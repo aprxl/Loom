@@ -1,0 +1,114 @@
+// parallel.loom: structured concurrency with loom blocks.
+//
+// Shows: `loom { }` scopes, `thread` / `Spun[T]` / `.join()`, `loom for`
+// over disjoint mutable chunks, threads borrowing local data safely,
+// Atomic for shared counters, projections (`entry(..) += n`), and what
+// happens when a thread fails partway through.
+
+use std.io.print
+use std.fs
+use std.sync.Atomic
+
+// ---------------------------------------------------------------- mandelbrot
+
+/// How many iterations before (cx, cy) escapes?
+fn escape(cx: f64, cy: f64, limit: u16) -> u16 {
+    var (x, y, i) = (0.0, 0.0, 0u16)
+    while x * x + y * y <= 4.0 and i < limit {
+        (x, y) = (x * x - y * y + cx, 2.0 * x * y + cy)
+        i += 1
+    }
+    i
+}
+
+const SHADES = [' ', '.', ':', '-', '=', '+', '*', '#', '%', '@']
+const LIMIT: u16 = 200
+
+/// ASCII Mandelbrot. Each row is its own thread.
+fn mandelbrot(w: usize, h: usize) -> String {
+    var cells = List.filled(' ', w * h)
+
+    // `chunks_mut` is a projection that lends out *disjoint* rows, so every
+    // iteration may edit its own `line` while all of them read `w`, `h`, and
+    // SHADES. The loop finishes only when every row is done.
+    loom for (row, mut line) in cells.chunks_mut(w).indexed() {
+        let cy = row as f64 / h as f64 * 2.4 - 1.2
+        for col in 0..w {
+            let cx = col as f64 / w as f64 * 3.5 - 2.5
+            let i = escape(cx, cy, LIMIT)
+            line[col] = SHADES[i * 9 / LIMIT]        // no cast: `i` widens to usize, the index type
+        }
+    }
+
+    cells.chunks(w).map(String.of).join("\n")
+}
+
+// ---------------------------------------------------------------- primes
+
+fn is_prime(n: u64) -> bool =
+    n >= 2 and (2..).take_while(p => p * p <= n).all(n % _ != 0)
+
+/// Threads may share read-only data freely. Shared *mutation* needs a type
+/// built for it, and Atomic's methods only need read access.
+fn count_primes_below(limit: u64) -> u64 {
+    let found = Atomic[u64](0)
+    loom for chunk in (2..limit).chunks(10_000) {
+        found.add(chunk.filter(is_prime).count())
+    }
+    found.load()
+}
+
+// The race detector is the type checker:
+//
+//     var hits = 0
+//     loom for x in data { if x > 0 { hits += 1 } }
+//                                     ^^^^ error[C0401]: `hits` is mutated by more than one thread
+//     = help: use `Atomic[u32]`, or produce a value per iteration and `.sum()` them
+
+// ---------------------------------------------------------------- word count
+
+fn count_file(path: str) -> Map[String, u32] ! fs.IoError {
+    var counts = Map[String, u32]()
+    for word in fs.read_text(path)?.words() {
+        counts.entry(word.to_lower(), or: 0) += 1     // `entry` projects a place you can edit
+    }
+    counts
+}
+
+/// One thread per file. If any file fails, `?` leaves the loom early. The
+/// remaining threads are cancelled and waited for *before* the error
+/// propagates, so nothing outlives the block, even on failure.
+fn word_counts(paths: [str]) -> Map[String, u32] ! fs.IoError {
+    loom {
+        let jobs = paths.map(p => thread count_file(p))   // `p` is borrowed. That's safe because
+                                                          // `paths` outlives the whole loom.
+        var total = Map[String, u32]()
+        for job in jobs {
+            for (word, n) in job.join()? {
+                total.entry(word, or: 0) += n
+            }
+        }
+        total
+    }
+}
+
+// ---------------------------------------------------------------- main
+
+fn main() {
+    print(mandelbrot(72, 28))
+
+    // Two unrelated jobs side by side. The block's value is a tuple of both results.
+    let docs = ["README.md", "design/01-syntax.md", "design/03-memory.md"]
+    let (primes, words) = loom {
+        let a = thread count_primes_below(200_000)
+        let b = thread word_counts(docs)
+        (a.join(), b.join())
+    }
+    print("primes below 200k: {primes}")           // 17984
+
+    let counts = words mend e => unravel("couldn't read the docs: {e}")
+    let top = counts.pairs().sorted_by(_.1 > _.1).take(5)   // two holes: (a, b) => a.1 > b.1
+    for (word, n) in top {
+        print("{n:>5}  {word}")
+    }
+}

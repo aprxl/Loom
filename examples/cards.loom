@@ -1,0 +1,212 @@
+// cards.loom: compile-time Loom.
+//
+// Named after the punched cards that programmed the Jacquard loom's pattern
+// before any weaving started. Shows: tables built by ordinary code at
+// compile time, `card assert`, card parameters and types as values, a type
+// whose shape is computed from a number, compile-time branches, and
+// "derive" as nothing more than a default method that reflects on `Self`.
+
+use std.io.print
+
+// ================================================================ 1. tables
+
+/// The CRC-32 lookup table, computed while compiling. In the binary it's
+/// just 1 KiB of read-only data.
+const CRC_TABLE: [u32; 256] = card {
+    var table = [0u32; 256]
+    for i in 0u32..256 {
+        var c = i
+        for _ in 0..8 {
+            c = if c & 1 == 1 { 0xEDB8_8320 ~ (c >> 1) } else { c >> 1 }
+        }
+        table[i] = c
+    }
+    table
+}
+
+pub fn crc32(data: [u8]) -> u32 {
+    var crc = 0xFFFF_FFFFu32
+    for b in data {
+        crc = CRC_TABLE[(crc ~ b) as% u8] ~ (crc >> 8)   // a u8 index into 256 entries: no bounds check
+    }
+    crc ~ 0xFFFF_FFFF
+}
+
+// The same function runs at compile time, so the check value is verified on every build.
+card assert(crc32(b"123456789") == 0xCBF4_3926, "CRC-32 check value")
+
+// ================================================================ 2. types as values
+
+/// A ring buffer whose cursor type is *computed* from its capacity. With
+/// N = 256 the cursors are u8, so `+%= 1` wraps exactly at N: no masking,
+/// no modulo, and indexing `slots` can never go out of bounds.
+pub warp Ring[T, card N: usize] {
+    card assert(N.is_power_of_two(), "Ring capacity must be a power of two, got {N}")
+
+    type Idx = uint(N.log2())                 // uint(8) is u8, uint(2) is u2, and so on
+    type Len = uint(N.log2() + 1)             // 0..=N needs one more bit
+
+    slots: [?T; N] = [none; N]
+    head: Idx = 0                             // next slot to read
+    tail: Idx = 0                             // next slot to write
+    pub(get) len: Len = 0
+
+    /// Add to the back. When full, the oldest item is evicted and returned.
+    pub fn push(mut self, take x: T) -> ?T {
+        let evicted = if .len == N { .pop() } else { none }
+        .slots[.tail] = x
+        .tail +%= 1                           // wraps at N by construction
+        .len += 1
+        evicted
+    }
+
+    pub fn pop(mut self) -> ?T {
+        if .len == 0 { return none }
+        let x = .slots[.head].take()          // leaves `none` behind
+        .head +%= 1
+        .len -= 1
+        x
+    }
+}
+
+// Ring[u32, 100] doesn't compile:
+//   error[K0101]: card assertion failed: Ring capacity must be a power of two, got 100
+//     note: while instantiating `Ring[u32, 100]`
+
+/// `card` parameters must be known at compile time, and the return type can depend on them.
+fn zeros(card n: usize) -> [f32; n] = [0.0; n]
+
+// ================================================================ 3. compile-time branches
+
+/// `card if` is decided while compiling. The branch that isn't taken is
+/// parsed but *not type-checked*, so it can name APIs this target doesn't have.
+fn page_size() -> usize {
+    card if target.os == .Windows {
+        std.sys.win32.system_info().page_size
+    } else {
+        selvage "sysconf has no preconditions" { std.sys.libc.sysconf(std.sys.libc.SC_PAGESIZE) as usize }
+    }
+}
+
+// ================================================================ 4. derive = a default method
+
+/// Anything that can write itself as JSON. There are no required methods.
+/// The default body works for *any* warp by walking its shape at compile
+/// time. `card if` and `card for` unroll while compiling, so each warp gets
+/// straight-line code with no runtime reflection left in the binary.
+pub weft ToJson {
+    fn to_json(self, out: mut String) {
+        card if Self.kind == .Record {
+            out.push('{')
+            card for (i, f) in Self.fields.indexed() {
+                card if i > 0 { out.push(',') }
+                out.push_json_key(f.name)
+                self.(f).to_json(mut out)                // `self.(f)`: field access by a card-time Field
+            }
+            out.push('}')
+        } else if Self.kind == .Sum {
+            card for c in Self.cases {
+                if self is .(c) {                        // runtime test against a card-time Case
+                    card if c.fields.is_empty() {
+                        out.push_json_str(c.name)        // unit case: "Admin"
+                    } else {
+                        out.push('{')
+                        out.push_json_key(c.name)
+                        out.push('{')
+                        card for (i, f) in c.fields.indexed() {
+                            card if i > 0 { out.push(',') }
+                            out.push_json_key(f.name)
+                            self.(c).(f).to_json(mut out)
+                        }
+                        out.push_str("}}")
+                    }
+                }
+            }
+        } else {
+            card unravel("ToJson can't be derived for {Self.name}; weave it by hand")
+        }
+    }
+}
+
+// Leaves are woven by hand. These are ordinary weaves.
+weave[T: Integer] ToJson into T {
+    fn to_json(self, out: mut String) = out.push_str("{self}")
+}
+weave ToJson into bool {
+    fn to_json(self, out: mut String) = out.push_str(if self { "true" } else { "false" })
+}
+weave ToJson into String {
+    fn to_json(self, out: mut String) = out.push_json_str(self)
+}
+weave[T: ToJson] ToJson into List[T] {
+    fn to_json(self, out: mut String) {
+        out.push('[')
+        for (i, x) in self.indexed() {
+            if i > 0 { out.push(',') }
+            x.to_json(mut out)
+        }
+        out.push(']')
+    }
+}
+weave[T: ToJson] ToJson into ?T {
+    fn to_json(self, out: mut String) = match self {
+        some(x) => x.to_json(mut out)
+        none => out.push_str("null")
+    }
+}
+
+// Two helpers as free functions. UFCS turns them into String methods
+// without touching String.
+fn push_json_str(out: mut String, s: str) {
+    out.push('"')
+    for c in s.chars() {
+        match c {
+            '"'  => out.push_str("\\\"")
+            '\\' => out.push_str("\\\\")
+            '\n' => out.push_str("\\n")
+            c if c < ' ' => out.push_str("\\u{c as u32:04x}")
+            _ => out.push(c)
+        }
+    }
+    out.push('"')
+}
+
+fn push_json_key(out: mut String, key: str) {
+    out.push_json_str(key)
+    out.push(':')
+}
+
+// Now any warp can opt in with nothing but a header.
+warp Role: ToJson {
+    case Guest
+    case Member(since: u16)
+    case Admin
+}
+
+warp User: ToJson {
+    name: String
+    age: u8
+    roles: List[Role]
+    email: ?String
+}
+
+// ================================================================ main
+
+fn main() {
+    let ada = User(name: "Ada", age: 36, roles: [.Member(since: 1843), .Admin], email: none)
+    var json = String()
+    ada.to_json(mut json)
+    print(json)
+    // {"name":"Ada","age":36,"roles":[{"Member":{"since":1843}},"Admin"],"email":null}
+
+    print("crc32 = {crc32(json.bytes()):08x}")
+
+    var recent = Ring[u32, 4]()               // Idx = u2, Len = u3
+    for n in 1..=6 {
+        if recent.push(n) is some(old) { print("evicted {old}") }   // 1, then 2
+    }
+    while recent.pop() is some(n) { print("kept {n}") }             // 3 4 5 6
+
+    let pad = zeros(4)                        // [f32; 4], sized at compile time
+    print("{pad:?}, page size {page_size()}")
+}

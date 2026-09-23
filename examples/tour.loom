@@ -1,0 +1,134 @@
+// tour.loom: everyday Loom in one file.
+//
+// Read top to bottom. Each section shows one small thing. The bigger features
+// (spools, loose ends, shuttles, looms, cards) have their own example files.
+
+use std.io.print
+use std.env
+
+const MAX_RETRIES = 3
+
+/// Doc comments use three slashes. Parameters can have defaults, and the
+/// `= expr` form is for one-expression functions.
+fn greet(name: str, excited: bool = false) -> String =
+    if excited { "hello, {name}!" } else { "hello, {name}." }
+
+/// Any free function can be called as a method on its first argument (UFCS),
+/// so this is also `"text".shout()`.
+fn shout(s: str) -> String = s.to_upper()
+
+warp Point {
+    x: f64 = 0
+    y: f64 = 0
+
+    fn len(self) -> f64 = (.x * .x + .y * .y).sqrt()     // `.x` means `self.x`
+    fn plus(self, o: Point) -> Point = Point(.x + o.x, .y + o.y)
+}
+
+warp Weather {
+    case Sunny
+    case Rain(mm: f32)
+    case Snow(cm: f32)
+}
+
+/// A gauge: an f32 that's always between 0 and 1.
+type Percent = f32 where 0.0..=1.0
+
+fn main() {
+    // --- bindings -----------------------------------------------------------
+    let answer = 42                      // immutable
+    var count = 0                        // mutable
+    count += 1
+    let (q, r) = (17 / 5, 17 % 5)        // destructuring
+    print("17 = 5 × {q} + {r}, count = {count}")
+
+    // --- calls: plain, named, uniform ----------------------------------------
+    print(greet("loom"))
+    print(greet("weaver", excited: true))
+    print("quiet".shout())               // UFCS
+
+    // --- everything is an expression -----------------------------------------
+    let size = if answer > 40 { "big" } else { "small" }
+    let temp = 21
+    if 18 <= temp < 25 { print("comfy ({size})") }      // chained comparison
+
+    // --- warps: built by calling them ------------------------------------------
+    let a = Point(3, 4)
+    let b = Point(y: 1)                  // x takes its default
+    print("|a| = {a.len()}, a+b = {a.plus(b):?}")
+    let shifted = a.{ .x += 10 }         // `a` is immutable, so this yields an edited copy
+    print("shifted: {shifted:?}, original: {a:?}")
+
+    // --- hole lambdas ------------------------------------------------------------
+    let evens = (1..=20).filter(_ % 2 == 0).collect()   // n => n % 2 == 0
+    let total = evens.reduce(_ + _) mend 0               // (a, b) => a + b: each `_` is a new parameter
+    let squares = evens.map(n => n * n)                  // using a value twice needs a name
+    print("evens {evens}, sum {total}, squares {squares}")
+
+    // --- match -------------------------------------------------------------------
+    let today: Weather = .Rain(mm: 3.5)                   // leading dot: a case of the expected type
+    let advice = match today {
+        .Sunny => "sunscreen"
+        .Rain(mm) if mm > 10 => "stay in"
+        .Rain(_) => "umbrella"
+        .Snow(cm) => if cm > 20 { "shovel" } else { "boots" }
+    }
+    print(advice)
+
+    // --- loops ---------------------------------------------------------------------
+    var scores = [3, 1, 4, 1, 5, 9, 2, 6]
+    for mut s in scores { s *= 10 }                       // `mut` binds each element in place
+    for (i, s) in scores.indexed() { if s > 40 { print("#{i}: {s}") } }
+
+    var (n, steps) = (27, 0)
+    while n != 1 {
+        n = if n % 2 == 0 { n / 2 } else { 3 * n + 1 }
+        steps += 1
+    }
+    let first_big = loop {                               // `break` can carry a value
+        count += 7
+        if count > 100 { break count }
+    }
+    print("collatz(27) = {steps} steps, first big = {first_big}")
+
+    // --- optionals, `?` and `mend` -------------------------------------------------
+    // `?` jumps to the nearest `mend`. Here it works as optional chaining.
+    let port = env.get("PORT")?.parse[u16]()? mend 8080
+    let home = env.get("HOME") mend "/"
+    if env.get("DEBUG") is some(level) and level != "0" { print("debug level {level}") }
+    print("port {port}, home {home}")
+
+    // --- overflow is in the operator -------------------------------------------------
+    let x: u8 = 250
+    print("{x +% 10} {x +| 10} {x +? 10}")               // 4 255 none
+    // `x + 10` would unravel: plain arithmetic traps on overflow in every build.
+    print("{300 as% u8} {300 as| u8} {300 as? u8}")      // 44 255 none
+
+    // --- bit-precise integers -----------------------------------------------------------
+    let nibble: u4 = 0xF
+    let addr: u12 = 0xFFF
+    print("{nibble +% 1} {addr +% 1}")                   // 0 0: each wraps at its own width
+    let wide: u16 = addr                                 // widening is implicit and lossless
+
+    // --- gauges ------------------------------------------------------------------------
+    let half: Percent = 0.5                              // literals are checked at compile time
+    // let oops: Percent = 1.5                           // error: 1.5 is outside the gauge 0.0..=1.0
+    let input = 0.73
+    if input is Percent { print("{input * 100}%") }      // `is` narrows `input` to Percent here
+    let clamped = 1.7 as| Percent                        // 1.0
+    print("{half} {clamped} {wide}")
+
+    // --- retrying with `mend` in a loop ---------------------------------------------------
+    for attempt in 1..=MAX_RETRIES {
+        let value = flaky(attempt) mend e => {
+            print("attempt {attempt} failed: {e}")
+            continue                                     // handlers may leave: continue/break/return/fail
+        }
+        print("got {value} on attempt {attempt}")
+        break
+    }
+}
+
+warp Flake: Error { case NotYet(u32) }
+
+fn flaky(n: u32) -> u32 ! Flake = if n < 3 { fail .NotYet(n) } else { n * 100 }

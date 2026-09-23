@@ -1,0 +1,165 @@
+// ledger.loom: moving money carefully.
+//
+// Shows: gauges (range-checked numeric types), error warps with `from`
+// cases, `fail`, the `?`/`mend` pair (including a block used as try/catch),
+// loose types that must be tied off, and fallback hems that tie them off on
+// early exits.
+
+use std.io.print
+use std.fs.{File, IoError}
+
+// ---------------------------------------------------------------- gauges
+
+/// Money is counted in cents, and a balance can never be negative.
+pub type Cents = i64 where 0..
+
+/// Account ids start at 1, and 1 is the house account that collects fees.
+pub type AccountId = u32 where 1..
+const HOUSE: AccountId = 1
+// const NOBODY: AccountId = 0     // error[G0201]: 0 is outside the gauge `AccountId` (1..)
+
+// ---------------------------------------------------------------- errors
+
+pub warp LedgerError: Error {
+    case UnknownAccount(AccountId)
+    case Insufficient(account: AccountId, short_by: Cents)
+    case SameAccount
+    case Journal(from IoError)            // a `?` on an IoError is wrapped in this case automatically
+}
+
+// ---------------------------------------------------------------- ledger
+
+warp Move { account: AccountId, delta: i64 }
+
+pub warp Ledger {
+    balances: Map[AccountId, Cents] = Map()
+    journal: File
+
+    pub fn open(path: str) -> Ledger ! IoError = Ledger(journal: File.append(path)?)
+
+    pub fn open_account(mut self, id: AccountId, opening: Cents = 0) {
+        .balances[id] = opening
+    }
+
+    pub fn balance(self, id: AccountId) -> Cents ! LedgerError =
+        .balances.get(id) mend fail .UnknownAccount(id)
+
+    pub fn check(self, id: AccountId) ! LedgerError {
+        if not .balances.has(id) { fail .UnknownAccount(id) }
+    }
+}
+
+// ---------------------------------------------------------------- transactions
+
+/// A transaction is a *loose end*. Once you `begin` one, the compiler won't
+/// let it fall out of scope: it has to be committed or rolled back, exactly
+/// once, on every path. Only this module can see Tx's fields, so only the
+/// functions here can tie it off.
+pub loose warp Tx {
+    moves: List[Move] = List()
+
+    pub fn begin() -> Tx = Tx()
+
+    pub fn debit(mut self, id: AccountId, amount: Cents) = .moves.push(Move(id, -amount))
+    pub fn credit(mut self, id: AccountId, amount: Cents) = .moves.push(Move(id, amount))
+
+    /// Tie-off #1: apply every move, or none of them.
+    pub fn commit(take self, ledger: mut Ledger) ! LedgerError {
+        let Tx(moves) = self                          // destructuring ties the loose end
+
+        // Dry-run on a copy first, so a failure leaves `ledger` untouched.
+        var next = ledger.balances.copy()
+        for m in moves {
+            let have = next.get(m.account) mend fail .UnknownAccount(m.account)
+            let after = have + m.delta                // Cents + i64 is plain i64: it could go negative
+            next[m.account] = after as? Cents         // ...so getting back into the gauge is checked
+                mend fail .Insufficient(m.account, short_by: -after as Cents)
+        }
+
+        ledger.journal.write_line("{moves:?}")?      // IoError → LedgerError.Journal via `from`
+        ledger.balances = next
+    }
+
+    /// Tie-off #2: drop the whole thing.
+    pub fn rollback(take self) {
+        let Tx(_) = self
+    }
+}
+
+// ---------------------------------------------------------------- operations
+
+/// 1% fee with a minimum of 25¢. Waived for balances of $1000 or more.
+fn fee_for(balance: Cents, amount: Cents) -> Cents =
+    if balance >= 1000_00 { 0 } else { (amount / 100).max(25) }
+    // Cents / 100 has interval 0.., so the result is still a Cents and no cast is needed.
+
+pub fn transfer(ledger: mut Ledger, from: AccountId, to: AccountId, amount: Cents) ! LedgerError {
+    if from == to { fail .SameAccount }
+
+    var tx = Tx.begin()
+    hem tx => tx.rollback()                  // on any exit where `tx` is still loose, roll it back
+
+    let fee = fee_for(ledger.balance(from)?, amount)   // unknown account? `?` returns, and the hem fires
+    tx.debit(from, amount + fee)            // Cents + Cents: both ≥ 0, so the sum is still Cents
+    ledger.check(to)?                        // another early exit, handled by the same hem
+    tx.credit(to, amount)
+    tx.credit(HOUSE, fee)
+    tx.commit(mut ledger)                    // tied off: on this path the hem does nothing
+}
+
+/// `is` narrows: inside the branch, `n` has type Cents.
+fn parse_cents(s: str) -> ?Cents {
+    let n = s.replace("_", "").parse[i64]() mend return none
+    if n is Cents { n } else { none }
+}
+
+// ---------------------------------------------------------------- main
+
+fn main() {
+    var ledger = Ledger.open("ledger.log") mend e => unravel("can't open journal: {e}")
+    ledger.open_account(HOUSE)
+    ledger.open_account(2, opening: 50_00)
+    ledger.open_account(3, opening: parse_cents("10_00") mend 0)
+
+    // A block with `?`s inside and a `mend` after it works like try/catch.
+    // Each `?` jumps to the mend instead of returning from main.
+    {
+        transfer(mut ledger, 2, 3, 20_00)?
+        print("transfer 1 ok")
+        transfer(mut ledger, 3, 9, 5_00)?        // no account 9: `check` fails before commit,
+                                                 // so transfer's hem rolls the half-built tx back
+        print("transfer 2 ok")                   // not reached
+    } mend e => print("stopped early: {e}")
+
+    // Here the overdraft is caught by commit's dry run. The tx was already
+    // handed to commit, so the hem has nothing to do.
+    transfer(mut ledger, 3, 2, 99_00) mend e => print("refused: {e}")
+
+    for (id, cents) in ledger.balances.sorted() {
+        print("  #{id}: ${cents / 100}.{cents % 100:02}")
+    }
+    // transfer 1 ok
+    // stopped early: UnknownAccount(9)
+    // refused: Insufficient(account: 3, short_by: 6999)
+    //   #1: $0.25
+    //   #2: $29.75
+    //   #3: $30.00
+}
+
+// ---------------------------------------------------------------- rejected
+
+// Forget to tie off a Tx and the build stops:
+//
+// fn forgetful(ledger: mut Ledger) {
+//     var tx = Tx.begin()
+//     tx.credit(2, 5_00)
+// }
+//
+// error[L0301]: loose end: `tx` is never tied off
+//   |
+// 2 |     var tx = Tx.begin()
+//   |         ^^ `Tx` is a loose type: it must be consumed exactly once
+// 4 | }
+//   | - ...but it is still loose when the scope ends here
+//   = help: tie it off with `tx.commit(..)` or `tx.rollback()`
+//   = help: or add `hem tx => tx.rollback()` right after it's created

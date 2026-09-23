@@ -1,0 +1,194 @@
+// widgets.loom: the object-oriented side of Loom.
+//
+// A tiny text-mode UI toolkit. Shows: wefts with default methods, inline and
+// separate weaves, `through` delegation in place of inheritance, `any W` for
+// dynamic dispatch, dot-blocks as builders, `pub(get)`, and `.x` for self.x.
+//
+// Output:
+//   Loom settings
+//   ┌──────────────┐
+//   │     Save     │
+//   └──────────────┘
+//   ╔══════════════╗
+//   ║     Quit     ║
+//   ╚══════════════╝
+
+use std.io.print
+use std.fmt.{Show, Fmt}
+
+// ---------------------------------------------------------------- geometry
+
+warp Pos { x: u16 = 0, y: u16 = 0 }
+
+// ------------------------------------------------------------------ canvas
+
+/// A grid of characters we can draw into and then print.
+warp Canvas {
+    pub(get) w: u16                    // readable anywhere, assignable only in this module
+    pub(get) h: u16
+    cells: List[char]
+
+    pub fn blank(w: u16, h: u16) -> Canvas =
+        Canvas(w, h, List.filled(' ', w * h))        // w * h is computed in usize, the expected type
+
+    pub fn put(mut self, at: Pos, ch: char) {
+        if at.x < .w and at.y < .h { .cells[at.y * .w + at.x] = ch }
+    }
+
+    pub fn text(mut self, at: Pos, s: str) {
+        for (i, ch) in s.chars().indexed() {
+            .put(at.{ .x += i as u16 }, ch)          // `at` is a read-only param: the dot-block yields a copy
+        }
+    }
+}
+
+weave Show into Canvas {
+    fn show(self, f: mut Fmt) {
+        for row in .cells.chunks(.w) {
+            f.put(String.of(row).trim_end())
+            f.put('\n')
+        }
+    }
+}
+
+// ------------------------------------------------------------------ the weft
+
+/// Anything that can be laid out and drawn.
+pub weft Widget {
+    fn size(self) -> (u16, u16)
+    fn draw(self, at: Pos, c: mut Canvas)
+    fn name(self) -> str = "widget"                  // default method: override it if you like
+}
+
+// ------------------------------------------------------------------ borders
+
+warp Glyphs { tl: char, tr: char, bl: char, br: char, hz: char, vt: char }
+
+pub warp Border {
+    case Single, Double, Rounded
+
+    fn glyphs(self) -> Glyphs = match self {
+        .Single  => Glyphs('┌', '┐', '└', '┘', '─', '│')
+        .Double  => Glyphs('╔', '╗', '╚', '╝', '═', '║')
+        .Rounded => Glyphs('╭', '╮', '╰', '╯', '─', '│')
+    }
+}
+
+// ------------------------------------------------------------------ widgets
+
+/// A bordered box. Implements Widget inline, OOP style.
+pub warp Frame: Widget {
+    pub w: u16
+    pub h: u16 = 3
+    pub style: Border = .Single
+
+    fn size(self) -> (u16, u16) = (.w, .h)
+
+    fn draw(self, at: Pos, c: mut Canvas) {
+        let g = .style.glyphs()
+        let (right, bottom) = (at.x + .w - 1, at.y + .h - 1)
+        for x in at.x..=right {
+            c.put(Pos(x, at.y), g.hz)
+            c.put(Pos(x, bottom), g.hz)
+        }
+        for y in at.y..=bottom {
+            c.put(Pos(at.x, y), g.vt)
+            c.put(Pos(right, y), g.vt)
+        }
+        c.put(at, g.tl)
+        c.put(Pos(right, at.y), g.tr)
+        c.put(Pos(at.x, bottom), g.bl)
+        c.put(Pos(right, bottom), g.br)
+    }
+
+    fn name(self) -> str = "frame"
+}
+
+/// A line of text. Its Widget weave is written separately below. Both
+/// styles work, and the separate one can even live in another module.
+pub warp Label {
+    pub text: String
+}
+
+weave Widget into Label {
+    fn size(self) -> (u16, u16) = (.text.len() as u16, 1)
+    fn draw(self, at: Pos, c: mut Canvas) = c.text(at, .text)
+    fn name(self) -> str = "label"
+}
+
+/// A Button isn't a Frame. It *has* one and delegates to it. `through`
+/// forwards the frame's *methods* (here `size`; `name` is overridden) but
+/// not its fields, so outside code writes `button.frame.w`.
+pub warp Button: Widget {
+    through frame: Frame
+    pub label: String
+
+    pub fn sized(label: str, width: u16) -> Button =
+        Button(frame: Frame(w: width), label: label.copy())
+
+    // Only `draw` is overridden. `size` comes straight from the frame.
+    fn draw(self, at: Pos, c: mut Canvas) {
+        .frame.draw(at, mut c)                               // a "super call" is just a field call
+        let pad = (.frame.w -| .label.len() as u16) / 2      // saturating: long labels don't underflow
+        c.text(at.{ .x += pad; .y += 1 }, .label)
+    }
+
+    fn name(self) -> str = "button"
+}
+
+/// A container that holds any mix of widgets and draws them top to bottom.
+pub warp Column: Widget {
+    children: List[any Widget] = List()
+    pub gap: u16 = 0
+
+    pub fn add(mut self, take w: any Widget) = .children.push(w)
+
+    fn size(self) -> (u16, u16) {
+        let w = .children.map(_.size().0).max() mend 0
+        let h = .children.map(_.size().1).sum() + .gap * (.children.len() -| 1) as u16
+        (w, h)
+    }
+
+    fn draw(self, at: Pos, c: mut Canvas) {
+        var y = at.y
+        for child in .children {
+            child.draw(at.{ .y = y }, mut c)                 // dynamic dispatch through `any Widget`
+            y += child.size().1 + .gap
+        }
+    }
+
+    fn name(self) -> str = "column"
+}
+
+/// A free function over any Widget. With UFCS it reads like a method:
+/// `ui.area()`. A weft used as a parameter type is an implicit generic, so
+/// this is `fn area[W: Widget](w: W)` with static dispatch.
+fn area(w: Widget) -> u32 {
+    let (width, height) = w.size()
+    width * height                                           // u16 × u16, computed in u32
+}
+
+// ------------------------------------------------------------------ main
+
+fn main() {
+    // Dot-blocks on fresh values work as builders: they configure the value and yield it.
+    let ui = Column().{
+        .add(Label(text: "Loom settings"))
+        .add(Button.sized("Save", 16))
+        .add(Button.sized("Quit", 16).{ .frame.style = .Double })
+    }
+
+    var canvas = Canvas.blank(20, 7)
+    ui.draw(Pos(), mut canvas)
+    print(canvas)
+
+    let (w, h) = ui.size()
+    print("{ui.name()}: {ui.children.len()} children, {w}×{h}, area {ui.area()}")
+
+    // Type-test patterns get concrete types back out of `any`.
+    for child in ui.children {
+        if child is b: Button {
+            print("  {b.name()} '{b.label}' is {b.size().0} wide")   // size() forwarded to b.frame
+        }
+    }
+}

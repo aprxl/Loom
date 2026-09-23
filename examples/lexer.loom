@@ -1,0 +1,153 @@
+// lexer.loom: shuttles, functions that go back and forth.
+//
+// Shows: generator shuttles (`~> T`), duplex shuttles (`~> T <~ U`) using
+// `pass` and `pull`, driving a shuttle by pushing input into it, the loose
+// `Burst` it hands back, and a sum type whose cases share a field.
+//
+//   0  Ident("let")
+//   4  Ident("greeting")
+//  13  Punct('=')
+//  15  Str("hi")
+//  20  Punct('+')
+//  22  Int(42)
+//  24  Eof
+
+use std.io.print
+
+warp Span { start: u32, end: u32 }
+
+/// Every token has a span, whatever its kind. So `span` is declared once, on
+/// the warp, and `tok.span` works without a match. The derived Show prints
+/// the case and its payload, e.g. `Ident("let")`. Shared fields only appear
+/// in the `{tok:?}` debug form.
+warp Token: Show {
+    span: Span
+
+    case Ident(String)
+    case Int(u64)
+    case Str(String)
+    case Punct(char)
+    case Eof
+}
+
+// ---------------------------------------------------------------- a push lexer
+
+/// Feed it one char at a time and it passes out a token whenever one is
+/// finished. The driver owns the I/O, and this code still reads top to bottom
+/// like a pull lexer. The lexer's whole state (pos, the pending char, partial
+/// tokens) lives in its frame, which is sized at compile time and stored
+/// inline in the shuttle value.
+fn lexer() ~> Token <~ char {
+    var pos: u32 = 0
+    var next = pull                               // ?char: `none` once the input is closed
+
+    loop {
+        let c = next mend {                       // input closed: emit Eof and finish
+            pass .Eof(span: Span(pos, pos))
+            return
+        }
+        let start = pos
+
+        match c {
+            ' ' | '\t' | '\n' => {
+                pos += 1
+                next = pull
+            }
+            '0'..='9' => {
+                var n: u64 = 0
+                while next is some(d) and d.is_digit() {
+                    n = n * 10 + d.digit()
+                    pos += 1
+                    next = pull
+                }
+                pass .Int(n, span: Span(start, pos))
+            }
+            'a'..='z' | 'A'..='Z' | '_' => {
+                var name = String()
+                while next is some(d) and (d.is_alphanumeric() or d == '_') {
+                    name.push(d)
+                    pos += 1
+                    next = pull
+                }
+                pass .Ident(name, span: Span(start, pos))
+            }
+            '"' => {
+                var text = String()
+                pos += 1
+                next = pull
+                while next is some(d) and d != '"' {
+                    text.push(d)
+                    pos += 1
+                    next = pull
+                }
+                pos += 1                          // the closing quote
+                next = pull
+                pass .Str(text, span: Span(start, pos))
+            }
+            _ => {
+                pos += 1
+                next = pull
+                pass .Punct(c, span: Span(start, pos))
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- generators
+
+/// A generator is a shuttle that only passes. It's an iterator too.
+fn primes() ~> u64 {
+    var found = List[u64]()
+    for n in 2.. {
+        if found.all(n % _ != 0) {                // hole lambda: p => n % p != 0
+            found.push(n)
+            pass n
+        }
+    }
+}
+
+/// A duplex shuttle can keep state between inputs, like a tiny actor.
+fn running_mean() ~> f64 <~ f64 {
+    var (sum, count) = (0.0, 0)
+    while pull is some(x) {
+        sum += x
+        count += 1
+        pass sum / count as f64                   // `as` binds tighter than `/`
+    }
+}
+
+// ---------------------------------------------------------------- main
+
+fn main() {
+    let source = "let greeting = \"hi\" + 42"
+
+    // We decide when input arrives. Each push resumes the lexer until it
+    // pulls again, and hands back the tokens it passed along the way.
+    var lex = lexer()
+    for ch in source.chars() {
+        for tok in lex.push(ch) {
+            print("{tok.span.start:>3}  {tok}")
+        }
+    }
+    for tok in lex.close() {                      // `pull` now returns none, so drain the rest
+        print("{tok.span.start:>3}  {tok}")
+    }
+
+    // Generators plug into ordinary iterator code.
+    print("primes: {primes().take(8).collect()}")      // [2, 3, 5, 7, 11, 13, 17, 19]
+
+    var mean = running_mean()
+    for x in [4.0, 8.0, 15.0, 16.0, 23.0, 42.0] {
+        for m in mean.push(x) { print("mean so far: {m:.2}") }
+    }
+    mean.close().drain()
+
+    // `push` returns a *loose* Burst, so tokens can't be dropped by accident:
+    //
+    //     lex.push('x')
+    //     ^^^^^^^^^^^^^ error[L0301]: loose end: this `Burst[Token]` is never consumed
+    //                   = help: iterate it, or call `.drain()` to discard on purpose
+    //
+    // And the frame really is fixed-size:
+    card assert(lexer.Frame.size <= 64, "the lexer frame grew unexpectedly")
+}

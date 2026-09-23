@@ -1,0 +1,273 @@
+# Loom
+
+> *Data is the warp. Behavior is the weft. Programs are woven.*
+
+Loom is an imagined systems programming language. It is statically typed,
+compiled ahead of time, has no garbage collector, and mixes functional and
+object-oriented styles around one idea: **data and behavior are separate
+threads, and you weave them together.**
+
+This is a design sketch. There's no compiler. The repo holds the design notes
+and some example programs written as if a compiler existed.
+
+```loom
+use std.io.print
+use std.math.PI
+
+weft Shape {                                   // behavior: an interface
+    fn area(self) -> f64
+    fn name(self) -> str = "shape"             // default method
+}
+
+warp Circle: Shape {                           // data, promising Shape up front
+    radius: f64
+    fn area(self) -> f64 = PI * .radius * .radius   // `.radius` means `self.radius`
+}
+
+warp Rect { w: f64, h: f64 }
+
+weave Shape into Rect {                        // behavior added after the fact
+    fn area(self) -> f64 = .w * .h
+    fn name(self) -> str = "rect"
+}
+
+fn main() {
+    let shapes: List[any Shape] = [Circle(1.5), Rect(2, 3)]
+    let total = shapes.map(_.area()).sum()     // `_.area()` is a hole lambda
+    print("{shapes.len()} shapes, {total:.2} square units")
+}
+```
+
+---
+
+## Design principles
+
+1. **Values first, pointers only when you ask for them.** Variables own their values.
+   Borrows only exist while a call is running, so you never write a lifetime
+   annotation. If you need a real graph, you allocate it in a *spool* and the
+   pointer's type names that spool: `^Node@frame`.
+2. **Nothing dangles, nothing is left loose.** The compiler checks that
+   pointers don't outlive their spool. *Loose* types must be consumed. *Hems*
+   run cleanup code on the way out of a scope.
+3. **The machine stays visible.** `u12` is a real type. Each arithmetic
+   operator states what happens on overflow (`+ +% +| +?`). Bit layouts are
+   declared. Instruction decoding is written as a pattern match.
+4. **Infer inside a module, be explicit at its edges.** Private functions get
+   their error sets and `given` contexts inferred. `pub` signatures spell
+   everything out.
+5. **One idea, many uses.** A leading `.` always means "relative to whatever
+   is in context". `?` always means "bail out to the nearest `mend`". Generics
+   are compile-time parameters. Deriving a weft is just a default method that
+   inspects the type at compile time.
+
+## Glossary
+
+| Loom         | Meaning                                                | Nearest cousin                 |
+|--------------|--------------------------------------------------------|--------------------------------|
+| `warp`       | a data type: record, sum, or both                      | struct / enum                  |
+| `weft`       | a set of behavior                                      | trait / protocol / interface   |
+| `weave W into T` | give type `T` the behavior `W`                      | `impl W for T`                 |
+| `through`    | forward a field's methods (delegation)                 | Go embedding, Kotlin `by`      |
+| `spool`      | a memory region / allocator with a name                | arena, allocator               |
+| `^T@s`       | pointer to a `T` that lives in spool `s`               | `Box<T>` / `&'s T`             |
+| `given`      | ambient parameter, passed implicitly by type           | Scala `using`, Odin `context`  |
+| `loose`      | a type whose values must be used up exactly once       | linear types (Austral)         |
+| `hem`        | code that runs at scope exit                           | `defer` / `errdefer`           |
+| `mend`       | recover from an error or a missing value               | `??`, `orelse`, `catch`        |
+| `unravel`    | panic                                                  | `panic!`                       |
+| `shuttle`    | a function that can pause, passing values out and pulling values in | generator / coroutine |
+| `loom { }`   | structured-concurrency scope                           | nursery, scoped threads        |
+| `thread`     | a task spawned on the enclosing loom                   | `spawn`                        |
+| twill pattern| bit/nibble pattern with captures, used in `match`      | Erlang bit syntax, sort of     |
+| gauge        | an integer or float type restricted to a range         | Ada subtypes                   |
+| `card`       | code that runs at compile time                         | Zig `comptime`, `constexpr`    |
+| `selvage`    | the unsafe edge                                        | `unsafe`                       |
+| bolt         | a package                                              | crate / module                 |
+
+The Jacquard loom (1804) was programmed with punched cards, and those cards
+are part of how programmable machines got started. That's where `card` comes from.
+
+---
+
+## Signature features
+
+A one-screen taste of each. The [design docs](design/) have the details.
+
+### 1. Warp · Weft · Weave, plus delegation and UFCS
+
+Data (`warp`) and behavior (`weft`) are declared separately and joined with
+`weave`. A warp can also list its wefts and implement them inline, OOP-style.
+There's no inheritance. `through` forwards another field's methods instead.
+With uniform call syntax, any free function is also a method on its first
+parameter.
+
+```loom
+warp Button: Widget {
+    through frame: Frame         // Button gets Frame's methods, e.g. size()
+    label: String
+    fn draw(self, at: Pos, c: mut Canvas) {
+        .frame.draw(at, mut c)   // a "super call" is just a field call
+        c.text(at.{ .x += 2; .y += 1 }, .label)
+    }
+}
+```
+
+### 2. The leading dot
+
+`.name` resolves against the thing in context. Inside a method that's `self`.
+Inside a dot-block it's the block's subject. Where a type is expected, it's
+that type's cases.
+
+```loom
+let win = Window(800, 600).{        // dot-block: configure a fresh value, yield it
+    .title = "Loom"
+    .border = .Rounded              // `Border.Rounded`, inferred from the field type
+    .show()
+}
+```
+
+### 3. `?` jumps to the nearest `mend`
+
+`?` unwraps an optional or a result. On failure it jumps to the nearest
+enclosing `mend`, or returns from the function if there isn't one. The same
+operator covers optional chaining, error propagation, and try/catch.
+
+```loom
+let port = env.get("PORT")?.parse[u16]()? mend 8080
+
+{
+    transfer(mut ledger, alice, bob, 20_00)?
+    transfer(mut ledger, bob, carol, 99_00)?
+} mend e => print("stopped early: {e}")
+```
+
+### 4. Spools and region pointers
+
+Allocation goes to a spool. A pointer's type records which spool it points
+into, and the compiler rejects any pointer that would outlive its spool.
+Functions take the spool as an ambient `given`.
+
+```loom
+fn parse(src: str) -> ^Expr@sp ! ParseError given sp: Spool { ... }
+
+spool scratch = Arena(64.kib())
+let tree = parse("2 * (x + 3)", given: scratch)?   // tree: ^Expr@scratch
+scratch.reset()                                    // error if `tree` is still used later
+```
+
+### 5. Loose ends and hems
+
+A `loose` value must be tied off exactly once. The compiler won't let a
+transaction fall out of scope. A *fallback hem* ties it off on any exit where
+it's still loose.
+
+```loom
+var tx = Tx.begin()
+hem tx => tx.rollback()        // runs only on exits where `tx` is still loose
+tx.debit(from, amount)
+ledger.check(to)?              // leaving early here rolls back
+tx.commit(mut ledger)          // tied off, so the hem does nothing on this path
+```
+
+### 6. Twill patterns
+
+Binary and hex literals in patterns can contain lowercase capture letters.
+Each capture binds an integer exactly as wide as the bits it covers.
+
+```loom
+match op {                          // op: u16
+    0x00E0 => .clear()
+    0x1nnn => .pc = n               // n: u12
+    0x6xkk => .v[x] = kk            // x: u4, kk: u8. u4 into [u8; 16] needs no bounds check
+    0x8xy4 => {
+        let 0bc_ssss_ssss = .v[x] + .v[y]   // 9-bit add: carry in c, sum in s
+        .v[x] = s; .v[0xF] = c
+    }
+    0xDxyn => .draw(.v[x], .v[y], rows: n)
+}
+```
+
+### 7. Shuttles
+
+`~>` means "passes these out" and `<~` means "pulls these in". Shuttle frames
+have a fixed size known at compile time and are stored inline, with no heap
+allocation.
+
+```loom
+fn lexer() ~> Token <~ char { ... pull ... pass .Int(n, span) ... }
+
+var lex = lexer()
+for ch in source.chars() {
+    for tok in lex.push(ch) { print(tok) }   // each token this char completed
+}
+```
+
+### 8. Loom blocks
+
+Threads run inside a `loom { }` scope and can't outlive it. That makes it safe
+for them to borrow local data. Data races show up as type errors.
+
+```loom
+let (primes, words) = loom {
+    let a = thread count_primes_below(2_000_000)
+    let b = thread word_counts(paths)
+    (a.join(), b.join())
+}
+
+loom for (row, mut line) in pixels.chunks_mut(width).indexed() { ... }
+```
+
+### 9. Cards: compile time is ordinary Loom code
+
+```loom
+const CRC_TABLE: [u32; 256] = card { ... }            // computed while compiling
+
+pub warp Ring[T, card N: usize] {
+    card assert(N.is_power_of_two(), "capacity must be a power of two")
+    type Idx = uint(N.log2())                        // N = 256 gives u8 cursors that wrap for free
+    ...
+}
+```
+
+### 10. Small comforts
+
+- **Gauges**: `type Port = u16 where 1..` gets checked at the boundaries, narrowed by `is`, and used to skip bounds checks.
+- **Overflow-policy operators**: `+` traps, `+%` wraps, `+|` saturates, `+?` returns `?T`. The same suffixes work on `as`.
+- **Hole lambdas**: `xs.filter(_ % 2 == 0)`, `xs.reduce(_ + _)`, `pairs.sorted_by(_.1 > _.1)`.
+- **Sums with shared fields**: every `Token` case has a `span`, declared once.
+- **Chained comparisons**: `if 0 <= x < width`.
+- **Call-site `mut`**: `draw(scene, mut canvas)` shows at the call which arguments get mutated.
+- **Construction is a call**: `Point(1, 2)`, so struct literals never make `if x == Foo {` ambiguous.
+
+---
+
+## Repository map
+
+```
+README.md                  you are here
+design/
+  01-syntax.md             lexical rules, statements, operators, patterns, the leading dot
+  02-types.md              primitives, gauges, warps, wefts, weaves, through, generics, any
+  03-memory.md             value semantics, borrows, projections, spools, given, loose, hem, selvage
+  04-errors.md             ?T, T ! E, the ?/mend pair, fail, unravel
+  05-concurrency.md        shuttles, loom blocks, threads
+  06-cards.md              compile-time evaluation and reflection
+  grammar.ebnf             a grammar sketch
+  open-questions.md        the parts that aren't settled yet
+examples/
+  tour.loom                everyday syntax in one file
+  widgets.loom             OOP side: wefts, weaves, through, any, dot-blocks
+  chip8.loom               a CHIP-8 core: twill patterns, u12/u4, overflow operators
+  calc.loom                expression compiler in arenas: spools, ^T@s, given
+  ledger.loom              money transfers: gauges, loose ends, hems, error flow
+  lexer.loom               shuttles: generators, push-driven lexer
+  parallel.loom            loom blocks, threads, loom for
+  cards.loom               compile-time tables, card params, reflection-based derive
+```
+
+The examples use an imagined `std` (`std.io`, `std.fs`, `std.mem`, …). Where
+they rely on something from `std`, the name should make its purpose clear.
+
+## Status
+
+Design sketch v0.1. Not implemented. Everything can still change.
