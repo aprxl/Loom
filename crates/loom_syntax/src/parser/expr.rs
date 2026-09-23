@@ -189,10 +189,18 @@ impl Parser<'_> {
     }
 
     pub(super) fn expr_bp(&mut self, min_bp: u8) -> Expr {
+        self.nested(|span| Expr { kind: ExprKind::Error, span }, |p| p.expr_bp_inner(min_bp))
+    }
+
+    fn expr_bp_inner(&mut self, min_bp: u8) -> Expr {
         let mut lhs = self.prefix_expr();
         loop {
             if !self.continues() {
                 break;
+            }
+            if self.at_punct(Punct::PullArrow) && BP_CMP >= min_bp {
+                lhs = self.pull_arrow_in_expr(lhs);
+                continue;
             }
             let Some(infix) = infix_of(self.kind()) else { break };
             if infix.bp() < min_bp {
@@ -216,6 +224,7 @@ impl Parser<'_> {
                     let hi = self.range_hi_follows().then(|| Box::new(self.expr_bp(BP_RANGE + 1)));
                     let end = hi.as_ref().map_or(op, |h| h.span);
                     let span = lhs.span.to(end);
+                    self.reject_chained_range();
                     Expr { kind: ExprKind::Range { lo: Some(Box::new(lhs)), hi, inclusive }, span }
                 }
                 Infix::As(kind) => {
@@ -272,6 +281,40 @@ impl Parser<'_> {
         Expr { kind: ExprKind::Chain { first: Box::new(first), rest }, span }
     }
 
+    /// Ranges don't associate: `a..b..c` is an error (parsed as `(a..b)..c`
+    /// to carry on).
+    fn reject_chained_range(&mut self) {
+        if !self.continues()
+            || !matches!(self.kind(), TokenKind::Punct(Punct::DotDot | Punct::DotDotEq))
+            || self.last_error_at == Some(self.pos)
+        {
+            return;
+        }
+        let span = self.peek().span;
+        self.last_error_at = Some(self.pos);
+        self.report(
+            Diagnostic::error(codes::S0200, "ranges can't be chained")
+                .primary(span, "a second range operator")
+                .help("put parentheses around the range you mean, like `(a..b)`"),
+        );
+    }
+
+    /// `a <~ b` in an expression: `<~` is always one token (the pull arrow of
+    /// a shuttle signature). Reports it and carries on as if it were `a < ~b`.
+    fn pull_arrow_in_expr(&mut self, lhs: Expr) -> Expr {
+        self.last_error_at = Some(self.pos);
+        let arrow = self.bump().span;
+        self.report(
+            Diagnostic::error(codes::S0200, "`<~` is the pull arrow, not `<` followed by `~`")
+                .primary(arrow, "one token, only used in shuttle signatures")
+                .help("to compare with a bitwise not, write `a < ~b` with a space"),
+        );
+        let operand = self.expr_bp(BP_PREFIX);
+        let span = arrow.to(operand.span);
+        let rhs = Expr { kind: ExprKind::Unary { op: UnaryOp::BitNot, operand: Box::new(operand) }, span };
+        binary(BinaryOp::Lt, lhs, rhs)
+    }
+
     fn range_hi_follows(&self) -> bool {
         !self.at_line_start() && can_start_expr(self.kind()) && !(self.no_block_range && self.at_punct(Punct::LBrace))
     }
@@ -295,6 +338,7 @@ impl Parser<'_> {
             self.bump();
             let hi = self.range_hi_follows().then(|| Box::new(self.expr_bp(BP_RANGE + 1)));
             let span = hi.as_ref().map_or(start, |h| start.to(h.span));
+            self.reject_chained_range();
             return Expr { kind: ExprKind::Range { lo: None, hi, inclusive: p == Punct::DotDotEq }, span };
         }
         let primary = self.primary();
@@ -467,6 +511,7 @@ impl Parser<'_> {
                 simple(ExprKind::Lit(Lit::Bytes(b)))
             }
             TokenKind::Twill(_) => {
+                self.last_error_at = Some(self.pos);
                 self.bump();
                 self.report(
                     Diagnostic::error(codes::S0204, "twill patterns only work in patterns")
@@ -477,6 +522,18 @@ impl Parser<'_> {
             }
             TokenKind::TemplateStart => self.template(),
             TokenKind::Ident => {
+                // `outer: for …`, `outer: loop { … }`: a labeled loop.
+                if !self.no_label
+                    && self.nth_is_punct(1, Punct::Colon)
+                    && matches!(
+                        self.nth_kind(2),
+                        TokenKind::Keyword(Keyword::For | Keyword::While | Keyword::Loop | Keyword::Loom)
+                    )
+                {
+                    let label = self.ident(NameCase::Value, "label");
+                    self.bump();
+                    return self.labeled_loop(label);
+                }
                 if !self.no_lambda && self.nth_is_punct(1, Punct::FatArrow) {
                     return self.lambda_single(false);
                 }
@@ -573,7 +630,18 @@ impl Parser<'_> {
             }
             Keyword::Continue => {
                 self.bump();
-                let label = self.loop_label_ref();
+                let mut label = self.loop_label_ref();
+                // `continue` carries no value, so a name after it can only be a label.
+                if label.is_none() && !self.at_line_start() && matches!(self.kind(), TokenKind::Ident) {
+                    let name = self.ident(NameCase::Value, "label");
+                    self.error_at(
+                        codes::S0200,
+                        name.span,
+                        format!("no enclosing loop is labeled `{}`", name.name),
+                        "not a loop label",
+                    );
+                    label = Some(name);
+                }
                 Expr { kind: ExprKind::Continue { label }, span: self.span_from(start) }
             }
             Keyword::Return => {
@@ -643,6 +711,15 @@ impl Parser<'_> {
                 }
                 TokenKind::InterpOpen => {
                     self.bump();
+                    if matches!(self.kind(), TokenKind::InterpClose | TokenKind::InterpSpec(_)) {
+                        let span = tok.span.to(self.peek().span);
+                        self.last_error_at = Some(self.pos);
+                        self.report(
+                            Diagnostic::error(codes::S0200, "empty interpolation")
+                                .primary(span, "expected an expression inside `{…}`")
+                                .help("for literal braces in a string, write `{{` and `}}`"),
+                        );
+                    }
                     let (expr, spec) = self.with_nl(false, |p| {
                         let expr = p.expr();
                         let spec = match p.kind().clone() {
@@ -656,7 +733,16 @@ impl Parser<'_> {
                     });
                     if !matches!(self.kind(), TokenKind::InterpClose) {
                         self.error_expected("`}` to end the interpolation");
-                        while !matches!(self.kind(), TokenKind::InterpClose | TokenKind::TemplateEnd | TokenKind::Eof) {
+                        // Skip to this interpolation's `}`, stepping over nested templates.
+                        let mut nested = 0usize;
+                        loop {
+                            match self.kind() {
+                                TokenKind::Eof => break,
+                                TokenKind::InterpClose | TokenKind::TemplateEnd if nested == 0 => break,
+                                TokenKind::TemplateStart => nested += 1,
+                                TokenKind::TemplateEnd => nested -= 1,
+                                _ => {}
+                            }
                             self.bump();
                         }
                     }
@@ -688,8 +774,9 @@ impl Parser<'_> {
         Expr { kind: ExprKind::Lambda { params, body: Box::new(body) }, span }
     }
 
-    /// Whether the `(` at the cursor opens a lambda's parameter list.
-    fn paren_is_lambda(&self) -> bool {
+    /// Whether the `(` at the cursor opens a lambda's (or a function type's)
+    /// parameter list: its matching `)` is followed by `=>`.
+    pub(super) fn paren_is_lambda(&self) -> bool {
         let mut depth = 0usize;
         let mut i = 0;
         loop {
@@ -760,6 +847,8 @@ impl Parser<'_> {
     fn array_like(&mut self) -> Expr {
         let open = self.bump().span;
         let kind = self.with_nl(false, |p| {
+            // `[k: loop { … }]` is a map entry, like `f(k: loop { … })` is a named argument.
+            p.no_label = true;
             if p.at_punct(Punct::RBracket) {
                 return ExprKind::Array(Vec::new());
             }
@@ -824,11 +913,21 @@ impl Parser<'_> {
         let start = self.bump().span;
         let scrutinee = self.head_expr();
         let open = self.expect_punct(Punct::LBrace);
+        let outer_indent = self.stmt_indent;
+        let mut closed = true;
         let arms = self.with_nl(true, |p| {
             let mut arms = Vec::new();
             loop {
                 while p.eat_punct(Punct::Comma).is_some() || p.eat_punct(Punct::Semi).is_some() {}
                 if p.at_punct(Punct::RBrace) || p.at_eof() {
+                    break;
+                }
+                // A statement keyword no deeper than the `match` itself can't
+                // be an arm: the `}` is missing. Stop here, so the rest of
+                // the block parses normally instead of as broken arms.
+                if p.at_line_start() && p.peek().line_indent <= outer_indent && p.at_stmt_keyword() {
+                    p.report_unclosed(open, Punct::RBrace);
+                    closed = false;
                     break;
                 }
                 let before = p.pos;
@@ -837,13 +936,39 @@ impl Parser<'_> {
                     p.stmt_terminator();
                 }
                 if p.pos == before {
-                    p.bump();
+                    p.skip_bad_stmt();
                 }
             }
             arms
         });
-        self.expect_close(Punct::RBrace, open);
+        if closed {
+            self.expect_close(Punct::RBrace, open);
+        }
         Expr { kind: ExprKind::Match { scrutinee: Box::new(scrutinee), arms }, span: self.span_from(start) }
+    }
+
+    /// Whether the current token starts a statement and can't start a
+    /// pattern (or a member of a warp, weft or weave).
+    pub(super) fn at_stmt_keyword(&self) -> bool {
+        matches!(
+            self.kind(),
+            TokenKind::Keyword(
+                Keyword::Let
+                    | Keyword::Var
+                    | Keyword::Given
+                    | Keyword::Spool
+                    | Keyword::Defer
+                    | Keyword::Return
+                    | Keyword::For
+                    | Keyword::While
+                    | Keyword::Loop
+                    | Keyword::Use
+                    | Keyword::Warp
+                    | Keyword::Weft
+                    | Keyword::Weave
+                    | Keyword::Extern
+            )
+        )
     }
 
     fn arm(&mut self) -> Arm {
@@ -902,9 +1027,12 @@ impl Parser<'_> {
         Expr { kind: ExprKind::Loom { args, body }, span: self.span_from(start) }
     }
 
-    /// A loop after `label:` (already consumed).
-    pub(super) fn labeled_loop(&mut self, label: Ident) -> Expr {
-        match self.kind() {
+    /// A loop after `label:` (already consumed). The label is in scope for
+    /// `break`/`continue` inside it.
+    fn labeled_loop(&mut self, label: Ident) -> Expr {
+        let start = label.span;
+        self.labels.push(label.name.clone());
+        let mut e = match self.kind() {
             TokenKind::Keyword(Keyword::For) => {
                 let start = self.bump().span;
                 self.for_rest(start, Some(label), false, false)
@@ -912,7 +1040,10 @@ impl Parser<'_> {
             TokenKind::Keyword(Keyword::While) => self.while_expr(Some(label)),
             TokenKind::Keyword(Keyword::Loom) => self.loom_expr(Some(label)),
             _ => self.loop_expr(Some(label)),
-        }
+        };
+        self.labels.pop();
+        e.span = start.to(e.span);
+        e
     }
 
     fn unsafe_block(&mut self) -> Expr {

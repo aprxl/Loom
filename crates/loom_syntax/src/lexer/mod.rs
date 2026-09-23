@@ -203,7 +203,8 @@ impl<'a> Lexer<'a> {
                             Diagnostic::error(codes::S0111, "unterminated interpolation")
                                 .primary(self.span(start, start + 1), "this string")
                                 .secondary(self.span(self.pos, self.pos), "the line ends before the `}`")
-                                .help("close the `{…}` before the end of the line, or use a `\"\"\"` string"),
+                                .help("close the `{…}` before the end of the line, or use a `\"\"\"` string")
+                                .help("for a literal brace, write `{{` or `}}`"),
                         );
                         self.abandon_interps();
                         continue;
@@ -237,7 +238,8 @@ impl<'a> Lexer<'a> {
             let start = interp.start;
             self.report(
                 Diagnostic::error(codes::S0111, "unterminated interpolation")
-                    .primary(self.span(start, start + 1), "this string's `{…}` is never closed"),
+                    .primary(self.span(start, start + 1), "this string's `{…}` is never closed")
+                    .help("for a literal brace, write `{{` or `}}`"),
             );
             self.abandon_interps();
         }

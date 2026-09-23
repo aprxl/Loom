@@ -3,10 +3,10 @@
 
 use super::{NameCase, Parser};
 use crate::ast::{
-    Attr, CaseDecl, CaseField, ConstDecl, ExternBlock, FieldDecl, FnBody, FnDecl, FnQualifier, FnRet, GenericParam,
-    GenericParamKind, GivenParam, Item, ItemKind, Member, MemberKind, Module, Param, ParamMode, ParamName, PlaceMode,
-    Ty, TyKind, TypeDecl, UseKind, UseTree, Vis, WarpBody, WarpDecl, WarpModifier, WeaveDecl, WeftDecl, WherePred,
-    YieldSpec,
+    Attr, AttrArg, CaseDecl, CaseField, ConstDecl, ExternBlock, FieldDecl, FnBody, FnDecl, FnQualifier, FnRet,
+    GenericParam, GenericParamKind, GivenParam, Item, ItemKind, Member, MemberKind, Module, Param, ParamMode,
+    ParamName, PlaceMode, Ty, TyKind, TypeDecl, UseKind, UseTree, Vis, WarpBody, WarpDecl, WarpModifier, WeaveDecl,
+    WeftDecl, WherePred, YieldSpec,
 };
 use crate::diag::{Diagnostic, codes};
 use crate::token::{Keyword, Punct, TokenKind};
@@ -149,7 +149,7 @@ impl Parser<'_> {
             let name = self.ident(NameCase::Value, "attribute name");
             let args = if self.at_punct(Punct::LParen) && !self.at_line_start() {
                 let open = self.bump().span;
-                let args = self.with_nl(false, |p| p.comma_list(Punct::RParen, Self::expr));
+                let args = self.with_nl(false, |p| p.comma_list(Punct::RParen, Self::attr_arg));
                 self.expect_close(Punct::RParen, open);
                 args
             } else {
@@ -158,6 +158,16 @@ impl Parser<'_> {
             attrs.push(Attr { name, args, span: self.span_from(start) });
         }
         attrs
+    }
+
+    /// `value` or `key = value`.
+    fn attr_arg(&mut self) -> AttrArg {
+        let key = (matches!(self.kind(), TokenKind::Ident) && self.nth_is_punct(1, Punct::Eq)).then(|| {
+            let key = self.ident(NameCase::Value, "attribute argument");
+            self.bump();
+            key
+        });
+        AttrArg { key, value: self.expr() }
     }
 
     /// `pub`, `pub(get)`, or nothing.
@@ -186,6 +196,10 @@ impl Parser<'_> {
     // ------------------------------------------------------------ use / const / type
 
     fn use_tree(&mut self) -> UseTree {
+        self.nested(|span| UseTree { path: Vec::new(), kind: UseKind::Group(Vec::new()), span }, Self::use_tree_inner)
+    }
+
+    fn use_tree_inner(&mut self) -> UseTree {
         let start = self.peek().span;
         let mut path = vec![self.ident(NameCase::Any, "module or item name")];
         loop {
@@ -300,11 +314,20 @@ impl Parser<'_> {
 
     fn members(&mut self, ctx: MemberCtx) -> Vec<Member> {
         let open = self.expect_punct(Punct::LBrace);
+        let outer_indent = self.stmt_indent;
+        let mut closed = true;
         let members = self.with_nl(true, |p| {
             let mut members = Vec::new();
             loop {
                 while p.eat_punct(Punct::Comma).is_some() || p.eat_punct(Punct::Semi).is_some() {}
                 if p.at_punct(Punct::RBrace) || p.at_eof() {
+                    break;
+                }
+                // `warp`, `use`, `let`, … no deeper than the declaration
+                // itself: its `}` is missing, and the next item starts here.
+                if p.at_line_start() && p.peek().line_indent <= outer_indent && p.at_stmt_keyword() {
+                    p.report_unclosed(open, Punct::RBrace);
+                    closed = false;
                     break;
                 }
                 let before = p.pos;
@@ -321,12 +344,14 @@ impl Parser<'_> {
                 }
                 p.stmt_indent = saved;
                 if p.pos == before {
-                    p.bump();
+                    p.skip_bad_stmt();
                 }
             }
             members
         });
-        self.expect_close(Punct::RBrace, open);
+        if closed {
+            self.expect_close(Punct::RBrace, open);
+        }
         members
     }
 
@@ -356,7 +381,7 @@ impl Parser<'_> {
             TokenKind::Keyword(Keyword::Through) if ctx == MemberCtx::Warp => {
                 self.bump();
                 let name = self.ident(NameCase::Value, "field");
-                self.bump();
+                self.expect_punct(Punct::Colon);
                 let ty = self.ty();
                 MemberKind::Through(FieldDecl { name, ty, default: None })
             }

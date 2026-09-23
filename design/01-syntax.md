@@ -213,7 +213,7 @@ outer: for row in grid { for c in row { if c == '#' { break outer } } }
 | 7 | `&` | bitwise and |
 | 8 | `~` | bitwise xor (same symbol as unary not, like Go's `^`) |
 | 9 | `\|` | bitwise or |
-| 10 | `..` `..=` | ranges |
+| 10 | `..` `..=` | ranges; not chainable, so `a..b..c` is an error |
 | 11 | `==` `!=` `<` `<=` `>` `>=` `is` | chainable |
 | 12 | `not` | |
 | 13 | `and` | |

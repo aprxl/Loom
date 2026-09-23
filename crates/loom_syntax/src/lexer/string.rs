@@ -179,6 +179,14 @@ impl Lexer<'_> {
     }
 
     fn unterminated_string(&mut self, start: usize, why: &str) {
+        // A string opened inside a single-line interpolation, like the `"` in
+        // `"k {"`: the S0111 for the interpolation, reported next at the same
+        // line end (or at the end of the file), already covers it.
+        if matches!(self.interps.last(), Some(Interp { ctx: StrCtx::Single, .. }))
+            || (!self.interps.is_empty() && self.pos >= self.src.len())
+        {
+            return;
+        }
         let mut diag = Diagnostic::error(codes::S0102, "unterminated string literal")
             .primary(self.span(start, start + 1), "this string is never closed")
             .secondary(self.span(self.pos, self.pos), why);

@@ -46,8 +46,15 @@ pub enum Vis {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Attr {
     pub name: Ident,
-    pub args: Vec<Expr>,
+    pub args: Vec<AttrArg>,
     pub span: Span,
+}
+
+/// An attribute argument: `C`, `"use foo"`, or `key = value`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AttrArg {
+    pub key: Option<Ident>,
+    pub value: Expr,
 }
 
 #[derive(Clone, Debug, PartialEq)]

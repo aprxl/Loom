@@ -5,7 +5,7 @@
 use std::fmt::Write as _;
 
 use crate::ast::{
-    Arg, AssignOp, Block, CasePath, ExprKind, FieldName, FnBody, FnDecl, FnQualifier, FnRet, GenericArg,
+    Arg, AssignOp, Attr, Block, CasePath, ExprKind, FieldName, FnBody, FnDecl, FnQualifier, FnRet, GenericArg,
     GenericParamKind, Item, ItemKind, Lit, Member, MemberKind, Module, Param, ParamMode, ParamName, Pat, PatKind,
     PlaceMode, Stmt, StmtKind, TemplatePart, Ty, TyKind, UnaryOp, UseKind, UseTree, Vis, WarpBody, WarpModifier,
     WherePred,
@@ -221,7 +221,10 @@ fn lit_str(lit: &Lit) -> String {
         },
         Lit::Char(c) => format!("{c:?}"),
         Lit::Str(s) => format!("{s:?}"),
-        Lit::Bytes(b) => format!("b{:?}", String::from_utf8_lossy(b)),
+        Lit::Bytes(b) => {
+            let escaped: String = b.iter().flat_map(|&c| std::ascii::escape_default(c)).map(char::from).collect();
+            format!("b\"{escaped}\"")
+        }
         Lit::Bool(b) => b.to_string(),
         Lit::None => "none".into(),
     }
@@ -372,9 +375,8 @@ fn vis_prefix(vis: Vis) -> &'static str {
 
 pub fn item(i: &Item) -> String {
     let mut out = String::new();
-    for attr in &i.attrs {
-        let args: Vec<String> = attr.args.iter().map(expr).collect();
-        let _ = writeln!(out, "#{}({})", attr.name.name, args.join(" "));
+    for a in &i.attrs {
+        let _ = writeln!(out, "{}", attr(a));
     }
     let vis = vis_prefix(i.vis);
     match &i.kind {
@@ -456,8 +458,24 @@ pub fn item(i: &Item) -> String {
 
 fn push_members(out: &mut String, members: &[Member]) {
     for m in members {
+        for a in &m.attrs {
+            let _ = writeln!(out, "  {}", attr(a));
+        }
         let _ = writeln!(out, "  {}", member(m));
     }
+}
+
+/// `#name(args)`; a keyed argument prints as `(= key value)`.
+fn attr(a: &Attr) -> String {
+    let args: Vec<String> = a
+        .args
+        .iter()
+        .map(|arg| match &arg.key {
+            Some(key) => format!("(= {} {})", key.name, expr(&arg.value)),
+            None => expr(&arg.value),
+        })
+        .collect();
+    format!("#{}({})", a.name.name, args.join(" "))
 }
 
 fn member(m: &Member) -> String {

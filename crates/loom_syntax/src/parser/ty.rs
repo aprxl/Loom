@@ -50,19 +50,24 @@ impl Parser<'_> {
     }
 
     fn ty_fn(&mut self) -> Ty {
+        // `(A, B) => C`: parentheses right before `=>` hold the parameter
+        // list, so `((A, B)) => C` takes one tuple and `(()) => C` takes a unit.
+        if self.at_punct(Punct::LParen) && self.paren_is_lambda() {
+            let open = self.bump().span;
+            let params = self.with_nl(false, |p| p.comma_list(Punct::RParen, Self::ty));
+            self.expect_close(Punct::RParen, open);
+            self.expect_punct(Punct::FatArrow);
+            let ret = self.ty();
+            return Ty { kind: TyKind::Fn { params, ret: Box::new(ret) }, span: self.span_from(open) };
+        }
         let lhs = self.ty_region();
         if !self.at_punct(Punct::FatArrow) || self.at_line_start() {
             return lhs;
         }
         self.bump();
         let start = lhs.span;
-        let params = match lhs.kind {
-            TyKind::Unit => Vec::new(),
-            TyKind::Tuple(params) => params,
-            _ => vec![lhs],
-        };
         let ret = self.ty();
-        Ty { kind: TyKind::Fn { params, ret: Box::new(ret) }, span: self.span_from(start) }
+        Ty { kind: TyKind::Fn { params: vec![lhs], ret: Box::new(ret) }, span: self.span_from(start) }
     }
 
     fn ty_region(&mut self) -> Ty {
@@ -77,6 +82,10 @@ impl Parser<'_> {
     }
 
     fn ty_prefix(&mut self) -> Ty {
+        self.nested(|span| Ty { kind: TyKind::Error, span }, Self::ty_prefix_inner)
+    }
+
+    fn ty_prefix_inner(&mut self) -> Ty {
         let start = self.peek().span;
         let wrap: fn(Box<Ty>) -> TyKind = match self.kind() {
             TokenKind::Punct(Punct::Question) => TyKind::Optional,

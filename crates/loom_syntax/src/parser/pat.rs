@@ -25,6 +25,30 @@ impl Parser<'_> {
     }
 
     fn pat_single(&mut self, allow_type_test: bool) -> Pat {
+        self.nested(|span| Pat { kind: PatKind::Error, span }, |p| p.pat_single_inner(allow_type_test))
+    }
+
+    /// `a.b.Type`: lowercase segments joined by dots (on one line), then a
+    /// PascalCase or SCREAMING_CASE name.
+    fn at_module_path(&self) -> bool {
+        let mut n = 0;
+        loop {
+            let dot = self.nth(n + 1);
+            if !matches!(self.nth_kind(n), TokenKind::Ident)
+                || dot.kind != TokenKind::Punct(Punct::Dot)
+                || (dot.nl_before && self.nl_significant())
+            {
+                return false;
+            }
+            match self.nth_kind(n + 2) {
+                TokenKind::TypeIdent | TokenKind::ConstIdent => return true,
+                TokenKind::Ident => n += 2,
+                _ => return false,
+            }
+        }
+    }
+
+    fn pat_single_inner(&mut self, allow_type_test: bool) -> Pat {
         let tok = self.peek().clone();
         let start = tok.span;
         let simple = |kind| Pat { kind, span: start };
@@ -37,6 +61,22 @@ impl Parser<'_> {
                 self.bump();
                 let name = self.ident(NameCase::Value, "binding");
                 Pat { kind: PatKind::Bind { name, mutable: true }, span: self.span_from(start) }
+            }
+            // `ast.Expr.Lit(v)`: a case reached through a module path.
+            TokenKind::Ident if self.at_module_path() => {
+                let mut segments = vec![self.ident(NameCase::Value, "module")];
+                while matches!(self.nth_kind(1), TokenKind::Ident) {
+                    self.bump();
+                    segments.push(self.ident(NameCase::Value, "module"));
+                }
+                while self.at_punct(Punct::Dot)
+                    && !self.at_line_start()
+                    && matches!(self.nth_kind(1), TokenKind::TypeIdent | TokenKind::ConstIdent)
+                {
+                    self.bump();
+                    segments.push(self.pat_path_segment());
+                }
+                self.case_pat(start, CasePath::Path(segments))
             }
             TokenKind::Ident => {
                 let name = self.ident(NameCase::Value, "binding");

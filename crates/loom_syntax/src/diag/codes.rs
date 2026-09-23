@@ -50,6 +50,7 @@ codes! {
     S0208 = "parameter mode after the colon";
     S0209 = "`pub(get)` outside a field";
     S0210 = "missing initializer";
+    S0211 = "nesting is too deep";
 }
 
 #[cfg(test)]

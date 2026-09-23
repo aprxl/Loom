@@ -117,6 +117,24 @@ fn ranges() {
 }
 
 #[test]
+fn ranges_do_not_chain() {
+    assert_eq!(e("(a..b)..c"), "(.. (.. a b) c)");
+    assert_eq!(run("a..b..c", |p| p.expr()).3, [codes::S0200]);
+    assert_eq!(run("..a..=b", |p| p.expr()).3, [codes::S0200]);
+    // A range at the end of a line doesn't meet the next line's `..`.
+    assert_eq!(stmts("a..\n..b"), ["(.. a _)", "(.. _ b)"]);
+}
+
+#[test]
+fn pull_arrow_in_an_expression() {
+    // `<~` is one token; `a<~b` is reported and read as `a < ~b`.
+    let (out, _, diags, codes) = run("a<~b", |p| pretty::expr(&p.expr()));
+    assert_eq!(out, "(< a (~ b))");
+    assert_eq!(codes, [codes::S0200]);
+    assert!(diags[0].contains("write `a < ~b` with a space"), "{}", diags[0]);
+}
+
+#[test]
 fn mend_forms() {
     assert_eq!(e("f() mend e => g(e)"), "(mend (call f) (e => (call g e)))");
     assert_eq!(e("a mend b mend c"), "(mend (mend a b) c)");
@@ -178,6 +196,21 @@ fn templates() {
 }
 
 #[test]
+fn template_errors() {
+    let (_, _, diags, codes) = run("\"a {} b\"", |p| p.expr());
+    assert_eq!(codes, [codes::S0200]);
+    assert!(diags[0].contains("empty interpolation"), "{}", diags[0]);
+    assert!(diags[0].contains("write `{{` and `}}`"), "{}", diags[0]);
+    // Template tokens are described in words, not by their internal names.
+    let (_, _, diags, _) = run("\"{x y}\"", |p| p.expr());
+    assert!(diags[0].contains("expected `}` to end the interpolation, found `y`"), "{}", diags[0]);
+    // Skipping a bad interpolation steps over nested templates in it.
+    let (out, _, _, codes) = run("\"{x \"a{b}c\" y}!\"", |p| pretty::expr(&p.expr()));
+    assert_eq!(codes, [codes::S0200]);
+    assert_eq!(out, "(template {x} \"!\")");
+}
+
+#[test]
 fn call_arguments() {
     assert_eq!(e("f(a, name: 1, mut c, given: raw)"), "(call f a (name: 1) (mut c) (given: raw))");
     assert_eq!(e("f(\n    a,\n    b,\n)"), "(call f a b)");
@@ -232,6 +265,21 @@ fn labels_resolve_break_targets() {
     );
     // Not a label in scope, so it's a value.
     assert_eq!(e("loop { break outer }"), "(loop (block (break outer)))");
+}
+
+#[test]
+fn labeled_loops_are_expressions() {
+    assert_eq!(stmts("let v = outer: loop { break outer 5 }"), ["(let v (loop 'outer (block (break 'outer 5))))"]);
+    // In brackets, `k: loop` is a map entry (as `f(k: loop …)` is a named argument).
+    assert_eq!(e("[k: loop { break 1 }]"), "(map (k (loop (block (break 1)))))");
+    assert_eq!(e("f(k: loop { break 1 })"), "(call f (k: (loop (block (break 1)))))");
+}
+
+#[test]
+fn continue_takes_only_known_labels() {
+    let (_, _, diags, codes) = run("fn a() { loop { continue foo } }", |p| p.module());
+    assert_eq!(codes, [codes::S0200]);
+    assert!(diags[0].contains("no enclosing loop is labeled `foo`"), "{}", diags[0]);
 }
 
 // ================================================================ statements
@@ -318,6 +366,16 @@ fn patterns() {
     assert_eq!(pat(".(c)"), "(.() c)");
     assert_eq!(pat("none"), "none");
     assert_eq!(pat("\"GET\" | \"HEAD\""), "(| \"GET\" \"HEAD\")");
+    assert_eq!(pat("b\"x\\xff\""), "b\"x\\xff\"");
+}
+
+#[test]
+fn case_patterns_through_module_paths() {
+    assert_eq!(pat("ast.Expr.Lit(v)"), "(ast.Expr.Lit v)");
+    assert_eq!(pat("std.fs.MAX"), "std.fs.MAX");
+    assert_eq!(stmts("let ast.Point(x, y) = p"), ["(let (ast.Point x y) p)"]);
+    // A plain name is still a binding.
+    assert_eq!(pat("x"), "x");
 }
 
 #[test]
@@ -351,6 +409,14 @@ fn types() {
     assert_eq!(ty("Ring[u32, 4]"), "Ring[u32, 4]");
     assert_eq!(ty("A | B | C"), "(A | B | C)");
     assert_eq!(ty("type"), "type");
+}
+
+#[test]
+fn function_types_keep_tuple_parameters() {
+    // The parentheses right before `=>` are the parameter list.
+    assert_eq!(ty("((A, B)) => C"), "(((A, B)) => C)");
+    assert_eq!(ty("(()) => C"), "((()) => C)");
+    assert_eq!(ty("(A) => C"), "((A) => C)");
 }
 
 // ================================================================ items
@@ -470,6 +536,25 @@ fn wefts_weaves_externs_uses() {
 }
 
 #[test]
+fn attribute_arguments() {
+    let m = module("#foo(key = 1, bits)\nfn a() {}\nwarp W {\n    #disjoint\n    fn f(self) {}\n}");
+    assert_eq!(pretty::item(&m.items[0]), "#foo((= key 1) bits)\n(fn a() (block))\n");
+    // Member attributes show up in the dump too.
+    assert!(
+        pretty::item(&m.items[1]).contains("  #disjoint()\n  (fn f(self) (block))"),
+        "{}",
+        pretty::item(&m.items[1])
+    );
+}
+
+#[test]
+fn through_needs_a_colon() {
+    let (_, _, diags, codes) = run("warp A { through frame Frame }", |p| p.module());
+    assert_eq!(codes, [codes::S0200]);
+    assert!(diags[0].contains("expected `:`, found `Frame`"), "{}", diags[0]);
+}
+
+#[test]
 fn param_modes_go_first() {
     let m = module("fn f(mut a: T, take b: T, c: T, const n: usize) {}");
     let ItemKind::Fn(f) = &m.items[0].kind else { panic!() };
@@ -517,6 +602,84 @@ fn reports_unclosed_delimiters() {
     let (_, _, diags, codes) = run("fn a() {\n    f(1, 2\n", |p| p.module());
     assert!(codes.contains(&codes::S0201), "{codes:?}");
     assert!(diags.iter().any(|d| d.contains("never closed")), "{diags:?}");
+}
+
+#[test]
+fn a_missing_close_paren_points_at_the_opener() {
+    let (_, _, diags, codes) = run("fn a() {\n    let x = f(1, 2\n    let y = 3\n}", |p| p.module());
+    assert_eq!(codes, [codes::S0200]);
+    assert!(diags[0].contains("expected `)`, found keyword `let`"), "{}", diags[0]);
+    assert!(diags[0].contains("to close this `(`"), "{}", diags[0]);
+}
+
+#[test]
+fn explains_the_continuation_rule() {
+    let (_, _, diags, codes) = run("fn a() {\n    let b = x\n    + y\n}", |p| p.module());
+    assert_eq!(codes, [codes::S0200]);
+    assert!(diags[0].contains("only when it's indented deeper"), "{}", diags[0]);
+}
+
+#[test]
+fn lexer_errors_are_not_reported_again() {
+    assert_eq!(module_codes("fn a() { let x = 1 $ 2 }"), [codes::S0100]);
+    assert_eq!(module_codes("fn a() {\n    let x = 'ab' + 1\n}"), [codes::S0107]);
+}
+
+#[test]
+fn one_error_per_garbage_line() {
+    assert_eq!(module_codes("fn a() {\n    @@@ @@\n    let y = 2\n}"), [codes::S0200]);
+    assert_eq!(module_codes("warp A {\n    @@@ @@\n    x: u8\n}"), [codes::S0200]);
+    assert_eq!(module_codes("fn a() {\n    match x {\n        ) ) )\n        _ => 1\n    }\n}"), [codes::S0200]);
+}
+
+#[test]
+fn a_missing_brace_ends_at_the_next_item() {
+    // The warp's `}` is missing: one error, and `B` and `c` still parse as items.
+    let (m, _, diags, codes) = run("warp A {\n    x: u8\nwarp B {\n    y: u8\n}\nfn c() {}", |p| p.module());
+    assert_eq!(codes, [codes::S0201]);
+    assert!(diags[0].contains("expected `}` before this line"), "{}", diags[0]);
+    assert_eq!(m.items.len(), 3);
+    // Same for a `match` whose `}` is missing.
+    let (m, _, _, codes) =
+        run("fn a() {\n    let v = match x {\n        1 => 2\n    let w = 3\n    w\n}\nfn b() {}", |p| p.module());
+    assert_eq!(codes, [codes::S0201]);
+    assert_eq!(m.items.len(), 2);
+    assert!(pretty::item(&m.items[0]).contains("(let w 3)"), "{}", pretty::item(&m.items[0]));
+    // A statement keyword indented like an arm is an ordinary error instead.
+    assert_eq!(module_codes("fn a() {\n    match x {\n        let y = 1\n    }\n}"), [codes::S0200]);
+}
+
+#[test]
+fn deep_nesting_is_an_error_not_a_crash() {
+    // Run with a big stack so a debug build reaches the limit (the CLI does the same).
+    let codes = std::thread::Builder::new()
+        .stack_size(64 * 1024 * 1024)
+        .spawn(|| {
+            let deep = |open: &str, mid: &str, close: &str| {
+                format!("fn a() {{ {}{mid}{} }}", open.repeat(5000), close.repeat(5000))
+            };
+            [
+                deep("(", "1", ")"),
+                deep("[", "1", "]"),
+                deep("{ ", "1", " }"),
+                deep("-", "1", ""),
+                format!("fn a() {{ let x: {}T = y }}", "?".repeat(5000)),
+                format!("fn a() {{ let {}x{} = 1 }}", "(".repeat(5000), ")".repeat(5000)),
+                format!("use a{}{}", ".{b".repeat(5000), "}".repeat(5000)),
+            ]
+            .iter()
+            .map(|src| module_codes(src))
+            .collect::<Vec<_>>()
+        })
+        .expect("spawn")
+        .join()
+        .expect("no stack overflow");
+    for c in codes {
+        assert_eq!(c, [codes::S0211]);
+    }
+    // Deep but reasonable nesting is fine.
+    let src = format!("fn a() {{ let x = {}1{} }}", "(".repeat(60), ")".repeat(60));
+    assert!(module_codes(&src).is_empty());
 }
 
 #[test]

@@ -349,8 +349,12 @@ fn string_errors() {
     assert_eq!(codes_for(r#""\u{110000}""#), [codes::S0108]);
     assert_eq!(codes_for(r#"b"é""#), [codes::S0110]);
     assert_eq!(codes_for("\"{x"), [codes::S0111]);
-    // Inside `{…}`, a `"` opens a nested string, so this one reports both.
-    assert_eq!(codes_for("\"{x\""), [codes::S0102, codes::S0111]);
+    // Inside `{…}`, a `"` opens a nested string. When that string runs off
+    // the line too, the unterminated interpolation is the one error.
+    assert_eq!(codes_for("\"{x\""), [codes::S0111]);
+    assert_eq!(codes_for("let s = \"k {\"\nlet t = 1"), [codes::S0111]);
+    // A nested string in a `"""` interpolation still reports its own line.
+    assert_eq!(codes_for("\"\"\"\n{f(\"a\n)}\n\"\"\""), [codes::S0102]);
     assert_eq!(codes_for("\"{x\nlet y = 2"), [codes::S0111]);
     assert_eq!(codes_for("\"{x:>3\n"), [codes::S0111]);
     assert_eq!(codes_for("\"\"\"never closed"), [codes::S0102]);

@@ -20,6 +20,10 @@ impl Parser<'_> {
 
     /// The statements and closing brace of a block whose `{` is already consumed.
     pub(super) fn block_rest(&mut self, open: crate::source::Span) -> Block {
+        self.nested(|span| Block { stmts: Vec::new(), span }, |p| p.block_rest_inner(open))
+    }
+
+    fn block_rest_inner(&mut self, open: crate::source::Span) -> Block {
         let stmts = self.with_nl(true, |p| {
             let mut stmts = Vec::new();
             loop {
@@ -31,7 +35,7 @@ impl Parser<'_> {
                 stmts.push(p.stmt());
                 p.stmt_terminator();
                 if p.pos == before {
-                    p.bump();
+                    p.skip_bad_stmt();
                 }
             }
             stmts
@@ -78,21 +82,7 @@ impl Parser<'_> {
                     StmtKind::Defer { binding: None, body: self.stmt_expr() }
                 }
             }
-            // `outer: for …`
-            TokenKind::Ident
-                if self.nth_is_punct(1, Punct::Colon)
-                    && matches!(
-                        self.nth_kind(2),
-                        TokenKind::Keyword(Keyword::For | Keyword::While | Keyword::Loop | Keyword::Loom)
-                    ) =>
-            {
-                let label = self.ident(NameCase::Value, "label");
-                self.bump();
-                self.labels.push(label.name.clone());
-                let expr = self.labeled_loop(label);
-                self.labels.pop();
-                StmtKind::Expr(expr)
-            }
+            // Labeled loops (`outer: for …`) are expressions: see `primary`.
             _ if self.at_item_start() => match self.item() {
                 Some(item) => StmtKind::Item(Box::new(item)),
                 None => StmtKind::Expr(Expr { kind: ExprKind::Error, span: start }),

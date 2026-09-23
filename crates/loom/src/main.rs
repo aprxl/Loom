@@ -84,8 +84,26 @@ impl From<Color> for ColorMode {
     }
 }
 
+/// Stack for the thread that runs the compiler. The front end is recursive
+/// descent, and the main thread's default stack (1 MiB on Windows) is too
+/// small for input nested up to the parser's limit in debug builds. This is
+/// reserved address space; pages are only committed as they're used.
+const COMPILER_STACK: usize = 64 * 1024 * 1024;
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    let spawned = std::thread::Builder::new().name("loom".into()).stack_size(COMPILER_STACK).spawn(move || run(cli));
+    match spawned {
+        // A panic has already been printed by the panic hook.
+        Ok(handle) => handle.join().unwrap_or(ExitCode::FAILURE),
+        Err(e) => {
+            eprintln!("error: couldn't start the compiler thread: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run(cli: Cli) -> ExitCode {
     let color = ColorMode::from(cli.color);
     match cli.command {
         Command::Build { file, out, emit } => build(&file, out.as_deref(), emit, color),
