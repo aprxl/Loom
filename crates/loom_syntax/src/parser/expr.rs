@@ -378,7 +378,6 @@ impl Parser<'_> {
         e
     }
 
-    /// `.name`, `.0`, `.{ … }` or `.(field)` after an expression.
     /// Reads the current integer token, whose value is `value`, as a tuple
     /// index after a `.`: `t.0`, `.1`.
     fn tuple_index(&mut self, value: u128) -> Option<FieldName> {
@@ -392,6 +391,7 @@ impl Parser<'_> {
         }
     }
 
+    /// `.name`, `.0`, `.{ … }` or `.(field)` after an expression.
     fn dot_suffix(&mut self, base: Expr) -> Expr {
         let base_span = base.span;
         self.bump();
