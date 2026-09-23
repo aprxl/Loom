@@ -1,0 +1,25 @@
+[package]
+name = "loom"
+description = "The Loom command-line tool: build, run, check, test."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "loom"
+path = "src/main.rs"
+
+[features]
+default = ["lua54"]
+lua54 = ["loom_compiler/lua54", "loom_host/lua54"]
+lua55 = ["loom_compiler/lua55", "loom_host/lua55"]
+
+[dependencies]
+clap.workspace = true
+loom_syntax.workspace = true
+loom_compiler.workspace = true
+loom_host.workspace = true
+
+[lints]
+workspace = true

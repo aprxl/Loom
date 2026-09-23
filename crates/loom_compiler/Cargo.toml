@@ -1,0 +1,19 @@
+[package]
+name = "loom_compiler"
+description = "Everything semantic: resolution, type checking, analyses, lowering to Lua."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[features]
+default = ["lua54"]
+lua54 = ["loom_host/lua54"]
+lua55 = ["loom_host/lua55"]
+
+[dependencies]
+loom_syntax.workspace = true
+loom_host.workspace = true
+
+[lints]
+workspace = true

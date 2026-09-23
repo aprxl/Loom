@@ -1,0 +1,5 @@
+# Minimum supported version is enforced by `rust-version = "1.98"` in Cargo.toml.
+# Pinning "stable" (not "1.98.0") avoids rustup installing a duplicate toolchain.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]

@@ -1,0 +1,8 @@
+# C code in this workspace (the vendored Lua VM, built by the `cc` crate via
+# mlua/lua-src) is compiled with Clang and linked with LLD, not MSVC.
+[env]
+CC_x86_64_pc_windows_msvc = "clang-cl"
+AR_x86_64_pc_windows_msvc = "llvm-lib"
+
+[target.x86_64-pc-windows-msvc]
+linker = "lld-link"

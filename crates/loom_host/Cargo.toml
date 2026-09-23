@@ -1,0 +1,19 @@
+[package]
+name = "loom_host"
+description = "The one owner of the bundled Lua VM: runtime embedding, lua-host, const-eval sandbox."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[features]
+default = ["lua54"]
+# Exactly one of these must be enabled.
+lua54 = ["mlua/lua54"]
+lua55 = ["mlua/lua55"]
+
+[dependencies]
+mlua.workspace = true
+
+[lints]
+workspace = true

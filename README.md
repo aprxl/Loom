@@ -247,6 +247,7 @@ pub warp Ring[T, const N: usize] {
 
 ```
 README.md                  you are here
+AGENTS.md                  how to work on the repo (gates, toolchain, conventions)
 design/
   01-syntax.md             lexical rules, statements, operators, patterns, the leading dot
   02-types.md              primitives, gauges, warps, wefts, weaves, through, generics, any
@@ -266,6 +267,15 @@ examples/
   lexer.loom               shuttles: generators, push-driven lexer
   parallel.loom            loom blocks, threads, loom for
   compile_time.loom        compile-time tables, const params, reflection-based derive
+crates/
+  loom_syntax/             source files, spans, diagnostics, tokens, the lexer
+  loom_host/               the bundled Lua VM (mlua, vendored, built with clang-cl)
+  loom_compiler/           resolve, typeck, analyses, lowering (not started)
+  loom/                    the `loom` command-line tool
+runtime/
+  rt/                      loomrt, the Lua runtime every bundle carries
+  std/                     the standard library, in Loom (not started)
+tests/                     fixture corpora (see tests/README.md)
 ```
 
 The examples use an imagined `std` (`std.io`, `std.fs`, `std.mem`, …). Where
@@ -273,4 +283,15 @@ they rely on something from `std`, the name should make its purpose clear.
 
 ## Status
 
-Design sketch v0.1. Not implemented. Everything can still change.
+The language is a design sketch (v0.1). A Loom → Lua 5.4 transpiler is being
+built in `crates/`, following the plan in `design/lua-backend.md`:
+
+- **Done:** the lexer. `loom check <file>` lexes and reports diagnostics;
+  `loom build <file> --emit tokens` dumps the token stream. All eight
+  examples lex cleanly.
+- **Next:** the parser, then type checking, lowering, and `loom run`.
+
+```bash
+cargo run -p loom -- check examples/chip8.loom
+cargo run -p loom -- build examples/chip8.loom --emit tokens
+```

@@ -1,0 +1,33 @@
+[workspace]
+members = ["crates/*"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+publish = false
+
+[workspace.dependencies]
+# Internal crates. Anything that (transitively) reaches mlua is taken without
+# default features, so exactly one Lua version is enabled per build.
+loom_syntax = { path = "crates/loom_syntax" }
+loom_host = { path = "crates/loom_host", default-features = false }
+loom_compiler = { path = "crates/loom_compiler", default-features = false }
+
+clap = { version = "4.6", features = ["derive"] }
+codespan-reporting = "0.13"
+mlua = { version = "0.11", features = ["vendored"] }
+unicode-ident = "1"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+unwrap_used = "warn"
+
+[profile.dev.package."*"]
+opt-level = 1

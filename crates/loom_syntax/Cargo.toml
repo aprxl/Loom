@@ -1,0 +1,14 @@
+[package]
+name = "loom_syntax"
+description = "Loom source files, spans, diagnostics, tokens and the lexer."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+codespan-reporting.workspace = true
+unicode-ident.workspace = true
+
+[lints]
+workspace = true
