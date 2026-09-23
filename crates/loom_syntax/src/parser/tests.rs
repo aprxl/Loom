@@ -177,6 +177,14 @@ fn leading_dots_and_dot_blocks() {
 }
 
 #[test]
+fn leading_dot_tuple_fields() {
+    // `.0` is to `self.0` what `.x` is to `self.x`.
+    assert_eq!(e(".0 * 2"), "(* .0 2)");
+    assert_eq!(e("pair.{ .1 = 5 }"), "(dot-block pair (block (= .1 5)))");
+    assert_eq!(e("\"{.0}m\""), "(template {.0} \"m\")");
+}
+
+#[test]
 fn collections_and_groups() {
     assert_eq!(e("[1, 2, 3]"), "(array 1 2 3)");
     assert_eq!(e("[0; 16]"), "(array-repeat 0 16)");
@@ -419,6 +427,12 @@ fn function_types_keep_tuple_parameters() {
     assert_eq!(ty("(A) => C"), "((A) => C)");
 }
 
+#[test]
+fn optional_binds_tighter_than_the_function_arrow() {
+    assert_eq!(ty("?T => U"), "((?T) => U)");
+    assert_eq!(ty("?(T => U)"), "?((T) => U)");
+}
+
 // ================================================================ items
 
 #[test]
@@ -512,6 +526,7 @@ fn wefts_weaves_externs_uses() {
          use std.{env, fs}\n\
          weft Iter: Show {\n    type Item\n    fn next(mut self) -> ?Item\n    fn name(self) -> str = \"iter\"\n}\n\
          weave[T: Show] Show into List[T] where T: Eq {\n    fn show(self, mut f: Fmt) {}\n}\n\
+         weave Iter into Bytes {\n    type Item = u8\n    fn next(mut self) -> ?u8 = none\n}\n\
          extern \"C\" {\n    fn GetTickCount() -> u32\n}\n\
          type Port = u16 where 1..\n\
          type Even = i64 where _ % 2 == 0\n\
@@ -528,11 +543,12 @@ fn wefts_weaves_externs_uses() {
         rendered[3]
     );
     assert!(rendered[4].starts_with("(weave[T: Show] Show into List[T] where T: Eq"), "{}", rendered[4]);
-    assert!(rendered[5].contains("(fn GetTickCount() -> u32)"), "{}", rendered[5]);
-    assert_eq!(rendered[6], "(type Port = u16 where (.. 1 _))");
-    assert_eq!(rendered[7], "(type Even = i64 where (== (% _ 2) 0))");
-    assert_eq!(rendered[8], "(const HOUSE: AccountId 1)");
-    assert_eq!(rendered[9], "#test()\n#layout(bits big)\n(fn t() (block))");
+    assert!(rendered[5].starts_with("(weave Iter into Bytes\n  (type Item = u8)"), "{}", rendered[5]);
+    assert!(rendered[6].contains("(fn GetTickCount() -> u32)"), "{}", rendered[6]);
+    assert_eq!(rendered[7], "(type Port = u16 where (.. 1 _))");
+    assert_eq!(rendered[8], "(type Even = i64 where (== (% _ 2) 0))");
+    assert_eq!(rendered[9], "(const HOUSE: AccountId 1)");
+    assert_eq!(rendered[10], "#test()\n#layout(bits big)\n(fn t() (block))");
 }
 
 #[test]

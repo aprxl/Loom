@@ -335,7 +335,8 @@ for `0x00E0`.
 A leading `.` means "relative to the thing in context". `.name` resolves like this:
 
 1. **Inside a dot-block**, it's a member of the block's subject.
-2. **Inside a method** (and outside any dot-block), it's a member of `self`: `.x` means `self.x`.
+2. **Inside a method** (and outside any dot-block), it's a member of `self`:
+   `.x` means `self.x`, and `.0` means `self.0`.
 3. **Where a type is expected**, in an expression or a pattern, it's a case,
    constant, or associated function of that type: `.Red` means `Color.Red`.
 

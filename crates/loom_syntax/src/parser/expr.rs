@@ -379,6 +379,19 @@ impl Parser<'_> {
     }
 
     /// `.name`, `.0`, `.{ … }` or `.(field)` after an expression.
+    /// Reads the current integer token, whose value is `value`, as a tuple
+    /// index after a `.`: `t.0`, `.1`.
+    fn tuple_index(&mut self, value: u128) -> Option<FieldName> {
+        let tok = self.bump();
+        match u32::try_from(value) {
+            Ok(index) => Some(FieldName::Index(index, tok.span)),
+            Err(_) => {
+                self.error_at(codes::S0200, tok.span, "tuple index is too large", "not a tuple index");
+                None
+            }
+        }
+    }
+
     fn dot_suffix(&mut self, base: Expr) -> Expr {
         let base_span = base.span;
         self.bump();
@@ -399,16 +412,10 @@ impl Parser<'_> {
                 let name = self.ident(NameCase::Any, "field name");
                 ExprKind::Field { base: Box::new(base), field: FieldName::Named(name) }
             }
-            TokenKind::Int(lit) => {
-                self.bump();
-                match u32::try_from(lit.value) {
-                    Ok(index) => ExprKind::Field { base: Box::new(base), field: FieldName::Index(index, tok.span) },
-                    Err(_) => {
-                        self.error_at(codes::S0200, tok.span, "tuple index is too large", "not a tuple index");
-                        ExprKind::Error
-                    }
-                }
-            }
+            TokenKind::Int(lit) => match self.tuple_index(lit.value) {
+                Some(field) => ExprKind::Field { base: Box::new(base), field },
+                None => ExprKind::Error,
+            },
             _ => {
                 self.error_expected("a field name after `.`");
                 return Expr { kind: ExprKind::Error, span: base_span };
@@ -563,8 +570,14 @@ impl Parser<'_> {
             TokenKind::Keyword(k) => self.keyword_expr(k),
             TokenKind::Punct(Punct::Dot) => {
                 self.bump();
-                let name = self.ident(NameCase::Any, "name after `.`");
-                Expr { kind: ExprKind::LeadingDot(name), span: self.span_from(span) }
+                let kind = if let TokenKind::Int(lit) = self.kind() {
+                    // `.0` is `self.0` (or the subject's `.0` in a dot-block).
+                    let value = lit.value;
+                    self.tuple_index(value).map_or(ExprKind::Error, ExprKind::LeadingDot)
+                } else {
+                    ExprKind::LeadingDot(FieldName::Named(self.ident(NameCase::Any, "name after `.`")))
+                };
+                Expr { kind, span: self.span_from(span) }
             }
             TokenKind::Punct(Punct::LParen) => self.paren_or_lambda(),
             TokenKind::Punct(Punct::LBracket) => self.array_like(),

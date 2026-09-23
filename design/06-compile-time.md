@@ -47,11 +47,11 @@ warp Matrix[const R: usize, const C: usize] {
 
 ```loom
 const fn uint(bits: u8) -> type          // a builtin: uint(12) is u12
-const fn Fixed(int_bits: u8, frac_bits: u8) -> type = warp {
+const fn fixed(int_bits: u8, frac_bits: u8) -> type = warp {
     raw: int(int_bits + frac_bits)
     ...
 }
-type Q16_16 = Fixed(16, 16)
+type Q16x16 = fixed(16, 16)
 ```
 
 ## Compile-time control flow

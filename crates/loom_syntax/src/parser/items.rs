@@ -25,7 +25,7 @@ impl MemberCtx {
         match self {
             MemberCtx::Warp => "a field, `case`, `through`, `fn`, `const` or `type`",
             MemberCtx::Weft => "`fn` or `type`",
-            MemberCtx::Weave => "`fn`",
+            MemberCtx::Weave => "`fn` or `type`",
             MemberCtx::Extern => "an `fn` declaration",
         }
     }
@@ -389,9 +389,7 @@ impl Parser<'_> {
                 MemberKind::Const(self.const_decl())
             }
             TokenKind::Keyword(Keyword::Const) if ctx == MemberCtx::Warp => MemberKind::ConstExpr(self.expr()),
-            TokenKind::Keyword(Keyword::Type) if matches!(ctx, MemberCtx::Warp | MemberCtx::Weft) => {
-                MemberKind::Type(self.type_decl())
-            }
+            TokenKind::Keyword(Keyword::Type) if ctx != MemberCtx::Extern => MemberKind::Type(self.type_decl()),
             _ if field_like && ctx == MemberCtx::Warp => {
                 let name = self.ident(NameCase::Value, "field");
                 self.bump();

@@ -449,8 +449,8 @@ pub enum ExprKind {
     BuiltinCase(Keyword),
     SelfValue,
     SelfType,
-    /// `.name`: resolved against the subject, `self`, or the expected type.
-    LeadingDot(Ident),
+    /// `.name` or `.0`: resolved against the subject, `self`, or the expected type.
+    LeadingDot(FieldName),
     /// `_` in an argument: part of a hole lambda.
     Hole,
     Tuple(Vec<Expr>),

@@ -91,6 +91,7 @@ let n = s.parse[i32]() mend 0                           // a fallback value
 let f = File.open(p) mend unravel("can't open {p}")     // a "fallback" that diverges: this is `expect`
 let v = cache.get(k) mend return none                   // early exit
 let x = risky() mend e => { log.error("{e}"); default }  // a handler that sees the error
+let port = flag("port") mend env_port() mend 8080       // chains left to right: the first that works wins
 ```
 
 `unwrap()` and `expect()` exist in `std`, but `mend unravel("…")` reads well

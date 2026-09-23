@@ -42,7 +42,7 @@ file         = { item SEP } ;
 
 item         = { attribute } , [ "pub" ] ,
                ( use_decl | const_decl | type_decl | warp_decl | weft_decl
-               | weave_decl | fn_decl | extern_block | card_stmt ) ;
+               | weave_decl | fn_decl | extern_block | const_stmt ) ;
 
 attribute    = "#" , IDENT , [ "(" , [ attr_arg , { "," , attr_arg } ] , ")" ] ;
 attr_arg     = IDENT | STRING | INT | IDENT , "=" , expr ;
@@ -59,7 +59,7 @@ gauge        = "where" , expr ;          (* a range expression, or a boolean hol
 warp_decl    = [ "once" | "ref" ] , "warp" , TYPE_IDENT , [ generics ] , [ ":" , weft_list ] , [ where_clause ] ,
                ( warp_body | "(" , [ field_list ] , ")" ) ;
 warp_body    = "{" , { warp_member , SEP } , "}" ;
-warp_member  = { attribute } , ( field | through | case_decl | const_decl | type_decl | fn_decl | card_stmt ) ;
+warp_member  = { attribute } , ( field | through | case_decl | const_decl | type_decl | fn_decl | const_stmt ) ;
 field        = [ visibility ] , IDENT , ":" , type , [ "=" , expr ] ;
 field_list   = field , { "," , field } ;
 through      = "through" , IDENT , ":" , type ;
@@ -73,7 +73,8 @@ weft_decl    = "weft" , TYPE_IDENT , [ generics ] , [ ":" , weft_list ] , "{" , 
 weft_member  = "type" , TYPE_IDENT , [ ":" , weft_list ]
              | fn_sig , [ fn_body ] ;
 weave_decl   = "weave" , [ generics ] , type , "into" , type , [ where_clause ] ,
-               "{" , { fn_decl , SEP } , "}" ;
+               "{" , { weave_member , SEP } , "}" ;
+weave_member = { attribute } , ( fn_decl | type_decl ) ;                (* type Item = u8 *)
 weft_list    = type , { ( "," | "+" ) , type } ;
 
 (* functions *)
@@ -103,22 +104,27 @@ extern_block = "extern" , STRING , "{" , { fn_sig , SEP } , "}" ;
 
 type         = union_type ;
 union_type   = result_type , { "|" , result_type } ;
-result_type  = region_type , [ "!" , error_type ] ;
+result_type  = fn_type , [ "!" , error_type ] ;
 error_type   = region_type | "(" , type , { "|" , type } , ")" | "_" ;
+fn_type      = "(" , [ type , { "," , type } ] , ")" , "=>" , type          (* parameter list *)
+             | region_type , [ "=>" , type ] ;                               (* right-assoc *)
+               (* Parentheses right before "=>" are the parameter list, so
+                  ((A, B)) => C takes one tuple. Prefixes bind tighter than
+                  the arrow: ?T => U takes a ?T; write ?(T => U) for an
+                  optional function. *)
 region_type  = prefix_type , [ "@" , ( IDENT | "heap" | "static" ) ] ;
 prefix_type  = "?" , prefix_type
              | "^" , prefix_type
              | "*" , prefix_type
              | "any" , ( type_path | "(" , weft_list , ")" )
-             | fn_type
              | atom_type ;
-fn_type      = ( atom_type | "(" , [ type , { "," , type } ] , ")" ) , "=>" , type ;
 atom_type    = PRIM
              | type_path , [ "[" , type_arg , { "," , type_arg } , "]" ]
              | "(" , [ type , { "," , type } ] , ")"                      (* tuple, unit *)
              | "[" , type , [ ";" , expr ] , "]"                          (* slice, array *)
              | "Self"
-             | card_call ;                                                (* uint(12) *)
+             | const_call ;                                               (* uint(12) *)
+const_call   = [ path , "." ] , IDENT , "(" , [ args ] , ")" ;           (* a const fn returning `type` *)
 type_path    = [ path , "." ] , TYPE_IDENT , { "." , TYPE_IDENT } ;
 type_arg     = type | expr ;                                              (* const values: Ring[u8, 64] *)
 
@@ -127,8 +133,8 @@ type_arg     = type | expr ;                                              (* con
 
 block        = "{" , { stmt , SEP } , [ expr ] , "}" ;
 
-stmt         = let_stmt | given_stmt | spool_stmt | hem_stmt | assign_stmt
-             | card_stmt | item | expr ;
+stmt         = let_stmt | given_stmt | spool_stmt | defer_stmt | assign_stmt
+             | const_stmt | item | expr ;
 let_stmt     = ( "let" | "var" ) , pattern , [ ":" , type ] , "=" , expr ;
 given_stmt   = "given" , ( IDENT , "=" , expr | expr ) ;
 spool_stmt   = "spool" , IDENT , "=" , expr ;
@@ -149,7 +155,8 @@ lambda       = lambda_params , "=>" , ( assign_stmt | expr ) | mend_expr ;  (* r
 lambda_params= IDENT | "(" , [ lparam , { "," , lparam } ] , ")" ;
 lparam       = [ "take" ] , IDENT , [ ":" , type ] ;
 
-mend_expr    = or_expr , [ "mend" , ( IDENT , "=>" , expr | expr ) ] ;
+mend_expr    = or_expr , { "mend" , ( IDENT , "=>" , expr | or_expr ) } ;
+               (* left-assoc: a mend b mend c tries a, then b, then c *)
 or_expr      = and_expr , { "or" , and_expr } ;
 and_expr     = not_expr , { "and" , not_expr } ;
 not_expr     = "not" , not_expr | cmp_expr ;
@@ -180,7 +187,7 @@ arg          = [ IDENT , ":" ] , [ "mut" ] , expr
              | "given" , ":" , expr ;
 
 primary      = literal | IDENT | CONST_IDENT | type_path | "self" | "_"
-             | "." , ( IDENT | TYPE_IDENT )                               (* leading dot *)
+             | "." , ( IDENT | TYPE_IDENT | INT )                         (* leading dot: .x, .Red, .0 *)
              | "(" , expr , { "," , expr } , ")"
              | "[" , [ expr , { "," , expr } | expr , ";" , expr | map_entries ] , "]"
              | block | if_expr | match_expr | loop_expr
@@ -200,7 +207,7 @@ match_expr   = "match" , expr , "{" , { arm , SEP } , "}" ;
 arm          = pattern , [ "if" , expr ] , "=>" , ( assign_stmt | expr ) ;
 loop_expr    = [ IDENT , ":" ] , ( for_expr | "while" , expr , block | "loop" , block ) ;
 for_expr     = "for" , pattern , "in" , expr , block ;
-card_for     = for_expr ;
+const_for    = for_expr ;
 
 
 (* --------------------------------------------------------------- patterns *)

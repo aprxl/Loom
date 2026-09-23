@@ -40,7 +40,7 @@ its registers in `[u8; 16]` and indexes them with `u4`.
 | `[T]` | slice: a view of contiguous `T`s |
 | `?T` | optional: `some(x)` or `none`. A `T` converts to `?T` implicitly |
 | `T ! E` | result: `ok(v)` or `err(e)` (see [04](04-errors.md)) |
-| `A => B` | function |
+| `A => B` | function. `?T => U` takes a `?T`; an optional function is `?(T => U)` |
 | `^T`, `^T@s` | pointer into a spool (see [03](03-memory.md)) |
 | `*T` | raw pointer; only usable inside `unsafe` |
 | `any W` | a value of some type that weaves `W`, with dynamic dispatch |
@@ -78,6 +78,7 @@ struct literal. To provide custom construction, write associated functions
 warp's module when the warp has private fields.
 
 **Tuple warps and newtypes:** `warp Meters(f64)` is a record with one positional field.
+It has no body, so its methods go in a `weave`, where `.0` means `self.0`.
 
 ### Sums (cases)
 
@@ -184,6 +185,11 @@ weave Shape into Rect {
 
 weave[T: Show] Show into List[T] {       // generic weave
     fn show(self, mut f: Fmt) { ... }
+}
+
+weave Iter into Bytes {
+    type Item = u8                       // binds the weft's associated type
+    fn next(mut self) -> ?u8 { ... }
 }
 ```
 
