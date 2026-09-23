@@ -1,7 +1,7 @@
 # 05 · Shuttles & looms
 
 On a real loom, the shuttle carries the weft thread back and forth across the
-warp. In Loom, a **shuttle** is a function that can pause and resume, passing
+warp. In Loom, a **shuttle** is a function that can pause and resume, yielding
 values out and pulling values in. A **loom block** is a scope where threads
 run side by side, and every one of them has finished before the scope ends.
 
@@ -16,14 +16,14 @@ The return arrow tells you what kind of function it is:
 | Signature | Kind | Type |
 |-----------|------|------|
 | `fn f() -> T` | ordinary function | |
-| `fn f() ~> T` | **generator**: passes out `T`s | `Shuttle[T, ()]` |
-| `fn f() ~> T <~ U` | **duplex**: pulls in `U`s, passes out `T`s | `Shuttle[T, U]` |
+| `fn f() ~> T` | **generator**: yields `T`s | `Shuttle[T, ()]` |
+| `fn f() ~> T <~ U` | **duplex**: pulls in `U`s, yields `T`s | `Shuttle[T, U]` |
 | `fn f() <~ U` | **sink**: only pulls | `Shuttle[(), U]` |
 | `fn f(mut self) ~> mut T` | **projection**: lends places (see [03](03-memory.md#projections)) | |
 
 Two expressions only work inside a shuttle:
 
-- **`pass v`** sends `v` out and suspends until the driver asks for more.
+- **`yield v`** sends `v` out and suspends until the driver asks for more.
 - **`pull`** suspends until the driver pushes an input. It evaluates to
   `?U`, which is `none` once the input has been closed.
 
@@ -34,7 +34,7 @@ body. It just builds the suspended shuttle value.
 fn fib() ~> u64 {
     var (a, b) = (0, 1)
     loop {
-        pass a
+        yield a
         (a, b) = (b, a + b)
     }
 }
@@ -44,7 +44,7 @@ fn running_mean() ~> f64 <~ f64 {
     while pull is some(x) {
         sum += x
         n += 1
-        pass sum / n as f64
+        yield sum / n as f64
     }
 }
 ```
@@ -54,11 +54,11 @@ fn running_mean() ~> f64 <~ f64 {
 - **Generators are iterators:** `for x in fib().take(10)`.
 - **`sh.push(u)`** resumes the shuttle with `u` as the value of its pending
   `pull` (on the first push, it starts the shuttle). It returns a **`Burst`**,
-  an iterator over what the shuttle passes out before it reaches its next
+  an iterator over what the shuttle yields before it reaches its next
   `pull`. The burst is lazy: iterating it is what actually runs the shuttle.
 - **`sh.close()`** makes pending and future `pull`s return `none`, and returns
   the final burst.
-- `Burst` is a **loose** type. You can't drop the outputs a push produced by
+- `Burst` is a **`once`** type. You can't drop the outputs a push produced by
   accident. If you really don't care, call `.drain()`.
 
 ```loom
@@ -75,9 +75,9 @@ reads top to bottom.
 
 ### Frames
 
-- A shuttle's frame (its locals that live across `pass` and `pull`) has a
+- A shuttle's frame (its locals that live across `yield` and `pull`) has a
   **size known at compile time** and is stored **inline** in the shuttle
-  value. There's no heap allocation. `card lexer.Frame.size` gives the size.
+  value. There's no heap allocation. `const lexer.Frame.size` gives the size.
 - Because of that, a shuttle can't recurse into itself directly. To nest one,
   allocate it: `^inner()`.
 - If a shuttle takes **borrowed** parameters, it's second-class, like a
@@ -106,7 +106,7 @@ let (a, b) = loom {
   inside the block, but the region checker won't let one escape it.
 - **Every thread started in a loom has finished before the block ends.**
   Threads nobody joined are joined when the block exits. If their results are
-  loose, that's a compile error, because you'd lose them.
+  `once`, that's a compile error, because you'd lose them.
 
 ### Why threads can borrow
 
@@ -138,8 +138,8 @@ error[C0401]: `hits` is mutated by more than one thread
 If the block exits early through `?`, `return`, `break`, or a thread that
 unraveled, the loom:
 
-1. **cancels** the unfinished threads, cooperatively, at their next `pass`,
-   `pull`, `join`, I/O call, or explicit `yield_now()`
+1. **cancels** the unfinished threads, cooperatively, at their next `yield`,
+   `pull`, `join`, I/O call, or explicit `sched_yield()`
 2. **waits** for all of them
 3. carries on with the exit: returning, propagating the error, or unravelling
    again in the parent

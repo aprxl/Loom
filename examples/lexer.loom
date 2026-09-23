@@ -1,7 +1,7 @@
 // lexer.loom: shuttles, functions that go back and forth.
 //
 // Shows: generator shuttles (`~> T`), duplex shuttles (`~> T <~ U`) using
-// `pass` and `pull`, driving a shuttle by pushing input into it, the loose
+// `yield` and `pull`, driving a shuttle by pushing input into it, the `once`
 // `Burst` it hands back, and a sum type whose cases share a field.
 //
 //   0  Ident("let")
@@ -32,7 +32,7 @@ warp Token: Show {
 
 // ---------------------------------------------------------------- a push lexer
 
-/// Feed it one char at a time and it passes out a token whenever one is
+/// Feed it one char at a time and it yields a token whenever one is
 /// finished. The driver owns the I/O, and this code still reads top to bottom
 /// like a pull lexer. The lexer's whole state (pos, the pending char, partial
 /// tokens) lives in its frame, which is sized at compile time and stored
@@ -43,7 +43,7 @@ fn lexer() ~> Token <~ char {
 
     loop {
         let c = next mend {                       // input closed: emit Eof and finish
-            pass .Eof(span: Span(pos, pos))
+            yield .Eof(span: Span(pos, pos))
             return
         }
         let start = pos
@@ -60,7 +60,7 @@ fn lexer() ~> Token <~ char {
                     pos += 1
                     next = pull
                 }
-                pass .Int(n, span: Span(start, pos))
+                yield .Int(n, span: Span(start, pos))
             }
             'a'..='z' | 'A'..='Z' | '_' => {
                 var name = String()
@@ -69,7 +69,7 @@ fn lexer() ~> Token <~ char {
                     pos += 1
                     next = pull
                 }
-                pass .Ident(name, span: Span(start, pos))
+                yield .Ident(name, span: Span(start, pos))
             }
             '"' => {
                 var text = String()
@@ -82,12 +82,12 @@ fn lexer() ~> Token <~ char {
                 }
                 pos += 1                          // the closing quote
                 next = pull
-                pass .Str(text, span: Span(start, pos))
+                yield .Str(text, span: Span(start, pos))
             }
             _ => {
                 pos += 1
                 next = pull
-                pass .Punct(c, span: Span(start, pos))
+                yield .Punct(c, span: Span(start, pos))
             }
         }
     }
@@ -95,13 +95,13 @@ fn lexer() ~> Token <~ char {
 
 // ---------------------------------------------------------------- generators
 
-/// A generator is a shuttle that only passes. It's an iterator too.
+/// A generator is a shuttle that only yields. It's an iterator too.
 fn primes() ~> u64 {
     var found = List[u64]()
     for n in 2.. {
         if found.all(n % _ != 0) {                // hole lambda: p => n % p != 0
             found.push(n)
-            pass n
+            yield n
         }
     }
 }
@@ -112,7 +112,7 @@ fn running_mean() ~> f64 <~ f64 {
     while pull is some(x) {
         sum += x
         count += 1
-        pass sum / count as f64                   // `as` binds tighter than `/`
+        yield sum / count as f64                   // `as` binds tighter than `/`
     }
 }
 
@@ -122,7 +122,7 @@ fn main() {
     let source = "let greeting = \"hi\" + 42"
 
     // We decide when input arrives. Each push resumes the lexer until it
-    // pulls again, and hands back the tokens it passed along the way.
+    // pulls again, and hands back the tokens it yielded along the way.
     var lex = lexer()
     for ch in source.chars() {
         for tok in lex.push(ch) {
@@ -142,12 +142,12 @@ fn main() {
     }
     mean.close().drain()
 
-    // `push` returns a *loose* Burst, so tokens can't be dropped by accident:
+    // `push` returns a `once` Burst, so tokens can't be dropped by accident:
     //
     //     lex.push('x')
     //     ^^^^^^^^^^^^^ error[L0301]: loose end: this `Burst[Token]` is never consumed
     //                   = help: iterate it, or call `.drain()` to discard on purpose
     //
     // And the frame really is fixed-size:
-    card assert(lexer.Frame.size <= 64, "the lexer frame grew unexpectedly")
+    const assert(lexer.Frame.size <= 64, "the lexer frame grew unexpectedly")
 }

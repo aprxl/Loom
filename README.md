@@ -47,8 +47,8 @@ fn main() {
    annotation. If you need a real graph, you allocate it in a *spool* and the
    pointer's type names that spool: `^Node@frame`.
 2. **Nothing dangles, nothing is left loose.** The compiler checks that
-   pointers don't outlive their spool. *Loose* types must be consumed. *Hems*
-   run cleanup code on the way out of a scope.
+   pointers don't outlive their spool. `once` types must be used up. `defer`
+   runs cleanup code on the way out of a scope.
 3. **The machine stays visible.** `u12` is a real type. Each arithmetic
    operator states what happens on overflow (`+ +% +| +?`). Bit layouts are
    declared. Instruction decoding is written as a pattern match.
@@ -71,21 +71,23 @@ fn main() {
 | `spool`      | a memory region / allocator with a name                | arena, allocator               |
 | `^T@s`       | pointer to a `T` that lives in spool `s`               | `Box<T>` / `&'s T`             |
 | `given`      | ambient parameter, passed implicitly by type           | Scala `using`, Odin `context`  |
-| `loose`      | a type whose values must be used up exactly once       | linear types (Austral)         |
-| `hem`        | code that runs at scope exit                           | `defer` / `errdefer`           |
+| `once`       | a type whose values must be used up exactly once       | linear types (Austral)         |
+| `defer`      | code that runs at scope exit                           | Go/Zig `defer`, `errdefer`     |
 | `mend`       | recover from an error or a missing value               | `??`, `orelse`, `catch`        |
 | `unravel`    | panic                                                  | `panic!`                       |
-| `shuttle`    | a function that can pause, passing values out and pulling values in | generator / coroutine |
+| `shuttle`    | a function that can pause, yielding values out and pulling values in | generator / coroutine |
 | `loom { }`   | structured-concurrency scope                           | nursery, scoped threads        |
 | `thread`     | a task spawned on the enclosing loom                   | `spawn`                        |
 | twill pattern| bit/nibble pattern with captures, used in `match`      | Erlang bit syntax, sort of     |
 | gauge        | an integer or float type restricted to a range         | Ada subtypes                   |
-| `card`       | code that runs at compile time                         | Zig `comptime`, `constexpr`    |
-| `selvage`    | the unsafe edge                                        | `unsafe`                       |
+| `const`      | code that runs at compile time                         | Zig `comptime`, `constexpr`    |
+| `unsafe`     | the unchecked edge, with a stated reason               | Rust `unsafe`                  |
 | bolt         | a package                                              | crate / module                 |
 
-The Jacquard loom (1804) was programmed with punched cards, and those cards
-are part of how programmable machines got started. That's where `card` comes from.
+The weaving words name the *things* Loom is built from: data, behavior, memory,
+patterns. The keywords you type every day (`defer`, `const`, `unsafe`, `yield`,
+`once`) are the plain ones you already know. The flavor survives in the
+diagnostics: forgetting to use up a `once` value is still a *loose end*.
 
 ---
 
@@ -155,18 +157,18 @@ let tree = parse("2 * (x + 3)", given: scratch)?   // tree: ^Expr@scratch
 scratch.reset()                                    // error if `tree` is still used later
 ```
 
-### 5. Loose ends and hems
+### 5. `once` types and `defer`
 
-A `loose` value must be tied off exactly once. The compiler won't let a
-transaction fall out of scope. A *fallback hem* ties it off on any exit where
-it's still loose.
+A `once` value must be used up exactly once. The compiler won't let a
+transaction fall out of scope; it reports a *loose end*. A *fallback defer*
+ties it off on any exit where it's still live.
 
 ```loom
 var tx = Tx.begin()
-hem tx => tx.rollback()        // runs only on exits where `tx` is still loose
+defer tx => tx.rollback()      // runs only on exits where `tx` is still live
 tx.debit(from, amount)
 ledger.check(to)?              // leaving early here rolls back
-tx.commit(mut ledger)          // tied off, so the hem does nothing on this path
+tx.commit(mut ledger)          // used up, so the defer does nothing on this path
 ```
 
 ### 6. Twill patterns
@@ -189,12 +191,12 @@ match op {                          // op: u16
 
 ### 7. Shuttles
 
-`~>` means "passes these out" and `<~` means "pulls these in". Shuttle frames
+`~>` means "yields these out" and `<~` means "pulls these in". Shuttle frames
 have a fixed size known at compile time and are stored inline, with no heap
 allocation.
 
 ```loom
-fn lexer() ~> Token <~ char { ... pull ... pass .Int(n, span) ... }
+fn lexer() ~> Token <~ char { ... pull ... yield .Int(n, span) ... }
 
 var lex = lexer()
 for ch in source.chars() {
@@ -217,13 +219,13 @@ let (primes, words) = loom {
 loom for (row, mut line) in pixels.chunks_mut(width).indexed() { ... }
 ```
 
-### 9. Cards: compile time is ordinary Loom code
+### 9. `const`: compile time is ordinary Loom code
 
 ```loom
-const CRC_TABLE: [u32; 256] = card { ... }            // computed while compiling
+const CRC_TABLE: [u32; 256] = { ... }                 // const initializers run while compiling
 
-pub warp Ring[T, card N: usize] {
-    card assert(N.is_power_of_two(), "capacity must be a power of two")
+pub warp Ring[T, const N: usize] {
+    const assert(N.is_power_of_two(), "capacity must be a power of two")
     type Idx = uint(N.log2())                        // N = 256 gives u8 cursors that wrap for free
     ...
 }
@@ -248,21 +250,22 @@ README.md                  you are here
 design/
   01-syntax.md             lexical rules, statements, operators, patterns, the leading dot
   02-types.md              primitives, gauges, warps, wefts, weaves, through, generics, any
-  03-memory.md             value semantics, borrows, projections, spools, given, loose, hem, selvage
+  03-memory.md             value semantics, borrows, projections, spools, given, once, defer, unsafe
   04-errors.md             ?T, T ! E, the ?/mend pair, fail, unravel
   05-concurrency.md        shuttles, loom blocks, threads
-  06-cards.md              compile-time evaluation and reflection
+  06-compile-time.md       compile-time evaluation (`const`) and reflection
   grammar.ebnf             a grammar sketch
   open-questions.md        the parts that aren't settled yet
+  lua-backend.md           decisions for the Loom → Lua 5.4 backend
 examples/
   tour.loom                everyday syntax in one file
   widgets.loom             OOP side: wefts, weaves, through, any, dot-blocks
   chip8.loom               a CHIP-8 core: twill patterns, u12/u4, overflow operators
   calc.loom                expression compiler in arenas: spools, ^T@s, given
-  ledger.loom              money transfers: gauges, loose ends, hems, error flow
+  ledger.loom              money transfers: gauges, once types, defer, error flow
   lexer.loom               shuttles: generators, push-driven lexer
   parallel.loom            loom blocks, threads, loom for
-  cards.loom               compile-time tables, card params, reflection-based derive
+  compile_time.loom        compile-time tables, const params, reflection-based derive
 ```
 
 The examples use an imagined `std` (`std.io`, `std.fs`, `std.mem`, …). Where

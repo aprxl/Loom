@@ -7,8 +7,8 @@ let pointers dangle. It gets there with four pieces:
    exist while a call is running.
 2. **Spools.** Allocation happens in named regions, and a pointer's type says
    which region it points into.
-3. **Loose types.** Resources that have to be closed can't be forgotten.
-4. **Selvage.** An explicit, documented escape hatch for unsafe code.
+3. **`once` types.** Resources that have to be closed can't be forgotten.
+4. **`unsafe`.** An explicit, documented escape hatch for unchecked code.
 
 ---
 
@@ -68,7 +68,7 @@ fn parse(src: str) -> Ast {
 
 ### 2. Projections: shuttles that lend a place
 
-A function can't return a borrow. It *can* pass one out and then wait. A
+A function can't return a borrow. It *can* `yield` one and then wait. A
 **projection** is a [shuttle](05-concurrency.md#shuttles) whose output is a
 *place* rather than a value. It's declared with `~> ref T` (read) or
 `~> mut T` (read-write).
@@ -77,7 +77,7 @@ A function can't return a borrow. It *can* pass one out and then wait. A
 weave[T] Index[usize] into List[T] {
     fn at(mut self, i: usize) ~> mut T {
         if i >= .len { unravel("index {i} out of bounds (len {.len})") }
-        pass mut .items[i]        // lend the slot; the caller uses it; we resume afterwards
+        yield mut .items[i]       // lend the slot; the caller uses it; we resume afterwards
     }
 }
 
@@ -89,7 +89,7 @@ counts.entry(word, or: 0) += 1
 
 The caller can use the projected place until the end of the statement that
 asked for it. After that the projection resumes, so it can clean up, rebalance,
-and so on. A projection that `pass`es **many** places is a mutable iterator,
+and so on. A projection that `yield`s **many** places is a mutable iterator,
 and that's how `for mut x in xs` and `chunks_mut` work. This idea comes from
 Hylo's subscripts, reused through shuttles.
 
@@ -224,89 +224,90 @@ fn main() {
 
 ---
 
-## Loose types (loose ends)
+## `once` types (and loose ends)
 
-A `loose warp` describes values that **must be consumed exactly once**. They
-can't be copied, and they can't just go out of scope.
+A `once warp` describes values that **must be used up exactly once**. They
+can't be copied, and they can't just go out of scope. `once` is a contextual
+keyword: it's only special directly before `warp`.
 
 ```loom
-pub loose warp Tx {
+pub once warp Tx {
     moves: List[Move]
 
     pub fn commit(take self, ledger: mut Ledger) ! LedgerError {
-        let Tx(moves) = self              // destructuring *ties* the loose end
+        let Tx(moves) = self              // destructuring *ties off* the value
         ...
     }
     pub fn rollback(take self) { let Tx(_) = self }
 }
 ```
 
-- The only ways to get rid of a loose value are to **destructure** it, which
+- The only ways to use up a `once` value are to **destructure** it, which
   is only possible where its fields are visible (normally its own module), or
   to pass it to a `take` parameter that deals with it. So the module that
-  defines a loose type decides which functions can tie it off.
-- A container of loose values is loose too: `List[Tx]` has to be drained.
-- When a loose value might be left unconsumed, the compiler says so and lists
-  the tie-off functions it knows about:
+  defines a `once` type decides which functions can tie it off.
+- A container of `once` values is `once` too: `List[Tx]` has to be drained.
+- A `once` value that might be left unused is a **loose end**. The compiler
+  says so and lists the tie-off functions it knows about:
 
 ```
 error[L0301]: loose end: `tx` is never tied off
   --> forgetful.loom:2:9
   |
 2 |     var tx = Tx.begin()
-  |         ^^ `Tx` is a loose type: it must be consumed exactly once
+  |         ^^ `Tx` is a `once` type: it must be used up exactly once
 4 | }
   | - ...but it is still loose when the scope ends here
     = help: tie it off with `tx.commit(..)` or `tx.rollback()`
-    = help: or add `hem tx => tx.rollback()` right after it's created
+    = help: or add `defer tx => tx.rollback()` right after it's created
 ```
 
 Good uses: transactions, file handles that need to report close errors,
 GPU command buffers, "remember to call `finish()`" builders, and protocol
 states (a `Handshake` that must turn into a `Session`).
 
-## Hems
+## `defer`
 
-A **hem** finishes an edge so it doesn't unravel. `hem` runs code when the
-scope exits, whether that's a normal exit, `return`, `fail`, `?`, `break`, or
-an `unravel`. Hems run in reverse order of declaration.
+`defer` runs code when the scope exits, whether that's a normal exit,
+`return`, `fail`, `?`, `break`, or an `unravel`. Defers run in reverse order
+of declaration.
 
 ```loom
 let fd = sys.open(path)?
-hem sys.close(fd)                     // plain hem: always runs
+defer sys.close(fd)                   // plain defer: always runs
 ```
 
-**Fallback hems** name a loose value:
+**Fallback defers** name a `once` value:
 
 ```loom
 var tx = Tx.begin()
-hem tx => tx.rollback()               // runs only on exits where `tx` is still loose
+defer tx => tx.rollback()             // runs only on exits where `tx` is still live
 ```
 
-At every exit, the compiler already knows whether `tx` has been consumed on
-that path, since it has to know that to check loose types. So a fallback hem
-compiles into cleanup code on the paths that need it and nothing on the others,
-with no runtime flag. This is Zig's `errdefer`, but keyed on the resource
-instead of on "an error happened".
+At every exit, the compiler already knows whether `tx` has been used up on
+that path, since it has to know that to check `once` types. So a native
+backend compiles a fallback defer into cleanup code on the paths that need it
+and nothing on the others, with no runtime flag. (The Lua backend uses a flag
+anyway; see [lua-backend](lua-backend.md).) This is Zig's `errdefer`, but
+keyed on the resource instead of on "an error happened".
 
-Hem bodies can't change control flow. They can't `return`, `fail`, `break`,
+Defer bodies can't change control flow. They can't `return`, `fail`, `break`,
 or use `?`. They're allowed to `unravel`.
 
 ---
 
-## Selvage: the unsafe edge
+## `unsafe`: the unchecked edge
 
-The selvage is the edge of woven cloth, where the rules change. `selvage`
-blocks are where you can:
+`unsafe` blocks are where you can:
 
 - dereference raw pointers `*T` and do pointer arithmetic
-- call `extern` functions and `selvage fn`s
+- call `extern` functions and `unsafe fn`s
 - reinterpret bits: `bits_as[T](x)`
 - read and write `Volatile[T]` registers
 - break exclusivity through `Shared` cells
 
-**Every selvage has to say why it's sound**, as a string, so audits can just
-grep for `selvage`:
+**Every `unsafe` block has to say why it's sound**, as a string, so audits
+can just grep for `unsafe`:
 
 ```loom
 extern "C" {
@@ -314,14 +315,14 @@ extern "C" {
 }
 
 pub fn raw_print(s: str) {
-    selvage "fd 1 is open for the whole process; s outlives the call" {
+    unsafe "fd 1 is open for the whole process; s outlives the call" {
         write(1, s.ptr(), s.len())
     }
 }
 ```
 
-`selvage fn` marks a whole function as unsafe to call, and its doc comment
-has to include a `# Selvage` section describing what callers must guarantee.
+`unsafe fn` marks a whole function as unsafe to call, and its doc comment
+has to include a `# Safety` section describing what callers must guarantee.
 
 ### Layout control
 
@@ -344,8 +345,8 @@ warp Ipv4Header {
     checksum: u16
     src: u32
     dst: u32
-    card assert(Self.bits == 160)          // checked at compile time
+    const assert(Self.bits == 160)         // checked at compile time
 }
 
-let hdr = Ipv4Header.read(packet[0..20])   // generated by #layout(bits); no selvage needed
+let hdr = Ipv4Header.read(packet[0..20])   // generated by #layout(bits); no unsafe needed
 ```

@@ -141,14 +141,14 @@ match fs.read(path) {
 
 `unravel(msg)` is a panic. Its type is `never`.
 
-- It unwinds the current thread and runs hems on the way out, including
-  fallback hems for loose values. Loose values without a hem are leaked, and
+- It unwinds the current thread and runs `defer`s on the way out, including
+  fallback defers for `once` values. `once` values without a defer are leaked, and
   the compiler notes this in debug builds.
 - When it reaches a `loom` block, the block cancels the sibling threads and
   unravels again in the parent (see [05](05-concurrency.md)).
 - `bolt.loom` can set `unravel = .abort` for builds that don't need unwinding.
 - It's meant for **bugs**, not expected failures. Plain arithmetic overflow and
-  failed `as` casts unravel. So do out-of-bounds indexing and failed `card assert`s, but those happen at compile time.
+  failed `as` casts unravel. So do out-of-bounds indexing and failed `const assert`s, but those happen at compile time.
 
 ---
 
@@ -161,4 +161,4 @@ match fs.read(path) {
 | default value | `.unwrap_or(d)` | `x orelse d` | `x ?? d` | `x mend d` |
 | catch locally | closure + match | `catch \|e\|` | `do { } catch` | `{ ... } mend e => ...` |
 | error set | enum + `From` | inferred sets | `any Error` | unions + `from` cases + `! _` |
-| cleanup on error | `Drop` | `errdefer` | `defer` | `hem x => ...` on the resource |
+| cleanup on error | `Drop` | `errdefer` | `defer` | `defer x => ...` on the resource |

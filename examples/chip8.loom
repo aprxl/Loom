@@ -176,7 +176,7 @@ pub warp Chip8 {
     }
 }
 
-card assert(FONT.len() == 16 * 5, "one 5-byte sprite per hex digit")
+const assert(FONT.len() == 16 * 5, "one 5-byte sprite per hex digit")
 
 // ---------------------------------------------------------------- frontend
 
@@ -196,7 +196,7 @@ fn main() ! any Error {
     var cpu = Chip8.load(fs.read(path)?)?                  // IoError and LoadError both widen to `any Error`
 
     term.raw_mode(true)
-    hem term.raw_mode(false)                               // restore the terminal however we leave
+    defer term.raw_mode(false)                             // restore the terminal however we leave
 
     loop {
         cpu.keys = term.poll_keys(KEYMAP)

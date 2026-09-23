@@ -1,10 +1,9 @@
-// cards.loom: compile-time Loom.
+// compile_time.loom: compile-time Loom (`const`).
 //
-// Named after the punched cards that programmed the Jacquard loom's pattern
-// before any weaving started. Shows: tables built by ordinary code at
-// compile time, `card assert`, card parameters and types as values, a type
-// whose shape is computed from a number, compile-time branches, and
-// "derive" as nothing more than a default method that reflects on `Self`.
+// Shows: tables built by ordinary code at compile time, `const assert`,
+// `const` parameters and types as values, a type whose shape is computed from
+// a number, compile-time branches, and "derive" as nothing more than a
+// default method that reflects on `Self`.
 
 use std.io.print
 
@@ -12,7 +11,7 @@ use std.io.print
 
 /// The CRC-32 lookup table, computed while compiling. In the binary it's
 /// just 1 KiB of read-only data.
-const CRC_TABLE: [u32; 256] = card {
+const CRC_TABLE: [u32; 256] = {        // const initializers run at compile time
     var table = [0u32; 256]
     for i in 0u32..256 {
         var c = i
@@ -33,15 +32,15 @@ pub fn crc32(data: [u8]) -> u32 {
 }
 
 // The same function runs at compile time, so the check value is verified on every build.
-card assert(crc32(b"123456789") == 0xCBF4_3926, "CRC-32 check value")
+const assert(crc32(b"123456789") == 0xCBF4_3926, "CRC-32 check value")
 
 // ================================================================ 2. types as values
 
 /// A ring buffer whose cursor type is *computed* from its capacity. With
 /// N = 256 the cursors are u8, so `+%= 1` wraps exactly at N: no masking,
 /// no modulo, and indexing `slots` can never go out of bounds.
-pub warp Ring[T, card N: usize] {
-    card assert(N.is_power_of_two(), "Ring capacity must be a power of two, got {N}")
+pub warp Ring[T, const N: usize] {
+    const assert(N.is_power_of_two(), "Ring capacity must be a power of two, got {N}")
 
     type Idx = uint(N.log2())                 // uint(8) is u8, uint(2) is u2, and so on
     type Len = uint(N.log2() + 1)             // 0..=N needs one more bit
@@ -70,21 +69,21 @@ pub warp Ring[T, card N: usize] {
 }
 
 // Ring[u32, 100] doesn't compile:
-//   error[K0101]: card assertion failed: Ring capacity must be a power of two, got 100
+//   error[K0101]: const assertion failed: Ring capacity must be a power of two, got 100
 //     note: while instantiating `Ring[u32, 100]`
 
-/// `card` parameters must be known at compile time, and the return type can depend on them.
-fn zeros(card n: usize) -> [f32; n] = [0.0; n]
+/// `const` parameters must be known at compile time, and the return type can depend on them.
+fn zeros(const n: usize) -> [f32; n] = [0.0; n]
 
 // ================================================================ 3. compile-time branches
 
-/// `card if` is decided while compiling. The branch that isn't taken is
+/// `const if` is decided while compiling. The branch that isn't taken is
 /// parsed but *not type-checked*, so it can name APIs this target doesn't have.
 fn page_size() -> usize {
-    card if target.os == .Windows {
+    const if target.os == .Windows {
         std.sys.win32.system_info().page_size
     } else {
-        selvage "sysconf has no preconditions" { std.sys.libc.sysconf(std.sys.libc.SC_PAGESIZE) as usize }
+        unsafe "sysconf has no preconditions" { std.sys.libc.sysconf(std.sys.libc.SC_PAGESIZE) as usize }
     }
 }
 
@@ -92,29 +91,29 @@ fn page_size() -> usize {
 
 /// Anything that can write itself as JSON. There are no required methods.
 /// The default body works for *any* warp by walking its shape at compile
-/// time. `card if` and `card for` unroll while compiling, so each warp gets
+/// time. `const if` and `const for` unroll while compiling, so each warp gets
 /// straight-line code with no runtime reflection left in the binary.
 pub weft ToJson {
     fn to_json(self, out: mut String) {
-        card if Self.kind == .Record {
+        const if Self.kind == .Record {
             out.push('{')
-            card for (i, f) in Self.fields.indexed() {
-                card if i > 0 { out.push(',') }
+            const for (i, f) in Self.fields.indexed() {
+                const if i > 0 { out.push(',') }
                 out.push_json_key(f.name)
-                self.(f).to_json(mut out)                // `self.(f)`: field access by a card-time Field
+                self.(f).to_json(mut out)                // `self.(f)`: field access by a compile-time Field
             }
             out.push('}')
         } else if Self.kind == .Sum {
-            card for c in Self.cases {
-                if self is .(c) {                        // runtime test against a card-time Case
-                    card if c.fields.is_empty() {
+            const for c in Self.cases {
+                if self is .(c) {                        // runtime test against a compile-time Case
+                    const if c.fields.is_empty() {
                         out.push_json_str(c.name)        // unit case: "Admin"
                     } else {
                         out.push('{')
                         out.push_json_key(c.name)
                         out.push('{')
-                        card for (i, f) in c.fields.indexed() {
-                            card if i > 0 { out.push(',') }
+                        const for (i, f) in c.fields.indexed() {
+                            const if i > 0 { out.push(',') }
                             out.push_json_key(f.name)
                             self.(c).(f).to_json(mut out)
                         }
@@ -123,7 +122,7 @@ pub weft ToJson {
                 }
             }
         } else {
-            card unravel("ToJson can't be derived for {Self.name}; weave it by hand")
+            const unravel("ToJson can't be derived for {Self.name}; weave it by hand")
         }
     }
 }

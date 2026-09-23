@@ -29,7 +29,7 @@ go out of bounds, so no check is emitted. That's why the CHIP-8 example stores
 its registers in `[u8; 16]` and indexes them with `u4`.
 
 **`uint(n)` / `int(n)`** are compile-time functions that return the type with
-`n` bits, so `u12` is sugar for `uint(12)`. See [06-cards](06-cards.md).
+`n` bits, so `u12` is sugar for `uint(12)`. See [06-compile-time](06-compile-time.md).
 
 ## Built-in composites
 
@@ -42,7 +42,7 @@ its registers in `[u8; 16]` and indexes them with `u4`.
 | `T ! E` | result: `ok(v)` or `err(e)` (see [04](04-errors.md)) |
 | `A => B` | function |
 | `^T`, `^T@s` | pointer into a spool (see [03](03-memory.md)) |
-| `*T` | raw pointer; only usable inside `selvage` |
+| `*T` | raw pointer; only usable inside `unsafe` |
 | `any W` | a value of some type that weaves `W`, with dynamic dispatch |
 | `A \| B` | anonymous tagged union, mostly used for error sets |
 
@@ -124,8 +124,8 @@ this module can assign to it.
 ### Copy and move
 
 A warp whose fields are all `Copy` becomes `Copy` automatically, unless it's
-`loose` or holds an owning pointer. Values of other types move when they're
-passed to `take` parameters or assigned. Every non-loose type has an explicit
+a `once` type or holds an owning pointer. Values of other types move when they're
+passed to `take` parameters or assigned. Every type that isn't `once` has an explicit
 deep `.copy()`.
 
 ---
@@ -193,7 +193,7 @@ your bolt.
 **Deriving.** When a warp lists a weft in its header but leaves out some
 required methods, the weft's default bodies have to cover them. Defaults can
 inspect `Self` at compile time, so "derive" isn't a special feature. It's just
-a well-written default method. See [06-cards](06-cards.md#derive-is-just-a-default-method).
+a well-written default method. See [06-compile-time](06-compile-time.md#derive-is-just-a-default-method).
 
 ```loom
 warp User: Eq, Hash, Show, ToJson { name: String, age: u8 }   // all four come from defaults
@@ -265,15 +265,15 @@ fn largest[T: Ord + Copy](xs: [T]) -> ?T {
 
 warp Pair[A, B] { first: A, second: B }
 
-warp Matrix[card R: usize, card C: usize] { cells: [f32; R * C] }
+warp Matrix[const R: usize, const C: usize] { cells: [f32; R * C] }
 
 fn describe[T](x: T) -> String where T: Show + Hash = "{x} #{x.hash():x}"
 ```
 
 - Generics are monomorphized.
-- Type parameters are really **card parameters** of type `type`. `[T: Ord]` is
-  sugar for `card T: type where T: Ord`, with `T` inferred from the arguments.
-  Value parameters such as `card N: usize` work the same way.
+- Type parameters are really **`const` parameters** of type `type`. `[T: Ord]` is
+  sugar for `const T: type where T: Ord`, with `T` inferred from the arguments.
+  Value parameters such as `const N: usize` work the same way.
 - To give explicit type arguments, use brackets: `s.parse[u16]()`, `List[i32]()`.
 
 ---

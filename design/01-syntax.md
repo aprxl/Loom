@@ -21,10 +21,11 @@ overflow-policy operators.
   The parser relies on this rule. In `Foo[x]` the brackets are type arguments,
   and in `foo[x]` or `TABLE[x]` they're an index.
 - Keywords:
-  `fn let var const type warp weft weave into through case pub if else match for in while loop break continue return fail is not and or mend hem loose ref spool given loom thread pass pull card selvage extern use as any self Self mut`.
+  `fn let var const type warp weft weave into through case pub if else match for in while loop break continue return fail is not and or mend defer ref spool given loom thread yield pull unsafe extern use as any self Self mut`.
   Some keywords are *contextual*: `take` only at the start of a parameter (so
   `iter.take(3)` is an ordinary method call), `from` only inside a case field
-  (so `fn transfer(from: AccountId, ...)` is fine), and `get` only inside `pub(get)`.
+  (so `fn transfer(from: AccountId, ...)` is fine), `get` only inside `pub(get)`,
+  and `once` only directly before `warp` (so `iter.once()` still works).
 
 ### Literals
 
@@ -86,7 +87,7 @@ let x = 5                      // immutable
 var count = 0                  // mutable
 let (q, r) = divmod(17, 5)     // destructuring
 let Point(x, y) = origin       // warp destructuring (positional or `x: px`)
-const LIMIT = 64               // compile-time constant (evaluated as a card)
+const LIMIT = 64               // compile-time constant
 given log = Logger.stderr()    // ambient context for the rest of the block (see 03)
 spool frame = Arena(1.mib())   // a named memory region (see 03)
 ```
@@ -374,5 +375,5 @@ says so and suggests `.copy()`.
 - `use std.fs.{File, read}`, `use app.parser as p`.
 - Items are private to their module unless they're marked `pub`. Fields can be
   `pub(get)`, which makes them readable everywhere but writable only inside the module.
-- A package is a **bolt**. Its manifest, `bolt.loom`, is a card program
-  rather than a config format (see [06-cards](06-cards.md)).
+- A package is a **bolt**. Its manifest, `bolt.loom`, is a compile-time
+  program rather than a config format (see [06-compile-time](06-compile-time.md)).

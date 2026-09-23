@@ -2,8 +2,8 @@
 //
 // Shows: gauges (range-checked numeric types), error warps with `from`
 // cases, `fail`, the `?`/`mend` pair (including a block used as try/catch),
-// loose types that must be tied off, and fallback hems that tie them off on
-// early exits.
+// `once` types that must be used up, and fallback defers that tie them off
+// on early exits.
 
 use std.io.print
 use std.fs.{File, IoError}
@@ -51,11 +51,11 @@ pub warp Ledger {
 
 // ---------------------------------------------------------------- transactions
 
-/// A transaction is a *loose end*. Once you `begin` one, the compiler won't
+/// A transaction is a `once` value. After you `begin` one, the compiler won't
 /// let it fall out of scope: it has to be committed or rolled back, exactly
 /// once, on every path. Only this module can see Tx's fields, so only the
 /// functions here can tie it off.
-pub loose warp Tx {
+pub once warp Tx {
     moves: List[Move] = List()
 
     pub fn begin() -> Tx = Tx()
@@ -97,14 +97,14 @@ pub fn transfer(ledger: mut Ledger, from: AccountId, to: AccountId, amount: Cent
     if from == to { fail .SameAccount }
 
     var tx = Tx.begin()
-    hem tx => tx.rollback()                  // on any exit where `tx` is still loose, roll it back
+    defer tx => tx.rollback()                // on any exit where `tx` is still live, roll it back
 
-    let fee = fee_for(ledger.balance(from)?, amount)   // unknown account? `?` returns, and the hem fires
+    let fee = fee_for(ledger.balance(from)?, amount)   // unknown account? `?` returns, and the defer fires
     tx.debit(from, amount + fee)            // Cents + Cents: both ≥ 0, so the sum is still Cents
-    ledger.check(to)?                        // another early exit, handled by the same hem
+    ledger.check(to)?                        // another early exit, handled by the same defer
     tx.credit(to, amount)
     tx.credit(HOUSE, fee)
-    tx.commit(mut ledger)                    // tied off: on this path the hem does nothing
+    tx.commit(mut ledger)                    // used up: on this path the defer does nothing
 }
 
 /// `is` narrows: inside the branch, `n` has type Cents.
@@ -127,12 +127,12 @@ fn main() {
         transfer(mut ledger, 2, 3, 20_00)?
         print("transfer 1 ok")
         transfer(mut ledger, 3, 9, 5_00)?        // no account 9: `check` fails before commit,
-                                                 // so transfer's hem rolls the half-built tx back
+                                                 // so transfer's defer rolls the half-built tx back
         print("transfer 2 ok")                   // not reached
     } mend e => print("stopped early: {e}")
 
     // Here the overdraft is caught by commit's dry run. The tx was already
-    // handed to commit, so the hem has nothing to do.
+    // handed to commit, so the defer has nothing to do.
     transfer(mut ledger, 3, 2, 99_00) mend e => print("refused: {e}")
 
     for (id, cents) in ledger.balances.sorted() {
@@ -158,8 +158,8 @@ fn main() {
 // error[L0301]: loose end: `tx` is never tied off
 //   |
 // 2 |     var tx = Tx.begin()
-//   |         ^^ `Tx` is a loose type: it must be consumed exactly once
+//   |         ^^ `Tx` is a `once` type: it must be used up exactly once
 // 4 | }
 //   | - ...but it is still loose when the scope ends here
 //   = help: tie it off with `tx.commit(..)` or `tx.rollback()`
-//   = help: or add `hem tx => tx.rollback()` right after it's created
+//   = help: or add `defer tx => tx.rollback()` right after it's created

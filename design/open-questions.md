@@ -70,10 +70,10 @@ blocked on I/O handles. The open question is whether a `Shuttle` that awaits
 I/O needs its own type (`~> T` plus `waits Io`), or whether that's
 visible anyway from the `given reel: Reel` it needs.
 
-### 8. `loose` and `unravel`
+### 8. `once` and `unravel`
 
-When a thread unravels, loose values without a fallback hem get leaked. Is
-that acceptable (like `mem::forget`), or should `loose` types require a
+When a thread unravels, `once` values without a fallback defer get leaked. Is
+that acceptable (like `mem::forget`), or should `once` types require a
 panic-time handler (`on unravel => ...`)?
 
 ### 9. Arithmetic on gauges
@@ -101,6 +101,9 @@ complicated rule.
 
 ### 12. Names
 
-`pass`/`pull` versus `yield`/`await`? `mend` versus `else`? `unravel` is
-charming. Does `hem` actually read as "defer" to newcomers? The weaving
-vocabulary is capped at about 15 words and every one has to earn its place.
+Settled: the keywords you type every day are plain words (`defer`, `const`,
+`unsafe`, `yield`, `once`), and the weaving vocabulary names the things Loom
+is built from (`warp`, `weft`, `weave`, `spool`, `shuttle`, twill, gauge).
+Still open: `mend` versus Zig-style `catch`, and whether `unravel` should just
+be `panic`. `sched_yield()` was renamed from `yield_now()` so it can't be
+confused with the `yield` keyword.

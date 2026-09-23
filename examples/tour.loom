@@ -1,7 +1,7 @@
 // tour.loom: everyday Loom in one file.
 //
 // Read top to bottom. Each section shows one small thing. The bigger features
-// (spools, loose ends, shuttles, looms, cards) have their own example files.
+// (spools, once types, shuttles, looms, compile-time code) have their own example files.
 
 use std.io.print
 use std.env

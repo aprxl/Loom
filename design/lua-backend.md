@@ -1,0 +1,130 @@
+# Lua backend: decision log
+
+How Loom maps onto Lua 5.4, and why. The emitted Lua stays inside the
+**5.4 ∩ 5.5 subset**, so the bundled VM can move to 5.5 with a feature flag.
+Each decision here should eventually have a fixture that pins it down.
+
+**Guiding rule:** where Loom and Lua agree, lower 1:1. Where Loom promises more
+than Lua gives, enforce it at compile time if possible and at runtime (in Lua)
+otherwise. Everything the type system proves (borrows, regions, `once`,
+exclusivity) is **erased**: Lua never sees it.
+
+---
+
+## Pipeline
+
+```
+SourceDb → lex → Tokens → parse → AST → resolve/desugar → HIR
+  → typeck(Instance) → THIR ⇄ const eval (Rust fold | sandboxed Lua)
+  → flow::Cfg → analyses → FlowFacts
+  → lower → LIR → lir_verify → luagen → Bundle { lua, source map }
+```
+
+- Generics are type-checked **per instance** (Zig-style), because untaken
+  `const if` branches aren't checked and `const for` bodies are checked per
+  iteration.
+- Flow analyses run on a CFG built only for analysis. Code is generated from
+  the typed tree, because Lua needs structured control flow and `<close>`
+  scoping.
+- `lir_verify` enforces Lua's own rules (goto/label scoping, 200 active locals,
+  255 upvalues, multi-value call positions, no writes to for-loop control
+  variables or `<close>` variables) before any Lua text exists.
+
+## Value representation
+
+| Loom | Lua |
+|------|-----|
+| `bool` | boolean |
+| `iN`/`uN`, N ≤ 64 | integer, kept normalized to the type's range |
+| `usize`/`isize` | treated as `u63`/`i63` (`target.pointer_bits == 63`) |
+| `f64` | float, always emitted with `.0` or an exponent |
+| `f32` | float, rounded through `string.pack("f")` after each operation |
+| `char` | integer code point |
+| `str`, `String` | Lua string (immutable; mutation goes through copy-out) |
+| `()` | `nil` |
+| tuples | `{a, b}` |
+| records | `{x = …, y = …}` |
+| sums with payloads | `{tag = k, payload…, shared fields…}`, a fresh table per construction |
+| unit-only enums | integers `1..n` (never shared singleton tables) |
+| `?T` | `nil` when T's representation never uses nil; `{v}` box otherwise |
+| `T ! E` | two slots `(ok, v_or_e)` in registers and returns; `{ok, v}` when stored |
+| `A \| B` | `{tid, v}` |
+| `any W` | `{v, vt}` (vtable per type × weft set; `vt.tid` for type tests) |
+| `[T; N]` | table indexed `1..N` (every index is emitted `+1`) |
+| `[T]` | view `{t, o, n}` |
+| `^T` | the table itself for table-backed T; `{v}` box for scalars |
+| Map / Set | insertion-ordered: `{keys, vals, idx, n}` |
+
+## Calling convention
+
+- **read** and **take** parameters pass the value or reference unchanged.
+- **`mut`** parameters:
+  - table-backed: pass the reference; whole-value assignment uses a
+    generated `overwrite_T(dst, fresh)`;
+  - scalar-backed: copy-in/copy-out via extra return values, always through
+    temporaries (`local r, t = f(p.x); p.x = t`), because Lua's multiple
+    assignment has no defined evaluation order.
+- Fallible functions return `true, v` or `false, e`, followed by copy-outs.
+- Multi-value calls only appear in `local … = call` and `return call`.
+
+## Copy points
+
+Invariant: every non-place expression produces a fresh table. A copy is
+emitted only when a place of a table-backed `Copy` type flows into an owning
+slot (`var`, field/element store, `take` argument, return, `^`, escaping
+capture, yield, value-form dot-block) while its source stays live. Last use
+turns the copy into a move. All of this is decided in one place:
+`loom_compiler::lower::place`.
+
+## Control flow shapes
+
+- `?` / `mend`: result locals declared before a `do … end`, failures `goto mN_fail`,
+  success `goto mN_done`. Labels are unique per function.
+- `continue`: `while c do do BODY end ::cN:: end`.
+- Labeled break: `goto bN` with the label right after the outer loop.
+- Never `repeat … until` (its condition sees body locals).
+- `defer`: `local d <close> = rt.defer(fn)`. Fallback defers add a liveness
+  flag, cleared right before the consuming call.
+- Shuttles: `coroutine.create` with tagged yields `(OUT, v)` / `(PULL)`.
+  A coroutine that dies by error is `coroutine.close`d before re-raising.
+
+## Defaults (decided; change here first)
+
+- `str.len()` counts bytes.
+- Integer `/` and `%` truncate (Lua's floor). Zero divisors and
+  `mininteger / -1` unravel.
+- `<<` truncates to the width; a shift amount ≥ width unravels.
+- float → int `as` truncates and unravels on NaN or out of range; `as|`
+  saturates (NaN → 0); `as%` on floats is rejected.
+- Evaluation order is left to right, everywhere.
+- Map and Set preserve insertion order.
+- f64 Display is Rust-like: `17`, `-3`, `1.5`, `inf`, `NaN`. Debug adds `.0`.
+  Never Lua's `tostring`.
+- Every type has a builtin structural Debug in v1.
+- An unravel inside a defer during an unravel replaces the first one.
+- `target.os` is the build host's OS; `target.pointer_bits` is 63.
+- A new `push` while the previous Burst is unfinished drains it silently.
+- The RNG is xoshiro in the runtime, never `math.random`.
+
+## Run mode
+
+`loom run` compiles in-process, writes the bundle to a temp file, and spawns
+`loom lua-host <bundle> -- args` with stdin/stdout inherited and stderr piped.
+A reader thread rewrites Lua positions into Loom spans using the source map
+and turns the runtime's unravel protocol lines into rustc-style reports.
+
+| Exit code | Meaning |
+|-----------|---------|
+| 0 | success |
+| 1 | `main` returned an error |
+| 2 | compile or usage error |
+| 70 | internal error (a raw Lua error, meaning a Loom bug) |
+| 101 | unravel |
+| 130 | interrupted (Ctrl-C) |
+| n | `process.exit(n)` |
+
+## Not supported in v1
+
+Raw pointers, `extern "C"`, `#layout(bits)` I/O, f16, integers wider than 64
+bits, user-written `Spool` weaves, anonymous `warp {}` types from `const fn`s,
+and `bolt.loom`. Each fails with a `U` code.

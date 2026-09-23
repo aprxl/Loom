@@ -56,7 +56,7 @@ type_decl    = "type" , TYPE_IDENT , [ generics ] , [ "=" , type , [ gauge ] ] ;
 gauge        = "where" , expr ;          (* a range expression, or a boolean hole lambda *)
 
 (* warps *)
-warp_decl    = [ "loose" | "ref" ] , "warp" , TYPE_IDENT , [ generics ] , [ ":" , weft_list ] , [ where_clause ] ,
+warp_decl    = [ "once" | "ref" ] , "warp" , TYPE_IDENT , [ generics ] , [ ":" , weft_list ] , [ where_clause ] ,
                ( warp_body | "(" , [ field_list ] , ")" ) ;
 warp_body    = "{" , { warp_member , SEP } , "}" ;
 warp_member  = { attribute } , ( field | through | case_decl | const_decl | type_decl | fn_decl | card_stmt ) ;
@@ -78,10 +78,10 @@ weft_list    = type , { ( "," | "+" ) , type } ;
 
 (* functions *)
 fn_decl      = fn_sig , fn_body ;
-fn_sig       = [ "card" | "selvage" ] , "fn" , IDENT , [ generics ] ,
+fn_sig       = [ "const" | "unsafe" ] , "fn" , IDENT , [ generics ] ,
                "(" , [ param , { "," , param } ] , ")" ,
                [ returns ] , [ givens ] , [ where_clause ] ;
-param        = [ "mut" | "take" | "card" ] , ( "self" | IDENT , ":" , type , [ "=" , expr ] ) ;
+param        = [ "mut" | "take" | "const" ] , ( "self" | IDENT , ":" , type , [ "=" , expr ] ) ;
 returns      = "->" , type , [ "!" , error_type ]
              | "!" , error_type
              | "~>" , [ "mut" | "ref" ] , type , [ "<~" , type ]      (* shuttles & projections *)
@@ -91,7 +91,7 @@ fn_body      = block | "=" , expr ;
 
 generics     = "[" , gparam , { "," , gparam } , "]" ;
 gparam       = TYPE_IDENT , [ ":" , weft_list ]
-             | "card" , IDENT , ":" , type
+             | "const" , IDENT , ":" , type
              | "@" , IDENT ;                                         (* explicit region param *)
 where_clause = "where" , bound , { "," , bound } ;
 bound        = type , ":" , weft_list ;
@@ -120,7 +120,7 @@ atom_type    = PRIM
              | "Self"
              | card_call ;                                                (* uint(12) *)
 type_path    = [ path , "." ] , TYPE_IDENT , { "." , TYPE_IDENT } ;
-type_arg     = type | expr ;                                              (* card values: Ring[u8, 64] *)
+type_arg     = type | expr ;                                              (* const values: Ring[u8, 64] *)
 
 
 (* ------------------------------------------------------------- statements *)
@@ -132,11 +132,13 @@ stmt         = let_stmt | given_stmt | spool_stmt | hem_stmt | assign_stmt
 let_stmt     = ( "let" | "var" ) , pattern , [ ":" , type ] , "=" , expr ;
 given_stmt   = "given" , ( IDENT , "=" , expr | expr ) ;
 spool_stmt   = "spool" , IDENT , "=" , expr ;
-hem_stmt     = "hem" , [ IDENT , "=>" ] , expr ;
+defer_stmt   = "defer" , [ IDENT , "=>" ] , expr ;
 assign_stmt  = place , assign_op , expr ;
 assign_op    = "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "~=" | "<<=" | ">>="
              | "+%=" | "-%=" | "*%=" | "+|=" | "-|=" | "*|=" ;
-card_stmt    = "card" , ( "assert" , "(" , expr , [ "," , expr ] , ")" | card_if | card_for | block ) ;
+const_stmt   = "const" , ( "assert" , "(" , expr , [ "," , expr ] , ")" | const_if | const_for | block ) ;
+               (* Disambiguation: `const` + CONST_IDENT + ( ":" | "=" ) is a const_decl;
+                  `const fn` is a function; anything else is compile-time code. *)
 
 
 (* ------------------------------------------------------------ expressions *)
@@ -169,7 +171,7 @@ prefix_expr  = ( "-" | "~" | "^" ) , prefix_expr | postfix_expr ;
 postfix_expr = primary , { postfix } ;
 postfix      = "(" , [ args ] , ")"
              | "[" , [ type_arg , { "," , type_arg } ] , "]"             (* index or type args: resolved by name *)
-             | "." , ( IDENT | TYPE_IDENT | INT | "(" , expr , ")" )     (* field, method, tuple .0, card field .(f) *)
+             | "." , ( IDENT | TYPE_IDENT | INT | "(" , expr , ")" )     (* field, method, tuple .0, const field .(f) *)
              | "?"
              | "^"
              | "." , "{" , { stmt , SEP } , "}" ;                        (* dot-block *)
@@ -184,16 +186,16 @@ primary      = literal | IDENT | CONST_IDENT | type_path | "self" | "_"
              | block | if_expr | match_expr | loop_expr
              | "loom" , [ "(" , args , ")" ] , ( block | for_expr )
              | "thread" , expr
-             | "pass" , [ "mut" | "ref" ] , expr
+             | "yield" , [ "mut" | "ref" ] , expr
              | "pull"
-             | "card" , ( block | postfix_expr )
-             | "selvage" , STRING , block
+             | "const" , ( block | postfix_expr )
+             | "unsafe" , STRING , block
              | "return" , [ expr ] | "fail" , expr
              | "break" , [ IDENT ] , [ expr ] | "continue" , [ IDENT ] ;
 map_entries  = expr , ":" , expr , { "," , expr , ":" , expr } ;
 
 if_expr      = "if" , expr , block , [ "else" , ( if_expr | block ) ] ;
-card_if      = "if" , expr , block , [ "else" , ( card_if | block ) ] ;  (* whole chain is card *)
+const_if     = "if" , expr , block , [ "else" , ( const_if | block ) ] ; (* whole chain is const *)
 match_expr   = "match" , expr , "{" , { arm , SEP } , "}" ;
 arm          = pattern , [ "if" , expr ] , "=>" , ( assign_stmt | expr ) ;
 loop_expr    = [ IDENT , ":" ] , ( for_expr | "while" , expr , block | "loop" , block ) ;
@@ -214,7 +216,7 @@ single_pattern
              | "(" , pattern , { "," , pattern } , ")"
              | "[" , [ pattern , { "," , pattern } ] , [ "," , ".." , [ IDENT ] ] , "]"
              | ( "." , TYPE_IDENT | type_path ) , [ "(" , field_pats , ")" ]
-             | "." , "(" , expr , ")"                                    (* card case: .(c) *)
+             | "." , "(" , expr , ")"                                    (* const case: .(c) *)
              | ( "some" | "ok" | "err" ) , "(" , pattern , ")"
              | "none" ;
 field_pats   = field_pat , { "," , field_pat } , [ "," , ".." ] ;
