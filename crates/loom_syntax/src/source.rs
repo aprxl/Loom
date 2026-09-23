@@ -59,17 +59,10 @@ pub struct SourceFile {
 impl SourceFile {
     fn new(name: String, text: String) -> Self {
         let text = text.strip_prefix('\u{feff}').unwrap_or(&text).replace("\r\n", "\n");
-        assert!(
-            u32::try_from(text.len()).is_ok(),
-            "source file `{name}` is larger than 4 GiB"
-        );
+        assert!(u32::try_from(text.len()).is_ok(), "source file `{name}` is larger than 4 GiB");
         let mut line_starts = vec![0];
         line_starts.extend(text.match_indices('\n').map(|(i, _)| i as u32 + 1));
-        Self {
-            name,
-            text,
-            line_starts,
-        }
+        Self { name, text, line_starts }
     }
 
     pub fn name(&self) -> &str {
@@ -107,10 +100,7 @@ impl SourceFile {
         let start = self.line_starts[line] as usize;
         let byte = (byte as usize).min(self.text.len());
         let col = self.text[start..byte].chars().count() + 1;
-        LineCol {
-            line: line as u32 + 1,
-            col: col as u32,
-        }
+        LineCol { line: line as u32 + 1, col: col as u32 }
     }
 }
 
@@ -150,50 +140,28 @@ impl<'a> codespan_reporting::files::Files<'a> for SourceDb {
     type Source = &'a str;
 
     fn name(&'a self, id: FileId) -> Result<&'a str, codespan_reporting::files::Error> {
-        self.files
-            .get(id.0 as usize)
-            .map(|f| f.name.as_str())
-            .ok_or(codespan_reporting::files::Error::FileMissing)
+        self.files.get(id.0 as usize).map(|f| f.name.as_str()).ok_or(codespan_reporting::files::Error::FileMissing)
     }
 
     fn source(&'a self, id: FileId) -> Result<&'a str, codespan_reporting::files::Error> {
-        self.files
-            .get(id.0 as usize)
-            .map(|f| f.text.as_str())
-            .ok_or(codespan_reporting::files::Error::FileMissing)
+        self.files.get(id.0 as usize).map(|f| f.text.as_str()).ok_or(codespan_reporting::files::Error::FileMissing)
     }
 
     fn line_index(&'a self, id: FileId, byte_index: usize) -> Result<usize, codespan_reporting::files::Error> {
-        let file = self
-            .files
-            .get(id.0 as usize)
-            .ok_or(codespan_reporting::files::Error::FileMissing)?;
+        let file = self.files.get(id.0 as usize).ok_or(codespan_reporting::files::Error::FileMissing)?;
         if byte_index > file.text.len() {
-            return Err(codespan_reporting::files::Error::IndexTooLarge {
-                given: byte_index,
-                max: file.text.len(),
-            });
+            return Err(codespan_reporting::files::Error::IndexTooLarge { given: byte_index, max: file.text.len() });
         }
         Ok(file.line_index(byte_index as u32))
     }
 
     fn line_range(&'a self, id: FileId, line_index: usize) -> Result<Range<usize>, codespan_reporting::files::Error> {
-        let file = self
-            .files
-            .get(id.0 as usize)
-            .ok_or(codespan_reporting::files::Error::FileMissing)?;
+        let file = self.files.get(id.0 as usize).ok_or(codespan_reporting::files::Error::FileMissing)?;
         // codespan expects the range to include the line's newline.
         let range = file
             .line_range(line_index)
-            .ok_or(codespan_reporting::files::Error::LineTooLarge {
-                given: line_index,
-                max: file.line_count() - 1,
-            })?;
-        let end = if range.end < file.text.len() {
-            range.end + 1
-        } else {
-            range.end
-        };
+            .ok_or(codespan_reporting::files::Error::LineTooLarge { given: line_index, max: file.line_count() - 1 })?;
+        let end = if range.end < file.text.len() { range.end + 1 } else { range.end };
         Ok(range.start..end)
     }
 }

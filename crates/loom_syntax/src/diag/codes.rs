@@ -37,6 +37,19 @@ codes! {
     S0109 = "unmatched brace in a string";
     S0110 = "non-ASCII character in a byte string";
     S0111 = "unterminated interpolation";
+
+    // S02xx: parser
+    S0200 = "unexpected token";
+    S0201 = "unclosed delimiter";
+    S0202 = "missing statement separator";
+    S0203 = "comparison chain mixes directions";
+    S0204 = "twill pattern outside a pattern";
+    S0205 = "assignment used as an expression";
+    S0206 = "hex digit used as a twill capture";
+    S0207 = "name has the wrong case";
+    S0208 = "parameter mode after the colon";
+    S0209 = "`pub(get)` outside a field";
+    S0210 = "missing initializer";
 }
 
 #[cfg(test)]

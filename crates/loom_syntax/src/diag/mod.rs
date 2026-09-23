@@ -45,32 +45,18 @@ impl Diagnostic {
     }
 
     fn new(severity: Severity, code: Code, message: impl Into<String>) -> Self {
-        Self {
-            severity,
-            code,
-            message: message.into(),
-            labels: Vec::new(),
-            notes: Vec::new(),
-        }
+        Self { severity, code, message: message.into(), labels: Vec::new(), notes: Vec::new() }
     }
 
     /// Adds the label that points at the problem itself.
     pub fn primary(mut self, span: Span, message: impl Into<String>) -> Self {
-        self.labels.push(Label {
-            span,
-            message: message.into(),
-            primary: true,
-        });
+        self.labels.push(Label { span, message: message.into(), primary: true });
         self
     }
 
     /// Adds a label that points at related context.
     pub fn secondary(mut self, span: Span, message: impl Into<String>) -> Self {
-        self.labels.push(Label {
-            span,
-            message: message.into(),
-            primary: false,
-        });
+        self.labels.push(Label { span, message: message.into(), primary: false });
         self
     }
 

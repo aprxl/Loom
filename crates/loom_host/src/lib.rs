@@ -77,10 +77,8 @@ mod tests {
     fn has_native_integers_and_bitwise_ops() -> mlua::Result<()> {
         // The backend relies on 64-bit integers, `//`, and native bitwise operators.
         let vm = Vm::new()?;
-        let (kind, wrapped, shifted): (String, i64, i64) = vm
-            .lua()
-            .load("return math.type(7 // 2), math.maxinteger + 1, (1 << 63) >> 63")
-            .eval()?;
+        let (kind, wrapped, shifted): (String, i64, i64) =
+            vm.lua().load("return math.type(7 // 2), math.maxinteger + 1, (1 << 63) >> 63").eval()?;
         assert_eq!(kind, "integer");
         assert_eq!(wrapped, i64::MIN);
         assert_eq!(shifted, 1);

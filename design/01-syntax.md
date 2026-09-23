@@ -25,7 +25,8 @@ overflow-policy operators.
   Some keywords are *contextual*: `take` only at the start of a parameter (so
   `iter.take(3)` is an ordinary method call), `from` only inside a case field
   (so `fn transfer(from: AccountId, ...)` is fine), `get` only inside `pub(get)`,
-  and `once` only directly before `warp` (so `iter.once()` still works).
+  `where` only after a type in a declaration, and `once` only directly before
+  `warp` (so `iter.once()` still works).
 
 ### Literals
 
@@ -186,6 +187,12 @@ outer: for row in grid { for c in row { if c == '#' { break outer } } }
 
 - `match` must be exhaustive. Arms are `pattern [if guard] => expr` and are
   separated by newlines or commas.
+- A label is `name:` before a loop. In `break name` / `continue name`, the name
+  is a label only if an enclosing loop has that label; otherwise
+  `break name` breaks with the *value* `name`. So `break count` in a
+  `loop` returns `count`, and `break outer` inside `outer: for` exits it.
+- `else` may start a new line: it can't begin a statement, so it always
+  attaches to the `if` before it.
 - `return`, `fail` (return an error, see [04](04-errors.md)), `break`, and `continue`
   all have type `never`, so they fit in any expression position.
 

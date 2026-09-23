@@ -20,10 +20,7 @@ pub enum ColorMode {
 }
 
 fn config() -> Config {
-    Config {
-        chars: Chars::ascii(),
-        ..Config::default()
-    }
+    Config { chars: Chars::ascii(), ..Config::default() }
 }
 
 fn to_codespan(diag: &Diagnostic) -> cs::Diagnostic<FileId> {
@@ -43,10 +40,7 @@ fn to_codespan(diag: &Diagnostic) -> cs::Diagnostic<FileId> {
             label.with_message(&l.message)
         })
         .collect();
-    base.with_code(diag.code.id)
-        .with_message(&diag.message)
-        .with_labels(labels)
-        .with_notes(diag.notes.clone())
+    base.with_code(diag.code.id).with_message(&diag.message).with_labels(labels).with_notes(diag.notes.clone())
 }
 
 /// Renders one diagnostic without color, e.g. for tests and golden files.

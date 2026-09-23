@@ -14,11 +14,7 @@ fn lex_str(src: &str) -> (SourceDb, Lexed) {
 fn describe_all(src: &str) -> Vec<String> {
     let (db, lexed) = lex_str(src);
     let rendered: Vec<String> = lexed.diagnostics.iter().map(|d| render_plain(&db, d)).collect();
-    assert!(
-        rendered.is_empty(),
-        "unexpected diagnostics for {src:?}:\n{}",
-        rendered.join("\n")
-    );
+    assert!(rendered.is_empty(), "unexpected diagnostics for {src:?}:\n{}", rendered.join("\n"));
     let mut out: Vec<String> = lexed.tokens.iter().map(|t| describe(&db, t)).collect();
     assert_eq!(out.pop().as_deref(), Some("eof"));
     out
@@ -159,14 +155,7 @@ fn integers() {
 fn floats() {
     assert_eq!(
         describe_all("3.14 1e-9 2.5f32 1f32 1_000.5 6.02E23"),
-        [
-            "float 3.14",
-            "float 1e-9",
-            "float 2.5 (f32)",
-            "float 1.0 (f32)",
-            "float 1000.5",
-            "float 6.02e23"
-        ]
+        ["float 3.14", "float 1e-9", "float 2.5 (f32)", "float 1.0 (f32)", "float 1000.5", "float 6.02e23"]
     );
 }
 
@@ -175,27 +164,13 @@ fn dots_after_numbers() {
     assert_eq!(describe_all("1..10"), ["int 1", "punct ..", "int 10"]);
     assert_eq!(describe_all("0..=x"), ["int 0", "punct ..=", "ident x"]);
     assert_eq!(describe_all("2.."), ["int 2", "punct .."]);
-    assert_eq!(
-        describe_all("64.kib()"),
-        ["int 64", "punct .", "ident kib", "punct (", "punct )"]
-    );
+    assert_eq!(describe_all("64.kib()"), ["int 64", "punct .", "ident kib", "punct (", "punct )"]);
     assert_eq!(describe_all("0.0..=1.0"), ["float 0.0", "punct ..=", "float 1.0"]);
     // Tuple indices are integers, never floats.
-    assert_eq!(
-        describe_all("t.0.1"),
-        ["ident t", "punct .", "int 0", "punct .", "int 1"]
-    );
+    assert_eq!(describe_all("t.0.1"), ["ident t", "punct .", "int 0", "punct .", "int 1"]);
     assert_eq!(
         describe_all("_.size().0"),
-        [
-            "underscore",
-            "punct .",
-            "ident size",
-            "punct (",
-            "punct )",
-            "punct .",
-            "int 0"
-        ]
+        ["underscore", "punct .", "ident size", "punct (", "punct )", "punct .", "int 0"]
     );
 }
 
@@ -234,9 +209,7 @@ fn hex_with_only_digit_letters_is_an_int() {
 
 #[test]
 fn chip8_opcodes_lex_as_twill() {
-    for op in [
-        "0x3xkk", "0xDxyn", "0xEx9E", "0xExA1", "0xFx0A", "0x8xyE", "0xAnnn", "0x0nnn",
-    ] {
+    for op in ["0x3xkk", "0xDxyn", "0xEx9E", "0xExA1", "0xFx0A", "0x8xyE", "0xAnnn", "0x0nnn"] {
         let k = kinds(op);
         assert!(matches!(k[0], TokenKind::Twill(_)), "{op} lexed as {:?}", k[0]);
     }
@@ -253,10 +226,7 @@ fn twill_errors() {
 #[test]
 fn plain_strings_and_escapes() {
     assert_eq!(describe_all(r#""hello""#), [r#"str "hello""#]);
-    assert_eq!(
-        describe_all(r#""a\n\t\\\"b\x1b\u{1F9F6}""#),
-        [r#"str "a\n\t\\\"b\u{1b}🧶""#]
-    );
+    assert_eq!(describe_all(r#""a\n\t\\\"b\x1b\u{1F9F6}""#), [r#"str "a\n\t\\\"b\u{1b}🧶""#]);
     assert_eq!(describe_all(r#""{{literal}}""#), [r#"str "{literal}""#]);
     assert_eq!(describe_all(r#"r"C:\raw\{x}""#), [r#"str "C:\\raw\\{x}""#]);
     assert_eq!(describe_all(r#"b"ab\x00\xFF""#), [r#"bytes b"ab\x00\xff""#]);
@@ -304,10 +274,7 @@ fn template_format_specs() {
     );
     // A `:` inside brackets belongs to the expression, not the spec.
     let d = describe_all(r#""{f(x: 1):?}""#);
-    assert!(
-        d.contains(&"punct :".to_string()) && d.contains(&r#"spec "?""#.to_string()),
-        "{d:?}"
-    );
+    assert!(d.contains(&"punct :".to_string()) && d.contains(&r#"spec "?""#.to_string()), "{d:?}");
 }
 
 #[test]
@@ -360,10 +327,7 @@ fn escape_then_interpolation() {
 #[test]
 fn multi_line_strings_strip_shared_indentation() {
     let src = "let s = \"\"\"\n        hello\n          world\n        \"\"\"\n";
-    assert_eq!(
-        describe_all(src),
-        ["keyword let", "ident s", "punct =", r#"str "hello\n  world""#]
-    );
+    assert_eq!(describe_all(src), ["keyword let", "ident s", "punct =", r#"str "hello\n  world""#]);
 
     let inline = "\"\"\"one line\"\"\"";
     assert_eq!(describe_all(inline), [r#"str "one line""#]);
@@ -371,15 +335,7 @@ fn multi_line_strings_strip_shared_indentation() {
     let with_interp = "\"\"\"\n    a {x}\n    b\n    \"\"\"";
     assert_eq!(
         describe_all(with_interp),
-        [
-            "template-start",
-            r#"text "a ""#,
-            "interp-open",
-            "ident x",
-            "interp-close",
-            r#"text "\nb""#,
-            "template-end"
-        ]
+        ["template-start", r#"text "a ""#, "interp-open", "ident x", "interp-close", r#"text "\nb""#, "template-end"]
     );
 }
 
@@ -416,14 +372,7 @@ fn unterminated_interpolation_keeps_the_stream_well_formed() {
 fn chars() {
     assert_eq!(
         describe_all(r"'a' '\n' '\u{1F9F6}' '█' '\\' '\''"),
-        [
-            "char 'a'",
-            r"char '\n'",
-            "char '🧶'",
-            "char '█'",
-            r"char '\\'",
-            r"char '\''"
-        ]
+        ["char 'a'", r"char '\n'", "char '🧶'", "char '█'", r"char '\\'", r"char '\''"]
     );
 }
 
@@ -440,10 +389,7 @@ fn char_errors() {
 fn comments() {
     assert_eq!(describe_all("a // line\nb"), ["ident a", "ident b"]);
     assert_eq!(describe_all("a /* x /* nested */ y */ b"), ["ident a", "ident b"]);
-    assert_eq!(
-        describe_all("/// Adds.\n////not doc\nfn"),
-        [r#"doc "Adds.""#, "keyword fn"]
-    );
+    assert_eq!(describe_all("/// Adds.\n////not doc\nfn"), [r#"doc "Adds.""#, "keyword fn"]);
     assert_eq!(codes_for("/* /* */"), [codes::S0101]);
 }
 
@@ -461,10 +407,7 @@ fn unexpected_characters() {
 #[test]
 fn maximal_munch() {
     let all = "..= .. . +%= +% += + -|= -| -? -> - *|= *? *% ~> <~ ~= ~ => == = != ! <<= << <= < >>= >> >= > &= & |= | ? ^ @ # , ; :";
-    let got: Vec<String> = describe_all(all)
-        .into_iter()
-        .map(|d| d.trim_start_matches("punct ").to_string())
-        .collect();
+    let got: Vec<String> = describe_all(all).into_iter().map(|d| d.trim_start_matches("punct ").to_string()).collect();
     let want: Vec<&str> = all.split(' ').collect();
     assert_eq!(got, want);
 }
@@ -491,11 +434,7 @@ fn newline_and_indent_metadata() {
     assert_eq!(meta, [(false, 0), (true, 4), (true, 0), (true, 0)]);
 
     // A newline inside a block comment still separates tokens.
-    let one = lexed
-        .tokens
-        .iter()
-        .find(|t| matches!(t.kind, TokenKind::Int(_)))
-        .expect("int");
+    let one = lexed.tokens.iter().find(|t| matches!(t.kind, TokenKind::Int(_))).expect("int");
     assert!(one.nl_before);
     assert_eq!(one.line_indent, 1);
 }
@@ -503,21 +442,12 @@ fn newline_and_indent_metadata() {
 #[test]
 fn tokens_inside_templates_never_start_lines() {
     let (_, lexed) = lex_str("\"\"\"\n  {a +\n   b}\n  \"\"\"");
-    assert!(
-        lexed
-            .tokens
-            .iter()
-            .filter(|t| t.kind != TokenKind::Eof)
-            .all(|t| !t.nl_before)
-    );
+    assert!(lexed.tokens.iter().filter(|t| t.kind != TokenKind::Eof).all(|t| !t.nl_before));
 }
 
 #[test]
 fn crlf_sources_lex_like_lf() {
-    assert_eq!(
-        describe_all("let a = 1\r\nlet b = 2\r\n"),
-        describe_all("let a = 1\nlet b = 2\n")
-    );
+    assert_eq!(describe_all("let a = 1\r\nlet b = 2\r\n"), describe_all("let a = 1\nlet b = 2\n"));
 }
 
 #[test]
@@ -555,11 +485,7 @@ fn every_example_lexes_cleanly() {
         let lexed = lex(&db, file);
         let rendered: Vec<String> = lexed.diagnostics.iter().map(|d| render_plain(&db, d)).collect();
         assert!(rendered.is_empty(), "{}:\n{}", path.display(), rendered.join("\n"));
-        assert!(
-            !lexed.tokens.iter().any(|t| t.kind == TokenKind::Error),
-            "{}",
-            path.display()
-        );
+        assert!(!lexed.tokens.iter().any(|t| t.kind == TokenKind::Error), "{}", path.display());
         seen += 1;
     }
     assert_eq!(seen, 8, "expected all eight examples");

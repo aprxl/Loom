@@ -268,7 +268,7 @@ examples/
   parallel.loom            loom blocks, threads, loom for
   compile_time.loom        compile-time tables, const params, reflection-based derive
 crates/
-  loom_syntax/             source files, spans, diagnostics, tokens, the lexer
+  loom_syntax/             source files, spans, diagnostics, the lexer, the parser and AST
   loom_host/               the bundled Lua VM (mlua, vendored, built with clang-cl)
   loom_compiler/           resolve, typeck, analyses, lowering (not started)
   loom/                    the `loom` command-line tool
@@ -286,12 +286,12 @@ they rely on something from `std`, the name should make its purpose clear.
 The language is a design sketch (v0.1). A Loom → Lua 5.4 transpiler is being
 built in `crates/`, following the plan in `design/lua-backend.md`:
 
-- **Done:** the lexer. `loom check <file>` lexes and reports diagnostics;
-  `loom build <file> --emit tokens` dumps the token stream. All eight
-  examples lex cleanly.
-- **Next:** the parser, then type checking, lowering, and `loom run`.
+- **Done:** the lexer and the parser. `loom check <file>` parses and reports
+  diagnostics; `loom build <file> --emit tokens` or `--emit ast` dumps a
+  stage. All eight examples parse cleanly.
+- **Next:** name resolution and type checking, then lowering and `loom run`.
 
 ```bash
 cargo run -p loom -- check examples/chip8.loom
-cargo run -p loom -- build examples/chip8.loom --emit tokens
+cargo run -p loom -- build examples/chip8.loom --emit ast
 ```

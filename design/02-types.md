@@ -275,6 +275,11 @@ fn describe[T](x: T) -> String where T: Show + Hash = "{x} #{x.hash():x}"
   sugar for `const T: type where T: Ord`, with `T` inferred from the arguments.
   Value parameters such as `const N: usize` work the same way.
 - To give explicit type arguments, use brackets: `s.parse[u16]()`, `List[i32]()`.
+  Brackets after a name are an index or type arguments, decided during name
+  resolution. The parser reads each entry by its first token: a primitive
+  type, `any`, `?`, `^`, or a PascalCase name not followed by `(` or `.`
+  starts a type (`Ring[u32, 4]`, `Map[String, u8]`). Anything else is an
+  expression (`xs[i + 1]`, `cache[Key(a, b)]`).
 
 ---
 

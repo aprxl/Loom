@@ -93,7 +93,7 @@ generics     = "[" , gparam , { "," , gparam } , "]" ;
 gparam       = TYPE_IDENT , [ ":" , weft_list ]
              | "const" , IDENT , ":" , type
              | "@" , IDENT ;                                         (* explicit region param *)
-where_clause = "where" , bound , { "," , bound } ;
+where_clause = "where" , bound , { "," , bound } ;   (* `where` is contextual: lexed as IDENT *)
 bound        = type , ":" , weft_list ;
 
 extern_block = "extern" , STRING , "{" , { fn_sig , SEP } , "}" ;

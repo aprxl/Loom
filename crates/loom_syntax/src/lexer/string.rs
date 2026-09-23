@@ -70,15 +70,7 @@ impl Lexer<'_> {
 
         self.pos = content_start;
         self.skip_indent(indent, content_end);
-        self.string_body(
-            StrCtx::Multi {
-                indent,
-                end: content_end,
-                close,
-            },
-            start,
-            false,
-        );
+        self.string_body(StrCtx::Multi { indent, end: content_end, close }, start, false);
     }
 
     fn skip_indent(&mut self, indent: usize, end: usize) {
@@ -198,10 +190,7 @@ impl Lexer<'_> {
 
     /// `}` at depth 0 inside an interpolation: close it and resume the string.
     pub(super) fn close_interp(&mut self) {
-        let interp = self
-            .interps
-            .pop()
-            .expect("close_interp called outside an interpolation");
+        let interp = self.interps.pop().expect("close_interp called outside an interpolation");
         self.push_inner(TokenKind::InterpClose, self.pos, self.pos + 1);
         self.pos += 1;
         self.string_body(interp.ctx, interp.start, true);
@@ -369,10 +358,7 @@ impl Lexer<'_> {
         }
         match c {
             'x' => {
-                let digits = self
-                    .src
-                    .get(self.pos..self.pos + 2)
-                    .filter(|d| d.bytes().all(|b| b.is_ascii_hexdigit()));
+                let digits = self.src.get(self.pos..self.pos + 2).filter(|d| d.bytes().all(|b| b.is_ascii_hexdigit()));
                 let Some(digits) = digits else {
                     self.report(
                         Diagnostic::error(codes::S0108, "`\\x` needs exactly two hex digits")
@@ -417,11 +403,7 @@ impl Lexer<'_> {
                     return None;
                 }
                 let valid_len = (1..=6).contains(&digits.len()) && digits.bytes().all(|b| b.is_ascii_hexdigit());
-                match u32::from_str_radix(digits, 16)
-                    .ok()
-                    .filter(|_| valid_len)
-                    .and_then(char::from_u32)
-                {
+                match u32::from_str_radix(digits, 16).ok().filter(|_| valid_len).and_then(char::from_u32) {
                     Some(ch) => Some(ch as u32),
                     None => {
                         self.report(

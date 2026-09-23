@@ -39,10 +39,7 @@ impl Lexed {
 pub fn lex(db: &SourceDb, file: FileId) -> Lexed {
     let mut lexer = Lexer::new(file, db.file(file).text());
     lexer.run();
-    Lexed {
-        tokens: lexer.tokens,
-        diagnostics: lexer.diags,
-    }
+    Lexed { tokens: lexer.tokens, diagnostics: lexer.diags }
 }
 
 /// Where the text of a string literal ends.
@@ -125,11 +122,7 @@ fn classify_word(text: &str) -> TokenKind {
     }
     let screaming =
         text.chars().count() >= 2 && text.chars().all(|c| c.is_uppercase() || c.is_ascii_digit() || c == '_');
-    if screaming {
-        TokenKind::ConstIdent
-    } else {
-        TokenKind::TypeIdent
-    }
+    if screaming { TokenKind::ConstIdent } else { TokenKind::TypeIdent }
 }
 
 impl<'a> Lexer<'a> {
@@ -169,22 +162,12 @@ impl<'a> Lexer<'a> {
     /// Pushes a token that may start a line.
     fn push(&mut self, kind: TokenKind, lo: usize, hi: usize) {
         let nl_before = std::mem::take(&mut self.nl_pending);
-        self.tokens.push(Token {
-            kind,
-            span: self.span(lo, hi),
-            nl_before,
-            line_indent: self.line_indent,
-        });
+        self.tokens.push(Token { kind, span: self.span(lo, hi), nl_before, line_indent: self.line_indent });
     }
 
     /// Pushes a token inside a string template (never starts a line).
     fn push_inner(&mut self, kind: TokenKind, lo: usize, hi: usize) {
-        self.tokens.push(Token {
-            kind,
-            span: self.span(lo, hi),
-            nl_before: false,
-            line_indent: self.line_indent,
-        });
+        self.tokens.push(Token { kind, span: self.span(lo, hi), nl_before: false, line_indent: self.line_indent });
     }
 
     fn report(&mut self, diag: Diagnostic) {
@@ -278,13 +261,7 @@ impl<'a> Lexer<'a> {
             match b {
                 b' ' | b'\t' | b'\r' => self.pos += 1,
                 b'\n' => {
-                    if matches!(
-                        self.interps.last(),
-                        Some(Interp {
-                            ctx: StrCtx::Single,
-                            ..
-                        })
-                    ) {
+                    if matches!(self.interps.last(), Some(Interp { ctx: StrCtx::Single, .. })) {
                         return;
                     }
                     self.pos += 1;

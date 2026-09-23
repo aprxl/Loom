@@ -1,8 +1,8 @@
 //! The `loom` command-line tool.
 //!
-//! The pipeline currently stops after the lexer: `check` lexes and reports
-//! diagnostics, and `build --emit tokens` dumps the token stream. The other
-//! commands exist so the CLI has its final shape, and say they aren't
+//! The pipeline currently stops after the parser: `check` lexes and parses
+//! and reports diagnostics, and `build --emit tokens|ast` dumps a stage. The
+//! other commands exist so the CLI has its final shape, and say they aren't
 //! implemented yet.
 
 use std::path::{Path, PathBuf};
@@ -11,7 +11,7 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand, ValueEnum};
 use loom_syntax::diag::{ColorMode, emit_to_stderr};
 use loom_syntax::token::dump_tokens;
-use loom_syntax::{FileId, SourceDb, lex};
+use loom_syntax::{Diagnostic, FileId, SourceDb, lex, parse, pretty};
 
 /// Exit code for compile errors and usage errors (see design/lua-backend.md).
 const EXIT_COMPILE_ERROR: u8 = 2;
@@ -63,6 +63,8 @@ enum Command {
 enum Emit {
     /// The token stream, one token per line.
     Tokens,
+    /// The syntax tree, as S-expressions.
+    Ast,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -95,8 +97,8 @@ fn main() -> ExitCode {
 }
 
 fn not_yet(what: &str) -> ExitCode {
-    eprintln!("error: `{what}` isn't implemented yet: the pipeline currently stops after the lexer");
-    eprintln!("  = help: `loom check <file>` lexes a file, `loom build <file> --emit tokens` dumps its tokens");
+    eprintln!("error: `{what}` isn't implemented yet: the pipeline currently stops after the parser");
+    eprintln!("  = help: `loom check <file>` parses a file; `loom build <file> --emit tokens|ast` dumps a stage");
     ExitCode::from(EXIT_COMPILE_ERROR)
 }
 
@@ -115,60 +117,72 @@ fn load(path: &Path) -> Result<(SourceDb, FileId), ExitCode> {
     }
 }
 
-/// Lexes `path`, reporting diagnostics. `Err` means errors were reported.
-fn lex_file(path: &Path, color: ColorMode) -> Result<(SourceDb, loom_syntax::Lexed), ExitCode> {
-    let (db, id) = load(path)?;
-    let lexed = lex(&db, id);
-    if !lexed.diagnostics.is_empty()
-        && let Err(e) = emit_to_stderr(&db, &lexed.diagnostics, color)
+/// Reports diagnostics; `Err` if any of them is an error.
+fn report(
+    db: &SourceDb,
+    path: &Path,
+    diagnostics: &[Diagnostic],
+    stage: &str,
+    color: ColorMode,
+) -> Result<(), ExitCode> {
+    if !diagnostics.is_empty()
+        && let Err(e) = emit_to_stderr(db, diagnostics, color)
     {
         eprintln!("error: couldn't write diagnostics: {e}");
     }
-    if lexed.has_errors() {
-        let n = lexed.diagnostics.iter().filter(|d| d.is_error()).count();
-        eprintln!(
-            "error: {} failed to lex ({n} error{})",
-            path.display(),
-            if n == 1 { "" } else { "s" }
-        );
-        return Err(ExitCode::from(EXIT_COMPILE_ERROR));
+    let errors = diagnostics.iter().filter(|d| d.is_error()).count();
+    if errors == 0 {
+        return Ok(());
     }
-    Ok((db, lexed))
+    let plural = if errors == 1 { "" } else { "s" };
+    eprintln!("error: {} failed to {stage} ({errors} error{plural})", path.display());
+    Err(ExitCode::from(EXIT_COMPILE_ERROR))
 }
 
 fn check(path: &Path, color: ColorMode) -> ExitCode {
-    match lex_file(path, color) {
-        Ok((_, lexed)) => {
-            println!(
-                "{}: {} tokens, no errors (the pipeline stops after the lexer for now)",
-                path.display(),
-                lexed.tokens.len()
-            );
-            ExitCode::SUCCESS
-        }
-        Err(code) => code,
-    }
+    let run = || -> Result<(), ExitCode> {
+        let (db, id) = load(path)?;
+        let parsed = parse(&db, id);
+        report(&db, path, &parsed.diagnostics, "parse", color)?;
+        let n = parsed.module.items.len();
+        println!(
+            "{}: {n} item{}, no errors (the pipeline stops after the parser for now)",
+            path.display(),
+            if n == 1 { "" } else { "s" }
+        );
+        Ok(())
+    };
+    run().err().unwrap_or(ExitCode::SUCCESS)
 }
 
 fn build(path: &Path, out: Option<&Path>, emit: Option<Emit>, color: ColorMode) -> ExitCode {
-    let (db, lexed) = match lex_file(path, color) {
-        Ok(v) => v,
-        Err(code) => return code,
-    };
-    match emit {
-        Some(Emit::Tokens) => {
-            let dump = dump_tokens(&db, &lexed.tokens);
-            match out {
-                None => print!("{dump}"),
-                Some(out) => {
-                    if let Err(e) = std::fs::write(out, dump) {
-                        eprintln!("error: can't write `{}`: {e}", out.display());
-                        return ExitCode::from(EXIT_COMPILE_ERROR);
-                    }
-                }
+    let run = || -> Result<(), ExitCode> {
+        let (db, id) = load(path)?;
+        let text = match emit {
+            Some(Emit::Tokens) => {
+                let lexed = lex(&db, id);
+                report(&db, path, &lexed.diagnostics, "lex", color)?;
+                dump_tokens(&db, &lexed.tokens)
             }
-            ExitCode::SUCCESS
+            Some(Emit::Ast) => {
+                let parsed = parse(&db, id);
+                report(&db, path, &parsed.diagnostics, "parse", color)?;
+                pretty::module(&parsed.module)
+            }
+            None => {
+                let parsed = parse(&db, id);
+                report(&db, path, &parsed.diagnostics, "parse", color)?;
+                return Err(not_yet("loom build (Lua output)"));
+            }
+        };
+        match out {
+            None => print!("{text}"),
+            Some(out) => std::fs::write(out, text).map_err(|e| {
+                eprintln!("error: can't write `{}`: {e}", out.display());
+                ExitCode::from(EXIT_COMPILE_ERROR)
+            })?,
         }
-        None => not_yet("loom build (Lua output)"),
-    }
+        Ok(())
+    };
+    run().err().unwrap_or(ExitCode::SUCCESS)
 }

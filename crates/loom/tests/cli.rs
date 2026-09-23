@@ -50,22 +50,41 @@ fn emit_tokens_dumps_the_token_stream() {
     let out = loom(&["build", path.to_str().expect("utf-8 path"), "--emit", "tokens"]);
     assert!(out.status.success(), "{}", text(&out.stderr));
     let dump = text(&out.stdout);
-    for expected in [
-        "keyword fn",
-        "ident main",
-        "template-start",
-        "text \"hi \"",
-        "interp-open",
-        "ident name",
-        "eof",
-    ] {
+    for expected in ["keyword fn", "ident main", "template-start", "text \"hi \"", "interp-open", "ident name", "eof"] {
         assert!(dump.contains(expected), "missing `{expected}` in:\n{dump}");
     }
     // `print` starts a new line indented by four columns.
-    assert!(
-        dump.lines().any(|l| l.contains("nl+4") && l.contains("ident print")),
-        "{dump}"
+    assert!(dump.lines().any(|l| l.contains("nl+4") && l.contains("ident print")), "{dump}");
+}
+
+#[test]
+fn emit_ast_prints_s_expressions() {
+    let path = temp_source(
+        "ast",
+        "fn main() {
+    let x = 1 + 2 * 3
+}
+",
     );
+    let out = loom(&["build", path.to_str().expect("utf-8 path"), "--emit", "ast"]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert_eq!(text(&out.stdout).trim_end(), "(fn main() (block (let x (+ 1 (* 2 3)))))");
+}
+
+#[test]
+fn parse_errors_exit_with_code_2() {
+    let path = temp_source(
+        "parse-error",
+        "fn main() {
+    let x = )
+}
+",
+    );
+    let out = loom(&["check", path.to_str().expect("utf-8 path")]);
+    assert_eq!(out.status.code(), Some(2));
+    let stderr = text(&out.stderr);
+    assert!(stderr.contains("error[S0200]: expected an expression, found `)`"), "{stderr}");
+    assert!(stderr.contains("failed to parse (1 error)"), "{stderr}");
 }
 
 #[test]
@@ -75,12 +94,9 @@ fn lexer_errors_exit_with_code_2() {
     assert_eq!(out.status.code(), Some(2));
     let stderr = text(&out.stderr);
     assert!(stderr.contains("error[S0102]: unterminated string literal"), "{stderr}");
-    assert!(
-        stderr.contains("error[S0105]: invalid digit `2` in a binary literal"),
-        "{stderr}"
-    );
+    assert!(stderr.contains("error[S0105]: invalid digit `2` in a binary literal"), "{stderr}");
     assert!(stderr.contains("--> "), "{stderr}");
-    assert!(stderr.contains("failed to lex (2 errors)"), "{stderr}");
+    assert!(stderr.contains("failed to parse"), "{stderr}");
 }
 
 #[test]

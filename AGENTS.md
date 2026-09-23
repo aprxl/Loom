@@ -27,7 +27,7 @@ Read your own diff before committing. One logical change per commit.
 
 | Path | What |
 |------|------|
-| `crates/loom_syntax` | source files, spans, diagnostics, tokens, lexer (no C deps, builds fast) |
+| `crates/loom_syntax` | source files, spans, diagnostics, tokens, lexer, parser, AST, AST printer (no C deps) |
 | `crates/loom_host` | the only owner of the Lua VM (mlua, vendored) |
 | `crates/loom_compiler` | everything semantic: resolve, typeck, analyses, lowering, Lua emission |
 | `crates/loom` | the `loom` binary (build, run, check, test, hidden lua-host) |
@@ -48,6 +48,7 @@ Read your own diff before committing. One logical change per commit.
 
 ## Status
 
-Step 0 (spec renames) and the workspace scaffold are done. The lexer is
-implemented. Everything after the lexer (parser, typeck, lowering, run mode)
-is planned but not started.
+Done: the spec renames, the workspace scaffold, the lexer, and the parser
+(AST, error recovery, `--emit ast`). Next: name resolution and type checking,
+then lowering and run mode. All eight examples lex and parse cleanly; keep it
+that way (`every_example_parses_cleanly` in `crates/loom_syntax`).

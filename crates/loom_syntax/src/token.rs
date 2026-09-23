@@ -414,11 +414,7 @@ pub fn dump_tokens(db: &SourceDb, tokens: &[Token]) -> String {
     let mut out = String::new();
     for tok in tokens {
         let lc = db.line_col(tok.span);
-        let nl = if tok.nl_before {
-            format!("nl+{}", tok.line_indent)
-        } else {
-            String::new()
-        };
+        let nl = if tok.nl_before { format!("nl+{}", tok.line_indent) } else { String::new() };
         out.push_str(&format!("{:>4}:{:<4}{:<7}{}\n", lc.line, lc.col, nl, describe(db, tok)));
     }
     out
@@ -446,11 +442,7 @@ pub fn describe(db: &SourceDb, tok: &Token) -> String {
         TokenKind::Char(c) => format!("char {c:?}"),
         TokenKind::Str(s) => format!("str {s:?}"),
         TokenKind::Bytes(b) => {
-            let escaped: String = b
-                .iter()
-                .flat_map(|&c| std::ascii::escape_default(c))
-                .map(char::from)
-                .collect();
+            let escaped: String = b.iter().flat_map(|&c| std::ascii::escape_default(c)).map(char::from).collect();
             format!("bytes b\"{escaped}\"")
         }
         TokenKind::TemplateStart => "template-start".into(),
@@ -473,20 +465,8 @@ mod tests {
     #[test]
     fn prim_types_parse_strictly() {
         assert_eq!(PrimType::parse("u8"), Some(PrimType::Int { signed: false, bits: 8 }));
-        assert_eq!(
-            PrimType::parse("i128"),
-            Some(PrimType::Int {
-                signed: true,
-                bits: 128
-            })
-        );
-        assert_eq!(
-            PrimType::parse("u12"),
-            Some(PrimType::Int {
-                signed: false,
-                bits: 12
-            })
-        );
+        assert_eq!(PrimType::parse("i128"), Some(PrimType::Int { signed: true, bits: 128 }));
+        assert_eq!(PrimType::parse("u12"), Some(PrimType::Int { signed: false, bits: 12 }));
         assert_eq!(PrimType::parse("usize"), Some(PrimType::Usize));
         for not_prim in ["u0", "u129", "u08", "u", "i-1", "uint", "f128"] {
             assert_eq!(PrimType::parse(not_prim), None, "{not_prim}");
@@ -501,13 +481,7 @@ mod tests {
 
     #[test]
     fn keywords_round_trip() {
-        for kw in [
-            Keyword::Fn,
-            Keyword::Defer,
-            Keyword::Yield,
-            Keyword::SelfType,
-            Keyword::Unsafe,
-        ] {
+        for kw in [Keyword::Fn, Keyword::Defer, Keyword::Yield, Keyword::SelfType, Keyword::Unsafe] {
             assert_eq!(Keyword::from_ident(kw.as_str()), Some(kw));
         }
         assert_eq!(Keyword::from_ident("once"), None, "`once` is contextual");

@@ -79,13 +79,7 @@ impl TwillPattern {
             return Err(TwillError::TooWide(width));
         }
 
-        let mut pattern = TwillPattern {
-            radix,
-            width,
-            mask: 0,
-            value: 0,
-            captures: Vec::new(),
-        };
+        let mut pattern = TwillPattern { radix, width, mask: 0, value: 0, captures: Vec::new() };
         for (index, &(offset, ch)) in digits.iter().enumerate() {
             // This digit covers bits [low, low + bits_per_digit).
             let low = width - (index as u32 + 1) * bits_per_digit;
@@ -97,10 +91,7 @@ impl TwillPattern {
                 let capture = match pattern.captures.iter_mut().find(|c| c.name == ch) {
                     Some(c) => c,
                     None => {
-                        pattern.captures.push(TwillCapture {
-                            name: ch,
-                            bits: Vec::new(),
-                        });
+                        pattern.captures.push(TwillCapture { name: ch, bits: Vec::new() });
                         pattern.captures.last_mut().expect("just pushed")
                     }
                 };
@@ -121,11 +112,7 @@ impl TwillPattern {
         if self.radix != Radix::Hex {
             return Vec::new();
         }
-        self.captures
-            .iter()
-            .map(|c| c.name)
-            .filter(|c| ('a'..='f').contains(c))
-            .collect()
+        self.captures.iter().map(|c| c.name).filter(|c| ('a'..='f').contains(c)).collect()
     }
 
     /// Whether this value matches the pattern.
@@ -135,10 +122,7 @@ impl TwillPattern {
 
     /// Extracts every capture from a value, in [`TwillPattern::captures`] order.
     pub fn extract(&self, value: u128) -> Vec<u128> {
-        self.captures
-            .iter()
-            .map(|c| c.bits.iter().fold(0u128, |acc, &bit| (acc << 1) | ((value >> bit) & 1)))
-            .collect()
+        self.captures.iter().map(|c| c.bits.iter().fold(0u128, |acc, &bit| (acc << 1) | ((value >> bit) & 1))).collect()
     }
 
     /// A compact description for token dumps, e.g. `w16 mask=0xF00F value=0x8004 x:u4 y:u4`.
@@ -223,22 +207,10 @@ mod tests {
     #[test]
     fn errors() {
         assert_eq!(TwillPattern::parse("__", Radix::Hex), Err(TwillError::Empty));
-        assert_eq!(
-            TwillPattern::parse("1G", Radix::Hex),
-            Err(TwillError::BadChar { ch: 'G', offset: 1 })
-        );
-        assert_eq!(
-            TwillPattern::parse("12", Radix::Bin),
-            Err(TwillError::BadChar { ch: '2', offset: 1 })
-        );
-        assert_eq!(
-            TwillPattern::parse("A", Radix::Oct),
-            Err(TwillError::BadChar { ch: 'A', offset: 0 })
-        );
-        assert_eq!(
-            TwillPattern::parse(&"f".repeat(33), Radix::Hex),
-            Err(TwillError::TooWide(132))
-        );
+        assert_eq!(TwillPattern::parse("1G", Radix::Hex), Err(TwillError::BadChar { ch: 'G', offset: 1 }));
+        assert_eq!(TwillPattern::parse("12", Radix::Bin), Err(TwillError::BadChar { ch: '2', offset: 1 }));
+        assert_eq!(TwillPattern::parse("A", Radix::Oct), Err(TwillError::BadChar { ch: 'A', offset: 0 }));
+        assert_eq!(TwillPattern::parse(&"f".repeat(33), Radix::Hex), Err(TwillError::TooWide(132)));
         assert_eq!(TwillPattern::parse("1x", Radix::Dec), Err(TwillError::Decimal));
     }
 }

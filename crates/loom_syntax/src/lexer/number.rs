@@ -25,12 +25,10 @@ fn is_radix_digits(text: &str, radix: Radix) -> bool {
 
 /// Splits `FFu8` into (`FF`, `u8`) when the tail is an integer type suffix.
 fn split_int_suffix(body: &str, radix: Radix) -> Option<(&str, PrimType)> {
-    body.char_indices()
-        .filter(|&(_, c)| c == 'u' || c == 'i')
-        .find_map(|(k, _)| {
-            let suffix = PrimType::parse(&body[k..]).filter(|p| p.is_int())?;
-            is_radix_digits(&body[..k], radix).then(|| (&body[..k], suffix))
-        })
+    body.char_indices().filter(|&(_, c)| c == 'u' || c == 'i').find_map(|(k, _)| {
+        let suffix = PrimType::parse(&body[k..]).filter(|p| p.is_int())?;
+        is_radix_digits(&body[..k], radix).then(|| (&body[..k], suffix))
+    })
 }
 
 impl Lexer<'_> {
@@ -90,17 +88,12 @@ impl Lexer<'_> {
         }
 
         // 3. Invalid.
-        let diag = match body
-            .char_indices()
-            .find(|&(_, c)| c != '_' && !c.is_digit(radix.value()))
-        {
+        let diag = match body.char_indices().find(|&(_, c)| c != '_' && !c.is_digit(radix.value())) {
             Some((offset, bad)) => {
                 let lo = body_start + offset;
-                let mut diag = Diagnostic::error(
-                    codes::S0105,
-                    format!("invalid digit `{bad}` in a {} literal", radix.name()),
-                )
-                .primary(self.span(lo, lo + bad.len_utf8()), "not a digit in this base");
+                let mut diag =
+                    Diagnostic::error(codes::S0105, format!("invalid digit `{bad}` in a {} literal", radix.name()))
+                        .primary(self.span(lo, lo + bad.len_utf8()), "not a digit in this base");
                 if radix == Radix::Hex && bad.is_ascii_uppercase() {
                     diag = diag.help("capture letters in a twill pattern are lowercase; hex digits are 0-9 and A-F");
                 }
@@ -118,21 +111,15 @@ impl Lexer<'_> {
             TwillError::Empty | TwillError::Decimal => {
                 Diagnostic::error(codes::S0106, "twill pattern has no digits").primary(self.span(start, end), "empty")
             }
-            TwillError::TooWide(width) => Diagnostic::error(
-                codes::S0106,
-                format!("twill pattern is {width} bits wide; the limit is {MAX_WIDTH}"),
-            )
-            .primary(self.span(start, end), "too wide"),
+            TwillError::TooWide(width) => {
+                Diagnostic::error(codes::S0106, format!("twill pattern is {width} bits wide; the limit is {MAX_WIDTH}"))
+                    .primary(self.span(start, end), "too wide")
+            }
             TwillError::BadChar { ch, offset } => {
                 let lo = body_start + offset;
-                let mut diag = Diagnostic::error(
-                    codes::S0106,
-                    format!("`{ch}` can't appear in a {} twill pattern", radix.name()),
-                )
-                .primary(
-                    self.span(lo, lo + ch.len_utf8()),
-                    "not a digit, `?`, `_` or capture letter",
-                );
+                let mut diag =
+                    Diagnostic::error(codes::S0106, format!("`{ch}` can't appear in a {} twill pattern", radix.name()))
+                        .primary(self.span(lo, lo + ch.len_utf8()), "not a digit, `?`, `_` or capture letter");
                 if ch.is_ascii_uppercase() {
                     diag = diag.help(if radix == Radix::Hex {
                         "capture letters are lowercase; hex digits are 0-9 and A-F"
