@@ -83,8 +83,8 @@ weave[T] Index[usize] into List[T] {
 
 xs[3] += 1                         // xs.at(3) projected, edited, released
 
-fn entry(mut self, take key: K, take or: V) ~> mut V { ... }
-counts.entry(word, or: 0) += 1
+fn entry(mut self, take key: K, take default: V) ~> mut V { ... }
+counts.entry(word, default: 0) += 1
 ```
 
 The caller can use the projected place until the end of the statement that
@@ -234,7 +234,7 @@ keyword: it's only special directly before `warp`.
 pub once warp Tx {
     moves: List[Move]
 
-    pub fn commit(take self, ledger: mut Ledger) ! LedgerError {
+    pub fn commit(take self, mut ledger: Ledger) ! LedgerError {
         let Tx(moves) = self              // destructuring *ties off* the value
         ...
     }

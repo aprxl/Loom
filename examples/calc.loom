@@ -36,7 +36,7 @@ warp Expr {
 }
 
 weave Show into Expr {
-    fn show(self, f: mut Fmt) = match self {   // patterns see through `^` automatically
+    fn show(self, mut f: Fmt) = match self {   // patterns see through `^` automatically
         .Num(n) => f.put(n)
         .Var(name) => f.put(name)
         .Neg(x) => f.put("-{x}")

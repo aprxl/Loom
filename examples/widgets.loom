@@ -43,7 +43,7 @@ warp Canvas {
 }
 
 weave Show into Canvas {
-    fn show(self, f: mut Fmt) {
+    fn show(self, mut f: Fmt) {
         for row in .cells.chunks(.w) {
             f.put(String.of(row).trim_end())
             f.put('\n')
@@ -56,7 +56,7 @@ weave Show into Canvas {
 /// Anything that can be laid out and drawn.
 pub weft Widget {
     fn size(self) -> (u16, u16)
-    fn draw(self, at: Pos, c: mut Canvas)
+    fn draw(self, at: Pos, mut c: Canvas)
     fn name(self) -> str = "widget"                  // default method: override it if you like
 }
 
@@ -84,7 +84,7 @@ pub warp Frame: Widget {
 
     fn size(self) -> (u16, u16) = (.w, .h)
 
-    fn draw(self, at: Pos, c: mut Canvas) {
+    fn draw(self, at: Pos, mut c: Canvas) {
         let g = .style.glyphs()
         let (right, bottom) = (at.x + .w - 1, at.y + .h - 1)
         for x in at.x..=right {
@@ -112,7 +112,7 @@ pub warp Label {
 
 weave Widget into Label {
     fn size(self) -> (u16, u16) = (.text.len() as u16, 1)
-    fn draw(self, at: Pos, c: mut Canvas) = c.text(at, .text)
+    fn draw(self, at: Pos, mut c: Canvas) = c.text(at, .text)
     fn name(self) -> str = "label"
 }
 
@@ -127,7 +127,7 @@ pub warp Button: Widget {
         Button(frame: Frame(w: width), label: label.copy())
 
     // Only `draw` is overridden. `size` comes straight from the frame.
-    fn draw(self, at: Pos, c: mut Canvas) {
+    fn draw(self, at: Pos, mut c: Canvas) {
         .frame.draw(at, mut c)                               // a "super call" is just a field call
         let pad = (.frame.w -| .label.len() as u16) / 2      // saturating: long labels don't underflow
         c.text(at.{ .x += pad; .y += 1 }, .label)
@@ -149,7 +149,7 @@ pub warp Column: Widget {
         (w, h)
     }
 
-    fn draw(self, at: Pos, c: mut Canvas) {
+    fn draw(self, at: Pos, mut c: Canvas) {
         var y = at.y
         for child in .children {
             child.draw(at.{ .y = y }, mut c)                 // dynamic dispatch through `any Widget`

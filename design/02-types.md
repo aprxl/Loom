@@ -138,7 +138,7 @@ associated types, and super-wefts.
 ```loom
 weft Widget: Show {                 // anything that's a Widget must also be Show
     fn size(self) -> (u16, u16)
-    fn draw(self, at: Pos, c: mut Canvas)
+    fn draw(self, at: Pos, mut c: Canvas)
     fn name(self) -> str = "widget" // default
 }
 
@@ -183,7 +183,7 @@ weave Shape into Rect {
 }
 
 weave[T: Show] Show into List[T] {       // generic weave
-    fn show(self, f: mut Fmt) { ... }
+    fn show(self, mut f: Fmt) { ... }
 }
 ```
 
@@ -208,7 +208,7 @@ warp Button: Widget {
     through frame: Frame
     label: String
 
-    fn draw(self, at: Pos, c: mut Canvas) {       // override
+    fn draw(self, at: Pos, mut c: Canvas) {       // override
         .frame.draw(at, mut c)                     // "super" is just the field
         c.text(at.{ .x += 2; .y += 1 }, .label)
     }

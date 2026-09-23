@@ -64,7 +64,7 @@ pub once warp Tx {
     pub fn credit(mut self, id: AccountId, amount: Cents) = .moves.push(Move(id, amount))
 
     /// Tie-off #1: apply every move, or none of them.
-    pub fn commit(take self, ledger: mut Ledger) ! LedgerError {
+    pub fn commit(take self, mut ledger: Ledger) ! LedgerError {
         let Tx(moves) = self                          // destructuring ties the loose end
 
         // Dry-run on a copy first, so a failure leaves `ledger` untouched.
@@ -93,7 +93,7 @@ fn fee_for(balance: Cents, amount: Cents) -> Cents =
     if balance >= 1000_00 { 0 } else { (amount / 100).max(25) }
     // Cents / 100 has interval 0.., so the result is still a Cents and no cast is needed.
 
-pub fn transfer(ledger: mut Ledger, from: AccountId, to: AccountId, amount: Cents) ! LedgerError {
+pub fn transfer(mut ledger: Ledger, from: AccountId, to: AccountId, amount: Cents) ! LedgerError {
     if from == to { fail .SameAccount }
 
     var tx = Tx.begin()
@@ -150,7 +150,7 @@ fn main() {
 
 // Forget to tie off a Tx and the build stops:
 //
-// fn forgetful(ledger: mut Ledger) {
+// fn forgetful(mut ledger: Ledger) {
 //     var tx = Tx.begin()
 //     tx.credit(2, 5_00)
 // }

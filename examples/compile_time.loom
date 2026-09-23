@@ -94,7 +94,7 @@ fn page_size() -> usize {
 /// time. `const if` and `const for` unroll while compiling, so each warp gets
 /// straight-line code with no runtime reflection left in the binary.
 pub weft ToJson {
-    fn to_json(self, out: mut String) {
+    fn to_json(self, mut out: String) {
         const if Self.kind == .Record {
             out.push('{')
             const for (i, f) in Self.fields.indexed() {
@@ -129,16 +129,16 @@ pub weft ToJson {
 
 // Leaves are woven by hand. These are ordinary weaves.
 weave[T: Integer] ToJson into T {
-    fn to_json(self, out: mut String) = out.push_str("{self}")
+    fn to_json(self, mut out: String) = out.push_str("{self}")
 }
 weave ToJson into bool {
-    fn to_json(self, out: mut String) = out.push_str(if self { "true" } else { "false" })
+    fn to_json(self, mut out: String) = out.push_str(if self { "true" } else { "false" })
 }
 weave ToJson into String {
-    fn to_json(self, out: mut String) = out.push_json_str(self)
+    fn to_json(self, mut out: String) = out.push_json_str(self)
 }
 weave[T: ToJson] ToJson into List[T] {
-    fn to_json(self, out: mut String) {
+    fn to_json(self, mut out: String) {
         out.push('[')
         for (i, x) in self.indexed() {
             if i > 0 { out.push(',') }
@@ -148,7 +148,7 @@ weave[T: ToJson] ToJson into List[T] {
     }
 }
 weave[T: ToJson] ToJson into ?T {
-    fn to_json(self, out: mut String) = match self {
+    fn to_json(self, mut out: String) = match self {
         some(x) => x.to_json(mut out)
         none => out.push_str("null")
     }
@@ -156,7 +156,7 @@ weave[T: ToJson] ToJson into ?T {
 
 // Two helpers as free functions. UFCS turns them into String methods
 // without touching String.
-fn push_json_str(out: mut String, s: str) {
+fn push_json_str(mut out: String, s: str) {
     out.push('"')
     for c in s.chars() {
         match c {
@@ -170,7 +170,7 @@ fn push_json_str(out: mut String, s: str) {
     out.push('"')
 }
 
-fn push_json_key(out: mut String, key: str) {
+fn push_json_key(mut out: String, key: str) {
     out.push_json_str(key)
     out.push(':')
 }

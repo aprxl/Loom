@@ -107,7 +107,7 @@ parameter.
 warp Button: Widget {
     through frame: Frame         // Button gets Frame's methods, e.g. size()
     label: String
-    fn draw(self, at: Pos, c: mut Canvas) {
+    fn draw(self, at: Pos, mut c: Canvas) {
         .frame.draw(at, mut c)   // a "super call" is just a field call
         c.text(at.{ .x += 2; .y += 1 }, .label)
     }

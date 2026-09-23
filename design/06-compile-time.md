@@ -104,7 +104,7 @@ specialized to its own shape:
 
 ```loom
 pub weft Show {
-    fn show(self, f: mut Fmt) {
+    fn show(self, mut f: Fmt) {
         const if Self.kind == .Record {
             f.put("{Self.name}(")
             const for (i, fld) in Self.fields.indexed() {

@@ -70,7 +70,7 @@ fn count_primes_below(limit: u64) -> u64 {
 fn count_file(path: str) -> Map[String, u32] ! fs.IoError {
     var counts = Map[String, u32]()
     for word in fs.read_text(path)?.words() {
-        counts.entry(word.to_lower(), or: 0) += 1     // `entry` projects a place you can edit
+        counts.entry(word.to_lower(), default: 0) += 1     // `entry` projects a place you can edit
     }
     counts
 }
@@ -85,7 +85,7 @@ fn word_counts(paths: [str]) -> Map[String, u32] ! fs.IoError {
         var total = Map[String, u32]()
         for job in jobs {
             for (word, n) in job.join()? {
-                total.entry(word, or: 0) += n
+                total.entry(word, default: 0) += n
             }
         }
         total
