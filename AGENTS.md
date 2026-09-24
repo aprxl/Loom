@@ -75,10 +75,14 @@ language through every layer (type checking, lowering to Lua, the runtime,
    cases, `any Error`), and `main ! E`;
 7. arrays, lists and slices: literals, `[x; n]`, bounds-checked indexing and
    index assignment, slicing, `for` and `for mut` over them, and the methods
-   std declares on `List` and `Slice`.
+   std declares on `List` and `Slice`;
+8. `mut` parameters of scalars (copied back to the caller), and the methods
+   of `str`/`String`, `char`, integers and floats, `s.parse[T]()`, and
+   slicing text.
 
-Next: strings and std methods (`str`/`String`, `chars`, `parse`), then
-iterators and lambdas, each through every layer at once.
+Next: iterators and lambdas (`Iter` with associated types, `chars()`,
+`indexed()`, `map`), then `defer`, gauges, and maps, each through every
+layer at once.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and

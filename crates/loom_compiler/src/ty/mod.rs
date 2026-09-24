@@ -224,6 +224,21 @@ impl TyCtx {
         self.intern(kind)
     }
 
+    /// Whether `ty` is, or has in it, a type that was already reported as
+    /// an error: `?{error}` shouldn't be reported again.
+    pub fn has_error(&self, ty: Ty) -> bool {
+        match self.kind(ty) {
+            TyKind::Error => true,
+            TyKind::Tuple(items) | TyKind::Adt(_, items) | TyKind::Union(items) => {
+                items.iter().any(|&t| self.has_error(t))
+            }
+            TyKind::Optional(t) | TyKind::Range(t) | TyKind::Array(t, _) => self.has_error(*t),
+            TyKind::Result(t, e) => self.has_error(*t) || self.has_error(*e),
+            TyKind::Fn(params, ret) => params.iter().any(|&t| self.has_error(t)) || self.has_error(*ret),
+            _ => false,
+        }
+    }
+
     /// Whether `ty` mentions a generic parameter.
     pub fn has_params(&self, ty: Ty) -> bool {
         match self.kind(ty) {

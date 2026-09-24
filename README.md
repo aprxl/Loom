@@ -299,11 +299,12 @@ built in `crates/`, following the plan in `design/lua-backend.md`:
   default methods, derived `Show`, `Eq` and `Ord`, and `through`; and
   generics, checked and compiled per instance; `any W` with dynamic
   dispatch and type tests; optionals and errors: `?`, `mend`, `fail`,
-  unions, and `main ! E`; and arrays, lists and slices. `loom run <file>` runs a program;
+  unions, and `main ! E`; arrays, lists and slices; and the methods of text,
+  characters and numbers. `loom run <file>` runs a program;
   `loom build <file>` writes the Lua; `--emit tokens|ast|hir|lua` dumps a
   stage. The examples use more than this; the compiler says so rather than
   guessing.
-- **Next:** strings and std methods, then iterators and lambdas, one slice
+- **Next:** iterators and lambdas, then `defer`, gauges and maps, one slice
   at a time through every layer.
 
 ```bash

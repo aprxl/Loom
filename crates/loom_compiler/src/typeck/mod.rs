@@ -372,6 +372,12 @@ struct Std {
     missing: Option<DefId>,
     list: Option<DefId>,
     slice: Option<DefId>,
+    /// The builtin warps whose methods primitive types have.
+    str_warp: Option<DefId>,
+    char_warp: Option<DefId>,
+    int_warp: Option<DefId>,
+    float_warp: Option<DefId>,
+    parse: Option<DefId>,
 }
 
 /// Where the enclosing loop's `break`s go.
@@ -461,6 +467,11 @@ impl<'p> Checker<'p> {
             missing: find("std.error", "Missing"),
             list: find("std.list", "List"),
             slice: find("std.slice", "Slice"),
+            str_warp: find("std.string", "Str"),
+            char_warp: find("std.string", "Char"),
+            int_warp: find("std.num", "Int"),
+            float_warp: find("std.num", "Float"),
+            parse: find("std.num", "Parse"),
         };
         Checker {
             p,
@@ -1075,7 +1086,7 @@ impl<'p> Checker<'p> {
     /// mismatch. Returns whether it worked.
     fn coerce(&mut self, e: &Expr, actual: Ty, target: Ty) -> bool {
         let (actual, target) = (self.deep_resolve(actual), self.deep_resolve(target));
-        if actual == target || self.tcx.is_lenient(actual) || self.tcx.is_error(target) {
+        if actual == target || self.tcx.is_lenient(actual) || self.tcx.has_error(target) {
             return true;
         }
         // A literal whose type is still open takes the target's.
@@ -1230,6 +1241,8 @@ impl<'p> Checker<'p> {
                 || matches!(kind, TyKind::Tuple(items) if all(self, items))
         } else if w == self.std.integer {
             matches!(kind, TyKind::Int(_) | TyKind::IntVar(_))
+        } else if w == self.std.parse {
+            numeric
         } else {
             false
         }

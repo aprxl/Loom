@@ -6,3 +6,43 @@ pub warp NumError: Error {
     case Invalid
     case Overflow
 }
+
+/// Types `str.parse` can make: every integer and float type.
+#builtin
+pub weft Parse {}
+
+/// The methods of every integer type, `T`.
+#builtin
+pub warp Int[T] {
+    /// The value without its sign. Unravels for the smallest signed value.
+    pub fn abs(self) -> T
+    pub fn min(self, other: T) -> T
+    pub fn max(self, other: T) -> T
+    /// `self` to the power `exp`. Unravels when it doesn't fit.
+    pub fn pow(self, exp: u32) -> T
+    /// How many zero bits come after the lowest one bit (all of them for 0).
+    pub fn trailing_zeros(self) -> u32
+    /// How many zero bits come before the highest one bit.
+    pub fn leading_zeros(self) -> u32
+    /// How many bits are one.
+    pub fn count_ones(self) -> u32
+    pub fn to_string(self) -> String
+}
+
+/// The methods of every float type, `T`.
+#builtin
+pub warp Float[T] {
+    pub fn abs(self) -> T
+    /// The smaller one; a NaN loses to a number.
+    pub fn min(self, other: T) -> T
+    pub fn max(self, other: T) -> T
+    pub fn sqrt(self) -> T
+    pub fn floor(self) -> T
+    pub fn ceil(self) -> T
+    /// Halfway rounds away from zero.
+    pub fn round(self) -> T
+    pub fn trunc(self) -> T
+    pub fn pow(self, exp: T) -> T
+    pub fn is_nan(self) -> bool
+    pub fn to_string(self) -> String
+}

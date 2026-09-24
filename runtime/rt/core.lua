@@ -318,6 +318,11 @@ function rt.opt(inner, boxed)
   return { kind = "opt", inner = inner, boxed = boxed }
 end
 
+--- `T ! E`: `{true, v}` or `{false, e}`.
+function rt.res(ok, err)
+  return { kind = "res", ok = ok, err = err }
+end
+
 --- A value of `any W`: the value with its type's vtable, which holds the
 --- type's descriptor (`vt.d`) and, by the weft method's number, the function
 --- for each method called through `any`.
@@ -430,6 +435,9 @@ local function copy(d, v)
     if v == nil then return nil end
     if d.boxed then return { copy(d.inner, v[1]) } end
     return copy(d.inner, v)
+  elseif kind == "res" then
+    if v[1] then return { true, copy(d.ok, v[2]) } end
+    return { false, copy(d.err, v[2]) }
   elseif kind == "seq" then
     local n, elem = v.n, d.elem
     local t = { n = n }
@@ -484,6 +492,9 @@ eq = function(d, a, b)
     if a == nil or b == nil then return a == b end
     if d.boxed then return eq(d.inner, a[1], b[1]) end
     return eq(d.inner, a, b)
+  elseif kind == "res" then
+    if a[1] ~= b[1] then return false end
+    return eq(a[1] and d.ok or d.err, a[2], b[2])
   elseif kind == "seq" or kind == "slice" then
     local at, ao, an = parts(a)
     local bt, bo, bn = parts(b)
@@ -629,6 +640,9 @@ show = function(d, v, debug)
     return "()"
   elseif kind == "any" then
     return show(v[2].d, v[1], debug)
+  elseif kind == "res" then
+    if v[1] then return "ok(" .. show(d.ok, v[2], true) .. ")" end
+    return "err(" .. show(d.err, v[2], true) .. ")"
   elseif kind == "seq" or kind == "slice" then
     local t, o, n = parts(v)
     local out = {}
@@ -1012,6 +1026,394 @@ ext["std.slice.Slice.sort"] = function(d, s)
   for i = 1, n do
     t[o + i] = items[i]
   end
+end
+
+-- Text, character and number methods. Text is a Lua string; a `mut self`
+-- method of `String` returns its result and then the new string, which the
+-- caller stores back.
+
+ext["std.string.String.with_capacity"] = function()
+  return ""
+end
+
+ext["std.string.String.of"] = function(chars)
+  local t, o, n = parts(chars)
+  local out = {}
+  for i = 1, n do
+    out[i] = utf8char(t[o + i])
+  end
+  return concat(out)
+end
+
+ext["std.string.String.push"] = function(s, c)
+  return nil, s .. utf8char(c)
+end
+
+ext["std.string.String.push_str"] = function(s, more)
+  return nil, s .. more
+end
+
+ext["std.string.String.pop"] = function(s)
+  if s == "" then return nil, s end
+  local at = utf8.offset(s, -1)
+  return utf8.codepoint(s, at), s:sub(1, at - 1)
+end
+
+ext["std.string.String.clear"] = function()
+  return nil, ""
+end
+
+--- `s[lo..hi]`, by bytes; both ends must fall between characters.
+function rt.substr(s, lo, hi)
+  local n = #s
+  if hi == nil then hi = n end
+  if lo > hi or hi > n then
+    error(sformat("%srange %d..%d is out of bounds (len %d)", MARK, lo, hi, n), 2)
+  end
+  for _, at in ipairs({ lo, hi }) do
+    local b = sbyte(s, at + 1)
+    if b and b >= 0x80 and b < 0xC0 then
+      error(sformat("%sbyte %d is inside a character", MARK, at), 2)
+    end
+  end
+  return s:sub(lo + 1, hi)
+end
+
+ext["std.string.Str.len"] = function(s)
+  return #s
+end
+
+ext["std.string.Str.is_empty"] = function(s)
+  return s == ""
+end
+
+ext["std.string.Str.char_count"] = function(s)
+  return utf8len(s)
+end
+
+ext["std.string.Str.contains"] = function(s, part)
+  return string.find(s, part, 1, true) ~= nil
+end
+
+ext["std.string.Str.starts_with"] = function(s, prefix)
+  return s:sub(1, #prefix) == prefix
+end
+
+ext["std.string.Str.ends_with"] = function(s, suffix)
+  return suffix == "" or s:sub(-#suffix) == suffix
+end
+
+ext["std.string.Str.find"] = function(s, part)
+  local at = string.find(s, part, 1, true)
+  if at == nil then return nil end
+  return at - 1
+end
+
+ext["std.string.Str.trim"] = function(s)
+  return (s:match("^%s*(.-)%s*$"))
+end
+
+ext["std.string.Str.trim_start"] = function(s)
+  return (s:match("^%s*(.*)$"))
+end
+
+ext["std.string.Str.trim_end"] = function(s)
+  return (s:match("^(.-)%s*$"))
+end
+
+ext["std.string.Str.to_upper"] = function(s)
+  return (s:gsub("%l", string.upper))
+end
+
+ext["std.string.Str.to_lower"] = function(s)
+  return (s:gsub("%u", string.lower))
+end
+
+ext["std.string.Str.replace"] = function(s, from, to)
+  if from == "" then return s end
+  local pattern = from:gsub("%p", "%%%0")
+  return (s:gsub(pattern, (to:gsub("%%", "%%%%"))))
+end
+
+ext["std.string.Str.repeat"] = function(s, n)
+  return srep(s, n)
+end
+
+ext["std.string.Str.split"] = function(s, sep)
+  local out, n = {}, 0
+  if sep == "" then
+    for _, c in utf8.codes(s) do
+      n = n + 1
+      out[n] = utf8char(c)
+    end
+  else
+    local at = 1
+    while true do
+      local i, j = string.find(s, sep, at, true)
+      n = n + 1
+      if i == nil then
+        out[n] = s:sub(at)
+        break
+      end
+      out[n] = s:sub(at, i - 1)
+      at = j + 1
+    end
+  end
+  out.n = n
+  return out
+end
+
+local function same(s)
+  return s
+end
+ext["std.string.Str.to_string"] = same
+ext["std.string.Str.copy"] = same
+
+-- `NumError`'s cases, by tag.
+local EMPTY, INVALID, OVERFLOW = 1, 2, 3
+
+local function parse_int(d, s)
+  if s == "" then return { false, EMPTY } end
+  local neg, i = false, 1
+  local first = s:sub(1, 1)
+  if first == "+" or first == "-" then
+    neg, i = first == "-", 2
+    if #s == 1 then return { false, INVALID } end
+  end
+  if neg and not d.signed then return { false, INVALID } end
+  -- The magnitude, as an unsigned 64-bit value.
+  local mag = 0
+  for j = i, #s do
+    local b = sbyte(s, j)
+    if b < 48 or b > 57 then return { false, INVALID } end
+    local digit = b - 48
+    if ult(udiv(-1 - digit, 10), mag) then return { false, OVERFLOW } end
+    mag = mag * 10 + digit
+  end
+  local limit = neg and -d.lo or d.hi
+  if ult(limit, mag) then return { false, OVERFLOW } end
+  return { true, neg and -mag or mag }
+end
+
+local function parse_float(d, s)
+  if s == "" then return { false, EMPTY } end
+  local body = s:gsub("^[+-]", "")
+  local lower = body:lower()
+  local v
+  if lower == "inf" or lower == "infinity" then
+    v = huge
+  elseif lower == "nan" then
+    v = 0.0 / 0.0
+  else
+    local mantissa, exponent = body:match("^([%d.]+)(.*)$")
+    local ok = mantissa ~= nil
+      and mantissa:find("%d") ~= nil
+      and select(2, mantissa:gsub("%.", "")) <= 1
+      and (exponent == "" or exponent:match("^[eE][+-]?%d+$") ~= nil)
+    if not ok then return { false, INVALID } end
+    v = tonumber(body) + 0.0
+  end
+  if s:sub(1, 1) == "-" then v = -v end
+  if d.name == "f32" then v = rt.f32(v) end
+  return { true, v }
+end
+
+ext["std.string.Str.parse"] = function(d, s)
+  if d.kind == "int" then return parse_int(d, s) end
+  return parse_float(d, s)
+end
+
+-- Characters are code points.
+
+local function between(c, lo, hi)
+  return c >= lo and c <= hi
+end
+
+local function is_upper(c)
+  return between(c, 65, 90)
+end
+
+local function is_lower(c)
+  return between(c, 97, 122)
+end
+
+local function is_digit(c)
+  return between(c, 48, 57)
+end
+
+ext["std.string.Char.is_digit"] = is_digit
+ext["std.string.Char.is_upper"] = is_upper
+ext["std.string.Char.is_lower"] = is_lower
+
+ext["std.string.Char.is_alphabetic"] = function(c)
+  return is_upper(c) or is_lower(c)
+end
+
+ext["std.string.Char.is_alphanumeric"] = function(c)
+  return is_upper(c) or is_lower(c) or is_digit(c)
+end
+
+ext["std.string.Char.is_whitespace"] = function(c)
+  return c == 32 or between(c, 9, 13)
+end
+
+ext["std.string.Char.to_upper"] = function(c)
+  if is_lower(c) then return c - 32 end
+  return c
+end
+
+ext["std.string.Char.to_lower"] = function(c)
+  if is_upper(c) then return c + 32 end
+  return c
+end
+
+ext["std.string.Char.to_digit"] = function(c, radix)
+  local v
+  if is_digit(c) then
+    v = c - 48
+  elseif is_lower(c) then
+    v = c - 87
+  elseif is_upper(c) then
+    v = c - 55
+  else
+    return nil
+  end
+  if v < radix then return v end
+  return nil
+end
+
+ext["std.string.Char.len_utf8"] = function(c)
+  return #utf8char(c)
+end
+
+-- Integers get their type's descriptor first.
+
+ext["std.num.Int.abs"] = function(d, v)
+  if v >= 0 or not d.signed then return v end
+  if v == d.lo then error(MARK .. "arithmetic overflow", 2) end
+  return -v
+end
+
+local function less(d, a, b)
+  if d.u64 then return ult(a, b) end
+  return a < b
+end
+
+ext["std.num.Int.min"] = function(d, a, b)
+  if less(d, b, a) then return b end
+  return a
+end
+
+ext["std.num.Int.max"] = function(d, a, b)
+  if less(d, a, b) then return b end
+  return a
+end
+
+ext["std.num.Int.pow"] = function(d, v, exp)
+  local r = 1
+  for _ = 1, exp do
+    r = rt.mul_chk(d, r, v)
+    if r == nil then error(MARK .. "arithmetic overflow", 2) end
+  end
+  return r
+end
+
+ext["std.num.Int.trailing_zeros"] = function(d, v)
+  local bits = v & d.mask
+  if bits == 0 then return d.bits end
+  local n = 0
+  while bits & 1 == 0 do
+    bits = bits >> 1
+    n = n + 1
+  end
+  return n
+end
+
+ext["std.num.Int.leading_zeros"] = function(d, v)
+  local bits = v & d.mask
+  local n = d.bits
+  while bits ~= 0 do
+    bits = bits >> 1
+    n = n - 1
+  end
+  return n
+end
+
+ext["std.num.Int.count_ones"] = function(d, v)
+  local bits = v & d.mask
+  local n = 0
+  while bits ~= 0 do
+    n = n + (bits & 1)
+    bits = bits >> 1
+  end
+  return n
+end
+
+local function to_string(d, v)
+  return show(d, v, false)
+end
+ext["std.num.Int.to_string"] = to_string
+ext["std.num.Float.to_string"] = to_string
+
+-- Floats get their type's descriptor first; an `f32` result is rounded to
+-- one.
+
+local function float(d, x)
+  if d.name == "f32" then return rt.f32(x) end
+  return x + 0.0
+end
+
+ext["std.num.Float.abs"] = function(d, v)
+  return float(d, math.abs(v))
+end
+
+ext["std.num.Float.min"] = function(d, a, b)
+  if a ~= a then return b end
+  if b ~= b then return a end
+  return float(d, b < a and b or a)
+end
+
+ext["std.num.Float.max"] = function(d, a, b)
+  if a ~= a then return b end
+  if b ~= b then return a end
+  return float(d, b > a and b or a)
+end
+
+ext["std.num.Float.sqrt"] = function(d, v)
+  return float(d, math.sqrt(v))
+end
+
+ext["std.num.Float.floor"] = function(d, v)
+  return float(d, floor(v))
+end
+
+ext["std.num.Float.ceil"] = function(d, v)
+  return float(d, ceil(v))
+end
+
+ext["std.num.Float.trunc"] = function(d, v)
+  if v >= 0 then return float(d, floor(v)) end
+  return float(d, ceil(v))
+end
+
+ext["std.num.Float.round"] = function(d, v)
+  if v ~= v or v == huge or v == -huge then return v end
+  if v >= 0 then
+    local f = floor(v)
+    if v - f >= 0.5 then f = f + 1 end
+    return float(d, f)
+  end
+  local c = ceil(v)
+  if c - v >= 0.5 then c = c - 1 end
+  return float(d, c)
+end
+
+ext["std.num.Float.pow"] = function(d, v, exp)
+  return float(d, v ^ exp)
+end
+
+ext["std.num.Float.is_nan"] = function(_, v)
+  return v ~= v
 end
 
 return rt

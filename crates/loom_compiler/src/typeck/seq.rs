@@ -191,11 +191,12 @@ impl Checker<'_> {
             return self.tcx.error;
         }
         let Some(seq) = self.seq(base_ty) else {
+            let base_ty = self.resolve(base_ty);
+            if matches!(self.tcx.kind(base_ty), TyKind::Str) || Some(base_ty) == self.string_ty_opt() {
+                return self.check_str_index(e, index);
+            }
             let shown = self.show(base_ty);
             self.check_expr(index, None);
-            if matches!(self.tcx.kind(self.resolve(base_ty)), TyKind::Str) || Some(base_ty) == self.string_ty_opt() {
-                return self.unsupported(e.span, "slicing strings");
-            }
             self.error(codes::T0103, e.span, format!("`{shown}` can't be indexed"), "not an array, list or slice");
             return self.tcx.error;
         };
@@ -208,6 +209,48 @@ impl Checker<'_> {
         }
         self.check_index_value(index);
         seq.elem()
+    }
+
+    /// `s[a..b]`: the bytes from `a` to `b`, which must fall on character
+    /// boundaries. A single position isn't a character, so `s[i]` is an error.
+    fn check_str_index(&mut self, e: &Expr, index: &Expr) -> Ty {
+        match &index.kind {
+            ExprKind::Range { lo, hi, .. } => {
+                for bound in lo.iter().chain(hi.iter()) {
+                    self.check_index_value(bound);
+                }
+                self.b.expr_ty.insert(index.id, self.tcx.error);
+                self.tcx.str
+            }
+            _ => {
+                self.check_expr(index, None);
+                self.diags.push(
+                    Diagnostic::error(codes::T0103, "text can't be indexed by position")
+                        .primary(e.span, "characters take different numbers of bytes")
+                        .help("slice it by bytes, `s[i..j]`, or look at its characters"),
+                );
+                self.tcx.error
+            }
+        }
+    }
+
+    /// The methods primitive types get from std's builtin warps: `str` (and
+    /// `String`) from `Str`, `char` from `Char`, integers from `Int[T]`,
+    /// floats from `Float[T]`. The value is passed as it is.
+    pub(super) fn prim_method(&mut self, ty: Ty, name: &str) -> Option<Found> {
+        let ty = self.resolve(ty);
+        let (warp, args) = match self.tcx.kind(ty) {
+            TyKind::Str => (self.std.str_warp?, Vec::new()),
+            TyKind::Adt(def, _) if Some(*def) == self.std.string => (self.std.str_warp?, Vec::new()),
+            TyKind::Char => (self.std.char_warp?, Vec::new()),
+            TyKind::Int(_) | TyKind::IntVar(_) => (self.std.int_warp?, vec![ty]),
+            TyKind::Float(_) | TyKind::FloatVar(_) => (self.std.float_warp?, vec![ty]),
+            _ => return None,
+        };
+        let Some(Member::Method(m)) = self.member(warp, name) else { return None };
+        let self_ty = self.tcx.intern(TyKind::Adt(warp, args));
+        let via = format!("{}.{name}", self.p.def(warp).name);
+        Some(Found { inst: self.member_instance(m, self_ty), path: Vec::new(), self_ty, via })
     }
 
     /// An index: any unsigned integer, used as a `usize`.

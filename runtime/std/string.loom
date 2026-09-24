@@ -1,6 +1,76 @@
-// Owned text.
+// Text.
+
+use std.num.{NumError, Parse}
 
 /// Owned, growable UTF-8 text. `str` is a view of text; a string literal
-/// converts to `String` wherever one is expected.
+/// converts to `String` wherever one is expected. A `String` has every
+/// method of `str`, too.
 #builtin
-pub warp String
+pub warp String {
+    /// An empty string with room for `n` bytes.
+    pub fn with_capacity(n: usize) -> String
+    /// The text of `chars`, in order.
+    pub fn of(chars: [char]) -> String
+    /// Adds `c` at the end.
+    pub fn push(mut self, c: char)
+    /// Adds `s` at the end.
+    pub fn push_str(mut self, s: str)
+    /// Takes the last character off, if there is one.
+    pub fn pop(mut self) -> ?char
+    pub fn clear(mut self)
+}
+
+/// The methods of `str`: a view of UTF-8 text. Lengths and positions count
+/// bytes.
+#builtin
+pub warp Str {
+    /// How many bytes it takes.
+    pub fn len(self) -> usize
+    pub fn is_empty(self) -> bool
+    /// How many characters it has.
+    pub fn char_count(self) -> usize
+    pub fn contains(self, part: str) -> bool
+    pub fn starts_with(self, prefix: str) -> bool
+    pub fn ends_with(self, suffix: str) -> bool
+    /// The byte position of the first `part`, if there is one.
+    pub fn find(self, part: str) -> ?usize
+    /// Without whitespace at either end.
+    pub fn trim(self) -> str
+    pub fn trim_start(self) -> str
+    pub fn trim_end(self) -> str
+    /// Upper case, for ASCII letters.
+    pub fn to_upper(self) -> String
+    /// Lower case, for ASCII letters.
+    pub fn to_lower(self) -> String
+    /// Every `from` replaced with `to`.
+    pub fn replace(self, from: str, to: str) -> String
+    /// `n` copies, one after another.
+    pub fn repeat(self, n: usize) -> String
+    /// The parts between each `sep`.
+    pub fn split(self, sep: str) -> List[String]
+    /// The text as a `String` of its own.
+    pub fn to_string(self) -> String
+    pub fn copy(self) -> String
+    /// The number the text spells: `"42".parse[u8]()`. Decimal, with an
+    /// optional sign; floats also take a fraction, an exponent, `inf`, `NaN`.
+    pub fn parse[T: Parse](self) -> T ! NumError
+}
+
+/// The methods of `char`. The tests are for ASCII.
+#builtin
+pub warp Char {
+    /// `0` through `9`.
+    pub fn is_digit(self) -> bool
+    pub fn is_alphabetic(self) -> bool
+    pub fn is_alphanumeric(self) -> bool
+    /// A space, tab, newline, or carriage return.
+    pub fn is_whitespace(self) -> bool
+    pub fn is_upper(self) -> bool
+    pub fn is_lower(self) -> bool
+    pub fn to_upper(self) -> char
+    pub fn to_lower(self) -> char
+    /// Its value as a digit in `radix`: `'f'.to_digit(16)` is `15`.
+    pub fn to_digit(self, radix: u32 = 10) -> ?u32
+    /// How many bytes it takes in UTF-8.
+    pub fn len_utf8(self) -> usize
+}

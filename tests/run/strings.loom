@@ -1,0 +1,63 @@
+// Text, characters and numbers: the methods std gives them.
+
+use std.io.print
+
+fn shout(s: str) -> String {
+    var out = String.with_capacity(s.len() + 1)
+    out.push_str(s.to_upper())
+    out.push('!')
+    out
+}
+
+fn digits(s: str) -> u32 {
+    var total: u32 = 0
+    var i: usize = 0
+    while i < s.len() {
+        let c = s[i..i + 1]
+        if c.parse[u32]() is ok(d) { total += d }
+        i += 1
+    }
+    total
+}
+
+fn main() {
+    // `String` has every method of `str`.
+    let s = "  Hello, Loom  "
+    let t = s.trim()
+    print("[{t}] {t.len()} {s.trim_start().len()} {s.trim_end().len()} {t.is_empty()}")
+    print("{t.contains("Lo")} {t.starts_with("Hell")} {t.ends_with("m")} {t.find("o")} {t.find("z")}")
+    print("{t.to_lower()} {t.replace("l", "L")} {"ab".repeat(3)} {shout("hi")}")
+    print("{t[7..]} {t[..5]} {"héllo".len()} {"héllo".char_count()}")
+    print("héllo"[0..3])
+    let parts = "a,b,,c".split(",")
+    print("{parts} {parts.len()}")
+
+    var name: String = "ada"
+    name.push(' ')
+    name.push_str("lovelace")
+    print("{name} {name.len()} {name.pop()} {name}")
+    let copy = name.copy()
+    name.clear()
+    print("[{name}] [{copy}]")
+    print(String.of(['L', 'o', 'o', 'm']))
+
+    // Parsing numbers.
+    print("{"42".parse[u8]():?} {"-7".parse[i32]():?} {"+7".parse[i32]():?} {"300".parse[u8]():?} {"".parse[i32]():?} {"x1".parse[i32]():?} {"-1".parse[u8]():?}")
+    print("{"2.5".parse[f64]():?} {"1e3".parse[f64]():?} {"-inf".parse[f64]():?} {".5".parse[f32]():?} {"1.2.3".parse[f64]():?}")
+    print("{"18446744073709551615".parse[u64]():?} {"18446744073709551616".parse[u64]():?} {"-9223372036854775808".parse[i64]():?}")
+    let port = "8080".parse[u16]() mend 80
+    print(port + 1)
+    print(digits("a1b2c3"))
+
+    // Characters.
+    let c = 'q'
+    print("{c.is_alphabetic()} {c.is_digit()} {'7'.is_digit()} {' '.is_whitespace()} {c.to_upper()} {'f'.to_digit(16)} {'z'.to_digit()} {'é'.len_utf8()}")
+
+    // Numbers.
+    let n: i8 = -5
+    let m: u16 = 0b1011_0000
+    print("{n.abs()} {n.min(3)} {n.max(3)} {2u32.pow(10)} {m.trailing_zeros()} {m.leading_zeros()} {m.count_ones()} {0u8.trailing_zeros()}")
+    let x = 2.5
+    print("{x.sqrt()} {x.floor()} {x.ceil()} {x.round()} {(-2.5).round()} {(-2.7).trunc()} {x.pow(2.0)} {x.min(1.0)} {(0.0 / 0.0).is_nan()}")
+    print("{(12).to_string().len()} {1.5.to_string()}")
+}

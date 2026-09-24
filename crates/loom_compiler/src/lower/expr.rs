@@ -630,7 +630,12 @@ impl Lowerer<'_> {
 
         // The receiver, then the arguments in source order, whatever order
         // the parameters take them in.
-        let receiver_base = match (&info.receiver, &callee.kind) {
+        // `s.parse[u16]()`: the method is inside the type arguments.
+        let method = match &callee.kind {
+            ExprKind::Index { base, .. } => base.as_ref(),
+            _ => callee,
+        };
+        let receiver_base = match (&info.receiver, &method.kind) {
             (Some(Receiver::Expr), ExprKind::Field { base, .. }) => Some(base.as_ref()),
             _ => None,
         };

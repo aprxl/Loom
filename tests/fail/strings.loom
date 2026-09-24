@@ -1,0 +1,11 @@
+fn main() {
+    let s = "hello"
+    let c = s[0]                            //~ T0103
+    let b = s.parse[bool]()                 //~ T0108
+    let name: String = "ada"
+    name.push('!')                          //~ T0107
+    var other: String = "x"
+    other.push("yz")                        //~ T0101
+    let n = s.shout()                       //~ U0102
+    let m = 5.sqrt()                        //~ U0102
+}

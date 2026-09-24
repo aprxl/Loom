@@ -46,33 +46,19 @@ pub struct Bundle {
 
 /// The `std` externs the runtime implements (see `rt.ext` in
 /// `runtime/rt/core.lua`). Calling any other extern is "not implemented yet".
-const EXTERNS: &[&str] = &[
-    "std.io.print",
-    "std.error.unravel",
-    "std.error.assert",
-    "std.fmt.Fmt.put",
-    "std.list.List.filled",
-    "std.list.List.push",
-    "std.list.List.pop",
-    "std.list.List.insert",
-    "std.list.List.remove",
-    "std.list.List.clear",
-    "std.list.List.truncate",
-    "std.list.List.extend",
-    "std.list.List.copy",
-    "std.slice.Slice.len",
-    "std.slice.Slice.is_empty",
-    "std.slice.Slice.get",
-    "std.slice.Slice.first",
-    "std.slice.Slice.last",
-    "std.slice.Slice.contains",
-    "std.slice.Slice.index_of",
-    "std.slice.Slice.copy_from",
-    "std.slice.Slice.fill",
-    "std.slice.Slice.swap",
-    "std.slice.Slice.reverse",
-    "std.slice.Slice.sort",
-    "std.slice.Slice.to_list",
+const EXTERNS: &[&str] = &["std.io.print", "std.error.unravel", "std.error.assert"];
+
+/// The `#builtin` warps of std whose methods the runtime implements, every
+/// one (a test checks that `rt.ext` has them all).
+pub const RUNTIME_WARPS: &[&str] = &[
+    "std.fmt.Fmt",
+    "std.list.List",
+    "std.slice.Slice",
+    "std.string.String",
+    "std.string.Str",
+    "std.string.Char",
+    "std.num.Int",
+    "std.num.Float",
 ];
 
 /// Lowers a type-checked program. `typed` must have no errors.
@@ -262,7 +248,8 @@ impl<'a> Lowerer<'a> {
     /// The Lua expression for a std extern, registering it.
     fn extern_fn(&mut self, def: DefId, span: Span) -> Option<Expr> {
         let path = self.p.def_path(def);
-        if !EXTERNS.contains(&path.as_str()) {
+        let of_warp = |w: &&str| path.strip_prefix(*w).is_some_and(|rest| rest.starts_with('.'));
+        if !EXTERNS.contains(&path.as_str()) && !RUNTIME_WARPS.iter().any(of_warp) {
             self.unsupported(span, &format!("`{path}` in the Lua runtime"));
             return None;
         }
@@ -326,6 +313,12 @@ impl<'a> Lowerer<'a> {
                 let boxed = self.opt_boxed(inner);
                 let inner = self.desc(inner, span);
                 Expr::rt("opt", vec![inner, Expr::Bool(boxed)])
+            }
+            TyKind::Result(ok, err) => {
+                let (ok, err) = (*ok, *err);
+                let ok = self.desc(ok, span);
+                let err = self.desc(err, span);
+                Expr::rt("res", vec![ok, err])
             }
             _ => {
                 let shown = self.tcx().display(self.p, ty);

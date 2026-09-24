@@ -1,0 +1,18 @@
+[Hello, Loom] 11 13 13 false
+true true true 4 none
+hello, loom HeLLo, Loom ababab HI!
+Loom Hello 6 5
+hé
+[a, b, , c] 4
+ada lovelace 12 e ada lovelac
+[] [ada lovelac]
+Loom
+ok(42) ok(-7) ok(7) err(Overflow) err(Empty) err(Invalid) err(Invalid)
+ok(2.5) ok(1000.0) ok(-inf) ok(0.5) err(Invalid)
+ok(18446744073709551615) err(Overflow) ok(-9223372036854775808)
+8081
+6
+true false true true Q 15 none 2
+5 -5 3 1024 4 8 3 8
+1.5811388300841898 2 3 3 -3 -2 6.25 1 true
+2 1.5

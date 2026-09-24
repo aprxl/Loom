@@ -59,17 +59,16 @@ impl Lowerer<'_> {
     pub(super) fn index(&mut self, base: &hir::Expr, args: &[GenericArg]) -> Expr {
         let [GenericArg::Expr(index)] = args else { return Expr::Nil };
         let base_ty = self.ty_of(base);
-        let Some(seq) = self.seq(base_ty) else { return Expr::Nil };
+        let Some(seq) = self.seq(base_ty) else {
+            // `s[a..b]`: the text between two byte positions.
+            let ExprKind::Range { lo, hi, inclusive } = &index.kind else { return Expr::Nil };
+            let s = self.lower_expr(base);
+            let (lo, hi) = self.range_bounds(lo.as_deref(), hi.as_deref(), *inclusive);
+            return Expr::rt("substr", vec![s, lo, hi]);
+        };
         let b = if self.is_place(base) { self.lower_place(base) } else { self.lower_expr(base) };
         if let ExprKind::Range { lo, hi, inclusive } = &index.kind {
-            let bounds: Vec<&hir::Expr> = lo.iter().chain(hi.iter()).map(|b| b.as_ref()).collect();
-            let mut vals = self.lower_operands(&bounds).into_iter();
-            let lo = if lo.is_some() { vals.next().unwrap_or(Expr::Int(0)) } else { Expr::Int(0) };
-            let hi = match (hi.is_some(), vals.next()) {
-                (true, Some(h)) if *inclusive => Expr::bin("+", h, Expr::Int(1)),
-                (true, Some(h)) => h,
-                _ => Expr::Nil,
-            };
+            let (lo, hi) = self.range_bounds(lo.as_deref(), hi.as_deref(), *inclusive);
             return Expr::rt("subview", vec![b, lo, hi]);
         }
         let b = if matches!(seq, Seq::Array(..)) { b } else { self.spill_place(b) };
@@ -84,6 +83,20 @@ impl Lowerer<'_> {
             Seq::Slice(_) => Expr::index(Expr::field(b.clone(), "t"), Expr::bin("+", Expr::field(b, "o"), at)),
             _ => Expr::index(b, at),
         }
+    }
+
+    /// The bounds of `a..b` as a start and an exclusive end: `0` for no
+    /// start, `nil` for no end.
+    fn range_bounds(&mut self, lo: Option<&hir::Expr>, hi: Option<&hir::Expr>, inclusive: bool) -> (Expr, Expr) {
+        let bounds: Vec<&hir::Expr> = lo.iter().chain(hi.iter()).copied().collect();
+        let mut vals = self.lower_operands(&bounds).into_iter();
+        let start = if lo.is_some() { vals.next().unwrap_or(Expr::Int(0)) } else { Expr::Int(0) };
+        let end = match (hi.is_some(), vals.next()) {
+            (true, Some(h)) if inclusive => Expr::bin("+", h, Expr::Int(1)),
+            (true, Some(h)) => h,
+            _ => Expr::Nil,
+        };
+        (start, end)
     }
 
     /// Whether every value of index type `ty` is below `n`, so no check is

@@ -77,8 +77,9 @@ impl Checker<'_> {
             let via = format!("{}.{name}", self.p.def(def).name);
             return vec![Found { inst: self.member_instance(m, ty), path: Vec::new(), self_ty: ty, via }];
         }
-        // Arrays and lists have the methods of slices.
-        if let Some(found) = self.slice_method(ty, name) {
+        // Arrays and lists have the methods of slices, and primitive types
+        // the methods std gives them.
+        if let Some(found) = self.slice_method(ty, name).or_else(|| self.prim_method(ty, name)) {
             return vec![found];
         }
         let woven = self.weave_methods(ty, name, depth);

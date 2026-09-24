@@ -54,7 +54,23 @@ impl Checker<'_> {
                 self.call_fn_with(call, Instance::of(*def), &explicit, args, None)
             }
             ExprKind::Field { base, field: FieldName::Named(name) } => {
-                self.method_call(call, callee, base, &name.name, args)
+                self.method_call(call, callee, base, &name.name, &[], args)
+            }
+            // `s.parse[u16]()`: a method with its type arguments given.
+            ExprKind::Index { base: method, args: type_args }
+                if type_args.iter().all(|a| matches!(a, hir::GenericArg::Type(_)))
+                    && matches!(&method.kind, ExprKind::Field { field: FieldName::Named(_), .. }) =>
+            {
+                let ExprKind::Field { base, field: FieldName::Named(name) } = &method.kind else { unreachable!() };
+                let explicit: Vec<Ty> = type_args
+                    .iter()
+                    .map(|a| match a {
+                        hir::GenericArg::Type(t) => self.lower_ty(t),
+                        hir::GenericArg::Expr(_) => self.tcx.error,
+                    })
+                    .collect();
+                self.b.expr_ty.insert(method.id, self.tcx.error);
+                self.method_call(call, method, base, &name.name, &explicit, args)
             }
             ExprKind::Type(ty) => {
                 self.infer_args = true;
@@ -90,7 +106,7 @@ impl Checker<'_> {
                 match self.resolve_leading(&name.name, callee.span, expected, true) {
                     Some(Leading::Method(found, receiver)) => {
                         let recv = Recv { receiver, ty: found.self_ty, expr: None, mutable: true };
-                        self.call_found(call, found, args, recv)
+                        self.call_found(call, found, &[], args, recv)
                     }
                     Some(Leading::Case(info, case)) => {
                         self.construct(call.id, &info, Some(case), Some(args), call.span)
@@ -131,8 +147,8 @@ impl Checker<'_> {
 
     /// Calls a method `find_method` found, following any `through` fields
     /// from the receiver to the method's `self`.
-    fn call_found(&mut self, call: &Expr, found: Found, args: &[Arg], recv: Recv<'_>) -> Ty {
-        let ty = self.call_fn(call, found.inst, args, Some(recv));
+    fn call_found(&mut self, call: &Expr, found: Found, explicit: &[Ty], args: &[Arg], recv: Recv<'_>) -> Ty {
+        let ty = self.call_fn_with(call, found.inst, explicit, args, Some(recv));
         if !found.path.is_empty()
             && let Some(c) = self.b.calls.get_mut(&call.id)
         {
@@ -370,7 +386,15 @@ impl Checker<'_> {
 
     // ------------------------------------------------------------ methods
 
-    fn method_call(&mut self, call: &Expr, callee: &Expr, base: &Expr, name: &str, args: &[Arg]) -> Ty {
+    fn method_call(
+        &mut self,
+        call: &Expr,
+        callee: &Expr,
+        base: &Expr,
+        name: &str,
+        explicit: &[Ty],
+        args: &[Arg],
+    ) -> Ty {
         let base_ty = self.check_expr(base, None);
         let base_ty = self.resolve(base_ty);
         if self.tcx.is_error(base_ty) {
@@ -409,7 +433,7 @@ impl Checker<'_> {
         match self.find_method(base_ty, name, callee.span) {
             Lookup::One(found) => {
                 let r = recv(found.self_ty);
-                return self.call_found(call, found, args, r);
+                return self.call_found(call, found, explicit, args, r);
             }
             Lookup::Ambiguous => return self.check_args_alone(args),
             Lookup::None => {}

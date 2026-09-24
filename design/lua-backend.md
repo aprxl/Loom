@@ -111,6 +111,18 @@ expected (`rt.view`).
 and printing work for any element type. Arrays and lists have every slice
 method, passed as they are. `for mut x in xs` makes `x` stand for `xs[i]`.
 
+## Text and primitive methods
+
+`str` and `String` are both Lua strings. `String`'s `mut self` methods
+(`push`, `push_str`) return the new string after their result, like any
+scalar `mut` parameter, and the caller stores it back. `s[a..b]` slices by
+bytes and unravels when either end is inside a character.
+
+The methods of `str`, `char`, integers and floats come from std's builtin
+warps `Str`, `Char`, `Int[T]` and `Float[T]` (a `String` has `Str`'s too).
+The value is passed as it is; `Int` and `Float` methods get the type's
+descriptor first, so `trailing_zeros` and `abs` know the width.
+
 ## Weaves
 
 Weave methods are static calls, like any other method. A weft's default

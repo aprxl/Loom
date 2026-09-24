@@ -207,7 +207,7 @@ fn show_is_required_in_templates_and_print() {
 
 #[test]
 fn unsupported_features_say_so_once_per_item() {
-    assert_eq!(codes("fn f(xs: str) {\n    xs.len()\n    xs.len()\n}"), [codes::U0102]);
+    assert_eq!(codes("fn f(xs: str) {\n    xs.chars()\n    xs.chars()\n}"), [codes::U0102]);
 }
 
 // ================================================================ results for lowering
