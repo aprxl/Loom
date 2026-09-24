@@ -1,5 +1,27 @@
 // Growable arrays.
 
-/// A growable array of `T`.
+/// A growable array of `T`. Build one with `List()`, `List.filled(x, n)`,
+/// or a literal where a list is expected: `let xs: List[i32] = [1, 2, 3]`.
+/// It has every method of a slice (`[T]`), too.
 #builtin
-pub warp List[T]
+pub warp List[T] {
+    /// `n` copies of `x`.
+    pub fn filled(x: T, n: usize) -> List[T]
+    /// Adds `x` at the end.
+    pub fn push(mut self, take x: T)
+    /// Takes the last element off, if there is one.
+    pub fn pop(mut self) -> ?T
+    /// Puts `x` at index `i`, moving the rest up. Unravels if `i > len`.
+    pub fn insert(mut self, i: usize, take x: T)
+    /// Takes out the element at `i`, moving the rest down. Unravels if
+    /// `i >= len`.
+    pub fn remove(mut self, i: usize) -> T
+    /// Removes every element.
+    pub fn clear(mut self)
+    /// Keeps the first `n` elements.
+    pub fn truncate(mut self, n: usize)
+    /// Adds a copy of every element of `xs` at the end.
+    pub fn extend(mut self, xs: [T])
+    /// A deep copy.
+    pub fn copy(self) -> List[T]
+}

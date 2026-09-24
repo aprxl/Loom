@@ -1,0 +1,28 @@
+// Slices: views of contiguous elements.
+
+/// `[T]`: a view of contiguous `T`s, in an array or a list. Arrays and lists
+/// have these methods too.
+#builtin
+pub warp Slice[T] {
+    /// How many elements there are.
+    pub fn len(self) -> usize
+    pub fn is_empty(self) -> bool
+    /// The element at `i`, or `none` past the end.
+    pub fn get(self, i: usize) -> ?T
+    pub fn first(self) -> ?T
+    pub fn last(self) -> ?T
+    /// Whether some element equals `x`.
+    pub fn contains(self, x: T) -> bool
+    /// The index of the first element equal to `x`.
+    pub fn index_of(self, x: T) -> ?usize
+    /// Copies `src` over the start of this slice. Unravels if `src` is longer.
+    pub fn copy_from(mut self, src: [T])
+    /// Sets every element to a copy of `x`.
+    pub fn fill(mut self, x: T)
+    pub fn swap(mut self, i: usize, j: usize)
+    pub fn reverse(mut self)
+    /// Sorts in order, keeping equal elements in the order they were in.
+    pub fn sort(mut self)
+    /// A new list with a copy of every element.
+    pub fn to_list(self) -> List[T]
+}

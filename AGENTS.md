@@ -72,10 +72,13 @@ language through every layer (type checking, lowering to Lua, the runtime,
 6. optionals and errors: `?` (to the nearest `mend`, or out of the
    function), `mend` and `mend e =>`, `fail`, `some`/`none`/`ok`/`err` as
    values and patterns, union types, error conversions (unions, `from`
-   cases, `any Error`), and `main ! E`.
+   cases, `any Error`), and `main ! E`;
+7. arrays, lists and slices: literals, `[x; n]`, bounds-checked indexing and
+   index assignment, slicing, `for` and `for mut` over them, and the methods
+   std declares on `List` and `Slice`.
 
-Next: arrays and lists, then strings and std methods, each through every
-layer at once.
+Next: strings and std methods (`str`/`String`, `chars`, `parse`), then
+iterators and lambdas, each through every layer at once.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and

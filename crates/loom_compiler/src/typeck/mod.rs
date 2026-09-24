@@ -20,7 +20,7 @@
 //! shared fields), methods, associated functions, UFCS, leading dots,
 //! dot-blocks, case and twill patterns; wefts and weaves (see `weave.rs`);
 //! generics (see `generic.rs`); `any W` (see `dynamic.rs`); optionals and
-//! errors (see `fallible.rs`).
+//! errors (see `fallible.rs`); arrays, lists and slices (see `seq.rs`).
 //! Everything else is reported with U0102 ("not implemented yet") rather
 //! than guessed at.
 
@@ -32,6 +32,7 @@ mod generic;
 mod infer;
 mod method;
 mod pat;
+mod seq;
 #[cfg(test)]
 mod tests;
 mod warp;
@@ -48,6 +49,7 @@ use crate::hir::{self, DefId, DefKind, Expr, ExprKind, FnRet, HirId, LocalId, Pr
 use crate::ty::{Ty, TyCtx, TyKind};
 pub use fallible::{ErrConv, Exit, MendInfo, TryInfo, Unwrap};
 use infer::{PendingLit, Var};
+pub use seq::Seq;
 pub use warp::{CaseFieldInfo, CaseInfo, FieldInfo, Key, WarpInfo};
 pub use weave::{Impl, Weaving};
 
@@ -200,6 +202,8 @@ pub struct Body {
     /// Every `fail`: the type of its error, and how it becomes the
     /// function's error type.
     pub fails: HashMap<HirId, (Ty, ErrConv)>,
+    /// `List()` calls: empty lists.
+    pub new_lists: HashSet<HirId>,
 }
 
 /// An implicit conversion.
@@ -223,6 +227,9 @@ pub enum Coercion {
     /// A value where a union that has its type is expected. It's boxed
     /// like an `any`, with a vtable that only describes its type.
     ToUnion,
+    /// An array or a list where a slice (`[T]`) is expected: a view of
+    /// all of it.
+    ToSlice,
     /// A value that's thrown away, where `()` is expected.
     Discard,
 }
@@ -363,6 +370,8 @@ struct Std {
     copy: Option<DefId>,
     integer: Option<DefId>,
     missing: Option<DefId>,
+    list: Option<DefId>,
+    slice: Option<DefId>,
 }
 
 /// Where the enclosing loop's `break`s go.
@@ -450,6 +459,8 @@ impl<'p> Checker<'p> {
             copy: find("std.ops", "Copy"),
             integer: find("std.ops", "Integer"),
             missing: find("std.error", "Missing"),
+            list: find("std.list", "List"),
+            slice: find("std.slice", "Slice"),
         };
         Checker {
             p,
@@ -522,8 +533,11 @@ impl<'p> Checker<'p> {
 
     // ------------------------------------------------------------ the work list
 
-    /// The body for `inst`, queuing it to be checked the first time.
-    fn instance(&mut self, inst: Instance) -> BodyId {
+    /// The body for `inst`, queuing it to be checked the first time. Its
+    /// types are resolved first: an instance is keyed by what they are.
+    fn instance(&mut self, mut inst: Instance) -> BodyId {
+        inst.args = inst.args.iter().map(|&t| self.deep_resolve(t)).collect();
+        inst.self_ty = inst.self_ty.map(|t| self.deep_resolve(t));
         if let Some(id) = self.r.find(&inst) {
             return id;
         }
@@ -963,8 +977,17 @@ impl<'p> Checker<'p> {
                 self.tcx.intern(TyKind::Any(defs))
             }
             HirTy::Error => self.tcx.error,
-            HirTy::Array { .. } => self.unsupported(span, "fixed-size arrays"),
-            HirTy::Slice(_) => self.unsupported(span, "slices"),
+            HirTy::Array { elem, len } => {
+                let elem = self.lower_ty(elem);
+                match self.array_len(len) {
+                    Some(n) if !self.tcx.is_error(elem) => self.tcx.intern(TyKind::Array(elem, n)),
+                    _ => self.tcx.error,
+                }
+            }
+            HirTy::Slice(elem) => {
+                let elem = self.lower_ty(elem);
+                if self.tcx.is_error(elem) { elem } else { self.slice_of(elem) }
+            }
             HirTy::Pointer(_) | HirTy::Region { .. } => self.unsupported(span, "spool pointers"),
             HirTy::RawPointer(_) => self.unsupported(span, "raw pointers"),
             HirTy::Union(items) => {
@@ -1072,6 +1095,13 @@ impl<'p> Checker<'p> {
             self.b.coercions.insert(e.id, Coercion::ToOptional);
             return true;
         }
+        // A view of a whole array or list.
+        if let (Some(Seq::Array(t, _) | Seq::List(t)), Some(Seq::Slice(u))) = (self.seq(actual), self.seq(target))
+            && (t == u || self.unify(t, u))
+        {
+            self.b.coercions.insert(e.id, Coercion::ToSlice);
+            return true;
+        }
         if let TyKind::Result(ok, _) = *self.tcx.kind(target)
             && (ok == actual || (self.has_vars(actual) && self.unify(actual, ok)))
         {
@@ -1150,6 +1180,17 @@ impl<'p> Checker<'p> {
         if let TyKind::Any(wefts) = self.tcx.kind(ty) {
             return self.weft_closure(wefts).contains(&weft);
         }
+        // A sequence shows, compares and hashes like its elements; an array
+        // copies like them, and a slice is a view, always copied.
+        if let Some(seq) = self.seq(ty)
+            && [self.std.show, self.std.eq, self.std.hash, self.std.copy].contains(&Some(weft))
+        {
+            return match seq {
+                Seq::Slice(_) if Some(weft) == self.std.copy => true,
+                Seq::List(_) if Some(weft) == self.std.copy => false,
+                _ => self.weaves(seq.elem(), weft),
+            };
+        }
         // A union weaves what every one of its types weaves.
         if let TyKind::Union(members) = self.tcx.kind(ty) {
             return members.iter().all(|&m| self.weaves(m, weft));
@@ -1207,6 +1248,7 @@ impl<'p> Checker<'p> {
         match self.tcx.kind(ty).clone() {
             TyKind::Tuple(items) => !items.is_empty(),
             TyKind::Adt(def, _) if self.is_builtin(def) => Some(def) != self.std.string,
+            TyKind::Array(..) => true,
             TyKind::Adt(..) => self.adt_info(ty).is_some_and(|i| !i.unit_only()),
             // A `mut self` method called through `any` changes the value in
             // it, which is table-backed: only those have `mut` methods yet.

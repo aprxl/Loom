@@ -60,6 +60,11 @@ it. `const LIMIT: u32 = 15` has one type everywhere.
 | `A \| B` | anonymous tagged union, mostly used for error sets |
 
 `List[T]`, `Map[K, V]`, `Set[T]`, and `String` come from `std` and aren't built in.
+An array literal is a `[T; N]`, or a `List[T]` where one is expected:
+`let xs: List[i32] = [1, 2, 3]`. An array or a list passes as a slice where
+one is expected, and has every slice method (`len`, `get`, `sort`, …).
+An array's length is computed at compile time, from literals, constants and
+arithmetic on them.
 `String` is owned text and `str` is a view of text. A string literal converts
 to `String` wherever one is expected (see [03](03-memory.md#slices-and-static)).
 

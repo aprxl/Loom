@@ -51,6 +51,9 @@ impl Lowerer<'_> {
             TyKind::Optional(t) => self.is_copy(*t),
             TyKind::Result(t, e) => self.is_copy(*t) && self.is_copy(*e),
             TyKind::Adt(def, _) if self.is_string(*def) => false,
+            TyKind::Array(t, _) => self.is_copy(*t),
+            // A slice is a view, and a list is moved.
+            TyKind::Adt(..) if self.seq(ty).is_some() => false,
             // Copy-ness depends on a generic warp's arguments.
             TyKind::Adt(..) => self.typed.results.adts.get(&ty).is_some_and(|w| w.copy),
             TyKind::Fn(..) | TyKind::Any(_) | TyKind::Union(_) => false,
@@ -63,8 +66,9 @@ impl Lowerer<'_> {
         match self.tcx().kind(ty) {
             TyKind::Tuple(items) => !items.is_empty(),
             TyKind::Optional(t) => self.is_table(*t),
+            TyKind::Adt(..) if self.seq(ty).is_some() => true,
             TyKind::Adt(def, _) => self.warp(*def).is_some_and(|w| !w.unit_only()),
-            TyKind::Any(_) | TyKind::Union(_) | TyKind::Result(..) => true,
+            TyKind::Any(_) | TyKind::Union(_) | TyKind::Result(..) | TyKind::Array(..) => true,
             _ => false,
         }
     }
@@ -74,6 +78,10 @@ impl Lowerer<'_> {
         match &e.kind {
             ExprKind::Local(_) => true,
             ExprKind::Field { base, .. } => self.is_place(base),
+            ExprKind::Index { base, args } => {
+                !matches!(args.as_slice(), [crate::hir::GenericArg::Expr(i)] if matches!(i.kind, ExprKind::Range { .. }))
+                    && self.seq(self.ty_of(base)).is_some()
+            }
             ExprKind::LeadingDot(_) => self.tables().fields.contains_key(&e.id),
             _ => false,
         }
@@ -167,7 +175,11 @@ impl Lowerer<'_> {
     /// Something that can be assigned to, as a Lua expression.
     pub(super) fn lower_place(&mut self, e: &hir::Expr) -> Expr {
         match &e.kind {
-            ExprKind::Local(l) => Expr::Name(self.local_name(*l)),
+            ExprKind::Local(l) => match self.aliases.get(l) {
+                Some(place) => place.clone(),
+                None => Expr::Name(self.local_name(*l)),
+            },
+            ExprKind::Index { base, args } => self.index(base, args),
             ExprKind::Field { base, .. } => {
                 let key = self.tables().fields.get(&e.id).map(|f| f.key.clone());
                 let base = if self.is_place(base) { self.lower_place(base) } else { self.lower_expr(base) };

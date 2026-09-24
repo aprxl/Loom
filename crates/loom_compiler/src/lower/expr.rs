@@ -33,7 +33,7 @@ impl Lowerer<'_> {
         self.tables().expr_ty.get(&e.id).copied().unwrap_or(self.typed.tcx.error)
     }
 
-    fn int_of(&self, ty: Ty) -> Option<IntTy> {
+    pub(super) fn int_of(&self, ty: Ty) -> Option<IntTy> {
         self.tcx().as_int(ty)
     }
 
@@ -53,7 +53,7 @@ impl Lowerer<'_> {
         self.push(StmtKind::Local(vec![name], vec![value]));
     }
 
-    fn spill(&mut self, v: Expr) -> Expr {
+    pub(super) fn spill(&mut self, v: Expr) -> Expr {
         if v.is_constant() || is_temp(&v) {
             return v;
         }
@@ -88,12 +88,13 @@ impl Lowerer<'_> {
                 let vt = self.vtable(self.ty_of(e), Vec::new(), e.span);
                 Expr::rt("any", vec![vt, v])
             }
+            Coercion::ToSlice => Expr::rt("view", vec![v]),
         }
     }
 
     /// Lowers several operands left to right, spilling earlier ones when a
     /// later one needs statements.
-    fn lower_operands(&mut self, es: &[&hir::Expr]) -> Vec<Expr> {
+    pub(super) fn lower_operands(&mut self, es: &[&hir::Expr]) -> Vec<Expr> {
         let flagged: Vec<(&hir::Expr, bool)> = es.iter().map(|e| (*e, false)).collect();
         self.lower_operands_flagged(&flagged)
     }
@@ -147,7 +148,14 @@ impl Lowerer<'_> {
         match &e.kind {
             ExprKind::Lit(lit) => self.lit(lit, false, ty),
             ExprKind::Template(parts) => self.template(parts),
-            ExprKind::Local(local) => Expr::Name(self.local_name(*local)),
+            ExprKind::Local(local) => match self.aliases.get(local) {
+                Some(place) => place.clone(),
+                None => Expr::Name(self.local_name(*local)),
+            },
+            ExprKind::Array(items) => self.array_lit(items),
+            ExprKind::ArrayRepeat { value, .. } => self.array_repeat(e, value),
+            ExprKind::Index { base, args } => self.index(base, args),
+            ExprKind::Call { .. } if self.tables().new_lists.contains(&e.id) => Self::new_list(),
             ExprKind::Def { def, .. } => match &self.p.def(*def).kind {
                 DefKind::Const(_) => match self.typed.results.untyped_consts.get(def) {
                     Some(&value) => self.int_value(value, ty),
@@ -428,7 +436,7 @@ impl Lowerer<'_> {
     /// that are tables or that write their own `eq` or `lt`.
     fn compares_structurally(&self, ty: Ty) -> bool {
         match self.tcx().kind(ty) {
-            TyKind::Tuple(_) | TyKind::Optional(_) => true,
+            TyKind::Tuple(_) | TyKind::Optional(_) | TyKind::Array(..) => true,
             TyKind::Adt(def, _) if self.is_string(*def) => false,
             TyKind::Adt(def, _) => {
                 let unit_only = self.warp(*def).is_some_and(|i| i.unit_only());
@@ -592,6 +600,15 @@ impl Lowerer<'_> {
                 && p.def(def).parent.is_some_and(|w| {
                     matches!(p.def(w).kind, DefKind::Warp(_)) && p.def(w).attrs.iter().any(|a| a.name == "builtin")
                 }));
+        // The runtime's generic methods (`List[T].push`) get the descriptor
+        // of each type argument first.
+        let mut descs = Vec::new();
+        if runtime {
+            let targs = self.typed.results.instance(info.callee).args.clone();
+            for t in targs {
+                descs.push(self.desc(t, callee.span));
+            }
+        }
         let target = if runtime {
             match self.extern_fn(def, callee.span) {
                 Some(e) => e,
@@ -668,7 +685,8 @@ impl Lowerer<'_> {
                 }
             }
         }
-        Expr::call(target, params)
+        descs.extend(params);
+        Expr::call(target, descs)
     }
 
     // ------------------------------------------------------------ statements and control flow
@@ -759,7 +777,10 @@ impl Lowerer<'_> {
                 }
                 self.after_loop();
             }
-            ExprKind::For { pat, iter, body, .. } => self.for_range(e, pat, iter, body),
+            ExprKind::For { pat, iter, body, .. } => match self.seq(self.ty_of(iter)) {
+                Some(seq) => self.for_seq(e, pat, iter, body, seq),
+                None => self.for_range(e, pat, iter, body),
+            },
             ExprKind::Break { target, value } => {
                 if let Some(v) = value {
                     let loop_dest = self.loops.iter().rev().find(|l| l.id == *target).map(|l| l.dest.clone());
@@ -827,7 +848,7 @@ impl Lowerer<'_> {
     }
 
     /// Binds an irrefutable pattern (`let`, `for`) to a value.
-    fn bind_irrefutable(&mut self, pat: &hir::Pat, v: Expr) {
+    pub(super) fn bind_irrefutable(&mut self, pat: &hir::Pat, v: Expr) {
         match &pat.kind {
             PatKind::Bind(local) => {
                 let name = self.local_name(*local);
@@ -894,7 +915,7 @@ impl Lowerer<'_> {
 
     /// A loop body: `do BODY end ::continue::`, with the loop registered for
     /// `break` and `continue`.
-    fn loop_body(&mut self, id: HirId, dest: Dest, body: &Block) -> Vec<Stmt> {
+    pub(super) fn loop_body(&mut self, id: HirId, dest: Dest, body: &Block) -> Vec<Stmt> {
         let continue_label = self.new_label("c");
         let break_label = self.new_label("b");
         self.loops.push(LoopInfo {
@@ -916,7 +937,7 @@ impl Lowerer<'_> {
 
     /// Ends the innermost loop: pops it, and places its break label if an
     /// inner loop jumps to it.
-    fn after_loop(&mut self) {
+    pub(super) fn after_loop(&mut self) {
         if let Some(info) = self.loops.pop()
             && info.break_label_used
         {
@@ -1143,12 +1164,18 @@ impl Lowerer<'_> {
                 let name = self.local_name(*local);
                 self.push(StmtKind::Call(Expr::rt("overwrite", vec![Expr::Name(name), v])));
             }
-            (ExprKind::Local(_) | ExprKind::Field { .. } | ExprKind::LeadingDot(_), AssignOp::Assign) => {
+            (
+                ExprKind::Local(_) | ExprKind::Field { .. } | ExprKind::LeadingDot(_) | ExprKind::Index { .. },
+                AssignOp::Assign,
+            ) => {
                 let v = self.lower_owned(value);
                 let place = self.lower_place(target);
                 self.push(StmtKind::Assign(vec![place], vec![v]));
             }
-            (ExprKind::Local(_) | ExprKind::Field { .. } | ExprKind::LeadingDot(_), AssignOp::Compound(bin)) => {
+            (
+                ExprKind::Local(_) | ExprKind::Field { .. } | ExprKind::LeadingDot(_) | ExprKind::Index { .. },
+                AssignOp::Compound(bin),
+            ) => {
                 let ty = self.ty_of(target);
                 let v = self.lower_expr(value);
                 let place = self.lower_place(target);

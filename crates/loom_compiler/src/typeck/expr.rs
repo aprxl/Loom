@@ -119,7 +119,8 @@ impl Checker<'_> {
             ExprKind::Intrinsic(_) => self.unsupported(span, "`target` and `heap`"),
             ExprKind::LeadingDot(field) => self.check_leading_value(e, field, expected),
             ExprKind::Tuple(items) => self.check_tuple(items, expected),
-            ExprKind::Array(_) | ExprKind::ArrayRepeat { .. } => self.unsupported(span, "arrays and lists"),
+            ExprKind::Array(items) => self.check_array_lit(e, items, expected),
+            ExprKind::ArrayRepeat { value, count } => self.check_array_repeat(value, count, expected),
             ExprKind::Map(_) => self.unsupported(span, "map literals"),
             ExprKind::Block(block) => self.check_block(block, expected),
             ExprKind::If { cond, then, else_, deferred } => {
@@ -142,6 +143,15 @@ impl Checker<'_> {
                 let elem = match self.tcx.kind(iter_ty) {
                     TyKind::Range(elem) => *elem,
                     TyKind::Error => self.tcx.error,
+                    _ if self.seq_elem(iter_ty).is_some() => {
+                        // `for mut x in xs` changes the elements themselves.
+                        if let crate::hir::PatKind::Bind(local) = &pat.kind
+                            && self.p.local(*local).mutable
+                        {
+                            self.check_for_mut(iter, pat.span);
+                        }
+                        self.seq_elem(iter_ty).unwrap_or(self.tcx.error)
+                    }
                     _ => {
                         let shown = self.show(iter_ty);
                         return self.unsupported(iter.span, &format!("`for` over `{shown}`"));
@@ -195,7 +205,7 @@ impl Checker<'_> {
             ExprKind::Lambda { .. } => self.unsupported(span, "lambdas"),
             ExprKind::Loom { .. } | ExprKind::Thread(_) => self.unsupported(span, "`loom` and `thread`"),
             ExprKind::Call { callee, args } => self.check_call(e, callee, args, expected),
-            ExprKind::Index { .. } => self.unsupported(span, "indexing"),
+            ExprKind::Index { base, args } => self.check_index(e, base, args),
             ExprKind::Field { base, field } => self.check_field(e, base, field),
             ExprKind::ConstField { .. } => self.unsupported(span, "compile-time field access"),
             ExprKind::Try(inner) => self.check_try(e, inner),
@@ -658,11 +668,25 @@ impl Checker<'_> {
                 };
                 // With an expected numeric type, both operands widen to it
                 // first: `let op: u16 = hi << 8 | lo`.
+                // An operand of a wider integer type widens the whole
+                // instead; whoever expected the narrower type then says so.
                 let ty = match expected.filter(|&t| self.is_numeric(t)) {
                     Some(t) if !matches!(op, B::AddChecked | B::SubChecked | B::MulChecked) => {
-                        self.check_coerce(lhs, t);
-                        self.check_coerce(rhs, t);
-                        t
+                        let a = self.check_expr(lhs, Some(t));
+                        let b = self.check_expr(rhs, Some(t));
+                        let mut target = self.resolve(t);
+                        for ty in [a, b] {
+                            let ty = self.resolve(ty);
+                            if let (Some(x), Some(y)) = (self.tcx.as_int(target), self.tcx.as_int(ty))
+                                && x != y
+                                && x.widens_to(y)
+                            {
+                                target = ty;
+                            }
+                        }
+                        self.coerce(lhs, a, target);
+                        self.coerce(rhs, b, target);
+                        target
                     }
                     _ => self.unify_operands(&[lhs, rhs]),
                 };
@@ -697,9 +721,24 @@ impl Checker<'_> {
         // A leading dot needs a type to look in: `light == .Red` finds
         // `.Red` in the other operand's type, so it's checked last. So does
         // `none`, which needs to know which optional it is.
+        // Arithmetic is checked last too, in the other operands' type:
+        // `xs.len() > 4096 - START` subtracts in `usize`.
         let leading = |e: &Expr| match &e.kind {
             ExprKind::LeadingDot(_) | ExprKind::Lit(Lit::None) => true,
             ExprKind::Call { callee, .. } => matches!(callee.kind, ExprKind::LeadingDot(_)),
+            ExprKind::Binary { op, .. } => matches!(
+                op,
+                BinaryOp::Add
+                    | BinaryOp::Sub
+                    | BinaryOp::Mul
+                    | BinaryOp::Div
+                    | BinaryOp::Rem
+                    | BinaryOp::BitAnd
+                    | BinaryOp::BitOr
+                    | BinaryOp::BitXor
+                    | BinaryOp::Shl
+                    | BinaryOp::Shr
+            ),
             _ => false,
         };
         let mut tys: Vec<Option<Ty>> =
@@ -860,10 +899,7 @@ impl Checker<'_> {
                 }
                 Some(ty)
             }
-            ExprKind::Index { .. } => {
-                self.unsupported(target.span, "assigning to elements");
-                None
-            }
+            ExprKind::Index { .. } => self.index_place(target),
             ExprKind::Call { .. } => {
                 self.unsupported(target.span, "assigning through projections");
                 None

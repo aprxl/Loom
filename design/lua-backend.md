@@ -50,8 +50,8 @@ SourceDb → lex → Tokens → parse → AST → resolve/desugar → HIR
 | `T ! E` | two slots `(ok, v_or_e)` in registers and returns; `{ok, v}` when stored |
 | `A \| B` | `{tid, v}` |
 | `any W` | `{v, vt}` (vtable per type × weft set; `vt.d` is the type's descriptor, for type tests) |
-| `[T; N]` | table indexed `1..N` (every index is emitted `+1`) |
-| `[T]` | view `{t, o, n}` |
+| `[T; N]`, `List[T]` | `{n = len, [1]…[n]}`: the same, so a literal can be either (every index is emitted `+1`; never Lua's `#`) |
+| `[T]` | view `{t = elements, o = offset, n = len}` |
 | `^T` | the table itself for table-backed T; `{v}` box for scalars |
 | Map / Set | insertion-ordered: `{keys, vals, idx, n}` |
 
@@ -94,6 +94,19 @@ type too (`Pair[i32, str]`), since its fields' descriptors differ.
 A generic function nobody calls isn't checked or emitted. An error in a
 generic body is reported once, with a note naming the instance it came from,
 even when several instances hit it.
+
+## Sequences
+
+`xs[i]` checks `i` against the length (`rt.idx`, which also makes it
+1-based), unless the index's type can't reach past the end of an array: a
+`u4` into `[u8; 16]` is never out of bounds. `xs[a..b]` makes a view
+(`rt.subview`), and so does passing an array or a list where a `[T]` is
+expected (`rt.view`).
+
+`List` and `Slice` are `#builtin` warps in std; their methods are in
+`rt.ext` and get the element type's descriptor first, so `contains`, `sort`
+and printing work for any element type. Arrays and lists have every slice
+method, passed as they are. `for mut x in xs` makes `x` stand for `xs[i]`.
 
 ## Weaves
 

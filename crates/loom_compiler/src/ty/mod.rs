@@ -48,6 +48,8 @@ pub enum TyKind {
     Adt(DefId, Vec<Ty>),
     /// `any W`: some type that weaves every weft listed.
     Any(Vec<DefId>),
+    /// `[T; N]`: exactly `N` elements, stored inline and copied like a value.
+    Array(Ty, u64),
     /// `A | B`: a value of one of these types. Always two or more members,
     /// sorted, none of them unions themselves (see [`TyCtx::union`]).
     Union(Vec<Ty>),
@@ -206,6 +208,7 @@ impl TyCtx {
             TyKind::Param(def) => return map.iter().find(|(p, _)| *p == def).map_or(ty, |(_, t)| *t),
             TyKind::Tuple(items) => TyKind::Tuple(items.into_iter().map(|t| self.subst(t, map)).collect()),
             TyKind::Optional(t) => TyKind::Optional(self.subst(t, map)),
+            TyKind::Array(t, n) => TyKind::Array(self.subst(t, map), n),
             TyKind::Result(t, e) => TyKind::Result(self.subst(t, map), self.subst(e, map)),
             TyKind::Range(t) => TyKind::Range(self.subst(t, map)),
             TyKind::Fn(params, ret) => {
@@ -226,7 +229,7 @@ impl TyCtx {
         match self.kind(ty) {
             TyKind::Param(_) => true,
             TyKind::Tuple(items) => items.iter().any(|&t| self.has_params(t)),
-            TyKind::Optional(t) | TyKind::Range(t) => self.has_params(*t),
+            TyKind::Optional(t) | TyKind::Range(t) | TyKind::Array(t, _) => self.has_params(*t),
             TyKind::Result(t, e) => self.has_params(*t) || self.has_params(*e),
             TyKind::Fn(params, ret) => params.iter().any(|&t| self.has_params(t)) || self.has_params(*ret),
             TyKind::Adt(_, args) | TyKind::Union(args) => args.iter().any(|&t| self.has_params(t)),
@@ -251,11 +254,20 @@ impl TyCtx {
                 if items.len() == 1 { format!("({},)", items[0]) } else { format!("({})", items.join(", ")) }
             }
             TyKind::Optional(t) => format!("?{}", self.display(p, *t)),
+            TyKind::Array(t, n) => format!("[{}; {n}]", self.display(p, *t)),
             TyKind::Result(t, e) => format!("{} ! {}", self.display(p, *t), self.display(p, *e)),
             TyKind::Range(t) => format!("Range[{}]", self.display(p, *t)),
             TyKind::Fn(params, ret) => {
                 let params: Vec<String> = params.iter().map(|t| self.display(p, *t)).collect();
                 format!("({}) => {}", params.join(", "), self.display(p, *ret))
+            }
+            // `Slice[T]`, the builtin warp behind slices, is written `[T]`.
+            TyKind::Adt(def, args)
+                if args.len() == 1
+                    && p.def(*def).name == "Slice"
+                    && p.module(p.def(*def).module).path == "std.slice" =>
+            {
+                format!("[{}]", self.display(p, args[0]))
             }
             TyKind::Adt(def, args) => {
                 let name = p.def(*def).name.clone();

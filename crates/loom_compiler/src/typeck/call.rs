@@ -16,7 +16,7 @@ use loom_syntax::source::Span;
 use super::generic::{self, Patch, Pending};
 use super::method::{Found, Lookup};
 use super::warp::{Key, Member, WarpInfo};
-use super::{ArgSource, AssocValue, Call, Checker, FieldAccess, Instance, Receiver, SigParam};
+use super::{ArgSource, AssocValue, Call, Checker, FieldAccess, Instance, Receiver, Seq, SigParam};
 use crate::hir::{self, Arg, Binding, DefId, DefKind, Expr, ExprKind, HirId};
 use crate::ty::{Ty, TyKind};
 
@@ -60,6 +60,9 @@ impl Checker<'_> {
                 self.infer_args = true;
                 let ty = self.lower_ty(ty);
                 self.infer_args = false;
+                if matches!(self.seq(ty), Some(Seq::List(_))) {
+                    return self.check_new_list(call, ty, expected, args);
+                }
                 match self.adt_info(ty) {
                     Some(info) => self.construct(call.id, &info, None, Some(args), call.span),
                     None if self.tcx.is_error(ty) => self.tcx.error,
@@ -427,14 +430,23 @@ impl Checker<'_> {
             );
             return self.check_args_alone(args);
         }
-        // Methods of built-in types come from std, which doesn't declare them yet.
-        self.unsupported(callee.span, &format!("methods on `{shown}`"));
+        // Methods of built-in types come from std, which doesn't declare
+        // them all yet.
+        self.unsupported(callee.span, &format!("`{name}` on `{shown}`"));
         self.check_args_alone(args)
     }
 
     fn assoc_call(&mut self, call: &Expr, ty: Ty, name: &str, span: Span, args: &[Arg]) -> Ty {
         if self.tcx.is_error(ty) {
             return self.check_args_alone(args);
+        }
+        // `List.filled(x, n)`: a builtin warp's associated function.
+        if let Some(def) = self.warp_def(ty)
+            && self.is_builtin(def)
+            && let Some(Member::AssocFn(f)) = self.member(def, name)
+        {
+            let inst = self.member_instance(f, ty);
+            return self.call_fn(call, inst, args, None);
         }
         let Some(info) = self.adt_info(ty) else {
             // `bool.to_json(b)`: a method a weave gives a built-in type.
@@ -728,7 +740,7 @@ impl Checker<'_> {
     pub(super) fn place(&self, e: &Expr) -> Option<bool> {
         match &e.kind {
             ExprKind::Local(l) => Some(self.p.local(*l).mutable),
-            ExprKind::Field { base, .. } => self.place(base),
+            ExprKind::Field { base, .. } | ExprKind::Index { base, .. } => self.place(base),
             ExprKind::LeadingDot(_) => match self.b.fields.get(&e.id).map(|f| f.base) {
                 Some(Receiver::Local(l)) => Some(self.p.local(l).mutable),
                 Some(Receiver::Subject(id)) => Some(self.subject_mutable(id)),

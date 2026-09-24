@@ -1,0 +1,23 @@
+use std.io.print
+
+const LEN = 3
+
+fn main() {
+    let a: [i32; 3] = [1, 2]                //~ T0101
+    let b = []                              //~ T0110
+    let c = [1, 2, 3]
+    c[0] = 5                                //~ T0107
+    let d = c[-1]                           //~ T0102
+    let e = 5[0]                            //~ T0103
+    let f = [0; LEN]
+    for mut x in f {                        //~ T0107
+        x += 1
+    }
+    let k: [i32; 1] = [1]
+    let g: [u8] = k                         //~ T0101
+    var xs: List[i32] = List()
+    xs.push("no")                           //~ T0101
+    let h = xs.fly()                        //~ U0102
+    let i = List(1)                         //~ T0104
+    let j = xs == c                         //~ T0101
+}

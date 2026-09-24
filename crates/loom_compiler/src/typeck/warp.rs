@@ -247,11 +247,14 @@ impl Checker<'_> {
             TyKind::Optional(t) => self.is_copy(t),
             TyKind::Result(t, e) => self.is_copy(t) && self.is_copy(e),
             TyKind::Adt(def, _) if Some(def) == self.std.string => false,
+            // A slice is a view: copying it copies the view.
+            TyKind::Adt(def, _) if Some(def) == self.std.slice => true,
             TyKind::Adt(..) => match self.r.adts.get(&ty) {
                 Some(info) => info.copy,
                 None => self.adt_info(ty).is_some_and(|i| i.copy),
             },
             TyKind::Fn(..) | TyKind::Any(_) | TyKind::Union(_) => false,
+            TyKind::Array(t, _) => self.is_copy(t),
         }
     }
 

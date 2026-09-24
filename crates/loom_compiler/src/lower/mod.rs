@@ -21,6 +21,7 @@
 mod expr;
 mod fallible;
 mod lir;
+mod seq;
 mod warp;
 
 use std::collections::{HashMap, HashSet};
@@ -45,7 +46,34 @@ pub struct Bundle {
 
 /// The `std` externs the runtime implements (see `rt.ext` in
 /// `runtime/rt/core.lua`). Calling any other extern is "not implemented yet".
-const EXTERNS: &[&str] = &["std.io.print", "std.error.unravel", "std.error.assert", "std.fmt.Fmt.put"];
+const EXTERNS: &[&str] = &[
+    "std.io.print",
+    "std.error.unravel",
+    "std.error.assert",
+    "std.fmt.Fmt.put",
+    "std.list.List.filled",
+    "std.list.List.push",
+    "std.list.List.pop",
+    "std.list.List.insert",
+    "std.list.List.remove",
+    "std.list.List.clear",
+    "std.list.List.truncate",
+    "std.list.List.extend",
+    "std.list.List.copy",
+    "std.slice.Slice.len",
+    "std.slice.Slice.is_empty",
+    "std.slice.Slice.get",
+    "std.slice.Slice.first",
+    "std.slice.Slice.last",
+    "std.slice.Slice.contains",
+    "std.slice.Slice.index_of",
+    "std.slice.Slice.copy_from",
+    "std.slice.Slice.fill",
+    "std.slice.Slice.swap",
+    "std.slice.Slice.reverse",
+    "std.slice.Slice.sort",
+    "std.slice.Slice.to_list",
+];
 
 /// Lowers a type-checked program. `typed` must have no errors.
 pub fn lower(db: &SourceDb, p: &Program, typed: &Typed) -> Result<Bundle, Vec<Diagnostic>> {
@@ -114,6 +142,8 @@ struct Lowerer<'a> {
     mend_labels: Vec<fallible::MendLabels>,
     /// For `main ! E`: the descriptor of `E`.
     main_error: Option<Expr>,
+    /// Locals that stand for a place: `x` in `for mut x in xs` is `xs[i]`.
+    aliases: HashMap<LocalId, Expr>,
     reported: HashSet<String>,
 }
 
@@ -138,6 +168,7 @@ impl<'a> Lowerer<'a> {
             subjects: HashMap::new(),
             mend_labels: Vec::new(),
             main_error: None,
+            aliases: HashMap::new(),
             reported: HashSet::new(),
         }
     }
@@ -270,6 +301,10 @@ impl<'a> Lowerer<'a> {
             TyKind::Unit => Expr::field(Expr::name("rt"), "unit"),
             // The value carries its own type's description in its vtable.
             TyKind::Any(_) | TyKind::Union(_) => Expr::field(Expr::name("rt"), "anyd"),
+            TyKind::Array(..) | TyKind::Adt(..) if self.seq(ty).is_some() => {
+                let seq = self.seq(ty).expect("checked");
+                self.seq_desc(seq, span)
+            }
             TyKind::Adt(..) => {
                 // Field types depend on a generic warp's arguments.
                 match self.typed.results.adts.get(&ty).cloned() {

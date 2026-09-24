@@ -358,6 +358,48 @@ function rt.enum(name, names)
   return { kind = "enum", name = name, names = names }
 end
 
+-- Sequences. An array and a list are `{n = len, [1..n]}`; a slice is a view
+-- `{t = elements, o = offset, n = len}` of one. Lengths live in `n`, never in
+-- Lua's `#`, since an element can be nil.
+
+--- `[T; N]` and `List[T]`.
+function rt.seq(elem)
+  return { kind = "seq", elem = elem }
+end
+
+--- `[T]`.
+function rt.slice(elem)
+  return { kind = "slice", elem = elem }
+end
+
+--- The elements table, offset and length of any sequence.
+local function parts(s)
+  local t = s.t
+  if t then return t, s.o, s.n end
+  return s, 0, s.n
+end
+
+--- Checks index `i` against length `n`, and makes it 1-based.
+function rt.idx(i, n)
+  if i >= n then error(sformat("%sindex %d is out of bounds (len %d)", MARK, i, n), 2) end
+  return i + 1
+end
+
+--- A view of all of an array or a list.
+function rt.view(s)
+  return { t = s, o = 0, n = s.n }
+end
+
+--- `xs[lo..hi]`: a view of part of a sequence. `hi` is nil for `xs[lo..]`.
+function rt.subview(s, lo, hi)
+  local t, o, n = parts(s)
+  if hi == nil then hi = n end
+  if lo > hi or hi > n then
+    error(sformat("%srange %d..%d is out of bounds (len %d)", MARK, lo, hi, n), 2)
+  end
+  return { t = t, o = o + lo, n = hi - lo }
+end
+
 --- A deep copy of a value that's a table, following its descriptor. Loom
 --- values are copied when assigned (for `Copy` types), but Lua shares tables.
 local function copy(d, v)
@@ -388,10 +430,26 @@ local function copy(d, v)
     if v == nil then return nil end
     if d.boxed then return { copy(d.inner, v[1]) } end
     return copy(d.inner, v)
+  elseif kind == "seq" then
+    local n, elem = v.n, d.elem
+    local t = { n = n }
+    for i = 1, n do
+      t[i] = copy(elem, v[i])
+    end
+    return t
   end
   return v
 end
 rt.copy = copy
+
+--- `n` copies of `v`.
+function rt.filled(d, v, n)
+  local t = { n = n }
+  for i = 1, n do
+    t[i] = copy(d, v)
+  end
+  return t
+end
 
 --- Replaces a `mut` parameter's table contents with a fresh value's, so the
 --- caller sees whole-value assignments (`self = Point(0, 0)`).
@@ -426,6 +484,14 @@ eq = function(d, a, b)
     if a == nil or b == nil then return a == b end
     if d.boxed then return eq(d.inner, a[1], b[1]) end
     return eq(d.inner, a, b)
+  elseif kind == "seq" or kind == "slice" then
+    local at, ao, an = parts(a)
+    local bt, bo, bn = parts(b)
+    if an ~= bn then return false end
+    for i = 1, an do
+      if not eq(d.elem, at[ao + i], bt[bo + i]) then return false end
+    end
+    return true
   elseif d.eq then
     return d.eq(a, b)
   elseif kind == "record" then
@@ -563,6 +629,13 @@ show = function(d, v, debug)
     return "()"
   elseif kind == "any" then
     return show(v[2].d, v[1], debug)
+  elseif kind == "seq" or kind == "slice" then
+    local t, o, n = parts(v)
+    local out = {}
+    for i = 1, n do
+      out[i] = show(d.elem, t[o + i], debug)
+    end
+    return "[" .. concat(out, ", ") .. "]"
   elseif kind == "tuple" then
     local parts = {}
     for i, item in ipairs(d.items) do
@@ -729,6 +802,216 @@ end
 
 rt.ext["std.error.assert"] = function(condition, message)
   if not condition then error(MARK .. message, 2) end
+end
+
+-- List and slice methods. Each gets the element type's descriptor first.
+
+--- `v` as a `?T` when `d` describes T: boxed when nil is one of T's values.
+local function some(d, v)
+  if d.kind == "opt" or d.kind == "unit" then return { v } end
+  return v
+end
+
+local function out_of_bounds(i, n)
+  error(sformat("%sindex %d is out of bounds (len %d)", MARK, i, n), 3)
+end
+
+local ext = rt.ext
+
+ext["std.list.List.filled"] = rt.filled
+
+ext["std.list.List.push"] = function(_, s, x)
+  local n = s.n + 1
+  s[n] = x
+  s.n = n
+end
+
+ext["std.list.List.pop"] = function(d, s)
+  local n = s.n
+  if n == 0 then return nil end
+  local x = s[n]
+  s[n] = nil
+  s.n = n - 1
+  return some(d, x)
+end
+
+ext["std.list.List.insert"] = function(_, s, i, x)
+  local n = s.n
+  if i > n then out_of_bounds(i, n) end
+  for j = n, i + 1, -1 do
+    s[j + 1] = s[j]
+  end
+  s[i + 1] = x
+  s.n = n + 1
+end
+
+ext["std.list.List.remove"] = function(_, s, i)
+  local n = s.n
+  if i >= n then out_of_bounds(i, n) end
+  local x = s[i + 1]
+  for j = i + 1, n - 1 do
+    s[j] = s[j + 1]
+  end
+  s[n] = nil
+  s.n = n - 1
+  return x
+end
+
+ext["std.list.List.clear"] = function(_, s)
+  for i = 1, s.n do
+    s[i] = nil
+  end
+  s.n = 0
+end
+
+ext["std.list.List.truncate"] = function(_, s, k)
+  local n = s.n
+  if k >= n then return end
+  for i = k + 1, n do
+    s[i] = nil
+  end
+  s.n = k
+end
+
+ext["std.list.List.extend"] = function(d, s, xs)
+  local t, o, m = parts(xs)
+  local items = {}
+  for i = 1, m do
+    items[i] = copy(d, t[o + i])
+  end
+  local n = s.n
+  for i = 1, m do
+    s[n + i] = items[i]
+  end
+  s.n = n + m
+end
+
+local function to_list(d, s)
+  local t, o, n = parts(s)
+  local out = { n = n }
+  for i = 1, n do
+    out[i] = copy(d, t[o + i])
+  end
+  return out
+end
+
+ext["std.list.List.copy"] = to_list
+ext["std.slice.Slice.to_list"] = to_list
+
+ext["std.slice.Slice.len"] = function(_, s)
+  return s.n
+end
+
+ext["std.slice.Slice.is_empty"] = function(_, s)
+  return s.n == 0
+end
+
+ext["std.slice.Slice.get"] = function(d, s, i)
+  local t, o, n = parts(s)
+  if i >= n then return nil end
+  return some(d, t[o + i + 1])
+end
+
+ext["std.slice.Slice.first"] = function(d, s)
+  local t, o, n = parts(s)
+  if n == 0 then return nil end
+  return some(d, t[o + 1])
+end
+
+ext["std.slice.Slice.last"] = function(d, s)
+  local t, o, n = parts(s)
+  if n == 0 then return nil end
+  return some(d, t[o + n])
+end
+
+ext["std.slice.Slice.index_of"] = function(d, s, x)
+  local t, o, n = parts(s)
+  for i = 1, n do
+    if eq(d, t[o + i], x) then return i - 1 end
+  end
+  return nil
+end
+
+ext["std.slice.Slice.contains"] = function(d, s, x)
+  return ext["std.slice.Slice.index_of"](d, s, x) ~= nil
+end
+
+ext["std.slice.Slice.copy_from"] = function(d, s, src)
+  local t, o, n = parts(s)
+  local st, so, sn = parts(src)
+  if sn > n then
+    error(sformat("%scan't copy %d elements into a slice of %d", MARK, sn, n), 2)
+  end
+  -- Through a buffer, in case the two overlap.
+  local items = {}
+  for i = 1, sn do
+    items[i] = copy(d, st[so + i])
+  end
+  for i = 1, sn do
+    t[o + i] = items[i]
+  end
+end
+
+ext["std.slice.Slice.fill"] = function(d, s, x)
+  local t, o, n = parts(s)
+  for i = 1, n do
+    t[o + i] = copy(d, x)
+  end
+end
+
+ext["std.slice.Slice.swap"] = function(_, s, i, j)
+  local t, o, n = parts(s)
+  if i >= n then out_of_bounds(i, n) end
+  if j >= n then out_of_bounds(j, n) end
+  t[o + i + 1], t[o + j + 1] = t[o + j + 1], t[o + i + 1]
+end
+
+ext["std.slice.Slice.reverse"] = function(_, s)
+  local t, o, n = parts(s)
+  for i = 1, n // 2 do
+    local a, b = o + i, o + n + 1 - i
+    t[a], t[b] = t[b], t[a]
+  end
+end
+
+--- A stable merge sort (`table.sort` isn't stable, and can't take nils).
+ext["std.slice.Slice.sort"] = function(d, s)
+  local t, o, n = parts(s)
+  local items, buf = {}, {}
+  for i = 1, n do
+    items[i] = t[o + i]
+  end
+  local width = 1
+  while width < n do
+    for lo = 1, n, 2 * width do
+      local mid = math.min(lo + width, n + 1)
+      local hi = math.min(lo + 2 * width, n + 1)
+      local i, j, k = lo, mid, lo
+      while i < mid and j < hi do
+        if cmp(d, items[j], items[i]) < 0 then
+          buf[k] = items[j]
+          j = j + 1
+        else
+          buf[k] = items[i]
+          i = i + 1
+        end
+        k = k + 1
+      end
+      while i < mid do
+        buf[k] = items[i]
+        i, k = i + 1, k + 1
+      end
+      while j < hi do
+        buf[k] = items[j]
+        j, k = j + 1, k + 1
+      end
+    end
+    items, buf = buf, items
+    width = width * 2
+  end
+  for i = 1, n do
+    t[o + i] = items[i]
+  end
 end
 
 return rt
