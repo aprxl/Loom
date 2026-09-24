@@ -7,29 +7,29 @@
 //! operands to its left that were already lowered are spilled into
 //! temporaries first, so Loom's left-to-right evaluation order holds.
 
-use loom_syntax::ast::{AssignOp, BinaryOp, CastKind, Lit, UnaryOp};
+use loom_syntax::ast::{AssignOp, BinaryOp, CastKind, Lit, ParamMode, UnaryOp};
 use loom_syntax::source::Span;
 
 use super::lir::{Expr, Stmt, StmtKind};
 use super::{Dest, LoopInfo, Lowerer};
 use crate::hir::{self, Block, DefKind, ExprKind, HirId, PatKind, StmtKind as HirStmt, TemplatePart};
 use crate::ty::{FloatTy, IntTy, Ty, TyKind};
-use crate::typeck::{ArgSource, Coercion};
+use crate::typeck::{ArgSource, Coercion, Receiver};
 
 impl Lowerer<'_> {
-    fn push(&mut self, kind: StmtKind) {
+    pub(super) fn push(&mut self, kind: StmtKind) {
         self.out.push(Stmt { kind, span: self.span });
     }
 
     /// Runs `f` into a fresh statement buffer and returns what it produced.
-    fn nested(&mut self, f: impl FnOnce(&mut Self)) -> Vec<Stmt> {
+    pub(super) fn nested(&mut self, f: impl FnOnce(&mut Self)) -> Vec<Stmt> {
         let saved = std::mem::take(&mut self.out);
         f(self);
         std::mem::replace(&mut self.out, saved)
     }
 
     /// The type of an expression as checked (before its coercion).
-    fn ty_of(&self, e: &hir::Expr) -> Ty {
+    pub(super) fn ty_of(&self, e: &hir::Expr) -> Ty {
         self.typed.results.expr_ty.get(&e.id).copied().unwrap_or(self.typed.tcx.error)
     }
 
@@ -49,6 +49,10 @@ impl Lowerer<'_> {
         matches!(self.tcx().kind(ty), TyKind::Unit | TyKind::Never)
     }
 
+    pub(super) fn push_local(&mut self, name: String, value: Expr) {
+        self.push(StmtKind::Local(vec![name], vec![value]));
+    }
+
     fn spill(&mut self, v: Expr) -> Expr {
         if v.is_constant() || is_temp(&v) {
             return v;
@@ -66,7 +70,7 @@ impl Lowerer<'_> {
         self.coerce(e, v)
     }
 
-    fn coerce(&mut self, e: &hir::Expr, v: Expr) -> Expr {
+    pub(super) fn coerce(&mut self, e: &hir::Expr, v: Expr) -> Expr {
         let Some(coercion) = self.typed.results.coercions.get(&e.id) else { return v };
         match coercion {
             Coercion::Widen | Coercion::StrToString | Coercion::StringToStr | Coercion::Discard => v,
@@ -85,10 +89,22 @@ impl Lowerer<'_> {
     /// Lowers several operands left to right, spilling earlier ones when a
     /// later one needs statements.
     fn lower_operands(&mut self, es: &[&hir::Expr]) -> Vec<Expr> {
+        let flagged: Vec<(&hir::Expr, bool)> = es.iter().map(|e| (*e, false)).collect();
+        self.lower_operands_flagged(&flagged)
+    }
+
+    /// `lower_operands`, copying places when the operands are owned.
+    pub(super) fn lower_operands_with(&mut self, es: &[&hir::Expr], owned: bool) -> Vec<Expr> {
+        let flagged: Vec<(&hir::Expr, bool)> = es.iter().map(|e| (*e, owned)).collect();
+        self.lower_operands_flagged(&flagged)
+    }
+
+    /// `lower_operands`, each operand owned (copied if it's a place) or not.
+    fn lower_operands_flagged(&mut self, es: &[(&hir::Expr, bool)]) -> Vec<Expr> {
         let mut vals: Vec<Expr> = Vec::with_capacity(es.len());
-        for e in es {
+        for &(e, owned) in es {
             let mark = self.out.len();
-            let v = self.lower_expr(e);
+            let v = if owned { self.lower_owned(e) } else { self.lower_expr(e) };
             if self.out.len() > mark {
                 let mut spills = Vec::new();
                 for prev in vals.iter_mut() {
@@ -117,9 +133,12 @@ impl Lowerer<'_> {
         Expr::Name(t)
     }
 
-    fn lower_raw(&mut self, e: &hir::Expr) -> Expr {
+    pub(super) fn lower_raw(&mut self, e: &hir::Expr) -> Expr {
         let span = e.span;
         let ty = self.ty_of(e);
+        if let Some(v) = self.warp_value(e) {
+            return v;
+        }
         match &e.kind {
             ExprKind::Lit(lit) => self.lit(lit, false, ty),
             ExprKind::Template(parts) => self.template(parts),
@@ -140,7 +159,7 @@ impl Lowerer<'_> {
             ExprKind::Tuple(items) if items.is_empty() => Expr::Nil,
             ExprKind::Tuple(items) => {
                 let items: Vec<&hir::Expr> = items.iter().collect();
-                Expr::Table(self.lower_operands(&items))
+                Expr::Table(self.lower_owned_operands(&items))
             }
             ExprKind::Block(_) | ExprKind::If { .. } | ExprKind::Match { .. } | ExprKind::Loop { .. } => {
                 self.via_temp(e)
@@ -161,10 +180,6 @@ impl Lowerer<'_> {
                 Expr::Nil
             }
             ExprKind::Call { callee, args } => self.call(e, callee, args),
-            ExprKind::Field { base, field: loom_syntax::ast::FieldName::Index(i, _) } => {
-                let v = self.lower_expr(base);
-                Expr::index(v, Expr::Int(*i as i64 + 1))
-            }
             ExprKind::Unary { op, operand } => self.unary(*op, operand, ty),
             ExprKind::Binary { op: op @ (BinaryOp::And | BinaryOp::Or), lhs, rhs } => self.short_circuit(*op, lhs, rhs),
             ExprKind::Binary { op, lhs, rhs } => self.binary(*op, lhs, rhs, ty),
@@ -206,7 +221,7 @@ impl Lowerer<'_> {
 
     /// An integer constant as a value of `ty`: an integer, or a float when
     /// the literal became one (`let x: f64 = 0`).
-    fn int_value(&self, value: i128, ty: Ty) -> Expr {
+    pub(super) fn int_value(&self, value: i128, ty: Ty) -> Expr {
         let ty = match self.tcx().kind(ty) {
             TyKind::Optional(inner) => *inner,
             _ => ty,
@@ -354,7 +369,7 @@ impl Lowerer<'_> {
         best
     }
 
-    fn compare(&mut self, op: BinaryOp, a: Expr, b: Expr, ty: Ty, span: Span) -> Expr {
+    pub(super) fn compare(&mut self, op: BinaryOp, a: Expr, b: Expr, ty: Ty, span: Span) -> Expr {
         use BinaryOp as B;
         let structural = matches!(self.tcx().kind(ty), TyKind::Tuple(_) | TyKind::Optional(_));
         if structural {
@@ -515,12 +530,41 @@ impl Lowerer<'_> {
         } else {
             Expr::field(Expr::name("F"), &self.def_name(info.callee))
         };
-        // Arguments run in source order, whatever order the parameters take them in.
-        let values: Vec<&hir::Expr> = args.iter().map(|a| &a.value).collect();
-        let mut lowered = self.lower_operands(&values);
+        // `take` parameters own their argument (a `Copy` place is copied);
+        // read and `mut` parameters share it.
+        let modes: Vec<ParamMode> = self
+            .typed
+            .results
+            .sigs
+            .get(&info.callee)
+            .map(|s| s.params.iter().map(|p| p.mode).collect())
+            .unwrap_or_default();
+        let owned = |slot: Option<usize>| slot.and_then(|k| modes.get(k)) == Some(&ParamMode::Take);
+
+        // The receiver, then the arguments in source order, whatever order
+        // the parameters take them in.
+        let receiver_base = match (&info.receiver, &callee.kind) {
+            (Some(Receiver::Expr), ExprKind::Field { base, .. }) => Some(base.as_ref()),
+            _ => None,
+        };
+        let receiver_slot = info.args.iter().position(|s| *s == ArgSource::Receiver);
+        let mut operands: Vec<(&hir::Expr, bool)> = Vec::with_capacity(args.len() + 1);
+        if let Some(base) = receiver_base {
+            operands.push((base, owned(receiver_slot)));
+        }
+        for (i, arg) in args.iter().enumerate() {
+            let slot = info.args.iter().position(|s| *s == ArgSource::Arg(i));
+            operands.push((&arg.value, owned(slot)));
+        }
+        let mut lowered = self.lower_operands_flagged(&operands);
+        let receiver = match (info.receiver, receiver_base) {
+            (Some(Receiver::Expr), Some(_)) => Some(lowered.remove(0)),
+            (Some(r), _) => Some(self.receiver(r, None)),
+            (None, _) => None,
+        };
         let in_order = info.args.iter().filter_map(|s| match s {
             ArgSource::Arg(i) => Some(*i),
-            ArgSource::Default => None,
+            ArgSource::Default | ArgSource::Receiver => None,
         });
         if !in_order.clone().is_sorted() {
             for v in lowered.iter_mut() {
@@ -535,6 +579,7 @@ impl Lowerer<'_> {
         for (k, source) in info.args.iter().enumerate() {
             match source {
                 ArgSource::Arg(i) => params.push(lowered[*i].clone()),
+                ArgSource::Receiver => params.push(receiver.clone().unwrap_or(Expr::Nil)),
                 ArgSource::Default => {
                     let Some(default) = f.params.get(k).and_then(|p| p.default.as_ref()) else {
                         params.push(Expr::Nil);
@@ -544,7 +589,7 @@ impl Lowerer<'_> {
                         self.unsupported(default.span, "default values that use other parameters");
                         params.push(Expr::Nil);
                     } else {
-                        params.push(self.lower_expr(default));
+                        params.push(self.lower_owned(default));
                     }
                 }
             }
@@ -587,7 +632,10 @@ impl Lowerer<'_> {
             self.span = saved;
             return;
         }
-        let v = self.lower_expr(e);
+        let v = match dest {
+            Dest::Discard => self.lower_expr(e),
+            Dest::Assign(_) | Dest::Return => self.lower_owned(e),
+        };
         self.deliver(v, dest);
     }
 
@@ -669,7 +717,7 @@ impl Lowerer<'_> {
     }
 
     /// The statements of a block, with its last expression delivered to `dest`.
-    fn block_into(&mut self, block: &Block, dest: &Dest) {
+    pub(super) fn block_into(&mut self, block: &Block, dest: &Dest) {
         let Some((last, rest)) = block.stmts.split_last() else { return };
         for stmt in rest {
             self.stmt(stmt);
@@ -688,7 +736,7 @@ impl Lowerer<'_> {
         self.span = Some(stmt.span);
         match &stmt.kind {
             HirStmt::Let { pat, init, .. } => {
-                let v = self.lower_expr(init);
+                let v = self.lower_owned(init);
                 self.bind_irrefutable(pat, v);
             }
             HirStmt::Expr(e) => self.lower_into(e, &Dest::Discard),
@@ -706,19 +754,16 @@ impl Lowerer<'_> {
                 let name = self.local_name(*local);
                 self.push(StmtKind::Local(vec![name], vec![v]));
             }
-            PatKind::Tuple(pats) => {
+            PatKind::Tuple(_) | PatKind::Case { .. } | PatKind::Twill { .. } => {
                 let base = self.spill_always(v);
-                for (i, p) in pats.iter().enumerate() {
-                    let item = Expr::index(base.clone(), Expr::Int(i as i64 + 1));
-                    self.bind_irrefutable(p, item);
-                }
+                self.bind_pat(pat, &base, true);
             }
             _ => self.deliver(v, &Dest::Discard),
         }
     }
 
     /// Like `spill`, but also for names, since the pattern reads it several times.
-    fn spill_always(&mut self, v: Expr) -> Expr {
+    pub(super) fn spill_always(&mut self, v: Expr) -> Expr {
         if matches!(v, Expr::Name(_)) || v.is_constant() {
             return v;
         }
@@ -922,7 +967,7 @@ impl Lowerer<'_> {
                     this.span = Some(arm.span);
                     let test = this.pat_test(pat, &s, ty);
                     let inner = this.nested(|this| {
-                        this.bind_pat(pat, &s);
+                        this.bind_pat(pat, &s, true);
                         match &arm.guard {
                             Some(guard) => {
                                 let g = this.lower_expr(guard);
@@ -952,7 +997,10 @@ impl Lowerer<'_> {
     }
 
     /// The condition under which `pat` matches `v`, or `None` if it always does.
-    fn pat_test(&mut self, pat: &hir::Pat, v: &Expr, ty: Ty) -> Option<Expr> {
+    pub(super) fn pat_test(&mut self, pat: &hir::Pat, v: &Expr, ty: Ty) -> Option<Expr> {
+        if let Some(test) = self.warp_pat_test(pat, v, ty) {
+            return test;
+        }
         match &pat.kind {
             PatKind::Wild | PatKind::Bind(_) | PatKind::Error => None,
             PatKind::Lit { lit, negative } => {
@@ -1004,38 +1052,28 @@ impl Lowerer<'_> {
         }
     }
 
-    /// Binds the names of a pattern that is known to match `v`.
-    fn bind_pat(&mut self, pat: &hir::Pat, v: &Expr) {
-        match &pat.kind {
-            PatKind::Bind(local) => {
-                let name = self.local_name(*local);
-                self.push(StmtKind::Local(vec![name], vec![v.clone()]));
-            }
-            PatKind::Tuple(pats) => {
-                for (i, p) in pats.iter().enumerate() {
-                    self.bind_pat(p, &Expr::index(v.clone(), Expr::Int(i as i64 + 1)));
-                }
-            }
-            _ => {}
-        }
-    }
-
     // ------------------------------------------------------------ assignment
 
     fn assign(&mut self, target: &hir::Expr, op: AssignOp, value: &hir::Expr) {
         match (&target.kind, op) {
-            (ExprKind::Local(local), AssignOp::Assign) => {
-                let v = self.lower_expr(value);
+            (ExprKind::Local(local), AssignOp::Assign) if self.overwrites(*local) => {
+                // A whole new value for a `mut` parameter: written into the
+                // caller's table, so the caller sees it.
+                let v = self.lower_owned(value);
                 let name = self.local_name(*local);
-                self.push(StmtKind::Assign(vec![Expr::Name(name)], vec![v]));
+                self.push(StmtKind::Call(Expr::rt("overwrite", vec![Expr::Name(name), v])));
             }
-            (ExprKind::Local(local), AssignOp::Compound(bin)) => {
-                let name = self.local_name(*local);
+            (ExprKind::Local(_) | ExprKind::Field { .. } | ExprKind::LeadingDot(_), AssignOp::Assign) => {
+                let v = self.lower_owned(value);
+                let place = self.lower_place(target);
+                self.push(StmtKind::Assign(vec![place], vec![v]));
+            }
+            (ExprKind::Local(_) | ExprKind::Field { .. } | ExprKind::LeadingDot(_), AssignOp::Compound(bin)) => {
                 let ty = self.ty_of(target);
                 let v = self.lower_expr(value);
-                let current = Expr::Name(name.clone());
-                let result = self.apply(bin, current, v, ty, target.span);
-                self.push(StmtKind::Assign(vec![Expr::Name(name)], vec![result]));
+                let place = self.lower_place(target);
+                let result = self.apply(bin, place.clone(), v, ty, target.span);
+                self.push(StmtKind::Assign(vec![place], vec![result]));
             }
             (ExprKind::Tuple(_), AssignOp::Assign) => {
                 // Every value is computed before anything is assigned, so
@@ -1050,9 +1088,9 @@ impl Lowerer<'_> {
 
     fn assign_parts(&mut self, target: &hir::Expr, v: &Expr) {
         match &target.kind {
-            ExprKind::Local(local) => {
-                let name = self.local_name(*local);
-                self.push(StmtKind::Assign(vec![Expr::Name(name)], vec![v.clone()]));
+            ExprKind::Local(_) | ExprKind::Field { .. } | ExprKind::LeadingDot(_) => {
+                let place = self.lower_place(target);
+                self.push(StmtKind::Assign(vec![place], vec![v.clone()]));
             }
             ExprKind::Tuple(items) => {
                 for (i, item) in items.iter().enumerate() {
@@ -1126,11 +1164,9 @@ fn minus_one(hi: Expr) -> Expr {
 }
 
 fn binds_anything(pat: &hir::Pat) -> bool {
-    match &pat.kind {
-        PatKind::Bind(_) => true,
-        PatKind::Tuple(pats) | PatKind::Or(pats) => pats.iter().any(binds_anything),
-        _ => false,
-    }
+    let mut locals = Vec::new();
+    super::warp::collect_bindings(pat, &mut locals);
+    !locals.is_empty()
 }
 
 /// Whether an expression reads any local (so it can't be moved to a call site).

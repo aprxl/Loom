@@ -323,6 +323,73 @@ function rt.any(d, v)
   return { v, d }
 end
 
+-- Warps. A field is `{key, name, descriptor}`, where the key is the field's
+-- name, or its 1-based position in a tuple warp or an unnamed payload.
+
+--- A record or tuple warp: `{x = 1, y = 2}`, `{5.0}`.
+function rt.record(name, fields, tuple)
+  return { kind = "record", name = name, fields = fields, tuple = tuple }
+end
+
+--- A warp with cases: `{tag = 2, mm = 3.5}`. `cases[tag]` is
+--- `{name, fields}` (fields is nil for a unit case); `shared` are the fields
+--- every case has.
+function rt.sum(name, cases, shared)
+  return { kind = "sum", name = name, cases = cases, shared = shared }
+end
+
+--- A warp whose cases have no payloads and no shared fields: its values are
+--- the tags themselves, 1 to n.
+function rt.enum(name, names)
+  return { kind = "enum", name = name, names = names }
+end
+
+--- A deep copy of a value that's a table, following its descriptor. Loom
+--- values are copied when assigned (for `Copy` types), but Lua shares tables.
+local function copy(d, v)
+  local kind = d.kind
+  if kind == "tuple" then
+    local t = {}
+    for i, item in ipairs(d.items) do
+      t[i] = copy(item, v[i])
+    end
+    return t
+  elseif kind == "record" then
+    local t = {}
+    for _, f in ipairs(d.fields) do
+      t[f[1]] = copy(f[3], v[f[1]])
+    end
+    return t
+  elseif kind == "sum" then
+    local t = { tag = v.tag }
+    local case = d.cases[v.tag]
+    for _, f in ipairs(case.fields or {}) do
+      t[f[1]] = copy(f[3], v[f[1]])
+    end
+    for _, f in ipairs(d.shared) do
+      t[f[1]] = copy(f[3], v[f[1]])
+    end
+    return t
+  elseif kind == "opt" then
+    if v == nil then return nil end
+    if d.boxed then return { copy(d.inner, v[1]) } end
+    return copy(d.inner, v)
+  end
+  return v
+end
+rt.copy = copy
+
+--- Replaces a `mut` parameter's table contents with a fresh value's, so the
+--- caller sees whole-value assignments (`self = Point(0, 0)`).
+function rt.overwrite(dst, src)
+  for k in pairs(dst) do
+    dst[k] = nil
+  end
+  for k, v in pairs(src) do
+    dst[k] = v
+  end
+end
+
 --- Structural equality, for types Lua's `==` doesn't compare by value.
 local function eq(d, a, b)
   if d.kind == "tuple" then
@@ -425,6 +492,28 @@ show = function(d, v, debug)
     local inner = d.boxed and v[1] or v
     if debug then return "some(" .. show(d.inner, inner, true) .. ")" end
     return show(d.inner, inner, false)
+  elseif kind == "record" then
+    -- The debug form reads like construction: `Point(x: 3, y: 4)`, `Meters(5)`.
+    local parts = {}
+    for i, f in ipairs(d.fields) do
+      local s = show(f[3], v[f[1]], true)
+      parts[i] = d.tuple and s or (f[2] .. ": " .. s)
+    end
+    return d.name .. "(" .. concat(parts, ", ") .. ")"
+  elseif kind == "sum" then
+    local case = d.cases[v.tag]
+    local parts = {}
+    for _, f in ipairs(case.fields or {}) do
+      local s = show(f[3], v[f[1]], true)
+      parts[#parts + 1] = f[2] and (f[2] .. ": " .. s) or s
+    end
+    for _, f in ipairs(d.shared) do
+      parts[#parts + 1] = f[2] .. ": " .. show(f[3], v[f[1]], true)
+    end
+    if case.fields == nil and #parts == 0 then return case.name end
+    return case.name .. "(" .. concat(parts, ", ") .. ")"
+  elseif kind == "enum" then
+    return d.names[v]
   end
   error("loom internal: no formatter for kind " .. tostring(kind))
 end

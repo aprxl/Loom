@@ -19,6 +19,7 @@
 
 mod expr;
 mod lir;
+mod warp;
 
 use std::collections::{HashMap, HashSet};
 
@@ -101,6 +102,8 @@ struct Lowerer<'a> {
     span: Option<Span>,
     /// Typed constants this body reads, for ordering constant initializers.
     const_refs: Vec<DefId>,
+    /// The Lua local holding each dot-block's subject.
+    subjects: HashMap<HirId, String>,
     reported: HashSet<String>,
 }
 
@@ -120,6 +123,7 @@ impl<'a> Lowerer<'a> {
             loops: Vec::new(),
             span: None,
             const_refs: Vec::new(),
+            subjects: HashMap::new(),
             reported: HashSet::new(),
         }
     }
@@ -197,6 +201,11 @@ impl<'a> Lowerer<'a> {
     /// `T[n]`, the runtime descriptor of `ty`, registering it (and what it's
     /// made of) first.
     fn desc(&mut self, ty: Ty, span: Span) -> Expr {
+        // `str` and `String` are both Lua strings: one descriptor serves both.
+        let ty = match self.tcx().kind(ty) {
+            TyKind::Adt(def, _) if self.is_string(*def) => self.tcx().str,
+            _ => ty,
+        };
         if let Some(i) = self.descs.get_index_of(&ty) {
             return Expr::index(Expr::name("T"), Expr::Int(i as i64 + 1));
         }
@@ -210,8 +219,18 @@ impl<'a> Lowerer<'a> {
             TyKind::Bool => Expr::field(Expr::name("rt"), "bool"),
             TyKind::Char => Expr::field(Expr::name("rt"), "char"),
             TyKind::Str => Expr::field(Expr::name("rt"), "str"),
-            TyKind::Adt(def, _) if self.is_string(*def) => Expr::field(Expr::name("rt"), "str"),
             TyKind::Unit => Expr::field(Expr::name("rt"), "unit"),
+            TyKind::Adt(def, _) => {
+                let def = *def;
+                match self.warp(def).cloned() {
+                    Some(info) => self.warp_desc(&info, span),
+                    None => {
+                        let shown = self.tcx().display(self.p, ty);
+                        self.unsupported(span, &format!("runtime descriptions of `{shown}`"));
+                        Expr::Nil
+                    }
+                }
+            }
             TyKind::Tuple(items) => {
                 let items = items.clone();
                 let items = items.into_iter().map(|t| self.desc(t, span)).collect();
@@ -229,12 +248,43 @@ impl<'a> Lowerer<'a> {
                 Expr::Nil
             }
         };
-        // `str` and `String` are both Lua strings: one descriptor serves both.
-        if let Some(i) = self.descs.values().position(|b| *b == build) {
-            return Expr::index(Expr::name("T"), Expr::Int(i as i64 + 1));
-        }
         let (i, _) = self.descs.insert_full(ty, build);
         Expr::index(Expr::name("T"), Expr::Int(i as i64 + 1))
+    }
+
+    /// `rt.record`, `rt.sum` or `rt.enum` for a warp, with its fields'
+    /// descriptors (registered first, so they're built first).
+    fn warp_desc(&mut self, info: &crate::typeck::WarpInfo, span: Span) -> Expr {
+        let name = Expr::Str(info.name.clone().into_bytes());
+        let field = |this: &mut Self, key: &crate::typeck::Key, name: Option<&str>, ty: Ty| {
+            let key = match key {
+                crate::typeck::Key::Name(n) => Expr::Str(n.clone().into_bytes()),
+                crate::typeck::Key::Pos(i) => Expr::Int(*i as i64),
+            };
+            let name = name.map_or(Expr::Nil, |n| Expr::Str(n.as_bytes().to_vec()));
+            Expr::Table(vec![key, name, this.desc(ty, span)])
+        };
+        if info.unit_only() {
+            let names = info.cases.iter().map(|c| Expr::Str(c.name.clone().into_bytes())).collect();
+            return Expr::rt("enum", vec![name, Expr::Table(names)]);
+        }
+        let fields: Vec<Expr> = info.fields.iter().map(|f| field(self, &f.key, Some(&f.name), f.ty)).collect();
+        if !info.is_sum() {
+            return Expr::rt("record", vec![name, Expr::Table(fields), Expr::Bool(info.tuple)]);
+        }
+        let cases = info
+            .cases
+            .iter()
+            .map(|c| {
+                let mut entries = vec![(lir::TableKey::Name("name".into()), Expr::Str(c.name.clone().into_bytes()))];
+                if let Some(fs) = &c.fields {
+                    let fs = fs.iter().map(|f| field(self, &f.key, f.name.as_deref(), f.ty)).collect();
+                    entries.push((lir::TableKey::Name("fields".into()), Expr::Table(fs)));
+                }
+                Expr::Record(entries)
+            })
+            .collect();
+        Expr::rt("sum", vec![name, Expr::Table(cases), Expr::Table(fields)])
     }
 
     fn is_string(&self, def: DefId) -> bool {

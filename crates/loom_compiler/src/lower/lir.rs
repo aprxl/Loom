@@ -23,6 +23,8 @@ pub enum Expr {
     Unary(&'static str, Box<Expr>),
     /// `{a, b, c}`.
     Table(Vec<Expr>),
+    /// `{x = 1, [2] = y}`: a record, or a case with its `tag`.
+    Record(Vec<(TableKey, Expr)>),
     Function(Vec<String>, Vec<Stmt>),
 }
 
@@ -57,6 +59,13 @@ impl Expr {
     pub fn is_constant(&self) -> bool {
         matches!(self, Expr::Nil | Expr::Bool(_) | Expr::Int(_) | Expr::Float(_) | Expr::Str(_))
     }
+}
+
+/// A key in a keyed table constructor.
+#[derive(Clone, Debug, PartialEq)]
+pub enum TableKey {
+    Name(String),
+    Index(i64),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -287,8 +296,13 @@ impl Printer {
             }
             Expr::Field(base, name) => {
                 self.prefix_expr(base);
-                self.write(".");
-                self.write(name);
+                if is_lua_name(name) {
+                    self.write(".");
+                    self.write(name);
+                } else {
+                    let key = lua_string(name.as_bytes());
+                    self.write(&format!("[{key}]"));
+                }
             }
             Expr::Call(callee, args) => {
                 self.prefix_expr(callee);
@@ -329,6 +343,21 @@ impl Printer {
             Expr::Table(items) => {
                 self.write("{");
                 self.exprs(items);
+                self.write("}");
+            }
+            Expr::Record(entries) => {
+                self.write("{");
+                for (i, (key, value)) in entries.iter().enumerate() {
+                    if i > 0 {
+                        self.write(", ");
+                    }
+                    match key {
+                        TableKey::Name(n) if is_lua_name(n) => self.write(&format!("{n} = ")),
+                        TableKey::Name(n) => self.write(&format!("[{}] = ", lua_string(n.as_bytes()))),
+                        TableKey::Index(i) => self.write(&format!("[{i}] = ")),
+                    }
+                    self.expr(value, 0);
+                }
                 self.write("}");
             }
             Expr::Function(params, body) => {
@@ -387,6 +416,19 @@ fn float_literal(f: f64) -> String {
     }
     let text = format!("{f:?}");
     if text.contains(['.', 'e', 'E']) { text } else { format!("{text}.0") }
+}
+
+/// Whether `name` can follow a `.` in Lua: an ASCII identifier that isn't a
+/// keyword (`global` counts, for Lua 5.5).
+pub fn is_lua_name(name: &str) -> bool {
+    const KEYWORDS: &[&str] = &[
+        "and", "break", "do", "else", "elseif", "end", "false", "for", "function", "global", "goto", "if", "in",
+        "local", "nil", "not", "or", "repeat", "return", "then", "true", "until", "while",
+    ];
+    let mut chars = name.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+        && !KEYWORDS.contains(&name)
 }
 
 /// A Lua string literal. Bytes outside printable ASCII are escaped, so the

@@ -1,0 +1,86 @@
+use std.io.print
+
+warp Point {
+    x: f64 = 0
+    y: f64 = 0
+
+    fn len(self) -> f64 = .x * .x + .y * .y
+    fn plus(self, o: Point) -> Point = Point(.x + o.x, .y + o.y)
+    fn nudge(mut self) { .x += 1 }
+    fn origin() -> Point = Point()
+}
+
+warp Weather {
+    case Sunny
+    case Rain(mm: f32)
+    case Snow(cm: f32)
+}
+
+warp Shape {
+    pos: (f64, f64) = (0, 0)
+
+    case Circle(r: f64)
+    case Rect(w: f64, h: f64)
+
+    fn area(self) -> f64 = match self {
+        .Circle(r) => 3.0 * r * r
+        .Rect(w, h) => w * h
+    }
+}
+
+warp Dir { case North, East, South, West }
+
+warp Meters(f64)
+
+fn advice(w: Weather) -> str = match w {
+    .Sunny => "sunscreen"
+    .Rain(mm) if mm > 10 => "stay in"
+    .Rain(_) => "umbrella"
+    .Snow(cm) => if cm > 20 { "shovel" } else { "boots" }
+}
+
+fn turn(d: Dir) -> Dir = match d {
+    .North => .East
+    .East => .South
+    .South => .West
+    .West => .North
+}
+
+fn double(n: f64) -> f64 = n * 2.0
+
+fn main() {
+    let a = Point(3, 4)
+    let b = Point(y: 1)
+    print("{a.len()} {a.plus(b):?} {Point.origin():?}")
+
+    var c = a                         // a copy: changing c leaves a alone
+    c.nudge()
+    c.y = 10
+    print("a {a:?} c {c:?}")
+
+    let moved = a.{ .x += 10 }        // a is a let: an edited copy
+    c.{ .x = 0; .y = 0 }              // c is a var: edited in place
+    print("moved {moved:?} a {a:?} c {c:?}")
+
+    let today: Weather = .Rain(mm: 3.5)
+    print("{advice(today)} {advice(.Snow(cm: 30))} {advice(Weather.Sunny)} {today:?}")
+
+    let s = Shape.Rect(w: 2, h: 3, pos: (1, 1))
+    let t: Shape = .Circle(1)
+    print("{s.area()} {t.area()} {s.pos.0} {s:?}")
+    if t is .Circle(r) and r < 2 { print("small circle {r}") }
+
+    print("{turn(.West):?} {Dir.North:?}")
+    let m = Meters(5.5)
+    print("{m.0} {m:?} {5.0.double()}")
+
+    let op: u16 = 0x8124
+    let msg: String = match op {
+        0x00E0 => "clear"
+        0x8xy4 => "add v{x} v{y}"
+        _ => "other"
+    }
+    print(msg)
+    let 0bc_ssss_ssss = 200u8 + 100u8
+    print("carry {c} sum {s}")
+}

@@ -1,0 +1,70 @@
+// Warps whose fields are all Copy are values: assigning one copies it.
+// Lua shares tables, so every place where two names could share one is here.
+use std.io.print
+
+warp P {
+    x: i32
+    y: i32
+}
+
+warp Line {
+    from: P
+    to: P
+}
+
+fn shifted(p: P) -> P = p.{ .x += 100 }     // a read parameter: edits a copy
+fn keep(p: P) -> P = p                      // returns a copy of the caller's value
+
+fn bump(mut p: P) { p.x += 1 }              // a `mut` parameter: edits the caller's
+fn reset(mut p: P) { p = P(0, 0) }          // whole-value assignment reaches the caller too
+
+warp Counter {
+    n: i32 = 0
+    fn tick(mut self) { .n += 1 }
+    fn restart(mut self) { self = Counter() }
+}
+
+fn main() {
+    var a = P(1, 2)
+    let b = a                    // let: a copy
+    var c = a                    // var: a copy
+    c.x = 50
+    a.y = 70
+    print("a {a:?} b {b:?} c {c:?}")
+
+    var line = Line(from: a, to: c)        // constructor arguments are copies
+    line.from.x = -1
+    print("a {a:?} line.from {line.from:?}")
+
+    var d = line.to                        // a field read into a var: a copy
+    d.y = 999
+    print("line.to {line.to:?} d {d:?}")
+
+    let pair = (a, b)                      // tuple elements are copies
+    a.x = 7
+    print("pair.0 {pair.0:?} a {a:?}")
+
+    let e = shifted(a)
+    let f = keep(a)
+    print("e {e:?} f {f:?} a {a:?}")
+
+    bump(mut a)
+    bump(mut line.to)
+    print("a {a:?} line.to {line.to:?}")
+    reset(mut a)
+    print("a {a:?}")
+
+    var counter = Counter()
+    counter.tick()
+    counter.tick()
+    let snapshot = counter
+    counter.tick()
+    print("{counter.n} {snapshot.n}")
+    counter.restart()
+    print("{counter.n}")
+
+    var q = P(1, 1)
+    q = b                                  // assignment: a copy
+    q.x = 3
+    print("q {q:?} b {b:?}")
+}

@@ -1,0 +1,35 @@
+warp Point {
+    x: i32
+    y: i32 = 0
+    fn nudge(mut self) { .x += 1 }
+}
+
+warp Shape {
+    case Circle(r: f64)
+    case Rect(w: f64, h: f64)
+    case Dot
+}
+
+fn move(mut p: Point) {}
+
+fn main() {
+    let a = Point()                         //~ T0104
+    let b = Point(1, z: 2)                  //~ T0105
+    let c = Point(1)
+    c.x = 5                                 //~ T0107
+    c.nudge()                               //~ T0107
+    var d = Point(2)
+    move(d)                                 //~ T0112
+    move(mut c)                             //~ T0107
+    d.fly()                                 //~ T0111
+    let s = Shape.Circle(1.5)
+    let r = s.r                             //~ T0111
+    let t = Shape(1.0)                      //~ T0106
+    let area = match s {                    //~ P0101
+        .Circle(r) => r * r
+    }
+    let u = match s {
+        .Circle => 1                        //~ T0104
+        _ => 2
+    }
+}

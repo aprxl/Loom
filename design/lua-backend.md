@@ -73,8 +73,14 @@ Invariant: every non-place expression produces a fresh table. A copy is
 emitted only when a place of a table-backed `Copy` type flows into an owning
 slot (`var`, field/element store, `take` argument, return, `^`, escaping
 capture, yield, value-form dot-block) while its source stays live. Last use
-turns the copy into a move. All of this is decided in one place:
-`loom_compiler::lower::place`.
+turns the copy into a move.
+
+Today the copies are made without last-use analysis: every place of a
+table-backed `Copy` type that flows into an owning slot is copied (in
+`lower/warp.rs`, `lower_owned`). `mut` parameters and `mut self` share the
+caller's table instead, and a whole-value assignment to one goes through
+`rt.overwrite`. `mut` parameters of scalar types (numbers, strings, enums)
+need copy-in/copy-out and aren't implemented yet.
 
 ## Control flow shapes
 

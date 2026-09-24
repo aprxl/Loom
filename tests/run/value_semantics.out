@@ -1,0 +1,10 @@
+a P(x: 1, y: 70) b P(x: 1, y: 2) c P(x: 50, y: 2)
+a P(x: 1, y: 70) line.from P(x: -1, y: 70)
+line.to P(x: 50, y: 2) d P(x: 50, y: 999)
+pair.0 P(x: 1, y: 70) a P(x: 7, y: 70)
+e P(x: 107, y: 70) f P(x: 7, y: 70) a P(x: 7, y: 70)
+a P(x: 8, y: 70) line.to P(x: 51, y: 2)
+a P(x: 0, y: 0)
+3 2
+0
+q P(x: 3, y: 2) b P(x: 1, y: 2)

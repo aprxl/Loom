@@ -76,6 +76,8 @@ pub struct Program {
     /// The number of [`HirId`]s handed out.
     pub hir_ids: u32,
     pub root: Option<ModuleId>,
+    /// Names every module sees without a `use` (`std/prelude.loom`).
+    pub prelude: IndexMap<String, Binding>,
 }
 
 impl Program {
@@ -89,6 +91,20 @@ impl Program {
 
     pub fn local(&self, id: LocalId) -> &Local {
         &self.locals[id.index()]
+    }
+
+    /// What `name` means at the top level of `module`: its items, then its
+    /// imports, then the prelude. (Locals and generic parameters aren't
+    /// visible from here.)
+    pub fn module_name(&self, module: ModuleId, name: &str) -> Option<Binding> {
+        let m = self.module(module);
+        if let Some(&def) = m.items.get(name) {
+            return Some(Binding::Def(def));
+        }
+        if let Some(import) = m.imports.get(name) {
+            return Some(import.target);
+        }
+        self.prelude.get(name).copied()
     }
 
     /// The dotted path of a definition, for messages and dumps: `std.io.print`,

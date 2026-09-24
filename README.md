@@ -293,12 +293,14 @@ built in `crates/`, following the plan in `design/lua-backend.md`:
 - **Done:** the lexer, the parser, name resolution, and a first slice of the
   language that compiles to Lua and runs: numbers of every width with their
   overflow operators, strings and templates, tuples, functions with named and
-  default arguments, control flow, and `match` on literals and tuples. `loom
-  run <file>` runs a program; `loom build <file>` writes the Lua; `--emit
-  tokens|ast|hir|lua` dumps a stage. The examples use more than this slice;
-  the compiler says so rather than guessing.
-- **Next:** warps and methods, optionals and errors, and the rest, one slice
-  at a time through every layer.
+  default arguments, control flow, and `match` on literals and tuples; and
+  warps: records and cases, methods, UFCS, the leading dot, dot-blocks, case
+  and twill patterns, with value semantics. `loom run <file>` runs a program;
+  `loom build <file>` writes the Lua; `--emit tokens|ast|hir|lua` dumps a
+  stage. The examples use more than this; the compiler says so rather than
+  guessing.
+- **Next:** optionals and errors, arrays and lists, then wefts and weaves,
+  one slice at a time through every layer.
 
 ```bash
 cargo run -p loom -- run tests/run/fizzbuzz.loom

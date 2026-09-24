@@ -82,6 +82,7 @@ codes! {
     T0109 = "cast not allowed";
     T0110 = "can't infer a type";
     T0111 = "not a value of this kind";
+    T0112 = "`mut` argument doesn't match its parameter";
 
     // P01xx: patterns
     P0101 = "match isn't exhaustive";

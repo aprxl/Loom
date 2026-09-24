@@ -13,15 +13,19 @@
 //! Only what's reachable from the root module is checked, starting from its
 //! items and following references into `std`.
 //!
-//! This is the first slice: numbers, `bool`, `char`, strings, tuples,
-//! functions, control flow, operators, casts and templates. Everything else
-//! is reported with U0102 ("not implemented yet") rather than guessed at.
+//! Covered so far: numbers, `bool`, `char`, strings, tuples, functions,
+//! control flow, operators, casts and templates; warps (records, cases,
+//! shared fields), methods, associated functions, UFCS, leading dots,
+//! dot-blocks, case and twill patterns. Everything else is reported with
+//! U0102 ("not implemented yet") rather than guessed at.
 
+mod call;
 mod expr;
 mod infer;
 mod pat;
 #[cfg(test)]
 mod tests;
+mod warp;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -33,6 +37,7 @@ use loom_syntax::source::Span;
 use crate::hir::{self, DefId, DefKind, Expr, ExprKind, FnRet, HirId, LocalId, Program, TyKind as HirTy};
 use crate::ty::{Ty, TyCtx, TyKind};
 use infer::{PendingLit, Var};
+pub use warp::{CaseFieldInfo, CaseInfo, FieldInfo, Key, WarpInfo};
 
 /// The output of type checking.
 #[derive(Debug)]
@@ -65,6 +70,23 @@ pub struct Results {
     pub untyped_consts: HashMap<DefId, i128>,
     /// For each call: which argument (or default) feeds each parameter.
     pub calls: HashMap<HirId, Call>,
+    /// The layout of every warp used.
+    pub warps: HashMap<DefId, WarpInfo>,
+    /// Expressions that build a warp value: constructor calls, `Shape.Dot`,
+    /// `.Circle(r)`.
+    pub constructs: HashMap<HirId, Construct>,
+    /// Field reads and writes: `p.x`, `t.0`, and a leading `.x` that means a field.
+    pub fields: HashMap<HirId, FieldAccess>,
+    /// Leading dots that name a constant: `.MAX` where a type is expected.
+    pub leading_consts: HashMap<HirId, DefId>,
+    /// `Type.NAME` constants: a user constant, or a primitive's bound (`u8.MAX`).
+    pub assoc_values: HashMap<HirId, AssocValue>,
+    /// Dot-blocks, and whether each edits its subject in place.
+    pub dot_blocks: HashMap<HirId, bool>,
+    /// Case and record patterns: which case, and each field pattern's key.
+    pub case_pats: HashMap<HirId, CasePat>,
+    /// Patterns that compare against a constant (`MAX =>`).
+    pub const_pats: HashMap<HirId, DefId>,
     /// Every function and constant checked, in the order they were reached.
     pub reachable: Vec<DefId>,
 }
@@ -109,6 +131,9 @@ pub struct Call {
     pub callee: DefId,
     /// One entry per parameter, in parameter order.
     pub args: Vec<ArgSource>,
+    /// For a method or UFCS call, the value before the dot. It feeds the
+    /// parameter marked [`ArgSource::Receiver`].
+    pub receiver: Option<Receiver>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -117,6 +142,58 @@ pub enum ArgSource {
     Arg(usize),
     /// The parameter's default value.
     Default,
+    /// The value a method was called on.
+    Receiver,
+}
+
+/// The value a method is called on, or a field is read from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Receiver {
+    /// The expression before the dot (`p` in `p.len()`).
+    Expr,
+    /// `self`, reached through a leading dot in a method (`.len()`).
+    Local(LocalId),
+    /// The subject of the dot-block with this id (`.show()` inside `w.{ … }`).
+    Subject(HirId),
+}
+
+/// A value of a warp being built.
+#[derive(Clone, Debug)]
+pub struct Construct {
+    pub warp: DefId,
+    /// `None` for a record or tuple warp.
+    pub case: Option<DefId>,
+    /// Every field, with where its value comes from.
+    pub fields: Vec<(Key, FieldSource)>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FieldSource {
+    /// The constructor's argument at this index.
+    Arg(usize),
+    /// The default value of this field definition.
+    Default(DefId),
+}
+
+#[derive(Clone, Debug)]
+pub struct FieldAccess {
+    pub key: Key,
+    pub base: Receiver,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum AssocValue {
+    Const(DefId),
+    Int(i128),
+}
+
+#[derive(Clone, Debug)]
+pub struct CasePat {
+    pub warp: DefId,
+    /// `None` for a record or tuple warp, which always matches.
+    pub case: Option<DefId>,
+    /// The key of each field pattern, in order.
+    pub keys: Vec<Key>,
 }
 
 /// Type-checks everything reachable from the root module of `p`.
@@ -178,6 +255,12 @@ struct Checker<'p> {
 
     /// Checking a call argument directly: where a `String` may be viewed as a `str`.
     in_argument: bool,
+    /// The warp whose members are being checked: what `Self` means.
+    self_ty: Option<Ty>,
+    /// The `self` of the method being checked.
+    self_local: Option<LocalId>,
+    /// Dot-blocks being checked, innermost last: their ids and subject types.
+    subjects: Vec<(HirId, Ty)>,
 
     // Per-function state.
     current: Option<DefId>,
@@ -213,6 +296,9 @@ impl<'p> Checker<'p> {
             pending_lits: Vec::new(),
             pending_negations: Vec::new(),
             in_argument: false,
+            self_ty: None,
+            self_local: None,
+            subjects: Vec::new(),
             current: None,
             ret: None,
             loops: Vec::new(),
@@ -275,9 +361,7 @@ impl<'p> Checker<'p> {
                 self.r.reachable.push(def);
                 self.const_ty(def);
             }
-            DefKind::Warp(_) => {
-                self.unsupported(d.span, "type-checking warps");
-            }
+            DefKind::Warp(w) => self.check_warp(def, w),
             DefKind::Weft(_) | DefKind::Weave(_) => {
                 self.unsupported(d.span, "type-checking wefts and weaves");
             }
@@ -292,7 +376,53 @@ impl<'p> Checker<'p> {
         self.current = None;
     }
 
+    /// A warp's field types and defaults. The members of a warp in the root
+    /// module are all checked, used or not; std's only when they're used.
+    fn check_warp(&mut self, def: DefId, w: &hir::WarpDef) {
+        let Some(info) = self.warp_info(def) else { return };
+        self.self_ty = Some(self.tcx.intern(TyKind::Adt(def, Vec::new())));
+        let first_var = self.vars.len();
+        for field in &info.fields {
+            if let DefKind::Field(f) = &self.p.def(field.def).kind
+                && let Some(default) = &f.default
+            {
+                self.check_coerce(default, field.ty);
+            }
+        }
+        self.finish_body(first_var);
+        self.self_ty = None;
+        if Some(self.p.def(def).module) == self.p.root {
+            for &member in &w.members {
+                match &self.p.def(member).kind {
+                    DefKind::Fn(_) | DefKind::Const(_) => self.queue_def(member),
+                    DefKind::Type(_) => {
+                        self.unsupported(self.p.def(member).span, "types inside warps");
+                    }
+                    DefKind::ConstBlock(e) => {
+                        self.unsupported(e.span, "compile-time code");
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    /// The warp type a member belongs to, for `Self` and `self`.
+    fn parent_warp_ty(&mut self, def: DefId) -> Option<Ty> {
+        let parent = self.p.def(def).parent?;
+        matches!(self.p.def(parent).kind, DefKind::Warp(_) | DefKind::Pending)
+            .then(|| self.tcx.intern(TyKind::Adt(parent, Vec::new())))
+    }
+
     fn check_fn(&mut self, def: DefId, f: &hir::FnDef) {
+        self.self_ty = self.parent_warp_ty(def);
+        self.self_local = f.params.first().filter(|p| p.is_self).map(|p| p.local);
+        self.check_fn_body(def, f);
+        self.self_ty = None;
+        self.self_local = None;
+    }
+
+    fn check_fn_body(&mut self, def: DefId, f: &hir::FnDef) {
         let Some(sig) = self.fn_sig(def) else { return };
         let first_var = self.vars.len();
         for (param, sig_param) in f.params.iter().zip(&sig.params) {
@@ -322,7 +452,10 @@ impl<'p> Checker<'p> {
         let DefKind::Fn(f) = &p.def(def).kind else { return None };
         let span = p.def(def).span;
         let saved = self.current.replace(def);
+        let parent = self.parent_warp_ty(def);
+        let saved_self = std::mem::replace(&mut self.self_ty, parent);
         let sig = self.lower_sig(f, span);
+        self.self_ty = saved_self;
         self.current = saved;
         let sig = sig?;
         self.r.sigs.insert(def, sig.clone());
@@ -338,22 +471,30 @@ impl<'p> Checker<'p> {
             self.unsupported(span, "`given` parameters");
             return None;
         }
-        if f.has_self() {
-            self.unsupported(span, "methods");
-            return None;
-        }
         let mut params = Vec::with_capacity(f.params.len());
         for param in &f.params {
-            if param.mode == ParamMode::Mut {
-                self.unsupported(param.span, "`mut` parameters");
-                return None;
-            }
             if param.mode == ParamMode::Const {
                 self.unsupported(param.span, "`const` parameters");
                 return None;
             }
-            let ty = param.ty.as_ref().map_or(self.tcx.error, |t| self.lower_ty(t));
+            let ty = if param.is_self {
+                match self.self_ty {
+                    Some(ty) => ty,
+                    None => {
+                        self.unsupported(param.span, "methods outside warps");
+                        return None;
+                    }
+                }
+            } else {
+                param.ty.as_ref().map_or(self.tcx.error, |t| self.lower_ty(t))
+            };
             if self.tcx.is_error(ty) {
+                return None;
+            }
+            // A `mut` parameter shares the caller's table; scalars would need
+            // copy-in/copy-out, which isn't implemented yet.
+            if param.mode == ParamMode::Mut && !self.is_table_backed(ty) {
+                self.unsupported(param.span, "`mut` parameters of numbers, strings and enums");
                 return None;
             }
             let name = self.p.local(param.local).name.clone();
@@ -442,7 +583,11 @@ impl<'p> Checker<'p> {
             HirTy::Pointer(_) | HirTy::Region { .. } => self.unsupported(span, "spool pointers"),
             HirTy::RawPointer(_) => self.unsupported(span, "raw pointers"),
             HirTy::Union(_) => self.unsupported(span, "union types"),
-            HirTy::SelfType | HirTy::Assoc { .. } => self.unsupported(span, "`Self` and associated types"),
+            HirTy::SelfType => match self.self_ty {
+                Some(ty) => ty,
+                None => self.unsupported(span, "`Self` outside warps"),
+            },
+            HirTy::Assoc { .. } => self.unsupported(span, "associated types"),
             HirTy::Local(_) | HirTy::ConstCall { .. } | HirTy::TypeType => {
                 self.unsupported(span, "types computed at compile time")
             }
@@ -537,6 +682,12 @@ impl<'p> Checker<'p> {
             }
             (_, TyKind::Optional(inner)) if inner == actual => Some(Coercion::ToOptional),
             (_, TyKind::Any(wefts)) => {
+                // Whether a warp weaves a weft is only known once weaves are
+                // type-checked; until then, say so rather than guess.
+                if self.adt_info(actual).is_some() {
+                    self.unsupported(e.span, "weaving wefts into warps");
+                    return false;
+                }
                 let missing: Vec<DefId> = wefts.iter().copied().filter(|&w| !self.weaves(actual, w)).collect();
                 if let Some(&weft) = missing.first() {
                     let (ty, weft) = (self.show(actual), self.p.def(weft).name.clone());
@@ -610,6 +761,17 @@ impl<'p> Checker<'p> {
             matches!(kind, TyKind::Int(_) | TyKind::IntVar(_))
         } else {
             false
+        }
+    }
+
+    /// Whether values of `ty` are Lua tables, which a `mut` parameter can
+    /// share with its caller.
+    fn is_table_backed(&mut self, ty: Ty) -> bool {
+        let ty = self.resolve(ty);
+        match self.tcx.kind(ty).clone() {
+            TyKind::Tuple(items) => !items.is_empty(),
+            TyKind::Adt(..) => self.adt_info(ty).is_some_and(|i| !i.unit_only()),
+            _ => false,
         }
     }
 

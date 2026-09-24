@@ -49,12 +49,20 @@ Read your own diff before committing. One logical change per commit.
 ## Status
 
 Done: the spec renames, the workspace scaffold, the lexer, the parser, name
-resolution (HIR, `std` declarations, the prelude), and the first slice of the
-language through every layer: type checking, lowering to Lua, the runtime,
-and `loom build` / `loom run`. The slice covers numbers of every width,
-strings, tuples, functions, control flow, `match` on literals and tuples,
-operators, casts and templates. Next: the next slices (warps and methods,
-optionals and errors, …), each through every layer at once, with fixtures.
+resolution (HIR, `std` declarations, the prelude), and two slices of the
+language through every layer (type checking, lowering to Lua, the runtime,
+`loom build` / `loom run`):
+
+1. numbers of every width, strings, tuples, functions, control flow,
+   `match` on literals and tuples, operators, casts, templates;
+2. warps: records, cases, shared fields, tuple warps, construction, fields,
+   methods, associated functions and constants, UFCS, the leading dot,
+   dot-blocks, `is`, case and twill patterns with exhaustiveness over cases,
+   `mut` parameters of table-backed types, and value semantics for `Copy`
+   warps.
+
+Next: optionals and errors (`?`, `mend`, `fail`, `some`/`none`), then
+arrays and lists, then wefts and weaves, each through every layer at once.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and

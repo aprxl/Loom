@@ -144,6 +144,13 @@ Fields and members are private to the module by default. `pub` exports them.
 **`pub(get)`** exports a field read-only, so other modules can see it but only
 this module can assign to it.
 
+### Debug form
+
+Every warp can be shown in its debug form, `{p:?}`, which reads like the
+code that builds it: `Point(x: 3, y: 4)`, `Rain(mm: 3.5)`, `Meters(5.5)`, or
+just `Sunny` for a case without fields. Its plain form, `{p}`, needs the warp to
+weave `Show`.
+
 ### Copy and move
 
 A warp whose fields are all `Copy` becomes `Copy` automatically, unless it's

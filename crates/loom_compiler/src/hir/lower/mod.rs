@@ -661,6 +661,7 @@ impl<'a> Resolver<'a> {
                 names.insert(name.clone(), import.target);
             }
         }
+        self.p.prelude = names.clone();
         self.prelude = names;
 
         // Where each public std item lives, for "add a `use`" hints.

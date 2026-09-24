@@ -1,14 +1,14 @@
 //! Checking expressions and statements.
 
 use loom_syntax::Diagnostic;
-use loom_syntax::ast::{AssignOp, BinaryOp, CastKind, FieldName, Lit, UnaryOp};
+use loom_syntax::ast::{AssignOp, BinaryOp, CastKind, Lit, UnaryOp};
 use loom_syntax::diag::codes;
 use loom_syntax::source::Span;
 use loom_syntax::token::IntLit;
 
 use super::infer::{PendingLit, VarKind};
-use super::{ArgSource, Call, Checker, Coercion, LoopCtx};
-use crate::hir::{Arg, Block, DefKind, Expr, ExprKind, StmtKind, TemplatePart};
+use super::{Checker, Coercion, LoopCtx};
+use crate::hir::{Block, DefKind, Expr, ExprKind, StmtKind, TemplatePart};
 use crate::ty::{Ty, TyKind};
 
 /// What an operator needs from its operand type.
@@ -69,11 +69,14 @@ impl Checker<'_> {
                     _ => self.unsupported(span, "this kind of value"),
                 }
             }
-            ExprKind::Type(_) => self.unsupported(span, "constructing warps"),
-            ExprKind::Assoc { .. } => self.unsupported(span, "associated items (`Type.name`)"),
+            ExprKind::Type(_) => self.unsupported(span, "types used as values"),
+            ExprKind::Assoc { base, name } => {
+                let ty = self.lower_ty(base);
+                self.check_assoc_value(e, ty, &name.name, name.span)
+            }
             ExprKind::BuiltinCase(_) => self.unsupported(span, "`some`, `ok` and `err`"),
             ExprKind::Intrinsic(_) => self.unsupported(span, "`target` and `heap`"),
-            ExprKind::LeadingDot(_) => self.unsupported(span, "leading dots"),
+            ExprKind::LeadingDot(field) => self.check_leading_value(e, field, expected),
             ExprKind::Tuple(items) => self.check_tuple(items, expected),
             ExprKind::Array(_) | ExprKind::ArrayRepeat { .. } => self.unsupported(span, "arrays and lists"),
             ExprKind::Map(_) => self.unsupported(span, "map literals"),
@@ -150,39 +153,29 @@ impl Checker<'_> {
             ExprKind::Const(_) => self.unsupported(span, "compile-time code"),
             ExprKind::Lambda { .. } => self.unsupported(span, "lambdas"),
             ExprKind::Loom { .. } | ExprKind::Thread(_) => self.unsupported(span, "`loom` and `thread`"),
-            ExprKind::Call { callee, args } => self.check_call(e, callee, args),
+            ExprKind::Call { callee, args } => self.check_call(e, callee, args, expected),
             ExprKind::Index { .. } => self.unsupported(span, "indexing"),
-            ExprKind::Field { base, field: FieldName::Index(i, index_span) } => {
-                // `t.0`: a tuple's element.
-                let base_ty = self.check_expr(base, None);
-                let base_ty = self.resolve(base_ty);
-                match self.tcx.kind(base_ty).clone() {
-                    TyKind::Tuple(items) => match items.get(*i as usize) {
-                        Some(&ty) => ty,
-                        None => {
-                            let shown = self.show(base_ty);
-                            self.error(
-                                codes::T0111,
-                                *index_span,
-                                format!(
-                                    "`{shown}` has {} element{}, so there's no `.{i}`",
-                                    items.len(),
-                                    plural(items.len())
-                                ),
-                                "no such element",
-                            );
-                            self.tcx.error
-                        }
-                    },
-                    TyKind::Error => self.tcx.error,
-                    _ => self.unsupported(span, "fields and methods"),
-                }
-            }
-            ExprKind::Field { .. } | ExprKind::ConstField { .. } => self.unsupported(span, "fields and methods"),
+            ExprKind::Field { base, field } => self.check_field(e, base, field),
+            ExprKind::ConstField { .. } => self.unsupported(span, "compile-time field access"),
             ExprKind::Try(_) | ExprKind::Mend { .. } => self.unsupported(span, "`?` and `mend`"),
             ExprKind::Deref(_) => self.unsupported(span, "spool pointers"),
-            ExprKind::DotBlock { .. } => self.unsupported(span, "dot-blocks"),
-            ExprKind::Is { .. } => self.unsupported(span, "`is`"),
+            ExprKind::DotBlock { subject, body } => {
+                // A changeable place is edited in place, and the block's
+                // value is `()`. Anything else is edited as a copy, which is
+                // the block's value.
+                let ty = self.check_expr(subject, None);
+                let in_place = self.place(subject) == Some(true);
+                self.r.dot_blocks.insert(e.id, in_place);
+                self.subjects.push((e.id, ty));
+                self.check_block(body, Some(self.tcx.unit));
+                self.subjects.pop();
+                if in_place { self.tcx.unit } else { ty }
+            }
+            ExprKind::Is { expr, pat } => {
+                let ty = self.check_expr(expr, None);
+                self.check_pat(pat, ty);
+                self.tcx.bool
+            }
             ExprKind::Unary { op, operand } => self.check_unary(*op, operand, span, expected),
             ExprKind::Binary { op, lhs, rhs } => self.check_binary(*op, lhs, rhs, span, expected),
             ExprKind::Chain { first, rest } => {
@@ -391,12 +384,19 @@ impl Checker<'_> {
     fn check_stmt(&mut self, stmt: &StmtKind) {
         match stmt {
             StmtKind::Let { pat, ty, init, .. } => {
-                let ty = match ty {
-                    Some(t) => {
+                let ty = match (ty, &pat.kind) {
+                    (Some(t), _) => {
                         let ty = self.lower_ty(t);
                         self.check_coerce(init, ty)
                     }
-                    None => self.check_expr(init, None),
+                    // A twill pattern is as wide as its digits, and that's the
+                    // type the value is computed in.
+                    (None, crate::hir::PatKind::Twill { pattern, .. }) if pattern.width <= 64 => {
+                        let ty =
+                            self.tcx.int(crate::ty::IntTy { signed: false, bits: pattern.width as u8, size: false });
+                        self.check_coerce(init, ty)
+                    }
+                    (None, _) => self.check_expr(init, None),
                 };
                 self.check_pat_irrefutable(pat, ty, "a `let`");
             }
@@ -525,127 +525,6 @@ impl Checker<'_> {
     }
 
     // ------------------------------------------------------------ calls
-
-    fn check_call(&mut self, call: &Expr, callee: &Expr, args: &[Arg]) -> Ty {
-        let def = match &callee.kind {
-            ExprKind::Def { def, args: generic_args }
-                if generic_args.is_empty() && matches!(self.p.def(*def).kind, DefKind::Fn(_)) =>
-            {
-                *def
-            }
-            ExprKind::Def { args: generic_args, .. } if !generic_args.is_empty() => {
-                return self.unsupported(callee.span, "explicit generic arguments");
-            }
-            ExprKind::Field { .. } => return self.unsupported(callee.span, "method calls"),
-            ExprKind::Type(_) => return self.unsupported(callee.span, "constructing warps"),
-            ExprKind::Assoc { .. } => return self.unsupported(callee.span, "associated functions and cases"),
-            ExprKind::BuiltinCase(_) => return self.unsupported(callee.span, "`some`, `ok` and `err`"),
-            ExprKind::LeadingDot(_) => return self.unsupported(callee.span, "leading dots"),
-            ExprKind::Local(_) => return self.unsupported(callee.span, "calling function values"),
-            _ => {
-                let ty = self.check_expr(callee, None);
-                if !self.tcx.is_error(ty) {
-                    let shown = self.show(ty);
-                    self.error(codes::T0106, callee.span, format!("`{shown}` can't be called"), "not a function");
-                }
-                return self.tcx.error;
-            }
-        };
-        self.r.expr_ty.insert(callee.id, self.tcx.error);
-        self.queue_def(def);
-        let Some(sig) = self.fn_sig(def) else {
-            for arg in args {
-                self.check_expr(&arg.value, None);
-            }
-            return self.tcx.error;
-        };
-
-        // Match arguments to parameters: positional first, then by name.
-        let name = self.p.def(def).name.clone();
-        let mut slots: Vec<Option<usize>> = vec![None; sig.params.len()];
-        let mut ok = true;
-        let mut next_positional = 0;
-        for (i, arg) in args.iter().enumerate() {
-            if arg.is_given {
-                self.unsupported(arg.span, "`given:` arguments");
-                ok = false;
-                continue;
-            }
-            let slot = match &arg.label {
-                None => {
-                    let slot = next_positional;
-                    next_positional += 1;
-                    if slot >= sig.params.len() {
-                        self.error(
-                            codes::T0104,
-                            arg.span,
-                            format!("`{name}` takes {} argument{}", sig.params.len(), plural(sig.params.len())),
-                            "one too many",
-                        );
-                        ok = false;
-                        continue;
-                    }
-                    slot
-                }
-                Some(label) => match sig.params.iter().position(|p| p.name == label.name) {
-                    Some(slot) => slot,
-                    None => {
-                        self.error(
-                            codes::T0105,
-                            label.span,
-                            format!("`{name}` has no parameter named `{}`", label.name),
-                            "unknown name",
-                        );
-                        ok = false;
-                        continue;
-                    }
-                },
-            };
-            if slots[slot].is_some() {
-                self.error(
-                    codes::T0105,
-                    arg.span,
-                    format!("`{}` is given twice", sig.params[slot].name),
-                    "already given",
-                );
-                ok = false;
-                continue;
-            }
-            if arg.mutable {
-                self.unsupported(arg.span, "`mut` arguments");
-            }
-            slots[slot] = Some(i);
-            let saved = std::mem::replace(&mut self.in_argument, true);
-            self.check_coerce(&arg.value, sig.params[slot].ty);
-            self.in_argument = saved;
-        }
-        let mut sources = Vec::with_capacity(slots.len());
-        for (slot, param) in slots.iter().zip(&sig.params) {
-            match slot {
-                Some(i) => sources.push(ArgSource::Arg(*i)),
-                None if param.has_default => sources.push(ArgSource::Default),
-                None => {
-                    self.error(
-                        codes::T0104,
-                        call.span,
-                        format!("`{name}` needs an argument for `{}`", param.name),
-                        format!("`{}` is missing", param.name),
-                    );
-                    ok = false;
-                }
-            }
-        }
-        // Arguments that went nowhere still need types.
-        for (i, arg) in args.iter().enumerate() {
-            if !slots.contains(&Some(i)) && !self.r.expr_ty.contains_key(&arg.value.id) {
-                self.check_expr(&arg.value, None);
-            }
-        }
-        if ok {
-            self.r.calls.insert(call.id, Call { callee: def, args: sources });
-        }
-        sig.ret
-    }
 
     // ------------------------------------------------------------ operators
 
@@ -896,8 +775,18 @@ impl Checker<'_> {
                 Some(ty)
             }
             ExprKind::Field { .. } | ExprKind::LeadingDot(_) => {
-                self.unsupported(target.span, "assigning to fields");
-                None
+                let ty = self.check_expr(target, None);
+                if self.tcx.is_error(ty) {
+                    return None;
+                }
+                if self.place(target) != Some(true) {
+                    self.diags.push(
+                        Diagnostic::error(codes::T0107, "can't change this field")
+                            .primary(target.span, "part of something that can't be changed")
+                            .help("fields can be changed through a `var`, a `mut` parameter, or `mut self`"),
+                    );
+                }
+                Some(ty)
             }
             ExprKind::Index { .. } => {
                 self.unsupported(target.span, "assigning to elements");
@@ -917,8 +806,4 @@ impl Checker<'_> {
             }
         }
     }
-}
-
-fn plural(n: usize) -> &'static str {
-    if n == 1 { "" } else { "s" }
 }
