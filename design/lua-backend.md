@@ -126,5 +126,5 @@ and turns the runtime's unravel protocol lines into rustc-style reports.
 ## Not supported in v1
 
 Raw pointers, `extern "C"`, `#layout(bits)` I/O, f16, integers wider than 64
-bits, user-written `Spool` weaves, anonymous `warp {}` types from `const fn`s,
+bits, user-written `Spool` weaves, anonymous `warp {}` types from `const fn`s (U0101),
 and `bolt.loom`. Each fails with a `U` code.

@@ -4,6 +4,9 @@
    Notation: EBNF.  { x } = zero or more, [ x ] = optional, ( a | b ) = choice.
    Terminals are quoted.  UPPER_CASE names are tokens from the lexer.
    The prose in 01-syntax.md wins whenever the two disagree.
+   Not covered, because v1 doesn't support it: anonymous `warp { … }` type
+   expressions returned from `const fn`s (06-compile-time.md). The parser
+   rejects them with U0101.
    ============================================================================ *)
 
 

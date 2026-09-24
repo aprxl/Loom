@@ -85,7 +85,7 @@ It has no body, so its methods go in a `weave`, where `.0` means `self.0`.
 **Unit warps** have no fields: `warp Missing`. It's the same type as
 `warp Missing {}` or `warp Missing()`. Its one value is `Missing()`, a call
 like every other construction. The bare name `Missing` is always the *type*,
-because types are compile-time values (`const T = Missing` stores the type).
+because types are compile-time values (`const KIND = Missing` stores the type).
 Payload-free cases are different: `.Sunny` and `fail .Negative` need no
 parentheses, since a case is never a type.
 
@@ -286,8 +286,9 @@ fn describe[T](x: T) -> String where T: Show + Hash = "{x} #{x.hash():x}"
 ```
 
 - Generics are monomorphized.
-- Type parameters are really **`const` parameters** of type `type`. `[T: Ord]` is
-  sugar for `const T: type where T: Ord`, with `T` inferred from the arguments.
+- Type parameters are really **`const` parameters** of type `type`.
+  `fn max[T: Ord](xs: [T])` is sugar for `fn max[const T: type](xs: [T]) where T: Ord`,
+  with `T` inferred from the arguments.
   Value parameters such as `const N: usize` work the same way.
 - To give explicit type arguments, use brackets: `s.parse[u16]()`, `List[i32]()`.
   Brackets after a name are an index or type arguments, decided during name

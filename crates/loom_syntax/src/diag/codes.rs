@@ -51,6 +51,9 @@ codes! {
     S0209 = "`pub(get)` outside a field";
     S0210 = "missing initializer";
     S0211 = "nesting is too deep";
+
+    // U01xx: features the v1 compiler doesn't support (see design/lua-backend.md)
+    U0101 = "anonymous warp types aren't supported yet";
 }
 
 #[cfg(test)]

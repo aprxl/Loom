@@ -132,7 +132,7 @@ its edges.
 
 ```loom
 match fs.read(path) {
-    ok(bytes) => use(bytes)
+    ok(bytes) => process(bytes)
     err(e: IoError) if e.is_not_found() => create(path)
     err(e) => fail e
 }

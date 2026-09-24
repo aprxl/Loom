@@ -468,6 +468,15 @@ fn function_signatures() {
 }
 
 #[test]
+fn anonymous_warps_are_unsupported() {
+    // One U0101 for the whole `warp { … }`, and the next item still parses.
+    let src = "const fn fixed(bits: u8) -> type = warp {\n    raw: int(bits)\n}\ntype Q16x16 = fixed(32)";
+    let (m, _, _, codes) = run(src, |p| p.module());
+    assert_eq!(codes, [codes::U0101]);
+    assert_eq!(m.items.len(), 2);
+}
+
+#[test]
 fn unit_warps() {
     let m = module(
         "warp Missing\n\
@@ -771,4 +780,67 @@ fn every_example_parses_cleanly() {
         seen += 1;
     }
     assert_eq!(seen, 8);
+}
+
+/// Every ```loom block in the README and the design docs parses, either as a
+/// file or as the body of a function. `...` stands for elided code. The only
+/// diagnostics allowed are for features v1 deliberately doesn't support.
+#[test]
+fn every_doc_block_parses() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut docs = vec![root.join("README.md")];
+    for entry in std::fs::read_dir(root.join("design")).expect("design directory") {
+        let path = entry.expect("dir entry").path();
+        if path.extension().and_then(|e| e.to_str()) == Some("md") {
+            docs.push(path);
+        }
+    }
+    docs.sort();
+    let unsupported = [codes::U0101];
+    let mut blocks = 0;
+    for path in &docs {
+        let text = std::fs::read_to_string(path).expect("readable doc").replace("\r\n", "\n");
+        let mut rest = text.as_str();
+        while let Some(start) = rest.find("```loom\n") {
+            let body_start = start + "```loom\n".len();
+            let len = rest[body_start..].find("```").expect("closed code block");
+            let line = text.len() - rest.len() + start;
+            let line = text[..line].matches('\n').count() + 2;
+            let src = elide(&rest[body_start..body_start + len]);
+            rest = &rest[body_start + len + 3..];
+            blocks += 1;
+
+            let attempt = |src: String| {
+                let mut db = SourceDb::new();
+                let file = db.add(format!("{}:{line}", path.display()), src);
+                let parsed = crate::parse(&db, file);
+                parsed
+                    .diagnostics
+                    .iter()
+                    .filter(|d| !unsupported.contains(&d.code))
+                    .map(|d| render_plain(&db, d))
+                    .collect::<Vec<String>>()
+            };
+            let as_file = attempt(src.clone());
+            if as_file.is_empty() {
+                continue;
+            }
+            let as_body = attempt(format!("fn snippet() {{\n{src}\n}}\n"));
+            assert!(as_body.is_empty(), "{}:{line}:\n{}", path.display(), as_file.join("\n"));
+        }
+    }
+    assert!(blocks > 50, "found only {blocks} blocks");
+}
+
+/// Drops the `...` placeholders docs use for elided code.
+fn elide(src: &str) -> String {
+    src.replace("{ ... }", "{}")
+        .replace("(...)", "()")
+        .replace(", ...", "")
+        .replace(", …", "")
+        .replace("{ … }", "{}")
+        .lines()
+        .filter(|l| !matches!(l.trim(), "..." | "…"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }

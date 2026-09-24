@@ -687,6 +687,19 @@ impl Parser<'_> {
             }
             Keyword::Unsafe => self.unsafe_block(),
             Keyword::Const => self.const_expr(),
+            Keyword::Warp if self.nth_is_punct(1, Punct::LBrace) => {
+                // `const fn fixed(…) -> type = warp { … }`: in the design
+                // (06-compile-time), but not in v1. Skip it as one unit.
+                self.recover_to_stmt_end();
+                let span = self.span_from(start);
+                self.error_at(
+                    codes::U0101,
+                    span,
+                    "anonymous `warp { … }` types aren't supported yet",
+                    "not supported in v1",
+                );
+                Expr { kind: ExprKind::Error, span }
+            }
             _ => {
                 self.error_expected("an expression");
                 Expr { kind: ExprKind::Error, span: self.here() }

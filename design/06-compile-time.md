@@ -41,7 +41,7 @@ warp Matrix[const R: usize, const C: usize] {
 - A `const` parameter must be known at compile time. The function is
   specialized for each distinct value.
 - `type` is a compile-time-only type. **Generics are `const` parameters:**
-  `fn max[T: Ord]` is sugar for `fn max(const T: type where T: Ord, ...)`,
+  `fn max[T: Ord](xs: [T])` is sugar for `fn max[const T: type](xs: [T]) where T: Ord`,
   with `T` inferred.
 - `const fn`s can return types, so you can compute them:
 
@@ -66,7 +66,7 @@ const if target.os == .Windows {
 }
 
 const for f in Point.fields {            // unrolled while compiling
-    print("{f.name}: {f.type.name}")
+    print("{f.name}: {f.ty.name}")
 }
 ```
 
@@ -85,8 +85,8 @@ const for f in Point.fields {            // unrolled while compiling
 | `T.name` | `"Point"` |
 | `T.kind` | `.Record`, `.Sum`, `.Int`, `.Float`, `.Array`, `.Pointer`, … |
 | `T.size`, `T.align`, `T.bits` | layout facts (`bits` for `#layout(bits)`) |
-| `T.fields` | compile-time list of `Field { name, type, offset, is_pub }` |
-| `T.cases` | compile-time list of `Case { name, fields }` |
+| `T.fields` | compile-time list of `Field`s, each with `.name`, `.ty`, `.offset`, `.is_pub` |
+| `T.cases` | compile-time list of `Case`s, each with `.name`, `.fields` |
 | `T.weaves(W)` | whether `T` weaves `W` |
 | `v.(f)` | the field `f` of `v`, where `f` is a compile-time `Field` |
 | `v is .(c)` | whether `v` is the compile-time `Case` `c` |

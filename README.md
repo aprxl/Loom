@@ -196,7 +196,9 @@ have a fixed size known at compile time and are stored inline, with no heap
 allocation.
 
 ```loom
-fn lexer() ~> Token <~ char { ... pull ... yield .Int(n, span) ... }
+fn lexer() ~> Token <~ char {
+    // `pull` takes the next char in; `yield .Int(n, span)` sends a token out
+}
 
 var lex = lexer()
 for ch in source.chars() {

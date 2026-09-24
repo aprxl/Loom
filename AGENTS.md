@@ -51,4 +51,6 @@ Read your own diff before committing. One logical change per commit.
 Done: the spec renames, the workspace scaffold, the lexer, and the parser
 (AST, error recovery, `--emit ast`). Next: name resolution and type checking,
 then lowering and run mode. All eight examples lex and parse cleanly; keep it
-that way (`every_example_parses_cleanly` in `crates/loom_syntax`).
+that way (`every_example_parses_cleanly` in `crates/loom_syntax`). The same
+goes for every ```` ```loom ```` block in the README and design docs
+(`every_doc_block_parses`); code v1 deliberately rejects must use a `U` code.
