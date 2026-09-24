@@ -1,0 +1,9 @@
+(10, 3)
+button
+frame
+button 'OK' 10x3
+14 wide, 2 clicks
+42
+(14, 3)
+button
+(15, 3) button 15

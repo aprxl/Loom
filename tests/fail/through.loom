@@ -1,0 +1,46 @@
+weft Sized {
+    fn size(self) -> u32
+}
+
+warp Frame {
+    pub w: u32
+    pub fn size(self) -> u32 = .w
+    pub fn tag(self) -> str = "frame"
+}
+
+warp Pane {
+    pub h: u16
+    pub fn size(self) -> u16 = .h
+    pub fn tag(self) -> str = "pane"
+}
+
+// Both fields have `size` and `tag`: a call can't pick one.
+warp Split {
+    through left: Frame
+    through right: Pane
+}
+
+// Forwarded, but `Pane.size` returns `u16`, not `u32`.
+warp Panel: Sized {                         //~ T0114
+    through pane: Pane
+}
+
+// Two fields could provide `size`.
+warp Double: Sized {                        //~ T0116
+    through a: Frame
+    through b: Frame
+}
+
+// Choosing by writing it in the warp itself is fine.
+warp Chosen: Sized {
+    through a: Frame
+    through b: Frame
+    fn size(self) -> u32 = .a.size()
+}
+
+fn main() {
+    let s = Split(left: Frame(w: 1), right: Pane(h: 2))
+    let t = s.tag()                         //~ T0116
+    let w = s.w                             //~ T0111
+    let fine = s.left.w + Chosen(a: Frame(w: 1), b: Frame(w: 2)).size()
+}

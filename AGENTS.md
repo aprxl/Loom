@@ -61,10 +61,11 @@ language through every layer (type checking, lowering to Lua, the runtime,
    `mut` parameters of table-backed types, and value semantics for `Copy`
    warps;
 3. wefts and weaves (in progress): inline and separate weaves, default
-   methods checked per type, derived `Show`/`Eq`/`Ord`, `Weft.f(x)`, and
-   `{x}`, `print`, `==`, `<` through hand-written weave methods.
+   methods checked per type, derived `Show`/`Eq`/`Ord`, `Weft.f(x)`,
+   `{x}`, `print`, `==`, `<` through hand-written weave methods, and
+   `through` delegation.
 
-Next: `through`, generics (explicit, and wefts as parameter types), and
+Next: generics (explicit, and wefts as parameter types), and
 `any W`; then optionals and errors (`?`, `mend`, `fail`, `some`/`none`), then
 arrays and lists, each through every layer at once.
 

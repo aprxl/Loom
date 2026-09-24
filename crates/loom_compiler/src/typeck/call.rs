@@ -1,8 +1,8 @@
 //! Calls, members, and what a name after a dot means.
 //!
 //! - `f(x)`: a function. `Point(1, 2)`: a constructor.
-//! - `x.f(y)`: a method of `x`'s warp, or one a weave gives it, or else a
-//!   free function in scope whose first parameter takes `x` (UFCS).
+//! - `x.f(y)`: a method of `x`'s type (see `method.rs`), or else a free
+//!   function in scope whose first parameter takes `x` (UFCS).
 //! - `Type.name`: a case, associated function, method, or constant.
 //! - `Weft.f(x, y)`: the method of the weft, for `x`'s type.
 //! - `.name`: a member of the dot-block's subject, of `self` in a method,
@@ -13,6 +13,7 @@ use loom_syntax::ast::{FieldName, ParamMode, Vis};
 use loom_syntax::diag::codes;
 use loom_syntax::source::Span;
 
+use super::method::{Found, Lookup};
 use super::warp::{Key, Member, WarpInfo};
 use super::{ArgSource, AssocValue, Call, Checker, FieldAccess, Instance, Receiver, SigParam};
 use crate::hir::{self, Arg, Binding, DefId, DefKind, Expr, ExprKind, HirId};
@@ -21,18 +22,10 @@ use crate::ty::{Ty, TyKind};
 /// What a leading `.name` found.
 enum Leading {
     Field(Key, Ty, Receiver),
-    Method(Instance, Receiver),
+    Method(Found, Receiver),
     Case(WarpInfo, DefId),
     AssocFn(DefId),
     Const(DefId),
-}
-
-/// What a weave offers for a method name.
-enum Woven {
-    None,
-    One(Instance),
-    /// More than one weft has it (already reported).
-    Ambiguous,
 }
 
 /// The value a method is called on, as far as argument checking cares.
@@ -83,9 +76,9 @@ impl Checker<'_> {
             }
             ExprKind::LeadingDot(FieldName::Named(name)) => {
                 match self.resolve_leading(&name.name, callee.span, expected, true) {
-                    Some(Leading::Method(inst, receiver)) => {
-                        let ty = self.receiver_ty(receiver);
-                        self.call_fn(call, inst, args, Some(Recv { receiver, ty, expr: None, mutable: true }))
+                    Some(Leading::Method(found, receiver)) => {
+                        let recv = Recv { receiver, ty: found.self_ty, expr: None, mutable: true };
+                        self.call_found(call, found, args, recv)
                     }
                     Some(Leading::Case(info, case)) => {
                         self.construct(call.id, &info, Some(case), Some(args), call.span)
@@ -122,6 +115,18 @@ impl Checker<'_> {
             self.check_expr(&arg.value, None);
         }
         self.tcx.error
+    }
+
+    /// Calls a method `find_method` found, following any `through` fields
+    /// from the receiver to the method's `self`.
+    fn call_found(&mut self, call: &Expr, found: Found, args: &[Arg], recv: Recv<'_>) -> Ty {
+        let ty = self.call_fn(call, found.inst, args, Some(recv));
+        if !found.path.is_empty()
+            && let Some(c) = self.b.calls.get_mut(&call.id)
+        {
+            c.through = found.path;
+        }
+        ty
     }
 
     fn receiver_ty(&self, receiver: Receiver) -> Ty {
@@ -175,7 +180,7 @@ impl Checker<'_> {
         if receiver.is_some() {
             sources.insert(0, ArgSource::Receiver);
         }
-        self.b.calls.insert(call.id, Call { callee: id, args: sources, receiver });
+        self.b.calls.insert(call.id, Call { callee: id, args: sources, receiver, through: Vec::new() });
         sig.ret
     }
 
@@ -307,42 +312,35 @@ impl Checker<'_> {
             return self.check_args_alone(args);
         }
         let mutable = self.place(base) == Some(true) || self.place(base).is_none();
-        let recv = || Recv { receiver: Receiver::Expr, ty: base_ty, expr: Some(base), mutable };
-        // 1. A method of the warp.
-        if let Some(def) = self.warp_def(base_ty) {
-            match self.member(def, name) {
-                Some(Member::Method(def)) => return self.call_fn(call, Instance::of(def), args, Some(recv())),
-                Some(Member::AssocFn(_)) => {
-                    let warp = self.p.def(def).name.clone();
-                    self.diags.push(
-                        Diagnostic::error(codes::T0111, format!("`{name}` doesn't take `self`"))
-                            .primary(callee.span, "not a method")
-                            .help(format!("call it on the type: `{warp}.{name}(…)`")),
-                    );
-                    return self.check_args_alone(args);
-                }
-                _ => {}
-            }
+        let recv = |ty: Ty| Recv { receiver: Receiver::Expr, ty, expr: Some(base), mutable };
+        if let Some(def) = self.warp_def(base_ty)
+            && let Some(Member::AssocFn(_)) = self.member(def, name)
+        {
+            let warp = self.p.def(def).name.clone();
+            self.diags.push(
+                Diagnostic::error(codes::T0111, format!("`{name}` doesn't take `self`"))
+                    .primary(callee.span, "not a method")
+                    .help(format!("call it on the type: `{warp}.{name}(…)`")),
+            );
+            return self.check_args_alone(args);
         }
-        // 2. A method a weave gives it.
-        match self.woven_method(base_ty, name, callee.span) {
-            Woven::One(inst) => return self.call_fn(call, inst, args, Some(recv())),
-            Woven::Ambiguous => return self.check_args_alone(args),
-            Woven::None => {}
+        // 1–3. A method of the type: its own, a weave's, or a `through` field's.
+        match self.find_method(base_ty, name, callee.span) {
+            Lookup::One(found) => {
+                let r = recv(found.self_ty);
+                return self.call_found(call, found, args, r);
+            }
+            Lookup::Ambiguous => return self.check_args_alone(args),
+            Lookup::None => {}
         }
         // 4. A free function in scope whose first parameter takes the value.
         let module = self.current.map(|c| self.p.def(c).module);
         if let Some(Binding::Def(def)) = module.and_then(|m| self.p.module_name(m, name))
             && matches!(self.p.def(def).kind, DefKind::Fn(_))
         {
-            return self.call_fn(call, Instance::of(def), args, Some(recv()));
+            return self.call_fn(call, Instance::of(def), args, Some(recv(base_ty)));
         }
         let shown = self.show(base_ty);
-        if let Some(info) = self.adt_info(base_ty)
-            && self.has_through(info.def)
-        {
-            return self.unsupported(callee.span, "methods forwarded by `through`");
-        }
         if self.adt_info(base_ty).is_some() {
             self.diags.push(
                 Diagnostic::error(codes::T0111, format!("`{shown}` has no method `{name}`"))
@@ -362,10 +360,10 @@ impl Checker<'_> {
         }
         let Some(info) = self.adt_info(ty) else {
             // `bool.to_json(b)`: a method a weave gives a built-in type.
-            match self.woven_method(ty, name, span) {
-                Woven::One(inst) => return self.call_fn(call, inst, args, None),
-                Woven::Ambiguous => return self.check_args_alone(args),
-                Woven::None => {}
+            match self.find_method(ty, name, span) {
+                Lookup::One(found) => return self.call_fn(call, found.inst, args, None),
+                Lookup::Ambiguous => return self.check_args_alone(args),
+                Lookup::None => {}
             }
             let shown = self.show(ty);
             return self.unsupported(span, &format!("associated functions of `{shown}`"));
@@ -382,10 +380,13 @@ impl Checker<'_> {
                 );
                 self.check_args_alone(args)
             }
-            None => match self.woven_method(ty, name, span) {
-                Woven::One(inst) => self.call_fn(call, inst, args, None),
-                Woven::Ambiguous => self.check_args_alone(args),
-                Woven::None => {
+            // `Rect.area(r)`: a weave's method, called through the type. A
+            // method a `through` field has needs a value to follow the
+            // field from, so it's called on one instead.
+            None => match self.find_method(ty, name, span) {
+                Lookup::One(found) if found.path.is_empty() => self.call_fn(call, found.inst, args, None),
+                Lookup::Ambiguous => self.check_args_alone(args),
+                Lookup::One(_) | Lookup::None => {
                     self.error(codes::T0111, span, format!("`{}` has no `{name}`", info.name), "no such member");
                     self.check_args_alone(args)
                 }
@@ -415,7 +416,7 @@ impl Checker<'_> {
             return self.check_args_alone(&args[1..]);
         }
         let inst = match self.weaving(weft, ty) {
-            Some(w) => self.impl_of(w, method).map(|imp| self.impl_instance(imp, ty)),
+            Some(w) => self.impl_of(w, method, 0).map(|imp| self.impl_instance(imp, ty)),
             None => None,
         };
         let Some(inst) = inst else {
@@ -432,23 +433,8 @@ impl Checker<'_> {
         self.call_fn(call, inst, args, None)
     }
 
-    /// The method `name` a weave gives `ty`, reporting when more than one
-    /// weft offers it.
-    fn woven_method(&mut self, ty: Ty, name: &str, span: Span) -> Woven {
-        let found = self.weave_methods(ty, name);
-        match found.as_slice() {
-            [] => Woven::None,
-            [(_, imp)] => Woven::One(self.impl_instance(*imp, self.resolve(ty))),
-            _ => {
-                let wefts: Vec<DefId> = found.iter().map(|(w, _)| *w).collect();
-                self.ambiguous_method(span, ty, name, &wefts);
-                Woven::Ambiguous
-            }
-        }
-    }
-
     /// The warp a type names, built-in ones included.
-    fn warp_def(&self, ty: Ty) -> Option<DefId> {
+    pub(super) fn warp_def(&self, ty: Ty) -> Option<DefId> {
         match *self.tcx.kind(self.resolve(ty)) {
             TyKind::Adt(def, _) if matches!(self.p.def(def).kind, DefKind::Warp(_)) => Some(def),
             _ => None,
@@ -518,7 +504,19 @@ impl Checker<'_> {
                     .primary(span, "not every case has it")
                     .help(format!("match on the value first: `if x is .{}({name}) {{ … }}`", case.name)),
             ),
-            None => self.error(codes::T0111, span, format!("`{}` has no field `{name}`", info.name), "no such field"),
+            None => {
+                let mut diag = Diagnostic::error(codes::T0111, format!("`{}` has no field `{name}`", info.name))
+                    .primary(span, "no such field");
+                // `through` forwards methods, never fields: name the field it's in.
+                for through in info.fields.iter().filter(|f| f.through) {
+                    if self.adt_info(through.ty).is_some_and(|inner| inner.field(name).is_some()) {
+                        diag = diag
+                            .help(format!("`through` forwards methods, not fields: write `.{}.{name}`", through.name));
+                        break;
+                    }
+                }
+                self.diags.push(diag);
+            }
         }
         None
     }
@@ -594,20 +592,10 @@ impl Checker<'_> {
             {
                 from_context = Some(Leading::Field(Key::Pos(i as u32 + 1), item, receiver));
             } else if call {
-                let inherent = match self.warp_def(ty) {
-                    Some(def) => match self.member(def, name) {
-                        Some(Member::Method(m)) => Some(Instance::of(m)),
-                        _ => None,
-                    },
-                    None => None,
-                };
-                from_context = match inherent {
-                    Some(inst) => Some(Leading::Method(inst, receiver)),
-                    None => match self.woven_method(ty, name, span) {
-                        Woven::One(inst) => Some(Leading::Method(inst, receiver)),
-                        Woven::Ambiguous => return None,
-                        Woven::None => None,
-                    },
+                from_context = match self.find_method(ty, name, span) {
+                    Lookup::One(found) => Some(Leading::Method(found, receiver)),
+                    Lookup::Ambiguous => return None,
+                    Lookup::None => None,
                 };
             } else if let Some(info) = self.adt_info(ty)
                 && let Some(f) = info.field(name)
@@ -653,13 +641,6 @@ impl Checker<'_> {
                 None
             }
         }
-    }
-
-    /// Whether warp `def` has `through` fields, whose methods it forwards.
-    fn has_through(&self, def: DefId) -> bool {
-        let p = self.p;
-        let DefKind::Warp(w) = &p.def(def).kind else { return false };
-        w.fields.iter().any(|&f| matches!(&p.def(f).kind, DefKind::Field(f) if f.through))
     }
 
     // ------------------------------------------------------------ places

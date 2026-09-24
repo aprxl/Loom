@@ -17,7 +17,7 @@ use loom_syntax::ast::ParamMode;
 use loom_syntax::diag::codes;
 use loom_syntax::source::Span;
 
-use super::{BodyId, Checker, FnSig, Instance};
+use super::{BodyId, Checker, FnSig, Forward, Instance};
 use crate::hir::{self, Binding, DefId, DefKind};
 use crate::ty::{Ty, TyKind};
 
@@ -43,14 +43,8 @@ pub enum Impl {
     Default(DefId),
     /// Made by the compiler: a `#builtin` method of std.
     Builtin(DefId),
-}
-
-impl Impl {
-    pub fn def(self) -> DefId {
-        match self {
-            Impl::Written(d) | Impl::Default(d) | Impl::Builtin(d) => d,
-        }
-    }
+    /// Forwarded to a `through` field that has the method.
+    Forward(DefId),
 }
 
 impl Checker<'_> {
@@ -161,8 +155,9 @@ impl Checker<'_> {
     }
 
     /// What implements weft method `method` in weaving `w`: the function
-    /// with its name in the weave (or the warp's body), or else the default.
-    pub(super) fn impl_of(&self, w: usize, method: DefId) -> Option<Impl> {
+    /// with its name in the weave (or the warp's body), or one a `through`
+    /// field has, or else the default.
+    pub(super) fn impl_of(&mut self, w: usize, method: DefId, depth: u32) -> Option<Impl> {
         let p = self.p;
         let name = &p.def(method).name;
         let site = self.weavings[w].site;
@@ -173,33 +168,40 @@ impl Checker<'_> {
         };
         let found =
             written.iter().copied().find(|&m| &p.def(m).name == name && matches!(p.def(m).kind, DefKind::Fn(_)));
-        match found {
-            Some(def) => Some(Impl::Written(def)),
-            None => self.default_of(method),
+        if let Some(def) = found {
+            return Some(Impl::Written(def));
         }
+        let target = self.weavings[w].target;
+        if !self.forwarded(target, &name.clone(), depth).is_empty() {
+            return Some(Impl::Forward(method));
+        }
+        self.default_of(method)
     }
 
     /// The instance a call to `imp` for type `ty` runs.
     pub(super) fn impl_instance(&self, imp: Impl, ty: Ty) -> Instance {
         match imp {
             Impl::Written(def) => Instance::of(def),
-            Impl::Default(def) | Impl::Builtin(def) => Instance { def, self_ty: Some(ty) },
+            Impl::Default(def) | Impl::Builtin(def) => Instance { def, self_ty: Some(ty), forward: false },
+            Impl::Forward(def) => Instance { def, self_ty: Some(ty), forward: true },
         }
     }
 
     /// Methods named `name` that weaves give `ty`, from wefts in scope here.
-    pub(super) fn weave_methods(&self, ty: Ty, name: &str) -> Vec<(DefId, Impl)> {
+    pub(super) fn weave_methods(&mut self, ty: Ty, name: &str, depth: u32) -> Vec<(DefId, Impl)> {
         let ty = self.resolve(ty);
         let mut found = Vec::new();
-        for (w, weaving) in self.weavings.iter().enumerate() {
+        for w in 0..self.weavings.len() {
+            let weaving = &self.weavings[w];
             if weaving.target != ty || !self.weft_in_scope(weaving.weft) {
                 continue;
             }
-            for method in self.weft_methods(weaving.weft) {
+            let weft = weaving.weft;
+            for method in self.weft_methods(weft) {
                 if self.p.def(method).name == name
-                    && let Some(imp) = self.impl_of(w, method)
+                    && let Some(imp) = self.impl_of(w, method, depth)
                 {
-                    found.push((weaving.weft, imp));
+                    found.push((weft, imp));
                 }
             }
         }
@@ -216,18 +218,6 @@ impl Checker<'_> {
             return true;
         }
         self.p.module_name(module, &self.p.def(weft).name) == Some(Binding::Def(weft))
-    }
-
-    /// Reports that several wefts give `ty` a method `name`.
-    pub(super) fn ambiguous_method(&mut self, span: Span, ty: Ty, name: &str, wefts: &[DefId]) {
-        let shown = self.show(ty);
-        let names: Vec<String> = wefts.iter().map(|w| format!("`{}.{name}`", self.p.def(*w).name)).collect();
-        let first = self.p.def(wefts[0]).name.clone();
-        self.diags.push(
-            Diagnostic::error(codes::T0116, format!("`{shown}` has more than one method `{name}`"))
-                .primary(span, format!("could be {}", names.join(" or ")))
-                .help(format!("say which one: `{first}.{name}(x)`")),
-        );
     }
 
     // ------------------------------------------------------------ conformance
@@ -312,10 +302,7 @@ impl Checker<'_> {
         }
         for method in self.weft_methods(w.weft) {
             let name = p.def(method).name.clone();
-            match self.impl_of(i, method) {
-                // `through` fields may forward it; they aren't supported yet
-                // and are reported where they're declared.
-                None if self.site_has_through(w.site) => {}
+            match self.impl_of(i, method, 0) {
                 None => {
                     self.diags.push(
                         Diagnostic::error(
@@ -343,25 +330,66 @@ impl Checker<'_> {
                         self.instance(inst);
                     }
                 }
+                Some(imp @ Impl::Forward(_)) => {
+                    if self.check_forward(&w, method, &weft_name) {
+                        let inst = self.impl_instance(imp, w.target);
+                        let id = self.instance(inst);
+                        self.record_op_fn(w.weft, w.target, id);
+                    }
+                }
             }
         }
     }
 
-    fn site_has_through(&self, site: DefId) -> bool {
-        let p = self.p;
-        let warp = match &p.def(site).kind {
-            DefKind::Warp(_) => Some(site),
-            DefKind::Weave(_) => match self
-                .tcx
-                .kind(self.weavings.iter().find(|w| w.site == site).map(|w| w.target).unwrap_or(self.tcx.error))
-            {
-                TyKind::Adt(def, _) => Some(*def),
-                _ => None,
-            },
-            _ => None,
+    /// A weft method a `through` field provides must be the only one, and
+    /// must take the same arguments and return the same type as the weft's.
+    fn check_forward(&mut self, w: &Weaving, method: DefId, weft_name: &str) -> bool {
+        let name = self.p.def(method).name.clone();
+        let target = self.show(w.target);
+        let mut found = self.forwarded(w.target, &name, 0);
+        if found.len() > 1 {
+            let vias: Vec<String> = found.iter().map(|f| format!("`{}`", f.via)).collect();
+            self.diags.push(
+                Diagnostic::error(codes::T0116, format!("`{target}` gets `{name}` through more than one field"))
+                    .primary(w.span, format!("could be {}", vias.join(" or ")))
+                    .help(format!("write `{name}` in `{target}` itself to choose")),
+            );
+            return false;
+        }
+        let Some(found) = found.pop() else { return false };
+        let inner = self.instance(found.inst);
+        let (Some(actual), Some(expected)) = (self.fn_sig(inner), self.sig_with_self(method, w.target)) else {
+            return false;
         };
-        let Some(DefKind::Warp(w)) = warp.map(|d| &p.def(d).kind) else { return false };
-        w.fields.iter().any(|&f| matches!(&p.def(f).kind, DefKind::Field(f) if f.through))
+        let same = actual.params.len() == expected.params.len()
+            && actual.params.first().map(|p| p.mode) == expected.params.first().map(|p| p.mode)
+            && actual.params.iter().zip(&expected.params).skip(1).all(|(a, e)| a.mode == e.mode && a.ty == e.ty)
+            && actual.ret == expected.ret;
+        if !same {
+            let (want, got) = (self.show_sig(&expected), self.show_sig(&actual));
+            self.diags.push(
+                Diagnostic::error(codes::T0114, format!("`{}` doesn't match `{weft_name}.{name}`", found.via))
+                    .primary(w.span, format!("`{}` is `{got}`", found.via))
+                    .secondary(self.p.def(method).span, format!("`{weft_name}` needs `{want}`")),
+            );
+            return false;
+        }
+        true
+    }
+
+    /// Records what a forwarding instance calls: the method a `through`
+    /// field has, and the fields to follow to reach it.
+    pub(super) fn check_forward_instance(&mut self, id: BodyId) {
+        let inst = self.r.instance(id).clone();
+        let Some(ty) = inst.self_ty else { return };
+        let name = self.p.def(inst.def).name.clone();
+        let mut found = self.forwarded(ty, &name, 0);
+        if found.len() != 1 {
+            return;
+        }
+        let found = found.remove(0);
+        let target = self.instance(found.inst);
+        self.r.forwards.insert(id, Forward { path: found.path, target });
     }
 
     /// The orphan rule: a weave must be defined next to its weft or its

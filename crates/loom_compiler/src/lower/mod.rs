@@ -335,6 +335,22 @@ impl<'a> Lowerer<'a> {
         self.cur = id;
         match &d.kind {
             DefKind::Fn(f) if f.abi.is_some() => {}
+            DefKind::Fn(f) if self.typed.results.instance(id).forward => {
+                // A weft method a `through` field provides: call the field's.
+                let Some(fwd) = self.typed.results.forwards.get(&id) else { return };
+                let span = d.span;
+                let params: Vec<String> = f.params.iter().map(|param| self.local_name(param.local)).collect();
+                let mut args: Vec<Expr> = params.iter().map(|p| Expr::name(p.clone())).collect();
+                if let Some(first) = args.first_mut() {
+                    let this = std::mem::replace(first, Expr::Nil);
+                    *first = fwd.path.iter().fold(this, Self::access);
+                }
+                let call = Expr::call(Expr::field(Expr::name("F"), &self.fn_name(fwd.target)), args);
+                let body = vec![Stmt { kind: StmtKind::Return(Some(call)), span: Some(span) }];
+                let func = Expr::Function(params, body);
+                let target = Expr::field(Expr::name("F"), &self.fn_name(id));
+                self.fns.push(Stmt { kind: StmtKind::Assign(vec![target], vec![func]), span: Some(span) });
+            }
             DefKind::Fn(f) if f.body.is_none() => {
                 // A `#builtin` weft method, for a type that doesn't write its own.
                 let Some(self_ty) = self.typed.results.instance(id).self_ty else { return };

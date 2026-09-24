@@ -593,6 +593,8 @@ impl Lowerer<'_> {
             (Some(r), _) => Some(self.receiver(r, None)),
             (None, _) => None,
         };
+        // A method a `through` field has is called on that field.
+        let receiver = receiver.map(|r| info.through.iter().fold(r, Self::access));
         let in_order = info.args.iter().filter_map(|s| match s {
             ArgSource::Arg(i) => Some(*i),
             ArgSource::Default | ArgSource::Receiver => None,

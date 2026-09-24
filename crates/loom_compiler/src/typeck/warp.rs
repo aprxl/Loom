@@ -43,6 +43,8 @@ pub struct FieldInfo {
     pub ty: Ty,
     pub has_default: bool,
     pub vis: Vis,
+    /// A `through` field, whose methods the warp forwards.
+    pub through: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -120,9 +122,6 @@ impl Checker<'_> {
         for (i, &field) in w.fields.iter().enumerate() {
             let fd = p.def(field);
             let DefKind::Field(f) = &fd.kind else { continue };
-            if f.through {
-                self.unsupported(fd.span, "`through` fields");
-            }
             let key = if w.tuple { Key::Pos(i as u32 + 1) } else { Key::Name(fd.name.clone()) };
             let ty = self.lower_ty(&f.ty);
             fields.push(FieldInfo {
@@ -132,6 +131,7 @@ impl Checker<'_> {
                 ty,
                 has_default: f.default.is_some(),
                 vis: fd.vis,
+                through: f.through,
             });
         }
         let mut cases = Vec::new();

@@ -25,6 +25,7 @@
 mod call;
 mod expr;
 mod infer;
+mod method;
 mod pat;
 #[cfg(test)]
 mod tests;
@@ -70,13 +71,24 @@ pub struct Instance {
     /// What `Self` stands for, when it isn't simply the warp or weave the
     /// item belongs to.
     pub self_ty: Option<Ty>,
+    /// A weft method `Self` gets from a `through` field: its body calls the
+    /// field's method (see [`Results::forwards`]).
+    pub forward: bool,
 }
 
 impl Instance {
     /// `def` checked as written.
     pub fn of(def: DefId) -> Self {
-        Instance { def, self_ty: None }
+        Instance { def, self_ty: None, forward: false }
     }
+}
+
+/// What a forwarding instance calls.
+#[derive(Clone, Debug)]
+pub struct Forward {
+    /// The `through` fields from `self` to the value the method is called on.
+    pub path: Vec<Key>,
+    pub target: BodyId,
 }
 
 /// An instance's index in [`Results::bodies`].
@@ -105,6 +117,8 @@ pub struct Results {
     /// operations (`{x}`, `==`, `<`) call through the type's runtime
     /// description.
     pub op_fns: HashMap<Ty, OpFns>,
+    /// The method each forwarding instance calls.
+    pub forwards: HashMap<BodyId, Forward>,
 }
 
 /// The functions behind a type's built-in operations, when they aren't
@@ -203,6 +217,10 @@ pub struct Call {
     /// For a method or UFCS call, the value before the dot. It feeds the
     /// parameter marked [`ArgSource::Receiver`].
     pub receiver: Option<Receiver>,
+    /// For a method a `through` field has: the fields to follow from the
+    /// receiver to the value it's called on (`button.size()` calls
+    /// `button.frame.size()`).
+    pub through: Vec<Key>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -467,6 +485,10 @@ impl<'p> Checker<'p> {
         let d = p.def(inst.def);
         self.current = Some(inst.def);
         match &d.kind {
+            DefKind::Fn(_) if inst.forward => {
+                self.r.reachable.push(id);
+                self.check_forward_instance(id);
+            }
             DefKind::Fn(f) => {
                 self.r.reachable.push(id);
                 self.in_body(id, |this| this.check_fn(id, &inst, f));

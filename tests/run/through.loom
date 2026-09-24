@@ -1,0 +1,59 @@
+// `through`: a warp forwards the methods of a field, with `self` rebound
+// to the field. Fields aren't forwarded, and the warp's own methods win.
+
+use std.io.print
+
+weft Widget {
+    fn size(self) -> (u16, u16)
+    fn name(self) -> str = "widget"
+    fn area(self) -> u32 {
+        let (w, h) = .size()
+        w as u32 * h as u32
+    }
+}
+
+warp Frame: Widget {
+    pub w: u16
+    pub h: u16 = 3
+    clicks: u32 = 0
+
+    fn size(self) -> (u16, u16) = (.w, .h)
+    fn name(self) -> str = "frame"
+    pub fn grow(mut self, by: u16) { .w += by }
+    pub fn click(mut self) { .clicks += 1 }
+    pub fn click_count(self) -> u32 = .clicks
+}
+
+warp Button: Widget {
+    through frame: Frame
+    label: String
+
+    // Only `name` is overridden: `size` comes from the frame.
+    fn name(self) -> str = "button"
+    pub fn describe(self) -> String = "{.name()} '{.label}' {.size().0}x{.size().1}"
+}
+
+// Forwarding follows `through` fields all the way down.
+warp Toolbar {
+    through main: Button
+    pub count: u8 = 1
+}
+
+fn main() {
+    var b = Button(frame: Frame(w: 10), label: "OK")
+    print(b.size())                          // forwarded to b.frame
+    print(b.name())                          // Button's own
+    print(b.frame.name())                    // the frame's, asked directly
+    print(b.describe())
+    b.grow(4)                                // `mut self` forwards too
+    b.click()
+    b.click()
+    print("{b.frame.w} wide, {b.click_count()} clicks")
+    print(b.area())                          // the weft's default, with Self = Button
+    print(Widget.size(b))                    // through the weft: a forwarding function
+    print(Widget.name(b))
+
+    var t = Toolbar(main: b)
+    t.grow(1)
+    print("{t.size()} {t.name()} {t.main.frame.w}")
+}

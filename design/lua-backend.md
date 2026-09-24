@@ -88,6 +88,10 @@ Weave methods are static calls, like any other method. A weft's default
 method becomes one Lua function per type that uses it (`F.name_12_7`, with
 the instance number), checked with `Self` as that type.
 
+A method forwarded by `through` is a call on the field: `b.size()` is
+`F.size_8(b.frame)`. When it stands in for a weft method (`Widget.size(b)`),
+a one-line function per type does that call.
+
 `{x}`, `print`, `==` and `<` work through a type's runtime descriptor.
 
 - A warp with a hand-written `show`, `eq` or `lt` has it stored in the
