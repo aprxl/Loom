@@ -411,8 +411,34 @@ impl<'a> Lowerer<'a> {
                     let this = std::mem::replace(first, Expr::Nil);
                     *first = fwd.path.iter().fold(this, Self::access);
                 }
+                let receiver = args.first().cloned();
                 let call = Expr::call(Expr::field(Expr::name("F"), &self.fn_name(fwd.target)), args);
-                let body = vec![Stmt { kind: StmtKind::Return(Some(call)), span: Some(span) }];
+                // The field's method hands back the new values of its scalar
+                // `mut` parameters: its `self` goes back into the field, and
+                // the others back to this function's caller.
+                let target_outs = self.scalar_mut_params(fwd.target);
+                let body = if target_outs.is_empty() {
+                    vec![Stmt { kind: StmtKind::Return(Some(call)), span: Some(span) }]
+                } else {
+                    let stmt = |kind| Stmt { kind, span: Some(span) };
+                    let temps: Vec<String> = (0..=target_outs.len()).map(|i| format!("_r{i}")).collect();
+                    let mut body = vec![stmt(StmtKind::Local(temps.clone(), vec![call]))];
+                    let mut passed_on = vec![Expr::name(temps[0].clone())];
+                    for (&k, temp) in target_outs.iter().zip(&temps[1..]) {
+                        match (k, &receiver) {
+                            (0, Some(place)) => {
+                                body.push(stmt(StmtKind::Assign(vec![place.clone()], vec![Expr::name(temp.clone())])))
+                            }
+                            _ => passed_on.push(Expr::name(temp.clone())),
+                        }
+                    }
+                    body.push(stmt(if passed_on.len() == 1 {
+                        StmtKind::Return(passed_on.pop())
+                    } else {
+                        StmtKind::ReturnMany(passed_on)
+                    }));
+                    body
+                };
                 let func = Expr::Function(params, body);
                 let target = Expr::field(Expr::name("F"), &self.fn_name(id));
                 self.fns.push(Stmt { kind: StmtKind::Assign(vec![target], vec![func]), span: Some(span) });
@@ -482,6 +508,18 @@ impl<'a> Lowerer<'a> {
                 return None;
             }
         })
+    }
+
+    /// The indices of the parameters of instance `id` that are scalar `mut`
+    /// parameters: their new values come back after the result.
+    fn scalar_mut_params(&self, id: BodyId) -> Vec<usize> {
+        let Some(sig) = self.typed.results.sigs.get(&id) else { return Vec::new() };
+        sig.params
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.mode == loom_syntax::ast::ParamMode::Mut && !self.is_table(p.ty))
+            .map(|(k, _)| k)
+            .collect()
     }
 
     /// The parameters of function instance `id` that are copied back to the

@@ -1,0 +1,76 @@
+// `mut self` methods of scalar types (enums), reached through `through`
+// fields: the new value goes back into the field.
+
+use std.io.print
+
+warp Light {
+    case Red
+    case Green
+}
+
+weft Flip {
+    fn flip(mut self)
+}
+weave Flip into Light {
+    fn flip(mut self) {
+        self = match self {
+            .Red => .Green
+            .Green => .Red
+        }
+    }
+}
+
+warp Lamp: Flip {
+    through light: Light
+    watts: u32
+}
+
+warp Tally { n: u32 = 0 }
+weft Count {
+    fn bump(mut self) -> u32
+}
+weave Count into Tally {
+    fn bump(mut self) -> u32 {
+        .n += 1
+        .n
+    }
+}
+warp Clicker: Count {
+    through tally: Tally
+}
+
+fn flip_it(mut f: Flip) { f.flip() }
+warp Level: Eq {
+    case Low
+    case High
+    fn toggle(mut self) -> bool {
+        self = match self {
+            .Low => .High
+            .High => .Low
+        }
+        self == .High
+    }
+}
+warp Knob { through level: Level }
+warp Panel { through knob: Knob }
+
+
+fn main() {
+    var lamp = Lamp(.Red, 60)
+    lamp.flip()
+    print("{lamp.light:?}")
+    flip_it(mut lamp)
+    print("{lamp.light:?}")
+    var c = Clicker(Tally())
+    c.bump()
+    print("{c.bump()} {c.tally.n}")
+    var l: Light = .Red
+    l.flip()
+    print("{l:?}")
+
+    var p = Panel(Knob(.Low))
+    print(p.toggle())
+    print("{p.knob.level:?}")
+    print(p.toggle())
+    print("{p.knob.level:?}")
+}
