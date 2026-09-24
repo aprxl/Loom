@@ -185,6 +185,16 @@ annotation, and string literals are `str@static`. Because of that,
 `fn name(self) -> str = "button"` is fine, and a field `label: str` holds a
 static string. For text that belongs to the value, use `String`.
 
+**Literals convert to `String`.** A string literal is a template with no
+holes, so like any template it becomes a `String` (allocated in the ambient
+spool) wherever a `String` is expected. `str` stays a view and never converts
+on its own, because that would hide an allocation: write `s.to_string()`.
+
+```loom
+fn label(n: u32) -> String = if n == 0 { "none" } else { "{n} items" }   // both convert
+fn shout(s: str) -> String = s.to_upper()                             // str → String is explicit
+```
+
 ---
 
 ## `given`: ambient parameters

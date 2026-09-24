@@ -47,6 +47,8 @@ its registers in `[u8; 16]` and indexes them with `u4`.
 | `A \| B` | anonymous tagged union, mostly used for error sets |
 
 `List[T]`, `Map[K, V]`, `Set[T]`, and `String` come from `std` and aren't built in.
+`String` is owned text and `str` is a view of text. A string literal converts
+to `String` wherever one is expected (see [03](03-memory.md#slices-and-static)).
 
 ---
 
