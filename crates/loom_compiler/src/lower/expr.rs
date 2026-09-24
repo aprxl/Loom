@@ -1051,16 +1051,12 @@ impl Lowerer<'_> {
                 (lo, hi, *inclusive)
             }
             _ => {
-                // A range value: `{lo, hi, inclusive}`.
+                // A range value, `{lo, hi, inclusive}`, which may be open or
+                // empty at any bound: its stream knows how to step it.
                 let v = self.lower_expr(iter);
-                let r = self.spill_always(v);
-                let lo = Expr::index(r.clone(), Expr::Int(1));
-                let hi = Expr::index(r.clone(), Expr::Int(2));
-                let incl = Expr::index(r, Expr::Int(3));
-                let t = self.new_temp();
-                let adjusted = Expr::bin("or", Expr::bin("and", incl, hi.clone()), Expr::bin("-", hi, Expr::Int(1)));
-                self.push(StmtKind::Local(vec![t.clone()], vec![adjusted]));
-                (lo, Some(Expr::Name(t)), true)
+                let s = self.stream_from(&IterSource::Range(elem), v, iter.span);
+                self.for_stream_of(e, pat, s, body);
+                return;
             }
         };
         let control = self.new_temp();

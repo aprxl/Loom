@@ -93,6 +93,11 @@ impl Lowerer<'_> {
             }
             None => self.lower_expr(iter),
         };
+        self.for_stream_of(e, pat, s, body);
+    }
+
+    /// `for pat in s`, where `s` is a stream.
+    pub(super) fn for_stream_of(&mut self, e: &hir::Expr, pat: &hir::Pat, s: Expr, body: &Block) {
         let item = self.new_temp();
         let mut body_stmts = self.nested(|this| this.bind_irrefutable(pat, Expr::name(&item)));
         body_stmts.extend(self.loop_body(e.id, Dest::Discard, body));
