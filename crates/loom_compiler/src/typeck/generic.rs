@@ -324,6 +324,7 @@ impl Checker<'_> {
         for ty in tys {
             self.register_type(ty);
         }
+        self.register_vtables();
         self.queue.len() > before
     }
 

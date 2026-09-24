@@ -154,6 +154,11 @@ impl Checker<'_> {
         self.weft_methods(weft).into_iter().all(|m| self.default_of(m).is_some())
     }
 
+    /// The compiler-made default of a std weft method, if it has one.
+    pub(super) fn builtin_default(&self, method: DefId) -> Option<Impl> {
+        self.default_of(method).filter(|imp| matches!(imp, Impl::Builtin(_)))
+    }
+
     /// The default a weft method falls back on, if it has one.
     fn default_of(&self, method: DefId) -> Option<Impl> {
         let d = self.p.def(method);
@@ -549,7 +554,7 @@ impl Checker<'_> {
 
     /// The signature of weft method `method` with `Self` standing for `ty`,
     /// without checking its body.
-    fn sig_with_self(&mut self, method: DefId, ty: Ty) -> Option<FnSig> {
+    pub(super) fn sig_with_self(&mut self, method: DefId, ty: Ty) -> Option<FnSig> {
         let DefKind::Fn(f) = &self.p.def(method).kind else { return None };
         let saved_self = self.self_ty.replace(ty);
         let saved = self.current.replace(method);

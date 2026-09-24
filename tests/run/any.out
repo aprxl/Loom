@@ -1,0 +1,8 @@
+circle of area 3
+circle of area 12
+Circle(r: 2.0)
+shape of area 4; Square(side: 2.0)
+shape big square big circle small circle
+a square with side 3
+shown: Square(side: 2.0)
+42 (42, Square(side: 2.0))

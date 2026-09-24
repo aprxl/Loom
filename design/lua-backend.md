@@ -49,7 +49,7 @@ SourceDb → lex → Tokens → parse → AST → resolve/desugar → HIR
 | `?T` | `nil` when T's representation never uses nil; `{v}` box otherwise |
 | `T ! E` | two slots `(ok, v_or_e)` in registers and returns; `{ok, v}` when stored |
 | `A \| B` | `{tid, v}` |
-| `any W` | `{v, vt}` (vtable per type × weft set; `vt.tid` for type tests) |
+| `any W` | `{v, vt}` (vtable per type × weft set; `vt.d` is the type's descriptor, for type tests) |
 | `[T; N]` | table indexed `1..N` (every index is emitted `+1`) |
 | `[T]` | view `{t, o, n}` |
 | `^T` | the table itself for table-backed T; `{v}` box for scalars |
@@ -110,6 +110,14 @@ a one-line function per type does that call.
   it, at any depth: inside a tuple, an optional, or another warp's field.
 - Without one they work field by field. That's also how the compiler-made
   (`#builtin`) defaults run.
+
+An `any W` value is `{v, vt}`. The vtable holds the type's descriptor
+(`vt.d`) and, keyed by the weft method's number, a function for each weft
+method the program calls through `any`: `w.draw(at, mut c)` is
+`rt.dyn(w, 31, at, c)`. Vtables are filled in after type checking, since a
+call anywhere can add a method to every one. A type test (`w is b: Button`)
+compares `vt.d` with `Button`'s descriptor, which is unique per type. An
+`any` of more wefts is already an `any` of fewer: nothing is converted.
 
 `Fmt` is a Lua array of strings: `f.put(x)` appends `x`'s shown form, and
 `rt.show` concatenates the array after calling a hand-written `show`.

@@ -19,11 +19,12 @@
 //! control flow, operators, casts and templates; warps (records, cases,
 //! shared fields), methods, associated functions, UFCS, leading dots,
 //! dot-blocks, case and twill patterns; wefts and weaves (see `weave.rs`);
-//! generics (see `generic.rs`).
+//! generics (see `generic.rs`); `any W` (see `dynamic.rs`).
 //! Everything else is reported with U0102 ("not implemented yet") rather
 //! than guessed at.
 
 mod call;
+mod dynamic;
 mod expr;
 mod generic;
 mod infer;
@@ -128,7 +129,15 @@ pub struct Results {
     pub op_fns: HashMap<Ty, OpFns>,
     /// The method each forwarding instance calls.
     pub forwards: HashMap<BodyId, Forward>,
+    /// The vtable of each type made into an `any`, by the type and the wefts
+    /// (with their super-wefts): the function for each weft method called
+    /// through `any`.
+    pub vtables: HashMap<VtableKey, Vec<(DefId, BodyId)>>,
 }
+
+/// A vtable: the type made into an `any`, and the wefts (with their
+/// super-wefts, sorted).
+pub type VtableKey = (Ty, Vec<DefId>);
 
 /// The functions behind a type's built-in operations, when they aren't
 /// the derived ones.
@@ -180,6 +189,8 @@ pub struct Body {
     pub case_pats: HashMap<HirId, CasePat>,
     /// Patterns that compare against a constant (`MAX =>`).
     pub const_pats: HashMap<HirId, DefId>,
+    /// Type-test patterns (`is b: Button`), and the type each tests for.
+    pub type_tests: HashMap<HirId, Ty>,
 }
 
 /// An implicit conversion.
@@ -197,7 +208,8 @@ pub enum Coercion {
     ToOptional,
     /// `T` where `T ! E` is expected: a success.
     ToResult,
-    /// A value where `any W` is expected.
+    /// A value where `any W` is expected. The wefts are `W` and its
+    /// super-wefts, sorted: with the value's type, they pick its vtable.
     ToAny(Vec<DefId>),
     /// A value that's thrown away, where `()` is expected.
     Discard,
@@ -230,6 +242,9 @@ pub struct Call {
     /// receiver to the value it's called on (`button.size()` calls
     /// `button.frame.size()`).
     pub through: Vec<Key>,
+    /// For a method called on an `any` value: the weft method, found in the
+    /// value's vtable at run time. `callee` means nothing then.
+    pub dynamic: Option<DefId>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -377,6 +392,8 @@ struct Checker<'p> {
     registered: HashSet<Ty>,
     /// Diagnostics already reported from generic instances (see `note_instance`).
     instance_diags: HashSet<(&'static str, Option<Span>)>,
+    /// Weft methods called through `any` (see `dynamic.rs`).
+    dyn_methods: HashSet<DefId>,
     /// Constants whose type is being computed, to catch cycles.
     const_stack: Vec<DefId>,
     /// "Not implemented yet" messages already reported, per definition.
@@ -434,6 +451,7 @@ impl<'p> Checker<'p> {
             infer_args: false,
             registered: HashSet::new(),
             instance_diags: HashSet::new(),
+            dyn_methods: HashSet::new(),
             const_stack: Vec::new(),
             unsupported_seen: HashSet::new(),
             vars: Vec::new(),
@@ -1043,6 +1061,19 @@ impl<'p> Checker<'p> {
                 Some(Coercion::StringToStr)
             }
             (_, TyKind::Optional(inner)) if inner == actual => Some(Coercion::ToOptional),
+            // An `any` is already an `any` of fewer wefts: it carries the
+            // same vtable.
+            (TyKind::Any(have), TyKind::Any(want)) => {
+                let closure = self.weft_closure(&have);
+                let Some(&missing) = want.iter().find(|w| !closure.contains(w)) else { return true };
+                let (from, to, weft) = (self.show(actual), self.show(target), self.p.def(missing).name.clone());
+                self.diags.push(
+                    Diagnostic::error(codes::T0108, format!("an `{from}` isn't always `{weft}`"))
+                        .primary(e.span, format!("can't be made an `{to}`"))
+                        .help(format!("ask for it: `any ({} + {weft})`", from.trim_start_matches("any "))),
+                );
+                return false;
+            }
             (_, TyKind::Any(wefts)) => {
                 let missing: Vec<DefId> = wefts.iter().copied().filter(|&w| !self.weaves(actual, w)).collect();
                 if let Some(&weft) = missing.first() {
@@ -1055,7 +1086,7 @@ impl<'p> Checker<'p> {
                     );
                     return false;
                 }
-                Some(Coercion::ToAny(wefts))
+                Some(Coercion::ToAny(self.weft_closure(&wefts)))
             }
             _ => None,
         };
@@ -1086,6 +1117,9 @@ impl<'p> Checker<'p> {
         let ty = self.resolve(ty);
         if self.weaving(weft, ty).is_some() {
             return true;
+        }
+        if let TyKind::Any(wefts) = self.tcx.kind(ty) {
+            return self.weft_closure(wefts).contains(&weft);
         }
         // A warp is `Copy` when all its fields are, whether it says so or not.
         if Some(weft) == self.std.copy
@@ -1141,6 +1175,9 @@ impl<'p> Checker<'p> {
             TyKind::Tuple(items) => !items.is_empty(),
             TyKind::Adt(def, _) if self.is_builtin(def) => Some(def) != self.std.string,
             TyKind::Adt(..) => self.adt_info(ty).is_some_and(|i| !i.unit_only()),
+            // A `mut self` method called through `any` changes the value in
+            // it, which is table-backed: only those have `mut` methods yet.
+            TyKind::Any(_) => true,
             _ => false,
         }
     }

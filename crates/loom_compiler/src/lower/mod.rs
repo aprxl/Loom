@@ -4,10 +4,11 @@
 //!
 //! ```text
 //! local rt = (function() <runtime/rt/core.lua> end)()
-//! local T, F, C, EXT = {}, {}, {}, {}
+//! local T, F, C, EXT, VT = {}, {}, {}, {}, {}
 //! T[1] = rt.int(32, true)            -- type descriptors
 //! EXT[1] = rt.ext["std.io.print"]    -- std externs it calls
 //! F.main_7 = function() … end        -- every reachable function
+//! VT[1] = {d = T[4], [31] = F.draw_9} -- vtables of values made `any`
 //! C.LIMIT_3 = …                      -- constants, in dependency order
 //! return F.main_7
 //! ```
@@ -90,6 +91,8 @@ struct Lowerer<'a> {
     /// Type descriptors: the Lua expression that builds each, in order.
     descs: IndexMap<Ty, Expr>,
     externs: IndexMap<String, usize>,
+    /// Vtables, by type and wefts, with the type's descriptor.
+    vtables: IndexMap<(Ty, Vec<DefId>), Expr>,
     /// Lowered functions and constants, in the order they were reached.
     fns: Vec<Stmt>,
     consts: IndexMap<DefId, (Stmt, Vec<DefId>)>,
@@ -117,6 +120,7 @@ impl<'a> Lowerer<'a> {
             diags: Vec::new(),
             descs: IndexMap::new(),
             externs: IndexMap::new(),
+            vtables: IndexMap::new(),
             fns: Vec::new(),
             consts: IndexMap::new(),
             cur: BodyId(0),
@@ -249,6 +253,8 @@ impl<'a> Lowerer<'a> {
             TyKind::Char => Expr::field(Expr::name("rt"), "char"),
             TyKind::Str => Expr::field(Expr::name("rt"), "str"),
             TyKind::Unit => Expr::field(Expr::name("rt"), "unit"),
+            // The value carries its own type's description in its vtable.
+            TyKind::Any(_) => Expr::field(Expr::name("rt"), "anyd"),
             TyKind::Adt(..) => {
                 // Field types depend on a generic warp's arguments.
                 match self.typed.results.adts.get(&ty).cloned() {
@@ -279,6 +285,14 @@ impl<'a> Lowerer<'a> {
         };
         let (i, _) = self.descs.insert_full(ty, build);
         Expr::index(Expr::name("T"), Expr::Int(i as i64 + 1))
+    }
+
+    /// `VT[n]`, the vtable of `ty` made into `any` of `wefts`, registering
+    /// it. It's written out after the functions it points to.
+    fn vtable(&mut self, ty: Ty, wefts: Vec<DefId>, span: Span) -> Expr {
+        let desc = self.desc(ty, span);
+        let (i, _) = self.vtables.insert_full((ty, wefts), desc);
+        Expr::index(Expr::name("VT"), Expr::Int(i as i64 + 1))
     }
 
     /// `rt.record`, `rt.sum` or `rt.enum` for a warp, with its fields'
@@ -431,7 +445,7 @@ impl<'a> Lowerer<'a> {
             loom_host::RT_CORE
         );
         let mut printer = Printer::new(&preamble);
-        printer.raw("local T, F, C, EXT = {}, {}, {}, {}");
+        printer.raw("local T, F, C, EXT, VT = {}, {}, {}, {}, {}");
         let descs = std::mem::take(&mut self.descs);
         for (i, (_, build)) in descs.iter().enumerate() {
             let target = Expr::index(Expr::name("T"), Expr::Int(i as i64 + 1));
@@ -444,6 +458,16 @@ impl<'a> Lowerer<'a> {
         }
         for stmt in &self.fns {
             printer.stmt(stmt);
+        }
+        for (i, ((ty, wefts), desc)) in self.vtables.iter().enumerate() {
+            let mut entries = vec![(lir::TableKey::Name("d".into()), desc.clone())];
+            let key = (*ty, wefts.clone());
+            for &(method, id) in self.typed.results.vtables.get(&key).into_iter().flatten() {
+                let f = Expr::field(Expr::name("F"), &self.fn_name(id));
+                entries.push((lir::TableKey::Index(method.0 as i64), f));
+            }
+            let target = Expr::index(Expr::name("VT"), Expr::Int(i as i64 + 1));
+            printer.stmt(&Stmt { kind: StmtKind::Assign(vec![target], vec![Expr::Record(entries)]), span: None });
         }
         for (i, ty) in descs.keys().enumerate() {
             let Some(fns) = self.typed.results.op_fns.get(ty) else { continue };

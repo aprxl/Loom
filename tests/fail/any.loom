@@ -1,0 +1,25 @@
+use std.io.print
+
+weft Shape {
+    fn area(self) -> f64
+    fn same(self, other: Self) -> bool
+}
+
+warp Circle: Shape {
+    r: f64
+    fn area(self) -> f64 = .r
+    fn same(self, other: Self) -> bool = .r == other.r
+}
+
+warp Rock { weight: u8 }
+
+fn main() {
+    let s: any Shape = Circle(1.0)
+    let t: any Shape = Rock(3)              //~ T0108
+    let a = s.volume()                      //~ T0111
+    let b = s.same(s)                       //~ T0111
+    let c = Circle(2.0)
+    if c is x: Circle {}                    //~ T0101
+    if s is y: Rock {}                      //~ T0108
+    let shown: any Show = s                 //~ T0108
+}

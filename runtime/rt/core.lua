@@ -318,9 +318,19 @@ function rt.opt(inner, boxed)
   return { kind = "opt", inner = inner, boxed = boxed }
 end
 
---- A value of `any W`: the value with its type's descriptor.
-function rt.any(d, v)
-  return { v, d }
+--- A value of `any W`: the value with its type's vtable, which holds the
+--- type's descriptor (`vt.d`) and, by the weft method's number, the function
+--- for each method called through `any`.
+function rt.any(vt, v)
+  return { v, vt }
+end
+
+--- The descriptor of `any W` types: the value's own is in its vtable.
+rt.anyd = { kind = "any" }
+
+--- Calls weft method number `k` of `any` value `x`.
+function rt.dyn(x, k, ...)
+  return x[2][k](x[1], ...)
 end
 
 -- Warps. A field is `{key, name, descriptor}`, where the key is the field's
@@ -551,6 +561,8 @@ show = function(d, v, debug)
     return v
   elseif kind == "unit" then
     return "()"
+  elseif kind == "any" then
+    return show(v[2].d, v[1], debug)
   elseif kind == "tuple" then
     local parts = {}
     for i, item in ipairs(d.items) do
@@ -702,11 +714,11 @@ end
 rt.ext = {}
 
 rt.ext["std.io.print"] = function(x)
-  write(show(x[2], x[1], false) .. "\n")
+  write(show(x[2].d, x[1], false) .. "\n")
 end
 
 rt.ext["std.fmt.Fmt.put"] = function(f, x)
-  f[#f + 1] = show(x[2], x[1], false)
+  f[#f + 1] = show(x[2].d, x[1], false)
 end
 
 rt.ext["std.error.unravel"] = function(message)

@@ -66,9 +66,11 @@ language through every layer (type checking, lowering to Lua, the runtime,
    `through` delegation;
 4. generics, checked per instance: generic functions with bounds and
    inferred or explicit arguments, generic warps and their methods, generic
-   weaves, and wefts as parameter types (implicit generics).
+   weaves, and wefts as parameter types (implicit generics);
+5. `any W`: dynamic dispatch through vtables, type tests (`w is b: Button`),
+   and `any` of more wefts passing as `any` of fewer.
 
-Next: `any W`; then optionals and errors (`?`, `mend`, `fail`, `some`/`none`), then
+Next: optionals and errors (`?`, `mend`, `fail`, `some`/`none`), then
 arrays and lists, each through every layer at once.
 
 Keep these green:

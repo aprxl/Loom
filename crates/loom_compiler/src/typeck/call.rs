@@ -174,6 +174,23 @@ impl Checker<'_> {
             let Some(sig) = self.fn_sig(id) else { return self.check_args_alone(args) };
             (sig, id, None)
         };
+        self.call_with_sig(call, def, sig, id, None, args, recv, pending)
+    }
+
+    /// Checks a call's receiver and arguments against `sig`, and records
+    /// the call.
+    #[allow(clippy::too_many_arguments)]
+    fn call_with_sig(
+        &mut self,
+        call: &Expr,
+        def: DefId,
+        sig: super::FnSig,
+        callee: super::BodyId,
+        dynamic: Option<DefId>,
+        args: &[Arg],
+        recv: Option<Recv<'_>>,
+        pending: Option<Pending>,
+    ) -> Ty {
         let name = self.p.def(def).name.clone();
         let mut params: &[SigParam] = &sig.params;
         let receiver = match recv {
@@ -211,7 +228,7 @@ impl Checker<'_> {
         if receiver.is_some() {
             sources.insert(0, ArgSource::Receiver);
         }
-        self.b.calls.insert(call.id, Call { callee: id, args: sources, receiver, through: Vec::new() });
+        self.b.calls.insert(call.id, Call { callee, args: sources, receiver, through: Vec::new(), dynamic });
         if let Some(pending) = pending {
             self.pending.push(pending);
         }
@@ -358,6 +375,22 @@ impl Checker<'_> {
         }
         let mutable = self.place(base) == Some(true) || self.place(base).is_none();
         let recv = |ty: Ty| Recv { receiver: Receiver::Expr, ty, expr: Some(base), mutable };
+        // A method of an `any` value is found in its vtable at run time.
+        if let TyKind::Any(wefts) = self.tcx.kind(base_ty).clone() {
+            let Some((method, sig)) = self.dyn_method(base_ty, &wefts, name, callee.span) else {
+                return self.check_args_alone(args);
+            };
+            return self.call_with_sig(
+                call,
+                method,
+                sig,
+                generic::UNKNOWN,
+                Some(method),
+                args,
+                Some(recv(base_ty)),
+                None,
+            );
+        }
         if let Some(def) = self.warp_def(base_ty)
             && let Some(Member::AssocFn(_)) = self.member(def, name)
         {

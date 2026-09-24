@@ -94,9 +94,7 @@ impl Checker<'_> {
             PatKind::Slice(_) | PatKind::Rest(_) => {
                 self.unsupported(span, "slice patterns");
             }
-            PatKind::TypeTest { .. } => {
-                self.unsupported(span, "type-test patterns");
-            }
+            PatKind::TypeTest { local, ty: tested } => self.check_type_test(pat, *local, tested, ty),
         }
     }
 
@@ -425,6 +423,7 @@ fn supported(pat: &Pat) -> bool {
         | PatKind::Lit { .. }
         | PatKind::Range { .. }
         | PatKind::Twill { .. }
+        | PatKind::TypeTest { .. }
         | PatKind::Error => true,
         PatKind::Tuple(pats) | PatKind::Or(pats) => pats.iter().all(supported),
         PatKind::Case { fields, .. } => fields.iter().flatten().all(|f| supported(&f.pat)),

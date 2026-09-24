@@ -79,9 +79,10 @@ impl Lowerer<'_> {
                 if self.opt_boxed(ty) { Expr::Table(vec![v]) } else { v }
             }
             Coercion::ToResult => Expr::Table(vec![Expr::Bool(true), v]),
-            Coercion::ToAny(_) => {
-                let desc = self.desc(self.ty_of(e), e.span);
-                Expr::rt("any", vec![desc, v])
+            Coercion::ToAny(wefts) => {
+                let wefts = wefts.clone();
+                let vt = self.vtable(self.ty_of(e), wefts, e.span);
+                Expr::rt("any", vec![vt, v])
             }
         }
     }
@@ -545,6 +546,29 @@ impl Lowerer<'_> {
             return Expr::Nil;
         };
         let p = self.p;
+        // A method of an `any` value: found in its vtable, by the weft
+        // method's number.
+        if let Some(method) = info.dynamic {
+            let values: Vec<&hir::Expr> = match &callee.kind {
+                ExprKind::Field { base, .. } => {
+                    std::iter::once(base.as_ref()).chain(args.iter().map(|a| &a.value)).collect()
+                }
+                _ => return Expr::Nil,
+            };
+            let mut lowered = self.lower_operands(&values);
+            let recv = lowered.remove(0);
+            let mut params = vec![recv, Expr::Int(method.0 as i64)];
+            for source in info.args.iter().skip(1) {
+                match source {
+                    ArgSource::Arg(i) => params.push(lowered[*i].clone()),
+                    _ => {
+                        self.unsupported(call.span, "default arguments through `any`");
+                        return Expr::Nil;
+                    }
+                }
+            }
+            return Expr::rt("dyn", params);
+        }
         let def = self.typed.results.instance(info.callee).def;
         let DefKind::Fn(f) = &p.def(def).kind else { return Expr::Nil };
         // Externs, and the methods of warps the runtime implements (`Fmt.put`).

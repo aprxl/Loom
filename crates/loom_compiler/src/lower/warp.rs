@@ -265,6 +265,13 @@ impl Lowerer<'_> {
                 }
                 Some(tests.into_iter().reduce(|a, b| Expr::bin("and", a, b)))
             }
+            // `is b: Button`: the value's vtable describes a `Button`.
+            PatKind::TypeTest { .. } => {
+                let tested = self.tables().type_tests.get(&pat.id).copied()?;
+                let desc = self.desc(tested, pat.span);
+                let actual = Expr::field(Expr::index(v.clone(), Expr::Int(2)), "d");
+                Some(Some(Expr::bin("==", actual, desc)))
+            }
             PatKind::Twill { pattern, .. } => {
                 if pattern.mask == 0 {
                     return Some(None);
@@ -336,6 +343,7 @@ impl Lowerer<'_> {
                     self.bind_pat(first, v, declare);
                 }
             }
+            PatKind::TypeTest { local, .. } => bind(self, *local, Expr::index(v.clone(), Expr::Int(1))),
             _ => {}
         }
     }
