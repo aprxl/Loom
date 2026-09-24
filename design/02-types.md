@@ -82,6 +82,13 @@ warp's module when the warp has private fields.
 **Tuple warps and newtypes:** `warp Meters(f64)` is a record with one positional field.
 It has no body, so its methods go in a `weave`, where `.0` means `self.0`.
 
+**Unit warps** have no fields: `warp Missing`. It's the same type as
+`warp Missing {}` or `warp Missing()`. Its one value is `Missing()`, a call
+like every other construction. The bare name `Missing` is always the *type*,
+because types are compile-time values (`const T = Missing` stores the type).
+Payload-free cases are different: `.Sunny` and `fail .Negative` need no
+parentheses, since a case is never a type.
+
 ### Sums (cases)
 
 ```loom

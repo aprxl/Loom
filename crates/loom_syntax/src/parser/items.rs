@@ -264,6 +264,10 @@ impl Parser<'_> {
             let fields = self.with_nl(false, |p| p.comma_list(Punct::RParen, Self::case_field));
             self.expect_close(Punct::RParen, open);
             WarpBody::Tuple(fields)
+        } else if self.at_stmt_end() && !self.at_punct(Punct::LBrace) {
+            // `warp Missing`: a unit warp, the same type as `warp Missing {}`.
+            // A `{` on the next line still opens the body.
+            WarpBody::Members(Vec::new())
         } else {
             WarpBody::Members(self.members(MemberCtx::Warp))
         };

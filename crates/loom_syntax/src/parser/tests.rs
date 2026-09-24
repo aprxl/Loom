@@ -468,6 +468,30 @@ fn function_signatures() {
 }
 
 #[test]
+fn unit_warps() {
+    let m = module(
+        "warp Missing\n\
+         warp Gone: Error;\n\
+         pub warp Empty {}\n\
+         warp Nothing()\n\
+         fn f() = fail Missing()\n\
+         warp Braces\n{\n    x: u8\n}",
+    );
+    assert_eq!(m.items.len(), 6);
+    for item in &m.items[..3] {
+        let ItemKind::Warp(w) = &item.kind else { panic!("expected a warp") };
+        assert_eq!(w.body, WarpBody::Members(Vec::new()), "{}", w.name.name);
+    }
+    let ItemKind::Warp(gone) = &m.items[1].kind else { panic!("expected a warp") };
+    assert_eq!(gone.wefts.len(), 1);
+    let ItemKind::Warp(nothing) = &m.items[3].kind else { panic!("expected a warp") };
+    assert_eq!(nothing.body, WarpBody::Tuple(Vec::new()));
+    // A `{` on the next line is still the body, as it is for `fn`.
+    let ItemKind::Warp(braces) = &m.items[5].kind else { panic!("expected a warp") };
+    assert!(matches!(&braces.body, WarpBody::Members(members) if members.len() == 1));
+}
+
+#[test]
 fn warps() {
     let m = module(
         "/// A token.\n\

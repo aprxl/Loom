@@ -57,7 +57,7 @@ gauge        = "where" , expr ;          (* a range expression, or a boolean hol
 
 (* warps *)
 warp_decl    = [ "once" | "ref" ] , "warp" , TYPE_IDENT , [ generics ] , [ ":" , weft_list ] , [ where_clause ] ,
-               ( warp_body | "(" , [ field_list ] , ")" ) ;
+               [ warp_body | "(" , [ field_list ] , ")" ] ;       (* no body: a unit warp *)
 warp_body    = "{" , { warp_member , SEP } , "}" ;
 warp_member  = { attribute } , ( field | through | case_decl | const_decl | type_decl | fn_decl | const_stmt ) ;
 field        = [ visibility ] , IDENT , ":" , type , [ "=" , expr ] ;
