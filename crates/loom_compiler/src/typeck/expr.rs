@@ -640,7 +640,22 @@ impl Checker<'_> {
     /// take the type of the typed operands, and a narrower integer widens to
     /// a wider one: `u8_value < 1000u16` compares as `u16`.
     fn unify_operands(&mut self, operands: &[&Expr]) -> Ty {
-        let tys: Vec<Ty> = operands.iter().map(|e| self.check_expr(e, None)).collect();
+        // A leading dot needs a type to look in: `light == .Red` finds
+        // `.Red` in the other operand's type, so it's checked last.
+        let leading = |e: &Expr| match &e.kind {
+            ExprKind::LeadingDot(_) => true,
+            ExprKind::Call { callee, .. } => matches!(callee.kind, ExprKind::LeadingDot(_)),
+            _ => false,
+        };
+        let mut tys: Vec<Option<Ty>> =
+            operands.iter().map(|e| (!leading(e)).then(|| self.check_expr(e, None))).collect();
+        let hint = tys.iter().flatten().next().copied();
+        for (e, ty) in operands.iter().zip(tys.iter_mut()) {
+            if ty.is_none() {
+                *ty = Some(self.check_expr(e, hint));
+            }
+        }
+        let tys: Vec<Ty> = tys.into_iter().flatten().collect();
         let Some(&first) = tys.first() else { return self.tcx.error };
         let mut target = first;
         for &ty in &tys[1..] {

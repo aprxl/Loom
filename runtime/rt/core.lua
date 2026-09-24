@@ -325,6 +325,10 @@ end
 
 -- Warps. A field is `{key, name, descriptor}`, where the key is the field's
 -- name, or its 1-based position in a tuple warp or an unnamed payload.
+--
+-- A warp that writes its own `Show`, `Eq` or `Ord` method gets it stored in
+-- its descriptor (`d.show(v, f)`, `d.eq(a, b)`, `d.lt(a, b)`), and `{x}`,
+-- `==` and `<` call it. Without one they work field by field.
 
 --- A record or tuple warp: `{x = 1, y = 2}`, `{5.0}`.
 function rt.record(name, fields, tuple)
@@ -390,21 +394,88 @@ function rt.overwrite(dst, src)
   end
 end
 
---- Structural equality, for types Lua's `==` doesn't compare by value.
-local function eq(d, a, b)
-  if d.kind == "tuple" then
+local eq
+
+--- Whether every field in `fields` is equal in `a` and `b`.
+local function fields_eq(fields, a, b)
+  for _, f in ipairs(fields) do
+    if not eq(f[3], a[f[1]], b[f[1]]) then return false end
+  end
+  return true
+end
+
+--- Equality by value, for types Lua's `==` doesn't compare that way.
+eq = function(d, a, b)
+  local kind = d.kind
+  if kind == "tuple" then
     for i, item in ipairs(d.items) do
       if not eq(item, a[i], b[i]) then return false end
     end
     return true
-  elseif d.kind == "opt" then
+  elseif kind == "opt" then
     if a == nil or b == nil then return a == b end
     if d.boxed then return eq(d.inner, a[1], b[1]) end
     return eq(d.inner, a, b)
+  elseif d.eq then
+    return d.eq(a, b)
+  elseif kind == "record" then
+    return fields_eq(d.fields, a, b)
+  elseif kind == "sum" then
+    if a.tag ~= b.tag then return false end
+    return fields_eq(d.cases[a.tag].fields or {}, a, b) and fields_eq(d.shared, a, b)
   end
   return a == b
 end
 rt.eq = eq
+
+local cmp
+
+--- Compares field by field: the first that differs decides.
+local function fields_cmp(fields, a, b)
+  for _, f in ipairs(fields) do
+    local c = cmp(f[3], a[f[1]], b[f[1]])
+    if c ~= 0 then return c end
+  end
+  return 0
+end
+
+--- -1, 0 or 1 as `a` comes before, with, or after `b`: `<` and friends on
+--- types Lua can't order itself.
+cmp = function(d, a, b)
+  local kind = d.kind
+  if d.lt then
+    if d.lt(a, b) then return -1 end
+    if d.lt(b, a) then return 1 end
+    return 0
+  elseif kind == "tuple" then
+    for i, item in ipairs(d.items) do
+      local c = cmp(item, a[i], b[i])
+      if c ~= 0 then return c end
+    end
+    return 0
+  elseif kind == "opt" then
+    if a == nil or b == nil then
+      if a == b then return 0 end
+      return a == nil and -1 or 1
+    end
+    if d.boxed then return cmp(d.inner, a[1], b[1]) end
+    return cmp(d.inner, a, b)
+  elseif kind == "record" then
+    return fields_cmp(d.fields, a, b)
+  elseif kind == "sum" then
+    if a.tag ~= b.tag then return a.tag < b.tag and -1 or 1 end
+    local c = fields_cmp(d.cases[a.tag].fields or {}, a, b)
+    if c ~= 0 then return c end
+    return fields_cmp(d.shared, a, b)
+  elseif kind == "int" and d.u64 then
+    if a == b then return 0 end
+    return ult(a, b) and -1 or 1
+  end
+  if a < b then return -1 end
+  if b < a then return 1 end
+  return 0
+end
+rt.cmp = cmp
 
 -- ================================================================ formatting
 
@@ -492,8 +563,14 @@ show = function(d, v, debug)
     local inner = d.boxed and v[1] or v
     if debug then return "some(" .. show(d.inner, inner, true) .. ")" end
     return show(d.inner, inner, false)
+  elseif not debug and d.show then
+    -- A hand-written `show` writes into a buffer (a `Fmt`).
+    local f = {}
+    d.show(v, f)
+    return concat(f)
   elseif kind == "record" then
     -- The debug form reads like construction: `Point(x: 3, y: 4)`, `Meters(5)`.
+    -- A derived `Show` writes the same.
     local parts = {}
     for i, f in ipairs(d.fields) do
       local s = show(f[3], v[f[1]], true)
@@ -507,8 +584,11 @@ show = function(d, v, debug)
       local s = show(f[3], v[f[1]], true)
       parts[#parts + 1] = f[2] and (f[2] .. ": " .. s) or s
     end
-    for _, f in ipairs(d.shared) do
-      parts[#parts + 1] = f[2] .. ": " .. show(f[3], v[f[1]], true)
+    -- Fields every case shares are only in the debug form.
+    if debug then
+      for _, f in ipairs(d.shared) do
+        parts[#parts + 1] = f[2] .. ": " .. show(f[3], v[f[1]], true)
+      end
     end
     if case.fields == nil and #parts == 0 then return case.name end
     return case.name .. "(" .. concat(parts, ", ") .. ")"
@@ -518,6 +598,11 @@ show = function(d, v, debug)
   error("loom internal: no formatter for kind " .. tostring(kind))
 end
 rt.show = show
+
+--- A derived `Show.show`: writes `v`'s own form into `f`.
+function rt.write_show(d, v, f)
+  f[#f + 1] = show(d, v, false)
+end
 
 -- Format specs, as in `{x:>8}`, `{pi:.3}`, `{op:04X}`, `{v:?}`:
 -- [[fill]align][+][#][0][width][.precision][type].
@@ -618,6 +703,10 @@ rt.ext = {}
 
 rt.ext["std.io.print"] = function(x)
   write(show(x[2], x[1], false) .. "\n")
+end
+
+rt.ext["std.fmt.Fmt.put"] = function(f, x)
+  f[#f + 1] = show(x[2], x[1], false)
 end
 
 rt.ext["std.error.unravel"] = function(message)

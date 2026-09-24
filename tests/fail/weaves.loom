@@ -1,0 +1,57 @@
+use std.io.print
+
+weft Shape {
+    fn area(self) -> f64
+    fn name(self) -> str = "shape"
+}
+
+weft Named {
+    fn name(self) -> str
+}
+
+warp Square { side: f64 }
+
+weave Shape into Square {}                  //~ T0113
+
+warp Circle { r: f64 }
+
+weave Shape into Circle {
+    fn area(self) -> i32 = 3                //~ T0114
+    fn volume(self) -> f64 = 0.0            //~ T0114
+}
+
+weave Named into Circle {
+    fn name(self) -> str = "circle"
+}
+
+weave Shape into Circle {                   //~ T0115
+    fn area(self) -> f64 = 3.0
+}
+
+weave Show into bool {}                     //~ T0115
+
+warp Label { text: String }
+
+warp Boxed: Eq { label: Label }             //~ T0108
+
+warp Tagged: Copy { name: String }          //~ T0108
+
+weave Square into Circle {}                 //~ T0111
+
+weft Loud: Named {
+    fn shout(self) -> str = "!"
+}
+
+warp Bell: Loud {}                          //~ T0108
+
+fn main() {
+    let c = Circle(1.0)
+    print(c.name())                         //~ T0116
+    print(Named.name(c))
+    print(Shape.area(Label("x")))           //~ T0108
+    print(Label("x"))                       //~ T0108
+    print("{Label("x")}")                   //~ T0108
+    let same = Label("a") == Label("b")     //~ T0103
+    let before = Circle(1.0) < Circle(2.0)  //~ T0103
+    print(Shape.volume(c))                  //~ T0111
+}

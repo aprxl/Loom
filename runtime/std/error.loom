@@ -3,6 +3,8 @@
 /// Something that went wrong. The default `message` is built from the case
 /// name and payload.
 pub weft Error: Show {
+    /// What went wrong, in words. Derived: the value's `Show` form.
+    #builtin
     fn message(self) -> String
 }
 

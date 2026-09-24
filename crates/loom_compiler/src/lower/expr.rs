@@ -371,11 +371,19 @@ impl Lowerer<'_> {
 
     pub(super) fn compare(&mut self, op: BinaryOp, a: Expr, b: Expr, ty: Ty, span: Span) -> Expr {
         use BinaryOp as B;
-        let structural = matches!(self.tcx().kind(ty), TyKind::Tuple(_) | TyKind::Optional(_));
-        if structural {
+        if self.compares_structurally(ty) {
             let d = self.desc(ty, span);
-            let eq = Expr::rt("eq", vec![d, a, b]);
-            return if op == B::Ne { Expr::Unary("not", Box::new(eq)) } else { eq };
+            if matches!(op, B::Eq | B::Ne) {
+                let eq = Expr::rt("eq", vec![d, a, b]);
+                return if op == B::Ne { Expr::Unary("not", Box::new(eq)) } else { eq };
+            }
+            let lua_op = match op {
+                B::Lt => "<",
+                B::Le => "<=",
+                B::Gt => ">",
+                _ => ">=",
+            };
+            return Expr::bin(lua_op, Expr::rt("cmp", vec![d, a, b]), Expr::Int(0));
         }
         let u64_ = self.int_of(ty).is_some_and(|i| !i.signed && i.bits == 64);
         if u64_ && !matches!(op, B::Eq | B::Ne) {
@@ -397,6 +405,22 @@ impl Lowerer<'_> {
             _ => ">=",
         };
         Expr::bin(lua_op, a, b)
+    }
+
+    /// Whether `==` and `<` on `ty` go through the runtime (`rt.eq`,
+    /// `rt.cmp`) rather than Lua's operators: tuples and optionals, and warps
+    /// that are tables or that write their own `eq` or `lt`.
+    fn compares_structurally(&self, ty: Ty) -> bool {
+        match self.tcx().kind(ty) {
+            TyKind::Tuple(_) | TyKind::Optional(_) => true,
+            TyKind::Adt(def, _) if self.is_string(*def) => false,
+            TyKind::Adt(def, _) => {
+                let unit_only = self.warp(*def).is_some_and(|i| i.unit_only());
+                let custom = self.typed.results.op_fns.get(&ty).is_some_and(|f| f.eq.is_some() || f.lt.is_some());
+                !unit_only || custom
+            }
+            _ => false,
+        }
     }
 
     /// `a and b`, `a or b`: Lua's own when `b` needs no statements.
@@ -523,7 +547,13 @@ impl Lowerer<'_> {
         let p = self.p;
         let def = self.typed.results.instance(info.callee).def;
         let DefKind::Fn(f) = &p.def(def).kind else { return Expr::Nil };
-        let target = if f.abi.is_some() {
+        // Externs, and the methods of warps the runtime implements (`Fmt.put`).
+        let runtime = f.abi.is_some()
+            || (f.body.is_none()
+                && p.def(def).parent.is_some_and(|w| {
+                    matches!(p.def(w).kind, DefKind::Warp(_)) && p.def(w).attrs.iter().any(|a| a.name == "builtin")
+                }));
+        let target = if runtime {
             match self.extern_fn(def, callee.span) {
                 Some(e) => e,
                 None => return Expr::Nil,

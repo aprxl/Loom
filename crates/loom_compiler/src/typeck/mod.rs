@@ -18,8 +18,9 @@
 //! Covered so far: numbers, `bool`, `char`, strings, tuples, functions,
 //! control flow, operators, casts and templates; warps (records, cases,
 //! shared fields), methods, associated functions, UFCS, leading dots,
-//! dot-blocks, case and twill patterns. Everything else is reported with
-//! U0102 ("not implemented yet") rather than guessed at.
+//! dot-blocks, case and twill patterns; wefts and weaves (see `weave.rs`).
+//! Everything else is reported with U0102 ("not implemented yet") rather
+//! than guessed at.
 
 mod call;
 mod expr;
@@ -28,6 +29,7 @@ mod pat;
 #[cfg(test)]
 mod tests;
 mod warp;
+mod weave;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -40,6 +42,7 @@ use crate::hir::{self, DefId, DefKind, Expr, ExprKind, FnRet, HirId, LocalId, Pr
 use crate::ty::{Ty, TyCtx, TyKind};
 use infer::{PendingLit, Var};
 pub use warp::{CaseFieldInfo, CaseInfo, FieldInfo, Key, WarpInfo};
+pub use weave::{Impl, Weaving};
 
 /// The output of type checking.
 #[derive(Debug)]
@@ -98,6 +101,19 @@ pub struct Results {
     pub warps: HashMap<DefId, WarpInfo>,
     /// Every function and constant checked, in the order they were reached.
     pub reachable: Vec<BodyId>,
+    /// Hand-written `Show`, `Eq` and `Ord` methods, which built-in
+    /// operations (`{x}`, `==`, `<`) call through the type's runtime
+    /// description.
+    pub op_fns: HashMap<Ty, OpFns>,
+}
+
+/// The functions behind a type's built-in operations, when they aren't
+/// the derived ones.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct OpFns {
+    pub show: Option<BodyId>,
+    pub eq: Option<BodyId>,
+    pub lt: Option<BodyId>,
 }
 
 impl Results {
@@ -254,9 +270,18 @@ pub struct CasePat {
 /// Type-checks everything reachable from the root module of `p`.
 pub fn check(p: &Program) -> Typed {
     let mut c = Checker::new(p);
+    c.collect_weaves();
     if let Some(root) = p.root {
         for &def in &p.module(root).decls {
             c.queue_def(def);
+        }
+    }
+    // Weaves outside std are checked wherever they are: a hand-written
+    // `show` must be known even when nothing calls it by name.
+    let sites: Vec<DefId> = c.weavings.iter().map(|w| w.site).collect();
+    for site in sites {
+        if !c.is_std_module(p.def(site).module) {
+            c.queue_def(site);
         }
     }
     while let Some(id) = c.queue.pop_front() {
@@ -298,6 +323,13 @@ struct Checker<'p> {
     diags: Vec<Diagnostic>,
     std: Std,
     queue: VecDeque<BodyId>,
+    /// Every weave in the program (see `weave.rs`).
+    weavings: Vec<Weaving>,
+    /// The first weaving of each weft into each type.
+    weave_index: HashMap<(DefId, Ty), usize>,
+    /// Call arguments whose type was already checked, to find the method
+    /// they're passed to (`Show.show(x, …)`).
+    prechecked: HashMap<HirId, Ty>,
     /// Constants whose type is being computed, to catch cycles.
     const_stack: Vec<DefId>,
     /// "Not implemented yet" messages already reported, per definition.
@@ -346,6 +378,9 @@ impl<'p> Checker<'p> {
             diags: Vec::new(),
             std,
             queue: VecDeque::new(),
+            weavings: Vec::new(),
+            weave_index: HashMap::new(),
+            prechecked: HashMap::new(),
             const_stack: Vec::new(),
             unsupported_seen: HashSet::new(),
             vars: Vec::new(),
@@ -440,10 +475,17 @@ impl<'p> Checker<'p> {
                 self.r.reachable.push(id);
                 self.const_ty(inst.def);
             }
-            DefKind::Warp(w) => self.in_body(id, |this| this.check_warp(inst.def, w)),
-            DefKind::Weft(_) | DefKind::Weave(_) => {
-                self.unsupported(d.span, "type-checking wefts and weaves");
+            DefKind::Warp(w) => {
+                self.in_body(id, |this| this.check_warp(inst.def, w));
+                if !self.is_std_module(d.module) && w.generics.is_empty() {
+                    for t in &w.wefts {
+                        self.weft_arg_problem(t);
+                    }
+                    self.check_weaves_at(inst.def);
+                }
             }
+            DefKind::Weave(w) => self.check_weave_item(inst.def, w),
+            DefKind::Weft(w) => self.check_weft(inst.def, w),
             DefKind::Type(_) => {
                 self.unsupported(d.span, "type-checking `type` declarations");
             }
@@ -488,11 +530,82 @@ impl<'p> Checker<'p> {
         }
     }
 
-    /// The warp type a member belongs to, for `Self` and `self`.
+    /// What `Self` means for a member: its warp, or the type its weave
+    /// weaves into.
     fn parent_warp_ty(&mut self, def: DefId) -> Option<Ty> {
         let parent = self.p.def(def).parent?;
-        matches!(self.p.def(parent).kind, DefKind::Warp(_) | DefKind::Pending)
-            .then(|| self.tcx.intern(TyKind::Adt(parent, Vec::new())))
+        match &self.p.def(parent).kind {
+            DefKind::Warp(_) | DefKind::Pending => Some(self.tcx.intern(TyKind::Adt(parent, Vec::new()))),
+            DefKind::Weave(w) if w.generics.is_empty() => {
+                let saved = self.current.replace(parent);
+                let ty = self.lower_ty(&w.target);
+                self.current = saved;
+                Some(ty)
+            }
+            _ => None,
+        }
+    }
+
+    /// A `weave W into T { … }` item.
+    fn check_weave_item(&mut self, def: DefId, w: &hir::WeaveDef) {
+        if !w.generics.is_empty() {
+            self.unsupported(self.p.def(def).span, "generic weaves");
+            return;
+        }
+        if self.weft_arg_problem(&w.weft) {
+            return;
+        }
+        self.check_weaves_at(def);
+    }
+
+    /// Reports a type used where a weft must be, if it isn't one. Returns
+    /// whether there was a problem.
+    fn weft_arg_problem(&mut self, t: &hir::Ty) -> bool {
+        match &t.kind {
+            HirTy::Def { def, args } if matches!(self.p.def(*def).kind, DefKind::Weft(_)) => {
+                if args.is_empty() {
+                    false
+                } else {
+                    self.unsupported(t.span, "generic wefts");
+                    true
+                }
+            }
+            HirTy::Error => true,
+            _ => {
+                let ty = self.lower_ty(t);
+                if !self.tcx.is_error(ty) {
+                    let shown = self.show(ty);
+                    self.error(codes::T0111, t.span, format!("`{shown}` isn't a weft"), "expected a weft here");
+                }
+                true
+            }
+        }
+    }
+
+    /// A weft's own declarations. Its default methods are checked for each
+    /// type that uses them, with `Self` standing for that type.
+    fn check_weft(&mut self, def: DefId, w: &hir::WeftDef) {
+        if !w.generics.is_empty() {
+            self.unsupported(self.p.def(def).span, "generic wefts");
+            return;
+        }
+        for sup in &w.supers {
+            self.weft_arg_problem(sup);
+        }
+        for &member in &w.members {
+            match &self.p.def(member).kind {
+                DefKind::Fn(f) if !f.has_self() => {
+                    self.unsupported(self.p.def(member).span, "weft functions without `self`");
+                }
+                DefKind::Type(_) => {
+                    self.unsupported(self.p.def(member).span, "associated types");
+                }
+                DefKind::Const(_) => {
+                    self.unsupported(self.p.def(member).span, "constants in wefts");
+                }
+                _ => {}
+            }
+        }
     }
 
     fn check_fn(&mut self, id: BodyId, inst: &Instance, f: &hir::FnDef) {
@@ -778,12 +891,6 @@ impl<'p> Checker<'p> {
             }
             (_, TyKind::Optional(inner)) if inner == actual => Some(Coercion::ToOptional),
             (_, TyKind::Any(wefts)) => {
-                // Whether a warp weaves a weft is only known once weaves are
-                // type-checked; until then, say so rather than guess.
-                if self.adt_info(actual).is_some() {
-                    self.unsupported(e.span, "weaving wefts into warps");
-                    return false;
-                }
                 let missing: Vec<DefId> = wefts.iter().copied().filter(|&w| !self.weaves(actual, w)).collect();
                 if let Some(&weft) = missing.first() {
                     let (ty, weft) = (self.show(actual), self.p.def(weft).name.clone());
@@ -820,10 +927,20 @@ impl<'p> Checker<'p> {
         }
     }
 
-    /// Whether `ty` weaves `weft`. For now only the built-in weaves of the
-    /// primitive types and `String` are known.
+    /// Whether `ty` weaves `weft`: built in (the primitive types, `String`,
+    /// tuples and optionals of them), or through a weave.
     fn weaves(&self, ty: Ty, weft: DefId) -> bool {
         let ty = self.resolve(ty);
+        if self.weave_index.contains_key(&(weft, ty)) {
+            return true;
+        }
+        // A warp is `Copy` when all its fields are, whether it says so or not.
+        if Some(weft) == self.std.copy
+            && let TyKind::Adt(def, _) = self.tcx.kind(ty)
+            && let Some(info) = self.r.warps.get(def)
+        {
+            return info.copy;
+        }
         let is_string = |ty: Ty| matches!(self.tcx.kind(ty), TyKind::Adt(d, _) if Some(*d) == self.std.string);
         let kind = self.tcx.kind(ty);
         let numeric = matches!(kind, TyKind::Int(_) | TyKind::Float(_) | TyKind::IntVar(_) | TyKind::FloatVar(_));
@@ -838,7 +955,10 @@ impl<'p> Checker<'p> {
             return self.weaves(*inner, weft);
         }
         if w == self.std.show {
-            scalar || matches!(kind, TyKind::Str) || is_string(ty)
+            scalar
+                || matches!(kind, TyKind::Str)
+                || is_string(ty)
+                || matches!(kind, TyKind::Tuple(items) if !items.is_empty() && all(self, items))
         } else if w == self.std.eq {
             scalar
                 || matches!(kind, TyKind::Str | TyKind::Unit)
@@ -866,9 +986,15 @@ impl<'p> Checker<'p> {
         let ty = self.resolve(ty);
         match self.tcx.kind(ty).clone() {
             TyKind::Tuple(items) => !items.is_empty(),
+            TyKind::Adt(def, _) if self.is_builtin(def) => Some(def) != self.std.string,
             TyKind::Adt(..) => self.adt_info(ty).is_some_and(|i| !i.unit_only()),
             _ => false,
         }
+    }
+
+    /// A warp std declares `#builtin`: the runtime implements it (`String`, `Fmt`).
+    fn is_builtin(&self, def: DefId) -> bool {
+        self.p.def(def).attrs.iter().any(|a| a.name == "builtin")
     }
 
     fn string_ty(&mut self) -> Ty {

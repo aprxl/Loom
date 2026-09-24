@@ -234,6 +234,25 @@ a well-written default method. See [06-compile-time](06-compile-time.md#derive-i
 warp User: Eq, Hash, Show, ToJson { name: String, age: u8 }   // all four come from defaults
 ```
 
+Until compile-time code lands, std's `Show`, `Eq`, `Ord`, `Hash` and
+`Error.message` defaults are built into the compiler (marked `#builtin` in
+std). They behave the way the reflective defaults will:
+
+- **`Show`** writes the debug form, less any fields every case shares:
+  `Point(x: 3, y: 4)`, `Word("let")`, `Red`.
+- **`Eq`**: every field is equal and, for a warp with cases, it's the same
+  case.
+- **`Ord`**: fields compare in order, the first difference decides, and
+  earlier cases come first.
+- **`Error.message`** is the value's `Show` form.
+
+A derived method needs every field to weave the weft too.
+
+**Super-wefts come along.** Weaving a weft means weaving its super-wefts. A
+super-weft the type doesn't weave is derived when every method it has has a
+default, so `warp ParseError: Error` is `Show` too. Otherwise, weaving the
+weft is an error that names the missing super-weft.
+
 ---
 
 ## `through`: delegation instead of inheritance

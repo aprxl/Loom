@@ -1,0 +1,13 @@
+12
+13.5
+circle of area 12
+shape of area 13.5
+3x4.5 rect
+Circle(r: 2.0)
+Circle(r: 2.0) and 3x4.5 rect, total 25.5
+Version(major: 1, minor: 2) < Version(major: 1, minor: 10): true
+true true true false
+true false
+true true Amber
+Word("let") Word("let", line: 3) true false
+(Version(major: 1, minor: 2), Circle(r: 2.0))

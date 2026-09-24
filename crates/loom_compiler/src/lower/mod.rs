@@ -43,7 +43,7 @@ pub struct Bundle {
 
 /// The `std` externs the runtime implements (see `rt.ext` in
 /// `runtime/rt/core.lua`). Calling any other extern is "not implemented yet".
-const EXTERNS: &[&str] = &["std.io.print", "std.error.unravel", "std.error.assert"];
+const EXTERNS: &[&str] = &["std.io.print", "std.error.unravel", "std.error.assert", "std.fmt.Fmt.put"];
 
 /// Lowers a type-checked program. `typed` must have no errors.
 pub fn lower(db: &SourceDb, p: &Program, typed: &Typed) -> Result<Bundle, Vec<Diagnostic>> {
@@ -334,7 +334,17 @@ impl<'a> Lowerer<'a> {
         let d = p.def(def);
         self.cur = id;
         match &d.kind {
-            DefKind::Fn(f) if f.abi.is_some() || f.body.is_none() => {}
+            DefKind::Fn(f) if f.abi.is_some() => {}
+            DefKind::Fn(f) if f.body.is_none() => {
+                // A `#builtin` weft method, for a type that doesn't write its own.
+                let Some(self_ty) = self.typed.results.instance(id).self_ty else { return };
+                let span = d.span;
+                let params: Vec<String> = f.params.iter().map(|param| self.local_name(param.local)).collect();
+                let Some(body) = self.builtin_method(def, self_ty, &params, span) else { return };
+                let func = Expr::Function(params, body);
+                let target = Expr::field(Expr::name("F"), &self.fn_name(id));
+                self.fns.push(Stmt { kind: StmtKind::Assign(vec![target], vec![func]), span: Some(span) });
+            }
             DefKind::Fn(f) => {
                 let span = d.span;
                 let params: Vec<String> = f.params.iter().map(|param| self.local_name(param.local)).collect();
@@ -359,6 +369,29 @@ impl<'a> Lowerer<'a> {
             }
             _ => {}
         }
+    }
+
+    /// The body of a method std leaves to the compiler: a derived `show`,
+    /// `eq`, `lt` or `message`, which work through the type's runtime
+    /// description.
+    fn builtin_method(&mut self, def: DefId, self_ty: Ty, params: &[String], span: Span) -> Option<Vec<Stmt>> {
+        let path = self.p.def_path(def);
+        let d = self.desc(self_ty, span);
+        let arg = |i: usize| Expr::name(params[i].clone());
+        let ret = |e: Expr| vec![Stmt { kind: StmtKind::Return(Some(e)), span: None }];
+        Some(match path.as_str() {
+            "std.fmt.Show.show" => {
+                let call = Expr::rt("write_show", vec![d, arg(0), arg(1)]);
+                vec![Stmt { kind: StmtKind::Call(call), span: None }]
+            }
+            "std.ops.Eq.eq" => ret(Expr::rt("eq", vec![d, arg(0), arg(1)])),
+            "std.ops.Ord.lt" => ret(Expr::bin("<", Expr::rt("cmp", vec![d, arg(0), arg(1)]), Expr::Int(0))),
+            "std.error.Error.message" => ret(Expr::rt("show", vec![d, arg(0), Expr::Bool(false)])),
+            _ => {
+                self.unsupported(span, &format!("deriving `{path}`"));
+                return None;
+            }
+        })
     }
 
     /// Lowers one function body with fresh per-body state.
@@ -394,6 +427,15 @@ impl<'a> Lowerer<'a> {
         }
         for stmt in &self.fns {
             printer.stmt(stmt);
+        }
+        for (i, ty) in descs.keys().enumerate() {
+            let Some(fns) = self.typed.results.op_fns.get(ty) else { continue };
+            for (slot, id) in [("show", fns.show), ("eq", fns.eq), ("lt", fns.lt)] {
+                let Some(id) = id else { continue };
+                let target = Expr::field(Expr::index(Expr::name("T"), Expr::Int(i as i64 + 1)), slot);
+                let value = Expr::field(Expr::name("F"), &self.fn_name(id));
+                printer.stmt(&Stmt { kind: StmtKind::Assign(vec![target], vec![value]), span: None });
+            }
         }
         for stmt in self.const_order() {
             printer.stmt(&stmt);

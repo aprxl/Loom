@@ -1,0 +1,82 @@
+// Wefts and weaves: required and default methods, inline and separate
+// weaves, `Weft.f(x)`, and the wefts built-in operations use.
+
+use std.io.print
+use std.fmt.{Show, Fmt}
+
+weft Shape: Show {
+    fn area(self) -> f64
+    fn name(self) -> str = "shape"
+    fn describe(self) -> String = "{.name()} of area {.area()}"
+}
+
+// Inline: the weft's methods live in the warp's body. Show is derived.
+warp Circle: Shape, Show {
+    r: f64
+
+    fn area(self) -> f64 = 3.0 * .r * .r
+    fn name(self) -> str = "circle"
+}
+
+// Separate: the weaves are written apart from the warp.
+warp Rect { w: f64, h: f64 }
+
+weave Shape into Rect {
+    fn area(self) -> f64 = .w * .h
+}
+
+weave Show into Rect {
+    fn show(self, mut f: Fmt) {
+        f.put(.w)
+        f.put("x")
+        f.put(.h)
+        f.put(" rect")
+    }
+}
+
+// Every weft method is also reachable as `Weft.method(x)`.
+fn total(c: Circle, r: Rect) -> f64 = Shape.area(c) + Shape.area(r)
+
+// Derived Eq and Ord compare field by field, in order.
+warp Version: Eq, Ord, Show { major: u8, minor: u8 }
+
+// A hand-written Eq: equal when they round to the same ten.
+warp Approx { v: i32 }
+
+weave Eq into Approx {
+    fn eq(self, other: Self) -> bool = .v / 10 == other.v / 10
+}
+
+warp Light: Eq, Show {
+    case Red, Amber, Green
+}
+
+warp Token: Show, Eq {
+    line: u32
+    case Word(String)
+    case Num(i64)
+    case End
+}
+
+fn main() {
+    let c = Circle(r: 2.0)
+    let r = Rect(w: 3.0, h: 4.5)
+    print(c.area())
+    print(r.area())
+    print(c.describe())
+    print(r.describe())
+    print(r)
+    print(c)
+    print("{c} and {r}, total {total(c, r)}")
+
+    let v1 = Version(1, 2)
+    let v2 = Version(major: 1, minor: 10)
+    print("{v1} < {v2}: {v1 < v2}")
+    print("{v1 == Version(1, 2)} {v1 != v2} {v2 >= v1} {v2 <= v1}")
+    print("{Approx(11) == Approx(19)} {Approx(11) == Approx(21)}")
+    print("{Light.Red == .Red} {Light.Red != .Green} {Light.Amber}")
+
+    let t = Token.Word("let", line: 3)
+    print("{t} {t:?} {t == Token.Word("let", line: 3)} {t == Token.Num(3, line: 3)}")
+    print((v1, c))
+}

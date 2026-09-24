@@ -82,6 +82,23 @@ caller's table instead, and a whole-value assignment to one goes through
 `rt.overwrite`. `mut` parameters of scalar types (numbers, strings, enums)
 need copy-in/copy-out and aren't implemented yet.
 
+## Weaves
+
+Weave methods are static calls, like any other method. A weft's default
+method becomes one Lua function per type that uses it (`F.name_12_7`, with
+the instance number), checked with `Self` as that type.
+
+`{x}`, `print`, `==` and `<` work through a type's runtime descriptor.
+
+- A warp with a hand-written `show`, `eq` or `lt` has it stored in the
+  descriptor (`T[n].show = F.show_9`). `rt.show`, `rt.eq` and `rt.cmp` call
+  it, at any depth: inside a tuple, an optional, or another warp's field.
+- Without one they work field by field. That's also how the compiler-made
+  (`#builtin`) defaults run.
+
+`Fmt` is a Lua array of strings: `f.put(x)` appends `x`'s shown form, and
+`rt.show` concatenates the array after calling a hand-written `show`.
+
 ## Control flow shapes
 
 - `?` / `mend`: result locals declared before a `do … end`, failures `goto mN_fail`,

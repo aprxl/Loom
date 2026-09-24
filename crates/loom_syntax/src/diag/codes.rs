@@ -83,6 +83,10 @@ codes! {
     T0110 = "can't infer a type";
     T0111 = "not a value of this kind";
     T0112 = "`mut` argument doesn't match its parameter";
+    T0113 = "weave is missing a method";
+    T0114 = "method doesn't match its weft";
+    T0115 = "weave not allowed";
+    T0116 = "ambiguous method";
 
     // P01xx: patterns
     P0101 = "match isn't exhaustive";

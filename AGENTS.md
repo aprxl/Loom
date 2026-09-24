@@ -59,10 +59,14 @@ language through every layer (type checking, lowering to Lua, the runtime,
    methods, associated functions and constants, UFCS, the leading dot,
    dot-blocks, `is`, case and twill patterns with exhaustiveness over cases,
    `mut` parameters of table-backed types, and value semantics for `Copy`
-   warps.
+   warps;
+3. wefts and weaves (in progress): inline and separate weaves, default
+   methods checked per type, derived `Show`/`Eq`/`Ord`, `Weft.f(x)`, and
+   `{x}`, `print`, `==`, `<` through hand-written weave methods.
 
-Next: optionals and errors (`?`, `mend`, `fail`, `some`/`none`), then
-arrays and lists, then wefts and weaves, each through every layer at once.
+Next: `through`, generics (explicit, and wefts as parameter types), and
+`any W`; then optionals and errors (`?`, `mend`, `fail`, `some`/`none`), then
+arrays and lists, each through every layer at once.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and

@@ -1,19 +1,29 @@
 // The wefts behind operators and value semantics.
+//
+// A warp that lists `Eq`, `Ord` or `Hash` in its header without writing the
+// method gets one that works field by field (see 02-types, "Deriving").
 
 /// Values that are copied rather than moved.
 pub weft Copy {}
 
 /// `==` and `!=`.
 pub weft Eq {
+    /// Whether the values are equal. Derived: every field is equal, and for
+    /// a warp with cases, it's the same case.
+    #builtin
     fn eq(self, other: Self) -> bool
 }
 
 /// `<`, `<=`, `>`, `>=`.
 pub weft Ord: Eq {
+    /// Whether `self` comes first. Derived: fields compare in order, the
+    /// first that differs decides, and earlier cases come first.
+    #builtin
     fn lt(self, other: Self) -> bool
 }
 
 pub weft Hash {
+    #builtin
     fn hash(self) -> u64
 }
 
