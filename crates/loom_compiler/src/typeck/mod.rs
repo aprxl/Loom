@@ -37,6 +37,7 @@ mod pat;
 mod seq;
 #[cfg(test)]
 mod tests;
+mod usefulness;
 mod warp;
 mod weave;
 

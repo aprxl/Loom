@@ -7,7 +7,7 @@ use loom_syntax::source::Span;
 
 use super::Checker;
 use super::warp::Key;
-use crate::hir::{Arm, CasePath, FieldPat, Pat, PatKind};
+use crate::hir::{CasePath, FieldPat, Pat, PatKind};
 use crate::ty::{Ty, TyKind};
 
 impl Checker<'_> {
@@ -356,136 +356,6 @@ impl Checker<'_> {
         }
     }
 
-    /// Whether a `match` covers every value. An arm that always matches
-    /// covers everything; otherwise a `bool` needs `true` and `false`, and a
-    /// warp with cases needs each case (with patterns that match anything
-    /// inside it). Integer ranges and twill bit patterns aren't counted yet,
-    /// so those need a catch-all arm.
-    pub(super) fn check_exhaustive(&mut self, arms: &[Arm], ty: Ty, span: Span) {
-        // An arm this checker can't handle yet was already reported, and
-        // judging coverage without it would only add noise.
-        if self.tcx.is_error(ty) || arms.iter().any(|a| !supported(&a.pat)) {
-            return;
-        }
-        let unguarded: Vec<&Arm> = arms.iter().filter(|a| a.guard.is_none()).collect();
-        if unguarded.iter().any(|a| self.irrefutable(&a.pat)) {
-            return;
-        }
-        let ty = self.resolve(ty);
-        if matches!(self.tcx.kind(ty), TyKind::Bool) {
-            let (mut t, mut f) = (false, false);
-            for arm in &unguarded {
-                bool_cover(&arm.pat, &mut t, &mut f);
-            }
-            if t && f {
-                return;
-            }
-        }
-        // `some(x)` and `none`; `ok(x)` and `err(e)`.
-        let (mut first, mut second) = (false, false);
-        for arm in &unguarded {
-            self.wrapper_cover(&arm.pat, &mut first, &mut second);
-        }
-        if first && second {
-            return;
-        }
-        let shown = self.show(ty);
-        // A union is covered by a type test for each of its types.
-        if let TyKind::Union(members) = self.tcx.kind(ty).clone() {
-            let mut tested = Vec::new();
-            for arm in &unguarded {
-                self.types_tested(&arm.pat, &mut tested);
-            }
-            let missing: Vec<String> =
-                members.iter().filter(|m| !tested.contains(m)).map(|&m| format!("`{}`", self.show(m))).collect();
-            if !missing.is_empty() {
-                self.diags.push(
-                    Diagnostic::error(codes::P0101, format!("this `match` doesn't cover every `{shown}`"))
-                        .primary(span, format!("not handled: {}", missing.join(", ")))
-                        .help("add an arm like `x: Type => …` for each, or `_ => …` for everything else"),
-                );
-            }
-            return;
-        }
-        match self.tcx.kind(ty) {
-            TyKind::Optional(_) | TyKind::Result(..) => {
-                let (a, b) = if matches!(self.tcx.kind(ty), TyKind::Optional(_)) {
-                    ("`some(_)`", "`none`")
-                } else {
-                    ("`ok(_)`", "`err(_)`")
-                };
-                let missing: Vec<&str> =
-                    [(first, a), (second, b)].iter().filter(|(c, _)| !c).map(|(_, n)| *n).collect();
-                self.diags.push(
-                    Diagnostic::error(codes::P0101, format!("this `match` doesn't cover every `{shown}`"))
-                        .primary(span, format!("not handled: {}", missing.join(", ")))
-                        .help("add an arm for each, or `_ => …` for everything else"),
-                );
-                return;
-            }
-            _ => {}
-        }
-        if let Some(info) = self.adt_info(ty).filter(|i| i.is_sum()) {
-            let mut covered = Vec::new();
-            for arm in &unguarded {
-                self.cases_covered(&arm.pat, &mut covered);
-            }
-            let missing: Vec<String> =
-                info.cases.iter().filter(|c| !covered.contains(&c.def)).map(|c| format!("`.{}`", c.name)).collect();
-            if missing.is_empty() {
-                return;
-            }
-            self.diags.push(
-                Diagnostic::error(codes::P0101, format!("this `match` doesn't cover every `{shown}`"))
-                    .primary(span, format!("not handled: {}", missing.join(", ")))
-                    .help("add an arm for each, or `_ => …` for everything else"),
-            );
-            return;
-        }
-        self.diags.push(
-            Diagnostic::error(codes::P0101, format!("this `match` doesn't cover every `{shown}`"))
-                .primary(span, "some values aren't handled")
-                .help("add an arm like `_ => …` for everything else"),
-        );
-    }
-
-    /// The types a pattern's type tests cover.
-    fn types_tested(&self, pat: &Pat, out: &mut Vec<crate::ty::Ty>) {
-        match &pat.kind {
-            PatKind::TypeTest { .. } => out.extend(self.b.type_tests.get(&pat.id)),
-            PatKind::Or(alts) => alts.iter().for_each(|a| self.types_tested(a, out)),
-            _ => {}
-        }
-    }
-
-    /// Whether a pattern covers every `some`/`ok` (`first`) or the
-    /// `none`/every `err` (`second`).
-    fn wrapper_cover(&self, pat: &Pat, first: &mut bool, second: &mut bool) {
-        match &pat.kind {
-            PatKind::Some(p) | PatKind::Ok(p) if self.irrefutable(p) => *first = true,
-            PatKind::Err(p) if self.irrefutable(p) => *second = true,
-            PatKind::None => *second = true,
-            PatKind::Or(alts) => alts.iter().for_each(|a| self.wrapper_cover(a, first, second)),
-            _ => {}
-        }
-    }
-
-    /// The cases a pattern matches completely.
-    fn cases_covered(&self, pat: &Pat, out: &mut Vec<crate::hir::DefId>) {
-        match &pat.kind {
-            PatKind::Case { fields, .. } => {
-                let whole = fields.iter().flatten().all(|f| self.irrefutable(&f.pat));
-                if let (Some(case_pat), true) = (self.b.case_pats.get(&pat.id), whole)
-                    && let Some(case) = case_pat.case
-                {
-                    out.push(case);
-                }
-            }
-            PatKind::Or(alts) => alts.iter().for_each(|a| self.cases_covered(a, out)),
-            _ => {}
-        }
-    }
-
     /// Whether `pat` matches every value of its type.
     pub(super) fn irrefutable(&self, pat: &Pat) -> bool {
         match &pat.kind {
@@ -505,32 +375,5 @@ impl Checker<'_> {
             PatKind::Twill { pattern, .. } => pattern.mask == 0,
             _ => false,
         }
-    }
-}
-
-/// Whether this checker understands every part of `pat`.
-fn supported(pat: &Pat) -> bool {
-    match &pat.kind {
-        PatKind::Wild
-        | PatKind::Bind(_)
-        | PatKind::Lit { .. }
-        | PatKind::Range { .. }
-        | PatKind::Twill { .. }
-        | PatKind::TypeTest { .. }
-        | PatKind::Error => true,
-        PatKind::Tuple(pats) | PatKind::Or(pats) => pats.iter().all(supported),
-        PatKind::Some(p) | PatKind::Ok(p) | PatKind::Err(p) => supported(p),
-        PatKind::None => true,
-        PatKind::Case { fields, .. } => fields.iter().flatten().all(|f| supported(&f.pat)),
-        _ => false,
-    }
-}
-
-fn bool_cover(pat: &Pat, t: &mut bool, f: &mut bool) {
-    match &pat.kind {
-        PatKind::Lit { lit: Lit::Bool(true), .. } => *t = true,
-        PatKind::Lit { lit: Lit::Bool(false), .. } => *f = true,
-        PatKind::Or(alts) => alts.iter().for_each(|a| bool_cover(a, t, f)),
-        _ => {}
     }
 }

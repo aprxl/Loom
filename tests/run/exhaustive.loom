@@ -1,0 +1,50 @@
+// Matches that cover everything without a `_`: nested patterns, integer
+// ranges and twill patterns count.
+
+use std.io.print
+
+warp Color {
+    case Red
+    case Green
+    case Blue
+}
+
+fn both(a: bool, b: bool) -> i32 = match (a, b) {
+    (true, true) => 1
+    (true, _) => 2
+    (false, _) => 3
+}
+
+fn maybe(x: ?bool) -> i32 = match x {
+    some(true) => 1
+    some(false) => 2
+    none => 3
+}
+
+fn half(x: u8) -> str = match x {
+    0..=127 => "low"
+    128..=255 => "high"
+}
+
+fn sign(x: i8) -> i32 = match x {
+    ..=-1 => -1
+    0 => 0
+    1.. => 1
+}
+
+fn nibble(x: u4) -> str = match x {
+    0b0xxx => "small"
+    0b1xxx => "big"
+}
+
+fn mix(a: Color, b: Color) -> str = match (a, b) {
+    (.Red, _) | (_, .Red) => "some red"
+    (.Green, .Green) | (.Blue, .Blue) => "same"
+    (.Green, .Blue) | (.Blue, .Green) => "mixed"
+}
+
+fn main() {
+    print("{both(true, false)} {both(false, true)} {maybe(some(false))} {maybe(none)}")
+    print("{half(3)} {half(200)} {sign(-100)} {sign(0)} {sign(9)} {nibble(3)} {nibble(12)}")
+    print("{mix(.Blue, .Red)} {mix(.Blue, .Blue)} {mix(.Green, .Blue)}")
+}

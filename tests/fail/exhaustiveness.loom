@@ -1,3 +1,41 @@
+warp Color {
+    case Red
+    case Green
+    case Blue
+}
+
+warp Shape {
+    case Circle(r: u8)
+    case Rect(w: u8, h: u8)
+}
+
+fn gap(x: u8) -> i32 = match x {        //~ P0101
+    0..128 => 1
+    129..=255 => 2
+}
+
+fn pairs(x: Color, y: Color) -> i32 = match (x, y) {   //~ P0101
+    (.Red, _) => 1
+    (_, .Red) => 2
+    (.Green, .Green) => 3
+}
+
+fn nested(s: Shape) -> i32 = match s {  //~ P0101
+    .Circle(0) => 1
+    .Circle(_) => 2
+    .Rect(w: 0, h: _) => 3
+}
+
+fn inner(x: ?(bool, u8)) -> i32 = match x {   //~ P0101
+    some((true, _)) => 1
+    none => 2
+}
+
+fn guarded(b: bool) -> i32 = match b {  //~ P0101
+    true => 1
+    false if b => 2
+}
+
 fn main() {
     let n = 3
     let word = match n {                //~ P0101
