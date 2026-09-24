@@ -29,7 +29,7 @@ Read your own diff before committing. One logical change per commit.
 |------|------|
 | `crates/loom_syntax` | source files, spans, diagnostics, tokens, lexer, parser, AST, AST printer (no C deps) |
 | `crates/loom_host` | the only owner of the Lua VM (mlua, vendored) |
-| `crates/loom_compiler` | everything semantic: resolve, typeck, analyses, lowering, Lua emission |
+| `crates/loom_compiler` | everything semantic: resolve (`hir`, `modules`), then typeck, analyses, lowering, Lua emission |
 | `crates/loom` | the `loom` binary (build, run, check, test, hidden lua-host) |
 | `runtime/rt` | `loomrt` Lua sources, embedded into the binary |
 | `runtime/std` | the standard library, written in Loom |
@@ -48,9 +48,11 @@ Read your own diff before committing. One logical change per commit.
 
 ## Status
 
-Done: the spec renames, the workspace scaffold, the lexer, and the parser
-(AST, error recovery, `--emit ast`). Next: name resolution and type checking,
-then lowering and run mode. All eight examples lex and parse cleanly; keep it
-that way (`every_example_parses_cleanly` in `crates/loom_syntax`). The same
-goes for every ```` ```loom ```` block in the README and design docs
+Done: the spec renames, the workspace scaffold, the lexer, the parser (AST,
+error recovery, `--emit ast`), and name resolution (HIR, `std` declarations,
+the prelude, `--emit hir`). Next: type checking, then lowering and run mode.
+All eight examples resolve cleanly; keep it that way
+(`every_example_parses_cleanly` in `crates/loom_syntax`,
+`every_example_resolves_cleanly` in `crates/loom_compiler`). The same goes for
+every ```` ```loom ```` block in the README and design docs
 (`every_doc_block_parses`); code v1 deliberately rejects must use a `U` code.

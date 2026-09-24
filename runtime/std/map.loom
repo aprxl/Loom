@@ -1,0 +1,5 @@
+// Hash maps.
+
+/// A map from `K` to `V` that remembers insertion order.
+#builtin
+pub warp Map[K, V]

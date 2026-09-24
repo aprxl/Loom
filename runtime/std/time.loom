@@ -1,0 +1,14 @@
+// Time.
+
+/// A span of time, in nanoseconds.
+pub warp Duration {
+    nanos: u64
+}
+
+pub fn ms(n: u64) -> Duration = Duration(n * 1_000_000)
+pub fn secs(n: u64) -> Duration = Duration(n * 1_000_000_000)
+
+extern "lua" {
+    /// Pauses the current thread for `d`.
+    pub fn sleep(d: Duration)
+}

@@ -1,0 +1,8 @@
+// Numbers.
+
+/// Why text didn't parse as a number.
+pub warp NumError: Error {
+    case Empty
+    case Invalid
+    case Overflow
+}

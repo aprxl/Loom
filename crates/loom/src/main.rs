@@ -1,14 +1,16 @@
 //! The `loom` command-line tool.
 //!
-//! The pipeline currently stops after the parser: `check` lexes and parses
-//! and reports diagnostics, and `build --emit tokens|ast` dumps a stage. The
-//! other commands exist so the CLI has its final shape, and say they aren't
-//! implemented yet.
+//! The pipeline currently stops after name resolution: `check` parses and
+//! resolves a program and reports diagnostics, and `build --emit
+//! tokens|ast|hir` dumps a stage. The other commands exist so the CLI has its
+//! final shape, and say they aren't implemented yet.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
+use loom_compiler::hir::{self, Resolved};
+use loom_compiler::modules::FsLoader;
 use loom_syntax::diag::{ColorMode, emit_to_stderr};
 use loom_syntax::token::dump_tokens;
 use loom_syntax::{Diagnostic, FileId, SourceDb, lex, parse, pretty};
@@ -65,6 +67,8 @@ enum Emit {
     Tokens,
     /// The syntax tree, as S-expressions.
     Ast,
+    /// The program after name resolution, as S-expressions.
+    Hir,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -115,8 +119,8 @@ fn run(cli: Cli) -> ExitCode {
 }
 
 fn not_yet(what: &str) -> ExitCode {
-    eprintln!("error: `{what}` isn't implemented yet: the pipeline currently stops after the parser");
-    eprintln!("  = help: `loom check <file>` parses a file; `loom build <file> --emit tokens|ast` dumps a stage");
+    eprintln!("error: `{what}` isn't implemented yet: the pipeline currently stops after name resolution");
+    eprintln!("  = help: `loom check <file>` checks a file; `loom build <file> --emit tokens|ast|hir` dumps a stage");
     ExitCode::from(EXIT_COMPILE_ERROR)
 }
 
@@ -157,14 +161,29 @@ fn report(
     Err(ExitCode::from(EXIT_COMPILE_ERROR))
 }
 
+/// Parses and resolves the program rooted at `path`. When a file has syntax
+/// errors only those are reported, since resolving broken code would mostly
+/// add noise.
+fn resolve(path: &Path, color: ColorMode) -> Result<(SourceDb, Resolved), ExitCode> {
+    let (mut db, id) = load(path)?;
+    let resolved = hir::resolve(&mut db, id, &FsLoader::new(path));
+    let syntax_errors = resolved.diagnostics.iter().any(|d| d.is_error() && d.code.id.starts_with('S'));
+    if syntax_errors {
+        let syntax: Vec<Diagnostic> =
+            resolved.diagnostics.iter().filter(|d| d.code.id.starts_with('S')).cloned().collect();
+        report(&db, path, &syntax, "parse", color)?;
+    }
+    report(&db, path, &resolved.diagnostics, "resolve", color)?;
+    Ok((db, resolved))
+}
+
 fn check(path: &Path, color: ColorMode) -> ExitCode {
     let run = || -> Result<(), ExitCode> {
-        let (db, id) = load(path)?;
-        let parsed = parse(&db, id);
-        report(&db, path, &parsed.diagnostics, "parse", color)?;
-        let n = parsed.module.items.len();
+        let (_, resolved) = resolve(path, color)?;
+        let p = &resolved.program;
+        let n = p.root.map_or(0, |root| p.module(root).decls.len());
         println!(
-            "{}: {n} item{}, no errors (the pipeline stops after the parser for now)",
+            "{}: {n} item{}, no errors (the pipeline stops after name resolution for now)",
             path.display(),
             if n == 1 { "" } else { "s" }
         );
@@ -187,9 +206,13 @@ fn build(path: &Path, out: Option<&Path>, emit: Option<Emit>, color: ColorMode) 
                 report(&db, path, &parsed.diagnostics, "parse", color)?;
                 pretty::module(&parsed.module)
             }
+            Some(Emit::Hir) => {
+                let (_, resolved) = resolve(path, color)?;
+                let p = &resolved.program;
+                p.root.map(|root| hir::pretty::module(p, root)).unwrap_or_default()
+            }
             None => {
-                let parsed = parse(&db, id);
-                report(&db, path, &parsed.diagnostics, "parse", color)?;
+                resolve(path, color)?;
                 return Err(not_yet("loom build (Lua output)"));
             }
         };

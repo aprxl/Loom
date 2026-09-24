@@ -1,0 +1,8 @@
+// Pseudo-random numbers.
+
+/// A deterministic xoshiro256** generator.
+#builtin
+pub warp Rng {
+    /// A generator that always produces the same sequence for `seed`.
+    pub fn seeded(seed: u64) -> Rng
+}

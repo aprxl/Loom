@@ -1,0 +1,20 @@
+// Files.
+
+pub warp IoError: Error {
+    case NotFound(path: String)
+    case Denied(path: String)
+    case Other(message: String)
+}
+
+/// An open file.
+#builtin
+pub warp File {
+    /// Opens `path` for appending, creating it if needed.
+    pub fn append(path: str) -> File ! IoError
+    pub fn write_line(mut self, line: str) ! IoError
+}
+
+extern "lua" {
+    pub fn read(path: str) -> List[u8] ! IoError
+    pub fn read_text(path: str) -> String ! IoError
+}

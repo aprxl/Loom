@@ -1,0 +1,16 @@
+// Memory: spools and sizes.
+
+/// A region to allocate in. `heap` is the global one.
+pub weft Spool {}
+
+/// A spool that allocates by bumping a pointer and frees everything at once.
+#builtin
+pub warp Arena: Spool {
+    capacity: usize
+
+    /// Frees everything allocated so far.
+    pub fn reset(mut self)
+}
+
+pub fn kib(n: usize) -> usize = n * 1024
+pub fn mib(n: usize) -> usize = n * 1024 * 1024

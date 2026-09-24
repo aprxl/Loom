@@ -210,7 +210,8 @@ fn generic_arg(a: &GenericArg) -> String {
     }
 }
 
-fn lit_str(lit: &Lit) -> String {
+/// A literal as source-like text: `42u8`, `"hi"`, `b"\xff"`.
+pub fn lit_str(lit: &Lit) -> String {
     match lit {
         Lit::Int(i) => match i.suffix {
             Some(s) => format!("{}{s}", i.value),

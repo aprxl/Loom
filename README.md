@@ -272,28 +272,29 @@ examples/
 crates/
   loom_syntax/             source files, spans, diagnostics, the lexer, the parser and AST
   loom_host/               the bundled Lua VM (mlua, vendored, built with clang-cl)
-  loom_compiler/           resolve, typeck, analyses, lowering (not started)
+  loom_compiler/           name resolution so far; then typeck, analyses, lowering
   loom/                    the `loom` command-line tool
 runtime/
   rt/                      loomrt, the Lua runtime every bundle carries
-  std/                     the standard library, in Loom (not started)
+  std/                     the standard library, in Loom (declarations so far)
 tests/                     fixture corpora (see tests/README.md)
 ```
 
-The examples use an imagined `std` (`std.io`, `std.fs`, `std.mem`, …). Where
-they rely on something from `std`, the name should make its purpose clear.
+The examples use `std` (`std.io`, `std.fs`, `std.mem`, …). So far `runtime/std`
+declares what they need, which is enough for their names to resolve; the
+bodies come with type checking and lowering.
 
 ## Status
 
 The language is a design sketch (v0.1). A Loom → Lua 5.4 transpiler is being
 built in `crates/`, following the plan in `design/lua-backend.md`:
 
-- **Done:** the lexer and the parser. `loom check <file>` parses and reports
-  diagnostics; `loom build <file> --emit tokens` or `--emit ast` dumps a
-  stage. All eight examples parse cleanly.
-- **Next:** name resolution and type checking, then lowering and `loom run`.
+- **Done:** the lexer, the parser, and name resolution. `loom check <file>`
+  parses and resolves a program and reports diagnostics; `loom build <file>
+  --emit tokens|ast|hir` dumps a stage. All eight examples resolve cleanly.
+- **Next:** type checking, then lowering and `loom run`.
 
 ```bash
 cargo run -p loom -- check examples/chip8.loom
-cargo run -p loom -- build examples/chip8.loom --emit ast
+cargo run -p loom -- build examples/chip8.loom --emit hir
 ```

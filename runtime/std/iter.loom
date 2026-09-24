@@ -1,0 +1,7 @@
+// Iteration.
+
+/// Something `for` can loop over.
+pub weft Iter {
+    type Item
+    fn next(mut self) -> ?Item
+}

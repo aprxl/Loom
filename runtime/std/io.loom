@@ -1,0 +1,6 @@
+// Console input and output.
+
+extern "lua" {
+    /// Writes `x` and a newline to standard output.
+    pub fn print(x: any Show)
+}

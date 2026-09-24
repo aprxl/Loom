@@ -14,6 +14,7 @@ lua55 = ["loom_host/lua55"]
 [dependencies]
 loom_syntax.workspace = true
 loom_host.workspace = true
+indexmap.workspace = true
 
 [lints]
 workspace = true

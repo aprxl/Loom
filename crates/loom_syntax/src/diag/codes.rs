@@ -52,6 +52,23 @@ codes! {
     S0210 = "missing initializer";
     S0211 = "nesting is too deep";
 
+    // N01xx: names and modules
+    N0101 = "unknown name";
+    N0102 = "unknown module";
+    N0103 = "item is private";
+    N0104 = "name defined twice";
+    N0105 = "not found in module";
+    N0106 = "`self` outside a method";
+    N0107 = "`Self` outside a warp, weft or weave";
+    N0108 = "`break` or `continue` outside a loop";
+    N0109 = "`_` placeholder outside a call argument";
+    N0110 = "import conflicts with another name";
+    N0111 = "expected a type";
+    N0112 = "expected a value";
+    N0113 = "unknown region";
+    N0114 = "`yield` or `pull` outside a shuttle";
+    N0115 = "or-pattern alternatives bind different names";
+
     // U01xx: features the v1 compiler doesn't support (see design/lua-backend.md)
     U0101 = "anonymous warp types aren't supported yet";
 }

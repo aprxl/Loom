@@ -1,0 +1,10 @@
+// Formatting.
+
+/// Something that can be written as text: `print`, `{x}` in templates.
+pub weft Show {
+    fn show(self, mut f: Fmt)
+}
+
+/// Where `show` writes to.
+#builtin
+pub warp Fmt

@@ -1,0 +1,8 @@
+// The terminal.
+
+extern "lua" {
+    /// Turns raw mode on or off: keys arrive immediately and aren't echoed.
+    pub fn raw_mode(on: bool)
+    /// A bit set of the keys in `keymap` that are held down right now.
+    pub fn poll_keys(keymap: str) -> u16
+}

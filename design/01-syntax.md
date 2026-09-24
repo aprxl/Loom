@@ -380,7 +380,18 @@ says so and suggests `.copy()`.
 ## Modules and bolts
 
 - A file is a module, and a directory is a module made of its files.
-- `use std.fs.{File, read}`, `use app.parser as p`.
+- `use std.fs.{File, read}`, `use app.parser as p`. A `use` path starts with
+  `std` or with a module next to the root file (`app/parser.loom`, or
+  `app.loom`). `pub use` re-exports a name.
+- A name is looked up in the enclosing scopes, then the module's own items,
+  then its imports, then the **prelude**. The prelude holds the names nearly
+  every file needs: `String`, `List`, `Map`, `Set`, `Error`, `Missing`,
+  `Show`, `Fmt`, `Copy`, `Eq`, `Ord`, `Hash`, `Integer`, `Iter`, `assert`,
+  `unravel`, `uint` and `int`. Anything a module declares or imports shadows
+  them. Everything else in `std` needs a `use`, like `std.io.print`.
+- `std` itself is always in scope, so `std.io.print("hi")` works without a
+  `use`. So are two names built into the compiler: `target` (facts about the
+  build target, like `target.os`) and `heap` (the global spool).
 - Items are private to their module unless they're marked `pub`. Fields can be
   `pub(get)`, which makes them readable everywhere but writable only inside the module.
 - A package is a **bolt**. Its manifest, `bolt.loom`, is a compile-time

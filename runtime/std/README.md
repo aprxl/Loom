@@ -2,8 +2,11 @@
 
 The Loom standard library, written in Loom (plus `extern "lua"` declarations
 for the primitives that live in `runtime/rt`). Modules are embedded into the
-`loom` binary; set `LOOM_STD_DIR` to load them from disk while developing.
+`loom` binary (the list is in `crates/loom_compiler/src/modules.rs`); set
+`LOOM_STD_DIR` to load them from disk while developing.
 
-Planned modules: prelude, io, fmt, env, fs, mem, num, math, iter, list, map,
-set, string, rand, time, term, sync. Nothing here yet: std starts with the
-M1 milestone, after the parser and type checker exist.
+So far each module declares only what the examples use, which is enough for
+name resolution. `#builtin` marks types and functions the compiler provides
+itself. Bodies arrive with type checking and lowering.
+
+`prelude.loom` lists the names every module sees without a `use`.

@@ -1,0 +1,6 @@
+// Owned text.
+
+/// Owned, growable UTF-8 text. `str` is a view of text; a string literal
+/// converts to `String` wherever one is expected.
+#builtin
+pub warp String

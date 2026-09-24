@@ -7,9 +7,12 @@
 //!   → lower → LIR → lir_verify → luagen → Bundle { lua, source map }
 //! ```
 //!
-//! Only the lexer exists so far (in `loom_syntax`). The modules planned here
-//! are: `session`, `modules`, `hir`, `ty`, `typeck`, `thir`, `consteval`,
-//! `flow`, `patterns`, `lower`, `lir`, `lir_verify` and `luagen`. See
-//! `design/lua-backend.md` for the decisions they implement.
+//! The lexer and parser live in `loom_syntax`. This crate has name
+//! resolution so far ([`hir`], [`modules`]). Still to come: `ty`, `typeck`,
+//! `thir`, `consteval`, `flow`, `patterns`, `lower`, `lir`, `lir_verify` and
+//! `luagen`. See `design/lua-backend.md` for the decisions they implement.
+
+pub mod hir;
+pub mod modules;
 
 pub use loom_syntax as syntax;

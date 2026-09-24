@@ -1,0 +1,22 @@
+// The wefts behind operators and value semantics.
+
+/// Values that are copied rather than moved.
+pub weft Copy {}
+
+/// `==` and `!=`.
+pub weft Eq {
+    fn eq(self, other: Self) -> bool
+}
+
+/// `<`, `<=`, `>`, `>=`.
+pub weft Ord: Eq {
+    fn lt(self, other: Self) -> bool
+}
+
+pub weft Hash {
+    fn hash(self) -> u64
+}
+
+/// Every integer type, `u1` through `i128`.
+#builtin
+pub weft Integer: Ord, Copy, Show {}

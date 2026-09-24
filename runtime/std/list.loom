@@ -1,0 +1,5 @@
+// Growable arrays.
+
+/// A growable array of `T`.
+#builtin
+pub warp List[T]

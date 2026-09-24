@@ -1,0 +1,9 @@
+// Sharing between threads.
+
+/// A value that threads can read and update without locks.
+#builtin
+pub warp Atomic[T]
+
+/// A value that one thread at a time can lock and use.
+#builtin
+pub warp Mutex[T]

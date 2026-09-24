@@ -1,0 +1,5 @@
+// Hash sets.
+
+/// A set of `T` that remembers insertion order.
+#builtin
+pub warp Set[T]

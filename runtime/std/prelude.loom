@@ -1,0 +1,20 @@
+// The prelude: names every module can use without a `use`.
+//
+// A module's own items and imports shadow these.
+
+pub use std.string.String
+pub use std.list.List
+pub use std.map.Map
+pub use std.set.Set
+pub use std.error.{Error, Missing, assert, unravel}
+pub use std.fmt.{Show, Fmt}
+pub use std.ops.{Copy, Eq, Ord, Hash, Integer}
+pub use std.iter.Iter
+
+/// The unsigned integer type with `bits` bits: `uint(12)` is `u12`.
+#builtin
+pub const fn uint(bits: u8) -> type
+
+/// The signed integer type with `bits` bits: `int(24)` is `i24`.
+#builtin
+pub const fn int(bits: u8) -> type

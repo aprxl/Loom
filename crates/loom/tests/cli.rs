@@ -116,3 +116,25 @@ fn unfinished_commands_say_so() {
         assert!(text(&out.stderr).contains("isn't implemented yet"), "{args:?}");
     }
 }
+
+#[test]
+fn emit_hir_prints_resolved_names() {
+    let path =
+        temp_source("hir", "use std.io.print\nfn main() {\n    let x = 1\n    let x = x + 1\n    print(\"{x}\")\n}\n");
+    let out = loom(&["build", path.to_str().expect("utf-8 path"), "--emit", "hir"]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert_eq!(
+        text(&out.stdout),
+        "(fn main() (block (let x#1 1) (let x#2 (+ x#1 1)) (call std.io.print (template {x#2}))))\n"
+    );
+}
+
+#[test]
+fn resolution_errors_exit_with_code_2_and_suggest_imports() {
+    let path = temp_source("unresolved", "fn main() {\n    print(\"hi\")\n}\n");
+    let out = loom(&["check", path.to_str().expect("utf-8 path")]);
+    assert_eq!(out.status.code(), Some(2));
+    let stderr = text(&out.stderr);
+    assert!(stderr.contains("error[N0101]: there's no `print` in scope"), "{stderr}");
+    assert!(stderr.contains("add `use std.io.print`"), "{stderr}");
+}
