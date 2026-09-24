@@ -60,8 +60,37 @@ pub fn run_bundle(bundle: &str, map: Option<&SourceMap>, output: Output) -> Outc
     match result {
         Ok(None) => Outcome::Finished,
         Ok(Some(message)) => Outcome::Failed { message: message.to_string_lossy() },
-        Err(e) => classify(&error_text(&e), map),
+        Err(e) => {
+            let mut outcome = classify(&error_text(&e), map);
+            // Raised inside the runtime (a stream's step, say): the Loom
+            // code that called into it is the nearest frame that has a
+            // location.
+            if let Outcome::Unravel { location: location @ None, .. }
+            | Outcome::Crash { location: location @ None, .. } = &mut outcome
+            {
+                *location = traceback_location(&full_text(&e), map);
+            }
+            outcome
+        }
     }
+}
+
+/// The whole text of a Lua error, traceback included.
+fn full_text(e: &mlua::Error) -> String {
+    match e {
+        mlua::Error::RuntimeError(message) => message.clone(),
+        mlua::Error::CallbackError { cause, traceback } => format!("{}\n{traceback}", full_text(cause)),
+        other => other.to_string(),
+    }
+}
+
+/// The first frame of a Lua traceback that maps to Loom code.
+fn traceback_location(text: &str, map: Option<&SourceMap>) -> Option<Location> {
+    let (_, trace) = text.split_once("stack traceback:")?;
+    trace.lines().find_map(|line| {
+        let (n, _) = line.trim().strip_prefix("bundle:")?.split_once(':')?;
+        map?.locate(n.parse().ok()?)
+    })
 }
 
 fn install_host(lua: &Lua, output: Output) -> mlua::Result<()> {
