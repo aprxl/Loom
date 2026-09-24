@@ -77,7 +77,8 @@ impl Checker<'_> {
         Some((method, sig))
     }
 
-    /// `x is b: T`, where `x` is an `any` value: whether it holds a `T`.
+    /// `x is b: T`, where `x` is an `any` value or a union: whether it holds
+    /// a `T`.
     pub(super) fn check_type_test(&mut self, pat: &Pat, local: hir::LocalId, t: &hir::Ty, scrutinee: Ty) {
         let tested = self.lower_ty(t);
         self.b.local_ty.insert(local, tested);
@@ -85,12 +86,24 @@ impl Checker<'_> {
         if self.tcx.is_error(tested) || self.tcx.is_error(scrutinee) {
             return;
         }
+        if let TyKind::Union(members) = self.tcx.kind(scrutinee).clone() {
+            if !members.contains(&tested) {
+                let (shown, union) = (self.show(tested), self.show(scrutinee));
+                self.diags.push(
+                    Diagnostic::error(codes::T0101, format!("`{shown}` isn't one of `{union}`"))
+                        .primary(t.span, "so this can never match"),
+                );
+                return;
+            }
+            self.b.type_tests.insert(pat.id, tested);
+            return;
+        }
         let TyKind::Any(wefts) = self.tcx.kind(scrutinee).clone() else {
             let shown = self.show(scrutinee);
             self.error(
                 codes::T0101,
                 pat.span,
-                format!("a type test needs an `any` value, and this is `{shown}`"),
+                format!("a type test needs an `any` value or a union, and this is `{shown}`"),
                 "its type is already known",
             );
             return;

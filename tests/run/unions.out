@@ -1,0 +1,9 @@
+7
+no such file: /nope
+  shown as-is: NotFound(path: "/nope")
+0
+bo may not
+  shown as-is: Denied(user: "bo")
+0
+7
+true false

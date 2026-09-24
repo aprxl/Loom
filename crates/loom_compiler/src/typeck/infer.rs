@@ -79,6 +79,10 @@ impl Checker<'_> {
                 TyKind::Fn(params.into_iter().map(|t| self.deep_resolve(t)).collect(), self.deep_resolve(ret))
             }
             TyKind::Adt(def, args) => TyKind::Adt(def, args.into_iter().map(|t| self.deep_resolve(t)).collect()),
+            TyKind::Union(items) => {
+                let items: Vec<Ty> = items.into_iter().map(|t| self.deep_resolve(t)).collect();
+                return self.tcx.union(items);
+            }
             _ => return ty,
         };
         self.tcx.intern(kind)
@@ -161,7 +165,7 @@ impl Checker<'_> {
             TyKind::Fn(params, ret) => {
                 params.iter().any(|&t| self.mentions_var(t, var)) || self.mentions_var(*ret, var)
             }
-            TyKind::Adt(_, args) => args.iter().any(|&t| self.mentions_var(t, var)),
+            TyKind::Adt(_, args) | TyKind::Union(args) => args.iter().any(|&t| self.mentions_var(t, var)),
             _ => false,
         }
     }
@@ -175,7 +179,7 @@ impl Checker<'_> {
             TyKind::Optional(t) | TyKind::Range(t) => self.has_vars(*t),
             TyKind::Result(t, e) => self.has_vars(*t) || self.has_vars(*e),
             TyKind::Fn(params, ret) => params.iter().any(|&t| self.has_vars(t)) || self.has_vars(*ret),
-            TyKind::Adt(_, args) => args.iter().any(|&t| self.has_vars(t)),
+            TyKind::Adt(_, args) | TyKind::Union(args) => args.iter().any(|&t| self.has_vars(t)),
             _ => false,
         }
     }

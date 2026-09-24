@@ -572,7 +572,9 @@ show = function(d, v, debug)
     return "(" .. concat(parts, ", ") .. ")"
   elseif kind == "opt" then
     if v == nil then return "none" end
-    local inner = d.boxed and v[1] or v
+    -- Not `d.boxed and v[1] or v`: v[1] can be nil (`some(none)`).
+    local inner = v
+    if d.boxed then inner = v[1] end
     if debug then return "some(" .. show(d.inner, inner, true) .. ")" end
     return show(d.inner, inner, false)
   elseif not debug and d.show then

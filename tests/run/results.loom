@@ -1,0 +1,107 @@
+// Results: `fail`, `?` out of a function, error conversions, `mend e =>`,
+// and matching on `ok`/`err`.
+
+use std.io.print
+
+warp AgeError: Error, Show {
+    case Negative
+    case TooOld(i32)
+}
+
+fn check(age: i32) -> u8 ! AgeError {
+    if age < 0 { fail .Negative }             // a leading dot: a case of the error type
+    age as? u8 mend fail .TooOld(age)         // `mend` unwraps the optional, or fails
+}
+
+warp ParseError: Show {
+    case Empty
+    case NotADigit(char)
+}
+
+fn digit(c: char) -> u8 ! ParseError {
+    if c < '0' or c > '9' { fail .NotADigit(c) }
+    (c as u32 - '0' as u32) as u8
+}
+
+// Unions widen: each `?` passes its own error out.
+fn older(age: i32, c: char) -> u8 ! (AgeError | ParseError) {
+    let a = check(age)?
+    let d = digit(c)?
+    a +| d
+}
+
+// A `from` case absorbs another error type.
+warp AppError: Error {
+    case Age(from AgeError)
+    case Bad(String)
+}
+
+fn admit(age: i32) -> String ! AppError {
+    let a = check(age)?                       // an AgeError becomes AppError.Age
+    if a < 18 { fail .Bad("too young: {a}") }
+    "welcome, {a}"
+}
+
+// `any Error` takes any error.
+fn anything(age: i32) -> u8 ! any Error {
+    check(age)?
+}
+
+// No success value: `! E`.
+fn validate(age: i32) ! AgeError {
+    check(age)?
+}
+
+fn show(r: u8 ! AgeError) -> String = match r {
+    ok(0) => "zero"
+    ok(n) => "ok {n}"
+    err(.Negative) => "negative"
+    err(e) => "error {e}"
+}
+
+fn main() {
+    print(show(check(30)))
+    print(show(check(-5)))
+    print(show(check(300)))
+    print(show(check(0)))
+
+    print(older(20, '5') mend 0)
+    print(older(20, 'x') mend e => {
+        print("  failed with {e}")
+        0
+    })
+    print(older(-1, '5') mend 7)
+
+    print(admit(30) mend e => "refused: {e}")
+    print(admit(10) mend e => "refused: {e}")
+    print(admit(-3) mend e => "refused: {e}")
+
+    print(anything(400) mend e => 0)
+    let r = validate(-1)
+    print("{r is ok(_)} {r is err(.Negative)} {validate(5) is ok(())}")
+
+    // A try block collects every error that can reach its `mend`.
+    let total = {
+        let a = check(40)?
+        let b = digit('7')?
+        let c = half(a)?
+        c + b
+    } mend e => {
+        print("  gave up: {e}")
+        0
+    }
+    print(total)
+    let failed = {
+        let a = check(41)?
+        half(a)?
+    } mend e => {
+        print("  gave up: {e}")
+        0
+    }
+    print(failed)
+    let x: u8 ! AgeError = err(.Negative)
+    let y: u8 ! AgeError = ok(3)
+    print("{show(x)} {show(y)}")
+}
+
+fn half(n: u8) -> ?u8 = if n % 2 == 0 { n / 2 } else { none }

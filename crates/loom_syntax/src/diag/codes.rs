@@ -87,6 +87,7 @@ codes! {
     T0114 = "method doesn't match its weft";
     T0115 = "weave not allowed";
     T0116 = "ambiguous method";
+    T0117 = "not a format spec";
 
     // P01xx: patterns
     P0101 = "match isn't exhaustive";

@@ -11,6 +11,36 @@ use super::{Checker, Coercion, LoopCtx};
 use crate::hir::{Block, DefKind, Expr, ExprKind, StmtKind, TemplatePart};
 use crate::ty::{Ty, TyKind};
 
+/// Whether `s` is a format spec: `[[fill]align][+][#][0][width][.precision][type]`,
+/// as `rt.fmt` reads it.
+fn valid_spec(s: &str) -> bool {
+    let chars: Vec<char> = s.chars().collect();
+    let align = |c: char| matches!(c, '<' | '>' | '^');
+    let mut i = match chars.as_slice() {
+        [_, a, ..] if align(*a) => 2,
+        [a, ..] if align(*a) => 1,
+        _ => 0,
+    };
+    for flag in ['+', '#', '0'] {
+        if chars.get(i) == Some(&flag) {
+            i += 1;
+        }
+    }
+    while chars.get(i).is_some_and(|c| c.is_ascii_digit()) {
+        i += 1;
+    }
+    if chars.get(i) == Some(&'.') {
+        i += 1;
+        while chars.get(i).is_some_and(|c| c.is_ascii_digit()) {
+            i += 1;
+        }
+    }
+    if chars.get(i).is_some_and(|c| matches!(c, '?' | 'x' | 'X' | 'o' | 'b')) {
+        i += 1;
+    }
+    i == chars.len()
+}
+
 /// What an operator needs from its operand type.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Operand {
@@ -35,6 +65,17 @@ impl Checker<'_> {
                 for part in parts {
                     if let TemplatePart::Interp { expr, spec } = part {
                         let ty = self.check_expr(expr, None);
+                        if let Some(spec) = spec.as_deref()
+                            && !valid_spec(spec)
+                        {
+                            self.diags.push(
+                                Diagnostic::error(codes::T0117, format!("`{spec}` isn't a format spec"))
+                                    .primary(expr.span, "what's after the `:` is read as a format spec")
+                                    .help(
+                                        "a `:` inside `{…}` starts one: wrap the expression in parentheses to use it",
+                                    ),
+                            );
+                        }
                         let debug = spec.as_deref().is_some_and(|s| s.contains('?'));
                         if !debug
                             && !self.tcx.is_lenient(ty)
@@ -147,7 +188,7 @@ impl Checker<'_> {
                 }
                 self.tcx.never
             }
-            ExprKind::Fail(_) => self.unsupported(span, "`fail`"),
+            ExprKind::Fail(value) => self.check_fail(e, value),
             ExprKind::Yield { .. } | ExprKind::Pull => self.unsupported(span, "shuttles"),
             ExprKind::Unsafe { .. } => self.unsupported(span, "`unsafe` blocks"),
             ExprKind::Const(_) => self.unsupported(span, "compile-time code"),
@@ -157,7 +198,8 @@ impl Checker<'_> {
             ExprKind::Index { .. } => self.unsupported(span, "indexing"),
             ExprKind::Field { base, field } => self.check_field(e, base, field),
             ExprKind::ConstField { .. } => self.unsupported(span, "compile-time field access"),
-            ExprKind::Try(_) | ExprKind::Mend { .. } => self.unsupported(span, "`?` and `mend`"),
+            ExprKind::Try(inner) => self.check_try(e, inner),
+            ExprKind::Mend { expr, binding, handler } => self.check_mend(e, expr, *binding, handler),
             ExprKind::Deref(_) => self.unsupported(span, "spool pointers"),
             ExprKind::DotBlock { subject, body } => {
                 // A changeable place is edited in place, and the block's
@@ -346,6 +388,18 @@ impl Checker<'_> {
                         self.b.coercions.insert(tail.id, Coercion::Discard);
                     }
                     self.tcx.unit
+                }
+                // `() ! E` takes a result, and throws away any other value.
+                Some(t) if matches!(self.tcx.kind(self.resolve(t)), TyKind::Result(ok, _) if *ok == self.tcx.unit) => {
+                    let ty = self.check_expr(tail, Some(t));
+                    let r = self.resolve(ty);
+                    if matches!(self.tcx.kind(r), TyKind::Result(..)) || r == self.tcx.unit || self.tcx.is_lenient(r) {
+                        self.coerce(tail, ty, t);
+                        t
+                    } else {
+                        self.b.coercions.insert(tail.id, Coercion::Discard);
+                        self.tcx.unit
+                    }
                 }
                 Some(t) => self.check_coerce(tail, t),
                 None => self.check_expr(tail, None),
@@ -641,9 +695,10 @@ impl Checker<'_> {
     /// a wider one: `u8_value < 1000u16` compares as `u16`.
     fn unify_operands(&mut self, operands: &[&Expr]) -> Ty {
         // A leading dot needs a type to look in: `light == .Red` finds
-        // `.Red` in the other operand's type, so it's checked last.
+        // `.Red` in the other operand's type, so it's checked last. So does
+        // `none`, which needs to know which optional it is.
         let leading = |e: &Expr| match &e.kind {
-            ExprKind::LeadingDot(_) => true,
+            ExprKind::LeadingDot(_) | ExprKind::Lit(Lit::None) => true,
             ExprKind::Call { callee, .. } => matches!(callee.kind, ExprKind::LeadingDot(_)),
             _ => false,
         };

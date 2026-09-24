@@ -297,13 +297,14 @@ built in `crates/`, following the plan in `design/lua-backend.md`:
   warps: records and cases, methods, UFCS, the leading dot, dot-blocks, case
   and twill patterns, with value semantics; and wefts and weaves, with
   default methods, derived `Show`, `Eq` and `Ord`, and `through`; and
-  generics, checked and compiled per instance; and `any W` with dynamic
-  dispatch and type tests. `loom run <file>` runs a program;
+  generics, checked and compiled per instance; `any W` with dynamic
+  dispatch and type tests; and optionals and errors: `?`, `mend`, `fail`,
+  unions, and `main ! E`. `loom run <file>` runs a program;
   `loom build <file>` writes the Lua; `--emit tokens|ast|hir|lua` dumps a
   stage. The examples use more than this; the compiler says so rather than
   guessing.
-- **Next:** optionals and errors, then arrays and lists, one slice at a time
-  through every layer.
+- **Next:** arrays and lists, then strings and std methods, one slice at a
+  time through every layer.
 
 ```bash
 cargo run -p loom -- run tests/run/fizzbuzz.loom

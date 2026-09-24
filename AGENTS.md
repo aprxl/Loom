@@ -68,10 +68,14 @@ language through every layer (type checking, lowering to Lua, the runtime,
    inferred or explicit arguments, generic warps and their methods, generic
    weaves, and wefts as parameter types (implicit generics);
 5. `any W`: dynamic dispatch through vtables, type tests (`w is b: Button`),
-   and `any` of more wefts passing as `any` of fewer.
+   and `any` of more wefts passing as `any` of fewer;
+6. optionals and errors: `?` (to the nearest `mend`, or out of the
+   function), `mend` and `mend e =>`, `fail`, `some`/`none`/`ok`/`err` as
+   values and patterns, union types, error conversions (unions, `from`
+   cases, `any Error`), and `main ! E`.
 
-Next: optionals and errors (`?`, `mend`, `fail`, `some`/`none`), then
-arrays and lists, each through every layer at once.
+Next: arrays and lists, then strings and std methods, each through every
+layer at once.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and

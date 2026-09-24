@@ -45,7 +45,9 @@ literal braces. An interpolated string is a **template**. It allocates a
 `String` only when it's stored somewhere that needs one. If you pass it
 straight to `print`, a `Fmt`, or a `String.push_str`, it streams without a
 temporary buffer. Format specs look like Python's: `{x:>8}`, `{pi:.3}`,
-`{op:04X}`, `{val:?}` (debug form).
+`{op:04X}`, `{val:?}` (debug form). A `:` inside the braces always starts
+the spec, so an expression with a `:` of its own goes in parentheses:
+`{(x is n: Num)}`.
 
 Multi-line `"""` strings strip the indentation shared by all their lines.
 

@@ -53,7 +53,7 @@ impl Lowerer<'_> {
             TyKind::Adt(def, _) if self.is_string(*def) => false,
             // Copy-ness depends on a generic warp's arguments.
             TyKind::Adt(..) => self.typed.results.adts.get(&ty).is_some_and(|w| w.copy),
-            TyKind::Fn(..) | TyKind::Any(_) => false,
+            TyKind::Fn(..) | TyKind::Any(_) | TyKind::Union(_) => false,
             _ => true,
         }
     }
@@ -64,12 +64,13 @@ impl Lowerer<'_> {
             TyKind::Tuple(items) => !items.is_empty(),
             TyKind::Optional(t) => self.is_table(*t),
             TyKind::Adt(def, _) => self.warp(*def).is_some_and(|w| !w.unit_only()),
+            TyKind::Any(_) | TyKind::Union(_) | TyKind::Result(..) => true,
             _ => false,
         }
     }
 
     /// Whether `e` names a place: a variable, or a field of one.
-    fn is_place(&self, e: &hir::Expr) -> bool {
+    pub(super) fn is_place(&self, e: &hir::Expr) -> bool {
         match &e.kind {
             ExprKind::Local(_) => true,
             ExprKind::Field { base, .. } => self.is_place(base),
@@ -286,6 +287,9 @@ impl Lowerer<'_> {
     /// Binds the names of a pattern that matched `v`: as new locals, or (for
     /// `is`, whose locals are declared up front) by assignment.
     pub(super) fn bind_pat(&mut self, pat: &hir::Pat, v: &Expr, declare: bool) {
+        if self.bind_wrapper(pat, v, declare) {
+            return;
+        }
         let bind = |this: &mut Self, l: LocalId, value: Expr| {
             let name = this.local_name(l);
             if declare {

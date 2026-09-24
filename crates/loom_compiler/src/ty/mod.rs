@@ -48,6 +48,9 @@ pub enum TyKind {
     Adt(DefId, Vec<Ty>),
     /// `any W`: some type that weaves every weft listed.
     Any(Vec<DefId>),
+    /// `A | B`: a value of one of these types. Always two or more members,
+    /// sorted, none of them unions themselves (see [`TyCtx::union`]).
+    Union(Vec<Ty>),
     /// An integer literal's type while it's still being inferred (`{integer}`).
     /// It becomes whatever integer (or float) type it meets first, and `i32`
     /// if it meets none by the end of the function.
@@ -141,6 +144,25 @@ impl TyCtx {
         self.intern(TyKind::Optional(ty))
     }
 
+    /// The union of `members`: nested unions are flattened and duplicates
+    /// dropped, and a union of one type is that type.
+    pub fn union(&mut self, members: impl IntoIterator<Item = Ty>) -> Ty {
+        let mut flat: Vec<Ty> = Vec::new();
+        for ty in members {
+            match self.kind(ty) {
+                TyKind::Union(items) => flat.extend(items.iter().copied()),
+                _ => flat.push(ty),
+            }
+        }
+        flat.sort();
+        flat.dedup();
+        match flat.len() {
+            0 => self.never,
+            1 => flat[0],
+            _ => self.intern(TyKind::Union(flat)),
+        }
+    }
+
     pub fn as_int(&self, ty: Ty) -> Option<IntTy> {
         match self.kind(ty) {
             TyKind::Int(i) => Some(*i),
@@ -190,6 +212,10 @@ impl TyCtx {
                 TyKind::Fn(params.into_iter().map(|t| self.subst(t, map)).collect(), self.subst(ret, map))
             }
             TyKind::Adt(def, args) => TyKind::Adt(def, args.into_iter().map(|t| self.subst(t, map)).collect()),
+            TyKind::Union(items) => {
+                let items: Vec<Ty> = items.into_iter().map(|t| self.subst(t, map)).collect();
+                return self.union(items);
+            }
             _ => return ty,
         };
         self.intern(kind)
@@ -203,7 +229,7 @@ impl TyCtx {
             TyKind::Optional(t) | TyKind::Range(t) => self.has_params(*t),
             TyKind::Result(t, e) => self.has_params(*t) || self.has_params(*e),
             TyKind::Fn(params, ret) => params.iter().any(|&t| self.has_params(t)) || self.has_params(*ret),
-            TyKind::Adt(_, args) => args.iter().any(|&t| self.has_params(t)),
+            TyKind::Adt(_, args) | TyKind::Union(args) => args.iter().any(|&t| self.has_params(t)),
             _ => false,
         }
     }
@@ -243,6 +269,10 @@ impl TyCtx {
             TyKind::Any(wefts) => {
                 let names: Vec<String> = wefts.iter().map(|w| p.def(*w).name.clone()).collect();
                 format!("any {}", names.join(" + "))
+            }
+            TyKind::Union(items) => {
+                let items: Vec<String> = items.iter().map(|t| self.display(p, *t)).collect();
+                items.join(" | ")
             }
             TyKind::IntVar(_) => "{integer}".into(),
             TyKind::FloatVar(_) => "{float}".into(),

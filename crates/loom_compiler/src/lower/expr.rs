@@ -84,6 +84,10 @@ impl Lowerer<'_> {
                 let vt = self.vtable(self.ty_of(e), wefts, e.span);
                 Expr::rt("any", vec![vt, v])
             }
+            Coercion::ToUnion => {
+                let vt = self.vtable(self.ty_of(e), Vec::new(), e.span);
+                Expr::rt("any", vec![vt, v])
+            }
         }
     }
 
@@ -162,8 +166,19 @@ impl Lowerer<'_> {
                 let items: Vec<&hir::Expr> = items.iter().collect();
                 Expr::Table(self.lower_owned_operands(&items))
             }
-            ExprKind::Block(_) | ExprKind::If { .. } | ExprKind::Match { .. } | ExprKind::Loop { .. } => {
-                self.via_temp(e)
+            ExprKind::Block(_)
+            | ExprKind::If { .. }
+            | ExprKind::Match { .. }
+            | ExprKind::Loop { .. }
+            | ExprKind::Mend { .. } => self.via_temp(e),
+            ExprKind::Try(inner) => self.lower_try(e, inner),
+            ExprKind::Fail(value) => {
+                self.lower_fail(e, value);
+                Expr::Nil
+            }
+            ExprKind::Call { callee, args } if matches!(callee.kind, ExprKind::BuiltinCase(_)) => {
+                let ExprKind::BuiltinCase(kw) = callee.kind else { unreachable!() };
+                self.builtin_case(e, kw, args)
             }
             ExprKind::For { .. } | ExprKind::While { .. } | ExprKind::Break { .. } | ExprKind::Continue { .. } => {
                 self.lower_control(e, &Dest::Discard);
@@ -677,12 +692,16 @@ impl Lowerer<'_> {
                 | ExprKind::Continue { .. }
                 | ExprKind::Return(_)
                 | ExprKind::Assign { .. }
-        );
+        ) || Self::is_fallible_control(e);
         if control && !has_coercion {
             let saved = self.span;
             if matches!(
                 e.kind,
-                ExprKind::Break { .. } | ExprKind::Continue { .. } | ExprKind::Return(_) | ExprKind::Assign { .. }
+                ExprKind::Break { .. }
+                    | ExprKind::Continue { .. }
+                    | ExprKind::Return(_)
+                    | ExprKind::Assign { .. }
+                    | ExprKind::Fail(_)
             ) {
                 self.span = Some(e.span);
             }
@@ -697,7 +716,7 @@ impl Lowerer<'_> {
         self.deliver(v, dest);
     }
 
-    fn deliver(&mut self, v: Expr, dest: &Dest) {
+    pub(super) fn deliver(&mut self, v: Expr, dest: &Dest) {
         match dest {
             Dest::Discard => match v {
                 Expr::Call(..) => self.push(StmtKind::Call(v)),
@@ -767,6 +786,8 @@ impl Lowerer<'_> {
                 None => self.push(StmtKind::Return(None)),
             },
             ExprKind::Assign { target, op, value } => self.assign(target, *op, value),
+            ExprKind::Mend { expr, handler, .. } => self.mend_into(e, expr, handler, dest),
+            ExprKind::Fail(value) => self.lower_fail(e, value),
             _ => {
                 let v = self.lower_expr(e);
                 self.deliver(v, dest);
@@ -1055,6 +1076,9 @@ impl Lowerer<'_> {
     /// The condition under which `pat` matches `v`, or `None` if it always does.
     pub(super) fn pat_test(&mut self, pat: &hir::Pat, v: &Expr, ty: Ty) -> Option<Expr> {
         if let Some(test) = self.warp_pat_test(pat, v, ty) {
+            return test;
+        }
+        if let Some(test) = self.wrapper_pat_test(pat, v, ty) {
             return test;
         }
         match &pat.kind {

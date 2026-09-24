@@ -65,6 +65,8 @@ SourceDb → lex → Tokens → parse → AST → resolve/desugar → HIR
     temporaries (`local r, t = f(p.x); p.x = t`), because Lua's multiple
     assignment has no defined evaluation order.
 - Fallible functions return `true, v` or `false, e`, followed by copy-outs.
+  *For now* a result is always the table `{true, v}` / `{false, e}`, in
+  returns too: two slots are an optimization for later.
 - Multi-value calls only appear in `local … = call` and `return call`.
 
 ## Copy points
@@ -125,7 +127,12 @@ compares `vt.d` with `Button`'s descriptor, which is unique per type. An
 ## Control flow shapes
 
 - `?` / `mend`: result locals declared before a `do … end`, failures `goto mN_fail`,
-  success `goto mN_done`. Labels are unique per function.
+  success `goto mN_done`. Labels are unique per function. The handler is its
+  own `do … end`, so no `goto` jumps into a local's scope (see
+  `lower/fallible.rs`). A `?` with no `mend` around it returns `nil` (an
+  optional) or `{false, e}`, with `e` converted to the function's error type.
+- Union values are boxed like `any` values, `{v, vt}`, with a vtable that only
+  holds the type's descriptor: type tests and printing work the same way.
 - `continue`: `while c do do BODY end ::cN:: end`.
 - Labeled break: `goto bN` with the label right after the outer loop.
 - Never `repeat … until` (its condition sees body locals).
@@ -179,7 +186,9 @@ location through the map and prints a rustc-style report.
 | 130 | interrupted (Ctrl-C) |
 | n | `process.exit(n)` |
 
-Implemented so far: 0, 2, 70 and 101. Still to come: `main ! E` (1), Ctrl-C
+`main ! E` shows its error (`error: …` on stderr) and exits with 1.
+
+Implemented so far: 0, 1, 2, 70 and 101. Still to come: Ctrl-C
 (130), `process.exit`, an instruction budget, and `--lua PATH` to run a bundle
 in an external interpreter.
 

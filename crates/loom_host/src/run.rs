@@ -35,6 +35,10 @@ pub enum Outcome {
         message: String,
         location: Option<Location>,
     },
+    /// `main ! E` returned an error, shown here.
+    Failed {
+        message: String,
+    },
     /// A Lua error that isn't an unravel: a bug in Loom itself.
     Crash {
         message: String,
@@ -47,13 +51,15 @@ pub fn run_bundle(bundle: &str, map: Option<&SourceMap>, output: Output) -> Outc
     let lua = Lua::new();
     let result = install_host(&lua, output.clone()).and_then(|()| {
         let main: Function = lua.load(bundle).set_name("=bundle").eval()?;
-        main.call::<()>(())
+        // `main ! E` returns its error's text when it fails.
+        main.call::<Option<mlua::String>>(())
     });
     if let Output::Stdout = output {
         let _ = std::io::stdout().flush();
     }
     match result {
-        Ok(()) => Outcome::Finished,
+        Ok(None) => Outcome::Finished,
+        Ok(Some(message)) => Outcome::Failed { message: message.to_string_lossy() },
         Err(e) => classify(&error_text(&e), map),
     }
 }

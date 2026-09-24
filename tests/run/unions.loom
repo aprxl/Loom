@@ -1,0 +1,35 @@
+// Unions: a value of one of several types, taken apart with type tests.
+
+use std.io.print
+
+warp NotFound: Show { path: String }
+warp Denied: Show { user: String }
+
+fn open(path: str, user: str) -> u32 ! (NotFound | Denied) {
+    if path == "/secret" and user != "root" { fail Denied(user: "{user}") }
+    if path != "/etc" and path != "/secret" { fail NotFound(path: "{path}") }
+    7
+}
+
+fn explain(e: NotFound | Denied) -> String = match e {
+    n: NotFound => "no such file: {n.path}"
+    d: Denied => "{d.user} may not"
+}
+
+fn try_open(path: str, user: str) {
+    let r = open(path, user) mend e => {
+        print(explain(e))
+        print("  shown as-is: {e}")
+        0
+    }
+    print(r)
+}
+
+fn main() {
+    print(open("/etc", "ana") mend 0)
+    try_open("/nope", "ana")
+    try_open("/secret", "bo")
+    try_open("/secret", "root")
+    let e: NotFound | Denied = Denied(user: "cy")
+    print("{(e is d: Denied)} {(e is n: NotFound)}")
+}

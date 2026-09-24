@@ -1,0 +1,76 @@
+// Optionals: `none`, values that convert, `some(…)` patterns, `?` and `mend`.
+
+use std.io.print
+
+fn half(n: i32) -> ?i32 = if n % 2 == 0 { n / 2 } else { none }
+
+fn quarter(n: i32) -> ?i32 {
+    let h = half(n)?                     // no `mend` around it: returns `none`
+    half(h)
+}
+
+fn describe(x: ?i32) -> String = match x {
+    some(0) => "zero"
+    some(n) if n < 0 => "negative {n}"
+    some(n) => "{n}"
+    none => "nothing"
+}
+
+warp Point: Show { x: i32, y: i32 }
+
+fn find(points: (Point, Point), x: i32) -> ?Point {
+    if points.0.x == x { return points.0 }
+    if points.1.x == x { return points.1 }
+    none
+}
+
+fn main() {
+    print(half(10))
+    print(half(7))
+    print("{quarter(12)} {quarter(6)} {quarter(5)}")
+    print("{describe(some(0))} {describe(-3)} {describe(half(8))} {describe(none)}")
+
+    // `mend` unwraps what's on its left, or falls back.
+    let a = half(9) mend -1
+    let b = half(8) mend -1
+    print("{a} {b}")
+
+    // A block with `?`s in it works as a try block.
+    let sum = {
+        let x = half(20)?
+        let y = half(x)?
+        x + y
+    } mend 0
+    let none_sum = {
+        let x = half(20)?
+        let y = half(x + 1)?
+        x + y
+    } mend 0
+    print("{sum} {none_sum}")
+
+    // Chains: the first that works wins; a fallback that may be absent
+    // keeps the whole optional.
+    let c = half(3) mend half(5) mend half(4) mend 100
+    let d: ?i32 = half(3) mend half(5)
+    print("{c} {d}")
+
+    // `is some(…)` binds in conditions, and `==` compares with a plain value.
+    let p = find((Point(1, 2), Point(3, 4)), 3)
+    if p is some(pt) { print("found {pt}") }
+    if find((Point(1, 2), Point(3, 4)), 9) is none { print("not found") }
+    print("{half(4) == 2} {half(5) == 2} {half(5) == none} {half(4) != none}")
+
+    var countdown = 3
+    while half(countdown * 2) is some(h) and h > 0 {
+        print("tick {h}")
+        countdown -= 1
+    }
+
+    // Optionals of optionals, and of `()`, box their values.
+    let deep: ??i32 = none
+    let shallow: ??i32 = some(none)
+    let full: ??i32 = some(some(7))
+    print("{deep:?} {shallow:?} {full:?}")
+    let unit: ?() = ()
+    print("{unit is some(_)} {(unit mend ()) == ()}")
+}

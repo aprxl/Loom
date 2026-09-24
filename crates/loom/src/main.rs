@@ -24,6 +24,7 @@ use loom_syntax::token::dump_tokens;
 use loom_syntax::{Diagnostic, FileId, SourceDb, lex, parse, pretty};
 
 /// Exit codes (see design/lua-backend.md).
+const EXIT_FAILED: u8 = 1;
 const EXIT_COMPILE_ERROR: u8 = 2;
 const EXIT_INTERNAL: u8 = 70;
 const EXIT_UNRAVEL: u8 = 101;
@@ -326,6 +327,10 @@ fn lua_host(bundle: &Path) -> ExitCode {
             eprintln!("unravel: {message}");
             print_location(location.as_ref());
             ExitCode::from(EXIT_UNRAVEL)
+        }
+        loom_host::Outcome::Failed { message } => {
+            eprintln!("error: {message}");
+            ExitCode::from(EXIT_FAILED)
         }
         loom_host::Outcome::Crash { message, location } => {
             eprintln!("internal error: {message}");

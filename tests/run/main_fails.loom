@@ -1,0 +1,16 @@
+// `main ! E`: an error that reaches the end of `main` is shown, and the
+// program exits with 1.
+
+use std.io.print
+
+warp ConfigError: Error {
+    case Missing(key: String)
+}
+
+fn setting(key: str) -> u16 ! ConfigError = fail .Missing(key: "{key}")
+
+fn main() ! ConfigError {
+    print("starting")
+    let port = setting("port")?
+    print("never printed: {port}")
+}

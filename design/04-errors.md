@@ -28,8 +28,12 @@ fn check(age: i32) -> u8 ! AgeError {
 }
 ```
 
-A `T` converts to `?T` or `T ! E` implicitly, so you never write `some(x)` or
-`ok(x)` when constructing. You only write them in patterns.
+A `T` converts to `?T` or `T ! E` implicitly, so you rarely write `some(x)`
+or `ok(x)` when constructing; `err(e)` makes a failure without leaving the
+function. The conversion goes one level deep: `??T` needs `some(some(x))`.
+
+`fail e` always leaves the function, even inside the left of a `mend`: only
+`?` jumps to a `mend`.
 
 ## `?`: bail to the nearest `mend`
 

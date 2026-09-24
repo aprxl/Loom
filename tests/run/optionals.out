@@ -1,0 +1,15 @@
+5
+none
+3 none none
+zero negative -3 4 nothing
+-1 4
+15 0
+2 none
+found Point(x: 3, y: 4)
+not found
+true false true true
+tick 3
+tick 2
+tick 1
+none some(none) some(some(7))
+true true

@@ -1,0 +1,17 @@
+ok 30
+negative
+error TooOld(300)
+zero
+25
+  failed with NotADigit('x')
+0
+7
+welcome, 30
+refused: Bad("too young: 10")
+refused: Age(Negative)
+0
+false true true
+27
+  gave up: Missing()
+0
+negative ok 3

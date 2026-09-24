@@ -19,6 +19,7 @@
 //! every Lua line that starts a statement.
 
 mod expr;
+mod fallible;
 mod lir;
 mod warp;
 
@@ -109,6 +110,10 @@ struct Lowerer<'a> {
     const_refs: Vec<DefId>,
     /// The Lua local holding each dot-block's subject.
     subjects: HashMap<HirId, String>,
+    /// The `mend`s whose left operand is being lowered, innermost last.
+    mend_labels: Vec<fallible::MendLabels>,
+    /// For `main ! E`: the descriptor of `E`.
+    main_error: Option<Expr>,
     reported: HashSet<String>,
 }
 
@@ -131,6 +136,8 @@ impl<'a> Lowerer<'a> {
             span: None,
             const_refs: Vec::new(),
             subjects: HashMap::new(),
+            mend_labels: Vec::new(),
+            main_error: None,
             reported: HashSet::new(),
         }
     }
@@ -159,11 +166,19 @@ impl<'a> Lowerer<'a> {
             return None;
         };
         let DefKind::Fn(f) = &p.def(def).kind else { return None };
-        if !f.params.is_empty() || !matches!(f.ret, FnRet::Unit) {
-            let span = p.def(def).span;
-            self.unsupported(span, "`main` with parameters or a return type");
+        let span = p.def(def).span;
+        // `main ! E`: a failure is shown, and the program exits with 1.
+        let ret =
+            self.typed.results.find(&crate::typeck::Instance::of(def)).and_then(|id| self.typed.results.sigs.get(&id));
+        let fails = ret.and_then(|sig| match self.tcx().kind(sig.ret) {
+            TyKind::Result(ok, err) if *ok == self.tcx().unit => Some(*err),
+            _ => None,
+        });
+        if !f.params.is_empty() || (!matches!(f.ret, FnRet::Unit) && fails.is_none()) {
+            self.unsupported(span, "`main` with parameters, or a return type other than `! E`");
             return None;
         }
+        self.main_error = fails.map(|err| self.desc(err, span));
         Some(def)
     }
 
@@ -254,7 +269,7 @@ impl<'a> Lowerer<'a> {
             TyKind::Str => Expr::field(Expr::name("rt"), "str"),
             TyKind::Unit => Expr::field(Expr::name("rt"), "unit"),
             // The value carries its own type's description in its vtable.
-            TyKind::Any(_) => Expr::field(Expr::name("rt"), "anyd"),
+            TyKind::Any(_) | TyKind::Union(_) => Expr::field(Expr::name("rt"), "anyd"),
             TyKind::Adt(..) => {
                 // Field types depend on a generic warp's arguments.
                 match self.typed.results.adts.get(&ty).cloned() {
@@ -481,7 +496,23 @@ impl<'a> Lowerer<'a> {
         for stmt in self.const_order() {
             printer.stmt(&stmt);
         }
-        printer.raw(&format!("return F.{}", self.def_name(main)));
+        match &self.main_error {
+            // The host gets the error's text back, or nothing.
+            Some(desc) => {
+                let stmt = |kind| Stmt { kind, span: None };
+                let r = Expr::name("r");
+                let call = Expr::call(Expr::field(Expr::name("F"), &self.def_name(main)), Vec::new());
+                let shown =
+                    Expr::rt("show", vec![desc.clone(), Expr::index(r.clone(), Expr::Int(2)), Expr::Bool(false)]);
+                let failed = Expr::Unary("not", Box::new(Expr::index(r, Expr::Int(1))));
+                let body = vec![
+                    stmt(StmtKind::Local(vec!["r".into()], vec![call])),
+                    stmt(StmtKind::If(vec![(failed, vec![stmt(StmtKind::Return(Some(shown)))])], None)),
+                ];
+                printer.stmt(&stmt(StmtKind::Return(Some(Expr::Function(Vec::new(), body)))));
+            }
+            None => printer.raw(&format!("return F.{}", self.def_name(main))),
+        }
         let printed = printer.finish();
         Bundle { lua: printed.text, map: source_map(db, &printed.lines) }
     }

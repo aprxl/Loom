@@ -74,8 +74,15 @@ fn run_corpus() {
             failures.push(format!("{name}: output differs\n--- expected\n{expected}--- got\n{out}"));
         }
         let unravel = std::fs::read_to_string(path.with_extension("unravel")).ok();
+        let error = std::fs::read_to_string(path.with_extension("error")).ok();
         match (unravel, outcome) {
-            (None, Outcome::Finished) => {}
+            (None, Outcome::Finished) if error.is_none() => {}
+            (None, Outcome::Failed { message }) if error.is_some() => {
+                let want = error.unwrap_or_default();
+                if message != want.trim_end() {
+                    failures.push(format!("{name}: failed with {message:?}, expected {:?}", want.trim_end()));
+                }
+            }
             (Some(spec), Outcome::Unravel { message, location }) => {
                 let mut lines = spec.lines();
                 let want_message = lines.next().unwrap_or_default();

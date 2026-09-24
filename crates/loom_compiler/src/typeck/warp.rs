@@ -251,7 +251,7 @@ impl Checker<'_> {
                 Some(info) => info.copy,
                 None => self.adt_info(ty).is_some_and(|i| i.copy),
             },
-            TyKind::Fn(..) | TyKind::Any(_) => false,
+            TyKind::Fn(..) | TyKind::Any(_) | TyKind::Union(_) => false,
         }
     }
 

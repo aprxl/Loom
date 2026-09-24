@@ -19,13 +19,15 @@
 //! control flow, operators, casts and templates; warps (records, cases,
 //! shared fields), methods, associated functions, UFCS, leading dots,
 //! dot-blocks, case and twill patterns; wefts and weaves (see `weave.rs`);
-//! generics (see `generic.rs`); `any W` (see `dynamic.rs`).
+//! generics (see `generic.rs`); `any W` (see `dynamic.rs`); optionals and
+//! errors (see `fallible.rs`).
 //! Everything else is reported with U0102 ("not implemented yet") rather
 //! than guessed at.
 
 mod call;
 mod dynamic;
 mod expr;
+mod fallible;
 mod generic;
 mod infer;
 mod method;
@@ -44,6 +46,7 @@ use loom_syntax::source::Span;
 
 use crate::hir::{self, DefId, DefKind, Expr, ExprKind, FnRet, HirId, LocalId, Program, TyKind as HirTy};
 use crate::ty::{Ty, TyCtx, TyKind};
+pub use fallible::{ErrConv, Exit, MendInfo, TryInfo, Unwrap};
 use infer::{PendingLit, Var};
 pub use warp::{CaseFieldInfo, CaseInfo, FieldInfo, Key, WarpInfo};
 pub use weave::{Impl, Weaving};
@@ -191,6 +194,12 @@ pub struct Body {
     pub const_pats: HashMap<HirId, DefId>,
     /// Type-test patterns (`is b: Button`), and the type each tests for.
     pub type_tests: HashMap<HirId, Ty>,
+    /// Every `?`: what it unwraps, and where it goes when there's nothing.
+    pub tries: HashMap<HirId, TryInfo>,
+    pub mends: HashMap<HirId, MendInfo>,
+    /// Every `fail`: the type of its error, and how it becomes the
+    /// function's error type.
+    pub fails: HashMap<HirId, (Ty, ErrConv)>,
 }
 
 /// An implicit conversion.
@@ -211,6 +220,9 @@ pub enum Coercion {
     /// A value where `any W` is expected. The wefts are `W` and its
     /// super-wefts, sorted: with the value's type, they pick its vtable.
     ToAny(Vec<DefId>),
+    /// A value where a union that has its type is expected. It's boxed
+    /// like an `any`, with a vtable that only describes its type.
+    ToUnion,
     /// A value that's thrown away, where `()` is expected.
     Discard,
 }
@@ -350,6 +362,7 @@ struct Std {
     hash: Option<DefId>,
     copy: Option<DefId>,
     integer: Option<DefId>,
+    missing: Option<DefId>,
 }
 
 /// Where the enclosing loop's `break`s go.
@@ -394,6 +407,9 @@ struct Checker<'p> {
     instance_diags: HashSet<(&'static str, Option<Span>)>,
     /// Weft methods called through `any` (see `dynamic.rs`).
     dyn_methods: HashSet<DefId>,
+    /// `mend`s whose left operand is being checked, innermost last: where a
+    /// `?` goes (see `fallible.rs`).
+    mends: Vec<fallible::MendCtx>,
     /// Constants whose type is being computed, to catch cycles.
     const_stack: Vec<DefId>,
     /// "Not implemented yet" messages already reported, per definition.
@@ -433,6 +449,7 @@ impl<'p> Checker<'p> {
             hash: find("std.ops", "Hash"),
             copy: find("std.ops", "Copy"),
             integer: find("std.ops", "Integer"),
+            missing: find("std.error", "Missing"),
         };
         Checker {
             p,
@@ -452,6 +469,7 @@ impl<'p> Checker<'p> {
             registered: HashSet::new(),
             instance_diags: HashSet::new(),
             dyn_methods: HashSet::new(),
+            mends: Vec::new(),
             const_stack: Vec::new(),
             unsupported_seen: HashSet::new(),
             vars: Vec::new(),
@@ -949,7 +967,13 @@ impl<'p> Checker<'p> {
             HirTy::Slice(_) => self.unsupported(span, "slices"),
             HirTy::Pointer(_) | HirTy::Region { .. } => self.unsupported(span, "spool pointers"),
             HirTy::RawPointer(_) => self.unsupported(span, "raw pointers"),
-            HirTy::Union(_) => self.unsupported(span, "union types"),
+            HirTy::Union(items) => {
+                let items: Vec<Ty> = items.iter().map(|t| self.lower_ty(t)).collect();
+                if items.iter().any(|&t| self.tcx.is_error(t)) {
+                    return self.tcx.error;
+                }
+                self.tcx.union(items)
+            }
             HirTy::SelfType => match self.self_ty {
                 Some(ty) => ty,
                 None => self.unsupported(span, "`Self` outside warps"),
@@ -984,6 +1008,7 @@ impl<'p> Checker<'p> {
         let saved_self_local = self.self_local.take();
         let saved_subst = std::mem::take(&mut self.subst);
         let saved_pending = std::mem::take(&mut self.pending);
+        let saved_mends = std::mem::take(&mut self.mends);
         let parent = self.parent_warp_ty(def);
         let saved_self = std::mem::replace(&mut self.self_ty, parent);
         let first_var = self.vars.len();
@@ -1012,6 +1037,7 @@ impl<'p> Checker<'p> {
         self.self_local = saved_self_local;
         self.subst = saved_subst;
         self.pending = saved_pending;
+        self.mends = saved_mends;
         self.self_ty = saved_self;
         self.const_stack.pop();
         self.r.const_ty.insert(def, ty);
@@ -1061,6 +1087,9 @@ impl<'p> Checker<'p> {
                 Some(Coercion::StringToStr)
             }
             (_, TyKind::Optional(inner)) if inner == actual => Some(Coercion::ToOptional),
+            // A union of fewer types is already boxed the same way.
+            (TyKind::Union(have), TyKind::Union(want)) if have.iter().all(|t| want.contains(t)) => return true,
+            (_, TyKind::Union(members)) if members.contains(&actual) => Some(Coercion::ToUnion),
             // An `any` is already an `any` of fewer wefts: it carries the
             // same vtable.
             (TyKind::Any(have), TyKind::Any(want)) => {
@@ -1120,6 +1149,10 @@ impl<'p> Checker<'p> {
         }
         if let TyKind::Any(wefts) = self.tcx.kind(ty) {
             return self.weft_closure(wefts).contains(&weft);
+        }
+        // A union weaves what every one of its types weaves.
+        if let TyKind::Union(members) = self.tcx.kind(ty) {
+            return members.iter().all(|&m| self.weaves(m, weft));
         }
         // A warp is `Copy` when all its fields are, whether it says so or not.
         if Some(weft) == self.std.copy

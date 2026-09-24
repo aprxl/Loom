@@ -105,7 +105,7 @@ impl Checker<'_> {
                     None => self.check_args_alone(args),
                 }
             }
-            ExprKind::BuiltinCase(_) => self.unsupported(callee.span, "`some`, `ok` and `err`"),
+            ExprKind::BuiltinCase(kw) => self.check_builtin_case(call, *kw, args, expected),
             ExprKind::Local(_) => self.unsupported(callee.span, "calling function values"),
             ExprKind::Def { .. } => self.unsupported(callee.span, "calling this kind of value"),
             _ => {
