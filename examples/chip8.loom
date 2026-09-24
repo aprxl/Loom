@@ -89,11 +89,11 @@ pub warp Chip8 {
                 .sp = .sp +? 1 mend fail .StackOverflow(here)
                 .pc = n
             }
-            0x3xkk => if .v[x] == kk { .pc +%= 2 }        // x: u4, kk: u8
-            0x4xkk => if .v[x] != kk { .pc +%= 2 }
+            0x3xkk => if .v[x] == k { .pc +%= 2 }         // x: u4, k: u8
+            0x4xkk => if .v[x] != k { .pc +%= 2 }
             0x5xy0 => if .v[x] == .v[y] { .pc +%= 2 }
-            0x6xkk => .v[x] = kk
-            0x7xkk => .v[x] +%= kk                        // no carry flag for 7XKK
+            0x6xkk => .v[x] = k
+            0x7xkk => .v[x] +%= k                         // no carry flag for 7XKK
             0x8xy0 => .v[x] = .v[y]
             0x8xy1 => .v[x] |= .v[y]
             0x8xy2 => .v[x] &= .v[y]
@@ -129,7 +129,7 @@ pub warp Chip8 {
             0x9xy0 => if .v[x] != .v[y] { .pc +%= 2 }
             0xAnnn => .i = n
             0xBnnn => .pc = n +% .v[0]                     // u8 widens to u12 and the sum wraps at 4 KiB
-            0xCxkk => .v[x] = .rng.byte() & kk
+            0xCxkk => .v[x] = .rng.byte() & k
             0xDxyn => .draw(.v[x], .v[y], rows: n)
             0xEx9E => if .held(.v[x]) { .pc +%= 2 }
             0xExA1 => if not .held(.v[x]) { .pc +%= 2 }
