@@ -4,10 +4,15 @@
 //! hidden `lua-host` subcommand), the test harness, and compile-time `const`
 //! evaluation. Exactly one of the `lua54` / `lua55` features is enabled.
 //!
-//! Only the VM bootstrap exists so far. Planned modules (see the plan in
-//! `design/lua-backend.md`): `runtime` (the embedded `rt` chunk), `hostio`,
-//! `hooks` (instruction budget, Ctrl-C), `luamap` (source maps), `remap`
-//! (stderr rewriting), `exit` (exit-code mapping).
+//! [`run`] runs a compiled bundle and classifies how it ended; [`srcmap`]
+//! maps bundle lines back to Loom source. Still to come (see
+//! `design/lua-backend.md`): an instruction budget and Ctrl-C handling.
+
+pub mod run;
+pub mod srcmap;
+
+pub use run::{Outcome, Output, run_bundle};
+pub use srcmap::{Location, SourceMap};
 
 use mlua::{Lua, Table};
 
