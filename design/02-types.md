@@ -28,6 +28,19 @@ N bits.
 go out of bounds, so no check is emitted. That's why the CHIP-8 example stores
 its registers in `[u8; 16]` and indexes them with `u4`.
 
+**Literal types.** A number literal takes the type its context expects:
+`let x: u8 = 250`, `takes_u16(7)`. With no context it starts out as an open
+`{integer}` (or `{float}`) and becomes the first numeric type it meets, so in
+`for i in 1..=15 { takes_u32(i) }` the loop variable is a `u32`. A literal
+that meets nothing by the end of its function is `i32` (or `f64`). An integer
+literal may also become a float (`let x: f64 = 0`), but a float literal never
+becomes an integer. Ranges are checked once the type is known: `let b: u8 = 256`
+is an error.
+
+**Untyped constants.** `const LIMIT = 15`, with no type, works like a literal:
+each use gets the type its context needs, and the value is checked against
+it. `const LIMIT: u32 = 15` has one type everywhere.
+
 **`uint(n)` / `int(n)`** are compile-time functions that return the type with
 `n` bits, so `u12` is sugar for `uint(12)`. See [06-compile-time](06-compile-time.md).
 

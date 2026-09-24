@@ -272,7 +272,7 @@ examples/
 crates/
   loom_syntax/             source files, spans, diagnostics, the lexer, the parser and AST
   loom_host/               the bundled Lua VM (mlua, vendored, built with clang-cl)
-  loom_compiler/           name resolution so far; then typeck, analyses, lowering
+  loom_compiler/           name resolution and type checking so far; then lowering
   loom/                    the `loom` command-line tool
 runtime/
   rt/                      loomrt, the Lua runtime every bundle carries
@@ -289,10 +289,12 @@ bodies come with type checking and lowering.
 The language is a design sketch (v0.1). A Loom → Lua 5.4 transpiler is being
 built in `crates/`, following the plan in `design/lua-backend.md`:
 
-- **Done:** the lexer, the parser, and name resolution. `loom check <file>`
-  parses and resolves a program and reports diagnostics; `loom build <file>
-  --emit tokens|ast|hir` dumps a stage. All eight examples resolve cleanly.
-- **Next:** type checking, then lowering and `loom run`.
+- **Done:** the lexer, the parser, name resolution, and a first slice of
+  type checking (numbers, strings, tuples, functions, control flow). `loom
+  check <file>` reports diagnostics; `loom build <file> --emit
+  tokens|ast|hir` dumps a stage. The examples use more than the type checker
+  covers so far; it says so rather than guessing.
+- **Next:** lowering to Lua and `loom run`, then the rest of the type checker.
 
 ```bash
 cargo run -p loom -- check examples/chip8.loom

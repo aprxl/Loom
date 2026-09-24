@@ -1,0 +1,889 @@
+//! Checking expressions and statements.
+
+use loom_syntax::Diagnostic;
+use loom_syntax::ast::{AssignOp, BinaryOp, CastKind, Lit, UnaryOp};
+use loom_syntax::diag::codes;
+use loom_syntax::source::Span;
+use loom_syntax::token::IntLit;
+
+use super::infer::{PendingLit, VarKind};
+use super::{ArgSource, Call, Checker, Coercion, LoopCtx};
+use crate::hir::{Arg, Block, DefKind, Expr, ExprKind, StmtKind, TemplatePart};
+use crate::ty::{Ty, TyKind};
+
+/// What an operator needs from its operand type.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Operand {
+    /// `+ - * / %`: integers and floats.
+    Numeric,
+    /// Overflow policies and bitwise operators: integers only.
+    Integer,
+}
+
+impl Checker<'_> {
+    pub(super) fn check_expr(&mut self, e: &Expr, expected: Option<Ty>) -> Ty {
+        let ty = self.check_expr_inner(e, expected);
+        self.r.expr_ty.insert(e.id, ty);
+        ty
+    }
+
+    fn check_expr_inner(&mut self, e: &Expr, expected: Option<Ty>) -> Ty {
+        let span = e.span;
+        match &e.kind {
+            ExprKind::Lit(lit) => self.check_lit(lit, false, span, expected),
+            ExprKind::Template(parts) => {
+                for part in parts {
+                    if let TemplatePart::Interp { expr, spec } = part {
+                        let ty = self.check_expr(expr, None);
+                        let debug = spec.as_deref().is_some_and(|s| s.contains('?'));
+                        if !debug
+                            && !self.tcx.is_lenient(ty)
+                            && self.std.show.is_some_and(|show| !self.weaves(ty, show))
+                        {
+                            let shown = self.show(ty);
+                            self.diags.push(
+                                Diagnostic::error(codes::T0108, format!("`{shown}` can't be shown in a template"))
+                                    .primary(expr.span, format!("this is `{shown}`, which doesn't weave `Show`"))
+                                    .help("`{x:?}` shows any value in its debug form"),
+                            );
+                        }
+                    }
+                }
+                self.string_ty()
+            }
+            ExprKind::Local(local) => self.r.local_ty.get(local).copied().unwrap_or(self.tcx.error),
+            ExprKind::Def { def, args } => {
+                if !args.is_empty() {
+                    return self.unsupported(span, "explicit generic arguments");
+                }
+                match &self.p.def(*def).kind {
+                    DefKind::Const(_) => {
+                        let ty = self.const_ty(*def);
+                        match self.r.untyped_consts.get(def) {
+                            Some(&value) => self.int_value_ty(value, span, expected),
+                            None => ty,
+                        }
+                    }
+                    DefKind::Fn(_) => self.unsupported(span, "functions used as values"),
+                    DefKind::Case(_) => self.unsupported(span, "cases"),
+                    _ => self.unsupported(span, "this kind of value"),
+                }
+            }
+            ExprKind::Type(_) => self.unsupported(span, "constructing warps"),
+            ExprKind::Assoc { .. } => self.unsupported(span, "associated items (`Type.name`)"),
+            ExprKind::BuiltinCase(_) => self.unsupported(span, "`some`, `ok` and `err`"),
+            ExprKind::Intrinsic(_) => self.unsupported(span, "`target` and `heap`"),
+            ExprKind::LeadingDot(_) => self.unsupported(span, "leading dots"),
+            ExprKind::Tuple(items) => self.check_tuple(items, expected),
+            ExprKind::Array(_) | ExprKind::ArrayRepeat { .. } => self.unsupported(span, "arrays and lists"),
+            ExprKind::Map(_) => self.unsupported(span, "map literals"),
+            ExprKind::Block(block) => self.check_block(block, expected),
+            ExprKind::If { cond, then, else_, deferred } => {
+                if deferred.is_some() {
+                    return self.unsupported(span, "`const if`");
+                }
+                self.check_coerce(cond, self.tcx.bool);
+                self.check_if(then, else_.as_deref(), expected)
+            }
+            ExprKind::Match { scrutinee, arms } => self.check_match(scrutinee, arms, span, expected),
+            ExprKind::For { pat, iter, body, is_const, is_loom } => {
+                if *is_const {
+                    return self.unsupported(span, "`const for`");
+                }
+                if *is_loom {
+                    return self.unsupported(span, "`loom for`");
+                }
+                let iter_ty = self.check_expr(iter, None);
+                let iter_ty = self.resolve(iter_ty);
+                let elem = match self.tcx.kind(iter_ty) {
+                    TyKind::Range(elem) => *elem,
+                    TyKind::Error => self.tcx.error,
+                    _ => {
+                        let shown = self.show(iter_ty);
+                        return self.unsupported(iter.span, &format!("`for` over `{shown}`"));
+                    }
+                };
+                self.check_pat_irrefutable(pat, elem, "a `for` loop");
+                self.in_loop(e.id, false, None, |this| this.check_block(body, Some(this.tcx.unit)));
+                self.tcx.unit
+            }
+            ExprKind::While { cond, body } => {
+                self.check_coerce(cond, self.tcx.bool);
+                self.in_loop(e.id, false, None, |this| this.check_block(body, Some(this.tcx.unit)));
+                self.tcx.unit
+            }
+            ExprKind::Loop { body } => {
+                let ctx = self.in_loop(e.id, true, expected, |this| this.check_block(body, Some(this.tcx.unit)));
+                match (ctx.expected, ctx.break_ty) {
+                    (Some(t), Some(_)) => t,
+                    (_, Some(t)) => t,
+                    (_, None) => self.tcx.never,
+                }
+            }
+            ExprKind::Break { target, value } => {
+                self.check_break(*target, value.as_deref(), span);
+                self.tcx.never
+            }
+            ExprKind::Continue { .. } => self.tcx.never,
+            ExprKind::Return(value) => {
+                let ret = self.ret.unwrap_or(self.tcx.unit);
+                match value {
+                    Some(v) => {
+                        self.check_coerce(v, ret);
+                    }
+                    None if ret != self.tcx.unit && !self.tcx.is_error(ret) => {
+                        let shown = self.show(ret);
+                        self.error(
+                            codes::T0101,
+                            span,
+                            format!("this function returns `{shown}`, so `return` needs a value"),
+                            "no value",
+                        );
+                    }
+                    None => {}
+                }
+                self.tcx.never
+            }
+            ExprKind::Fail(_) => self.unsupported(span, "`fail`"),
+            ExprKind::Yield { .. } | ExprKind::Pull => self.unsupported(span, "shuttles"),
+            ExprKind::Unsafe { .. } => self.unsupported(span, "`unsafe` blocks"),
+            ExprKind::Const(_) => self.unsupported(span, "compile-time code"),
+            ExprKind::Lambda { .. } => self.unsupported(span, "lambdas"),
+            ExprKind::Loom { .. } | ExprKind::Thread(_) => self.unsupported(span, "`loom` and `thread`"),
+            ExprKind::Call { callee, args } => self.check_call(e, callee, args),
+            ExprKind::Index { .. } => self.unsupported(span, "indexing"),
+            ExprKind::Field { .. } | ExprKind::ConstField { .. } => self.unsupported(span, "fields and methods"),
+            ExprKind::Try(_) | ExprKind::Mend { .. } => self.unsupported(span, "`?` and `mend`"),
+            ExprKind::Deref(_) => self.unsupported(span, "spool pointers"),
+            ExprKind::DotBlock { .. } => self.unsupported(span, "dot-blocks"),
+            ExprKind::Is { .. } => self.unsupported(span, "`is`"),
+            ExprKind::Unary { op, operand } => self.check_unary(*op, operand, span, expected),
+            ExprKind::Binary { op, lhs, rhs } => self.check_binary(*op, lhs, rhs, span, expected),
+            ExprKind::Chain { first, rest } => {
+                let mut operands = vec![first.as_ref()];
+                operands.extend(rest.iter().map(|(_, e)| e));
+                let ty = self.unify_operands(&operands);
+                for (op, _) in rest {
+                    self.require_comparable(*op, ty, span);
+                }
+                self.tcx.bool
+            }
+            ExprKind::Cast { expr, kind, ty } => self.check_cast(expr, *kind, ty, span),
+            ExprKind::Range { lo, hi, .. } => {
+                let operands: Vec<&Expr> = lo.iter().chain(hi.iter()).map(|e| e.as_ref()).collect();
+                if lo.is_none() {
+                    return self.unsupported(span, "ranges without a start");
+                }
+                let elem = self.unify_operands(&operands);
+                if !matches!(self.tcx.kind(elem), TyKind::Int(_) | TyKind::IntVar(_) | TyKind::Char | TyKind::Error) {
+                    let shown = self.show(elem);
+                    self.error(codes::T0103, span, format!("a range needs integers or chars, not `{shown}`"), "here");
+                    return self.tcx.error;
+                }
+                self.tcx.intern(TyKind::Range(elem))
+            }
+            ExprKind::Assign { target, op, value } => {
+                self.check_assign(target, *op, value);
+                self.tcx.unit
+            }
+            ExprKind::Error => self.tcx.error,
+        }
+    }
+
+    // ------------------------------------------------------------ literals
+
+    /// A literal, negated when `negative` (for `-128i8`, which is in range
+    /// only as a whole).
+    fn check_lit(&mut self, lit: &Lit, negative: bool, span: Span, expected: Option<Ty>) -> Ty {
+        // `let x: ?u8 = 5`: the literal takes the inner type.
+        let expected = expected.map(|t| self.resolve(t)).map(|t| match self.tcx.kind(t) {
+            TyKind::Optional(inner) => self.resolve(*inner),
+            _ => t,
+        });
+        match lit {
+            Lit::Int(i) => self.check_int_lit(i, negative, span, expected),
+            Lit::Float(f) => match f.suffix {
+                Some(p) => self.tcx.prim(p).unwrap_or_else(|| self.unsupported(span, "`f16`")),
+                None => match expected.map(|t| self.tcx.kind(t).clone()) {
+                    Some(TyKind::Float(_) | TyKind::FloatVar(_)) => expected.unwrap_or(self.tcx.f64),
+                    _ => self.new_var(VarKind::Float),
+                },
+            },
+            Lit::Char(_) => self.tcx.char,
+            Lit::Str(_) => self.tcx.str,
+            Lit::Bool(_) => self.tcx.bool,
+            Lit::Bytes(_) => self.unsupported(span, "byte strings"),
+            Lit::None => match expected.map(|t| self.tcx.kind(t).clone()) {
+                // `expected` was unwrapped above; `none` needs the optional back.
+                Some(_) => match expected {
+                    Some(inner) => self.tcx.optional(inner),
+                    None => self.tcx.error,
+                },
+                None => {
+                    self.error(
+                        codes::T0110,
+                        span,
+                        "can't tell what type this `none` has",
+                        "add a type annotation, like `let x: ?i32 = none`",
+                    );
+                    self.tcx.error
+                }
+            },
+        }
+    }
+
+    fn check_int_lit(&mut self, lit: &IntLit, negative: bool, span: Span, expected: Option<Ty>) -> Ty {
+        let value = if negative { -(lit.value as i128) } else { lit.value as i128 };
+        match lit.suffix {
+            Some(p) => match self.tcx.prim(p) {
+                Some(ty) => {
+                    self.check_int_range(value, ty, span);
+                    ty
+                }
+                None => self.unsupported(span, "`f16` and integers wider than 64 bits"),
+            },
+            None => self.int_value_ty(value, span, expected),
+        }
+    }
+
+    /// The type of an integer value with no suffix: the expected numeric
+    /// type, or a fresh `{integer}`. The range is checked once it's known.
+    fn int_value_ty(&mut self, value: i128, span: Span, expected: Option<Ty>) -> Ty {
+        let expected = expected.map(|t| self.resolve(t)).map(|t| match self.tcx.kind(t) {
+            TyKind::Optional(inner) => self.resolve(*inner),
+            _ => t,
+        });
+        let ty = match expected.map(|t| self.tcx.kind(t).clone()) {
+            // An integer literal can be a float: `let x: f64 = 0`.
+            Some(TyKind::Int(_) | TyKind::Float(_) | TyKind::IntVar(_) | TyKind::FloatVar(_)) => {
+                expected.unwrap_or(self.tcx.i32)
+            }
+            _ => self.new_var(VarKind::Int),
+        };
+        self.check_int_range(value, ty, span);
+        ty
+    }
+
+    fn check_int_range(&mut self, value: i128, ty: Ty, span: Span) {
+        match self.tcx.kind(self.resolve(ty)) {
+            TyKind::Int(int) if !int.contains(value) => {
+                let int = *int;
+                let shown = self.show(ty);
+                self.diags.push(
+                    Diagnostic::error(codes::T0102, format!("`{value}` doesn't fit in `{shown}`"))
+                        .primary(span, format!("`{shown}` holds {} through {}", int.min(), int.max()))
+                        .help("use a wider type, or say what should happen: `as%` wraps, `as|` clamps"),
+                );
+            }
+            TyKind::IntVar(_) => self.pending_lits.push(PendingLit { ty, value, span }),
+            _ => {}
+        }
+    }
+
+    fn check_tuple(&mut self, items: &[Expr], expected: Option<Ty>) -> Ty {
+        if items.is_empty() {
+            return self.tcx.unit;
+        }
+        let expected_items = match expected.map(|t| self.resolve(t)).map(|t| self.tcx.kind(t).clone()) {
+            Some(TyKind::Tuple(ts)) if ts.len() == items.len() => Some(ts),
+            _ => None,
+        };
+        let tys = items
+            .iter()
+            .enumerate()
+            .map(|(i, item)| match &expected_items {
+                Some(ts) => self.check_coerce(item, ts[i]),
+                None => self.check_expr(item, None),
+            })
+            .collect();
+        self.tcx.intern(TyKind::Tuple(tys))
+    }
+
+    // ------------------------------------------------------------ blocks and statements
+
+    pub(super) fn check_block(&mut self, block: &Block, expected: Option<Ty>) -> Ty {
+        let Some((last, rest)) = block.stmts.split_last() else {
+            return self.expect_unit_tail(block.span, expected);
+        };
+        for stmt in rest {
+            self.check_stmt(&stmt.kind);
+        }
+        match &last.kind {
+            StmtKind::Expr(tail) if !matches!(tail.kind, ExprKind::Assign { .. }) => match expected {
+                // The value is thrown away where `()` is expected.
+                Some(t) if t == self.tcx.unit => {
+                    let ty = self.check_expr(tail, None);
+                    if ty == self.tcx.never {
+                        return ty;
+                    }
+                    if ty != self.tcx.unit && !self.tcx.is_error(ty) {
+                        self.r.coercions.insert(tail.id, Coercion::Discard);
+                    }
+                    self.tcx.unit
+                }
+                Some(t) => self.check_coerce(tail, t),
+                None => self.check_expr(tail, None),
+            },
+            other => {
+                self.check_stmt(other);
+                let diverges = matches!(other, StmtKind::Expr(e) if self.r.expr_ty.get(&e.id) == Some(&self.tcx.never));
+                if diverges { self.tcx.never } else { self.expect_unit_tail(block.span, expected) }
+            }
+        }
+    }
+
+    /// A block with no value: fine where `()` fits, including `() ! E`.
+    /// Otherwise it's reported here, and the error type keeps the caller
+    /// from reporting it again.
+    fn expect_unit_tail(&mut self, span: Span, expected: Option<Ty>) -> Ty {
+        let Some(t) = expected else { return self.tcx.unit };
+        let t = self.resolve(t);
+        let unit_fits = match self.tcx.kind(t) {
+            TyKind::Unit | TyKind::Error | TyKind::Never => true,
+            TyKind::Result(ok, _) | TyKind::Optional(ok) => *ok == self.tcx.unit,
+            _ => false,
+        };
+        if unit_fits {
+            return self.tcx.unit;
+        }
+        let shown = self.show(t);
+        let end = Span::new(span.file, span.hi.saturating_sub(1), span.hi);
+        self.diags.push(
+            Diagnostic::error(codes::T0101, format!("expected `{shown}`, but this block has no value"))
+                .primary(end, format!("a `{shown}` should be the last thing here")),
+        );
+        self.tcx.error
+    }
+
+    fn check_stmt(&mut self, stmt: &StmtKind) {
+        match stmt {
+            StmtKind::Let { pat, ty, init, .. } => {
+                let ty = match ty {
+                    Some(t) => {
+                        let ty = self.lower_ty(t);
+                        self.check_coerce(init, ty)
+                    }
+                    None => self.check_expr(init, None),
+                };
+                self.check_pat_irrefutable(pat, ty, "a `let`");
+            }
+            StmtKind::Expr(e) => {
+                self.check_expr(e, None);
+            }
+            StmtKind::Item(def) => self.queue_def(*def),
+            StmtKind::Given { value, .. } => {
+                self.unsupported(value.span, "`given`");
+            }
+            StmtKind::Spool { init, .. } => {
+                self.unsupported(init.span, "spools");
+            }
+            StmtKind::Defer { body, .. } => {
+                self.unsupported(body.span, "`defer`");
+            }
+        }
+    }
+
+    fn check_if(&mut self, then: &Block, else_: Option<&Expr>, expected: Option<Ty>) -> Ty {
+        let Some(else_) = else_ else {
+            // Without `else`, the `then` value is thrown away.
+            self.check_block(then, Some(self.tcx.unit));
+            return self.tcx.unit;
+        };
+        if let Some(t) = expected {
+            self.check_block(then, Some(t));
+            self.check_coerce(else_, t);
+            return t;
+        }
+        let then_ty = self.check_block(then, None);
+        if then_ty == self.tcx.never {
+            return self.check_expr(else_, None);
+        }
+        let else_ty = self.check_expr(else_, Some(then_ty));
+        if else_ty == self.tcx.never {
+            return then_ty;
+        }
+        self.coerce(else_, else_ty, then_ty);
+        then_ty
+    }
+
+    fn check_match(&mut self, scrutinee: &Expr, arms: &[crate::hir::Arm], span: Span, expected: Option<Ty>) -> Ty {
+        let scrutinee_ty = self.check_expr(scrutinee, None);
+        let mut result = expected;
+        let mut all_diverge = true;
+        for arm in arms {
+            self.check_pat(&arm.pat, scrutinee_ty);
+            if let Some(guard) = &arm.guard {
+                self.check_coerce(guard, self.tcx.bool);
+            }
+            let ty = match result {
+                Some(t) => self.check_coerce(&arm.body, t),
+                None => {
+                    let ty = self.check_expr(&arm.body, None);
+                    if ty != self.tcx.never {
+                        result = Some(ty);
+                    }
+                    ty
+                }
+            };
+            if ty != self.tcx.never {
+                all_diverge = false;
+            }
+        }
+        self.check_exhaustive(arms, scrutinee_ty, span);
+        match result {
+            Some(t) if !all_diverge || expected.is_some() => t,
+            _ => self.tcx.never,
+        }
+    }
+
+    // ------------------------------------------------------------ loops
+
+    fn in_loop(
+        &mut self,
+        id: crate::hir::HirId,
+        takes_value: bool,
+        expected: Option<Ty>,
+        f: impl FnOnce(&mut Self) -> Ty,
+    ) -> LoopCtx {
+        self.loops.push(LoopCtx { id, takes_value, expected, break_ty: None });
+        f(self);
+        self.loops.pop().expect("pushed above")
+    }
+
+    fn check_break(&mut self, target: crate::hir::HirId, value: Option<&Expr>, span: Span) {
+        let Some(index) = self.loops.iter().rposition(|l| l.id == target) else { return };
+        let (takes_value, expected, break_ty) = {
+            let ctx = &self.loops[index];
+            (ctx.takes_value, ctx.expected, ctx.break_ty)
+        };
+        match value {
+            Some(v) if !takes_value => {
+                self.error(
+                    codes::T0111,
+                    v.span,
+                    "only `loop` can `break` with a value",
+                    "`while` and `for` loops have no value",
+                );
+                self.check_expr(v, None);
+            }
+            Some(v) => {
+                let ty = match expected.or(break_ty) {
+                    Some(t) => self.check_coerce(v, t),
+                    None => self.check_expr(v, None),
+                };
+                if self.loops[index].break_ty.is_none() && ty != self.tcx.never {
+                    self.loops[index].break_ty = Some(ty);
+                }
+            }
+            None if takes_value => {
+                match expected.or(break_ty) {
+                    Some(t) if t != self.tcx.unit && !self.tcx.is_lenient(t) => {
+                        let shown = self.show(t);
+                        self.error(codes::T0101, span, format!("this `loop` needs a `{shown}` value here"), "no value");
+                    }
+                    _ => {}
+                }
+                if self.loops[index].break_ty.is_none() {
+                    self.loops[index].break_ty = Some(self.tcx.unit);
+                }
+            }
+            None => {}
+        }
+    }
+
+    // ------------------------------------------------------------ calls
+
+    fn check_call(&mut self, call: &Expr, callee: &Expr, args: &[Arg]) -> Ty {
+        let def = match &callee.kind {
+            ExprKind::Def { def, args: generic_args }
+                if generic_args.is_empty() && matches!(self.p.def(*def).kind, DefKind::Fn(_)) =>
+            {
+                *def
+            }
+            ExprKind::Def { args: generic_args, .. } if !generic_args.is_empty() => {
+                return self.unsupported(callee.span, "explicit generic arguments");
+            }
+            ExprKind::Field { .. } => return self.unsupported(callee.span, "method calls"),
+            ExprKind::Type(_) => return self.unsupported(callee.span, "constructing warps"),
+            ExprKind::Assoc { .. } => return self.unsupported(callee.span, "associated functions and cases"),
+            ExprKind::BuiltinCase(_) => return self.unsupported(callee.span, "`some`, `ok` and `err`"),
+            ExprKind::LeadingDot(_) => return self.unsupported(callee.span, "leading dots"),
+            ExprKind::Local(_) => return self.unsupported(callee.span, "calling function values"),
+            _ => {
+                let ty = self.check_expr(callee, None);
+                if !self.tcx.is_error(ty) {
+                    let shown = self.show(ty);
+                    self.error(codes::T0106, callee.span, format!("`{shown}` can't be called"), "not a function");
+                }
+                return self.tcx.error;
+            }
+        };
+        self.r.expr_ty.insert(callee.id, self.tcx.error);
+        self.queue_def(def);
+        let Some(sig) = self.fn_sig(def) else {
+            for arg in args {
+                self.check_expr(&arg.value, None);
+            }
+            return self.tcx.error;
+        };
+
+        // Match arguments to parameters: positional first, then by name.
+        let name = self.p.def(def).name.clone();
+        let mut slots: Vec<Option<usize>> = vec![None; sig.params.len()];
+        let mut ok = true;
+        let mut next_positional = 0;
+        for (i, arg) in args.iter().enumerate() {
+            if arg.is_given {
+                self.unsupported(arg.span, "`given:` arguments");
+                ok = false;
+                continue;
+            }
+            let slot = match &arg.label {
+                None => {
+                    let slot = next_positional;
+                    next_positional += 1;
+                    if slot >= sig.params.len() {
+                        self.error(
+                            codes::T0104,
+                            arg.span,
+                            format!("`{name}` takes {} argument{}", sig.params.len(), plural(sig.params.len())),
+                            "one too many",
+                        );
+                        ok = false;
+                        continue;
+                    }
+                    slot
+                }
+                Some(label) => match sig.params.iter().position(|p| p.name == label.name) {
+                    Some(slot) => slot,
+                    None => {
+                        self.error(
+                            codes::T0105,
+                            label.span,
+                            format!("`{name}` has no parameter named `{}`", label.name),
+                            "unknown name",
+                        );
+                        ok = false;
+                        continue;
+                    }
+                },
+            };
+            if slots[slot].is_some() {
+                self.error(
+                    codes::T0105,
+                    arg.span,
+                    format!("`{}` is given twice", sig.params[slot].name),
+                    "already given",
+                );
+                ok = false;
+                continue;
+            }
+            if arg.mutable {
+                self.unsupported(arg.span, "`mut` arguments");
+            }
+            slots[slot] = Some(i);
+            self.check_coerce(&arg.value, sig.params[slot].ty);
+        }
+        let mut sources = Vec::with_capacity(slots.len());
+        for (slot, param) in slots.iter().zip(&sig.params) {
+            match slot {
+                Some(i) => sources.push(ArgSource::Arg(*i)),
+                None if param.has_default => sources.push(ArgSource::Default),
+                None => {
+                    self.error(
+                        codes::T0104,
+                        call.span,
+                        format!("`{name}` needs an argument for `{}`", param.name),
+                        format!("`{}` is missing", param.name),
+                    );
+                    ok = false;
+                }
+            }
+        }
+        // Arguments that went nowhere still need types.
+        for (i, arg) in args.iter().enumerate() {
+            if !slots.contains(&Some(i)) && !self.r.expr_ty.contains_key(&arg.value.id) {
+                self.check_expr(&arg.value, None);
+            }
+        }
+        if ok {
+            self.r.calls.insert(call.id, Call { callee: def, args: sources });
+        }
+        sig.ret
+    }
+
+    // ------------------------------------------------------------ operators
+
+    fn check_unary(&mut self, op: UnaryOp, operand: &Expr, span: Span, expected: Option<Ty>) -> Ty {
+        match op {
+            UnaryOp::Neg => {
+                // `-128i8` is checked as one literal.
+                let ty = match &operand.kind {
+                    ExprKind::Lit(lit @ (Lit::Int(_) | Lit::Float(_))) => {
+                        let ty = self.check_lit(lit, true, operand.span, expected);
+                        self.r.expr_ty.insert(operand.id, ty);
+                        ty
+                    }
+                    _ => self.check_expr(operand, expected),
+                };
+                let literal = matches!(operand.kind, ExprKind::Lit(_));
+                match self.tcx.kind(self.resolve(ty)) {
+                    TyKind::Int(i) if i.signed => ty,
+                    // `-1` as a `u8` was already reported as out of range.
+                    TyKind::Int(_) if literal => ty,
+                    TyKind::Float(_) | TyKind::FloatVar(_) | TyKind::Error | TyKind::Never => ty,
+                    TyKind::IntVar(_) => {
+                        // A literal's sign was checked with its range; anything
+                        // else must turn out signed.
+                        if !literal {
+                            self.pending_negations.push((ty, span));
+                        }
+                        ty
+                    }
+                    _ => {
+                        let shown = self.show(ty);
+                        self.error(
+                            codes::T0103,
+                            span,
+                            format!("can't negate a `{shown}`"),
+                            "only signed integers and floats have `-`",
+                        );
+                        self.tcx.error
+                    }
+                }
+            }
+            UnaryOp::BitNot => {
+                let ty = self.check_expr(operand, expected);
+                self.require_operand(ty, Operand::Integer, "~", span)
+            }
+            UnaryOp::Not => self.check_coerce(operand, self.tcx.bool),
+            UnaryOp::Alloc => self.unsupported(span, "`^` allocation"),
+        }
+    }
+
+    fn check_binary(&mut self, op: BinaryOp, lhs: &Expr, rhs: &Expr, span: Span, expected: Option<Ty>) -> Ty {
+        use BinaryOp as B;
+        match op {
+            B::And | B::Or => {
+                self.check_coerce(lhs, self.tcx.bool);
+                self.check_coerce(rhs, self.tcx.bool);
+                self.tcx.bool
+            }
+            B::Eq | B::Ne | B::Lt | B::Le | B::Gt | B::Ge => {
+                let ty = self.unify_operands(&[lhs, rhs]);
+                self.require_comparable(op, ty, span);
+                self.tcx.bool
+            }
+            B::Shl | B::Shr => {
+                // The amount can be any integer type; the result has the left side's type.
+                let ty = self.check_arith_operand(lhs, expected);
+                let amount = self.check_expr(rhs, None);
+                self.require_operand(amount, Operand::Integer, op.as_str(), rhs.span);
+                self.require_operand(ty, Operand::Integer, op.as_str(), span)
+            }
+            _ => {
+                let need = match op {
+                    B::Add | B::Sub | B::Mul | B::Div | B::Rem => Operand::Numeric,
+                    _ => Operand::Integer,
+                };
+                // With an expected numeric type, both operands widen to it
+                // first: `let op: u16 = hi << 8 | lo`.
+                let ty = match expected.filter(|&t| self.is_numeric(t)) {
+                    Some(t) if !matches!(op, B::AddChecked | B::SubChecked | B::MulChecked) => {
+                        self.check_coerce(lhs, t);
+                        self.check_coerce(rhs, t);
+                        t
+                    }
+                    _ => self.unify_operands(&[lhs, rhs]),
+                };
+                let ty = self.require_operand(ty, need, op.as_str(), span);
+                if matches!(op, B::AddChecked | B::SubChecked | B::MulChecked) && !self.tcx.is_error(ty) {
+                    return self.tcx.optional(ty);
+                }
+                ty
+            }
+        }
+    }
+
+    /// A shift's left side: widened to the expected type, if there is one.
+    fn check_arith_operand(&mut self, e: &Expr, expected: Option<Ty>) -> Ty {
+        match expected.filter(|&t| self.is_numeric(t)) {
+            Some(t) => self.check_coerce(e, t),
+            None => self.check_expr(e, None),
+        }
+    }
+
+    fn is_numeric(&self, ty: Ty) -> bool {
+        matches!(
+            self.tcx.kind(self.resolve(ty)),
+            TyKind::Int(_) | TyKind::Float(_) | TyKind::IntVar(_) | TyKind::FloatVar(_)
+        )
+    }
+
+    /// Checks operands that must end up with one type. Open literal types
+    /// take the type of the typed operands, and a narrower integer widens to
+    /// a wider one: `u8_value < 1000u16` compares as `u16`.
+    fn unify_operands(&mut self, operands: &[&Expr]) -> Ty {
+        let tys: Vec<Ty> = operands.iter().map(|e| self.check_expr(e, None)).collect();
+        let Some(&first) = tys.first() else { return self.tcx.error };
+        let mut target = first;
+        for &ty in &tys[1..] {
+            if self.unify(target, ty) {
+                continue;
+            }
+            let (a, b) = (self.resolve(target), self.resolve(ty));
+            if let (Some(x), Some(y)) = (self.tcx.as_int(a), self.tcx.as_int(b))
+                && x.widens_to(y)
+            {
+                target = b;
+            }
+        }
+        for (e, &ty) in operands.iter().zip(&tys) {
+            self.coerce(e, ty, target);
+        }
+        self.resolve(target)
+    }
+
+    fn require_operand(&mut self, ty: Ty, need: Operand, op: &str, span: Span) -> Ty {
+        let ok = match self.tcx.kind(self.resolve(ty)) {
+            TyKind::Int(_) | TyKind::IntVar(_) | TyKind::Error | TyKind::Never => true,
+            TyKind::Float(_) | TyKind::FloatVar(_) => need == Operand::Numeric,
+            _ => false,
+        };
+        if ok {
+            return ty;
+        }
+        let shown = self.show(ty);
+        let what = if need == Operand::Integer { "integers" } else { "numbers" };
+        self.error(codes::T0103, span, format!("`{op}` doesn't work on `{shown}`"), format!("`{op}` works on {what}"));
+        self.tcx.error
+    }
+
+    fn require_comparable(&mut self, op: BinaryOp, ty: Ty, span: Span) {
+        if self.tcx.is_lenient(ty) {
+            return;
+        }
+        let ordered = !matches!(op, BinaryOp::Eq | BinaryOp::Ne);
+        let weft = if ordered { self.std.ord } else { self.std.eq };
+        if weft.is_some_and(|w| self.weaves(ty, w)) {
+            return;
+        }
+        let shown = self.show(ty);
+        let what = if ordered { "ordered" } else { "compared" };
+        self.error(codes::T0103, span, format!("`{shown}` can't be {what} with `{}`", op.as_str()), "here");
+    }
+
+    fn check_cast(&mut self, e: &Expr, kind: CastKind, ty: &crate::hir::Ty, span: Span) -> Ty {
+        let target = self.lower_ty(ty);
+        let source = self.check_expr(e, None);
+        let source = self.resolve(source);
+        if self.tcx.is_lenient(source) || self.tcx.is_error(target) {
+            return self.tcx.error;
+        }
+        use TyKind as T;
+        let allowed = match (self.tcx.kind(source), self.tcx.kind(target)) {
+            (T::Int(_) | T::IntVar(_), T::Int(_)) => true,
+            (T::Int(_) | T::IntVar(_), T::Float(_)) => kind == CastKind::Checked,
+            (T::Float(_) | T::FloatVar(_), T::Int(_)) => {
+                matches!(kind, CastKind::Checked | CastKind::Sat | CastKind::Opt)
+            }
+            (T::Float(_) | T::FloatVar(_), T::Float(_)) => kind == CastKind::Checked,
+            (T::Char | T::Bool, T::Int(_)) => kind == CastKind::Checked,
+            (T::Int(_) | T::IntVar(_), T::Char) => matches!(kind, CastKind::Checked | CastKind::Opt),
+            _ => false,
+        };
+        if !allowed {
+            let (from, to) = (self.show(source), self.show(target));
+            self.error(
+                codes::T0109,
+                span,
+                format!("can't convert `{from}` to `{to}` with `{}`", kind.as_str()),
+                "not allowed",
+            );
+            return self.tcx.error;
+        }
+        if kind == CastKind::Opt { self.tcx.optional(target) } else { target }
+    }
+
+    fn check_assign(&mut self, target: &Expr, op: AssignOp, value: &Expr) {
+        if let (AssignOp::Compound(_), ExprKind::Tuple(_)) = (op, &target.kind) {
+            self.error(codes::T0107, target.span, "`op=` needs a single variable", "a tuple here");
+            return;
+        }
+        let Some(ty) = self.check_place(target) else {
+            self.check_expr(value, None);
+            return;
+        };
+        match op {
+            AssignOp::Assign => {
+                self.check_coerce(value, ty);
+            }
+            AssignOp::Compound(bin) => {
+                let need = match bin {
+                    BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem => Operand::Numeric,
+                    _ => Operand::Integer,
+                };
+                self.require_operand(ty, need, bin.as_str(), target.span);
+                if matches!(bin, BinaryOp::Shl | BinaryOp::Shr) {
+                    let amount = self.check_expr(value, None);
+                    self.require_operand(amount, Operand::Integer, bin.as_str(), value.span);
+                } else {
+                    self.check_coerce(value, ty);
+                }
+            }
+        }
+    }
+
+    /// The type of something assigned to: a `var`, or a tuple of them
+    /// (`(x, y) = (y, x)`). `None` if it can't be assigned (already reported).
+    fn check_place(&mut self, target: &Expr) -> Option<Ty> {
+        match &target.kind {
+            ExprKind::Local(local) => {
+                let ty = self.check_expr(target, None);
+                let l = self.p.local(*local);
+                if !l.mutable {
+                    self.diags.push(
+                        Diagnostic::error(codes::T0107, format!("`{}` can't be changed", l.name))
+                            .primary(target.span, "assigned here")
+                            .secondary(l.span, "declared with `let`")
+                            .help(format!("declare it with `var {}` to make it changeable", l.name)),
+                    );
+                }
+                Some(ty)
+            }
+            ExprKind::Tuple(items) if !items.is_empty() => {
+                let mut tys = Vec::with_capacity(items.len());
+                for item in items {
+                    tys.push(self.check_place(item)?);
+                }
+                let ty = self.tcx.intern(TyKind::Tuple(tys));
+                self.r.expr_ty.insert(target.id, ty);
+                Some(ty)
+            }
+            ExprKind::Field { .. } | ExprKind::LeadingDot(_) => {
+                self.unsupported(target.span, "assigning to fields");
+                None
+            }
+            ExprKind::Index { .. } => {
+                self.unsupported(target.span, "assigning to elements");
+                None
+            }
+            ExprKind::Call { .. } => {
+                self.unsupported(target.span, "assigning through projections");
+                None
+            }
+            ExprKind::Deref(_) => {
+                self.unsupported(target.span, "spool pointers");
+                None
+            }
+            _ => {
+                self.error(codes::T0107, target.span, "can't assign to this", "not a variable");
+                None
+            }
+        }
+    }
+}
+
+fn plural(n: usize) -> &'static str {
+    if n == 1 { "" } else { "s" }
+}

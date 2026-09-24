@@ -1,8 +1,8 @@
 //! The `loom` command-line tool.
 //!
-//! The pipeline currently stops after name resolution: `check` parses and
-//! resolves a program and reports diagnostics, and `build --emit
-//! tokens|ast|hir` dumps a stage. The other commands exist so the CLI has its
+//! The pipeline currently stops after type checking: `check` parses,
+//! resolves and type-checks a program and reports diagnostics, and `build
+//! --emit tokens|ast|hir` dumps a stage. The other commands exist so the CLI has its
 //! final shape, and say they aren't implemented yet.
 
 use std::path::{Path, PathBuf};
@@ -11,6 +11,7 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand, ValueEnum};
 use loom_compiler::hir::{self, Resolved};
 use loom_compiler::modules::FsLoader;
+use loom_compiler::typeck::{self, Typed};
 use loom_syntax::diag::{ColorMode, emit_to_stderr};
 use loom_syntax::token::dump_tokens;
 use loom_syntax::{Diagnostic, FileId, SourceDb, lex, parse, pretty};
@@ -119,7 +120,7 @@ fn run(cli: Cli) -> ExitCode {
 }
 
 fn not_yet(what: &str) -> ExitCode {
-    eprintln!("error: `{what}` isn't implemented yet: the pipeline currently stops after name resolution");
+    eprintln!("error: `{what}` isn't implemented yet: the pipeline currently stops after type checking");
     eprintln!("  = help: `loom check <file>` checks a file; `loom build <file> --emit tokens|ast|hir` dumps a stage");
     ExitCode::from(EXIT_COMPILE_ERROR)
 }
@@ -177,13 +178,21 @@ fn resolve(path: &Path, color: ColorMode) -> Result<(SourceDb, Resolved), ExitCo
     Ok((db, resolved))
 }
 
+/// Resolves and type-checks the program rooted at `path`.
+fn typecheck(path: &Path, color: ColorMode) -> Result<(SourceDb, Resolved, Typed), ExitCode> {
+    let (db, resolved) = resolve(path, color)?;
+    let typed = typeck::check(&resolved.program);
+    report(&db, path, &typed.diagnostics, "type-check", color)?;
+    Ok((db, resolved, typed))
+}
+
 fn check(path: &Path, color: ColorMode) -> ExitCode {
     let run = || -> Result<(), ExitCode> {
-        let (_, resolved) = resolve(path, color)?;
+        let (_, resolved, _) = typecheck(path, color)?;
         let p = &resolved.program;
         let n = p.root.map_or(0, |root| p.module(root).decls.len());
         println!(
-            "{}: {n} item{}, no errors (the pipeline stops after name resolution for now)",
+            "{}: {n} item{}, no errors (the pipeline stops after type checking for now)",
             path.display(),
             if n == 1 { "" } else { "s" }
         );
@@ -212,7 +221,7 @@ fn build(path: &Path, out: Option<&Path>, emit: Option<Emit>, color: ColorMode) 
                 p.root.map(|root| hir::pretty::module(p, root)).unwrap_or_default()
             }
             None => {
-                resolve(path, color)?;
+                typecheck(path, color)?;
                 return Err(not_yet("loom build (Lua output)"));
             }
         };

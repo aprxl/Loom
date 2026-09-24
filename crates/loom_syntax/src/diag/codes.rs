@@ -69,8 +69,26 @@ codes! {
     N0114 = "`yield` or `pull` outside a shuttle";
     N0115 = "or-pattern alternatives bind different names";
 
+    // T01xx: types
+    T0101 = "mismatched types";
+    T0102 = "literal out of range";
+    T0103 = "operator doesn't apply to this type";
+    T0104 = "wrong number of arguments";
+    T0105 = "bad named argument";
+    T0106 = "not callable";
+    T0107 = "can't assign here";
+    T0108 = "type doesn't weave a required weft";
+    T0109 = "cast not allowed";
+    T0110 = "can't infer a type";
+    T0111 = "not a value of this kind";
+
+    // P01xx: patterns
+    P0101 = "match isn't exhaustive";
+    P0102 = "refutable pattern in a binding";
+
     // U01xx: features the v1 compiler doesn't support (see design/lua-backend.md)
     U0101 = "anonymous warp types aren't supported yet";
+    U0102 = "not implemented yet";
 }
 
 #[cfg(test)]

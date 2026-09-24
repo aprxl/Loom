@@ -49,10 +49,18 @@ Read your own diff before committing. One logical change per commit.
 ## Status
 
 Done: the spec renames, the workspace scaffold, the lexer, the parser (AST,
-error recovery, `--emit ast`), and name resolution (HIR, `std` declarations,
-the prelude, `--emit hir`). Next: type checking, then lowering and run mode.
-All eight examples resolve cleanly; keep it that way
-(`every_example_parses_cleanly` in `crates/loom_syntax`,
-`every_example_resolves_cleanly` in `crates/loom_compiler`). The same goes for
-every ```` ```loom ```` block in the README and design docs
-(`every_doc_block_parses`); code v1 deliberately rejects must use a `U` code.
+error recovery, `--emit ast`), name resolution (HIR, `std` declarations, the
+prelude, `--emit hir`), and the first slice of type checking (numbers,
+strings, tuples, functions, control flow, operators, casts, templates, with
+literal-type inference). Next: lowering to Lua and `loom run` for that slice,
+then the next slices (warps and methods, optionals and errors, …) through
+every layer at once.
+
+Keep these green:
+- `every_example_parses_cleanly` (`crates/loom_syntax`) and
+  `every_doc_block_parses`: every example and every ```` ```loom ```` block in
+  the README and design docs parses.
+- `every_example_resolves_cleanly` (`crates/loom_compiler`).
+- `every_example_fails_only_with_not_implemented_yet`: the type checker may
+  reject an example only with U0102 until it covers what the example uses.
+  Code v1 deliberately rejects must use a `U` code.
