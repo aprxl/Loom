@@ -67,6 +67,8 @@ impl Lowerer<'_> {
             TyKind::Tuple(items) => !items.is_empty(),
             TyKind::Optional(t) => self.is_table(*t),
             TyKind::Adt(..) if self.seq(ty).is_some() => true,
+            // The runtime's warps are tables, except `String`, a Lua string.
+            TyKind::Adt(def, _) if self.p.def(*def).attrs.iter().any(|a| a.name == "builtin") => !self.is_string(*def),
             TyKind::Adt(def, _) => self.warp(*def).is_some_and(|w| !w.unit_only()),
             TyKind::Any(_) | TyKind::Union(_) | TyKind::Result(..) | TyKind::Array(..) => true,
             _ => false,

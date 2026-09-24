@@ -92,6 +92,9 @@ pub enum StmtKind {
     Label(String),
     /// Always printed as `do return … end`, so it can go anywhere.
     Return(Option<Expr>),
+    /// `do return a, b, c end`: a result, then the final values of the
+    /// function's scalar `mut` parameters.
+    ReturnMany(Vec<Expr>),
     Break,
 }
 
@@ -238,6 +241,17 @@ impl Printer {
                 self.write("do return");
                 if let Some(v) = value {
                     self.write(" ");
+                    self.expr(v, 0);
+                }
+                self.write(" end");
+                self.end_line();
+            }
+            StmtKind::ReturnMany(values) => {
+                self.write("do return ");
+                for (i, v) in values.iter().enumerate() {
+                    if i > 0 {
+                        self.write(", ");
+                    }
                     self.expr(v, 0);
                 }
                 self.write(" end");

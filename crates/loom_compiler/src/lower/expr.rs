@@ -686,7 +686,41 @@ impl Lowerer<'_> {
             }
         }
         descs.extend(params);
-        Expr::call(target, descs)
+        let call_expr = Expr::call(target, descs);
+
+        // Scalar `mut` arguments come back after the result, and are
+        // written to where they came from.
+        let modes = self.typed.results.sigs.get(&info.callee).map(|s| s.params.clone()).unwrap_or_default();
+        let outs: Vec<usize> = modes
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.mode == ParamMode::Mut && !self.is_table(p.ty))
+            .map(|(k, _)| k)
+            .collect();
+        if outs.is_empty() {
+            return call_expr;
+        }
+        let result = self.new_temp();
+        let temps: Vec<String> = outs.iter().map(|_| self.new_temp()).collect();
+        let mut names = vec![result.clone()];
+        names.extend(temps.iter().cloned());
+        self.push(StmtKind::Local(names, vec![call_expr]));
+        for (&k, temp) in outs.iter().zip(&temps) {
+            let place = match info.args.get(k) {
+                Some(ArgSource::Arg(i)) => self.lower_place(&args[*i].value),
+                Some(ArgSource::Receiver) => match (info.receiver, receiver_base) {
+                    (Some(Receiver::Expr), Some(base)) => {
+                        let place = self.lower_place(base);
+                        info.through.iter().fold(place, Self::access)
+                    }
+                    (Some(r), _) => self.receiver(r, None),
+                    _ => continue,
+                },
+                _ => continue,
+            };
+            self.push(StmtKind::Assign(vec![place], vec![Expr::name(temp.clone())]));
+        }
+        Expr::Name(result)
     }
 
     // ------------------------------------------------------------ statements and control flow

@@ -846,14 +846,8 @@ impl<'p> Checker<'p> {
                 self.implicit = mode;
                 return None;
             }
-            // A `mut` parameter shares the caller's table; scalars would need
-            // copy-in/copy-out, which isn't implemented yet. A generic one is
-            // decided per instance.
-            let open = self.has_vars(ty) || self.tcx.has_params(ty);
-            if param.mode == ParamMode::Mut && !open && !self.is_table_backed(ty) {
-                self.unsupported(param.span, "`mut` parameters of numbers, strings and enums");
-                return None;
-            }
+            // A `mut` parameter shares the caller's table; a scalar one (a
+            // number, a string, an enum) is copied back after the call.
             let name = self.p.local(param.local).name.clone();
             params.push(SigParam { name, mode: param.mode, ty, has_default: param.default.is_some() });
         }
@@ -1243,7 +1237,7 @@ impl<'p> Checker<'p> {
 
     /// Whether values of `ty` are Lua tables, which a `mut` parameter can
     /// share with its caller.
-    fn is_table_backed(&mut self, ty: Ty) -> bool {
+    pub(super) fn is_table_backed(&mut self, ty: Ty) -> bool {
         let ty = self.resolve(ty);
         match self.tcx.kind(ty).clone() {
             TyKind::Tuple(items) => !items.is_empty(),

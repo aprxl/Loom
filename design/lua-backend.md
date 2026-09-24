@@ -82,7 +82,10 @@ table-backed `Copy` type that flows into an owning slot is copied (in
 `lower/warp.rs`, `lower_owned`). `mut` parameters and `mut self` share the
 caller's table instead, and a whole-value assignment to one goes through
 `rt.overwrite`. `mut` parameters of scalar types (numbers, strings, enums)
-need copy-in/copy-out and aren't implemented yet.
+are copied back: every `return` of the function also returns their final
+values, and the caller assigns them to where they came from
+(`local r, t = f(x); x = t`). A `mut self` method of a scalar type can't be
+called through `any` yet, since the `any` holds its own copy.
 
 ## Generics
 

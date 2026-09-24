@@ -153,6 +153,18 @@ impl Checker<'_> {
                         None => self.builtin_default(method).map(|imp| (imp, Vec::new())),
                     };
                     let Some((imp, bindings)) = imp else { continue };
+                    // A scalar changed through `any` can't be copied back to
+                    // where it came from: the `any` holds its own copy.
+                    let mut_self = matches!(&self.p.def(method).kind,
+                        DefKind::Fn(f) if f.params.first().is_some_and(|p| p.is_self && p.mode == loom_syntax::ast::ParamMode::Mut));
+                    if mut_self && !self.is_table_backed(ty) {
+                        let shown = self.show(ty);
+                        self.unsupported(
+                            self.p.def(method).span,
+                            &format!("`mut self` methods of `{shown}` through `any`"),
+                        );
+                        continue;
+                    }
                     let inst = self.impl_instance(imp, ty, &bindings);
                     entries.push((method, self.instance(inst)));
                 }

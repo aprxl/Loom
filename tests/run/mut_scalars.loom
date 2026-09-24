@@ -1,0 +1,71 @@
+// `mut` parameters of numbers, strings and enums: changed by the callee,
+// and copied back to where they came from.
+
+use std.io.print
+
+fn bump(mut n: i32, by: i32) -> i32 {
+    n += by
+    if n > 100 { return -1 }
+    n
+}
+
+fn twice(mut a: u8, mut b: u8) {
+    a *= 2
+    b *= 2
+}
+
+warp Light: Show {
+    case Red, Amber, Green
+
+    fn next(mut self) {
+        self = match self {
+            .Red => .Green
+            .Green => .Amber
+            .Amber => .Red
+        }
+    }
+}
+
+warp Counter: Show { hits: u32, light: Light }
+
+fn main() {
+    var x = 5
+    let r = bump(mut x, 10)
+    print("{x} {r}")
+    let s = bump(mut x, 90)
+    print("{x} {s}")
+
+    var a: u8 = 3
+    var b: u8 = 4
+    twice(mut a, mut b)
+    print("{a} {b}")
+
+    var light = Light.Red
+    light.next()
+    print(light)
+    light.next()
+    light.next()
+    print(light)
+
+    // Fields and elements are places too.
+    var c = Counter(0, .Green)
+    c.light.next()
+    add_hit(mut c.hits)
+    add_hit(mut c.hits)
+    print(c)
+    var hits = [1u32, 2, 3]
+    add_hit(mut hits[1])
+    print(hits)
+
+    // A method changing a scalar `self` inside another method.
+    var l = Light.Amber
+    advance_twice(mut l)
+    print(l)
+}
+
+fn add_hit(mut n: u32) { n += 1 }
+
+fn advance_twice(mut l: Light) {
+    l.next()
+    l.next()
+}

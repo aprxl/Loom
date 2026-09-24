@@ -431,9 +431,17 @@ impl<'a> Lowerer<'a> {
                 let params: Vec<String> = f.params.iter().map(|param| self.local_name(param.local)).collect();
                 let body_expr = f.body.as_ref().expect("checked above");
                 let unit = matches!(f.ret, FnRet::Unit);
-                let body = self.body(span, |this| {
+                let mut body = self.body(span, |this| {
                     this.lower_into(body_expr, if unit { &Dest::Discard } else { &Dest::Return });
                 });
+                // Scalar `mut` parameters go back to the caller after the result.
+                let outs = self.copy_outs(id, f);
+                if !outs.is_empty() {
+                    body = with_copy_outs(body, &outs);
+                    let mut values = vec![Expr::Nil];
+                    values.extend(outs.iter().cloned());
+                    body.push(Stmt { kind: StmtKind::ReturnMany(values), span: None });
+                }
                 let func = Expr::Function(params, body);
                 let target = Expr::field(Expr::name("F"), &self.fn_name(id));
                 self.fns.push(Stmt { kind: StmtKind::Assign(vec![target], vec![func]), span: Some(span) });
@@ -473,6 +481,19 @@ impl<'a> Lowerer<'a> {
                 return None;
             }
         })
+    }
+
+    /// The parameters of function instance `id` that are copied back to the
+    /// caller: `mut` ones whose values aren't tables (numbers, strings,
+    /// enums), which the callee can't change in place.
+    fn copy_outs(&self, id: BodyId, f: &crate::hir::FnDef) -> Vec<Expr> {
+        let Some(sig) = self.typed.results.sigs.get(&id) else { return Vec::new() };
+        f.params
+            .iter()
+            .zip(&sig.params)
+            .filter(|(_, p)| p.mode == loom_syntax::ast::ParamMode::Mut && !self.is_table(p.ty))
+            .map(|(param, _)| Expr::name(self.local_name(param.local)))
+            .collect()
     }
 
     /// Lowers one function body with fresh per-body state.
@@ -578,6 +599,31 @@ impl<'a> Lowerer<'a> {
         }
         out
     }
+}
+
+/// `stmts` with every `return` also returning `outs` (see `copy_outs`).
+fn with_copy_outs(stmts: Vec<Stmt>, outs: &[Expr]) -> Vec<Stmt> {
+    stmts
+        .into_iter()
+        .map(|stmt| {
+            let kind = match stmt.kind {
+                StmtKind::Return(v) => {
+                    let mut values = vec![v.unwrap_or(Expr::Nil)];
+                    values.extend(outs.iter().cloned());
+                    StmtKind::ReturnMany(values)
+                }
+                StmtKind::If(arms, else_) => StmtKind::If(
+                    arms.into_iter().map(|(c, b)| (c, with_copy_outs(b, outs))).collect(),
+                    else_.map(|b| with_copy_outs(b, outs)),
+                ),
+                StmtKind::While(c, b) => StmtKind::While(c, with_copy_outs(b, outs)),
+                StmtKind::NumFor(v, lo, hi, b) => StmtKind::NumFor(v, lo, hi, with_copy_outs(b, outs)),
+                StmtKind::Do(b) => StmtKind::Do(with_copy_outs(b, outs)),
+                other => other,
+            };
+            Stmt { kind, span: stmt.span }
+        })
+        .collect()
 }
 
 fn source_map(db: &SourceDb, lines: &[(u32, Span)]) -> SourceMap {
