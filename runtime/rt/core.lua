@@ -591,8 +591,9 @@ local function expand(mantissa, exp)
 end
 
 -- Rust-like float Display: "17", "-3", "1.5", "inf", "NaN". Debug adds ".0"
--- to whole numbers. Never Lua's `tostring`, which differs by platform.
-local function fmt_float(v, debug)
+-- to whole numbers. Never Lua's `tostring`, which differs by platform. An
+-- `f32` (`single`) gets the shortest digits that read back as the same f32.
+local function fmt_float(v, debug, single)
   if v ~= v then return "NaN" end
   if v == huge then return "inf" end
   if v == -huge then return "-inf" end
@@ -603,7 +604,9 @@ local function fmt_float(v, debug)
   else
     for prec = 1, 17 do
       s = sformat("%." .. prec .. "g", v)
-      if tonumber(s) == v then break end
+      local back = tonumber(s)
+      if single then back = rt.f32(back) end
+      if back == v then break end
     end
     local mantissa, exp = s:match("^(-?[%d%.]+)e([-+]%d+)$")
     if mantissa then s = expand(mantissa, tonumber(exp)) end
@@ -630,7 +633,7 @@ show = function(d, v, debug)
     if d.u64 then return unsigned_decimal(v) end
     return tostring(v)
   elseif kind == "float" then
-    return fmt_float(v, debug)
+    return fmt_float(v, debug, d.name == "f32")
   elseif kind == "bool" then
     return v and "true" or "false"
   elseif kind == "char" then

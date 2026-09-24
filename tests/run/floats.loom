@@ -6,6 +6,10 @@ fn main() {
     print("{3.14159:.2} {2.0:.3} {17.0:?}")
     let f: f32 = 0.1
     print("{f} {f + 0.2}")
+    // An f32 shows the shortest digits that read back as the same f32.
+    let third: f32 = 1.0 / 3.0
+    let top: f32 = 3.4028235e38
+    print("{third} {third:?} {f as f64} {top} {0.1 as f32 * 3.0}")
     let n: i32 = 7
     print("{n as f64 / 2.0} {9.99 as i32} {-9.99 as i32} {1e10 as| u8}")
 }
