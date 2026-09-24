@@ -124,6 +124,13 @@ expected (`rt.view`).
 and printing work for any element type. Arrays and lists have every slice
 method, passed as they are. `for mut x in xs` makes `x` stand for `xs[i]`.
 
+## Lua's limits
+
+Lua allows 200 active locals in a function. When one block of an emitted
+function would go over (a long body, with the temporaries that `if` and
+`match` values need), its locals become the fields of a table made at the
+start of the block (`local _L1 = {}`, `_L1.x_3`); see `lower/limits.rs`.
+
 ## Lambdas and streams
 
 A lambda is a Lua closure. It sees the enclosing locals as upvalues, so

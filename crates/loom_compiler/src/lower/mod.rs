@@ -21,6 +21,7 @@
 mod closure;
 mod expr;
 mod fallible;
+mod limits;
 mod lir;
 mod seq;
 mod warp;
@@ -527,7 +528,9 @@ impl<'a> Lowerer<'a> {
             let target = Expr::index(Expr::name("EXT"), Expr::Int(i as i64));
             printer.stmt(&Stmt { kind: StmtKind::Assign(vec![target], vec![source]), span: None });
         }
-        for stmt in &self.fns {
+        let mut tables = 0;
+        for stmt in &mut self.fns {
+            limits::fix(stmt, &mut tables);
             printer.stmt(stmt);
         }
         for (i, ((ty, wefts), desc)) in self.vtables.iter().enumerate() {
@@ -549,7 +552,8 @@ impl<'a> Lowerer<'a> {
                 printer.stmt(&Stmt { kind: StmtKind::Assign(vec![target], vec![value]), span: None });
             }
         }
-        for stmt in self.const_order() {
+        for mut stmt in self.const_order() {
+            limits::fix(&mut stmt, &mut tables);
             printer.stmt(&stmt);
         }
         match &self.main_error {
