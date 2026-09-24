@@ -7,6 +7,8 @@
 //! operands to its left that were already lowered are spilled into
 //! temporaries first, so Loom's left-to-right evaluation order holds.
 
+use std::collections::HashMap;
+
 use loom_syntax::ast::{AssignOp, BinaryOp, CastKind, Lit, ParamMode, UnaryOp};
 use loom_syntax::source::Span;
 
@@ -124,6 +126,49 @@ impl Lowerer<'_> {
     pub(super) fn lower_operands_with(&mut self, es: &[&hir::Expr], owned: bool) -> Vec<Expr> {
         let flagged: Vec<(&hir::Expr, bool)> = es.iter().map(|e| (*e, owned)).collect();
         self.lower_operands_flagged(&flagged)
+    }
+
+    /// `lower_operands_flagged`, where the operands at `places` are places a
+    /// call writes back to: each is lowered once, with its index and base in
+    /// temporaries, and returned by operand number too.
+    fn lower_operands_places(
+        &mut self,
+        es: &[(&hir::Expr, bool)],
+        places: &[usize],
+    ) -> (Vec<Expr>, HashMap<usize, Expr>) {
+        if places.is_empty() {
+            return (self.lower_operands_flagged(es), HashMap::new());
+        }
+        let mut vals: Vec<Expr> = Vec::with_capacity(es.len());
+        let mut found = HashMap::new();
+        for (k, &(e, owned)) in es.iter().enumerate() {
+            let mark = self.out.len();
+            let v = if places.contains(&k) && self.is_place(e) {
+                let place = self.lower_place(e);
+                found.insert(k, place.clone());
+                place
+            } else if owned {
+                self.lower_owned(e)
+            } else {
+                self.lower_expr(e)
+            };
+            if self.out.len() > mark {
+                let mut spills = Vec::new();
+                for (j, prev) in vals.iter_mut().enumerate() {
+                    // A place is read when the call starts, like a `mut`
+                    // access in Swift; only its parts had to go first.
+                    if found.contains_key(&j) || prev.is_constant() || is_temp(prev) {
+                        continue;
+                    }
+                    let t = self.new_temp();
+                    let value = std::mem::replace(prev, Expr::Name(t.clone()));
+                    spills.push(Stmt { kind: StmtKind::Local(vec![t], vec![value]), span: self.span });
+                }
+                self.out.splice(mark..mark, spills);
+            }
+            vals.push(v);
+        }
+        (vals, found)
     }
 
     /// `lower_operands`, each operand owned (copied if it's a place) or not.
@@ -681,7 +726,25 @@ impl Lowerer<'_> {
             let slot = info.args.iter().position(|s| *s == ArgSource::Arg(i));
             operands.push((&arg.value, owned(slot)));
         }
-        let mut lowered = self.lower_operands_flagged(&operands);
+        // Scalar `mut` arguments come back after the result and are written
+        // to where they came from: each such place is worked out once.
+        let modes = self.typed.results.sigs.get(&info.callee).map(|s| s.params.clone()).unwrap_or_default();
+        let outs: Vec<usize> = modes
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.mode == ParamMode::Mut && !self.is_table(p.ty))
+            .map(|(k, _)| k)
+            .collect();
+        let shift = usize::from(receiver_base.is_some());
+        let out_operands: Vec<usize> = outs
+            .iter()
+            .filter_map(|&k| match info.args.get(k) {
+                Some(ArgSource::Arg(i)) => Some(i + shift),
+                Some(ArgSource::Receiver) if receiver_base.is_some() => Some(0),
+                _ => None,
+            })
+            .collect();
+        let (mut lowered, places) = self.lower_operands_places(&operands, &out_operands);
         let receiver = match (info.receiver, receiver_base) {
             (Some(Receiver::Expr), Some(_)) => Some(lowered.remove(0)),
             (Some(r), _) => Some(self.receiver(r, None)),
@@ -730,15 +793,6 @@ impl Lowerer<'_> {
         descs.extend(params);
         let call_expr = Expr::call(target, descs);
 
-        // Scalar `mut` arguments come back after the result, and are
-        // written to where they came from.
-        let modes = self.typed.results.sigs.get(&info.callee).map(|s| s.params.clone()).unwrap_or_default();
-        let outs: Vec<usize> = modes
-            .iter()
-            .enumerate()
-            .filter(|(_, p)| p.mode == ParamMode::Mut && !self.is_table(p.ty))
-            .map(|(k, _)| k)
-            .collect();
         if outs.is_empty() {
             return call_expr;
         }
@@ -749,10 +803,16 @@ impl Lowerer<'_> {
         self.push(StmtKind::Local(names, vec![call_expr]));
         for (&k, temp) in outs.iter().zip(&temps) {
             let place = match info.args.get(k) {
-                Some(ArgSource::Arg(i)) => self.lower_place(&args[*i].value),
+                Some(ArgSource::Arg(i)) => match places.get(&(i + shift)) {
+                    Some(place) => place.clone(),
+                    None => self.lower_place(&args[*i].value),
+                },
                 Some(ArgSource::Receiver) => match (info.receiver, receiver_base) {
                     (Some(Receiver::Expr), Some(base)) => {
-                        let place = self.lower_place(base);
+                        let place = match places.get(&0) {
+                            Some(place) => place.clone(),
+                            None => self.lower_place(base),
+                        };
                         info.through.iter().fold(place, Self::access)
                     }
                     (Some(r), _) => self.receiver(r, None),

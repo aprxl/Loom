@@ -1,0 +1,32 @@
+// A place a call writes a scalar `mut` argument back to is worked out once:
+// its index runs one time.
+
+use std.io.print
+warp Level {
+    case Low
+    case High
+    fn toggle(mut self) {
+        self = match self {
+            .Low => .High
+            .High => .Low
+        }
+    }
+}
+fn pick(label: str, i: usize) -> usize {
+    print("pick {label}")
+    i
+}
+fn bump(mut n: i32) { n += 1 }
+fn main() {
+    var ls: [Level; 3] = [.Low, .Low, .Low]
+    ls[pick("a", 1)].toggle()
+    print("{ls:?}")
+    var ns = [1, 2, 3]
+    bump(mut ns[pick("b", 2)])
+    print(ns)
+    var grid = [[1, 2], [3, 4]]
+    bump(mut grid[pick("c", 1)][pick("d", 0)])
+    print(grid)
+    ns[pick("e", 0)] += 10
+    print(ns)
+}
