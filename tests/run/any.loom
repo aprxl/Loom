@@ -1,3 +1,6 @@
+// `any W`: a value of some type that weaves `W`, with its methods found at
+// run time, and type tests to get the concrete type back.
+
 use std.io.print
 use std.fmt.{Show, Fmt}
 
