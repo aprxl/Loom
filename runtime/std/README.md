@@ -20,7 +20,10 @@ has an implementation:
 - `String`, and `Str` and `Char`, the methods of `str` and `char`
   (`string.loom`);
 - `Int[T]` and `Float[T]`, the methods of every integer and float type
-  (`num.loom`).
+  (`num.loom`);
+- `Stream[T]` (`iter.loom`), the lazy streams `chars()`, `indexed()` and
+  friends make, whose methods arrays, lists, slices, ranges and `Iter` types
+  have too.
 
 A generic one's implementation gets the descriptor of each type argument
 first; a `mut self` method of `String` returns its result, then the new

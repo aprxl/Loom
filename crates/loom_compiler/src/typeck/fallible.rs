@@ -143,6 +143,18 @@ impl Checker<'_> {
     /// Where a `?` with no `mend` around it goes: out of the function, which
     /// must be able to carry what it failed with.
     fn exit_function(&mut self, unwrap: Unwrap, err_ty: Ty, span: Span) -> Option<Exit> {
+        // A lambda whose return type nothing gave yet: a `?` in it makes it
+        // return what the `?` passes on (`xs.map(s => s.first()? + 1)`).
+        if let Some(ret) = self.ret
+            && matches!(self.tcx.kind(self.resolve(ret)), TyKind::Var(_))
+        {
+            let value = self.new_var(super::infer::VarKind::Type);
+            let fallible = match unwrap {
+                Unwrap::Optional => self.tcx.optional(value),
+                Unwrap::Result => self.tcx.intern(TyKind::Result(value, err_ty)),
+            };
+            self.unify(ret, fallible);
+        }
         let ret = self.ret.map(|t| self.resolve(t));
         match ret.map(|t| self.tcx.kind(t).clone()) {
             Some(TyKind::Optional(_)) if unwrap == Unwrap::Optional => Some(Exit::ReturnNone),

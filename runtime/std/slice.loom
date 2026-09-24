@@ -12,9 +12,9 @@ pub warp Slice[T] {
     pub fn first(self) -> ?T
     pub fn last(self) -> ?T
     /// Whether some element equals `x`.
-    pub fn contains(self, x: T) -> bool
+    pub fn contains(self, x: T) -> bool where T: Eq
     /// The index of the first element equal to `x`.
-    pub fn index_of(self, x: T) -> ?usize
+    pub fn index_of(self, x: T) -> ?usize where T: Eq
     /// Copies `src` over the start of this slice. Unravels if `src` is longer.
     pub fn copy_from(mut self, src: [T])
     /// Sets every element to a copy of `x`.
@@ -22,7 +22,18 @@ pub warp Slice[T] {
     pub fn swap(mut self, i: usize, j: usize)
     pub fn reverse(mut self)
     /// Sorts in order, keeping equal elements in the order they were in.
-    pub fn sort(mut self)
+    pub fn sort(mut self) where T: Ord
     /// A new list with a copy of every element.
     pub fn to_list(self) -> List[T]
+    /// A new list of `f` of each element. (`xs.indexed()` and the other
+    /// methods of `Stream` work on slices too, lazily.)
+    pub fn map[U](self, f: T => U) -> List[U]
+    /// A new list with a copy of each element `f` says yes to.
+    pub fn filter(self, f: T => bool) -> List[T]
+    /// Views of `n` elements at a time, one after another; the last may be
+    /// shorter. Unravels if `n` is 0.
+    pub fn chunks(self, n: usize) -> Stream[[T]]
+    /// Views of every run of `n` elements in a row: `[a, b]`, `[b, c]`, …
+    /// Unravels if `n` is 0.
+    pub fn windows(self, n: usize) -> Stream[[T]]
 }

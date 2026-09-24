@@ -138,6 +138,11 @@ x => {
 ```
 
 Function types use the same arrow: `i32 => i32`, `(f64, f64) => bool`.
+A lambda's parameter types come from where it's passed (`xs.map(x => x * 2)`);
+anywhere else, annotate them. Its body is a function of its own: `return`
+leaves the lambda, and a `?` in it makes the lambda return an optional or a
+result (`paths.map(p => p.first()?.len())`). A function's name is a value too:
+`xs.filter(is_prime)`.
 Lambdas that are passed as arguments borrow what they capture and can't
 escape. To store or return a closure, allocate it, which moves its captures:
 `^(x => x + offset)` of type `^(i32 => i32)`.

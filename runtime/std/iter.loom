@@ -1,7 +1,89 @@
 // Iteration.
 
-/// Something `for` can loop over.
+use std.num.Num
+
+/// Something `for` can loop over, one item at a time.
+///
+/// ```loom
+/// warp Countdown(u32): Iter {
+///     type Item = u32
+///     fn next(mut self) -> ?u32 {
+///         if .0 == 0 { return none }
+///         .0 -= 1
+///         .0 + 1
+///     }
+/// }
+/// ```
 pub weft Iter {
+    /// What it gives.
     type Item
+    /// The next item, or `none` once there are no more.
     fn next(mut self) -> ?Item
+}
+
+/// A lazy stream of `T`s: `s.chars()`, `xs.indexed()` and `stream.map(f)`
+/// are streams. Nothing is computed until something asks for the next item.
+///
+/// Everything else with items has these methods too: arrays, lists and
+/// slices, ranges, and types that weave `Iter`. `(1..=10).filter(_ % 2 == 0)`
+/// is a stream of the range's items.
+///
+/// The methods that make a new stream use up this one: a stream is read
+/// once.
+#builtin
+pub warp Stream[T] {
+    /// The next item, or `none` once there are no more.
+    pub fn next(mut self) -> ?T
+
+    /// `f` of each item.
+    pub fn map[U](take self, f: T => U) -> Stream[U]
+    /// The items `f` says yes to.
+    pub fn filter(take self, f: T => bool) -> Stream[T]
+    /// The first `n` items.
+    pub fn take(take self, n: usize) -> Stream[T]
+    /// The items after the first `n`.
+    pub fn skip(take self, n: usize) -> Stream[T]
+    /// The items before the first one `f` says no to.
+    pub fn take_while(take self, f: T => bool) -> Stream[T]
+    /// The items from the first one `f` says no to.
+    pub fn skip_while(take self, f: T => bool) -> Stream[T]
+    /// Each item with its index: `(0, a), (1, b), …`.
+    pub fn indexed(take self) -> Stream[(usize, T)]
+    /// Pairs of items, one from each, until either runs out.
+    pub fn zip[U](take self, other: Stream[U]) -> Stream[(T, U)]
+    /// These items, then `other`'s.
+    pub fn chain(take self, other: Stream[T]) -> Stream[T]
+
+    /// A list of the items.
+    pub fn collect(take self) -> List[T]
+    /// How many items there are.
+    pub fn count(take self) -> usize
+    /// The last item.
+    pub fn last(take self) -> ?T
+    /// Calls `f` with each item.
+    pub fn each(take self, f: T => ())
+    /// Combines the items, starting with `init`: `f(f(init, a), b)`…
+    pub fn fold[A](take self, take init: A, f: (A, T) => A) -> A
+    /// Combines the items, starting with the first; `none` if there are none.
+    pub fn reduce(take self, f: (T, T) => T) -> ?T
+    /// Whether `f` says yes to every item (`true` when there are none).
+    pub fn all(take self, f: T => bool) -> bool
+    /// Whether `f` says yes to some item. (`any` is a keyword.)
+    pub fn exists(take self, f: T => bool) -> bool
+    /// The first item `f` says yes to.
+    pub fn find(take self, f: T => bool) -> ?T
+    /// The index of the first item `f` says yes to.
+    pub fn position(take self, f: T => bool) -> ?usize
+    /// The sum of the items (0 when there are none). Unravels when it
+    /// doesn't fit.
+    pub fn sum(take self) -> T where T: Num
+    /// The product of the items (1 when there are none). Unravels when it
+    /// doesn't fit.
+    pub fn product(take self) -> T where T: Num
+    /// The smallest item (the first, among equals).
+    pub fn min(take self) -> ?T where T: Ord
+    /// The largest item (the last, among equals).
+    pub fn max(take self) -> ?T where T: Ord
+    /// The items as text, with `sep` between them.
+    pub fn join(take self, sep: str) -> String where T: Show
 }

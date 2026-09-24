@@ -76,17 +76,10 @@ impl Checker<'_> {
                                     ),
                             );
                         }
+                        // Checked once the body's types are known.
                         let debug = spec.as_deref().is_some_and(|s| s.contains('?'));
-                        if !debug
-                            && !self.tcx.is_lenient(ty)
-                            && self.std.show.is_some_and(|show| !self.weaves(ty, show))
-                        {
-                            let shown = self.show(ty);
-                            self.diags.push(
-                                Diagnostic::error(codes::T0108, format!("`{shown}` can't be shown in a template"))
-                                    .primary(expr.span, format!("this is `{shown}`, which doesn't weave `Show`"))
-                                    .help("`{x:?}` shows any value in its debug form"),
-                            );
+                        if !debug {
+                            self.pending_shows.push((ty, expr.span));
                         }
                     }
                 }
@@ -105,7 +98,7 @@ impl Checker<'_> {
                             None => ty,
                         }
                     }
-                    DefKind::Fn(_) => self.unsupported(span, "functions used as values"),
+                    DefKind::Fn(_) => self.fn_value(e, *def),
                     DefKind::Case(_) => self.unsupported(span, "cases"),
                     _ => self.unsupported(span, "this kind of value"),
                 }
@@ -152,10 +145,29 @@ impl Checker<'_> {
                         }
                         self.seq_elem(iter_ty).unwrap_or(self.tcx.error)
                     }
-                    _ => {
-                        let shown = self.show(iter_ty);
-                        return self.unsupported(iter.span, &format!("`for` over `{shown}`"));
-                    }
+                    _ => match self.for_items(e, iter_ty) {
+                        Some(item) => {
+                            if let crate::hir::PatKind::Bind(local) = &pat.kind
+                                && self.p.local(*local).mutable
+                            {
+                                self.diags.push(
+                                    Diagnostic::error(codes::T0107, "`for mut` needs elements to change")
+                                        .primary(pat.span, "a stream's items aren't stored anywhere")
+                                        .help("`for mut` works on arrays, lists and slices"),
+                                );
+                            }
+                            item
+                        }
+                        None => {
+                            let shown = self.show(iter_ty);
+                            self.diags.push(
+                                Diagnostic::error(codes::T0108, format!("can't loop over `{shown}`"))
+                                    .primary(iter.span, format!("`{shown}` has no items"))
+                                    .help("`for` loops over arrays, lists, slices, ranges, streams and types that weave `Iter`"),
+                            );
+                            self.tcx.error
+                        }
+                    },
                 };
                 self.check_pat_irrefutable(pat, elem, "a `for` loop");
                 self.in_loop(e.id, false, None, |this| this.check_block(body, Some(this.tcx.unit)));
@@ -202,7 +214,7 @@ impl Checker<'_> {
             ExprKind::Yield { .. } | ExprKind::Pull => self.unsupported(span, "shuttles"),
             ExprKind::Unsafe { .. } => self.unsupported(span, "`unsafe` blocks"),
             ExprKind::Const(_) => self.unsupported(span, "compile-time code"),
-            ExprKind::Lambda { .. } => self.unsupported(span, "lambdas"),
+            ExprKind::Lambda { params, body } => self.check_lambda(e, params, body, expected),
             ExprKind::Loom { .. } | ExprKind::Thread(_) => self.unsupported(span, "`loom` and `thread`"),
             ExprKind::Call { callee, args } => self.check_call(e, callee, args, expected),
             ExprKind::Index { base, args } => self.check_index(e, base, args),

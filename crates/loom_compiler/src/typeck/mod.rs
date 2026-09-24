@@ -30,6 +30,8 @@ mod expr;
 mod fallible;
 mod generic;
 mod infer;
+mod iter;
+mod lambda;
 mod method;
 mod pat;
 mod seq;
@@ -204,6 +206,25 @@ pub struct Body {
     pub fails: HashMap<HirId, (Ty, ErrConv)>,
     /// `List()` calls: empty lists.
     pub new_lists: HashSet<HirId>,
+    /// Calls of function values: lambdas, and functions passed around.
+    pub closure_calls: HashSet<HirId>,
+    /// Functions used as values (`xs.filter(is_prime)`): which instance.
+    pub fn_values: HashMap<HirId, BodyId>,
+    /// Values turned into a `Stream` to loop over or to call its methods
+    /// on: the `for` loop, or the method call, and where the items come from.
+    pub streams: HashMap<HirId, IterSource>,
+}
+
+/// How a value that isn't a `Stream` gives its items one at a time.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum IterSource {
+    /// An array, list or slice: its elements.
+    Seq,
+    /// A range value, of this element type.
+    Range(Ty),
+    /// A type that weaves `Iter`: its `next`, until it gives `none`. `item`
+    /// is the type of what it gives.
+    Woven { next: BodyId, item: Ty },
 }
 
 /// An implicit conversion.
@@ -232,6 +253,9 @@ pub enum Coercion {
     ToSlice,
     /// A value that's thrown away, where `()` is expected.
     Discard,
+    /// An array, list, slice, range or `Iter` where a `Stream` of its
+    /// items is expected.
+    ToStream(IterSource),
 }
 
 #[derive(Clone, Debug)]
@@ -378,6 +402,9 @@ struct Std {
     int_warp: Option<DefId>,
     float_warp: Option<DefId>,
     parse: Option<DefId>,
+    num: Option<DefId>,
+    iter: Option<DefId>,
+    stream: Option<DefId>,
 }
 
 /// Where the enclosing loop's `break`s go.
@@ -435,6 +462,11 @@ struct Checker<'p> {
     pending_lits: Vec<PendingLit>,
     /// Negations whose operand must turn out signed.
     pending_negations: Vec<(Ty, Span)>,
+    /// `I.Item` where `I` is a variable: the variable standing for it, `I`,
+    /// the name, and where (see `iter.rs`).
+    projections: Vec<(Ty, Ty, String, Span)>,
+    /// Values interpolated into templates, which must be `Show`.
+    pending_shows: Vec<(Ty, Span)>,
 
     /// Checking a call argument directly: where a `String` may be viewed as a `str`.
     in_argument: bool,
@@ -472,6 +504,9 @@ impl<'p> Checker<'p> {
             int_warp: find("std.num", "Int"),
             float_warp: find("std.num", "Float"),
             parse: find("std.num", "Parse"),
+            num: find("std.num", "Num"),
+            iter: find("std.iter", "Iter"),
+            stream: find("std.iter", "Stream"),
         };
         Checker {
             p,
@@ -497,6 +532,8 @@ impl<'p> Checker<'p> {
             vars: Vec::new(),
             pending_lits: Vec::new(),
             pending_negations: Vec::new(),
+            projections: Vec::new(),
+            pending_shows: Vec::new(),
             in_argument: false,
             self_ty: None,
             self_local: None,
@@ -652,6 +689,8 @@ impl<'p> Checker<'p> {
                     DefKind::Fn(_) | DefKind::Const(_) => {
                         self.queue_def(member);
                     }
+                    // `type Item = u8` for a weft the header lists.
+                    DefKind::Type(_) if self.binds_assoc(w, member) => {}
                     DefKind::Type(_) => {
                         self.unsupported(self.p.def(member).span, "types inside warps");
                     }
@@ -747,8 +786,8 @@ impl<'p> Checker<'p> {
                 DefKind::Fn(f) if !f.has_self() => {
                     self.unsupported(self.p.def(member).span, "weft functions without `self`");
                 }
-                DefKind::Type(_) => {
-                    self.unsupported(self.p.def(member).span, "associated types");
+                DefKind::Type(t) if t.value.is_some() || !t.bounds.is_empty() || !t.generics.is_empty() => {
+                    self.unsupported(self.p.def(member).span, "associated types with bounds or defaults");
                 }
                 DefKind::Const(_) => {
                     self.unsupported(self.p.def(member).span, "constants in wefts");
@@ -939,7 +978,7 @@ impl<'p> Checker<'p> {
                     }
                     DefKind::Type(alias) if alias.gauge.is_none() && alias.generics.is_empty() => match &alias.value {
                         Some(value) => self.lower_ty(value),
-                        None => self.unsupported(span, "associated types"),
+                        None => self.weft_assoc(*def, span),
                     },
                     DefKind::Type(_) => self.unsupported(span, "gauges and generic type aliases"),
                     DefKind::GenericParam(_) => match self.subst.iter().find(|(g, _)| g == def) {
@@ -1006,7 +1045,10 @@ impl<'p> Checker<'p> {
                 Some(ty) => ty,
                 None => self.unsupported(span, "`Self` outside warps"),
             },
-            HirTy::Assoc { .. } => self.unsupported(span, "associated types"),
+            HirTy::Assoc { base, name } => {
+                let ty = self.lower_ty(base);
+                self.assoc_named(ty, &name.name, span)
+            }
             HirTy::Local(_) | HirTy::ConstCall { .. } | HirTy::TypeType => {
                 self.unsupported(span, "types computed at compile time")
             }
@@ -1032,6 +1074,8 @@ impl<'p> Checker<'p> {
         let saved_loops = std::mem::take(&mut self.loops);
         let saved_lits = std::mem::take(&mut self.pending_lits);
         let saved_negations = std::mem::take(&mut self.pending_negations);
+        let saved_projections = std::mem::take(&mut self.projections);
+        let saved_shows = std::mem::take(&mut self.pending_shows);
         let saved_subjects = std::mem::take(&mut self.subjects);
         let saved_self_local = self.self_local.take();
         let saved_subst = std::mem::take(&mut self.subst);
@@ -1061,6 +1105,8 @@ impl<'p> Checker<'p> {
         self.loops = saved_loops;
         self.pending_lits = saved_lits;
         self.pending_negations = saved_negations;
+        self.projections = saved_projections;
+        self.pending_shows = saved_shows;
         self.subjects = saved_subjects;
         self.self_local = saved_self_local;
         self.subst = saved_subst;
@@ -1094,7 +1140,7 @@ impl<'p> Checker<'p> {
             return true;
         }
         if let TyKind::Optional(inner) = *self.tcx.kind(target)
-            && self.has_vars(actual)
+            && (self.has_vars(actual) || self.has_vars(inner))
             && self.unify(actual, inner)
         {
             self.b.coercions.insert(e.id, Coercion::ToOptional);
@@ -1105,6 +1151,15 @@ impl<'p> Checker<'p> {
             && (t == u || self.unify(t, u))
         {
             self.b.coercions.insert(e.id, Coercion::ToSlice);
+            return true;
+        }
+        // Anything with items, where a stream of them is expected.
+        if let Some(want) = self.stream_item(target)
+            && self.stream_item(actual).is_none()
+            && let Some((source, item)) = self.iter_source(actual)
+            && (item == want || self.unify(item, want))
+        {
+            self.b.coercions.insert(e.id, Coercion::ToStream(source));
             return true;
         }
         if let TyKind::Result(ok, _) = *self.tcx.kind(target)
@@ -1241,8 +1296,10 @@ impl<'p> Checker<'p> {
                 || matches!(kind, TyKind::Tuple(items) if all(self, items))
         } else if w == self.std.integer {
             matches!(kind, TyKind::Int(_) | TyKind::IntVar(_))
-        } else if w == self.std.parse {
+        } else if w == self.std.parse || w == self.std.num {
             numeric
+        } else if w == self.std.iter {
+            matches!(kind, TyKind::Adt(def, _) if Some(*def) == self.std.stream)
         } else {
             false
         }

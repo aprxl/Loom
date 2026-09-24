@@ -78,11 +78,15 @@ language through every layer (type checking, lowering to Lua, the runtime,
    std declares on `List` and `Slice`;
 8. `mut` parameters of scalars (copied back to the caller), and the methods
    of `str`/`String`, `char`, integers and floats, `s.parse[T]()`, and
-   slicing text.
+   slicing text;
+9. lambdas (with holes), function values and calling them; `Iter` with
+   associated types (`type Item`, `I.Item`), `Stream[T]` and its methods,
+   which lists, ranges and `Iter` types have too, `for` over any of them,
+   `chars()`/`bytes()`/`lines()`/`words()`, `chunks`/`windows`, and `where`
+   bounds on a builtin warp's parameters (`sum` needs `Num`, `sort` `Ord`).
+   `examples/widgets.loom` runs, checked by `tests/examples/widgets.out`.
 
-Next: iterators and lambdas (`Iter` with associated types, `chars()`,
-`indexed()`, `map`), then `defer`, gauges, and maps, each through every
-layer at once.
+Next: `defer`, gauges, and maps, each through every layer at once.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and

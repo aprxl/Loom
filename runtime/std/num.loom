@@ -11,6 +11,10 @@ pub warp NumError: Error {
 #builtin
 pub weft Parse {}
 
+/// Every number type: the integers and the floats.
+#builtin
+pub weft Num: Ord, Copy, Show {}
+
 /// The methods of every integer type, `T`.
 #builtin
 pub warp Int[T] {

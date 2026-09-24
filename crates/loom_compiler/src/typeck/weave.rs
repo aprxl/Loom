@@ -121,7 +121,7 @@ impl Checker<'_> {
     }
 
     /// The weft a type names, if it names a weft without arguments.
-    fn weft_of(&self, t: &hir::Ty) -> Option<DefId> {
+    pub(super) fn weft_of(&self, t: &hir::Ty) -> Option<DefId> {
         match &t.kind {
             hir::TyKind::Def { def, args } if args.is_empty() && matches!(self.p.def(*def).kind, DefKind::Weft(_)) => {
                 Some(*def)
@@ -343,8 +343,19 @@ impl Checker<'_> {
             && let Some(weft) = self.weft_of(&weave.weft)
         {
             let methods: Vec<String> = self.weft_methods(weft).iter().map(|&m| p.def(m).name.clone()).collect();
+            let assoc: Vec<String> = self.assoc_types(weft).iter().map(|&a| p.def(a).name.clone()).collect();
             for &member in &weave.members {
                 let md = p.def(member);
+                if matches!(md.kind, DefKind::Type(_)) && !assoc.contains(&md.name) {
+                    let weft_name = p.def(weft).name.clone();
+                    self.diags.push(
+                        Diagnostic::error(
+                            codes::T0114,
+                            format!("`{}` isn't an associated type of `{weft_name}`", md.name),
+                        )
+                        .primary(md.span, "not in the weft"),
+                    );
+                }
                 if matches!(md.kind, DefKind::Fn(_)) && !methods.contains(&md.name) {
                     let weft_name = p.def(weft).name.clone();
                     self.diags.push(
@@ -406,6 +417,10 @@ impl Checker<'_> {
                     .primary(w.span, "some of its fields are moved, not copied")
                     .note("a warp is `Copy` when every field is"),
             );
+        }
+        // Without its associated types, the weft's methods can't be read.
+        if !w.implied && !self.check_assoc_bindings(w.weft, w.site, w.target, w.span) {
+            return;
         }
         // A generic weave's methods are instantiated for each type it's used
         // with; only what's written is checked here, for the pattern.

@@ -125,30 +125,33 @@ impl Checker<'_> {
                 }
             }
             ExprKind::BuiltinCase(kw) => self.check_builtin_case(call, *kw, args, expected),
-            ExprKind::Local(_) => self.unsupported(callee.span, "calling function values"),
             ExprKind::Def { .. } => self.unsupported(callee.span, "calling this kind of value"),
-            _ => {
-                let ty = self.check_expr(callee, None);
-                if !self.tcx.is_error(ty) {
-                    let shown = self.show(ty);
-                    self.error(codes::T0106, callee.span, format!("`{shown}` can't be called"), "not a function");
-                }
-                self.check_args_alone(args)
-            }
+            _ => self.call_value(call, callee, args),
         }
     }
 
-    fn check_args_alone(&mut self, args: &[Arg]) -> Ty {
+    pub(super) fn check_args_alone(&mut self, args: &[Arg]) -> Ty {
         for arg in args {
-            self.check_expr(&arg.value, None);
+            self.check_arg_alone(&arg.value);
         }
         self.tcx.error
+    }
+
+    /// Checks an argument that goes nowhere, after the call was reported: a
+    /// lambda there has nothing to say what its parameters are, and that's
+    /// not worth another message.
+    fn check_arg_alone(&mut self, e: &Expr) {
+        let hint = matches!(e.kind, ExprKind::Lambda { .. }).then_some(self.tcx.error);
+        self.check_expr(e, hint);
     }
 
     /// Calls a method `find_method` found, following any `through` fields
     /// from the receiver to the method's `self`.
     fn call_found(&mut self, call: &Expr, found: Found, explicit: &[Ty], args: &[Arg], recv: Recv<'_>) -> Ty {
         let ty = self.call_fn_with(call, found.inst, explicit, args, Some(recv));
+        if let Some(source) = found.stream {
+            self.b.streams.insert(call.id, source);
+        }
         if !found.path.is_empty()
             && let Some(c) = self.b.calls.get_mut(&call.id)
         {
@@ -189,6 +192,10 @@ impl Checker<'_> {
             };
             (sig, generic::UNKNOWN, Some(Pending { inst: full, patch: Patch::Call(call.id), span: call.span, bounds }))
         } else {
+            let bounds = self.parent_bounds(def, &inst.args);
+            if !self.check_bounds(def, call.span, &bounds) {
+                return self.check_args_alone(args);
+            }
             let id = self.instance(inst);
             let Some(sig) = self.fn_sig(id) else { return self.check_args_alone(args) };
             (sig, id, None)
@@ -251,6 +258,7 @@ impl Checker<'_> {
         if let Some(pending) = pending {
             self.pending.push(pending);
         }
+        self.solve_projections();
         sig.ret
     }
 
@@ -314,6 +322,15 @@ impl Checker<'_> {
                 continue;
             }
             slots[slot] = Some(i);
+        }
+        // Lambdas go last: the other arguments may say what their
+        // parameters are (`apply(x => x + 1, 5)`).
+        let is_lambda = |i: usize| matches!(args[i].value.kind, ExprKind::Lambda { .. });
+        let order = slots.iter().enumerate().filter_map(|(slot, i)| i.map(|i| (slot, i)));
+        let order: Vec<(usize, usize)> =
+            order.clone().filter(|&(_, i)| !is_lambda(i)).chain(order.filter(|&(_, i)| is_lambda(i))).collect();
+        for (slot, i) in order {
+            let arg = &args[i];
             let saved = std::mem::replace(&mut self.in_argument, true);
             match self.prechecked.remove(&arg.value.id) {
                 Some(ty) => {
@@ -346,7 +363,7 @@ impl Checker<'_> {
         for (i, arg) in args.iter().enumerate() {
             self.prechecked.remove(&arg.value.id);
             if !slots.contains(&Some(i)) && !self.b.expr_ty.contains_key(&arg.value.id) {
-                self.check_expr(&arg.value, None);
+                self.check_arg_alone(&arg.value);
             }
         }
         ok.then_some(sources)
@@ -651,6 +668,13 @@ impl Checker<'_> {
                 return ty;
             }
         }
+        // `String.of`: a builtin warp's function, as a value.
+        if let TyKind::Adt(def, _) = *self.tcx.kind(ty)
+            && self.is_builtin(def)
+            && let Some(Member::AssocFn(f) | Member::Method(f)) = self.member(def, name)
+        {
+            return self.fn_value(e, f);
+        }
         let Some(info) = self.adt_info(ty) else {
             let shown = self.show(ty);
             return self.unsupported(span, &format!("members of `{shown}`"));
@@ -661,7 +685,7 @@ impl Checker<'_> {
                 self.b.assoc_values.insert(e.id, AssocValue::Const(def));
                 self.const_ty(def)
             }
-            Some(Member::AssocFn(_) | Member::Method(_)) => self.unsupported(span, "functions used as values"),
+            Some(Member::AssocFn(def) | Member::Method(def)) => self.fn_value(e, def),
             None => {
                 self.error(codes::T0111, span, format!("`{}` has no `{name}`", info.name), "no such member");
                 self.tcx.error

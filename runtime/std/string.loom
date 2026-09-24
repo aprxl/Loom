@@ -48,6 +48,15 @@ pub warp Str {
     pub fn repeat(self, n: usize) -> String
     /// The parts between each `sep`.
     pub fn split(self, sep: str) -> List[String]
+    /// The characters, one at a time.
+    pub fn chars(self) -> Stream[char]
+    /// The bytes of its UTF-8, one at a time.
+    pub fn bytes(self) -> Stream[u8]
+    /// The lines, without their line breaks (a newline, or a carriage
+    /// return and a newline).
+    pub fn lines(self) -> Stream[str]
+    /// The words: what's between runs of whitespace.
+    pub fn words(self) -> Stream[str]
     /// The text as a `String` of its own.
     pub fn to_string(self) -> String
     pub fn copy(self) -> String

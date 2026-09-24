@@ -206,6 +206,7 @@ impl Checker<'_> {
                 bounds.push(Bound { ty, wefts, param: p.def(g).name.clone() });
             }
         }
+        bounds.extend(self.parent_bounds(inst.def, &args[..parent_params]));
         if let Implicit::Fresh(vars) = implicit {
             for (ty, weft) in vars {
                 args.push(ty);
@@ -213,6 +214,73 @@ impl Checker<'_> {
             }
         }
         Some((sig, Instance { args, ..template }, bounds))
+    }
+
+    /// The bounds a method's `where` clause puts on its warp's parameters
+    /// (`fn sum(self) -> T where T: Num`), for the warp's arguments `args`.
+    pub(super) fn parent_bounds(&self, def: DefId, args: &[Ty]) -> Vec<Bound> {
+        let DefKind::Fn(f) = &self.p.def(def).kind else { return Vec::new() };
+        let params = self.generic_params(def);
+        let parent = &params[..params.len() - f.generics.len()];
+        let mut bounds = Vec::new();
+        for (&g, &ty) in parent.iter().zip(args) {
+            let mut wefts = Vec::new();
+            for pred in &f.where_clause {
+                if matches!(&pred.ty.kind, HirTy::Def { def, .. } if *def == g) {
+                    for t in &pred.bounds {
+                        if let HirTy::Def { def, .. } = &t.kind
+                            && matches!(self.p.def(*def).kind, DefKind::Weft(_))
+                        {
+                            wefts.push(*def);
+                        }
+                    }
+                }
+            }
+            if !wefts.is_empty() {
+                bounds.push(Bound { ty, wefts, param: self.p.def(g).name.clone() });
+            }
+        }
+        bounds
+    }
+
+    /// Reports each bound that doesn't hold for a call to `def` at `span`.
+    /// Returns whether they all do.
+    pub(super) fn check_bounds(&mut self, def: DefId, span: Span, bounds: &[Bound]) -> bool {
+        let name = self.p.def(def).name.clone();
+        let mut ok = true;
+        for bound in bounds {
+            let ty = self.deep_resolve(bound.ty);
+            if self.tcx.is_lenient(ty) {
+                continue;
+            }
+            for &weft in &bound.wefts {
+                if !self.weaves(ty, weft) {
+                    let (shown, weft_name) = (self.show(ty), self.p.def(weft).name.clone());
+                    let mut diag = Diagnostic::error(codes::T0108, format!("`{shown}` doesn't weave `{weft_name}`"));
+                    // A weft as a parameter's type is its own bound; a
+                    // named parameter says what it stands for.
+                    diag = if bound.param == weft_name {
+                        diag.primary(span, format!("`{name}` needs a `{weft_name}`"))
+                    } else {
+                        diag.primary(span, format!("`{name}` needs `{}` to weave `{weft_name}`", bound.param))
+                            .note(format!("here `{}` is `{shown}`", bound.param))
+                    };
+                    self.diags.push(diag);
+                    ok = false;
+                }
+            }
+        }
+        ok
+    }
+
+    /// Whether an error was already reported inside `span`.
+    fn errors_within(&self, span: Span) -> bool {
+        self.diags.iter().any(|d| {
+            d.severity == loom_syntax::diag::Severity::Error
+                && d.labels
+                    .iter()
+                    .any(|l| l.primary && l.span.file == span.file && l.span.lo >= span.lo && l.span.hi <= span.hi)
+        })
     }
 
     /// The wefts generic parameter `g` of `f` must weave: its bounds and
@@ -247,6 +315,10 @@ impl Checker<'_> {
             let self_ty = pending.inst.self_ty.map(|t| self.deep_resolve(t));
             let name = self.p.def(pending.inst.def).name.clone();
             if args.iter().chain(&self_ty).any(|&t| self.has_vars(t)) {
+                // An error in the call's arguments already said why.
+                if self.errors_within(pending.span) {
+                    continue;
+                }
                 self.diags.push(
                     Diagnostic::error(codes::T0110, format!("can't tell which types `{name}` is used with here"))
                         .primary(pending.span, "type arguments unknown")
@@ -257,31 +329,7 @@ impl Checker<'_> {
             if args.iter().chain(&self_ty).any(|&t| self.tcx.is_error(t)) {
                 continue;
             }
-            let mut ok = true;
-            for bound in &pending.bounds {
-                let ty = self.deep_resolve(bound.ty);
-                for &weft in &bound.wefts {
-                    if !self.weaves(ty, weft) {
-                        let (shown, weft_name) = (self.show(ty), self.p.def(weft).name.clone());
-                        let mut diag =
-                            Diagnostic::error(codes::T0108, format!("`{shown}` doesn't weave `{weft_name}`"));
-                        // A weft as a parameter's type is its own bound; a
-                        // named parameter says what it stands for.
-                        diag = if bound.param == weft_name {
-                            diag.primary(pending.span, format!("`{name}` needs a `{weft_name}`"))
-                        } else {
-                            diag.primary(
-                                pending.span,
-                                format!("`{name}` needs `{}` to weave `{weft_name}`", bound.param),
-                            )
-                            .note(format!("here `{}` is `{shown}`", bound.param))
-                        };
-                        self.diags.push(diag);
-                        ok = false;
-                    }
-                }
-            }
-            if !ok {
+            if !self.check_bounds(pending.inst.def, pending.span, &pending.bounds) {
                 continue;
             }
             let id = self.instance(Instance { args, self_ty, ..pending.inst });

@@ -14,7 +14,7 @@ use super::lir::{Expr, Stmt, StmtKind};
 use super::{Dest, LoopInfo, Lowerer};
 use crate::hir::{self, Block, DefKind, ExprKind, HirId, PatKind, StmtKind as HirStmt, TemplatePart};
 use crate::ty::{FloatTy, IntTy, Ty, TyKind};
-use crate::typeck::{ArgSource, Coercion, Receiver};
+use crate::typeck::{ArgSource, Coercion, IterSource, Receiver};
 
 impl Lowerer<'_> {
     pub(super) fn push(&mut self, kind: StmtKind) {
@@ -89,6 +89,22 @@ impl Lowerer<'_> {
                 Expr::rt("any", vec![vt, v])
             }
             Coercion::ToSlice => Expr::rt("view", vec![v]),
+            Coercion::ToStream(source) => {
+                let source = source.clone();
+                // An `Iter` changes as its stream goes: a place gives a copy.
+                let ty = self.ty_of(e);
+                let v = if matches!(source, IterSource::Woven { .. })
+                    && self.is_place(e)
+                    && self.is_table(ty)
+                    && self.is_copy(ty)
+                {
+                    let d = self.desc(ty, e.span);
+                    Expr::rt("copy", vec![d, v])
+                } else {
+                    v
+                };
+                self.stream_from(&source, v, e.span)
+            }
         }
     }
 
@@ -145,7 +161,11 @@ impl Lowerer<'_> {
         if let Some(v) = self.warp_value(e) {
             return v;
         }
+        if let Some(&id) = self.tables().fn_values.get(&e.id) {
+            return self.fn_value(id, span);
+        }
         match &e.kind {
+            ExprKind::Lambda { params, body } => self.lambda(e, params, body),
             ExprKind::Lit(lit) => self.lit(lit, false, ty),
             ExprKind::Template(parts) => self.template(parts),
             ExprKind::Local(local) => match self.aliases.get(local) {
@@ -564,6 +584,9 @@ impl Lowerer<'_> {
     // ------------------------------------------------------------ calls
 
     fn call(&mut self, call: &hir::Expr, callee: &hir::Expr, args: &[hir::Arg]) -> Expr {
+        if self.tables().closure_calls.contains(&call.id) {
+            return self.call_value(callee, args);
+        }
         let Some(info) = self.tables().calls.get(&call.id).cloned() else {
             self.unsupported(call.span, "this call");
             return Expr::Nil;
@@ -640,9 +663,14 @@ impl Lowerer<'_> {
             _ => None,
         };
         let receiver_slot = info.args.iter().position(|s| *s == ArgSource::Receiver);
+        // A `Stream` method called on something else with items: on a
+        // stream of them. A list's or a range's stream only reads it; an
+        // `Iter`'s changes it, so it gets its own copy.
+        let stream = self.tables().streams.get(&call.id).cloned();
+        let reads_only = matches!(stream, Some(IterSource::Seq | IterSource::Range(_)));
         let mut operands: Vec<(&hir::Expr, bool)> = Vec::with_capacity(args.len() + 1);
         if let Some(base) = receiver_base {
-            operands.push((base, owned(receiver_slot)));
+            operands.push((base, owned(receiver_slot) && !reads_only));
         }
         for (i, arg) in args.iter().enumerate() {
             let slot = info.args.iter().position(|s| *s == ArgSource::Arg(i));
@@ -656,6 +684,10 @@ impl Lowerer<'_> {
         };
         // A method a `through` field has is called on that field.
         let receiver = receiver.map(|r| info.through.iter().fold(r, Self::access));
+        let receiver = match (receiver, &stream) {
+            (Some(r), Some(source)) => Some(self.stream_from(source, r, call.span)),
+            (r, _) => r,
+        };
         let in_order = info.args.iter().filter_map(|s| match s {
             ArgSource::Arg(i) => Some(*i),
             ArgSource::Default | ArgSource::Receiver => None,
@@ -818,7 +850,10 @@ impl Lowerer<'_> {
             }
             ExprKind::For { pat, iter, body, .. } => match self.seq(self.ty_of(iter)) {
                 Some(seq) => self.for_seq(e, pat, iter, body, seq),
-                None => self.for_range(e, pat, iter, body),
+                None if matches!(self.tcx().kind(self.ty_of(iter)), TyKind::Range(_)) => {
+                    self.for_range(e, pat, iter, body)
+                }
+                None => self.for_stream(e, pat, iter, body),
             },
             ExprKind::Break { target, value } => {
                 if let Some(v) = value {

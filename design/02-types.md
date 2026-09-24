@@ -190,6 +190,17 @@ weft From[T] {
 Operators are wefts: `Add`, `Sub`, `Eq`, `Ord`, `Index` (see projections in
 [03](03-memory.md#projections)), `Show` (used by interpolation), `Hash`, and `Iter`.
 
+**Associated types.** A weft's `type Item` is a type each weave names
+(`type Item = u8`). Inside the weft and its weaves it's just `Item`; from
+outside, a generic parameter's is `I.Item`: `fn first[I: Iter](it: I) -> ?I.Item`.
+
+**Streams.** `for` loops over anything that weaves `Iter`. std's
+`Stream[T]` is a lazy stream of `T`s with the usual adaptors and consumers
+(`map`, `filter`, `take`, `indexed`, `zip`, `collect`, `sum`, `max`, `join`…),
+and everything with items has its methods too: `xs.indexed()`,
+`(1..=20).filter(_ % 2 == 0)`, `countdown.sum()`. On arrays, lists and
+slices, `map` and `filter` are eager and make lists; the rest are lazy.
+
 **Wefts used as parameter types are implicit generics.** `fn show_all(xs: [Show])`
 means `fn show_all[T: Show](xs: [T])`, which is monomorphized with static
 dispatch. For dynamic dispatch, write `any Show`.
@@ -297,14 +308,18 @@ pass `button.frame`.
 
 1. a method defined in `x`'s warp body
 2. a method from a weave into `x`'s type, where the weft is in scope
-3. a method forwarded through a `through` field
-4. a free function in scope whose first parameter accepts `x`
+3. for something with items that isn't a `Stream` (an array, list or slice, a
+   range, or a type that weaves `Iter`): a method of `Stream`, on a stream of
+   its items. That's how `xs.indexed()`, `(1..=20).filter(…)` and
+   `countdown.sum()` work.
+4. a method forwarded through a `through` field
+5. a free function in scope whose first parameter accepts `x`
 
 If two candidates at the same level match, it's an ambiguity error. Qualify it
 as `Weft.f(x)` or `module.f(x)`. `x.f` without parentheses is always field
 access, and methods are never called implicitly.
 
-Rule 4 is how Loom gets extension methods without special syntax:
+Rule 5 is how Loom gets extension methods without special syntax:
 
 ```loom
 fn kib(n: usize) -> usize = n * 1024

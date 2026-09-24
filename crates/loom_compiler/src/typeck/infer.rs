@@ -200,12 +200,28 @@ impl Checker<'_> {
                 self.vars[v].value = Some(default);
             }
         }
+        self.solve_projections();
+        self.projections.clear();
         self.instantiate_pending();
         // Type variables nothing pinned down were reported by the calls
         // that made them.
         for v in first_var..self.vars.len() {
             if self.vars[v].value.is_none() {
                 self.vars[v].value = Some(self.tcx.error);
+            }
+        }
+        for (ty, span) in std::mem::take(&mut self.pending_shows) {
+            let ty = self.deep_resolve(ty);
+            if !self.tcx.is_lenient(ty)
+                && !self.tcx.has_error(ty)
+                && self.std.show.is_some_and(|show| !self.weaves(ty, show))
+            {
+                let shown = self.show(ty);
+                self.diags.push(
+                    Diagnostic::error(codes::T0108, format!("`{shown}` can't be shown in a template"))
+                        .primary(span, format!("this is `{shown}`, which doesn't weave `Show`"))
+                        .help("`{x:?}` shows any value in its debug form"),
+                );
             }
         }
         for lit in std::mem::take(&mut self.pending_lits) {
@@ -237,6 +253,14 @@ impl Checker<'_> {
         }
     }
 
+    fn zonk_source(&mut self, source: super::IterSource) -> super::IterSource {
+        match source {
+            super::IterSource::Range(t) => super::IterSource::Range(self.deep_resolve(t)),
+            super::IterSource::Woven { next, item } => super::IterSource::Woven { next, item: self.deep_resolve(item) },
+            other => other,
+        }
+    }
+
     /// Replaces every variable in the results with its final type.
     pub(super) fn zonk(&mut self) {
         for i in 0..self.r.bodies.len() {
@@ -264,6 +288,36 @@ impl Checker<'_> {
         for (id, ty) in locals {
             let ty = self.deep_resolve(ty);
             self.b.local_ty.insert(id, ty);
+        }
+        let tests: Vec<_> = self.b.type_tests.iter().map(|(&k, &v)| (k, v)).collect();
+        for (id, ty) in tests {
+            let ty = self.deep_resolve(ty);
+            self.b.type_tests.insert(id, ty);
+        }
+        let fails: Vec<_> = self.b.fails.iter().map(|(&k, v)| (k, v.0)).collect();
+        for (id, ty) in fails {
+            let ty = self.deep_resolve(ty);
+            if let Some(f) = self.b.fails.get_mut(&id) {
+                f.0 = ty;
+            }
+        }
+        let streams: Vec<_> = self.b.streams.iter().map(|(&k, v)| (k, v.clone())).collect();
+        for (id, source) in streams {
+            let source = self.zonk_source(source);
+            self.b.streams.insert(id, source);
+        }
+        let to_streams: Vec<_> = self
+            .b
+            .coercions
+            .iter()
+            .filter_map(|(&k, c)| match c {
+                Coercion::ToStream(source) => Some((k, source.clone())),
+                _ => None,
+            })
+            .collect();
+        for (id, source) in to_streams {
+            let source = self.zonk_source(source);
+            self.b.coercions.insert(id, Coercion::ToStream(source));
         }
         // A widening between two types that turned out equal is no conversion.
         let widenings: Vec<_> =

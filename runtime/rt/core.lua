@@ -333,6 +333,9 @@ end
 --- The descriptor of `any W` types: the value's own is in its vtable.
 rt.anyd = { kind = "any" }
 
+--- Values nothing looks inside, like functions: shared, never copied.
+rt.opaque = { kind = "opaque" }
+
 --- Calls weft method number `k` of `any` value `x`.
 function rt.dyn(x, k, ...)
   return x[2][k](x[1], ...)
@@ -1028,6 +1031,383 @@ ext["std.slice.Slice.sort"] = function(d, s)
   end
 end
 
+-- Streams. A `Stream[T]` is a Lua function: each call gives `true, item`,
+-- or nothing once there are no more (`true` first, because an item can be
+-- nil). Items are borrowed: a stream of a list's elements gives the elements
+-- themselves, so whatever keeps one (`collect`, `find`, `next`) copies it.
+
+--- The elements of an array, list or slice.
+function rt.seq_stream(s)
+  local t, o, n = parts(s)
+  local i = 0
+  return function()
+    if i >= n then return nil end
+    i = i + 1
+    return true, t[o + i]
+  end
+end
+
+--- The values of a range `{lo, hi, inclusive}` whose values `d` describes.
+--- An open range (`hi` nil) unravels when it steps past its type's maximum.
+function rt.range_stream(d, r)
+  local x, hi, incl = r[1], r[2], r[3]
+  local u64 = d.u64
+  local started, done = false, false
+  return function()
+    if done then return nil end
+    if started then
+      if hi == nil and d.kind == "int" then
+        local next_x, o = add_raw(d, x, 1)
+        if o then error(MARK .. "arithmetic overflow", 2) end
+        x = next_x
+      else
+        x = x + 1
+      end
+    end
+    started = true
+    if hi ~= nil then
+      local inside
+      if u64 then
+        inside = incl and not ult(hi, x) or (not incl and ult(x, hi))
+      else
+        inside = incl and x <= hi or (not incl and x < hi)
+      end
+      if not inside then
+        done = true
+        return nil
+      end
+      -- The last value of an inclusive range may be its type's maximum:
+      -- stop before stepping past it.
+      if incl and x == hi then done = true end
+    end
+    return true, x
+  end
+end
+
+--- The items of a type that weaves `Iter`, from its `next`. `boxed` when
+--- `next` gives `{item}` (its items can be nil); `copy_out` when it gives
+--- the iterator's new value after the item (a `mut self` that isn't a table).
+function rt.iter_stream(next, it, boxed, copy_out)
+  return function()
+    local o
+    if copy_out then
+      o, it = next(it)
+    else
+      o = next(it)
+    end
+    if o == nil then return nil end
+    if boxed then o = o[1] end
+    return true, o
+  end
+end
+
+ext["std.iter.Stream.next"] = function(d, s)
+  local ok, v = s()
+  if not ok then return nil end
+  return some(d, copy(d, v))
+end
+
+ext["std.iter.Stream.map"] = function(_, _, s, f)
+  return function()
+    local ok, v = s()
+    if not ok then return nil end
+    return true, f(v)
+  end
+end
+
+ext["std.iter.Stream.filter"] = function(_, s, f)
+  return function()
+    while true do
+      local ok, v = s()
+      if not ok then return nil end
+      if f(v) then return true, v end
+    end
+  end
+end
+
+ext["std.iter.Stream.take"] = function(_, s, n)
+  return function()
+    if n <= 0 then return nil end
+    n = n - 1
+    return s()
+  end
+end
+
+ext["std.iter.Stream.skip"] = function(_, s, n)
+  return function()
+    while n > 0 do
+      n = n - 1
+      if not s() then return nil end
+    end
+    return s()
+  end
+end
+
+ext["std.iter.Stream.take_while"] = function(_, s, f)
+  local done = false
+  return function()
+    if done then return nil end
+    local ok, v = s()
+    if ok and f(v) then return true, v end
+    done = true
+    return nil
+  end
+end
+
+ext["std.iter.Stream.skip_while"] = function(_, s, f)
+  local skipping = true
+  return function()
+    if skipping then
+      skipping = false
+      while true do
+        local ok, v = s()
+        if not ok then return nil end
+        if not f(v) then return true, v end
+      end
+    end
+    return s()
+  end
+end
+
+ext["std.iter.Stream.indexed"] = function(_, s)
+  local i = -1
+  return function()
+    local ok, v = s()
+    if not ok then return nil end
+    i = i + 1
+    return true, { i, v }
+  end
+end
+
+ext["std.iter.Stream.zip"] = function(_, _, s, other)
+  local done = false
+  return function()
+    if done then return nil end
+    local ok, a = s()
+    if ok then
+      local ok2, b = other()
+      if ok2 then return true, { a, b } end
+    end
+    done = true
+    return nil
+  end
+end
+
+ext["std.iter.Stream.chain"] = function(_, s, other)
+  local first = true
+  return function()
+    if first then
+      local ok, v = s()
+      if ok then return true, v end
+      first = false
+    end
+    return other()
+  end
+end
+
+ext["std.iter.Stream.collect"] = function(d, s)
+  local out, n = {}, 0
+  while true do
+    local ok, v = s()
+    if not ok then break end
+    n = n + 1
+    out[n] = copy(d, v)
+  end
+  out.n = n
+  return out
+end
+
+ext["std.iter.Stream.count"] = function(_, s)
+  local n = 0
+  while s() do
+    n = n + 1
+  end
+  return n
+end
+
+ext["std.iter.Stream.last"] = function(d, s)
+  local have, last = false, nil
+  while true do
+    local ok, v = s()
+    if not ok then break end
+    have, last = true, v
+  end
+  if not have then return nil end
+  return some(d, copy(d, last))
+end
+
+ext["std.iter.Stream.each"] = function(_, s, f)
+  while true do
+    local ok, v = s()
+    if not ok then return end
+    f(v)
+  end
+end
+
+ext["std.iter.Stream.fold"] = function(_, _, s, acc, f)
+  while true do
+    local ok, v = s()
+    if not ok then return acc end
+    acc = f(acc, v)
+  end
+end
+
+ext["std.iter.Stream.reduce"] = function(d, s, f)
+  local ok, acc = s()
+  if not ok then return nil end
+  acc = copy(d, acc)
+  while true do
+    local ok2, v = s()
+    if not ok2 then return some(d, acc) end
+    acc = f(acc, v)
+  end
+end
+
+ext["std.iter.Stream.all"] = function(_, s, f)
+  while true do
+    local ok, v = s()
+    if not ok then return true end
+    if not f(v) then return false end
+  end
+end
+
+ext["std.iter.Stream.exists"] = function(_, s, f)
+  while true do
+    local ok, v = s()
+    if not ok then return false end
+    if f(v) then return true end
+  end
+end
+
+ext["std.iter.Stream.find"] = function(d, s, f)
+  while true do
+    local ok, v = s()
+    if not ok then return nil end
+    if f(v) then return some(d, copy(d, v)) end
+  end
+end
+
+ext["std.iter.Stream.position"] = function(_, s, f)
+  local i = 0
+  while true do
+    local ok, v = s()
+    if not ok then return nil end
+    if f(v) then return i end
+    i = i + 1
+  end
+end
+
+--- `sum` and `product`: integers unravel when the result doesn't fit.
+local function total(raw, op, start)
+  return function(d, s)
+    local float = d.kind == "float"
+    local acc = float and start + 0.0 or start
+    while true do
+      local ok, v = s()
+      if not ok then break end
+      if float then
+        acc = op(acc, v)
+      else
+        local r, o = raw(d, acc, v)
+        if o then error(MARK .. "arithmetic overflow", 2) end
+        acc = r
+      end
+    end
+    if d.name == "f32" then acc = rt.f32(acc) end
+    return acc
+  end
+end
+
+ext["std.iter.Stream.sum"] = total(add_raw, function(a, b) return a + b end, 0)
+ext["std.iter.Stream.product"] = total(mul_raw, function(a, b) return a * b end, 1)
+
+--- The smallest (`sign` < 0) or largest item. NaNs are skipped.
+local function extreme(sign)
+  return function(d, s)
+    local have, best = false, nil
+    local float = d.kind == "float"
+    while true do
+      local ok, v = s()
+      if not ok then break end
+      if float and v ~= v then
+        -- NaN: not smaller or larger than anything.
+      elseif not have then
+        have, best = true, v
+      else
+        local c = cmp(d, v, best)
+        if (sign < 0 and c < 0) or (sign > 0 and c >= 0) then best = v end
+      end
+    end
+    if not have then return nil end
+    return some(d, copy(d, best))
+  end
+end
+
+ext["std.iter.Stream.min"] = extreme(-1)
+ext["std.iter.Stream.max"] = extreme(1)
+
+ext["std.iter.Stream.join"] = function(d, s, sep)
+  local out, n = {}, 0
+  while true do
+    local ok, v = s()
+    if not ok then break end
+    n = n + 1
+    out[n] = show(d, v, false)
+  end
+  return concat(out, sep)
+end
+
+ext["std.slice.Slice.chunks"] = function(_, s, size)
+  if size == 0 then error(MARK .. "chunks of 0 elements", 2) end
+  local t, o, n = parts(s)
+  local at = 0
+  return function()
+    if at >= n then return nil end
+    local len = n - at
+    if len > size then len = size end
+    local view = { t = t, o = o + at, n = len }
+    at = at + len
+    return true, view
+  end
+end
+
+ext["std.slice.Slice.windows"] = function(_, s, size)
+  if size == 0 then error(MARK .. "windows of 0 elements", 2) end
+  local t, o, n = parts(s)
+  local at = 0
+  return function()
+    if at + size > n then return nil end
+    local view = { t = t, o = o + at, n = size }
+    at = at + 1
+    return true, view
+  end
+end
+
+-- Eager versions of `map` and `filter` for slices, which make lists.
+
+ext["std.slice.Slice.map"] = function(_, _, s, f)
+  local t, o, n = parts(s)
+  local out = { n = n }
+  for i = 1, n do
+    out[i] = f(t[o + i])
+  end
+  return out
+end
+
+ext["std.slice.Slice.filter"] = function(d, s, f)
+  local t, o, n = parts(s)
+  local out, m = {}, 0
+  for i = 1, n do
+    local x = t[o + i]
+    if f(x) then
+      m = m + 1
+      out[m] = copy(d, x)
+    end
+  end
+  out.n = m
+  return out
+end
+
 -- Text, character and number methods. Text is a Lua string; a `mut self`
 -- method of `String` returns its result and then the new string, which the
 -- caller stores back.
@@ -1161,6 +1541,53 @@ ext["std.string.Str.split"] = function(s, sep)
   end
   out.n = n
   return out
+end
+
+ext["std.string.Str.chars"] = function(s)
+  local at, n = 1, #s
+  return function()
+    if at > n then return nil end
+    local c = utf8.codepoint(s, at)
+    at = at + #utf8char(c)
+    return true, c
+  end
+end
+
+ext["std.string.Str.bytes"] = function(s)
+  local at, n = 0, #s
+  return function()
+    if at >= n then return nil end
+    at = at + 1
+    return true, sbyte(s, at)
+  end
+end
+
+ext["std.string.Str.lines"] = function(s)
+  local at, n = 1, #s
+  return function()
+    if at > n then return nil end
+    local nl = string.find(s, "\n", at, true)
+    local line
+    if nl then
+      line = s:sub(at, nl - 1)
+      at = nl + 1
+    else
+      line = s:sub(at)
+      at = n + 1
+    end
+    if sbyte(line, -1) == 13 then line = line:sub(1, -2) end
+    return true, line
+  end
+end
+
+ext["std.string.Str.words"] = function(s)
+  local at = 1
+  return function()
+    local i, j = string.find(s, "%S+", at)
+    if i == nil then return nil end
+    at = j + 1
+    return true, s:sub(i, j)
+  end
 end
 
 local function same(s)

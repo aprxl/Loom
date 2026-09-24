@@ -52,6 +52,9 @@ SourceDb → lex → Tokens → parse → AST → resolve/desugar → HIR
 | `any W` | `{v, vt}` (vtable per type × weft set; `vt.d` is the type's descriptor, for type tests) |
 | `[T; N]`, `List[T]` | `{n = len, [1]…[n]}`: the same, so a literal can be either (every index is emitted `+1`; never Lua's `#`) |
 | `[T]` | view `{t = elements, o = offset, n = len}` |
+| `A => B` | a Lua function (a lambda is a closure over the enclosing locals) |
+| `Stream[T]` | a Lua function: each call gives `true, item`, or nothing once done |
+| ranges (as values) | `{lo, hi, inclusive}` |
 | `^T` | the table itself for table-backed T; `{v}` box for scalars |
 | Map / Set | insertion-ordered: `{keys, vals, idx, n}` |
 
@@ -110,6 +113,34 @@ expected (`rt.view`).
 `rt.ext` and get the element type's descriptor first, so `contains`, `sort`
 and printing work for any element type. Arrays and lists have every slice
 method, passed as they are. `for mut x in xs` makes `x` stand for `xs[i]`.
+
+## Lambdas and streams
+
+A lambda is a Lua closure. It sees the enclosing locals as upvalues, so
+`xs.each(x => total += x)` changes `total` itself, and each loop iteration's
+locals are fresh. Its body is lowered as a function of its own: `return`
+leaves the lambda, and a `?` in it leaves the lambda too (labels don't cross
+into a Lua function). A function's name used as a value is its `F` entry.
+Escape checking (the `^(…)` rule for stored closures) comes with the region
+checker; for now a stored lambda simply works.
+
+A `Stream[T]` is a Lua function returning `true, item` (`true` first, since
+an item can be `nil`), so `for x in s` is Lua's generic `for _, x in s do`.
+Its methods live in `rt.ext` like `List`'s. Streams are lazy and read once.
+Items are *borrowed*: a stream of a list's elements gives the elements
+themselves, so every method that keeps an item (`collect`, `find`, `next`,
+`min`, `reduce`…) copies it (`rt.copy`); `map`'s results are fresh already.
+
+Arrays, lists, slices, ranges and types that weave `Iter` all have
+`Stream`'s methods (method lookup rule 3, see 02-types): the receiver becomes
+`rt.seq_stream(xs)`, `rt.range_stream(d, r)` or `rt.iter_stream(F.next, it,
+boxed, copy_out)`, and the same happens where a `Stream` argument is
+expected (`a.zip(1..10)`) and in `for` over an `Iter`. An `Iter`'s stream
+works on a copy of a `Copy` place, since `next` changes it. `map` and
+`filter` on a slice are eager instead, and make lists.
+
+When an unravel happens inside the runtime (a stream's step, say), the host
+reports the first frame of the Lua traceback that maps to Loom code.
 
 ## Text and primitive methods
 

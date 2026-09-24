@@ -5,7 +5,10 @@
 //!
 //! 1. a method written in the warp's body;
 //! 2. a method a weave gives the type, from a weft in scope;
-//! 3. a method a `through` field has (by these same rules), called with
+//! 3. for something with items that isn't a `Stream` (an array, list or
+//!    slice, a range, a type that weaves `Iter`): a method of `Stream`,
+//!    called on a stream of its items;
+//! 4. a method a `through` field has (by these same rules), called with
 //!    `self` rebound to that field.
 //!
 //! More than one find at the same level is ambiguous.
@@ -31,6 +34,9 @@ pub(super) struct Found {
     pub self_ty: Ty,
     /// Where it comes from, for messages: `Widget.size`, `frame.size`.
     pub via: String,
+    /// For a `Stream` method called on something else that has items (a
+    /// list, a range, an `Iter`): how it becomes the stream.
+    pub stream: Option<super::IterSource>,
 }
 
 /// The outcome of looking up a method.
@@ -42,7 +48,7 @@ pub(super) enum Lookup {
 }
 
 impl Checker<'_> {
-    /// The method `name` of `ty` by rules 1–3, reporting ambiguity.
+    /// The method `name` of `ty` by rules 1–4, reporting ambiguity.
     pub(super) fn find_method(&mut self, ty: Ty, name: &str, span: Span) -> Lookup {
         let mut found = self.methods_of(ty, name, 0);
         match found.len() {
@@ -67,7 +73,7 @@ impl Checker<'_> {
         }
     }
 
-    /// Rules 1–3 without reporting anything: every method at the first
+    /// Rules 1–4 without reporting anything: every method at the first
     /// level that has one.
     pub(super) fn methods_of(&mut self, ty: Ty, name: &str, depth: u32) -> Vec<Found> {
         let ty = self.resolve(ty);
@@ -75,7 +81,7 @@ impl Checker<'_> {
             && let Some(Member::Method(m)) = self.member(def, name)
         {
             let via = format!("{}.{name}", self.p.def(def).name);
-            return vec![Found { inst: self.member_instance(m, ty), path: Vec::new(), self_ty: ty, via }];
+            return vec![Found { inst: self.member_instance(m, ty), path: Vec::new(), self_ty: ty, via, stream: None }];
         }
         // Arrays and lists have the methods of slices, and primitive types
         // the methods std gives them.
@@ -91,13 +97,18 @@ impl Checker<'_> {
                     path: Vec::new(),
                     self_ty: ty,
                     via: format!("{}.{name}", self.p.def(weft).name),
+                    stream: None,
                 })
                 .collect();
+        }
+        // Anything with items has the methods of `Stream`.
+        if let Some(found) = self.stream_method(ty, name) {
+            return vec![found];
         }
         self.forwarded(ty, name, depth)
     }
 
-    /// Rule 3: the methods `name` of `ty`'s `through` fields.
+    /// Rule 4: the methods `name` of `ty`'s `through` fields.
     pub(super) fn forwarded(&mut self, ty: Ty, name: &str, depth: u32) -> Vec<Found> {
         if depth >= MAX_THROUGH {
             return Vec::new();

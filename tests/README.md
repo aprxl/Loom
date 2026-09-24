@@ -9,7 +9,7 @@ just these.
 |-----------|---------------------|-----------------|
 | `run/` | a program | its output, exactly (`NAME.out`). With `NAME.unravel`, it must unravel with the message on that file's first line, at the Loom line the second line names (`line 4`). With `NAME.error`, `main` must fail with that error. |
 | `fail/` | a program that must not compile | `//~ CODE …` comments: exactly those diagnostics, on the lines they're on |
+| `examples/` | `NAME.out`: the exact output of `examples/NAME.loom`, which must run to the end | |
 
 Still to come, as the milestones need them: `lower/` (reviewed snapshots of
-emitted Lua) and `examples/NAME.out` (the expected output of
-`examples/NAME.loom`, which turns that example's check on).
+emitted Lua).

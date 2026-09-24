@@ -1,0 +1,131 @@
+// Streams, `Iter`, and the stream methods of lists, ranges and text.
+
+use std.io.print
+
+warp Countdown: Iter {
+    n: u32
+    type Item = u32
+    fn next(mut self) -> ?u32 {
+        if .n == 0 { return none }
+        .n -= 1
+        .n + 1
+    }
+}
+
+warp Fib { a: u64 = 0, b: u64 = 1 }
+weave Iter into Fib {
+    type Item = u64
+    fn next(mut self) -> ?Item {                 // `Item` is `u64` here
+        let out = .a
+        (.a, .b) = (.b, .a + .b)
+        out
+    }
+}
+
+// Items that can be `none` themselves.
+warp Maybes { i: u8 = 0 }
+weave Iter into Maybes {
+    type Item = ?u8
+    fn next(mut self) -> ??u8 {
+        if .i >= 4 { return none }
+        .i += 1
+        some(if .i % 2 == 0 { some(.i) } else { none })
+    }
+}
+
+// An iterator that isn't a table: `next` hands its new value back.
+warp Light {
+    case Red
+    case Green
+    case Off
+}
+weave Iter into Light {
+    type Item = str
+    fn next(mut self) -> ?str = match self {
+        .Red => {
+            self = .Green
+            "red"
+        }
+        .Green => {
+            self = .Off
+            "green"
+        }
+        .Off => none
+    }
+}
+
+warp Point: Ord { x: i32, y: i32 }
+
+fn total(it: Iter) -> u64 {
+    var sum: u64 = 0
+    for x in it { sum += x as u64 }
+    sum
+}
+
+fn first_of[I: Iter](it: I) -> ?I.Item {
+    var it = it
+    it.next()
+}
+
+fn main() {
+    // `for` over an `Iter` loops over a copy.
+    let c = Countdown(3)
+    for n in c { print(n) }
+    print("{c.collect()} {c.map(_ * 2).sum()} {c.n}")
+    print(Fib().take(10).collect())
+    print(Fib().take_while(_ < 100).last())
+    for m in Maybes() { print("{m:?}") }
+    print("{Maybes().collect()} {Maybes().count()}")
+    var light: Light = .Red
+    for s in light { print(s) }
+    print("{light:?} {Light.Red.join("+")}")
+    print("{total(Countdown(4))} {total("abc".bytes())} {first_of(Countdown(9))} {first_of(Countdown(0))}")
+
+    // A stream is read once, one item at a time.
+    var s = "añb".chars()
+    print("{s.next()} {s.next()} {s.next()} {s.next()}")
+
+    // Adaptors.
+    let xs = [5, 3, 8, 1, 9, 2]
+    print(xs.indexed().filter(_.1 > 4).map(p => p.0).collect())
+    print("{(1..=10).skip(7).collect()} {(1..=10).skip_while(_ < 8).collect()} {(1..10).take(0).count()}")
+    print("{(1..4).zip("abcd".chars()).collect()} {(1..3).chain(7..9).collect()}")
+    print("{xs.position(_ == 8)} {xs.position(_ == 7)} {xs.find(_ > 5)} {xs.find(_ > 50)}")
+    print("{xs.all(_ > 0)} {xs.all(_ > 1)} {xs.exists(_ == 9)} {[0; 0].all(_ > 1)} {[0; 0].exists(_ > 1)}")
+    print("{xs.fold(0, (acc, x) => acc * 10 + x)} {xs.reduce(_ + _)} {[0; 0].reduce(_ + _)}")
+    print("{xs.sum()} {xs.product()} {xs.min()} {xs.max()} {xs.count()} {xs.last()}")
+    print("{[1.5, 2.5].sum()} {[0.0 / 0.0, 2.0, -1.0].max()} {[0.0 / 0.0].min()}")
+    print(xs.map(_ * 2).join(", "))
+
+    // Lists own their elements: what they're made from isn't shared.
+    var pts = [Point(1, 2), Point(3, 4), Point(3, 0)]
+    var near = pts.filter(_.x < 2)
+    near[0].x = 100
+    var firsts = pts.indexed().map(_.1).collect()
+    firsts[1].y = -1
+    print("{pts[0].x} {pts[1].y} {near[0].x} {firsts[1].y}")
+    print("{pts.max():?} {pts.min():?}")      // `Point` is `Ord`, field by field
+
+    // Ranges: to their type's limits, and empty ones.
+    print("{(250u8..=255).count()} {(254u8..).take(2).collect()} {(5..1).count()} {(3..=3).collect()}")
+    print("{('a'..='e').collect()} {(18446744073709551614u64..=18446744073709551615).collect()}")
+    let r = 2..5
+    print("{r.map(n => n * n).collect()} {r.sum()}")
+
+    // Text.
+    print("{"héllo".chars().count()} {"  two  words ".words().collect()} {"".words().count()}")
+    print("{"a\nb\r\nc\n".lines().collect()} {"".lines().count()} {"x\n\ny".lines().count()}")
+
+    // Views of a slice.
+    let grid = ['a', 'b', 'c', 'd', 'e']
+    print("{grid.chunks(2).map(String.of).join("|")} {grid.windows(4).count()} {grid.windows(9).count()}")
+
+    // `break` and `continue` in a loop over a stream.
+    outer: for w in "one two three four".words() {
+        for ch in w.chars() {
+            if ch == 'w' { continue outer }
+            if ch == 'f' { break outer }
+        }
+        print(w)
+    }
+}

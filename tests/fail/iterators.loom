@@ -1,0 +1,33 @@
+// Iteration used wrongly.
+
+warp Point { x: i32, y: i32 }
+
+warp NoItem { n: u8 }
+weave Iter into NoItem {                         //~ T0113
+    fn next(mut self) -> ?u8 = none
+}
+
+warp Extra { n: u8 }
+weave Iter into Extra {
+    type Item = u8
+    type Other = u8                              //~ T0114
+    fn next(mut self) -> ?u8 = none
+}
+
+warp Wrong { n: u8 }
+weave Iter into Wrong {
+    type Item = u8
+    fn next(mut self) -> ?u16 = none             //~ T0114
+}
+
+fn main() {
+    for x in 5 { }                               //~ T0108
+    for mut c in "abc".chars() { }               //~ T0107
+    let words = ["a", "b"].map(_.to_string())
+    let total = words.sum()                      //~ T0108
+    var pts = [Point(1, 2)]
+    pts.sort()                                   //~ T0108
+    let has = pts.contains(Point(1, 2))          //~ T0108
+    let s = "ab".chars()
+    let c = s.next()                             //~ T0107
+}

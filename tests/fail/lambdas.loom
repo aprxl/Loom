@@ -1,0 +1,16 @@
+// Lambdas and function values used wrongly.
+
+fn apply(f: i32 => i32, x: i32) -> i32 = f(x)
+
+fn main() {
+    let f = x => x                           //~ T0110
+    let g: i32 => i32 = (a, b) => a + b      //~ T0104
+    let h = (x: i32) => x * 2
+    h(1, 2)                                  //~ T0104
+    h(x: 1)                                  //~ T0105
+    let n = 5
+    n(1)                                     //~ T0106
+    apply((x: str) => 1, 2)                  //~ T0101
+    apply(x => "no", 2)                      //~ T0101
+    [1, 2].each(x => x + 1)                  //~ T0101
+}

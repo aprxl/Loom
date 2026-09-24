@@ -1,0 +1,11 @@
+Loom settings
+┌──────────────┐
+│     Save     │
+└──────────────┘
+╔══════════════╗
+║     Quit     ║
+╚══════════════╝
+
+column: 3 children, 16×7, area 112
+  button 'Save' is 16 wide
+  button 'Quit' is 16 wide

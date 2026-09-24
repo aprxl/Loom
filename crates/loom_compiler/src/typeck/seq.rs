@@ -250,7 +250,7 @@ impl Checker<'_> {
         let Some(Member::Method(m)) = self.member(warp, name) else { return None };
         let self_ty = self.tcx.intern(TyKind::Adt(warp, args));
         let via = format!("{}.{name}", self.p.def(warp).name);
-        Some(Found { inst: self.member_instance(m, self_ty), path: Vec::new(), self_ty, via })
+        Some(Found { inst: self.member_instance(m, self_ty), path: Vec::new(), self_ty, via, stream: None })
     }
 
     /// An index: any unsigned integer, used as a `usize`.
@@ -307,7 +307,13 @@ impl Checker<'_> {
         let slice = self.std.slice?;
         let Some(Member::Method(m)) = self.member(slice, name) else { return None };
         let self_ty = self.slice_of(seq.elem());
-        Some(Found { inst: self.member_instance(m, self_ty), path: Vec::new(), self_ty, via: format!("[T].{name}") })
+        Some(Found {
+            inst: self.member_instance(m, self_ty),
+            path: Vec::new(),
+            self_ty,
+            via: format!("[T].{name}"),
+            stream: None,
+        })
     }
 
     /// `List()`: an empty list.

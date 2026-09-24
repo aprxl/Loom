@@ -1,0 +1,6 @@
+use std.io.print
+
+fn main() {
+    let bytes: [u8; 2] = [200, 100]
+    print(bytes.sum())
+}

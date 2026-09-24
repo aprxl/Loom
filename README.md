@@ -299,13 +299,14 @@ built in `crates/`, following the plan in `design/lua-backend.md`:
   default methods, derived `Show`, `Eq` and `Ord`, and `through`; and
   generics, checked and compiled per instance; `any W` with dynamic
   dispatch and type tests; optionals and errors: `?`, `mend`, `fail`,
-  unions, and `main ! E`; arrays, lists and slices; and the methods of text,
-  characters and numbers. `loom run <file>` runs a program;
-  `loom build <file>` writes the Lua; `--emit tokens|ast|hir|lua` dumps a
-  stage. The examples use more than this; the compiler says so rather than
-  guessing.
-- **Next:** iterators and lambdas, then `defer`, gauges and maps, one slice
-  at a time through every layer.
+  unions, and `main ! E`; arrays, lists and slices; the methods of text,
+  characters and numbers; and lambdas, `Iter` and lazy streams.
+  `examples/widgets.loom` runs start to finish. `loom run <file>` runs a
+  program; `loom build <file>` writes the Lua; `--emit tokens|ast|hir|lua`
+  dumps a stage. The other examples use more than this; the compiler says so
+  rather than guessing.
+- **Next:** `defer`, gauges and maps, one slice at a time through every
+  layer.
 
 ```bash
 cargo run -p loom -- run tests/run/fizzbuzz.loom

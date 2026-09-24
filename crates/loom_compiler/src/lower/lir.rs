@@ -87,6 +87,8 @@ pub enum StmtKind {
     While(Expr, Vec<Stmt>),
     /// `for var = start, stop do … end`.
     NumFor(String, Expr, Expr, Vec<Stmt>),
+    /// `for a, b in f do … end`.
+    GenFor(Vec<String>, Expr, Vec<Stmt>),
     Do(Vec<Stmt>),
     Goto(String),
     Label(String),
@@ -214,6 +216,16 @@ impl Printer {
                 self.expr(start, 0);
                 self.write(", ");
                 self.expr(stop, 0);
+                self.write(" do");
+                self.end_line();
+                self.block(body);
+                self.line_start(None);
+                self.write("end");
+                self.end_line();
+            }
+            StmtKind::GenFor(vars, f, body) => {
+                self.write(&format!("for {} in ", vars.join(", ")));
+                self.expr(f, 0);
                 self.write(" do");
                 self.end_line();
                 self.block(body);

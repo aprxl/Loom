@@ -18,6 +18,7 @@
 //! function. Next to the Lua text, a source map records the Loom line of
 //! every Lua line that starts a statement.
 
+mod closure;
 mod expr;
 mod fallible;
 mod lir;
@@ -59,6 +60,7 @@ pub const RUNTIME_WARPS: &[&str] = &[
     "std.string.Char",
     "std.num.Int",
     "std.num.Float",
+    "std.iter.Stream",
 ];
 
 /// Lowers a type-checked program. `typed` must have no errors.
@@ -288,6 +290,11 @@ impl<'a> Lowerer<'a> {
             TyKind::Unit => Expr::field(Expr::name("rt"), "unit"),
             // The value carries its own type's description in its vtable.
             TyKind::Any(_) | TyKind::Union(_) => Expr::field(Expr::name("rt"), "anyd"),
+            // Values nothing looks inside: shared rather than copied.
+            TyKind::Fn(..) | TyKind::Range(_) => Expr::field(Expr::name("rt"), "opaque"),
+            TyKind::Adt(def, _) if self.p.def_path(*def) == "std.iter.Stream" => {
+                Expr::field(Expr::name("rt"), "opaque")
+            }
             TyKind::Array(..) | TyKind::Adt(..) if self.seq(ty).is_some() => {
                 let seq = self.seq(ty).expect("checked");
                 self.seq_desc(seq, span)
@@ -611,6 +618,7 @@ fn with_copy_outs(stmts: Vec<Stmt>, outs: &[Expr]) -> Vec<Stmt> {
                 ),
                 StmtKind::While(c, b) => StmtKind::While(c, with_copy_outs(b, outs)),
                 StmtKind::NumFor(v, lo, hi, b) => StmtKind::NumFor(v, lo, hi, with_copy_outs(b, outs)),
+                StmtKind::GenFor(vars, f, b) => StmtKind::GenFor(vars, f, with_copy_outs(b, outs)),
                 StmtKind::Do(b) => StmtKind::Do(with_copy_outs(b, outs)),
                 other => other,
             };

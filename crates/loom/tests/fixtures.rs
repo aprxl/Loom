@@ -4,6 +4,7 @@
 //!   match `NAME.out`. With `NAME.unravel`, the run must unravel with the
 //!   message on that file's first line, at the Loom line its second line
 //!   names (`line 4`); otherwise it must finish.
+//! - `tests/examples/NAME.out` is the exact output of `examples/NAME.loom`.
 //! - `tests/fail/NAME.loom` must fail to compile with exactly the
 //!   diagnostics its `//~ CODE …` comments list, on the lines they're on.
 //!
@@ -104,6 +105,41 @@ fn run_corpus() {
         paths.len(),
         failures.join("\n\n")
     );
+}
+
+/// `tests/examples/NAME.out` is the output of `examples/NAME.loom`, which
+/// must run to the end.
+#[test]
+fn examples_corpus() {
+    let mut failures = Vec::new();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let dir = root.join("tests/examples");
+    let mut outs: Vec<PathBuf> = std::fs::read_dir(&dir)
+        .unwrap_or_else(|e| panic!("{}: {e}", dir.display()))
+        .map(|e| e.expect("dir entry").path())
+        .filter(|p| p.extension().is_some_and(|e| e == "out"))
+        .collect();
+    outs.sort();
+    assert!(!outs.is_empty());
+    for out_path in &outs {
+        let name = out_path.file_stem().and_then(|s| s.to_str()).unwrap_or("?").to_string();
+        let (db, diags, bundle) = compile(&root.join("examples").join(format!("{name}.loom")));
+        let Some(bundle) = bundle else {
+            failures.push(format!("{name}: didn't compile:\n{}", rendered(&db, &diags)));
+            continue;
+        };
+        let buffer = Rc::new(RefCell::new(Vec::new()));
+        let outcome = run_bundle(&bundle.lua, Some(&bundle.map), Output::Capture(buffer.clone()));
+        let out = String::from_utf8_lossy(&buffer.borrow()).into_owned();
+        let expected = std::fs::read_to_string(out_path).unwrap_or_default();
+        if out != expected {
+            failures.push(format!("{name}: output differs\n--- expected\n{expected}--- got\n{out}"));
+        }
+        if !matches!(outcome, Outcome::Finished) {
+            failures.push(format!("{name}: ended with {outcome:?}"));
+        }
+    }
+    assert!(failures.is_empty(), "{} examples failed:\n\n{}", failures.len(), failures.join("\n\n"));
 }
 
 #[test]
