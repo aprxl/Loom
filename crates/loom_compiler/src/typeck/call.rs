@@ -38,7 +38,7 @@ struct Recv<'e> {
 
 impl Checker<'_> {
     pub(super) fn check_call(&mut self, call: &Expr, callee: &Expr, args: &[Arg], expected: Option<Ty>) -> Ty {
-        self.r.expr_ty.insert(callee.id, self.tcx.error);
+        self.b.expr_ty.insert(callee.id, self.tcx.error);
         match &callee.kind {
             ExprKind::Def { def, args: generic_args } if matches!(self.p.def(*def).kind, DefKind::Fn(_)) => {
                 if !generic_args.is_empty() {
@@ -109,7 +109,7 @@ impl Checker<'_> {
 
     fn receiver_ty(&self, receiver: Receiver) -> Ty {
         match receiver {
-            Receiver::Local(l) => self.r.local_ty.get(&l).copied().unwrap_or(self.tcx.error),
+            Receiver::Local(l) => self.b.local_ty.get(&l).copied().unwrap_or(self.tcx.error),
             Receiver::Subject(id) => self.subjects.iter().find(|(s, _)| *s == id).map_or(self.tcx.error, |(_, t)| *t),
             Receiver::Expr => self.tcx.error,
         }
@@ -118,8 +118,8 @@ impl Checker<'_> {
     /// Calls function `def`. With a receiver, it feeds the first parameter
     /// and `args` the rest.
     fn call_fn(&mut self, call: &Expr, def: DefId, args: &[Arg], recv: Option<Recv<'_>>) -> Ty {
-        self.queue_def(def);
-        let Some(sig) = self.fn_sig(def) else { return self.check_args_alone(args) };
+        let id = self.queue_def(def);
+        let Some(sig) = self.fn_sig(id) else { return self.check_args_alone(args) };
         let name = self.p.def(def).name.clone();
         let mut params: &[SigParam] = &sig.params;
         let receiver = match recv {
@@ -157,7 +157,7 @@ impl Checker<'_> {
         if receiver.is_some() {
             sources.insert(0, ArgSource::Receiver);
         }
-        self.r.calls.insert(call.id, Call { callee: def, args: sources, receiver });
+        self.b.calls.insert(call.id, Call { callee: id, args: sources, receiver });
         sig.ret
     }
 
@@ -233,7 +233,7 @@ impl Checker<'_> {
         }
         // Arguments that went nowhere still need types.
         for (i, arg) in args.iter().enumerate() {
-            if !slots.contains(&Some(i)) && !self.r.expr_ty.contains_key(&arg.value.id) {
+            if !slots.contains(&Some(i)) && !self.b.expr_ty.contains_key(&arg.value.id) {
                 self.check_expr(&arg.value, None);
             }
         }
@@ -362,7 +362,7 @@ impl Checker<'_> {
         if let (TyKind::Tuple(items), FieldName::Index(i, span)) = (self.tcx.kind(base_ty).clone(), field) {
             return match items.get(*i as usize) {
                 Some(&ty) => {
-                    self.r.fields.insert(e.id, FieldAccess { key: Key::Pos(*i + 1), base: Receiver::Expr });
+                    self.b.fields.insert(e.id, FieldAccess { key: Key::Pos(*i + 1), base: Receiver::Expr });
                     ty
                 }
                 None => {
@@ -388,7 +388,7 @@ impl Checker<'_> {
         };
         match self.field_of(&info, &name, e.span) {
             Some((key, ty)) => {
-                self.r.fields.insert(e.id, FieldAccess { key, base: Receiver::Expr });
+                self.b.fields.insert(e.id, FieldAccess { key, base: Receiver::Expr });
                 ty
             }
             None => self.tcx.error,
@@ -430,7 +430,7 @@ impl Checker<'_> {
                 _ => None,
             };
             if let Some(value) = value {
-                self.r.assoc_values.insert(e.id, AssocValue::Int(value));
+                self.b.assoc_values.insert(e.id, AssocValue::Int(value));
                 return ty;
             }
         }
@@ -441,7 +441,7 @@ impl Checker<'_> {
         match self.member(info.def, name) {
             Some(Member::Case(case)) => self.construct(e.id, &info, Some(case), None, e.span),
             Some(Member::Const(def)) => {
-                self.r.assoc_values.insert(e.id, AssocValue::Const(def));
+                self.b.assoc_values.insert(e.id, AssocValue::Const(def));
                 self.const_ty(def)
             }
             Some(Member::AssocFn(_) | Member::Method(_)) => self.unsupported(span, "functions used as values"),
@@ -460,12 +460,12 @@ impl Checker<'_> {
         };
         match self.resolve_leading(&name, e.span, expected, false) {
             Some(Leading::Field(key, ty, receiver)) => {
-                self.r.fields.insert(e.id, FieldAccess { key, base: receiver });
+                self.b.fields.insert(e.id, FieldAccess { key, base: receiver });
                 ty
             }
             Some(Leading::Case(info, case)) => self.construct(e.id, &info, Some(case), None, e.span),
             Some(Leading::Const(def)) => {
-                self.r.leading_consts.insert(e.id, def);
+                self.b.leading_consts.insert(e.id, def);
                 self.const_ty(def)
             }
             Some(Leading::Method(..) | Leading::AssocFn(_)) => self.unsupported(e.span, "functions used as values"),
@@ -561,7 +561,7 @@ impl Checker<'_> {
         match &e.kind {
             ExprKind::Local(l) => Some(self.p.local(*l).mutable),
             ExprKind::Field { base, .. } => self.place(base),
-            ExprKind::LeadingDot(_) => match self.r.fields.get(&e.id).map(|f| f.base) {
+            ExprKind::LeadingDot(_) => match self.b.fields.get(&e.id).map(|f| f.base) {
                 Some(Receiver::Local(l)) => Some(self.p.local(l).mutable),
                 Some(Receiver::Subject(id)) => Some(self.subject_mutable(id)),
                 _ => None,

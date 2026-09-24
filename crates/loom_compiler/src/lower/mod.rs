@@ -31,7 +31,7 @@ use loom_syntax::source::{SourceDb, Span};
 
 use crate::hir::{DefId, DefKind, FnRet, HirId, LocalId, Program};
 use crate::ty::{FloatTy, Ty, TyKind};
-use crate::typeck::Typed;
+use crate::typeck::{Body, BodyId, Typed};
 use lir::{Expr, Printer, Stmt, StmtKind};
 
 /// A compiled program.
@@ -49,8 +49,8 @@ const EXTERNS: &[&str] = &["std.io.print", "std.error.unravel", "std.error.asser
 pub fn lower(db: &SourceDb, p: &Program, typed: &Typed) -> Result<Bundle, Vec<Diagnostic>> {
     let mut l = Lowerer::new(p, typed);
     let Some(main) = l.find_main() else { return Err(l.diags) };
-    for &def in &typed.results.reachable {
-        l.lower_def(def);
+    for &id in &typed.results.reachable {
+        l.lower_instance(id);
     }
     if !l.diags.is_empty() {
         return Err(l.diags);
@@ -91,10 +91,12 @@ struct Lowerer<'a> {
     descs: IndexMap<Ty, Expr>,
     externs: IndexMap<String, usize>,
     /// Lowered functions and constants, in the order they were reached.
-    fns: Vec<(DefId, Stmt)>,
+    fns: Vec<Stmt>,
     consts: IndexMap<DefId, (Stmt, Vec<DefId>)>,
 
     // Per-body state.
+    /// The body being lowered: where its types and decisions are recorded.
+    cur: BodyId,
     out: Vec<Stmt>,
     next_temp: u32,
     next_label: u32,
@@ -117,6 +119,7 @@ impl<'a> Lowerer<'a> {
             externs: IndexMap::new(),
             fns: Vec::new(),
             consts: IndexMap::new(),
+            cur: BodyId(0),
             out: Vec::new(),
             next_temp: 0,
             next_label: 0,
@@ -168,6 +171,31 @@ impl<'a> Lowerer<'a> {
 
     fn def_name(&self, def: DefId) -> String {
         format!("{}_{}", ident(&self.p.def(def).name), def.0)
+    }
+
+    /// The name of a function instance in `F`. A function checked as written
+    /// is named after its definition; one checked for a particular `Self`
+    /// also gets its instance number.
+    fn fn_name(&self, id: BodyId) -> String {
+        let inst = self.typed.results.instance(id);
+        match inst.self_ty {
+            None => self.def_name(inst.def),
+            Some(_) => format!("{}_{}", self.def_name(inst.def), id.0),
+        }
+    }
+
+    /// The tables of the body being lowered.
+    fn tables(&self) -> &'a Body {
+        self.typed.results.body(self.cur)
+    }
+
+    /// Runs `f` reading the tables of body `id`: for a default value, which
+    /// was checked with its function or warp rather than with the caller.
+    fn in_body<T>(&mut self, id: BodyId, f: impl FnOnce(&mut Self) -> T) -> T {
+        let saved = std::mem::replace(&mut self.cur, id);
+        let out = f(self);
+        self.cur = saved;
+        out
     }
 
     fn new_temp(&mut self) -> String {
@@ -300,9 +328,11 @@ impl<'a> Lowerer<'a> {
 
     // ------------------------------------------------------------ items
 
-    fn lower_def(&mut self, def: DefId) {
+    fn lower_instance(&mut self, id: BodyId) {
         let p = self.p;
+        let def = self.typed.results.instance(id).def;
         let d = p.def(def);
+        self.cur = id;
         match &d.kind {
             DefKind::Fn(f) if f.abi.is_some() || f.body.is_none() => {}
             DefKind::Fn(f) => {
@@ -314,8 +344,8 @@ impl<'a> Lowerer<'a> {
                     this.lower_into(body_expr, if unit { &Dest::Discard } else { &Dest::Return });
                 });
                 let func = Expr::Function(params, body);
-                let target = Expr::field(Expr::name("F"), &self.def_name(def));
-                self.fns.push((def, Stmt { kind: StmtKind::Assign(vec![target], vec![func]), span: Some(span) }));
+                let target = Expr::field(Expr::name("F"), &self.fn_name(id));
+                self.fns.push(Stmt { kind: StmtKind::Assign(vec![target], vec![func]), span: Some(span) });
             }
             DefKind::Const(c) if !self.typed.results.untyped_consts.contains_key(&def) => {
                 let span = d.span;
@@ -362,7 +392,7 @@ impl<'a> Lowerer<'a> {
             let target = Expr::index(Expr::name("EXT"), Expr::Int(i as i64));
             printer.stmt(&Stmt { kind: StmtKind::Assign(vec![target], vec![source]), span: None });
         }
-        for (_, stmt) in &self.fns {
+        for stmt in &self.fns {
             printer.stmt(stmt);
         }
         for stmt in self.const_order() {

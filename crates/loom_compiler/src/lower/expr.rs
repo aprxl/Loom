@@ -30,7 +30,7 @@ impl Lowerer<'_> {
 
     /// The type of an expression as checked (before its coercion).
     pub(super) fn ty_of(&self, e: &hir::Expr) -> Ty {
-        self.typed.results.expr_ty.get(&e.id).copied().unwrap_or(self.typed.tcx.error)
+        self.tables().expr_ty.get(&e.id).copied().unwrap_or(self.typed.tcx.error)
     }
 
     fn int_of(&self, ty: Ty) -> Option<IntTy> {
@@ -71,7 +71,7 @@ impl Lowerer<'_> {
     }
 
     pub(super) fn coerce(&mut self, e: &hir::Expr, v: Expr) -> Expr {
-        let Some(coercion) = self.typed.results.coercions.get(&e.id) else { return v };
+        let Some(coercion) = self.tables().coercions.get(&e.id) else { return v };
         match coercion {
             Coercion::Widen | Coercion::StrToString | Coercion::StringToStr | Coercion::Discard => v,
             Coercion::ToOptional => {
@@ -516,19 +516,20 @@ impl Lowerer<'_> {
     // ------------------------------------------------------------ calls
 
     fn call(&mut self, call: &hir::Expr, callee: &hir::Expr, args: &[hir::Arg]) -> Expr {
-        let Some(info) = self.typed.results.calls.get(&call.id).cloned() else {
+        let Some(info) = self.tables().calls.get(&call.id).cloned() else {
             self.unsupported(call.span, "this call");
             return Expr::Nil;
         };
         let p = self.p;
-        let DefKind::Fn(f) = &p.def(info.callee).kind else { return Expr::Nil };
+        let def = self.typed.results.instance(info.callee).def;
+        let DefKind::Fn(f) = &p.def(def).kind else { return Expr::Nil };
         let target = if f.abi.is_some() {
-            match self.extern_fn(info.callee, callee.span) {
+            match self.extern_fn(def, callee.span) {
                 Some(e) => e,
                 None => return Expr::Nil,
             }
         } else {
-            Expr::field(Expr::name("F"), &self.def_name(info.callee))
+            Expr::field(Expr::name("F"), &self.fn_name(info.callee))
         };
         // `take` parameters own their argument (a `Copy` place is copied);
         // read and `mut` parameters share it.
@@ -589,7 +590,9 @@ impl Lowerer<'_> {
                         self.unsupported(default.span, "default values that use other parameters");
                         params.push(Expr::Nil);
                     } else {
-                        params.push(self.lower_owned(default));
+                        // The default was checked with the function's body.
+                        let value = self.in_body(info.callee, |this| this.lower_owned(default));
+                        params.push(value);
                     }
                 }
             }
@@ -602,8 +605,7 @@ impl Lowerer<'_> {
     /// Lowers `e` so its value reaches `dest`.
     pub(super) fn lower_into(&mut self, e: &hir::Expr, dest: &Dest) {
         let has_coercion = self
-            .typed
-            .results
+            .tables()
             .coercions
             .get(&e.id)
             .is_some_and(|c| !matches!(c, Coercion::Widen | Coercion::StrToString | Coercion::StringToStr));
@@ -725,7 +727,7 @@ impl Lowerer<'_> {
         match &last.kind {
             HirStmt::Expr(tail) if !matches!(tail.kind, ExprKind::Assign { .. }) => {
                 self.span = Some(last.span);
-                let discard = self.typed.results.coercions.get(&tail.id) == Some(&Coercion::Discard);
+                let discard = self.tables().coercions.get(&tail.id) == Some(&Coercion::Discard);
                 self.lower_into(tail, if discard { &Dest::Discard } else { dest });
             }
             _ => self.stmt(last),
@@ -781,9 +783,7 @@ impl Lowerer<'_> {
         // `else if` chains become `elseif` when the condition needs no statements.
         while let Some(e) = next {
             match &e.kind {
-                ExprKind::If { cond, then, else_, deferred: None }
-                    if !self.typed.results.coercions.contains_key(&e.id) =>
-                {
+                ExprKind::If { cond, then, else_, deferred: None } if !self.tables().coercions.contains_key(&e.id) => {
                     let mut c = Expr::Nil;
                     let pre = self.nested(|this| c = this.lower_expr(cond));
                     if !pre.is_empty() {

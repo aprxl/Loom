@@ -72,7 +72,7 @@ impl Lowerer<'_> {
         match &e.kind {
             ExprKind::Local(_) => true,
             ExprKind::Field { base, .. } => self.is_place(base),
-            ExprKind::LeadingDot(_) => self.typed.results.fields.contains_key(&e.id),
+            ExprKind::LeadingDot(_) => self.tables().fields.contains_key(&e.id),
             _ => false,
         }
     }
@@ -129,7 +129,7 @@ impl Lowerer<'_> {
                 FieldSource::Arg(i) => lowered[*i].clone(),
                 FieldSource::Default(field) => match &self.p.def(*field).kind {
                     DefKind::Field(f) => match &f.default {
-                        Some(default) => self.lower_owned(default),
+                        Some(default) => self.in_body(c.defaults, |this| this.lower_owned(default)),
                         None => Expr::Nil,
                     },
                     _ => Expr::Nil,
@@ -153,7 +153,7 @@ impl Lowerer<'_> {
 
     /// A field read: `p.x`, `t.0`, or a leading `.x`.
     pub(super) fn field_value(&mut self, e: &hir::Expr) -> Option<Expr> {
-        let access = self.typed.results.fields.get(&e.id)?.clone();
+        let access = self.tables().fields.get(&e.id)?.clone();
         let base = match &e.kind {
             ExprKind::Field { base, .. } => Some(base.as_ref()),
             _ => None,
@@ -167,7 +167,7 @@ impl Lowerer<'_> {
         match &e.kind {
             ExprKind::Local(l) => Expr::Name(self.local_name(*l)),
             ExprKind::Field { base, .. } => {
-                let key = self.typed.results.fields.get(&e.id).map(|f| f.key.clone());
+                let key = self.tables().fields.get(&e.id).map(|f| f.key.clone());
                 let base = if self.is_place(base) { self.lower_place(base) } else { self.lower_expr(base) };
                 match key {
                     Some(key) => Self::access(base, &key),
@@ -182,7 +182,7 @@ impl Lowerer<'_> {
     /// table the caller passed (`mut` parameters and `mut self`).
     pub(super) fn overwrites(&self, l: LocalId) -> bool {
         let local = self.p.local(l);
-        let ty = self.typed.results.local_ty.get(&l).copied().unwrap_or(self.typed.tcx.error);
+        let ty = self.tables().local_ty.get(&l).copied().unwrap_or(self.typed.tcx.error);
         local.mutable
             && matches!(local.kind, crate::hir::LocalKind::Param | crate::hir::LocalKind::SelfParam)
             && self.is_table(ty)
@@ -193,7 +193,7 @@ impl Lowerer<'_> {
     /// `subject.{ … }`: edits the subject in place (and is `()`), or edits a
     /// copy and is that copy.
     pub(super) fn dot_block(&mut self, e: &hir::Expr, subject: &hir::Expr, body: &hir::Block) -> Expr {
-        let in_place = self.typed.results.dot_blocks.get(&e.id).copied().unwrap_or(false);
+        let in_place = self.tables().dot_blocks.get(&e.id).copied().unwrap_or(false);
         let value = if in_place { self.lower_place(subject) } else { self.lower_owned(subject) };
         let name = self.new_temp();
         self.push_local(name.clone(), value);
@@ -237,18 +237,18 @@ impl Lowerer<'_> {
 
     /// The type a pattern was checked against.
     pub(super) fn pat_ty(&self, pat: &hir::Pat) -> Ty {
-        self.typed.results.pat_ty.get(&pat.id).copied().unwrap_or(self.typed.tcx.error)
+        self.tables().pat_ty.get(&pat.id).copied().unwrap_or(self.typed.tcx.error)
     }
 
     /// The test for a case, record or twill pattern (see `pat_test`).
     pub(super) fn warp_pat_test(&mut self, pat: &hir::Pat, v: &Expr, ty: Ty) -> Option<Option<Expr>> {
         match &pat.kind {
             PatKind::Case { fields, .. } => {
-                if let Some(&def) = self.typed.results.const_pats.get(&pat.id) {
+                if let Some(&def) = self.tables().const_pats.get(&pat.id) {
                     let value = self.const_value(def, ty);
                     return Some(Some(self.compare(loom_syntax::ast::BinaryOp::Eq, v.clone(), value, ty, pat.span)));
                 }
-                let case_pat = self.typed.results.case_pats.get(&pat.id)?.clone();
+                let case_pat = self.tables().case_pats.get(&pat.id)?.clone();
                 let info = self.warp(case_pat.warp)?.clone();
                 let mut tests = Vec::new();
                 if let Some(case) = case_pat.case.and_then(|c| info.case_by_def(c)) {
@@ -294,7 +294,7 @@ impl Lowerer<'_> {
                 }
             }
             PatKind::Case { fields, .. } => {
-                let Some(case_pat) = self.typed.results.case_pats.get(&pat.id).cloned() else { return };
+                let Some(case_pat) = self.tables().case_pats.get(&pat.id).cloned() else { return };
                 for (f, key) in fields.iter().flatten().zip(&case_pat.keys) {
                     self.bind_pat(&f.pat, &Self::access(v.clone(), key), declare);
                 }
@@ -355,7 +355,7 @@ impl Lowerer<'_> {
     /// `e` is one.
     pub(super) fn warp_value(&mut self, e: &hir::Expr) -> Option<Expr> {
         let ty = self.ty_of(e);
-        if let Some(c) = self.typed.results.constructs.get(&e.id).cloned() {
+        if let Some(c) = self.tables().constructs.get(&e.id).cloned() {
             let args: &[hir::Arg] = match &e.kind {
                 ExprKind::Call { args, .. } => args,
                 _ => &[],
@@ -367,10 +367,10 @@ impl Lowerer<'_> {
                 if let Some(v) = self.field_value(e) {
                     return Some(v);
                 }
-                let def = self.typed.results.leading_consts.get(&e.id).copied()?;
+                let def = self.tables().leading_consts.get(&e.id).copied()?;
                 Some(self.const_value(def, ty))
             }
-            ExprKind::Assoc { .. } => match self.typed.results.assoc_values.get(&e.id).copied()? {
+            ExprKind::Assoc { .. } => match self.tables().assoc_values.get(&e.id).copied()? {
                 crate::typeck::AssocValue::Const(def) => Some(self.const_value(def, ty)),
                 crate::typeck::AssocValue::Int(v) => Some(self.int_value(v, ty)),
             },

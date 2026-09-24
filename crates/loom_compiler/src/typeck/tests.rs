@@ -38,7 +38,8 @@ fn local_type(src: &str, name: &str) -> String {
     let p = &resolved.program;
     // The root module is lowered first, so its locals come before std's.
     let (id, _) = p.locals.iter().enumerate().find(|(_, l)| l.name == name).expect("local exists");
-    let ty = typed.results.local_ty[&crate::hir::LocalId(id as u32)];
+    let local = crate::hir::LocalId(id as u32);
+    let ty = typed.results.bodies.iter().find_map(|b| b.local_ty.get(&local)).copied().expect("local has a type");
     typed.tcx.display(p, ty)
 }
 
@@ -223,7 +224,7 @@ fn calls_record_where_each_argument_goes() {
     let crate::hir::DefKind::Fn(f) = &p.def(f).kind else { panic!() };
     let ExprKind::Block(block) = &f.body.as_ref().expect("body").kind else { panic!() };
     let StmtKind::Expr(call) = &block.stmts[0].kind else { panic!() };
-    let call = &typed.results.calls[&call.id];
+    let call = typed.results.bodies.iter().find_map(|b| b.calls.get(&call.id)).expect("call was checked");
     use super::ArgSource::{Arg, Default};
     assert_eq!(call.args, [Arg(0), Default, Arg(1)]);
 }

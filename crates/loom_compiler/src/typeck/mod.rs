@@ -1,8 +1,10 @@
 //! Type checking: HIR → types for every expression, pattern and local.
 //!
 //! The results live in side tables keyed by [`HirId`] and [`LocalId`]
-//! ([`Results`]) rather than in a new tree: lowering reads the HIR and the
-//! tables together.
+//! rather than in a new tree: lowering reads the HIR and the tables
+//! together. Each checked [`Instance`] (a function for one `Self`, a
+//! constant, or a warp's field defaults) has its own [`Body`] of tables, so
+//! the same HIR can be checked more than once with different types.
 //!
 //! Checking is bidirectional. Each expression is checked against an
 //! optional expected type, which is how literals get their types
@@ -53,25 +55,77 @@ impl Typed {
     }
 }
 
+/// A body checked for particular types: a function or constant, or the
+/// field defaults of a warp.
+///
+/// The same HIR can be checked more than once. A weft's default method is
+/// checked once for each warp that uses it, with `Self` standing for that
+/// warp, so each check has its own [`Body`] of results.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Instance {
+    pub def: DefId,
+    /// What `Self` stands for, when it isn't simply the warp or weave the
+    /// item belongs to.
+    pub self_ty: Option<Ty>,
+}
+
+impl Instance {
+    /// `def` checked as written.
+    pub fn of(def: DefId) -> Self {
+        Instance { def, self_ty: None }
+    }
+}
+
+/// An instance's index in [`Results::bodies`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct BodyId(pub u32);
+
 /// Types and decisions recorded for lowering.
 #[derive(Debug, Default)]
 pub struct Results {
+    /// Every instance, indexed by [`BodyId`].
+    pub instances: Vec<Instance>,
+    pub bodies: Vec<Body>,
+    ids: HashMap<Instance, BodyId>,
+    /// The signature of each function instance.
+    pub sigs: HashMap<BodyId, FnSig>,
+    pub const_ty: HashMap<DefId, Ty>,
+    /// Constants declared without a type whose value is an integer literal.
+    /// Like Go's untyped constants, each use gets the type its context
+    /// needs, so lowering writes the value in place.
+    pub untyped_consts: HashMap<DefId, i128>,
+    /// The layout of every warp used.
+    pub warps: HashMap<DefId, WarpInfo>,
+    /// Every function and constant checked, in the order they were reached.
+    pub reachable: Vec<BodyId>,
+}
+
+impl Results {
+    pub fn instance(&self, id: BodyId) -> &Instance {
+        &self.instances[id.0 as usize]
+    }
+
+    pub fn body(&self, id: BodyId) -> &Body {
+        &self.bodies[id.0 as usize]
+    }
+
+    /// The body checked for `inst`, if it was.
+    pub fn find(&self, inst: &Instance) -> Option<BodyId> {
+        self.ids.get(inst).copied()
+    }
+}
+
+/// What checking one body found, keyed by the ids of its HIR nodes.
+#[derive(Debug, Default)]
+pub struct Body {
     /// The type of each expression, before any coercion.
     pub expr_ty: HashMap<HirId, Ty>,
     pub pat_ty: HashMap<HirId, Ty>,
     pub local_ty: HashMap<LocalId, Ty>,
     /// Conversions applied to an expression's value where it's used.
     pub coercions: HashMap<HirId, Coercion>,
-    pub sigs: HashMap<DefId, FnSig>,
-    pub const_ty: HashMap<DefId, Ty>,
-    /// Constants declared without a type whose value is an integer literal.
-    /// Like Go's untyped constants, each use gets the type its context
-    /// needs, so lowering writes the value in place.
-    pub untyped_consts: HashMap<DefId, i128>,
     /// For each call: which argument (or default) feeds each parameter.
     pub calls: HashMap<HirId, Call>,
-    /// The layout of every warp used.
-    pub warps: HashMap<DefId, WarpInfo>,
     /// Expressions that build a warp value: constructor calls, `Shape.Dot`,
     /// `.Circle(r)`.
     pub constructs: HashMap<HirId, Construct>,
@@ -87,8 +141,6 @@ pub struct Results {
     pub case_pats: HashMap<HirId, CasePat>,
     /// Patterns that compare against a constant (`MAX =>`).
     pub const_pats: HashMap<HirId, DefId>,
-    /// Every function and constant checked, in the order they were reached.
-    pub reachable: Vec<DefId>,
 }
 
 /// An implicit conversion.
@@ -128,7 +180,8 @@ pub struct SigParam {
 
 #[derive(Clone, Debug)]
 pub struct Call {
-    pub callee: DefId,
+    /// The instance of the function called.
+    pub callee: BodyId,
     /// One entry per parameter, in parameter order.
     pub args: Vec<ArgSource>,
     /// For a method or UFCS call, the value before the dot. It feeds the
@@ -161,6 +214,8 @@ pub enum Receiver {
 #[derive(Clone, Debug)]
 pub struct Construct {
     pub warp: DefId,
+    /// Where the warp's field defaults were checked.
+    pub defaults: BodyId,
     /// `None` for a record or tuple warp.
     pub case: Option<DefId>,
     /// Every field, with where its value comes from.
@@ -204,8 +259,8 @@ pub fn check(p: &Program) -> Typed {
             c.queue_def(def);
         }
     }
-    while let Some(def) = c.queue.pop_front() {
-        c.check_def(def);
+    while let Some(id) = c.queue.pop_front() {
+        c.check_instance(id);
     }
     c.zonk();
     Typed { tcx: c.tcx, results: c.r, diagnostics: c.diags }
@@ -238,10 +293,11 @@ struct Checker<'p> {
     p: &'p Program,
     tcx: TyCtx,
     r: Results,
+    /// The tables of the body being checked.
+    b: Body,
     diags: Vec<Diagnostic>,
     std: Std,
-    queue: VecDeque<DefId>,
-    queued: HashSet<DefId>,
+    queue: VecDeque<BodyId>,
     /// Constants whose type is being computed, to catch cycles.
     const_stack: Vec<DefId>,
     /// "Not implemented yet" messages already reported, per definition.
@@ -286,10 +342,10 @@ impl<'p> Checker<'p> {
             p,
             tcx: TyCtx::default(),
             r: Results::default(),
+            b: Body::default(),
             diags: Vec::new(),
             std,
             queue: VecDeque::new(),
-            queued: HashSet::new(),
             const_stack: Vec::new(),
             unsupported_seen: HashSet::new(),
             vars: Vec::new(),
@@ -342,26 +398,49 @@ impl<'p> Checker<'p> {
 
     // ------------------------------------------------------------ the work list
 
-    fn queue_def(&mut self, def: DefId) {
-        if self.queued.insert(def) {
-            self.queue.push_back(def);
+    /// The body for `inst`, queuing it to be checked the first time.
+    fn instance(&mut self, inst: Instance) -> BodyId {
+        if let Some(id) = self.r.find(&inst) {
+            return id;
         }
+        let id = BodyId(self.r.instances.len() as u32);
+        self.r.ids.insert(inst.clone(), id);
+        self.r.instances.push(inst);
+        self.r.bodies.push(Body::default());
+        self.queue.push_back(id);
+        id
     }
 
-    fn check_def(&mut self, def: DefId) {
+    fn queue_def(&mut self, def: DefId) -> BodyId {
+        self.instance(Instance::of(def))
+    }
+
+    /// Runs `f` with `id`'s tables as the current ones, then puts back the
+    /// tables of the body that was being checked. A body can be filled in
+    /// more than one sitting: a constant is checked where it's first used.
+    fn in_body<T>(&mut self, id: BodyId, f: impl FnOnce(&mut Self) -> T) -> T {
+        let tables = std::mem::take(&mut self.r.bodies[id.0 as usize]);
+        let saved = std::mem::replace(&mut self.b, tables);
+        let out = f(self);
+        self.r.bodies[id.0 as usize] = std::mem::replace(&mut self.b, saved);
+        out
+    }
+
+    fn check_instance(&mut self, id: BodyId) {
         let p = self.p;
-        let d = p.def(def);
-        self.current = Some(def);
+        let inst = self.r.instance(id).clone();
+        let d = p.def(inst.def);
+        self.current = Some(inst.def);
         match &d.kind {
             DefKind::Fn(f) => {
-                self.r.reachable.push(def);
-                self.check_fn(def, f);
+                self.r.reachable.push(id);
+                self.in_body(id, |this| this.check_fn(id, &inst, f));
             }
             DefKind::Const(_) => {
-                self.r.reachable.push(def);
-                self.const_ty(def);
+                self.r.reachable.push(id);
+                self.const_ty(inst.def);
             }
-            DefKind::Warp(w) => self.check_warp(def, w),
+            DefKind::Warp(w) => self.in_body(id, |this| this.check_warp(inst.def, w)),
             DefKind::Weft(_) | DefKind::Weave(_) => {
                 self.unsupported(d.span, "type-checking wefts and weaves");
             }
@@ -394,7 +473,9 @@ impl<'p> Checker<'p> {
         if Some(self.p.def(def).module) == self.p.root {
             for &member in &w.members {
                 match &self.p.def(member).kind {
-                    DefKind::Fn(_) | DefKind::Const(_) => self.queue_def(member),
+                    DefKind::Fn(_) | DefKind::Const(_) => {
+                        self.queue_def(member);
+                    }
                     DefKind::Type(_) => {
                         self.unsupported(self.p.def(member).span, "types inside warps");
                     }
@@ -414,19 +495,24 @@ impl<'p> Checker<'p> {
             .then(|| self.tcx.intern(TyKind::Adt(parent, Vec::new())))
     }
 
-    fn check_fn(&mut self, def: DefId, f: &hir::FnDef) {
-        self.self_ty = self.parent_warp_ty(def);
+    fn check_fn(&mut self, id: BodyId, inst: &Instance, f: &hir::FnDef) {
+        self.self_ty = self.instance_self(inst);
         self.self_local = f.params.first().filter(|p| p.is_self).map(|p| p.local);
-        self.check_fn_body(def, f);
+        self.check_fn_body(id, f);
         self.self_ty = None;
         self.self_local = None;
     }
 
-    fn check_fn_body(&mut self, def: DefId, f: &hir::FnDef) {
-        let Some(sig) = self.fn_sig(def) else { return };
+    /// What `Self` means in `inst`.
+    fn instance_self(&mut self, inst: &Instance) -> Option<Ty> {
+        inst.self_ty.or_else(|| self.parent_warp_ty(inst.def))
+    }
+
+    fn check_fn_body(&mut self, id: BodyId, f: &hir::FnDef) {
+        let Some(sig) = self.fn_sig(id) else { return };
         let first_var = self.vars.len();
         for (param, sig_param) in f.params.iter().zip(&sig.params) {
-            self.r.local_ty.insert(param.local, sig_param.ty);
+            self.b.local_ty.insert(param.local, sig_param.ty);
             if let Some(default) = &param.default {
                 self.check_coerce(default, sig_param.ty);
             }
@@ -442,23 +528,24 @@ impl<'p> Checker<'p> {
 
     // ------------------------------------------------------------ signatures and types
 
-    /// The signature of a function, computed on first use. `None` if it uses
-    /// something unsupported (already reported).
-    fn fn_sig(&mut self, def: DefId) -> Option<FnSig> {
-        if let Some(sig) = self.r.sigs.get(&def) {
+    /// The signature of a function instance, computed on first use. `None`
+    /// if it uses something unsupported (already reported).
+    fn fn_sig(&mut self, id: BodyId) -> Option<FnSig> {
+        if let Some(sig) = self.r.sigs.get(&id) {
             return Some(sig.clone());
         }
         let p = self.p;
-        let DefKind::Fn(f) = &p.def(def).kind else { return None };
-        let span = p.def(def).span;
-        let saved = self.current.replace(def);
-        let parent = self.parent_warp_ty(def);
-        let saved_self = std::mem::replace(&mut self.self_ty, parent);
+        let inst = self.r.instance(id).clone();
+        let DefKind::Fn(f) = &p.def(inst.def).kind else { return None };
+        let span = p.def(inst.def).span;
+        let saved = self.current.replace(inst.def);
+        let this = self.instance_self(&inst);
+        let saved_self = std::mem::replace(&mut self.self_ty, this);
         let sig = self.lower_sig(f, span);
         self.self_ty = saved_self;
         self.current = saved;
         let sig = sig?;
-        self.r.sigs.insert(def, sig.clone());
+        self.r.sigs.insert(id, sig.clone());
         Some(sig)
     }
 
@@ -608,33 +695,42 @@ impl<'p> Checker<'p> {
             return self.tcx.error;
         }
         self.const_stack.push(def);
+        let id = self.queue_def(def);
         let (saved_current, saved_ret) = (self.current.replace(def), self.ret.take());
         let saved_loops = std::mem::take(&mut self.loops);
         let saved_lits = std::mem::take(&mut self.pending_lits);
         let saved_negations = std::mem::take(&mut self.pending_negations);
+        let saved_subjects = std::mem::take(&mut self.subjects);
+        let saved_self_local = self.self_local.take();
+        let parent = self.parent_warp_ty(def);
+        let saved_self = std::mem::replace(&mut self.self_ty, parent);
         let first_var = self.vars.len();
-        let ty = match &c.ty {
-            Some(t) => {
-                let ty = self.lower_ty(t);
-                self.check_coerce(&c.value, ty)
-            }
-            None => {
-                if let Some(value) = int_literal_value(&c.value) {
-                    self.r.untyped_consts.insert(def, value);
+        let ty = self.in_body(id, |this| {
+            let ty = match &c.ty {
+                Some(t) => {
+                    let ty = this.lower_ty(t);
+                    this.check_coerce(&c.value, ty)
                 }
-                self.check_expr(&c.value, None)
-            }
-        };
-        self.finish_body(first_var);
-        let ty = self.deep_resolve(ty);
+                None => {
+                    if let Some(value) = int_literal_value(&c.value) {
+                        this.r.untyped_consts.insert(def, value);
+                    }
+                    this.check_expr(&c.value, None)
+                }
+            };
+            this.finish_body(first_var);
+            this.deep_resolve(ty)
+        });
         self.current = saved_current;
         self.ret = saved_ret;
         self.loops = saved_loops;
         self.pending_lits = saved_lits;
         self.pending_negations = saved_negations;
+        self.subjects = saved_subjects;
+        self.self_local = saved_self_local;
+        self.self_ty = saved_self;
         self.const_stack.pop();
         self.r.const_ty.insert(def, ty);
-        self.queue_def(def);
         ty
     }
 
@@ -663,13 +759,13 @@ impl<'p> Checker<'p> {
             && self.has_vars(actual)
             && self.unify(actual, inner)
         {
-            self.r.coercions.insert(e.id, Coercion::ToOptional);
+            self.b.coercions.insert(e.id, Coercion::ToOptional);
             return true;
         }
         if let TyKind::Result(ok, _) = *self.tcx.kind(target)
             && (ok == actual || (self.has_vars(actual) && self.unify(actual, ok)))
         {
-            self.r.coercions.insert(e.id, Coercion::ToResult);
+            self.b.coercions.insert(e.id, Coercion::ToResult);
             return true;
         }
         let coercion = match (self.tcx.kind(actual).clone(), self.tcx.kind(target).clone()) {
@@ -705,7 +801,7 @@ impl<'p> Checker<'p> {
         };
         match coercion {
             Some(coercion) => {
-                self.r.coercions.insert(e.id, coercion);
+                self.b.coercions.insert(e.id, coercion);
                 true
             }
             None => {

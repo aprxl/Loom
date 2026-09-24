@@ -366,7 +366,8 @@ impl Checker<'_> {
             }
         }
         if ok {
-            self.r.constructs.insert(id, Construct { warp: info.def, case, fields });
+            let defaults = self.queue_def(info.def);
+            self.b.constructs.insert(id, Construct { warp: info.def, defaults, case, fields });
         }
         ty
     }

@@ -13,13 +13,13 @@ use crate::ty::{Ty, TyKind};
 impl Checker<'_> {
     /// Checks that `pat` can match a value of type `ty`, and types its bindings.
     pub(super) fn check_pat(&mut self, pat: &Pat, ty: Ty) {
-        self.r.pat_ty.insert(pat.id, ty);
+        self.b.pat_ty.insert(pat.id, ty);
         let ty = self.resolve(ty);
         let span = pat.span;
         match &pat.kind {
             PatKind::Wild | PatKind::Error => {}
             PatKind::Bind(local) => {
-                self.r.local_ty.insert(*local, ty);
+                self.b.local_ty.insert(*local, ty);
             }
             PatKind::Lit { lit, negative } => self.check_lit_pat(lit, *negative, ty, span),
             PatKind::Range { lo, hi, .. } => {
@@ -81,7 +81,7 @@ impl Checker<'_> {
                 for (capture, &local) in pattern.captures.iter().zip(captures) {
                     let bits = capture.width() as u8;
                     let cty = self.tcx.int(crate::ty::IntTy { signed: false, bits, size: false });
-                    self.r.local_ty.insert(local, cty);
+                    self.b.local_ty.insert(local, cty);
                 }
             }
             PatKind::Case { path, fields, rest } => self.check_case_pat(pat, path, fields.as_deref(), *rest, ty),
@@ -116,7 +116,7 @@ impl Checker<'_> {
                 if !self.unify(cty, ty) && !self.tcx.is_error(cty) {
                     self.mismatch(span, ty, cty);
                 }
-                self.r.const_pats.insert(pat.id, *def);
+                self.b.const_pats.insert(pat.id, *def);
                 return;
             }
             CasePath::Dot(name) => match &scrutinee {
@@ -226,7 +226,7 @@ impl Checker<'_> {
                         .help(format!("`{what}(..)`")),
                 );
             }
-            self.r.case_pats.insert(pat.id, crate::typeck::CasePat { warp: info.def, case, keys: Vec::new() });
+            self.b.case_pats.insert(pat.id, crate::typeck::CasePat { warp: info.def, case, keys: Vec::new() });
             return;
         };
         let mut keys = Vec::with_capacity(fields.len());
@@ -278,7 +278,7 @@ impl Checker<'_> {
                     .help("match them all, or end with `..` to ignore the rest"),
             );
         }
-        self.r.case_pats.insert(pat.id, crate::typeck::CasePat { warp: info.def, case, keys });
+        self.b.case_pats.insert(pat.id, crate::typeck::CasePat { warp: info.def, case, keys });
     }
 
     fn check_sub_pats_alone(&mut self, fields: Option<&[FieldPat]>) {
@@ -384,7 +384,7 @@ impl Checker<'_> {
         match &pat.kind {
             PatKind::Case { fields, .. } => {
                 let whole = fields.iter().flatten().all(|f| self.irrefutable(&f.pat));
-                if let (Some(case_pat), true) = (self.r.case_pats.get(&pat.id), whole)
+                if let (Some(case_pat), true) = (self.b.case_pats.get(&pat.id), whole)
                     && let Some(case) = case_pat.case
                 {
                     out.push(case);
@@ -403,7 +403,7 @@ impl Checker<'_> {
             PatKind::Or(alts) => alts.iter().any(|p| self.irrefutable(p)),
             // A record destructure, or a sum with a single case.
             PatKind::Case { fields, .. } => {
-                let Some(case_pat) = self.r.case_pats.get(&pat.id) else { return false };
+                let Some(case_pat) = self.b.case_pats.get(&pat.id) else { return false };
                 let only_case = match case_pat.case {
                     None => true,
                     Some(_) => self.r.warps.get(&case_pat.warp).is_some_and(|w| w.cases.len() == 1),

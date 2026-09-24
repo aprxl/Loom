@@ -23,7 +23,7 @@ enum Operand {
 impl Checker<'_> {
     pub(super) fn check_expr(&mut self, e: &Expr, expected: Option<Ty>) -> Ty {
         let ty = self.check_expr_inner(e, expected);
-        self.r.expr_ty.insert(e.id, ty);
+        self.b.expr_ty.insert(e.id, ty);
         ty
     }
 
@@ -51,7 +51,7 @@ impl Checker<'_> {
                 }
                 self.string_ty()
             }
-            ExprKind::Local(local) => self.r.local_ty.get(local).copied().unwrap_or(self.tcx.error),
+            ExprKind::Local(local) => self.b.local_ty.get(local).copied().unwrap_or(self.tcx.error),
             ExprKind::Def { def, args } => {
                 if !args.is_empty() {
                     return self.unsupported(span, "explicit generic arguments");
@@ -165,7 +165,7 @@ impl Checker<'_> {
                 // the block's value.
                 let ty = self.check_expr(subject, None);
                 let in_place = self.place(subject) == Some(true);
-                self.r.dot_blocks.insert(e.id, in_place);
+                self.b.dot_blocks.insert(e.id, in_place);
                 self.subjects.push((e.id, ty));
                 self.check_block(body, Some(self.tcx.unit));
                 self.subjects.pop();
@@ -343,7 +343,7 @@ impl Checker<'_> {
                         return ty;
                     }
                     if ty != self.tcx.unit && !self.tcx.is_error(ty) {
-                        self.r.coercions.insert(tail.id, Coercion::Discard);
+                        self.b.coercions.insert(tail.id, Coercion::Discard);
                     }
                     self.tcx.unit
                 }
@@ -352,7 +352,7 @@ impl Checker<'_> {
             },
             other => {
                 self.check_stmt(other);
-                let diverges = matches!(other, StmtKind::Expr(e) if self.r.expr_ty.get(&e.id) == Some(&self.tcx.never));
+                let diverges = matches!(other, StmtKind::Expr(e) if self.b.expr_ty.get(&e.id) == Some(&self.tcx.never));
                 if diverges { self.tcx.never } else { self.expect_unit_tail(block.span, expected) }
             }
         }
@@ -403,7 +403,9 @@ impl Checker<'_> {
             StmtKind::Expr(e) => {
                 self.check_expr(e, None);
             }
-            StmtKind::Item(def) => self.queue_def(*def),
+            StmtKind::Item(def) => {
+                self.queue_def(*def);
+            }
             StmtKind::Given { value, .. } => {
                 self.unsupported(value.span, "`given`");
             }
@@ -535,7 +537,7 @@ impl Checker<'_> {
                 let ty = match &operand.kind {
                     ExprKind::Lit(lit @ (Lit::Int(_) | Lit::Float(_))) => {
                         let ty = self.check_lit(lit, true, operand.span, expected);
-                        self.r.expr_ty.insert(operand.id, ty);
+                        self.b.expr_ty.insert(operand.id, ty);
                         ty
                     }
                     _ => self.check_expr(operand, expected),
@@ -771,7 +773,7 @@ impl Checker<'_> {
                     tys.push(self.check_place(item)?);
                 }
                 let ty = self.tcx.intern(TyKind::Tuple(tys));
-                self.r.expr_ty.insert(target.id, ty);
+                self.b.expr_ty.insert(target.id, ty);
                 Some(ty)
             }
             ExprKind::Field { .. } | ExprKind::LeadingDot(_) => {

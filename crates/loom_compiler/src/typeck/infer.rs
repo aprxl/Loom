@@ -195,34 +195,40 @@ impl Checker<'_> {
 
     /// Replaces every variable in the results with its final type.
     pub(super) fn zonk(&mut self) {
-        let exprs: Vec<_> = self.r.expr_ty.iter().map(|(&k, &v)| (k, v)).collect();
-        for (id, ty) in exprs {
-            let ty = self.deep_resolve(ty);
-            self.r.expr_ty.insert(id, ty);
-        }
-        let pats: Vec<_> = self.r.pat_ty.iter().map(|(&k, &v)| (k, v)).collect();
-        for (id, ty) in pats {
-            let ty = self.deep_resolve(ty);
-            self.r.pat_ty.insert(id, ty);
-        }
-        let locals: Vec<_> = self.r.local_ty.iter().map(|(&k, &v)| (k, v)).collect();
-        for (id, ty) in locals {
-            let ty = self.deep_resolve(ty);
-            self.r.local_ty.insert(id, ty);
+        for i in 0..self.r.bodies.len() {
+            self.in_body(super::BodyId(i as u32), |this| this.zonk_body());
         }
         let consts: Vec<_> = self.r.const_ty.iter().map(|(&k, &v)| (k, v)).collect();
         for (id, ty) in consts {
             let ty = self.deep_resolve(ty);
             self.r.const_ty.insert(id, ty);
         }
+    }
+
+    fn zonk_body(&mut self) {
+        let exprs: Vec<_> = self.b.expr_ty.iter().map(|(&k, &v)| (k, v)).collect();
+        for (id, ty) in exprs {
+            let ty = self.deep_resolve(ty);
+            self.b.expr_ty.insert(id, ty);
+        }
+        let pats: Vec<_> = self.b.pat_ty.iter().map(|(&k, &v)| (k, v)).collect();
+        for (id, ty) in pats {
+            let ty = self.deep_resolve(ty);
+            self.b.pat_ty.insert(id, ty);
+        }
+        let locals: Vec<_> = self.b.local_ty.iter().map(|(&k, &v)| (k, v)).collect();
+        for (id, ty) in locals {
+            let ty = self.deep_resolve(ty);
+            self.b.local_ty.insert(id, ty);
+        }
         // A widening between two types that turned out equal is no conversion.
         let widenings: Vec<_> =
-            self.r.coercions.iter().filter(|(_, c)| **c == Coercion::Widen).map(|(&id, _)| id).collect();
+            self.b.coercions.iter().filter(|(_, c)| **c == Coercion::Widen).map(|(&id, _)| id).collect();
         for id in widenings {
-            if let Some(&ty) = self.r.expr_ty.get(&id)
+            if let Some(&ty) = self.b.expr_ty.get(&id)
                 && self.tcx.as_int(ty).is_none()
             {
-                self.r.coercions.remove(&id);
+                self.b.coercions.remove(&id);
             }
         }
     }
