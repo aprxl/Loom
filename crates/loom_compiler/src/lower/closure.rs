@@ -60,7 +60,10 @@ impl Lowerer<'_> {
     /// A stream of the items of `v`, which come from `source`.
     pub(super) fn stream_from(&mut self, source: &IterSource, v: Expr, span: Span) -> Expr {
         match source {
-            IterSource::Seq => Expr::rt("seq_stream", vec![v]),
+            IterSource::Seq(elem) => {
+                let d = self.desc(*elem, span);
+                Expr::rt("seq_stream", vec![d, v])
+            }
             IterSource::Range(elem) => {
                 let d = self.desc(*elem, span);
                 Expr::rt("range_stream", vec![d, v])

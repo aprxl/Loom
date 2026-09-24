@@ -84,7 +84,10 @@ language through every layer (type checking, lowering to Lua, the runtime,
    which lists, ranges and `Iter` types have too, `for` over any of them,
    `chars()`/`bytes()`/`lines()`/`words()`, `chunks`/`windows`, and `where`
    bounds on a builtin warp's parameters (`sum` needs `Num`, `sort` `Ord`).
-   `examples/widgets.loom` runs, checked by `tests/examples/widgets.out`.
+   `examples/widgets.loom` runs, checked by `tests/examples/widgets.out`;
+10. moves: use after move, moving out of borrows and elements (M01xx), and
+    match exhaustiveness by pattern usefulness (nested patterns, integer
+    ranges, twill patterns).
 
 Next: `defer`, gauges, and maps, each through every layer at once.
 

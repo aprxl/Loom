@@ -25,7 +25,7 @@ warp Square: Shape, Show {
 
 fn describe(s: any Shape) -> String = "{s.name()} of area {s.area()}"
 
-fn biggest(a: any Shape, b: any Shape) -> any Shape = if a.area() >= b.area() { a } else { b }
+fn biggest(take a: any Shape, take b: any Shape) -> any Shape = if a.area() >= b.area() { a } else { b }
 
 fn kind(s: any Shape) -> str = match s {
     c: Circle => if c.r > 1.0 { "big circle" } else { "small circle" }

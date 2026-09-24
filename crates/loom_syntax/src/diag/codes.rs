@@ -89,6 +89,11 @@ codes! {
     T0116 = "ambiguous method";
     T0117 = "not a format spec";
 
+    // M01xx: moves and borrows
+    M0101 = "use of a moved value";
+    M0102 = "move out of a borrow";
+    M0103 = "move out of an element";
+
     // P01xx: patterns
     P0101 = "match isn't exhaustive";
     P0102 = "refutable pattern in a binding";

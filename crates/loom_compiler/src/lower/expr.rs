@@ -79,12 +79,16 @@ impl Lowerer<'_> {
                 if self.opt_boxed(ty) { Expr::Table(vec![v]) } else { v }
             }
             Coercion::ToResult => Expr::Table(vec![Expr::Bool(true), v]),
+            // The box owns its value: a `Copy` place goes in as a copy, or
+            // changing it through the box would change the place.
             Coercion::ToAny(wefts) => {
                 let wefts = wefts.clone();
+                let v = self.copied_place(e, v);
                 let vt = self.vtable(self.ty_of(e), wefts, e.span);
                 Expr::rt("any", vec![vt, v])
             }
             Coercion::ToUnion => {
+                let v = self.copied_place(e, v);
                 let vt = self.vtable(self.ty_of(e), Vec::new(), e.span);
                 Expr::rt("any", vec![vt, v])
             }
@@ -92,20 +96,21 @@ impl Lowerer<'_> {
             Coercion::ToStream(source) => {
                 let source = source.clone();
                 // An `Iter` changes as its stream goes: a place gives a copy.
-                let ty = self.ty_of(e);
-                let v = if matches!(source, IterSource::Woven { .. })
-                    && self.is_place(e)
-                    && self.is_table(ty)
-                    && self.is_copy(ty)
-                {
-                    let d = self.desc(ty, e.span);
-                    Expr::rt("copy", vec![d, v])
-                } else {
-                    v
-                };
+                let v = if matches!(source, IterSource::Woven { .. }) { self.copied_place(e, v) } else { v };
                 self.stream_from(&source, v, e.span)
             }
         }
+    }
+
+    /// `v`, the value of `e`, copied if `e` is a place of a table-backed
+    /// `Copy` type.
+    fn copied_place(&mut self, e: &hir::Expr, v: Expr) -> Expr {
+        let ty = self.ty_of(e);
+        if self.is_place(e) && self.is_table(ty) && self.is_copy(ty) {
+            let d = self.desc(ty, e.span);
+            return Expr::rt("copy", vec![d, v]);
+        }
+        v
     }
 
     /// Lowers several operands left to right, spilling earlier ones when a
@@ -667,7 +672,7 @@ impl Lowerer<'_> {
         // stream of them. A list's or a range's stream only reads it; an
         // `Iter`'s changes it, so it gets its own copy.
         let stream = self.tables().streams.get(&call.id).cloned();
-        let reads_only = matches!(stream, Some(IterSource::Seq | IterSource::Range(_)));
+        let reads_only = matches!(stream, Some(IterSource::Seq(_) | IterSource::Range(_)));
         let mut operands: Vec<(&hir::Expr, bool)> = Vec::with_capacity(args.len() + 1);
         if let Some(base) = receiver_base {
             operands.push((base, owned(receiver_slot) && !reads_only));

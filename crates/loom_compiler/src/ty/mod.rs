@@ -253,6 +253,17 @@ impl TyCtx {
     }
 
     /// The type as Loom source would write it.
+    /// `display`, in parentheses when it's a union, a result or a function,
+    /// which would read differently next to another operator: `?(A | B)`,
+    /// `T ! (A | B)`.
+    fn display_atom(&self, p: &Program, ty: Ty) -> String {
+        let shown = self.display(p, ty);
+        match self.kind(ty) {
+            TyKind::Union(_) | TyKind::Result(..) | TyKind::Fn(..) => format!("({shown})"),
+            _ => shown,
+        }
+    }
+
     pub fn display(&self, p: &Program, ty: Ty) -> String {
         match self.kind(ty) {
             TyKind::Int(i) if i.size => (if i.signed { "isize" } else { "usize" }).into(),
@@ -268,13 +279,13 @@ impl TyCtx {
                 let items: Vec<String> = items.iter().map(|t| self.display(p, *t)).collect();
                 if items.len() == 1 { format!("({},)", items[0]) } else { format!("({})", items.join(", ")) }
             }
-            TyKind::Optional(t) => format!("?{}", self.display(p, *t)),
+            TyKind::Optional(t) => format!("?{}", self.display_atom(p, *t)),
             TyKind::Array(t, n) => format!("[{}; {n}]", self.display(p, *t)),
-            TyKind::Result(t, e) => format!("{} ! {}", self.display(p, *t), self.display(p, *e)),
+            TyKind::Result(t, e) => format!("{} ! {}", self.display_atom(p, *t), self.display_atom(p, *e)),
             TyKind::Range(t) => format!("Range[{}]", self.display(p, *t)),
             TyKind::Fn(params, ret) => {
                 let params: Vec<String> = params.iter().map(|t| self.display(p, *t)).collect();
-                format!("({}) => {}", params.join(", "), self.display(p, *ret))
+                format!("({}) => {}", params.join(", "), self.display_atom(p, *ret))
             }
             // `Slice[T]`, the builtin warp behind slices, is written `[T]`.
             TyKind::Adt(def, args)
@@ -298,7 +309,7 @@ impl TyCtx {
                 format!("any {}", names.join(" + "))
             }
             TyKind::Union(items) => {
-                let items: Vec<String> = items.iter().map(|t| self.display(p, *t)).collect();
+                let items: Vec<String> = items.iter().map(|t| self.display_atom(p, *t)).collect();
                 items.join(" | ")
             }
             TyKind::IntVar(_) => "{integer}".into(),

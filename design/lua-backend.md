@@ -88,7 +88,17 @@ caller's table instead, and a whole-value assignment to one goes through
 are copied back: every `return` of the function also returns their final
 values, and the caller assigns them to where they came from
 (`local r, t = f(x); x = t`). A `mut self` method of a scalar type can't be
-called through `any` yet, since the `any` holds its own copy.
+called through `any` yet, since the `any` holds its own copy. A place
+converted to `any` or a union is copied too: the box owns its value.
+
+Copying only `Copy` places is sound because moves are checked
+(`typeck/moves.rs`): using a variable after its value moved is M0101,
+moving out of a borrow (a read or `mut` parameter, a loop's item over a
+list, a lambda's parameter or captured variable) is M0102, and moving out of
+a list's element is M0103. The check follows branches and goes through loop
+bodies twice. Two simplifications: a binding a `match` or `is` makes from a
+place moves the whole variable when it moves, and distinct fields of a
+variable move separately (`let a = p.first; let b = p.second`).
 
 ## Generics
 
@@ -127,9 +137,10 @@ checker; for now a stored lambda simply works.
 A `Stream[T]` is a Lua function returning `true, item` (`true` first, since
 an item can be `nil`), so `for x in s` is Lua's generic `for _, x in s do`.
 Its methods live in `rt.ext` like `List`'s. Streams are lazy and read once.
-Items are *borrowed*: a stream of a list's elements gives the elements
-themselves, so every method that keeps an item (`collect`, `find`, `next`,
-`min`, `reduce`…) copies it (`rt.copy`); `map`'s results are fresh already.
+Each item is its own value: a stream of a list's elements gives copies
+(`rt.seq_stream` copies as it goes), so a loop over one may keep or move its
+items. The methods that keep items copy them too, which is a second copy for
+a list's stream but never shares a table.
 
 Arrays, lists, slices, ranges and types that weave `Iter` all have
 `Stream`'s methods (method lookup rule 3, see 02-types): the receiver becomes

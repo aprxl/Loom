@@ -56,13 +56,13 @@ weave Iter into Light {
 
 warp Point: Ord { x: i32, y: i32 }
 
-fn total(it: Iter) -> u64 {
+fn total(take it: Iter) -> u64 {
     var sum: u64 = 0
     for x in it { sum += x as u64 }
     sum
 }
 
-fn first_of[I: Iter](it: I) -> ?I.Item {
+fn first_of[I: Iter](take it: I) -> ?I.Item {
     var it = it
     it.next()
 }

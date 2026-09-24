@@ -1036,17 +1036,19 @@ end
 
 -- Streams. A `Stream[T]` is a Lua function: each call gives `true, item`,
 -- or nothing once there are no more (`true` first, because an item can be
--- nil). Items are borrowed: a stream of a list's elements gives the elements
--- themselves, so whatever keeps one (`collect`, `find`, `next`) copies it.
+-- nil). Each item is its own value: a stream of a list's elements gives
+-- copies, which can be kept or moved. (`collect` and friends copy what they
+-- keep as well, which costs a copy but never shares.)
 
---- The elements of an array, list or slice.
-function rt.seq_stream(s)
+--- Copies of the elements of an array, list or slice whose elements `d`
+--- describes.
+function rt.seq_stream(d, s)
   local t, o, n = parts(s)
   local i = 0
   return function()
     if i >= n then return nil end
     i = i + 1
-    return true, t[o + i]
+    return true, copy(d, t[o + i])
   end
 end
 

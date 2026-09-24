@@ -40,7 +40,7 @@ impl Checker<'_> {
     pub(super) fn iter_source(&mut self, ty: Ty) -> Option<(IterSource, Ty)> {
         let ty = self.resolve(ty);
         if let Some(elem) = self.seq_elem(ty) {
-            return Some((IterSource::Seq, elem));
+            return Some((IterSource::Seq(elem), elem));
         }
         if let TyKind::Range(elem) = *self.tcx.kind(ty) {
             return Some((IterSource::Range(elem), elem));

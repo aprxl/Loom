@@ -33,6 +33,7 @@ mod infer;
 mod iter;
 mod lambda;
 mod method;
+mod moves;
 mod pat;
 mod seq;
 #[cfg(test)]
@@ -219,8 +220,9 @@ pub struct Body {
 /// How a value that isn't a `Stream` gives its items one at a time.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum IterSource {
-    /// An array, list or slice: its elements.
-    Seq,
+    /// An array, list or slice of this element type: copies of its
+    /// elements.
+    Seq(Ty),
     /// A range value, of this element type.
     Range(Ty),
     /// A type that weaves `Iter`: its `next`, until it gives `none`. `item`
@@ -830,6 +832,7 @@ impl<'p> Checker<'p> {
             self.ret = None;
         }
         self.finish_body(first_var);
+        self.check_moves(f, sig.ret == self.tcx.unit);
     }
 
     // ------------------------------------------------------------ signatures and types

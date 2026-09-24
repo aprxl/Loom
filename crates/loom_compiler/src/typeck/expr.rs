@@ -737,7 +737,9 @@ impl Checker<'_> {
         // `xs.len() > 4096 - START` subtracts in `usize`.
         let leading = |e: &Expr| match &e.kind {
             ExprKind::LeadingDot(_) | ExprKind::Lit(Lit::None) => true,
-            ExprKind::Call { callee, .. } => matches!(callee.kind, ExprKind::LeadingDot(_)),
+            // `some(none)`, `ok(.Red)`, `[]`: their type comes from the others.
+            ExprKind::Call { callee, .. } => matches!(callee.kind, ExprKind::LeadingDot(_) | ExprKind::BuiltinCase(_)),
+            ExprKind::Array(items) => items.is_empty(),
             ExprKind::Binary { op, .. } => matches!(
                 op,
                 BinaryOp::Add

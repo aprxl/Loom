@@ -1,0 +1,52 @@
+// A value that isn't `Copy` has one owner.
+
+warp Named { name: String, tags: List[str] }
+
+fn keep(take s: String) -> String = s
+
+fn give_back(s: String) -> String = s             //~ M0102
+
+fn stash(xs: List[i32]) {
+    var mine = xs                                  //~ M0102
+    mine.push(1)
+}
+
+fn used_after(take s: String) -> String {
+    let t = keep(s)
+    s.len()                                        //~ M0101
+    t
+}
+
+fn in_branch(take s: String, b: bool) -> usize {
+    if b { keep(s) }
+    s.len()                                        //~ M0101
+}
+
+fn in_loop(take s: String) {
+    for i in 0..3 {
+        keep(s)                                    //~ M0101
+    }
+}
+
+fn from_list(xs: List[String]) -> String {
+    var copy: List[String] = List()
+    copy.push(xs[0])                               //~ M0103
+    copy.pop() mend ""
+}
+
+fn loop_item(xs: List[String]) {
+    var out: List[String] = List()
+    for x in xs { out.push(x) }                    //~ M0102
+}
+
+fn part(take n: Named) -> List[str] {
+    let s = n.name
+    let again = n.name                             //~ M0101
+    n.tags
+}
+
+fn captured(take s: String) {
+    [1].map(x => keep(s))                          //~ M0102
+}
+
+fn main() {}

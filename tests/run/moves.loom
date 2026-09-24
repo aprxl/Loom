@@ -1,0 +1,72 @@
+// Moves the checker must allow: each value still has one owner.
+
+use std.io.print
+
+warp Pair { first: String, second: List[i32] }
+
+fn keep(take s: String) -> String = s
+fn length(s: String) -> usize = s.len()
+
+// A variable given a new value can be used again.
+fn refill(take s: String) -> String {
+    var s = s
+    var out: List[String] = List()
+    for i in 0..3 {
+        out.push(s)
+        s = "again {i}"
+    }
+    "{out} {s}"
+}
+
+// Moved on one branch, given a new value on it too.
+fn maybe(take s: String, b: bool) -> String {
+    var s = s
+    if b {
+        keep(s)
+        s = "new"
+    }
+    s
+}
+
+// Moved only on the way out.
+fn early(take s: String, b: bool) -> String {
+    if b { return keep(s) }
+    "{length(s)}"
+}
+
+// Different fields move separately.
+fn split(take p: Pair) -> String {
+    let a = p.first
+    let b = p.second
+    "{a} {b}"
+}
+
+// A temporary, and a value made from a copy.
+fn fresh(xs: List[String]) -> List[String] {
+    var out: List[String] = List()
+    out.push(xs[0].copy())
+    out.push("made".to_string())
+    for x in xs { out.push(x.copy()) }
+    out
+}
+
+// Moved once, then the loop ends.
+fn once(take s: String) -> String {
+    var out: String = ""
+    loop {
+        out = keep(s)
+        break
+    }
+    out
+}
+
+fn main() {
+    print(refill("start"))
+    print("{maybe("old", true)} {maybe("old", false)}")
+    print("{early("abc", true)} {early("abc", false)}")
+    print(split(Pair("one", [1, 2])))
+    print(fresh(["a", "b"]))
+    print(once("only"))
+    let s: String = "reading doesn't move"
+    print("{length(s)} {s} {s.len()}")
+}

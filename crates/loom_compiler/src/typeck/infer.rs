@@ -256,8 +256,8 @@ impl Checker<'_> {
     fn zonk_source(&mut self, source: super::IterSource) -> super::IterSource {
         match source {
             super::IterSource::Range(t) => super::IterSource::Range(self.deep_resolve(t)),
+            super::IterSource::Seq(t) => super::IterSource::Seq(self.deep_resolve(t)),
             super::IterSource::Woven { next, item } => super::IterSource::Woven { next, item: self.deep_resolve(item) },
-            other => other,
         }
     }
 
