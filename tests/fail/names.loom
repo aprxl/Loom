@@ -1,0 +1,5 @@
+fn main() {
+    print("no import")                  //~ N0101
+    let x = nope + 1                    //~ N0101
+    break                               //~ N0108
+}

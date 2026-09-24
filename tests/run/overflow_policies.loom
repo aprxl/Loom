@@ -1,0 +1,17 @@
+// The table in design/01-syntax.md, and the same at other widths.
+use std.io.print
+
+fn main() {
+    let x: u8 = 200
+    print("{x +% 100} {x +| 100} {x +? 100}")
+    print("{x +% 55} {x +| 55} {x +? 55}")
+    let n: u4 = 15
+    print("{n +% 1} {n *% 3} {n +| 1}")
+    let s: i8 = -100
+    print("{s -% 100} {s -| 100} {s -? 100} {s *| 2}")
+    let big: u64 = 18446744073709551615
+    print("{big} {big +% 1} {big +| 1} {big +? 1}")
+    let neg: i64 = -9223372036854775808
+    print("{neg} {neg -| 1} {neg -% 1}")
+    print("{300 as% u8} {300 as| u8} {300 as? u8} {-1 as| u8} {-1 as% u8}")
+}

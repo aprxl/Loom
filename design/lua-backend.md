@@ -106,12 +106,22 @@ turns the copy into a move. All of this is decided in one place:
 - A new `push` while the previous Burst is unfinished drains it silently.
 - The RNG is xoshiro in the runtime, never `math.random`.
 
-## Run mode
+## Bundles and run mode
 
-`loom run` compiles in-process, writes the bundle to a temp file, and spawns
-`loom lua-host <bundle> -- args` with stdin/stdout inherited and stderr piped.
-A reader thread rewrites Lua positions into Loom spans using the source map
-and turns the runtime's unravel protocol lines into rustc-style reports.
+A bundle is one self-contained Lua chunk: the runtime (`runtime/rt/core.lua`)
+inlined at the top, then type descriptors (`T`), the std externs it calls
+(`EXT`), every reachable function (`F`, a table because Lua allows at most 200
+locals), constant initializers in dependency order (`C`), and finally
+`return F.main_N`. Next to it, `NAME.lua.map` maps each Lua line that starts a
+statement to its Loom file, line and column.
+
+`loom build` writes both files. `loom run` compiles in-process, writes them to
+a temp file, and spawns `loom lua-host <bundle> -- args` with stdin, stdout and
+stderr inherited. The host loads the chunk, gives it `__LOOM_HOST.write` (so
+output reaches the Windows console as UTF-8), and calls `main`. Anything that
+unravels raises a string starting with `rt.MARK` at the Loom code's position
+(`error`'s level argument), and the host turns `bundle:LINE:` into a Loom
+location through the map and prints a rustc-style report.
 
 | Exit code | Meaning |
 |-----------|---------|
@@ -122,6 +132,10 @@ and turns the runtime's unravel protocol lines into rustc-style reports.
 | 101 | unravel |
 | 130 | interrupted (Ctrl-C) |
 | n | `process.exit(n)` |
+
+Implemented so far: 0, 2, 70 and 101. Still to come: `main ! E` (1), Ctrl-C
+(130), `process.exit`, an instruction budget, and `--lua PATH` to run a bundle
+in an external interpreter.
 
 ## Not supported in v1
 

@@ -1,0 +1,10 @@
+use std.io.print
+
+fn main() {
+    // Division truncates toward zero, and the remainder has the dividend's sign.
+    print("{7 / 2} {-7 / 2} {7 / -2} {-7 / -2}")
+    print("{7 % 3} {-7 % 3} {7 % -3} {-7 % -3}")
+    let big: u64 = 18446744073709551615
+    print("{big / 10} {big % 10}")
+    print("{7.0 / 2.0} {-7.5 % 2.0}")
+}

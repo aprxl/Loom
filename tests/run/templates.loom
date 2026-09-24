@@ -1,0 +1,11 @@
+use std.io.print
+
+fn main() {
+    let name = "loom"
+    let n = 42
+    print("{name:>6}|{name:<6}|{name:^6}|{name:*^8}")
+    print("{n:5}|{n:<5}|{n:05}|{-n:05}|{n:+}")
+    print("{{literal braces}} and {n:x} {n:o} {n:b}")
+    print("{name:?} {'c'} {'c':?} {true}")
+    print("{(1, 2.5, "x"):?}")
+}

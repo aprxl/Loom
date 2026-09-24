@@ -1,0 +1,11 @@
+use std.io.print
+
+fn main() {
+    let x = 5
+    let x = x + 1
+    let x = "{x}{x}"
+    print(x)
+    var n: u8 = 1
+    for _ in 0..7 { n *= 2 }
+    print("{n}")
+}

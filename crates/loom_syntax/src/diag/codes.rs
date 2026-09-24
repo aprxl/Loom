@@ -68,6 +68,7 @@ codes! {
     N0113 = "unknown region";
     N0114 = "`yield` or `pull` outside a shuttle";
     N0115 = "or-pattern alternatives bind different names";
+    N0116 = "no `main` function";
 
     // T01xx: types
     T0101 = "mismatched types";

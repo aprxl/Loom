@@ -1,0 +1,13 @@
+use std.io.print
+
+fn main() {
+    let a: u8 = 0b1010_0110
+    print("{a & 0x0F} {a | 1} {a ~ 0xFF} {~a}")
+    print("{a << 1} {a >> 3} {1u16 << 15}")
+    let s: i8 = -64
+    print("{s >> 2} {s << 1}")
+    let hi: u8 = 0xAB
+    let lo: u8 = 0xCD
+    let word: u16 = hi << 8 | lo          // both widen to u16 first
+    print("{word:04X} {word:#x} {hi:08b}")
+}

@@ -1,0 +1,6 @@
+fn main() {
+    let x = 1
+    x = 2                               //~ T0107
+    var y = 1
+    y += 1
+}

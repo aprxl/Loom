@@ -1,14 +1,15 @@
 # Fixture corpora
 
-These directories fill up as the milestones land. Each one is driven by the
-fixture harness in `crates/loom/tests/` (not written yet; today the lexer is
-tested by unit tests in `crates/loom_syntax` and the CLI by
-`crates/loom/tests/cli.rs`).
+Driven by `crates/loom/tests/fixtures.rs`, which runs every fixture through
+the real pipeline (resolve, type check, lower, run in the bundled Lua VM)
+and reports all failures at once. `cargo test -p loom --test fixtures` runs
+just these.
 
-| Directory | Each file is | Checked against |
-|-----------|--------------|-----------------|
-| `run/<milestone>/` | a program | exact stdout (`.out`), optional `.err`, `.code`, `.stdin`, `.args` |
-| `fail/<area>/` | a program that must not compile | `//~ ERROR L0301` annotations, optional `.stderr` golden |
-| `unravel/` | a program that unravels | exit code 101 and the remapped Loom location |
-| `lower/` | a lowering case | a reviewed snapshot of the emitted Lua |
-| `examples/<name>.out` | expected output of `examples/<name>.loom` | its presence turns that example's check on |
+| Directory | Each `NAME.loom` is | Checked against |
+|-----------|---------------------|-----------------|
+| `run/` | a program | its output, exactly (`NAME.out`). With `NAME.unravel`, it must unravel with the message on that file's first line, at the Loom line the second line names (`line 4`). |
+| `fail/` | a program that must not compile | `//~ CODE …` comments: exactly those diagnostics, on the lines they're on |
+
+Still to come, as the milestones need them: `lower/` (reviewed snapshots of
+emitted Lua) and `examples/NAME.out` (the expected output of
+`examples/NAME.loom`, which turns that example's check on).

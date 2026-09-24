@@ -1,0 +1,27 @@
+use std.io.print
+
+const GREETING = "hello"
+const LIMIT = 3
+const TWICE: i64 = LIMIT * 2
+
+fn greet(name: str, loud: bool = false, times: i32 = 1) -> String {
+    var out: String = ""                // `""` alone would be a `str`, a view
+    for _ in 0..times {
+        out = if loud { "{out}{GREETING}, {name}! " } else { "{out}{GREETING}, {name}. " }
+    }
+    out
+}
+
+fn swap(p: (i32, str)) -> (str, i32) = (p.1, p.0)
+
+fn main() {
+    print(greet("loom"))
+    print(greet("loom", loud: true))
+    print(greet(times: LIMIT, name: "weaver"))
+    let (word, n) = swap((7, "seven"))
+    print("{word} {n} {TWICE}")
+    var a = 1
+    var b = 2
+    (a, b) = (b, a)
+    print("{a} {b}")
+}

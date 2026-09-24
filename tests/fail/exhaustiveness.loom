@@ -1,0 +1,8 @@
+fn main() {
+    let n = 3
+    let word = match n {                //~ P0101
+        0 => "zero"
+        1 => "one"
+    }
+    let 5 = n                           //~ P0102
+}

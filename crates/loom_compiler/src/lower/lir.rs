@@ -1,0 +1,409 @@
+//! LIR: a Lua-shaped IR, and its printer.
+//!
+//! Lowering builds LIR rather than text so that it can still insert
+//! statements (spilling operands into temporaries) and so the printer can
+//! record which Loom span each Lua line came from.
+
+use loom_syntax::source::Span;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Expr {
+    Nil,
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    Str(Vec<u8>),
+    Name(String),
+    /// `t[k]`.
+    Index(Box<Expr>, Box<Expr>),
+    /// `t.name`.
+    Field(Box<Expr>, String),
+    Call(Box<Expr>, Vec<Expr>),
+    Binary(&'static str, Box<Expr>, Box<Expr>),
+    Unary(&'static str, Box<Expr>),
+    /// `{a, b, c}`.
+    Table(Vec<Expr>),
+    Function(Vec<String>, Vec<Stmt>),
+}
+
+impl Expr {
+    pub fn name(s: impl Into<String>) -> Expr {
+        Expr::Name(s.into())
+    }
+
+    pub fn call(callee: Expr, args: Vec<Expr>) -> Expr {
+        Expr::Call(Box::new(callee), args)
+    }
+
+    pub fn field(base: Expr, name: &str) -> Expr {
+        Expr::Field(Box::new(base), name.to_string())
+    }
+
+    pub fn bin(op: &'static str, a: Expr, b: Expr) -> Expr {
+        Expr::Binary(op, Box::new(a), Box::new(b))
+    }
+
+    pub fn index(base: Expr, key: Expr) -> Expr {
+        Expr::Index(Box::new(base), Box::new(key))
+    }
+
+    /// `rt.<name>(args…)`.
+    pub fn rt(name: &str, args: Vec<Expr>) -> Expr {
+        Expr::call(Expr::field(Expr::name("rt"), name), args)
+    }
+
+    /// A constant: evaluating it has no effect and can't be affected by
+    /// anything, so it never needs spilling.
+    pub fn is_constant(&self) -> bool {
+        matches!(self, Expr::Nil | Expr::Bool(_) | Expr::Int(_) | Expr::Float(_) | Expr::Str(_))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Stmt {
+    pub kind: StmtKind,
+    /// The Loom code this statement comes from.
+    pub span: Option<Span>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum StmtKind {
+    /// `local a, b = x, y` (no values: just the declaration).
+    Local(Vec<String>, Vec<Expr>),
+    Assign(Vec<Expr>, Vec<Expr>),
+    /// A call evaluated for its effects.
+    Call(Expr),
+    /// `if c1 then … elseif c2 then … else … end`.
+    If(Vec<(Expr, Vec<Stmt>)>, Option<Vec<Stmt>>),
+    While(Expr, Vec<Stmt>),
+    /// `for var = start, stop do … end`.
+    NumFor(String, Expr, Expr, Vec<Stmt>),
+    Do(Vec<Stmt>),
+    Goto(String),
+    Label(String),
+    /// Always printed as `do return … end`, so it can go anywhere.
+    Return(Option<Expr>),
+    Break,
+}
+
+/// Lua source text plus, for each line that starts a statement with a span,
+/// that span.
+#[derive(Debug, Default)]
+pub struct Printed {
+    pub text: String,
+    /// `(1-based Lua line, Loom span)`, in line order.
+    pub lines: Vec<(u32, Span)>,
+}
+
+pub struct Printer {
+    out: Printed,
+    line: u32,
+    indent: usize,
+}
+
+impl Printer {
+    /// Starts printing after `preamble`, whose lines count toward positions.
+    pub fn new(preamble: &str) -> Self {
+        let line = 1 + preamble.matches('\n').count() as u32;
+        Printer { out: Printed { text: preamble.to_string(), lines: Vec::new() }, line, indent: 0 }
+    }
+
+    pub fn finish(self) -> Printed {
+        self.out
+    }
+
+    /// A line of raw text, with no span.
+    pub fn raw(&mut self, text: &str) {
+        self.out.text.push_str(text);
+        self.out.text.push('\n');
+        self.line += 1 + text.matches('\n').count() as u32;
+    }
+
+    fn line_start(&mut self, span: Option<Span>) {
+        if let Some(span) = span {
+            self.out.lines.push((self.line, span));
+        }
+        for _ in 0..self.indent {
+            self.out.text.push_str("  ");
+        }
+    }
+
+    fn end_line(&mut self) {
+        self.out.text.push('\n');
+        self.line += 1;
+    }
+
+    pub fn stmts(&mut self, stmts: &[Stmt]) {
+        for s in stmts {
+            self.stmt(s);
+        }
+    }
+
+    fn block(&mut self, stmts: &[Stmt]) {
+        self.indent += 1;
+        self.stmts(stmts);
+        self.indent -= 1;
+    }
+
+    pub fn stmt(&mut self, s: &Stmt) {
+        self.line_start(s.span);
+        match &s.kind {
+            StmtKind::Local(names, values) => {
+                self.write(&format!("local {}", names.join(", ")));
+                if !values.is_empty() {
+                    self.write(" = ");
+                    self.exprs(values);
+                }
+                self.end_line();
+            }
+            StmtKind::Assign(targets, values) => {
+                self.exprs(targets);
+                self.write(" = ");
+                self.exprs(values);
+                self.end_line();
+            }
+            StmtKind::Call(e) => {
+                self.expr(e, 0);
+                self.end_line();
+            }
+            StmtKind::If(arms, else_) => {
+                for (i, (cond, body)) in arms.iter().enumerate() {
+                    if i > 0 {
+                        self.line_start(None);
+                    }
+                    self.write(if i == 0 { "if " } else { "elseif " });
+                    self.expr(cond, 0);
+                    self.write(" then");
+                    self.end_line();
+                    self.block(body);
+                }
+                if let Some(body) = else_ {
+                    self.line_start(None);
+                    self.write("else");
+                    self.end_line();
+                    self.block(body);
+                }
+                self.line_start(None);
+                self.write("end");
+                self.end_line();
+            }
+            StmtKind::While(cond, body) => {
+                self.write("while ");
+                self.expr(cond, 0);
+                self.write(" do");
+                self.end_line();
+                self.block(body);
+                self.line_start(None);
+                self.write("end");
+                self.end_line();
+            }
+            StmtKind::NumFor(var, start, stop, body) => {
+                self.write(&format!("for {var} = "));
+                self.expr(start, 0);
+                self.write(", ");
+                self.expr(stop, 0);
+                self.write(" do");
+                self.end_line();
+                self.block(body);
+                self.line_start(None);
+                self.write("end");
+                self.end_line();
+            }
+            StmtKind::Do(body) => {
+                self.write("do");
+                self.end_line();
+                self.block(body);
+                self.line_start(None);
+                self.write("end");
+                self.end_line();
+            }
+            StmtKind::Goto(label) => {
+                self.write(&format!("goto {label}"));
+                self.end_line();
+            }
+            StmtKind::Label(label) => {
+                self.write(&format!("::{label}::"));
+                self.end_line();
+            }
+            StmtKind::Return(value) => {
+                self.write("do return");
+                if let Some(v) = value {
+                    self.write(" ");
+                    self.expr(v, 0);
+                }
+                self.write(" end");
+                self.end_line();
+            }
+            StmtKind::Break => {
+                self.write("break");
+                self.end_line();
+            }
+        }
+    }
+
+    fn write(&mut self, s: &str) {
+        self.out.text.push_str(s);
+    }
+
+    fn exprs(&mut self, es: &[Expr]) {
+        for (i, e) in es.iter().enumerate() {
+            if i > 0 {
+                self.write(", ");
+            }
+            self.expr(e, 0);
+        }
+    }
+
+    /// Prints `e`, parenthesized if its operator binds looser than `min`.
+    fn expr(&mut self, e: &Expr, min: u8) {
+        match e {
+            Expr::Nil => self.write("nil"),
+            Expr::Bool(b) => self.write(if *b { "true" } else { "false" }),
+            Expr::Int(i) if *i == i64::MIN => self.write("math.mininteger"),
+            Expr::Int(i) if *i < 0 => {
+                // A negative literal is a unary minus in Lua.
+                let text = format!("-{}", i.unsigned_abs());
+                if min > UNARY_PREC { self.write(&format!("({text})")) } else { self.write(&text) }
+            }
+            Expr::Int(i) => self.write(&i.to_string()),
+            Expr::Float(f) => {
+                let text = float_literal(*f);
+                if text.starts_with('-') && min > UNARY_PREC {
+                    self.write(&format!("({text})"))
+                } else {
+                    self.write(&text)
+                }
+            }
+            Expr::Str(bytes) => {
+                let lit = lua_string(bytes);
+                self.write(&lit);
+            }
+            Expr::Name(n) => self.write(n),
+            Expr::Index(base, key) => {
+                self.prefix_expr(base);
+                self.write("[");
+                self.expr(key, 0);
+                self.write("]");
+            }
+            Expr::Field(base, name) => {
+                self.prefix_expr(base);
+                self.write(".");
+                self.write(name);
+            }
+            Expr::Call(callee, args) => {
+                self.prefix_expr(callee);
+                self.write("(");
+                self.exprs(args);
+                self.write(")");
+            }
+            Expr::Binary(op, a, b) => {
+                let (prec, right_assoc) = binary_prec(op);
+                let paren = prec < min;
+                if paren {
+                    self.write("(");
+                }
+                // Left-associative operators need a tighter right operand, and
+                // right-associative ones (`..`, `^`) a tighter left one.
+                let (lmin, rmin) = if right_assoc { (prec + 1, prec) } else { (prec, prec + 1) };
+                self.expr(a, lmin);
+                self.write(&format!(" {op} "));
+                self.expr(b, rmin);
+                if paren {
+                    self.write(")");
+                }
+            }
+            Expr::Unary(op, a) => {
+                let paren = UNARY_PREC < min;
+                if paren {
+                    self.write("(");
+                }
+                self.write(op);
+                if op.chars().all(char::is_alphabetic) {
+                    self.write(" ");
+                }
+                self.expr(a, UNARY_PREC);
+                if paren {
+                    self.write(")");
+                }
+            }
+            Expr::Table(items) => {
+                self.write("{");
+                self.exprs(items);
+                self.write("}");
+            }
+            Expr::Function(params, body) => {
+                self.write(&format!("function({})", params.join(", ")));
+                self.end_line();
+                self.block(body);
+                self.line_start(None);
+                self.write("end");
+            }
+        }
+    }
+
+    /// A callee or indexed value: names, calls and indexing print as they
+    /// are; anything else needs parentheses.
+    fn prefix_expr(&mut self, e: &Expr) {
+        match e {
+            Expr::Name(_) | Expr::Call(..) | Expr::Index(..) | Expr::Field(..) => self.expr(e, 0),
+            _ => {
+                self.write("(");
+                self.expr(e, 0);
+                self.write(")");
+            }
+        }
+    }
+}
+
+const UNARY_PREC: u8 = 11;
+
+/// Lua 5.4's binary operator precedence (higher binds tighter), and whether
+/// the operator is right-associative.
+fn binary_prec(op: &str) -> (u8, bool) {
+    match op {
+        "or" => (1, false),
+        "and" => (2, false),
+        "<" | ">" | "<=" | ">=" | "~=" | "==" => (3, false),
+        "|" => (4, false),
+        "~" => (5, false),
+        "&" => (6, false),
+        "<<" | ">>" => (7, false),
+        ".." => (8, true),
+        "+" | "-" => (9, false),
+        "*" | "/" | "//" | "%" => (10, false),
+        "^" => (12, true),
+        _ => (0, false),
+    }
+}
+
+/// A float as a Lua literal that reads back as the same float, and as a
+/// float (never an integer): `3.0`, `1e+300`, `0x1p-1074`-free forms.
+fn float_literal(f: f64) -> String {
+    if f.is_nan() {
+        return "(0.0/0.0)".into();
+    }
+    if f.is_infinite() {
+        return if f > 0.0 { "math.huge".into() } else { "(-math.huge)".into() };
+    }
+    let text = format!("{f:?}");
+    if text.contains(['.', 'e', 'E']) { text } else { format!("{text}.0") }
+}
+
+/// A Lua string literal. Bytes outside printable ASCII are escaped, so the
+/// bundle stays plain text.
+pub fn lua_string(bytes: &[u8]) -> String {
+    let mut s = String::from("\"");
+    for &b in bytes {
+        match b {
+            b'"' => s.push_str("\\\""),
+            b'\\' => s.push_str("\\\\"),
+            b'\n' => s.push_str("\\n"),
+            b'\t' => s.push_str("\\t"),
+            b'\r' => s.push_str("\\r"),
+            0x20..=0x7e => s.push(b as char),
+            _ => s.push_str(&format!("\\{b:03}")),
+        }
+    }
+    s.push('"');
+    s
+}

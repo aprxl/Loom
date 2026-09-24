@@ -1,0 +1,12 @@
+use std.io.print
+
+fn bump(x: u8) -> u8 {
+    let y = x + 10
+    y
+}
+
+fn main() {
+    print(bump(200))
+    print(bump(250))
+    print("never printed")
+}

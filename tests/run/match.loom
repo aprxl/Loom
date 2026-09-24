@@ -1,0 +1,30 @@
+use std.io.print
+
+fn describe(n: i32) -> str = match n {
+    0 => "zero"
+    1 | 2 | 3 => "small"
+    -9..=-1 => "a little negative"
+    x if x > 1000 => "huge"
+    _ => "something else"
+}
+
+fn signs(p: (i32, i32)) -> String = match p {
+    (0, 0) => "origin"
+    (x, 0) | (0, x) => "on an axis at {x}"
+    (a, b) if a == b => "on the diagonal"
+    _ => "somewhere"
+}
+
+fn main() {
+    print("{describe(0)}, {describe(2)}, {describe(-4)}, {describe(5000)}, {describe(7)}")
+    print(signs((0, 0)))
+    print(signs((5, 0)))
+    print(signs((0, -3)))
+    print(signs((4, 4)))
+    print(signs((1, 2)))
+    let grade = match 'b' {
+        'a'..='c' => "early letter"
+        _ => "later letter"
+    }
+    print(grade)
+}

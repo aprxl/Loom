@@ -1,0 +1,8 @@
+fn main() {
+    let f = 1.5
+    let a = f +% 1.0                    //~ T0103
+    let s = "a" + "b"                   //~ T0103
+    let u: u32 = 5
+    let n = -u                          //~ T0103
+    let c = 3.5 as% u8                  //~ T0109
+}

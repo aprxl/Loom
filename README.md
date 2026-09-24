@@ -7,8 +7,9 @@ compiled ahead of time, has no garbage collector, and mixes functional and
 object-oriented styles around one idea: **data and behavior are separate
 threads, and you weave them together.**
 
-This is a design sketch. There's no compiler. The repo holds the design notes
-and some example programs written as if a compiler existed.
+This started as a design sketch: the design notes and example programs were
+written before any compiler existed. A Loom → Lua compiler now runs a growing
+part of the language (see [Status](#status)).
 
 ```loom
 use std.io.print
@@ -272,7 +273,7 @@ examples/
 crates/
   loom_syntax/             source files, spans, diagnostics, the lexer, the parser and AST
   loom_host/               the bundled Lua VM (mlua, vendored, built with clang-cl)
-  loom_compiler/           name resolution and type checking so far; then lowering
+  loom_compiler/           name resolution, type checking, lowering to Lua
   loom/                    the `loom` command-line tool
 runtime/
   rt/                      loomrt, the Lua runtime every bundle carries
@@ -289,14 +290,17 @@ bodies come with type checking and lowering.
 The language is a design sketch (v0.1). A Loom → Lua 5.4 transpiler is being
 built in `crates/`, following the plan in `design/lua-backend.md`:
 
-- **Done:** the lexer, the parser, name resolution, and a first slice of
-  type checking (numbers, strings, tuples, functions, control flow). `loom
-  check <file>` reports diagnostics; `loom build <file> --emit
-  tokens|ast|hir` dumps a stage. The examples use more than the type checker
-  covers so far; it says so rather than guessing.
-- **Next:** lowering to Lua and `loom run`, then the rest of the type checker.
+- **Done:** the lexer, the parser, name resolution, and a first slice of the
+  language that compiles to Lua and runs: numbers of every width with their
+  overflow operators, strings and templates, tuples, functions with named and
+  default arguments, control flow, and `match` on literals and tuples. `loom
+  run <file>` runs a program; `loom build <file>` writes the Lua; `--emit
+  tokens|ast|hir|lua` dumps a stage. The examples use more than this slice;
+  the compiler says so rather than guessing.
+- **Next:** warps and methods, optionals and errors, and the rest, one slice
+  at a time through every layer.
 
 ```bash
-cargo run -p loom -- check examples/chip8.loom
-cargo run -p loom -- build examples/chip8.loom --emit hir
+cargo run -p loom -- run tests/run/fizzbuzz.loom
+cargo run -p loom -- build tests/run/fizzbuzz.loom --emit lua
 ```

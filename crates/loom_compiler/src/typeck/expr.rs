@@ -1,7 +1,7 @@
 //! Checking expressions and statements.
 
 use loom_syntax::Diagnostic;
-use loom_syntax::ast::{AssignOp, BinaryOp, CastKind, Lit, UnaryOp};
+use loom_syntax::ast::{AssignOp, BinaryOp, CastKind, FieldName, Lit, UnaryOp};
 use loom_syntax::diag::codes;
 use loom_syntax::source::Span;
 use loom_syntax::token::IntLit;
@@ -152,6 +152,32 @@ impl Checker<'_> {
             ExprKind::Loom { .. } | ExprKind::Thread(_) => self.unsupported(span, "`loom` and `thread`"),
             ExprKind::Call { callee, args } => self.check_call(e, callee, args),
             ExprKind::Index { .. } => self.unsupported(span, "indexing"),
+            ExprKind::Field { base, field: FieldName::Index(i, index_span) } => {
+                // `t.0`: a tuple's element.
+                let base_ty = self.check_expr(base, None);
+                let base_ty = self.resolve(base_ty);
+                match self.tcx.kind(base_ty).clone() {
+                    TyKind::Tuple(items) => match items.get(*i as usize) {
+                        Some(&ty) => ty,
+                        None => {
+                            let shown = self.show(base_ty);
+                            self.error(
+                                codes::T0111,
+                                *index_span,
+                                format!(
+                                    "`{shown}` has {} element{}, so there's no `.{i}`",
+                                    items.len(),
+                                    plural(items.len())
+                                ),
+                                "no such element",
+                            );
+                            self.tcx.error
+                        }
+                    },
+                    TyKind::Error => self.tcx.error,
+                    _ => self.unsupported(span, "fields and methods"),
+                }
+            }
             ExprKind::Field { .. } | ExprKind::ConstField { .. } => self.unsupported(span, "fields and methods"),
             ExprKind::Try(_) | ExprKind::Mend { .. } => self.unsupported(span, "`?` and `mend`"),
             ExprKind::Deref(_) => self.unsupported(span, "spool pointers"),

@@ -1,0 +1,8 @@
+fn check(balance: i64) {
+    if balance < 0 { unravel("the ledger is out of balance") }
+}
+
+fn main() {
+    check(10)
+    check(-5)
+}

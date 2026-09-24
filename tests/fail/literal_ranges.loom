@@ -1,0 +1,6 @@
+fn main() {
+    let a: u8 = 256                     //~ T0102
+    let b: i8 = -129                    //~ T0102
+    let c: u4 = 16                      //~ T0102
+    let fine: i8 = -128
+}

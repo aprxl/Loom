@@ -48,13 +48,13 @@ Read your own diff before committing. One logical change per commit.
 
 ## Status
 
-Done: the spec renames, the workspace scaffold, the lexer, the parser (AST,
-error recovery, `--emit ast`), name resolution (HIR, `std` declarations, the
-prelude, `--emit hir`), and the first slice of type checking (numbers,
-strings, tuples, functions, control flow, operators, casts, templates, with
-literal-type inference). Next: lowering to Lua and `loom run` for that slice,
-then the next slices (warps and methods, optionals and errors, …) through
-every layer at once.
+Done: the spec renames, the workspace scaffold, the lexer, the parser, name
+resolution (HIR, `std` declarations, the prelude), and the first slice of the
+language through every layer: type checking, lowering to Lua, the runtime,
+and `loom build` / `loom run`. The slice covers numbers of every width,
+strings, tuples, functions, control flow, `match` on literals and tuples,
+operators, casts and templates. Next: the next slices (warps and methods,
+optionals and errors, …), each through every layer at once, with fixtures.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and
@@ -64,3 +64,6 @@ Keep these green:
 - `every_example_fails_only_with_not_implemented_yet`: the type checker may
   reject an example only with U0102 until it covers what the example uses.
   Code v1 deliberately rejects must use a `U` code.
+- `tests/run` and `tests/fail` (`crates/loom/tests/fixtures.rs`): every new
+  feature gets fixtures there. `crates/loom_compiler/tests/rt_int.rs` checks
+  the runtime's integer operations against the Rust oracle in `ty::int`.

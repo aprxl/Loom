@@ -165,6 +165,12 @@ fn mismatches() {
 }
 
 #[test]
+fn tuple_elements() {
+    ok("fn f(p: (i32, str)) -> str = p.1");
+    assert_eq!(codes("fn f(p: (i32, str)) -> i32 = p.2"), [codes::T0111]);
+}
+
+#[test]
 fn assignment_needs_var() {
     assert_eq!(codes("fn f() {\n    let x = 1\n    x = 2\n}"), [codes::T0107]);
     ok("fn f() {\n    var x = 1\n    x = 2\n    x += 3\n    x <<= 1\n}");
