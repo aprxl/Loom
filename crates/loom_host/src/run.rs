@@ -134,6 +134,10 @@ fn classify(text: &str, map: Option<&SourceMap>) -> Outcome {
     };
     match rest.strip_prefix(UNRAVEL_MARK) {
         Some(message) => Outcome::Unravel { message: message.to_string(), location },
+        // Recursion that doesn't stop is the program's, not Loom's.
+        None if rest.starts_with("stack overflow") || rest.starts_with("C stack overflow") => {
+            Outcome::Unravel { message: "stack overflow: too many calls inside each other".into(), location }
+        }
         None => Outcome::Crash { message: rest.to_string(), location },
     }
 }

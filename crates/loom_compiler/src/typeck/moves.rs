@@ -385,6 +385,52 @@ impl Checker<'_> {
             let take = mode_of(super::ArgSource::Arg(i)) == ParamMode::Take;
             self.mv(cx, &arg.value, take);
         }
+        // While a place is lent out as `mut`, nothing else in the call may
+        // touch it: `swap(mut a, mut a)`. Different fields are fine.
+        // A read of a value that isn't a table (a number, a string) is done
+        // before the call starts, so it can't see the change.
+        let mut places: Vec<(Root, Vec<String>, ParamMode, Span, bool)> = Vec::new();
+        if let Some(base) = base
+            && let Some((root, path)) = self.place_of(cx, base)
+        {
+            let shared = self.shares_table(base);
+            places.push((root, path, recv_mode, base.span, shared));
+        } else if let Some(Receiver::Local(l)) = info.receiver {
+            places.push((Root::Local(l), Vec::new(), recv_mode, callee.span, true));
+        }
+        for (i, arg) in args.iter().enumerate() {
+            if let Some((root, path)) = self.place_of(cx, &arg.value) {
+                let shared = self.shares_table(&arg.value);
+                places.push((root, path, mode_of(super::ArgSource::Arg(i)), arg.value.span, shared));
+            }
+        }
+        for (i, (ra, pa, ma, sa, share_a)) in places.iter().enumerate() {
+            for (rb, pb, mb, sb, share_b) in &places[i + 1..] {
+                let (Root::Local(a), Root::Local(b)) = (ra, rb) else { continue };
+                let overlap = a == b && (pa.starts_with(pb) || pb.starts_with(pa));
+                let conflict = match (*ma == ParamMode::Mut, *mb == ParamMode::Mut) {
+                    (true, true) => true,
+                    (true, false) => *share_b,
+                    (false, true) => *share_a,
+                    (false, false) => false,
+                };
+                if !overlap || !conflict {
+                    continue;
+                }
+                let (lent, other) = if *ma == ParamMode::Mut { (*sa, *sb) } else { (*sb, *sa) };
+                let name = self.p.local(*a).name.clone();
+                self.report(
+                    cx,
+                    Diagnostic::error(
+                        codes::M0104,
+                        format!("`{name}` is lent out as `mut` and used again in the same call"),
+                    )
+                    .primary(other, "used here too")
+                    .secondary(lent, "lent as `mut` here")
+                    .help("a `mut` argument must be the only way the call reaches that value"),
+                );
+            }
+        }
     }
 
     /// Reads or moves the place `e`.
@@ -534,6 +580,13 @@ impl Checker<'_> {
             }
             _ => None,
         }
+    }
+
+    /// Whether `e`'s value is a table the callee would share with it.
+    fn shares_table(&mut self, e: &Expr) -> bool {
+        let Some(&ty) = self.b.expr_ty.get(&e.id) else { return false };
+        let ty = self.deep_resolve(ty);
+        self.is_table_backed(ty)
     }
 
     fn is_copy_expr(&mut self, e: &Expr) -> bool {

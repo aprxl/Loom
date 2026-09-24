@@ -1,0 +1,7 @@
+use std.io.print
+
+fn forever(n: u64) -> u64 = forever(n + 1) + 1
+
+fn main() {
+    print(forever(0))
+}

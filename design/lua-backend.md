@@ -95,7 +95,9 @@ Copying only `Copy` places is sound because moves are checked
 (`typeck/moves.rs`): using a variable after its value moved is M0101,
 moving out of a borrow (a read or `mut` parameter, a loop's item over a
 list, a lambda's parameter or captured variable) is M0102, and moving out of
-a list's element is M0103. The check follows branches and goes through loop
+a list's element is M0103. A `mut` argument that overlaps another argument of
+the same call (`swap(mut a, mut a)`, or a table read alongside) is M0104;
+distinct fields are fine. The check follows branches and goes through loop
 bodies twice. Two simplifications: a binding a `match` or `is` makes from a
 place moves the whole variable when it moves, and distinct fields of a
 variable move separately (`let a = p.first; let b = p.second`).

@@ -93,6 +93,7 @@ codes! {
     M0101 = "use of a moved value";
     M0102 = "move out of a borrow";
     M0103 = "move out of an element";
+    M0104 = "`mut` access overlaps another use";
 
     // P01xx: patterns
     P0101 = "match isn't exhaustive";

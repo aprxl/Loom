@@ -49,4 +49,21 @@ fn captured(take s: String) {
     [1].map(x => keep(s))                          //~ M0102
 }
 
-fn main() {}
+fn swap(mut a: i32, mut b: i32) {
+    let t = a
+    a = b
+    b = t
+}
+
+fn add_to(mut xs: List[i32], ys: [i32]) = xs.extend(ys)
+
+fn main() {
+    var n = 1
+    var m = 2
+    swap(mut n, mut m)
+    swap(mut n, mut n)                             //~ M0104
+    var xs: List[i32] = [1]
+    add_to(mut xs, xs)                             //~ M0104
+    var pair = (1, 2)
+    swap(mut pair.0, mut pair.1)
+}
