@@ -63,10 +63,12 @@ language through every layer (type checking, lowering to Lua, the runtime,
 3. wefts and weaves (in progress): inline and separate weaves, default
    methods checked per type, derived `Show`/`Eq`/`Ord`, `Weft.f(x)`,
    `{x}`, `print`, `==`, `<` through hand-written weave methods, and
-   `through` delegation.
+   `through` delegation;
+4. generics, checked per instance: generic functions with bounds and
+   inferred or explicit arguments, generic warps and their methods, generic
+   weaves, and wefts as parameter types (implicit generics).
 
-Next: generics (explicit, and wefts as parameter types), and
-`any W`; then optionals and errors (`?`, `mend`, `fail`, `some`/`none`), then
+Next: `any W`; then optionals and errors (`?`, `mend`, `fail`, `some`/`none`), then
 arrays and lists, each through every layer at once.
 
 Keep these green:

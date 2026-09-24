@@ -18,12 +18,14 @@
 //! Covered so far: numbers, `bool`, `char`, strings, tuples, functions,
 //! control flow, operators, casts and templates; warps (records, cases,
 //! shared fields), methods, associated functions, UFCS, leading dots,
-//! dot-blocks, case and twill patterns; wefts and weaves (see `weave.rs`).
+//! dot-blocks, case and twill patterns; wefts and weaves (see `weave.rs`);
+//! generics (see `generic.rs`).
 //! Everything else is reported with U0102 ("not implemented yet") rather
 //! than guessed at.
 
 mod call;
 mod expr;
+mod generic;
 mod infer;
 mod method;
 mod pat;
@@ -74,12 +76,15 @@ pub struct Instance {
     /// A weft method `Self` gets from a `through` field: its body calls the
     /// field's method (see [`Results::forwards`]).
     pub forward: bool,
+    /// What each generic parameter stands for: the parameters of the warp
+    /// it's in first, then its own, then one per weft-typed parameter.
+    pub args: Vec<Ty>,
 }
 
 impl Instance {
     /// `def` checked as written.
     pub fn of(def: DefId) -> Self {
-        Instance { def, self_ty: None, forward: false }
+        Instance { def, self_ty: None, forward: false, args: Vec::new() }
     }
 }
 
@@ -109,8 +114,12 @@ pub struct Results {
     /// Like Go's untyped constants, each use gets the type its context
     /// needs, so lowering writes the value in place.
     pub untyped_consts: HashMap<DefId, i128>,
-    /// The layout of every warp used.
+    /// The layout of every warp used. A generic warp's field types mention
+    /// its parameters.
     pub warps: HashMap<DefId, WarpInfo>,
+    /// The layout of every warp type used, with its field types for its
+    /// generic arguments: `Pair[i32, str]`.
+    pub adts: HashMap<Ty, WarpInfo>,
     /// Every function and constant checked, in the order they were reached.
     pub reachable: Vec<BodyId>,
     /// Hand-written `Show`, `Eq` and `Ord` methods, which built-in
@@ -302,10 +311,17 @@ pub fn check(p: &Program) -> Typed {
             c.queue_def(site);
         }
     }
-    while let Some(id) = c.queue.pop_front() {
-        c.check_instance(id);
+    // Describing the warp types the results mention can need more
+    // instances (a generic warp's `show`), which need checking in turn.
+    loop {
+        while let Some(id) = c.queue.pop_front() {
+            c.check_instance(id);
+        }
+        c.zonk();
+        if !c.register_types() {
+            break;
+        }
     }
-    c.zonk();
     Typed { tcx: c.tcx, results: c.r, diagnostics: c.diags }
 }
 
@@ -348,6 +364,19 @@ struct Checker<'p> {
     /// Call arguments whose type was already checked, to find the method
     /// they're passed to (`Show.show(x, …)`).
     prechecked: HashMap<HirId, Ty>,
+    /// What each generic parameter stands for, where types are being lowered.
+    subst: Vec<(DefId, Ty)>,
+    /// How a weft as a parameter's type is read (see `generic.rs`).
+    implicit: generic::Implicit,
+    /// Generic instances the body needs, until its variables are known.
+    pending: Vec<generic::Pending>,
+    /// Lowering the type in `Pair(1, 2)` or `Pair.new(…)`: a generic warp
+    /// without arguments gets variables for them.
+    infer_args: bool,
+    /// Types `register_types` has seen.
+    registered: HashSet<Ty>,
+    /// Diagnostics already reported from generic instances (see `note_instance`).
+    instance_diags: HashSet<(&'static str, Option<Span>)>,
     /// Constants whose type is being computed, to catch cycles.
     const_stack: Vec<DefId>,
     /// "Not implemented yet" messages already reported, per definition.
@@ -399,6 +428,12 @@ impl<'p> Checker<'p> {
             weavings: Vec::new(),
             weave_index: HashMap::new(),
             prechecked: HashMap::new(),
+            subst: Vec::new(),
+            implicit: generic::Implicit::Off,
+            pending: Vec::new(),
+            infer_args: false,
+            registered: HashSet::new(),
+            instance_diags: HashSet::new(),
             const_stack: Vec::new(),
             unsupported_seen: HashSet::new(),
             vars: Vec::new(),
@@ -489,17 +524,22 @@ impl<'p> Checker<'p> {
                 self.r.reachable.push(id);
                 self.check_forward_instance(id);
             }
+            // A generic function is only checked for particular types.
+            DefKind::Fn(_) if inst.args.is_empty() && self.is_generic(inst.def) => {}
             DefKind::Fn(f) => {
                 self.r.reachable.push(id);
+                let mark = self.diags.len();
                 self.in_body(id, |this| this.check_fn(id, &inst, f));
+                self.note_instance(mark, &inst);
             }
             DefKind::Const(_) => {
                 self.r.reachable.push(id);
                 self.const_ty(inst.def);
             }
             DefKind::Warp(w) => {
-                self.in_body(id, |this| this.check_warp(inst.def, w));
-                if !self.is_std_module(d.module) && w.generics.is_empty() {
+                self.in_body(id, |this| this.check_warp(&inst, w));
+                // A generic warp's weaves are checked once, for its template.
+                if !self.is_std_module(d.module) && inst.args.is_empty() {
                     for t in &w.wefts {
                         self.weft_arg_problem(t);
                     }
@@ -521,9 +561,19 @@ impl<'p> Checker<'p> {
 
     /// A warp's field types and defaults. The members of a warp in the root
     /// module are all checked, used or not; std's only when they're used.
-    fn check_warp(&mut self, def: DefId, w: &hir::WarpDef) {
-        let Some(info) = self.warp_info(def) else { return };
-        self.self_ty = Some(self.tcx.intern(TyKind::Adt(def, Vec::new())));
+    ///
+    /// A generic warp's defaults are checked for each list of arguments it's
+    /// built with, and its members when they're used.
+    fn check_warp(&mut self, inst: &Instance, w: &hir::WarpDef) {
+        let def = inst.def;
+        if !w.generics.is_empty() && inst.args.is_empty() {
+            self.warp_info(def);
+            return;
+        }
+        let ty = self.tcx.intern(TyKind::Adt(def, inst.args.clone()));
+        let Some(info) = self.adt_info(ty) else { return };
+        self.self_ty = Some(ty);
+        self.subst = self.instance_subst(inst);
         let first_var = self.vars.len();
         for field in &info.fields {
             if let DefKind::Field(f) = &self.p.def(field.def).kind
@@ -534,7 +584,8 @@ impl<'p> Checker<'p> {
         }
         self.finish_body(first_var);
         self.self_ty = None;
-        if Some(self.p.def(def).module) == self.p.root {
+        self.subst = Vec::new();
+        if Some(self.p.def(def).module) == self.p.root && w.generics.is_empty() {
             for &member in &w.members {
                 match &self.p.def(member).kind {
                     DefKind::Fn(_) | DefKind::Const(_) => {
@@ -557,8 +608,24 @@ impl<'p> Checker<'p> {
     fn parent_warp_ty(&mut self, def: DefId) -> Option<Ty> {
         let parent = self.p.def(def).parent?;
         match &self.p.def(parent).kind {
-            DefKind::Warp(_) | DefKind::Pending => Some(self.tcx.intern(TyKind::Adt(parent, Vec::new()))),
-            DefKind::Weave(w) if w.generics.is_empty() => {
+            // A generic warp's parameters stand for what `self.subst` says.
+            DefKind::Warp(w) => {
+                let args = w
+                    .generics
+                    .iter()
+                    .map(|g| {
+                        self.subst
+                            .iter()
+                            .find(|(p, _)| p == g)
+                            .map(|(_, t)| *t)
+                            .unwrap_or_else(|| self.tcx.intern(TyKind::Param(*g)))
+                    })
+                    .collect();
+                Some(self.tcx.intern(TyKind::Adt(parent, args)))
+            }
+            DefKind::Pending => Some(self.tcx.intern(TyKind::Adt(parent, Vec::new()))),
+            // A generic weave's parameters stand for what `self.subst` says.
+            DefKind::Weave(w) => {
                 let saved = self.current.replace(parent);
                 let ty = self.lower_ty(&w.target);
                 self.current = saved;
@@ -570,8 +637,8 @@ impl<'p> Checker<'p> {
 
     /// A `weave W into T { … }` item.
     fn check_weave_item(&mut self, def: DefId, w: &hir::WeaveDef) {
-        if !w.generics.is_empty() {
-            self.unsupported(self.p.def(def).span, "generic weaves");
+        if let Some(&g) = w.generics.iter().find(|&&g| !self.is_type_param(g)) {
+            self.unsupported(self.p.def(g).span, "`const` and region parameters");
             return;
         }
         if self.weft_arg_problem(&w.weft) {
@@ -631,14 +698,17 @@ impl<'p> Checker<'p> {
     }
 
     fn check_fn(&mut self, id: BodyId, inst: &Instance, f: &hir::FnDef) {
+        self.subst = self.instance_subst(inst);
         self.self_ty = self.instance_self(inst);
         self.self_local = f.params.first().filter(|p| p.is_self).map(|p| p.local);
         self.check_fn_body(id, f);
         self.self_ty = None;
         self.self_local = None;
+        self.subst = Vec::new();
     }
 
-    /// What `Self` means in `inst`.
+    /// What `Self` means in `inst`. Reads `self.subst`, which must be
+    /// `inst`'s.
     fn instance_self(&mut self, inst: &Instance) -> Option<Ty> {
         inst.self_ty.or_else(|| self.parent_warp_ty(inst.def))
     }
@@ -674,21 +744,30 @@ impl<'p> Checker<'p> {
         let DefKind::Fn(f) = &p.def(inst.def).kind else { return None };
         let span = p.def(inst.def).span;
         let saved = self.current.replace(inst.def);
+        let subst = self.instance_subst(&inst);
+        let saved_subst = std::mem::replace(&mut self.subst, subst);
+        let implicit = self.implicit_args(&inst);
+        let saved_implicit = std::mem::replace(&mut self.implicit, implicit);
         let this = self.instance_self(&inst);
         let saved_self = std::mem::replace(&mut self.self_ty, this);
         let sig = self.lower_sig(f, span);
         self.self_ty = saved_self;
+        self.implicit = saved_implicit;
+        self.subst = saved_subst;
         self.current = saved;
         let sig = sig?;
         self.r.sigs.insert(id, sig.clone());
         Some(sig)
     }
 
+    /// A function's signature. A weft as a parameter's type is read the way
+    /// `self.implicit` says; anywhere else, it's not a type.
     fn lower_sig(&mut self, f: &hir::FnDef, span: Span) -> Option<FnSig> {
-        if !f.generics.is_empty() {
-            self.unsupported(span, "generic functions");
-            return None;
-        }
+        let mode = std::mem::take(&mut self.implicit);
+        self.lower_sig_with(f, span, mode)
+    }
+
+    fn lower_sig_with(&mut self, f: &hir::FnDef, span: Span, mut mode: generic::Implicit) -> Option<FnSig> {
         if !f.givens.is_empty() {
             self.unsupported(span, "`given` parameters");
             return None;
@@ -708,14 +787,20 @@ impl<'p> Checker<'p> {
                     }
                 }
             } else {
-                param.ty.as_ref().map_or(self.tcx.error, |t| self.lower_ty(t))
+                self.implicit = mode;
+                let ty = param.ty.as_ref().map_or(self.tcx.error, |t| self.lower_ty(t));
+                mode = std::mem::take(&mut self.implicit);
+                ty
             };
             if self.tcx.is_error(ty) {
+                self.implicit = mode;
                 return None;
             }
             // A `mut` parameter shares the caller's table; scalars would need
-            // copy-in/copy-out, which isn't implemented yet.
-            if param.mode == ParamMode::Mut && !self.is_table_backed(ty) {
+            // copy-in/copy-out, which isn't implemented yet. A generic one is
+            // decided per instance.
+            let open = self.has_vars(ty) || self.tcx.has_params(ty);
+            if param.mode == ParamMode::Mut && !open && !self.is_table_backed(ty) {
                 self.unsupported(param.span, "`mut` parameters of numbers, strings and enums");
                 return None;
             }
@@ -727,9 +812,12 @@ impl<'p> Checker<'p> {
             FnRet::Value(t) => self.lower_ty(t),
             FnRet::Shuttle { .. } => {
                 self.unsupported(span, "shuttles");
+                self.implicit = mode;
                 return None;
             }
         };
+        // Callers read the variables a `Fresh` mode collected.
+        self.implicit = mode;
         if self.tcx.is_error(ret) {
             return None;
         }
@@ -746,8 +834,9 @@ impl<'p> Checker<'p> {
             },
             HirTy::Def { def, args } => {
                 let d = self.p.def(*def);
+                let infer = std::mem::take(&mut self.infer_args);
                 match &d.kind {
-                    DefKind::Warp(_) => {
+                    DefKind::Warp(w) => {
                         let mut lowered = Vec::with_capacity(args.len());
                         for arg in args {
                             match arg {
@@ -755,15 +844,53 @@ impl<'p> Checker<'p> {
                                 hir::GenericArg::Expr(e) => return self.unsupported(e.span, "value generic arguments"),
                             }
                         }
+                        if lowered.is_empty() && !w.generics.is_empty() && infer {
+                            lowered = w.generics.iter().map(|_| self.new_var(infer::VarKind::Type)).collect();
+                        }
+                        if lowered.len() != w.generics.len() {
+                            let n = w.generics.len();
+                            let name = d.name.clone();
+                            let params: Vec<&str> = w.generics.iter().map(|&g| self.p.def(g).name.as_str()).collect();
+                            let diag = if n == 0 {
+                                Diagnostic::error(codes::T0104, format!("`{name}` takes no type arguments"))
+                                    .primary(span, "remove the brackets")
+                            } else {
+                                Diagnostic::error(
+                                    codes::T0104,
+                                    format!("`{name}` takes {n} type argument{}", if n == 1 { "" } else { "s" }),
+                                )
+                                .primary(span, format!("write `{name}[{}]`", params.join(", ")))
+                            };
+                            self.diags.push(diag);
+                            return self.tcx.error;
+                        }
                         self.tcx.intern(TyKind::Adt(*def, lowered))
                     }
-                    DefKind::Weft(_) => self.unsupported(span, "wefts used as types (implicit generics)"),
+                    // A weft as a parameter's type is an implicit generic.
+                    DefKind::Weft(_) => {
+                        if matches!(self.implicit, generic::Implicit::Fresh(_)) {
+                            let var = self.new_var(infer::VarKind::Type);
+                            if let generic::Implicit::Fresh(vars) = &mut self.implicit {
+                                vars.push((var, *def));
+                            }
+                            var
+                        } else if let generic::Implicit::Given { args, next } = &mut self.implicit {
+                            let ty = args.get(*next).copied();
+                            *next += 1;
+                            ty.unwrap_or(self.tcx.error)
+                        } else {
+                            self.unsupported(span, "wefts used as types outside parameters (write `any W`)")
+                        }
+                    }
                     DefKind::Type(alias) if alias.gauge.is_none() && alias.generics.is_empty() => match &alias.value {
                         Some(value) => self.lower_ty(value),
                         None => self.unsupported(span, "associated types"),
                     },
                     DefKind::Type(_) => self.unsupported(span, "gauges and generic type aliases"),
-                    DefKind::GenericParam(_) => self.unsupported(span, "generic parameters"),
+                    DefKind::GenericParam(_) => match self.subst.iter().find(|(g, _)| g == def) {
+                        Some(&(_, ty)) => ty,
+                        None => self.unsupported(span, "generic parameters here"),
+                    },
                     _ => self.tcx.error,
                 }
             }
@@ -837,6 +964,8 @@ impl<'p> Checker<'p> {
         let saved_negations = std::mem::take(&mut self.pending_negations);
         let saved_subjects = std::mem::take(&mut self.subjects);
         let saved_self_local = self.self_local.take();
+        let saved_subst = std::mem::take(&mut self.subst);
+        let saved_pending = std::mem::take(&mut self.pending);
         let parent = self.parent_warp_ty(def);
         let saved_self = std::mem::replace(&mut self.self_ty, parent);
         let first_var = self.vars.len();
@@ -863,6 +992,8 @@ impl<'p> Checker<'p> {
         self.pending_negations = saved_negations;
         self.subjects = saved_subjects;
         self.self_local = saved_self_local;
+        self.subst = saved_subst;
+        self.pending = saved_pending;
         self.self_ty = saved_self;
         self.const_stack.pop();
         self.r.const_ty.insert(def, ty);
@@ -882,7 +1013,7 @@ impl<'p> Checker<'p> {
     /// Records the conversion from `actual` to `target` on `e`, or reports a
     /// mismatch. Returns whether it worked.
     fn coerce(&mut self, e: &Expr, actual: Ty, target: Ty) -> bool {
-        let (actual, target) = (self.resolve(actual), self.resolve(target));
+        let (actual, target) = (self.deep_resolve(actual), self.deep_resolve(target));
         if actual == target || self.tcx.is_lenient(actual) || self.tcx.is_error(target) {
             return true;
         }
@@ -953,13 +1084,13 @@ impl<'p> Checker<'p> {
     /// tuples and optionals of them), or through a weave.
     fn weaves(&self, ty: Ty, weft: DefId) -> bool {
         let ty = self.resolve(ty);
-        if self.weave_index.contains_key(&(weft, ty)) {
+        if self.weaving(weft, ty).is_some() {
             return true;
         }
         // A warp is `Copy` when all its fields are, whether it says so or not.
         if Some(weft) == self.std.copy
             && let TyKind::Adt(def, _) = self.tcx.kind(ty)
-            && let Some(info) = self.r.warps.get(def)
+            && let Some(info) = self.r.adts.get(&ty).or_else(|| self.r.warps.get(def))
         {
             return info.copy;
         }

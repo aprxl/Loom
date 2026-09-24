@@ -11,6 +11,10 @@
 //! Weaving a weft means weaving its super-wefts too. Those the program
 //! doesn't weave itself are derived when every method they have has a
 //! default: `warp ParseError: Error` gets `Show` that way.
+//!
+//! A generic weave (`weave[T: Show] Show into Boxed[T]`, or a generic warp's
+//! header) is written for a pattern. It applies to a type that matches the
+//! pattern, when what its parameters stand for meets their bounds.
 
 use loom_syntax::Diagnostic;
 use loom_syntax::ast::ParamMode;
@@ -32,6 +36,14 @@ pub struct Weaving {
     pub span: Span,
     /// Derived because another weaving's weft needs it, not written.
     pub implied: bool,
+}
+
+/// A weaving that applies to a type, with what its generic parameters
+/// stand for there.
+#[derive(Clone, Debug)]
+pub(super) struct Match {
+    pub w: usize,
+    pub bindings: Vec<(DefId, Ty)>,
 }
 
 /// The function behind one weft method for one type.
@@ -56,12 +68,15 @@ impl Checker<'_> {
         for (i, d) in p.defs.iter().enumerate() {
             let site = DefId(i as u32);
             match &d.kind {
-                DefKind::Weave(w) if w.generics.is_empty() => {
+                DefKind::Weave(w) => {
                     let quiet = Some(d.module) != p.root;
                     let mark = self.diags.len();
                     let saved = self.current.replace(site);
+                    let params = w.generics.iter().map(|&g| (g, self.tcx.intern(TyKind::Param(g)))).collect();
+                    let saved_subst = std::mem::replace(&mut self.subst, params);
                     let weft = self.weft_of(&w.weft);
                     let target = self.lower_ty(&w.target);
+                    self.subst = saved_subst;
                     self.current = saved;
                     if quiet {
                         self.diags.truncate(mark);
@@ -72,8 +87,11 @@ impl Checker<'_> {
                         self.add_weaving(weft, target, site, w.weft.span, false);
                     }
                 }
-                DefKind::Warp(w) if w.generics.is_empty() => {
-                    let target = self.tcx.intern(TyKind::Adt(site, Vec::new()));
+                DefKind::Warp(w) => {
+                    // A generic warp's weaves are written for its template,
+                    // `Pair[A, B]`, and hold for every `Pair`.
+                    let params = w.generics.iter().map(|&g| self.tcx.intern(TyKind::Param(g))).collect();
+                    let target = self.tcx.intern(TyKind::Adt(site, params));
                     for t in &w.wefts {
                         if let Some(weft) = self.weft_of(t) {
                             self.add_weaving(weft, target, site, t.span, false);
@@ -149,15 +167,90 @@ impl Checker<'_> {
         }
     }
 
-    /// The weaving of `weft` into `ty`, if there is one.
-    pub(super) fn weaving(&self, weft: DefId, ty: Ty) -> Option<usize> {
-        self.weave_index.get(&(weft, self.resolve(ty))).copied()
+    /// The weaving of `weft` into `ty`, if there is one: for `ty` itself, or
+    /// a generic one whose pattern `ty` matches.
+    pub(super) fn weaving(&self, weft: DefId, ty: Ty) -> Option<Match> {
+        let ty = self.resolve(ty);
+        if let Some(&w) = self.weave_index.get(&(weft, ty)) {
+            return Some(Match { w, bindings: Vec::new() });
+        }
+        (0..self.weavings.len()).filter(|&w| self.weavings[w].weft == weft).find_map(|w| self.matches(w, ty))
     }
 
-    /// What implements weft method `method` in weaving `w`: the function
-    /// with its name in the weave (or the warp's body), or one a `through`
-    /// field has, or else the default.
-    pub(super) fn impl_of(&mut self, w: usize, method: DefId, depth: u32) -> Option<Impl> {
+    /// Whether weaving `w` applies to `ty`, and what its parameters stand
+    /// for if so.
+    fn matches(&self, w: usize, ty: Ty) -> Option<Match> {
+        let target = self.weavings[w].target;
+        if target == ty {
+            return Some(Match { w, bindings: Vec::new() });
+        }
+        if !self.tcx.has_params(target) {
+            return None;
+        }
+        let mut bindings = Vec::new();
+        if !self.match_pattern(target, ty, &mut bindings) {
+            return None;
+        }
+        // Each parameter's bounds must hold for what it stands for.
+        for &(param, arg) in &bindings {
+            for weft in self.param_bounds(self.weavings[w].site, param) {
+                if !self.weaves(arg, weft) {
+                    return None;
+                }
+            }
+        }
+        Some(Match { w, bindings })
+    }
+
+    /// Matches `ty` against `pattern`, a type with generic parameters in it,
+    /// recording what each parameter stands for.
+    fn match_pattern(&self, pattern: Ty, ty: Ty, bindings: &mut Vec<(DefId, Ty)>) -> bool {
+        let ty = self.resolve(ty);
+        match (self.tcx.kind(pattern), self.tcx.kind(ty)) {
+            (TyKind::Param(p), _) => match bindings.iter().find(|(q, _)| q == p) {
+                Some(&(_, bound)) => bound == ty,
+                None => {
+                    bindings.push((*p, ty));
+                    true
+                }
+            },
+            (TyKind::Adt(d1, a1), TyKind::Adt(d2, a2)) if d1 == d2 && a1.len() == a2.len() => {
+                a1.clone().into_iter().zip(a2.clone()).all(|(p, t)| self.match_pattern(p, t, bindings))
+            }
+            (TyKind::Tuple(a1), TyKind::Tuple(a2)) if a1.len() == a2.len() => {
+                a1.clone().into_iter().zip(a2.clone()).all(|(p, t)| self.match_pattern(p, t, bindings))
+            }
+            (TyKind::Optional(p), TyKind::Optional(t)) => self.match_pattern(*p, *t, bindings),
+            _ => pattern == ty,
+        }
+    }
+
+    /// The wefts generic parameter `param` of `site` (a weave, or a generic
+    /// warp) must weave.
+    fn param_bounds(&self, site: DefId, param: DefId) -> Vec<DefId> {
+        let mut wefts = Vec::new();
+        if let DefKind::GenericParam(g) = &self.p.def(param).kind
+            && let hir::GenericParamKind::Type { bounds } = &g.kind
+        {
+            wefts.extend(bounds.iter().filter_map(|t| self.weft_of(t)));
+        }
+        let preds = match &self.p.def(site).kind {
+            DefKind::Weave(w) => w.where_clause.as_slice(),
+            DefKind::Warp(w) => w.where_clause.as_slice(),
+            _ => &[],
+        };
+        for pred in preds {
+            if matches!(&pred.ty.kind, hir::TyKind::Def { def, .. } if *def == param) {
+                wefts.extend(pred.bounds.iter().filter_map(|t| self.weft_of(t)));
+            }
+        }
+        wefts
+    }
+
+    /// What implements weft method `method` in weaving `w`, for type `ty`:
+    /// the function with its name in the weave (or the warp's body), or one
+    /// a `through` field has, or else the default.
+    pub(super) fn impl_of(&mut self, w: usize, method: DefId, ty: Ty, depth: u32) -> Option<Impl> {
         let p = self.p;
         let name = &p.def(method).name;
         let site = self.weavings[w].site;
@@ -171,37 +264,46 @@ impl Checker<'_> {
         if let Some(def) = found {
             return Some(Impl::Written(def));
         }
-        let target = self.weavings[w].target;
-        if !self.forwarded(target, &name.clone(), depth).is_empty() {
+        if !self.tcx.has_params(ty) && !self.forwarded(ty, &name.clone(), depth).is_empty() {
             return Some(Impl::Forward(method));
         }
         self.default_of(method)
     }
 
-    /// The instance a call to `imp` for type `ty` runs.
-    pub(super) fn impl_instance(&self, imp: Impl, ty: Ty) -> Instance {
+    /// The instance a call to `imp` for type `ty` runs. `bindings` says what
+    /// a generic weave's parameters stand for.
+    pub(super) fn impl_instance(&self, imp: Impl, ty: Ty, bindings: &[(DefId, Ty)]) -> Instance {
         match imp {
-            Impl::Written(def) => Instance::of(def),
-            Impl::Default(def) | Impl::Builtin(def) => Instance { def, self_ty: Some(ty), forward: false },
-            Impl::Forward(def) => Instance { def, self_ty: Some(ty), forward: true },
+            Impl::Written(def) => {
+                let params = self.generic_params(def);
+                let args: Option<Vec<Ty>> =
+                    params.iter().map(|g| bindings.iter().find(|(p, _)| p == g).map(|(_, t)| *t)).collect();
+                match args {
+                    Some(args) if !params.is_empty() => Instance { args, ..Instance::of(def) },
+                    _ => self.member_instance(def, ty),
+                }
+            }
+            Impl::Default(def) | Impl::Builtin(def) => Instance { self_ty: Some(ty), ..Instance::of(def) },
+            Impl::Forward(def) => Instance { self_ty: Some(ty), forward: true, ..Instance::of(def) },
         }
     }
 
-    /// Methods named `name` that weaves give `ty`, from wefts in scope here.
-    pub(super) fn weave_methods(&mut self, ty: Ty, name: &str, depth: u32) -> Vec<(DefId, Impl)> {
+    /// Methods named `name` that weaves give `ty`, from wefts in scope here,
+    /// with the instance each would run.
+    pub(super) fn weave_methods(&mut self, ty: Ty, name: &str, depth: u32) -> Vec<(DefId, Instance)> {
         let ty = self.resolve(ty);
         let mut found = Vec::new();
         for w in 0..self.weavings.len() {
-            let weaving = &self.weavings[w];
-            if weaving.target != ty || !self.weft_in_scope(weaving.weft) {
+            let weft = self.weavings[w].weft;
+            if !self.weft_in_scope(weft) {
                 continue;
             }
-            let weft = weaving.weft;
+            let Some(m) = self.matches(w, ty) else { continue };
             for method in self.weft_methods(weft) {
                 if self.p.def(method).name == name
-                    && let Some(imp) = self.impl_of(w, method, depth)
+                    && let Some(imp) = self.impl_of(w, method, ty, depth)
                 {
-                    found.push((weft, imp));
+                    found.push((weft, self.impl_instance(imp, ty, &m.bindings)));
                 }
             }
         }
@@ -300,9 +402,12 @@ impl Checker<'_> {
                     .note("a warp is `Copy` when every field is"),
             );
         }
+        // A generic weave's methods are instantiated for each type it's used
+        // with; only what's written is checked here, for the pattern.
+        let generic = self.tcx.has_params(w.target);
         for method in self.weft_methods(w.weft) {
             let name = p.def(method).name.clone();
-            match self.impl_of(i, method, 0) {
+            match self.impl_of(i, method, w.target, 0) {
                 None => {
                     self.diags.push(
                         Diagnostic::error(
@@ -315,24 +420,25 @@ impl Checker<'_> {
                 }
                 Some(Impl::Written(def)) => {
                     let id = self.queue_def(def);
-                    if self.check_impl_sig(id, method, w.target, &weft_name) {
+                    if self.check_impl_sig(id, method, w.target, &weft_name) && !generic {
                         self.record_op_fn(w.weft, w.target, id);
                     }
                 }
+                Some(_) if generic => {}
                 Some(imp @ Impl::Default(_)) => {
-                    let inst = self.impl_instance(imp, w.target);
+                    let inst = self.impl_instance(imp, w.target, &[]);
                     let id = self.instance(inst);
                     self.record_op_fn(w.weft, w.target, id);
                 }
                 Some(imp @ Impl::Builtin(_)) => {
                     if self.check_derive(&w, &name) {
-                        let inst = self.impl_instance(imp, w.target);
+                        let inst = self.impl_instance(imp, w.target, &[]);
                         self.instance(inst);
                     }
                 }
                 Some(imp @ Impl::Forward(_)) => {
                     if self.check_forward(&w, method, &weft_name) {
-                        let inst = self.impl_instance(imp, w.target);
+                        let inst = self.impl_instance(imp, w.target, &[]);
                         let id = self.instance(inst);
                         self.record_op_fn(w.weft, w.target, id);
                     }
@@ -447,7 +553,9 @@ impl Checker<'_> {
         let DefKind::Fn(f) = &self.p.def(method).kind else { return None };
         let saved_self = self.self_ty.replace(ty);
         let saved = self.current.replace(method);
+        let saved_subst = std::mem::take(&mut self.subst);
         let sig = self.lower_sig(f, self.p.def(method).span);
+        self.subst = saved_subst;
         self.current = saved;
         self.self_ty = saved_self;
         sig
@@ -478,6 +586,10 @@ impl Checker<'_> {
             }
         };
         let Some(weft) = needs(self) else { return true };
+        // A generic warp's fields are checked for each type it's used with.
+        if self.tcx.has_params(w.target) {
+            return true;
+        }
         let Some(info) = self.adt_info(w.target) else {
             // Only warps can be derived; other types weave these wefts
             // built in, or by hand.

@@ -296,11 +296,12 @@ built in `crates/`, following the plan in `design/lua-backend.md`:
   default arguments, control flow, and `match` on literals and tuples; and
   warps: records and cases, methods, UFCS, the leading dot, dot-blocks, case
   and twill patterns, with value semantics; and wefts and weaves, with
-  default methods, derived `Show`, `Eq` and `Ord`, and `through`. `loom run <file>` runs a program;
+  default methods, derived `Show`, `Eq` and `Ord`, and `through`; and
+  generics, checked and compiled per instance. `loom run <file>` runs a program;
   `loom build <file>` writes the Lua; `--emit tokens|ast|hir|lua` dumps a
   stage. The examples use more than this; the compiler says so rather than
   guessing.
-- **Next:** generics and `any W`, then optionals and errors, then
+- **Next:** `any W`, then optionals and errors, then
   arrays and lists, one slice at a time through every layer.
 
 ```bash

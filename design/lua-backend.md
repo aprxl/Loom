@@ -82,6 +82,17 @@ caller's table instead, and a whole-value assignment to one goes through
 `rt.overwrite`. `mut` parameters of scalar types (numbers, strings, enums)
 need copy-in/copy-out and aren't implemented yet.
 
+## Generics
+
+Each instance of a generic function is its own Lua function, named with its
+instance number (`F.largest_4_12`). So are a generic warp's methods, one per
+list of arguments it's used with. A generic warp's runtime descriptor is per
+type too (`Pair[i32, str]`), since its fields' descriptors differ.
+
+A generic function nobody calls isn't checked or emitted. An error in a
+generic body is reported once, with a note naming the instance it came from,
+even when several instances hit it.
+
 ## Weaves
 
 Weave methods are static calls, like any other method. A weft's default

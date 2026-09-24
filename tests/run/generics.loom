@@ -1,0 +1,84 @@
+// Generics: checked and compiled once per list of types they're used with.
+
+use std.io.print
+use std.fmt.{Show, Fmt}
+
+// Type parameters with bounds, inferred from the arguments.
+fn largest[T: Ord + Copy](a: T, b: T) -> T = if a < b { b } else { a }
+
+fn twice[T](x: T) -> (T, T) where T: Copy = (x, x)
+
+// A generic warp, with methods that use its parameters.
+warp Pair[A, B]: Show {
+    first: A
+    second: B
+
+    fn swap(self) -> Pair[B, A] = Pair(.second, .first)
+    fn with_first[C](self, first: C) -> Pair[C, B] = Pair(first, .second)
+}
+
+// A generic sum, matched on.
+warp Maybe[T] {
+    case Just(T)
+    case Nothing
+
+    fn unwrap_or(self, fallback: T) -> T = match self {
+        .Just(v) => v
+        .Nothing => fallback
+    }
+}
+
+// A weft as a parameter's type: an implicit generic, one instance per type.
+weft Named {
+    fn name(self) -> String
+}
+
+warp Cat { lives: u8 }
+warp Dog { good: bool }
+
+weave Named into Cat {
+    fn name(self) -> String = "cat with {.lives} lives"
+}
+
+weave Named into Dog {
+    fn name(self) -> String = if .good { "good dog" } else { "dog" }
+}
+
+fn greet(who: Named) -> String = "hello, {who.name()}"
+
+// A hand-written Show on a generic warp, for each instance.
+warp Boxed[T] { value: T }
+
+weave[T: Show] Show into Boxed[T] {
+    fn show(self, mut f: Fmt) {
+        f.put("[")
+        f.put(.value)
+        f.put("]")
+    }
+}
+
+fn main() {
+    print(largest(3, 9))
+    print(largest(2.5, -1.0))
+    print(largest[u8](200, 100))
+    print(largest("apple", "pear"))
+    print(twice('x'))
+
+    let p = Pair(1, "one")
+    print(p)
+    print(p.swap())
+    print(p.with_first(true).swap())
+    let q: Pair[u8, u8] = Pair(first: 7, second: 8)
+    print("{q.first + q.second} {q.swap():?}")
+
+    let m = Maybe.Just(5)
+    let n: Maybe[i32] = .Nothing
+    print("{m.unwrap_or(0)} {n.unwrap_or(-1)}")
+    print(Maybe.Just("hi").unwrap_or("bye"))
+
+    print(greet(Cat(lives: 9)))
+    print(greet(Dog(good: true)))
+
+    print(Boxed(42))
+    print("{Boxed("s")} {Boxed(Boxed(1.5))} {(Boxed('c'), 1)}")
+}

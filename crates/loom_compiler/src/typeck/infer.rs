@@ -1,10 +1,14 @@
-//! Inference for literal types.
+//! Inference for literal types and generic arguments.
 //!
 //! An integer literal with no expected type gets a fresh `{integer}`
 //! variable, which becomes the first concrete numeric type it meets:
 //! in `for i in 1..=15 { takes_u32(i) }`, `i` is a `u32`. At the end of each
 //! function body, variables nothing constrained become `i32` (or `f64` for
 //! `{float}`), and literal range checks that had to wait run then.
+//!
+//! A generic argument a call doesn't give (`largest(a, b)`) is a type
+//! variable that can become any type. The function is instantiated once the
+//! body is finished and every variable is known (see `generic.rs`).
 //!
 //! Variables are local to one body; signatures never contain them.
 
@@ -20,6 +24,8 @@ use crate::ty::{Ty, TyKind};
 pub(super) enum VarKind {
     Int,
     Float,
+    /// Any type.
+    Type,
 }
 
 #[derive(Debug)]
@@ -43,6 +49,7 @@ impl Checker<'_> {
         self.tcx.intern(match kind {
             VarKind::Int => TyKind::IntVar(id),
             VarKind::Float => TyKind::FloatVar(id),
+            VarKind::Type => TyKind::Var(id),
         })
     }
 
@@ -50,7 +57,7 @@ impl Checker<'_> {
     pub(super) fn resolve(&self, mut ty: Ty) -> Ty {
         loop {
             match self.tcx.kind(ty) {
-                TyKind::IntVar(v) | TyKind::FloatVar(v) => match self.vars[*v as usize].value {
+                TyKind::IntVar(v) | TyKind::FloatVar(v) | TyKind::Var(v) => match self.vars[*v as usize].value {
                     Some(next) => ty = next,
                     None => return ty,
                 },
@@ -79,7 +86,7 @@ impl Checker<'_> {
 
     fn var_of(&self, ty: Ty) -> Option<(u32, VarKind)> {
         match self.tcx.kind(ty) {
-            TyKind::IntVar(v) | TyKind::FloatVar(v) => Some((*v, self.vars[*v as usize].kind)),
+            TyKind::IntVar(v) | TyKind::FloatVar(v) | TyKind::Var(v) => Some((*v, self.vars[*v as usize].kind)),
             _ => None,
         }
     }
@@ -97,6 +104,9 @@ impl Checker<'_> {
             return true;
         }
         match (self.var_of(a), self.var_of(b)) {
+            // A type variable takes whatever it meets, a literal's variable included.
+            (Some((va, VarKind::Type)), _) => return self.bind_var(va, VarKind::Type, b),
+            (_, Some((vb, VarKind::Type))) => return self.bind_var(vb, VarKind::Type, a),
             (Some((va, ka)), Some((vb, kb))) => {
                 // Two variables: the float one wins, so `1 + 2.5` is a float.
                 if ka == VarKind::Float && kb == VarKind::Int {
@@ -128,6 +138,8 @@ impl Checker<'_> {
 
     fn bind_var(&mut self, var: u32, kind: VarKind, ty: Ty) -> bool {
         let fits = match self.tcx.kind(ty) {
+            // A type can't contain itself.
+            _ if kind == VarKind::Type => !self.mentions_var(ty, var),
             TyKind::Int(_) => kind == VarKind::Int,
             TyKind::Float(_) => true,
             _ => false,
@@ -138,11 +150,27 @@ impl Checker<'_> {
         fits
     }
 
+    /// Whether `ty` (after resolving) mentions variable `var`.
+    fn mentions_var(&self, ty: Ty, var: u32) -> bool {
+        let ty = self.resolve(ty);
+        match self.tcx.kind(ty) {
+            TyKind::IntVar(v) | TyKind::FloatVar(v) | TyKind::Var(v) => *v == var,
+            TyKind::Tuple(items) => items.iter().any(|&t| self.mentions_var(t, var)),
+            TyKind::Optional(t) | TyKind::Range(t) => self.mentions_var(*t, var),
+            TyKind::Result(t, e) => self.mentions_var(*t, var) || self.mentions_var(*e, var),
+            TyKind::Fn(params, ret) => {
+                params.iter().any(|&t| self.mentions_var(t, var)) || self.mentions_var(*ret, var)
+            }
+            TyKind::Adt(_, args) => args.iter().any(|&t| self.mentions_var(t, var)),
+            _ => false,
+        }
+    }
+
     /// Whether `ty` (after resolving) still contains a variable.
     pub(super) fn has_vars(&self, ty: Ty) -> bool {
         let ty = self.resolve(ty);
         match self.tcx.kind(ty) {
-            TyKind::IntVar(_) | TyKind::FloatVar(_) => true,
+            TyKind::IntVar(_) | TyKind::FloatVar(_) | TyKind::Var(_) => true,
             TyKind::Tuple(items) => items.iter().any(|&t| self.has_vars(t)),
             TyKind::Optional(t) | TyKind::Range(t) => self.has_vars(*t),
             TyKind::Result(t, e) => self.has_vars(*t) || self.has_vars(*e),
@@ -152,16 +180,26 @@ impl Checker<'_> {
         }
     }
 
-    /// Ends a body: unconstrained variables made since `first_var` take
-    /// their defaults, and the literal checks that were waiting run.
+    /// Ends a body: unconstrained literal variables made since `first_var`
+    /// take their defaults, generic calls are instantiated, and the literal
+    /// checks that were waiting run.
     pub(super) fn finish_body(&mut self, first_var: usize) {
         for v in first_var..self.vars.len() {
             if self.vars[v].value.is_none() {
                 let default = match self.vars[v].kind {
                     VarKind::Int => self.tcx.i32,
                     VarKind::Float => self.tcx.f64,
+                    VarKind::Type => continue,
                 };
                 self.vars[v].value = Some(default);
+            }
+        }
+        self.instantiate_pending();
+        // Type variables nothing pinned down were reported by the calls
+        // that made them.
+        for v in first_var..self.vars.len() {
+            if self.vars[v].value.is_none() {
+                self.vars[v].value = Some(self.tcx.error);
             }
         }
         for lit in std::mem::take(&mut self.pending_lits) {

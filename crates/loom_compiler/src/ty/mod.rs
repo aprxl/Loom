@@ -54,6 +54,12 @@ pub enum TyKind {
     IntVar(u32),
     /// The same for a float literal (`{float}`), defaulting to `f64`.
     FloatVar(u32),
+    /// A type being inferred: a generic argument not given at a call
+    /// (`largest(a, b)`) or a constructor (`Pair(1, 2)`).
+    Var(u32),
+    /// A generic parameter, in a template: the field types of a generic
+    /// warp. Instances replace it with the argument (see [`TyCtx::subst`]).
+    Param(DefId),
     /// Something already reported as an error: it matches anything, so one
     /// mistake doesn't cascade.
     Error,
@@ -118,6 +124,11 @@ impl TyCtx {
         ty
     }
 
+    /// The type `kind` describes, if it's been interned.
+    pub fn find(&self, kind: &TyKind) -> Option<Ty> {
+        self.ids.get(kind).copied()
+    }
+
     pub fn kind(&self, ty: Ty) -> &TyKind {
         &self.kinds[ty.0 as usize]
     }
@@ -164,6 +175,39 @@ impl TyCtx {
         })
     }
 
+    /// `ty` with each generic parameter in `map` replaced by its type.
+    pub fn subst(&mut self, ty: Ty, map: &[(DefId, Ty)]) -> Ty {
+        if map.is_empty() {
+            return ty;
+        }
+        let kind = match self.kind(ty).clone() {
+            TyKind::Param(def) => return map.iter().find(|(p, _)| *p == def).map_or(ty, |(_, t)| *t),
+            TyKind::Tuple(items) => TyKind::Tuple(items.into_iter().map(|t| self.subst(t, map)).collect()),
+            TyKind::Optional(t) => TyKind::Optional(self.subst(t, map)),
+            TyKind::Result(t, e) => TyKind::Result(self.subst(t, map), self.subst(e, map)),
+            TyKind::Range(t) => TyKind::Range(self.subst(t, map)),
+            TyKind::Fn(params, ret) => {
+                TyKind::Fn(params.into_iter().map(|t| self.subst(t, map)).collect(), self.subst(ret, map))
+            }
+            TyKind::Adt(def, args) => TyKind::Adt(def, args.into_iter().map(|t| self.subst(t, map)).collect()),
+            _ => return ty,
+        };
+        self.intern(kind)
+    }
+
+    /// Whether `ty` mentions a generic parameter.
+    pub fn has_params(&self, ty: Ty) -> bool {
+        match self.kind(ty) {
+            TyKind::Param(_) => true,
+            TyKind::Tuple(items) => items.iter().any(|&t| self.has_params(t)),
+            TyKind::Optional(t) | TyKind::Range(t) => self.has_params(*t),
+            TyKind::Result(t, e) => self.has_params(*t) || self.has_params(*e),
+            TyKind::Fn(params, ret) => params.iter().any(|&t| self.has_params(t)) || self.has_params(*ret),
+            TyKind::Adt(_, args) => args.iter().any(|&t| self.has_params(t)),
+            _ => false,
+        }
+    }
+
     /// The type as Loom source would write it.
     pub fn display(&self, p: &Program, ty: Ty) -> String {
         match self.kind(ty) {
@@ -202,6 +246,8 @@ impl TyCtx {
             }
             TyKind::IntVar(_) => "{integer}".into(),
             TyKind::FloatVar(_) => "{float}".into(),
+            TyKind::Var(_) => "_".into(),
+            TyKind::Param(def) => p.def(*def).name.clone(),
             TyKind::Error => "{error}".into(),
         }
     }

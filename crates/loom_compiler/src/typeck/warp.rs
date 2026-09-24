@@ -26,6 +26,9 @@ pub enum Key {
 #[derive(Clone, Debug)]
 pub struct WarpInfo {
     pub def: DefId,
+    /// The type this describes: `Pair[i32, str]`. In a generic warp's
+    /// template, the arguments are its parameters (`Pair[A, B]`).
+    pub ty: Ty,
     pub name: String,
     /// A record's fields, or the fields every case of a sum shares.
     pub fields: Vec<FieldInfo>,
@@ -65,6 +68,15 @@ pub struct CaseFieldInfo {
 }
 
 impl WarpInfo {
+    /// The types of every field, shared and per case.
+    pub fn field_tys(&self) -> Vec<Ty> {
+        self.fields
+            .iter()
+            .map(|f| f.ty)
+            .chain(self.cases.iter().flat_map(|c| c.fields.iter().flatten().map(|f| f.ty)))
+            .collect()
+    }
+
     pub fn is_sum(&self) -> bool {
         !self.cases.is_empty()
     }
@@ -100,7 +112,9 @@ pub(super) enum Member {
 }
 
 impl Checker<'_> {
-    /// The layout of warp `def`, computed on first use.
+    /// The layout of warp `def`, computed on first use. A generic warp's
+    /// field types mention its parameters; [`Checker::adt_info`] gives the
+    /// layout for particular arguments.
     pub(super) fn warp_info(&mut self, def: DefId) -> Option<WarpInfo> {
         if let Some(info) = self.r.warps.get(&def) {
             return Some(info.clone());
@@ -108,15 +122,18 @@ impl Checker<'_> {
         let p = self.p;
         let d = p.def(def);
         let DefKind::Warp(w) = &d.kind else { return None };
-        if !w.generics.is_empty() {
-            self.unsupported(d.span, "generic warps");
-            return None;
-        }
         if w.modifier != loom_syntax::ast::WarpModifier::None {
             self.unsupported(d.span, "`once` and `ref` warps");
             return None;
         }
-        let saved_self = self.self_ty.replace(self.tcx.intern(TyKind::Adt(def, Vec::new())));
+        if let Some(&param) = w.generics.iter().find(|&&g| !self.is_type_param(g)) {
+            self.unsupported(p.def(param).span, "`const` and region parameters");
+            return None;
+        }
+        let params: Vec<(DefId, Ty)> = w.generics.iter().map(|&g| (g, self.tcx.intern(TyKind::Param(g)))).collect();
+        let this = self.tcx.intern(TyKind::Adt(def, params.iter().map(|(_, t)| *t).collect()));
+        let saved_self = self.self_ty.replace(this);
+        let saved_subst = std::mem::replace(&mut self.subst, params);
         let saved_current = self.current.replace(def);
         let mut fields = Vec::new();
         for (i, &field) in w.fields.iter().enumerate() {
@@ -154,18 +171,58 @@ impl Checker<'_> {
             cases.push(CaseInfo { def: case, name: cd.name.clone(), tag: i as u32 + 1, fields: payload });
         }
         self.self_ty = saved_self;
+        self.subst = saved_subst;
         self.current = saved_current;
-        let mut info = WarpInfo { def, name: d.name.clone(), fields, cases, tuple: w.tuple, copy: true };
+        let mut info = WarpInfo { def, ty: this, name: d.name.clone(), fields, cases, tuple: w.tuple, copy: true };
         // Insert first, so a warp that contains itself doesn't recurse forever.
         self.r.warps.insert(def, info.clone());
-        let tys: Vec<Ty> = info
-            .fields
-            .iter()
-            .map(|f| f.ty)
-            .chain(info.cases.iter().flat_map(|c| c.fields.iter().flatten().map(|f| f.ty)))
-            .collect();
-        info.copy = tys.iter().all(|&t| self.is_copy(t));
+        info.copy = info.field_tys().iter().all(|&t| self.is_copy(t));
         self.r.warps.insert(def, info.clone());
+        Some(info)
+    }
+
+    /// Whether generic parameter `def` stands for a type (rather than a
+    /// `const` value or a region).
+    pub(super) fn is_type_param(&self, def: DefId) -> bool {
+        matches!(&self.p.def(def).kind, DefKind::GenericParam(g) if matches!(g.kind, hir::GenericParamKind::Type { .. }))
+    }
+
+    /// The layout of warp type `ty`, with a generic warp's parameters
+    /// replaced by `ty`'s arguments.
+    fn instantiate_warp(&mut self, ty: Ty) -> Option<WarpInfo> {
+        let TyKind::Adt(def, args) = self.tcx.kind(ty).clone() else { return None };
+        if let Some(info) = self.r.adts.get(&ty) {
+            return Some(info.clone());
+        }
+        let template = self.warp_info(def)?;
+        if args.is_empty() {
+            self.r.adts.insert(ty, template.clone());
+            return Some(template);
+        }
+        let DefKind::Warp(w) = &self.p.def(def).kind else { return None };
+        if args.len() != w.generics.len() {
+            return None;
+        }
+        let map: Vec<(DefId, Ty)> = w.generics.iter().copied().zip(args.iter().copied()).collect();
+        let mut info = template;
+        info.ty = ty;
+        for f in &mut info.fields {
+            f.ty = self.tcx.subst(f.ty, &map);
+        }
+        for c in &mut info.cases {
+            for f in c.fields.iter_mut().flatten() {
+                f.ty = self.tcx.subst(f.ty, &map);
+            }
+        }
+        let concrete = !self.has_vars(ty) && !self.tcx.has_params(ty);
+        if concrete {
+            // Insert first, so a warp that contains itself doesn't recurse forever.
+            self.r.adts.insert(ty, info.clone());
+        }
+        info.copy = info.field_tys().iter().all(|&t| self.is_copy(t));
+        if concrete {
+            self.r.adts.insert(ty, info.clone());
+        }
         Some(info)
     }
 
@@ -183,28 +240,31 @@ impl Checker<'_> {
             | TyKind::IntVar(_)
             | TyKind::FloatVar(_)
             | TyKind::Range(_)
+            | TyKind::Var(_)
+            | TyKind::Param(_)
             | TyKind::Error => true,
             TyKind::Tuple(items) => items.iter().all(|&t| self.is_copy(t)),
             TyKind::Optional(t) => self.is_copy(t),
             TyKind::Result(t, e) => self.is_copy(t) && self.is_copy(e),
             TyKind::Adt(def, _) if Some(def) == self.std.string => false,
-            TyKind::Adt(def, _) => match self.r.warps.get(&def) {
+            TyKind::Adt(..) => match self.r.adts.get(&ty) {
                 Some(info) => info.copy,
-                None => self.warp_info(def).is_some_and(|i| i.copy),
+                None => self.adt_info(ty).is_some_and(|i| i.copy),
             },
             TyKind::Fn(..) | TyKind::Any(_) => false,
         }
     }
 
-    /// The warp a type names, if it's one this checker handles.
+    /// The warp a type names, if it's one this checker handles, with its
+    /// field types for this type's generic arguments.
     pub(super) fn adt_info(&mut self, ty: Ty) -> Option<WarpInfo> {
-        let ty = self.resolve(ty);
+        let ty = self.deep_resolve(ty);
         match *self.tcx.kind(ty) {
             TyKind::Adt(def, _) if Some(def) != self.std.string => {
                 if self.p.def(def).attrs.iter().any(|a| a.name == "builtin") {
                     return None;
                 }
-                self.warp_info(def)
+                self.instantiate_warp(ty)
             }
             _ => None,
         }
@@ -246,7 +306,7 @@ impl Checker<'_> {
         args: Option<&[hir::Arg]>,
         span: Span,
     ) -> Ty {
-        let ty = self.tcx.intern(TyKind::Adt(info.def, Vec::new()));
+        let ty = info.ty;
         let args = args.unwrap_or(&[]);
         if case.is_none() && info.is_sum() {
             self.diags.push(
@@ -366,7 +426,24 @@ impl Checker<'_> {
             }
         }
         if ok {
-            let defaults = self.queue_def(info.def);
+            // A generic warp's defaults are checked for its arguments, once
+            // they're known.
+            let args = match self.tcx.kind(info.ty) {
+                TyKind::Adt(_, args) => args.clone(),
+                _ => Vec::new(),
+            };
+            let inst = super::Instance { args, ..super::Instance::of(info.def) };
+            let defaults = if inst.args.iter().any(|&t| self.has_vars(t)) {
+                self.pending.push(super::generic::Pending {
+                    inst,
+                    patch: super::generic::Patch::Construct(id),
+                    span,
+                    bounds: Vec::new(),
+                });
+                super::generic::UNKNOWN
+            } else {
+                self.instance(inst)
+            };
             self.b.constructs.insert(id, Construct { warp: info.def, defaults, case, fields });
         }
         ty

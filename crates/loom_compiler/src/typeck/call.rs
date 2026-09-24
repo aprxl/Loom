@@ -13,6 +13,7 @@ use loom_syntax::ast::{FieldName, ParamMode, Vis};
 use loom_syntax::diag::codes;
 use loom_syntax::source::Span;
 
+use super::generic::{self, Patch, Pending};
 use super::method::{Found, Lookup};
 use super::warp::{Key, Member, WarpInfo};
 use super::{ArgSource, AssocValue, Call, Checker, FieldAccess, Instance, Receiver, SigParam};
@@ -43,16 +44,22 @@ impl Checker<'_> {
         self.b.expr_ty.insert(callee.id, self.tcx.error);
         match &callee.kind {
             ExprKind::Def { def, args: generic_args } if matches!(self.p.def(*def).kind, DefKind::Fn(_)) => {
-                if !generic_args.is_empty() {
-                    return self.unsupported(callee.span, "explicit generic arguments");
+                let mut explicit = Vec::with_capacity(generic_args.len());
+                for arg in generic_args {
+                    match arg {
+                        hir::GenericArg::Type(t) => explicit.push(self.lower_ty(t)),
+                        hir::GenericArg::Expr(e) => return self.unsupported(e.span, "value generic arguments"),
+                    }
                 }
-                self.call_fn(call, Instance::of(*def), args, None)
+                self.call_fn_with(call, Instance::of(*def), &explicit, args, None)
             }
             ExprKind::Field { base, field: FieldName::Named(name) } => {
                 self.method_call(call, callee, base, &name.name, args)
             }
             ExprKind::Type(ty) => {
+                self.infer_args = true;
                 let ty = self.lower_ty(ty);
+                self.infer_args = false;
                 match self.adt_info(ty) {
                     Some(info) => self.construct(call.id, &info, None, Some(args), call.span),
                     None if self.tcx.is_error(ty) => self.tcx.error,
@@ -71,7 +78,9 @@ impl Checker<'_> {
                     }
                     return self.weft_call(call, *def, &name.name, name.span, args);
                 }
+                self.infer_args = true;
                 let ty = self.lower_ty(base);
+                self.infer_args = false;
                 self.assoc_call(call, ty, &name.name, name.span, args)
             }
             ExprKind::LeadingDot(FieldName::Named(name)) => {
@@ -140,9 +149,31 @@ impl Checker<'_> {
     /// Calls a function instance. With a receiver, it feeds the first
     /// parameter and `args` the rest.
     fn call_fn(&mut self, call: &Expr, inst: Instance, args: &[Arg], recv: Option<Recv<'_>>) -> Ty {
+        self.call_fn_with(call, inst, &[], args, recv)
+    }
+
+    /// `call_fn`, with the generic arguments the call gives (`f[u8](x)`).
+    /// A generic function's instance is known once the body is finished.
+    fn call_fn_with(
+        &mut self,
+        call: &Expr,
+        inst: Instance,
+        explicit: &[Ty],
+        args: &[Arg],
+        recv: Option<Recv<'_>>,
+    ) -> Ty {
         let def = inst.def;
-        let id = self.instance(inst);
-        let Some(sig) = self.fn_sig(id) else { return self.check_args_alone(args) };
+        let generic = !explicit.is_empty() || self.needs_inference(&inst);
+        let (sig, id, pending) = if generic {
+            let Some((sig, full, bounds)) = self.generic_sig(inst, explicit, call.span) else {
+                return self.check_args_alone(args);
+            };
+            (sig, generic::UNKNOWN, Some(Pending { inst: full, patch: Patch::Call(call.id), span: call.span, bounds }))
+        } else {
+            let id = self.instance(inst);
+            let Some(sig) = self.fn_sig(id) else { return self.check_args_alone(args) };
+            (sig, id, None)
+        };
         let name = self.p.def(def).name.clone();
         let mut params: &[SigParam] = &sig.params;
         let receiver = match recv {
@@ -181,7 +212,21 @@ impl Checker<'_> {
             sources.insert(0, ArgSource::Receiver);
         }
         self.b.calls.insert(call.id, Call { callee: id, args: sources, receiver, through: Vec::new() });
+        if let Some(pending) = pending {
+            self.pending.push(pending);
+        }
         sig.ret
+    }
+
+    /// Whether calling `inst` needs generic arguments inferred: the function
+    /// has its own generic parameters (or weft-typed ones), or it's a method
+    /// of a generic warp whose arguments aren't all known yet.
+    fn needs_inference(&self, inst: &Instance) -> bool {
+        let DefKind::Fn(f) = &self.p.def(inst.def).kind else { return false };
+        if !f.generics.is_empty() || self.is_generic(inst.def) && inst.args.is_empty() {
+            return true;
+        }
+        inst.args.iter().any(|&t| self.has_vars(t))
     }
 
     /// Matches arguments to parameters, positional first, then by name, and
@@ -416,7 +461,7 @@ impl Checker<'_> {
             return self.check_args_alone(&args[1..]);
         }
         let inst = match self.weaving(weft, ty) {
-            Some(w) => self.impl_of(w, method, 0).map(|imp| self.impl_instance(imp, ty)),
+            Some(m) => self.impl_of(m.w, method, ty, 0).map(|imp| self.impl_instance(imp, ty, &m.bindings)),
             None => None,
         };
         let Some(inst) = inst else {

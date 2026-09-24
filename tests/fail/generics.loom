@@ -1,0 +1,36 @@
+use std.io.print
+
+fn largest[T: Ord](a: T, b: T) -> T = if a < b { b } else { a }
+
+fn nothing[T]() -> u8 = 0
+
+fn plus_one[T](x: T) -> T = x + 1         //~ T0101 T0103
+
+warp Pair[A, B] { first: A, second: B }
+
+warp Cat { lives: u8 }
+
+weft Named {
+    fn name(self) -> str
+}
+
+fn greet(who: Named) -> str = who.name()
+
+warp Boxed[T] { value: T }
+
+weave[T: Show] Show into Boxed[T] {
+    fn show(self, mut f: Fmt) = f.put(.value)
+}
+
+fn main() {
+    let a = largest(Cat(1), Cat(2))         //~ T0108
+    let b = largest(1, "x")                 //~ T0101
+    let c = largest[u8, u8](1, 2)           //~ T0104
+    let d = nothing()                       //~ T0110
+    let e: Pair[i32] = Pair(1, 2)           //~ T0104
+    let f = greet(Cat(3))                   //~ T0108
+    print(Boxed(Cat(4)))                    //~ T0108
+    let g = plus_one(2)
+    let h = plus_one("two")
+    let i = plus_one(true)
+}

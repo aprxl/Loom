@@ -51,7 +51,8 @@ impl Lowerer<'_> {
             TyKind::Optional(t) => self.is_copy(*t),
             TyKind::Result(t, e) => self.is_copy(*t) && self.is_copy(*e),
             TyKind::Adt(def, _) if self.is_string(*def) => false,
-            TyKind::Adt(def, _) => self.warp(*def).is_some_and(|w| w.copy),
+            // Copy-ness depends on a generic warp's arguments.
+            TyKind::Adt(..) => self.typed.results.adts.get(&ty).is_some_and(|w| w.copy),
             TyKind::Fn(..) | TyKind::Any(_) => false,
             _ => true,
         }

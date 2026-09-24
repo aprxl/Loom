@@ -174,13 +174,14 @@ impl<'a> Lowerer<'a> {
     }
 
     /// The name of a function instance in `F`. A function checked as written
-    /// is named after its definition; one checked for a particular `Self`
-    /// also gets its instance number.
+    /// is named after its definition; one checked for particular types (a
+    /// `Self`, generic arguments) also gets its instance number.
     fn fn_name(&self, id: BodyId) -> String {
         let inst = self.typed.results.instance(id);
-        match inst.self_ty {
-            None => self.def_name(inst.def),
-            Some(_) => format!("{}_{}", self.def_name(inst.def), id.0),
+        if inst.self_ty.is_none() && inst.args.is_empty() && !inst.forward {
+            self.def_name(inst.def)
+        } else {
+            format!("{}_{}", self.def_name(inst.def), id.0)
         }
     }
 
@@ -248,9 +249,9 @@ impl<'a> Lowerer<'a> {
             TyKind::Char => Expr::field(Expr::name("rt"), "char"),
             TyKind::Str => Expr::field(Expr::name("rt"), "str"),
             TyKind::Unit => Expr::field(Expr::name("rt"), "unit"),
-            TyKind::Adt(def, _) => {
-                let def = *def;
-                match self.warp(def).cloned() {
+            TyKind::Adt(..) => {
+                // Field types depend on a generic warp's arguments.
+                match self.typed.results.adts.get(&ty).cloned() {
                     Some(info) => self.warp_desc(&info, span),
                     None => {
                         let shown = self.tcx().display(self.p, ty);

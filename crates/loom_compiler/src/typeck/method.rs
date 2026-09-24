@@ -75,14 +75,14 @@ impl Checker<'_> {
             && let Some(Member::Method(m)) = self.member(def, name)
         {
             let via = format!("{}.{name}", self.p.def(def).name);
-            return vec![Found { inst: Instance::of(m), path: Vec::new(), self_ty: ty, via }];
+            return vec![Found { inst: self.member_instance(m, ty), path: Vec::new(), self_ty: ty, via }];
         }
         let woven = self.weave_methods(ty, name, depth);
         if !woven.is_empty() {
             return woven
                 .into_iter()
-                .map(|(weft, imp)| Found {
-                    inst: self.impl_instance(imp, ty),
+                .map(|(weft, inst)| Found {
+                    inst,
                     path: Vec::new(),
                     self_ty: ty,
                     via: format!("{}.{name}", self.p.def(weft).name),
