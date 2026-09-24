@@ -7,3 +7,5 @@ fn main() {
     let n: i32 = s                      //~ T0101
     let b: bool = if a > 3 { 1 } else { 2 }   //~ T0101 T0101
 }
+
+fn label(n: i32) -> str = "{n} items"   //~ T0101

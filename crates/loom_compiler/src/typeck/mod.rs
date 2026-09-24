@@ -76,7 +76,9 @@ pub enum Coercion {
     Widen,
     /// A string literal where a `String` is expected.
     StrToString,
-    /// A `String` where a `str` view is expected.
+    /// A `String` passed where a `str` parameter is expected. Only in call
+    /// arguments: a view must not outlive what it points at, and a borrow
+    /// lasts exactly as long as the call.
     StringToStr,
     /// `T` where `?T` is expected.
     ToOptional,
@@ -174,6 +176,9 @@ struct Checker<'p> {
     /// Negations whose operand must turn out signed.
     pending_negations: Vec<(Ty, Span)>,
 
+    /// Checking a call argument directly: where a `String` may be viewed as a `str`.
+    in_argument: bool,
+
     // Per-function state.
     current: Option<DefId>,
     ret: Option<Ty>,
@@ -207,6 +212,7 @@ impl<'p> Checker<'p> {
             vars: Vec::new(),
             pending_lits: Vec::new(),
             pending_negations: Vec::new(),
+            in_argument: false,
             current: None,
             ret: None,
             loops: Vec::new(),
@@ -526,7 +532,9 @@ impl<'p> Checker<'p> {
             (TyKind::Str, TyKind::Adt(def, _)) if Some(def) == self.std.string && is_str_literal(e) => {
                 Some(Coercion::StrToString)
             }
-            (TyKind::Adt(def, _), TyKind::Str) if Some(def) == self.std.string => Some(Coercion::StringToStr),
+            (TyKind::Adt(def, _), TyKind::Str) if Some(def) == self.std.string && self.in_argument => {
+                Some(Coercion::StringToStr)
+            }
             (_, TyKind::Optional(inner)) if inner == actual => Some(Coercion::ToOptional),
             (_, TyKind::Any(wefts)) => {
                 let missing: Vec<DefId> = wefts.iter().copied().filter(|&w| !self.weaves(actual, w)).collect();
@@ -551,6 +559,15 @@ impl<'p> Checker<'p> {
             }
             None => {
                 self.mismatch(e.span, target, actual);
+                let is_string = matches!(self.tcx.kind(actual), TyKind::Adt(d, _) if Some(*d) == self.std.string);
+                if is_string
+                    && matches!(self.tcx.kind(target), TyKind::Str)
+                    && let Some(last) = self.diags.last_mut()
+                {
+                    *last = std::mem::replace(last, Diagnostic::error(codes::T0101, ""))
+                        .note("a `str` is a view of text that lives elsewhere; this `String` would be gone")
+                        .help("store or return a `String` instead; a `String` argument can be passed to a `str` parameter");
+                }
                 false
             }
         }

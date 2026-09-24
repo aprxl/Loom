@@ -190,6 +190,11 @@ holes, so like any template it becomes a `String` (allocated in the ambient
 spool) wherever a `String` is expected. `str` stays a view and never converts
 on its own, because that would hide an allocation: write `s.to_string()`.
 
+The other direction is a borrow: a `String` **argument** can be passed to a
+`str` parameter, because a borrow lasts exactly as long as the call. Anywhere
+else, a `str` can't hold a `String`: `fn label(n: i32) -> str = "{n} items"`
+is an error, since the view would outlive the text it points at.
+
 ```loom
 fn label(n: u32) -> String = if n == 0 { "none" } else { "{n} items" }   // both convert
 fn shout(s: str) -> String = s.to_upper()                             // str → String is explicit

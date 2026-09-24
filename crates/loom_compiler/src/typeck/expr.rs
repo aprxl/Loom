@@ -328,6 +328,13 @@ impl Checker<'_> {
     // ------------------------------------------------------------ blocks and statements
 
     pub(super) fn check_block(&mut self, block: &Block, expected: Option<Ty>) -> Ty {
+        let saved = std::mem::replace(&mut self.in_argument, false);
+        let ty = self.check_block_inner(block, expected);
+        self.in_argument = saved;
+        ty
+    }
+
+    fn check_block_inner(&mut self, block: &Block, expected: Option<Ty>) -> Ty {
         let Some((last, rest)) = block.stmts.split_last() else {
             return self.expect_unit_tail(block.span, expected);
         };
@@ -608,7 +615,9 @@ impl Checker<'_> {
                 self.unsupported(arg.span, "`mut` arguments");
             }
             slots[slot] = Some(i);
+            let saved = std::mem::replace(&mut self.in_argument, true);
             self.check_coerce(&arg.value, sig.params[slot].ty);
+            self.in_argument = saved;
         }
         let mut sources = Vec::with_capacity(slots.len());
         for (slot, param) in slots.iter().zip(&sig.params) {

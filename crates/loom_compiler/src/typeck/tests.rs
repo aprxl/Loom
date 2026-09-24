@@ -134,6 +134,10 @@ fn strings_and_templates() {
     ok("use std.io.print\nfn f() {\n    print(\"a\")\n    print(3)\n    print(\"{1.5:.2} {'c'} {true}\")\n}");
     // A plain `str` value doesn't become a String by itself.
     assert_eq!(codes("fn f(s: str) -> String = s"), [codes::T0101]);
+    // A String can be viewed as a `str` only for the length of a call.
+    ok("fn takes(s: str) {}\nfn f(n: i32) {\n    takes(\"{n}\")\n}");
+    assert_eq!(codes("fn f(n: i32) -> str = \"{n} items\""), [codes::T0101]);
+    assert_eq!(codes("fn f(n: i32) {\n    var s = \"\"\n    s = \"{n}\"\n}"), [codes::T0101]);
 }
 
 // ================================================================ mistakes
