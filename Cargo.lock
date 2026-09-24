@@ -225,6 +225,7 @@ dependencies = [
  "indexmap",
  "loom_host",
  "loom_syntax",
+ "mlua",
 ]
 
 [[package]]
