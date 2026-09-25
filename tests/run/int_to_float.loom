@@ -1,0 +1,22 @@
+// Integers become floats rounded once, to the nearest (ties to even), even
+// past 2^53 and for u64 values past 2^63. An f32 sum rounds at each step.
+
+use std.io.print
+
+fn main() {
+    let x: u64 = 0x8000_0000_0000_0401                // 2^63 + 1025 → 2^63 + 2048
+    print(x as f64)
+    let w: u64 = 0xFFFF_FFFF_FFFF_FFFF
+    print("{w as f32} {w as f64}")
+    let y: i64 = 0x1000_0010_0000_0001                // just past an f32 tie: rounds up
+    let z: i64 = -0x1000_0010_0000_0001
+    print("{y as f32} {z as f32}")
+    let tie: i64 = 0x1000_0010_0000_0000              // exactly a tie: to even (down)
+    print(tie as f32)
+    let small: i32 = 16777217                         // 2^24 + 1: a tie, to even
+    print(small as f32)
+    let low: i64 = -9_223_372_036_854_775_807 - 1
+    print("{low as f32} {low as f64}")
+    let xs: List[f32] = [100000000.0, 1.0, -100000000.0]
+    print(xs.sum())
+}

@@ -1264,6 +1264,27 @@ impl<'p> Checker<'p> {
             self.b.coercions.insert(e.id, Coercion::ToResult);
             return true;
         }
+        // A number literal where a union is expected: the union's integer
+        // type (or float type), if it has just one.
+        if let TyKind::Union(members) = self.tcx.kind(target).clone()
+            && matches!(self.tcx.kind(actual), TyKind::IntVar(_) | TyKind::FloatVar(_))
+        {
+            let int_lit = matches!(self.tcx.kind(actual), TyKind::IntVar(_));
+            let ints: Vec<Ty> =
+                members.iter().copied().filter(|&m| matches!(self.tcx.kind(m), TyKind::Int(_))).collect();
+            let floats: Vec<Ty> =
+                members.iter().copied().filter(|&m| matches!(self.tcx.kind(m), TyKind::Float(_))).collect();
+            let pick = match (int_lit, ints.as_slice(), floats.as_slice()) {
+                (true, [one], _) | (true, [], [one]) | (false, _, [one]) => Some(*one),
+                _ => None,
+            };
+            if let Some(member) = pick
+                && self.unify(actual, member)
+            {
+                self.b.coercions.insert(e.id, Coercion::ToUnion);
+                return true;
+            }
+        }
         let coercion = match (self.tcx.kind(actual).clone(), self.tcx.kind(target).clone()) {
             (TyKind::Int(a), TyKind::Int(b)) if a.widens_to(b) => Some(Coercion::Widen),
             (TyKind::Str, TyKind::Adt(def, _)) if Some(def) == self.std.string && is_str_literal(e) => {

@@ -1,0 +1,26 @@
+// Union values compare by value (the same type, and equal as it), a number
+// literal takes the union's one number type, and map keys of a union type
+// keep values of different types apart.
+
+use std.io.print
+
+fn main() {
+    let a: i32 | str = 1
+    let b: i32 | str = 1
+    let c: i32 | str = "1"
+    print("{a == b} {a == c} {a != c}")
+    let f: f64 | bool = 2
+    let t: f64 | bool = true
+    print("{f} {t} {f == t}")
+
+    var m: Map[i32 | i64, str] = Map()
+    let k1: i32 = 1
+    let k2: i64 = 1
+    m[k1] = "an i32"
+    m[k2] = "an i64"
+    m[k1] = "the i32 again"
+    print(m.len())
+    for (k, v) in m {
+        print("{k} {v}")
+    }
+}

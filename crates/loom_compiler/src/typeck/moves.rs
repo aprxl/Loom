@@ -13,6 +13,12 @@
 //! moved after it, and a loop's body is gone through twice, so a move in one
 //! iteration is caught by a use in the next.
 //!
+//! Values that borrow a local are checked too (M0105): a slice of it, a
+//! stream over it, or a lambda that uses it. Once the local moves or
+//! changes, a borrow made before can't be used, and while a `for` loop goes
+//! over a local, its body can't change it. (Borrows are otherwise
+//! second-class, see 03-memory: this is the part that concerns locals.)
+//!
 //! It also finds loose ends (L0301): a variable holding a `once` value that
 //! might still hold it when its scope ends, or when a `return`, `fail`, `?`
 //! or `break` leaves the scope, unless a fallback `defer x => ...` ties it
@@ -39,6 +45,9 @@ struct Flow {
     dead: bool,
     /// Locals holding a `once` value that may not have been used up yet.
     loose: Vec<LocalId>,
+    /// Borrows made stale: the borrowing local, what it borrows, and where
+    /// that changed.
+    stale: Vec<(LocalId, LocalId, Span)>,
 }
 
 impl Flow {
@@ -61,7 +70,13 @@ impl Flow {
                 loose.push(l);
             }
         }
-        Flow { moved, dead: false, loose }
+        let mut stale = self.stale;
+        for s in other.stale {
+            if !stale.iter().any(|(b, o, _)| *b == s.0 && *o == s.1) {
+                stale.push(s);
+            }
+        }
+        Flow { moved, dead: false, loose, stale }
     }
 }
 
@@ -95,8 +110,16 @@ struct MoveCx {
     subjects: HashMap<HirId, (Root, Vec<String>)>,
     /// For each level of depth: whether it's a `defer`'s body (or a lambda's).
     in_defer: Vec<bool>,
-    /// The outer locals each `defer` body being gone through uses.
-    captures: Vec<Vec<LocalId>>,
+    /// For each `defer` or lambda body being gone through: how deep it
+    /// starts, and the outer locals it uses.
+    captures: Vec<(u32, Vec<LocalId>)>,
+    /// The outer locals each lambda uses, by the lambda's id.
+    lambda_caps: HashMap<HirId, Vec<LocalId>>,
+    /// Locals holding a borrow (a slice, a stream, a function value), and
+    /// the locals they borrow.
+    borrows: HashMap<LocalId, Vec<LocalId>>,
+    /// Locals a `for` loop being gone through goes over, with the loop.
+    locked: Vec<(LocalId, Span)>,
     /// Locals a `defer` in an enclosing block still needs at its end, with
     /// where that `defer` is.
     held: Vec<(LocalId, Span)>,
@@ -220,9 +243,19 @@ impl Checker<'_> {
                         cx.borrowed.insert(local, Borrow::LoopItem);
                     }
                 }
+                // A list, a map or a set is read as the loop goes, and so is
+                // what a stream over one reads: none of them may change.
+                let lazy = is_seq || is_coll || iter_ty.is_some_and(|t| self.is_borrowing_ty(t));
+                let mut over = Vec::new();
+                if lazy {
+                    self.borrowed_roots(cx, iter, &mut over);
+                }
+                let locked = cx.locked.len();
+                cx.locked.extend(over.into_iter().map(|l| (l, iter.span)));
                 cx.loops.push((e.id, cx.scopes.len()));
                 self.mv_loop(cx, |this, cx| this.mv_block(cx, body, false));
                 cx.loops.pop();
+                cx.locked.truncate(locked);
             }
             ExprKind::While { cond, body } => {
                 cx.loops.push((e.id, cx.scopes.len()));
@@ -265,11 +298,14 @@ impl Checker<'_> {
                 let saved_base = std::mem::replace(&mut cx.fn_base, cx.scopes.len());
                 cx.depth += 1;
                 cx.in_defer.push(false);
+                cx.captures.push((cx.depth, Vec::new()));
                 for p in params {
                     cx.depth_of.insert(p.local, cx.depth);
                     cx.borrowed.insert(p.local, Borrow::LambdaParam);
                 }
                 self.mv(cx, body, true);
+                let (_, caps) = cx.captures.pop().unwrap_or_default();
+                cx.lambda_caps.insert(e.id, caps);
                 cx.in_defer.pop();
                 cx.depth -= 1;
                 cx.fn_base = saved_base;
@@ -333,6 +369,12 @@ impl Checker<'_> {
             }
             ExprKind::Assign { target, op, value } => {
                 self.mv(cx, value, *op == AssignOp::Assign);
+                if let Some((Root::Local(l), path)) = self.place_of(cx, target) {
+                    self.changes(cx, l, target.span);
+                    if path.is_empty() && *op == AssignOp::Assign {
+                        self.new_borrow(cx, l, value);
+                    }
+                }
                 match (op, self.place_of(cx, target)) {
                     // A whole new value: what was moved out of it is back.
                     (AssignOp::Assign, Some((Root::Local(l), path))) => {
@@ -354,16 +396,21 @@ impl Checker<'_> {
                     _ => self.mv(cx, target, false),
                 }
             }
+            ExprKind::Map(pairs) => {
+                for (key, value) in pairs {
+                    self.mv(cx, key, true);
+                    self.mv(cx, value, true);
+                }
+            }
+            ExprKind::Yield { value, .. } => self.mv(cx, value, true),
             ExprKind::Lit(_)
             | ExprKind::Def { .. }
             | ExprKind::Type(_)
             | ExprKind::Assoc { .. }
             | ExprKind::BuiltinCase(_)
             | ExprKind::Intrinsic(_)
-            | ExprKind::Map(_)
             | ExprKind::Loom { .. }
             | ExprKind::Thread(_)
-            | ExprKind::Yield { .. }
             | ExprKind::Pull
             | ExprKind::Const(_)
             | ExprKind::ConstField { .. }
@@ -398,6 +445,9 @@ impl Checker<'_> {
                     fresh(cx, local);
                     self.declare(cx, local);
                 }
+                if let PatKind::Bind(l) = pat.kind {
+                    self.new_borrow(cx, l, init);
+                }
             }
             HirStmt::Expr(e) => {
                 self.mv(cx, e, owning);
@@ -417,11 +467,11 @@ impl Checker<'_> {
                 let saved_base = std::mem::replace(&mut cx.fn_base, cx.scopes.len());
                 cx.depth += 1;
                 cx.in_defer.push(true);
-                cx.captures.push(Vec::new());
+                cx.captures.push((cx.depth, Vec::new()));
                 let own = binding.map(|b| (b, cx.depth_of.insert(b, cx.depth)));
                 self.mv(cx, body, false);
                 // What the body uses must still be there when it runs.
-                for local in cx.captures.pop().unwrap_or_default() {
+                for local in cx.captures.pop().unwrap_or_default().1 {
                     if Some(local) != *binding {
                         cx.held.push((local, stmt.span));
                     }
@@ -531,6 +581,11 @@ impl Checker<'_> {
                 places.push((root, path, mode_of(super::ArgSource::Arg(i)), arg.value.span, shared));
             }
         }
+        for (root, _, mode, span, _) in &places {
+            if let (Root::Local(l), ParamMode::Mut) = (root, mode) {
+                self.changes(cx, *l, *span);
+            }
+        }
         for (i, (ra, pa, ma, sa, share_a)) in places.iter().enumerate() {
             for (rb, pb, mb, sb, share_b) in &places[i + 1..] {
                 let (Root::Local(a), Root::Local(b)) = (ra, rb) else { continue };
@@ -571,11 +626,12 @@ impl Checker<'_> {
         }
         let Root::Local(local) = root else { return };
         self.check_use(cx, local, &path, e.span);
-        if let Some(captured) = cx.captures.last_mut()
-            && cx.depth_of.get(&local).is_some_and(|&d| d < cx.depth)
-            && !captured.contains(&local)
-        {
-            captured.push(local);
+        self.check_borrow(cx, local, e.span);
+        let declared = cx.depth_of.get(&local).copied();
+        for (depth, captured) in cx.captures.iter_mut() {
+            if declared.is_some_and(|d| d < *depth) && !captured.contains(&local) {
+                captured.push(local);
+            }
         }
         if !owning || self.is_copy_expr(e) {
             return;
@@ -651,6 +707,7 @@ impl Checker<'_> {
             cx.flow.moved.push((owner, Vec::new(), at));
         }
         cx.flow.moved.push((local, path.to_vec(), at));
+        self.changes(cx, owner, at);
         // Moved away (or, for part of it, taken apart): used up.
         cx.flow.loose.retain(|&l| l != owner && l != local);
         // A fallback defer on `owner` does nothing once it has moved.
@@ -686,6 +743,137 @@ impl Checker<'_> {
         cx.flow.moved.retain(|(l, p, _)| !(*l == local && (p.starts_with(path) || path.starts_with(p))));
     }
 
+    /// Whether values of `ty` can borrow what they were made from: slices,
+    /// streams and function values.
+    fn is_borrowing_ty(&mut self, ty: Ty) -> bool {
+        let ty = self.deep_resolve(ty);
+        match self.tcx.kind(ty) {
+            TyKind::Fn(..) => true,
+            TyKind::Adt(def, _) => Some(*def) == self.std.slice || Some(*def) == self.std.stream,
+            _ => false,
+        }
+    }
+
+    /// The locals the value of `e` borrows (and what those borrow in turn):
+    /// the place a slice or a stream is made from, and what lambdas use.
+    fn borrowed_roots(&mut self, cx: &MoveCx, e: &Expr, out: &mut Vec<LocalId>) {
+        let add = |out: &mut Vec<LocalId>, l: LocalId| {
+            let mut all = vec![l];
+            all.extend(cx.borrows.get(&l).into_iter().flatten().copied());
+            for l in all {
+                if !out.contains(&l) {
+                    out.push(l);
+                }
+            }
+        };
+        match &e.kind {
+            ExprKind::Lambda { .. } => {
+                for &l in cx.lambda_caps.get(&e.id).into_iter().flatten() {
+                    add(out, l);
+                }
+            }
+            ExprKind::Local(_) | ExprKind::Field { .. } | ExprKind::Index { .. } | ExprKind::LeadingDot(_) => {
+                match self.place_of(cx, e) {
+                    Some((Root::Local(l), _)) => add(out, l),
+                    Some((Root::Temp, _)) => {}
+                    // `xs[a..b]`: a view of `xs`.
+                    None => {
+                        if let ExprKind::Index { base, .. } | ExprKind::Field { base, .. } = &e.kind {
+                            self.borrowed_roots(cx, base, out);
+                        }
+                    }
+                }
+            }
+            // A call that gives a borrow borrows what it was given.
+            ExprKind::Call { callee, args } => {
+                let Some(&ty) = self.b.expr_ty.get(&e.id) else { return };
+                if !self.is_borrowing_ty(ty) {
+                    return;
+                }
+                let method = match &callee.kind {
+                    ExprKind::Index { base, .. } => base.as_ref(),
+                    _ => callee.as_ref(),
+                };
+                if let ExprKind::Field { base, .. } = &method.kind {
+                    self.borrowed_roots(cx, base, out);
+                }
+                for arg in args {
+                    self.borrowed_roots(cx, &arg.value, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// `l` now holds `value`: what does it borrow?
+    fn new_borrow(&mut self, cx: &mut MoveCx, l: LocalId, value: &Expr) {
+        cx.flow.stale.retain(|(b, _, _)| *b != l);
+        cx.borrows.remove(&l);
+        let Some(&ty) = self.b.local_ty.get(&l) else { return };
+        if !self.is_borrowing_ty(ty) {
+            return;
+        }
+        let mut roots = Vec::new();
+        self.borrowed_roots(cx, value, &mut roots);
+        roots.retain(|&r| r != l);
+        if !roots.is_empty() {
+            cx.borrows.insert(l, roots);
+        }
+    }
+
+    /// `l` moves or changes at `at`: the borrows of it made before go stale,
+    /// and a loop going over it can't let that happen.
+    fn changes(&mut self, cx: &mut MoveCx, l: LocalId, at: Span) {
+        if cx.flow.dead {
+            return;
+        }
+        let owner = cx.parts_of.get(&l).copied().unwrap_or(l);
+        if let Some(&(_, over)) = cx.locked.iter().find(|(x, _)| *x == owner || *x == l) {
+            let name = self.p.local(owner).name.clone();
+            self.report(
+                cx,
+                Diagnostic::error(codes::M0105, format!("`{name}` changes while a loop goes over it"))
+                    .primary(at, "changed here")
+                    .secondary(over, "the loop reads it as it goes")
+                    .help(format!(
+                        "go over a copy (`{name}.copy()`), or collect the changes and make them after the loop"
+                    )),
+            );
+        }
+        let borrowers: Vec<LocalId> = cx
+            .borrows
+            .iter()
+            .filter(|(_, roots)| roots.contains(&owner) || roots.contains(&l))
+            .map(|(&b, _)| b)
+            .collect();
+        for b in borrowers {
+            if !cx.flow.stale.iter().any(|(x, o, _)| *x == b && *o == owner) {
+                cx.flow.stale.push((b, owner, at));
+            }
+        }
+    }
+
+    /// A use of `local`, which may hold a borrow gone stale.
+    fn check_borrow(&mut self, cx: &mut MoveCx, local: LocalId, span: Span) {
+        if cx.flow.dead {
+            return;
+        }
+        let Some(&(_, owner, at)) = cx.flow.stale.iter().find(|(b, _, _)| *b == local) else { return };
+        let (name, owner_name) = (self.p.local(local).name.clone(), self.p.local(owner).name.clone());
+        self.report(
+            cx,
+            Diagnostic::error(
+                codes::M0105,
+                format!("`{name}` borrows `{owner_name}`, which changed after it was made"),
+            )
+            .primary(span, "used here")
+            .secondary(at, format!("`{owner_name}` changes here"))
+            .note(format!("`{name}` reads `{owner_name}` as it is now, not as it was"))
+            .help(format!("make `{name}` after the change, or from a copy (`{owner_name}.copy()`)")),
+        );
+        cx.flow.stale.retain(|(b, _, _)| *b != local);
+    }
+
     /// Records the locals a pattern binds from the place starting at `root`.
     fn bind_parts(&mut self, cx: &mut MoveCx, pat: &Pat, root: Option<&Root>) {
         for local in pat_locals(pat) {
@@ -694,6 +882,15 @@ impl Checker<'_> {
             if let Some(Root::Local(owner)) = root {
                 let owner = cx.parts_of.get(owner).copied().unwrap_or(*owner);
                 cx.parts_of.insert(local, owner);
+                // A binding that isn't `Copy` shares its table with the
+                // place it came from: it borrows it.
+                let shared = self.b.local_ty.get(&local).copied().is_some_and(|t| {
+                    let t = self.deep_resolve(t);
+                    self.is_table_backed(t) && !self.is_copy(t)
+                });
+                if shared {
+                    cx.borrows.insert(local, vec![owner]);
+                }
             }
         }
     }
@@ -927,6 +1124,8 @@ impl Checker<'_> {
 /// moved out of this value yet.
 fn fresh(cx: &mut MoveCx, local: LocalId) {
     cx.flow.moved.retain(|(l, _, _)| *l != local);
+    cx.flow.stale.retain(|(b, _, _)| *b != local);
+    cx.borrows.remove(&local);
 }
 
 /// Just the end of `span`: where a block's `}` is.

@@ -80,7 +80,18 @@ impl Lowerer<'_> {
         let err = Self::error_in(info.unwrap, &t);
         let fail = self.nested(|this| this.exit(&info.exit, err, info.err_ty, e.span));
         self.push(StmtKind::If(vec![(Self::is_empty(info.unwrap, &t), fail)], None));
-        self.unwrapped(info.unwrap, &t, ty)
+        let v = self.unwrapped(info.unwrap, &t, ty);
+        // Out of a place, a `Copy` value is its own: `var q = opt?` mustn't
+        // share `opt`'s table.
+        let inner_ty = match self.tcx().kind(ty) {
+            TyKind::Optional(t) | TyKind::Result(t, _) => *t,
+            _ => ty,
+        };
+        if self.is_place(inner) && self.is_table(inner_ty) && self.is_copy(inner_ty) {
+            let d = self.desc(inner_ty, e.span);
+            return Expr::rt("copy", vec![d, v]);
+        }
+        v
     }
 
     /// Leaves with error `err` (of type `ty`): to a `mend`, or out of the

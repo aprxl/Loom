@@ -240,10 +240,33 @@ function rt.cast_chk(d, s, v)
   return nil
 end
 
---- An integer of type `s` as a float.
+--- An integer of type `s` as a float, rounded once. A u64 of 2^63 or more
+--- is halved first, keeping the bit that falls off as a "sticky" low bit so
+--- the halved value still rounds the right way.
 function rt.itof(s, v)
-  if s.u64 and v < 0 then return (v >> 1) * 2.0 + (v & 1) end
+  if s.u64 and v < 0 then return ((v >> 1) | (v & 1)) * 2.0 end
   return v + 0.0
+end
+
+--- An integer of type `s` as an `f32`, rounded once. Through an f64 it
+--- would round twice (to 53 bits, then 24) for values past 2^53: those keep
+--- 26 bits, with the rest folded into the lowest as a sticky bit.
+function rt.itof32(s, v)
+  local neg = not s.u64 and v < 0
+  local m = neg and -v or v -- the magnitude, as an unsigned 64-bit pattern
+  if m >= 0 and m < (1 << 53) then
+    local f = rt.f32(m + 0.0)
+    return neg and -f or f
+  end
+  local len, x = 0, m
+  while x ~= 0 do
+    x = x >> 1
+    len = len + 1
+  end
+  local shift = len - 26
+  local top = (m >> shift) | ((m & ((1 << shift) - 1)) ~= 0 and 1 or 0)
+  local f = rt.f32(top + 0.0) * 2.0 ^ shift
+  return neg and -f or f
 end
 
 local TWO64 = 2.0 ^ 64
@@ -550,6 +573,10 @@ eq = function(d, a, b)
       if not eq(d.elem, at[ao + i], bt[bo + i]) then return false end
     end
     return true
+  elseif kind == "any" then
+    -- A union value: the same type, and equal as that type.
+    if a[2].d ~= b[2].d then return false end
+    return eq(a[2].d, a[1], b[1])
   elseif kind == "map" or kind == "set" then
     -- The same keys (and values for them), in any order.
     if a.n ~= b.n then return false end
@@ -1528,19 +1555,21 @@ end
 local function total(raw, op, start)
   return function(d, s)
     local float = d.kind == "float"
+    local single = d.name == "f32"
     local acc = float and start + 0.0 or start
     while true do
       local ok, v = s()
       if not ok then break end
       if float then
+        -- An f32 sum rounds at every step, as f32 additions do.
         acc = op(acc, v)
+        if single then acc = rt.f32(acc) end
       else
         local r, o = raw(d, acc, v)
         if o then error(MARK .. "arithmetic overflow", 2) end
         acc = r
       end
     end
-    if d.name == "f32" then acc = rt.f32(acc) end
     return acc
   end
 end
@@ -1616,9 +1645,21 @@ end
 -- or string is its own hash key; any other (a tuple, a record) is its
 -- debug text, which is the same for equal values.
 
+-- A number for each descriptor, handed out as needed: `i32 | i64` keys
+-- 1 and 1 differ by their types, which their text alone doesn't show.
+local next_uid = 0
+local function uid(d)
+  if d.uid == nil then
+    next_uid = next_uid + 1
+    d.uid = next_uid
+  end
+  return d.uid
+end
+
 local function hkey(d, k)
   local kind = d.kind
   if kind == "int" or kind == "str" or kind == "char" or kind == "bool" or kind == "enum" then return k end
+  if kind == "any" then return uid(k[2].d) .. ":" .. show(k[2].d, k[1], true) end
   return show(d, k, true)
 end
 

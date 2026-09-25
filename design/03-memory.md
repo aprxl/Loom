@@ -49,6 +49,21 @@ as the call that received it. So a borrow can't be:
 That rule removes the need for lifetime annotations. There are three ways to
 do the things it forbids.
 
+A value that borrows a local can live in another local: a slice of a list
+(`xs[1..]`), a stream over one (`xs.indexed()`), a lambda that uses
+variables around it, or a pattern binding of part of a place. It sees the
+local as it is, not as it was, so once the local moves or changes, a borrow
+made before can't be used (M0105). For the same reason, a `for` loop's body
+can't change what the loop goes over. A `Copy` value bound by a pattern is a
+copy, and doesn't borrow.
+
+```loom
+var xs: List[i32] = [1, 2, 3]
+let tail = xs[1..]
+xs.push(4)
+print(tail)          // error[M0105]: `tail` borrows `xs`, which changed after it was made
+```
+
 ### 1. `ref warp`: views that hold borrows
 
 A `ref warp` can have borrowed fields. It's second-class itself, so it can

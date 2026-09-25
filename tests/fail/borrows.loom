@@ -1,0 +1,94 @@
+// A slice, a stream or a lambda borrows what it's made from: it can't be
+// used after that changes or moves, and a loop's body can't change what
+// the loop goes over.
+
+use std.io.print
+
+fn eat(take xs: List[i32]) {}
+
+fn stale_slice() {
+    var xs: List[i32] = [1, 2, 3]
+    let view: [i32] = xs[..]
+    xs.clear()
+    print(view.len())                       //~ M0105
+}
+
+fn stale_stream() {
+    var xs: List[i32] = [1, 2, 3]
+    let st = xs.indexed().map(p => p.1)
+    xs.push(4)
+    print(st.count())                       //~ M0105
+}
+
+fn stale_lambda() {
+    var k = 1
+    let f = () => k * 10
+    k = 2
+    print(f())                              //~ M0105
+}
+
+fn moved_capture() {
+    let xs: List[i32] = [1]
+    let f = () => xs.len()
+    eat(xs)
+    print(f())                              //~ M0105
+}
+
+fn lambda_in_stream() {
+    var k = 1
+    let ys: List[i32] = [1, 2]
+    let st = ys.map(y => y + k)
+    k = 5
+    print(st)
+}
+
+fn stream_of_lambda_stream() {
+    var k = 1
+    let ys: List[i32] = [1, 2]
+    let st = ys.indexed().map(p => p.1 + k)
+    k += 1
+    print(st.collect())                     //~ M0105
+}
+
+fn changes_while_looping() {
+    var xs: List[i32] = [1, 2, 3]
+    for x in xs {
+        xs.push(x)                          //~ M0105
+    }
+    var m: Map[str, i32] = ["a": 1]
+    for (k, v) in m {
+        m["b"] = v                          //~ M0105
+    }
+    for x in xs.indexed() {
+        xs.clear()                          //~ M0105
+    }
+}
+
+fn map_literal_moves() {
+    let xs: List[i32] = [1]
+    let m: Map[str, List[i32]] = ["a": xs]
+    print(xs.len())                         //~ M0101
+}
+
+fn yield_moves() ~> List[i32] {
+    let xs: List[i32] = [1]
+    yield xs
+    print(xs.len())                         //~ M0101
+}
+
+fn shared_bindings() {
+    var nested: List[List[i32]] = [[1], [2]]
+    match nested[0] {
+        inner => {
+            nested[0].push(9)
+            print(inner.len())              //~ M0105
+        }
+    }
+    var pair = (List[i32](), 1)
+    if pair is (l, n) {
+        pair.0.push(3)
+        print(l)                            //~ M0105
+    }
+}
+
+fn main() {}

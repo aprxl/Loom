@@ -214,7 +214,6 @@ fn main() {
     let a207 = 207
     let a208 = 208
     let a209 = 209
-    let add = (x: i32) => total += x + a3
     for round in 0..2 {
         let b0 = a0 * round
         let b1 = a1 * round
@@ -408,6 +407,7 @@ fn main() {
         let b189 = a189 * round
         total += b189 + b1
     }
+    let add = (x: i32) => total += x + a3
     add(1)
     print("{total} {a0} {a209}")
 }

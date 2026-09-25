@@ -1,0 +1,39 @@
+// Borrows that stay valid: made after the change, made from a copy, used
+// before the change, or remade. And a loop over a copy may change the
+// original.
+
+use std.io.print
+
+fn main() {
+    var xs: List[i32] = [1, 2, 3]
+    let before: [i32] = xs[..]
+    print(before.len())                     // used before the change: fine
+    xs.push(4)
+    let after: [i32] = xs[..]
+    print(after.len())
+
+    let snapshot = xs.copy()
+    let st = snapshot.indexed()
+    xs.clear()
+    print(st.map(p => p.1).collect())
+
+    var k = 1
+    var f = () => k * 10
+    print(f())
+    k = 2
+    f = () => k * 100                       // remade after the change
+    print(f())
+
+    var ys: List[i32] = [1, 2]
+    for y in ys.copy() {
+        ys.push(y * 10)
+    }
+    print(ys)
+
+    var total = 0
+    for x in [1, 2, 3] {
+        let add = (n: i32) => total += n
+        add(x)
+    }
+    print(total)
+}

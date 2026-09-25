@@ -537,11 +537,11 @@ impl Lowerer<'_> {
     }
 
     /// Whether `==` and `<` on `ty` go through the runtime (`rt.eq`,
-    /// `rt.cmp`) rather than Lua's operators: tuples and optionals, and warps
-    /// that are tables or that write their own `eq` or `lt`.
+    /// `rt.cmp`) rather than Lua's operators: tuples, optionals, arrays and
+    /// unions, and warps that are tables or that write their own `eq` or `lt`.
     fn compares_structurally(&self, ty: Ty) -> bool {
         match self.tcx().kind(ty) {
-            TyKind::Tuple(_) | TyKind::Optional(_) | TyKind::Array(..) => true,
+            TyKind::Tuple(_) | TyKind::Optional(_) | TyKind::Array(..) | TyKind::Union(_) => true,
             TyKind::Adt(def, _) if self.is_string(*def) => false,
             TyKind::Adt(def, _) => {
                 let unit_only = self.warp(*def).is_some_and(|i| i.unit_only());
@@ -636,8 +636,7 @@ impl Lowerer<'_> {
             }
             (TyKind::Int(_), TyKind::Float(f)) => {
                 let sd = self.desc(source, span);
-                let v = Expr::rt("itof", vec![sd, v]);
-                if f == FloatTy::F32 { Expr::rt("f32", vec![v]) } else { v }
+                Expr::rt(if f == FloatTy::F32 { "itof32" } else { "itof" }, vec![sd, v])
             }
             (TyKind::Float(_), TyKind::Int(_)) => {
                 let d = self.desc(target, span);

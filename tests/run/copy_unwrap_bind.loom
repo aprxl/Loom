@@ -1,0 +1,44 @@
+// A `Copy` value taken out of a place (by `?`, `mend`, or a pattern) is a
+// value of its own: changing it, or the place, leaves the other alone.
+
+use std.io.print
+
+warp Point: Copy, Show { x: i32, y: i32 }
+
+fn bumped(opt: ?Point) -> ?Point {
+    var q = opt?
+    q.x = 100
+    some(q)
+}
+
+fn main() {
+    var opt: ?Point = some(Point(x: 1, y: 2))
+    print(bumped(opt))
+    print(opt)
+
+    var q = opt mend Point(x: 0, y: 0)
+    q.x = 9
+    print(opt)
+
+    var pts: List[Point] = [Point(x: 1, y: 1)]
+    match pts[0] {
+        p => {
+            pts[0].x = 5
+            print(p)
+        }
+    }
+    var here = Point(x: 1, y: 1)
+    if here is p {
+        here.x = 7
+        print(p)
+    }
+    var r: Point | i32 = Point(x: 5, y: 5)
+    match r {
+        p: Point => {
+            r = 3
+            print(p)
+        }
+        _ => {}
+    }
+    print(pts)
+}

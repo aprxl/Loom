@@ -315,6 +315,16 @@ impl Lowerer<'_> {
         }
         let bind = |this: &mut Self, l: LocalId, value: Expr| {
             let name = this.local_name(l);
+            // A binding of a `Copy` value is a value of its own: what it was
+            // matched against may change while it's in scope.
+            let ty = this.tables().local_ty.get(&l).map(|&t| this.tcx().degauge(t));
+            let value = match ty {
+                Some(ty) if this.is_table(ty) && this.is_copy(ty) => {
+                    let d = this.desc(ty, pat.span);
+                    Expr::rt("copy", vec![d, value])
+                }
+                _ => value,
+            };
             if declare {
                 this.push_local(name, value);
             } else {

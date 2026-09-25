@@ -9,6 +9,15 @@ than Lua gives, enforce it at compile time if possible and at runtime (in Lua)
 otherwise. Everything the type system proves (borrows, regions, `once`,
 exclusivity) is **erased**: Lua never sees it.
 
+**Priorities:** correctness and the whole language first, speed later. The
+Lua backend's job is to run every Loom feature with the right semantics,
+checked at run time wherever the compiler can't prove it yet; it isn't
+optimized (no dropping of proven-unneeded checks, no copy elision beyond
+what semantics need). Once the language is complete on Lua, the plan is to
+move to Loom's own interpreter, and that's where optimization happens. Until
+then, a change that makes emitted code faster at the cost of clarity or of
+a runtime check doesn't go in.
+
 ---
 
 ## Pipeline
