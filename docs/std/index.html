@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loom std</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="index.html">Loom <span class="dim">std</span></a>
+<ul>
+<li><a href="modules/prelude.html">prelude</a></li>
+<li><a href="modules/env.html">env</a></li>
+<li><a href="modules/error.html">error</a></li>
+<li><a href="modules/fmt.html">fmt</a></li>
+<li><a href="modules/fs.html">fs</a></li>
+<li><a href="modules/io.html">io</a></li>
+<li><a href="modules/iter.html">iter</a></li>
+<li><a href="modules/list.html">list</a></li>
+<li><a href="modules/map.html">map</a></li>
+<li><a href="modules/math.html">math</a></li>
+<li><a href="modules/mem.html">mem</a></li>
+<li><a href="modules/num.html">num</a></li>
+<li><a href="modules/ops.html">ops</a></li>
+<li><a href="modules/rand.html">rand</a></li>
+<li><a href="modules/set.html">set</a></li>
+<li><a href="modules/slice.html">slice</a></li>
+<li><a href="modules/string.html">string</a></li>
+<li><a href="modules/sync.html">sync</a></li>
+<li><a href="modules/term.html">term</a></li>
+<li><a href="modules/time.html">time</a></li>
+</ul></nav>
+<main>
+<h1>The Loom standard library</h1>
+<p class="summary">What's implemented in <code>runtime/std</code>, one namespace
+per module. Every item's description is copied from its doc comment in the
+source; an item with none is marked <span class="badge todo">TODO</span>
+rather than given one here.</p>
+<div class="cards">
+<a class="card" href="modules/prelude.html"><span class="name">std.prelude</span><span class="desc">The prelude: names every module can use without a <code>use</code>.</span><span class="count">20 items</span></a>
+<a class="card" href="modules/env.html"><span class="name">std.env</span><span class="desc">The process environment.</span><span class="count">2 items</span></a>
+<a class="card" href="modules/error.html"><span class="name">std.error</span><span class="desc">Errors and giving up.</span><span class="count">4 items</span></a>
+<a class="card" href="modules/fmt.html"><span class="name">std.fmt</span><span class="desc">Formatting.</span><span class="count">2 items</span></a>
+<a class="card" href="modules/fs.html"><span class="name">std.fs</span><span class="desc">Files.</span><span class="count">4 items</span></a>
+<a class="card" href="modules/io.html"><span class="name">std.io</span><span class="desc">Console input and output.</span><span class="count">1 item</span></a>
+<a class="card" href="modules/iter.html"><span class="name">std.iter</span><span class="desc">Iteration.</span><span class="count">2 items</span></a>
+<a class="card" href="modules/list.html"><span class="name">std.list</span><span class="desc">Growable arrays.</span><span class="count">1 item</span></a>
+<a class="card" href="modules/map.html"><span class="name">std.map</span><span class="desc">Hash maps.</span><span class="count">1 item</span></a>
+<a class="card" href="modules/math.html"><span class="name">std.math</span><span class="desc">Mathematical constants and functions.</span><span class="count">2 items</span></a>
+<a class="card" href="modules/mem.html"><span class="name">std.mem</span><span class="desc">Memory: spools and sizes.</span><span class="count">4 items</span></a>
+<a class="card" href="modules/num.html"><span class="name">std.num</span><span class="desc">Numbers.</span><span class="count">5 items</span></a>
+<a class="card" href="modules/ops.html"><span class="name">std.ops</span><span class="desc">The wefts behind operators and value semantics. A warp that lists <code>Eq</code>, <code>Ord</code> or <code>Hash</code> in its header without writing the method gets one that works field by field.</span><span class="count">5 items</span></a>
+<a class="card" href="modules/rand.html"><span class="name">std.rand</span><span class="desc">Pseudo-random numbers.</span><span class="count">1 item</span></a>
+<a class="card" href="modules/set.html"><span class="name">std.set</span><span class="desc">Hash sets.</span><span class="count">1 item</span></a>
+<a class="card" href="modules/slice.html"><span class="name">std.slice</span><span class="desc">Slices: views of contiguous elements.</span><span class="count">1 item</span></a>
+<a class="card" href="modules/string.html"><span class="name">std.string</span><span class="desc">Text.</span><span class="count">3 items</span></a>
+<a class="card" href="modules/sync.html"><span class="name">std.sync</span><span class="desc">Sharing between threads.</span><span class="count">2 items</span></a>
+<a class="card" href="modules/term.html"><span class="name">std.term</span><span class="desc">The terminal.</span><span class="count">2 items</span></a>
+<a class="card" href="modules/time.html"><span class="name">std.time</span><span class="desc">Time.</span><span class="count">4 items</span></a>
+</div>
+<div class="legend">
+<div><span class="badge builtin">builtin</span> implemented directly by the compiler or the runtime, not in Loom.</div>
+<div><span class="badge extern">extern</span> declared as <code>extern "lua"</code>, calling straight into the host.</div>
+<div><span class="badge todo">TODO</span> no doc comment in the source yet.</div>
+</div>
+<footer>Generated from <code>runtime/std/*.loom</code>. Re-run <code>docs/std/gen.py</code> after changing the standard library.</footer>
+</main>
+</div>
+</body>
+</html>

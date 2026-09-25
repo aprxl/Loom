@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>std.ops · Loom</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="../index.html">Loom <span class="dim">std</span></a>
+<ul>
+<li><a href="prelude.html">prelude</a></li>
+<li><a href="env.html">env</a></li>
+<li><a href="error.html">error</a></li>
+<li><a href="fmt.html">fmt</a></li>
+<li><a href="fs.html">fs</a></li>
+<li><a href="io.html">io</a></li>
+<li><a href="iter.html">iter</a></li>
+<li><a href="list.html">list</a></li>
+<li><a href="map.html">map</a></li>
+<li><a href="math.html">math</a></li>
+<li><a href="mem.html">mem</a></li>
+<li><a href="num.html">num</a></li>
+<li><a class="current" href="ops.html">ops</a></li>
+<li><a href="rand.html">rand</a></li>
+<li><a href="set.html">set</a></li>
+<li><a href="slice.html">slice</a></li>
+<li><a href="string.html">string</a></li>
+<li><a href="sync.html">sync</a></li>
+<li><a href="term.html">term</a></li>
+<li><a href="time.html">time</a></li>
+</ul></nav>
+<main>
+<div class="crumb"><a href="../index.html">std</a> / ops</div>
+<h1>std.ops</h1>
+<p class="summary">The wefts behind operators and value semantics. A warp that lists <code>Eq</code>, <code>Ord</code> or <code>Hash</code> in its header without writing the method gets one that works field by field.</p>
+<h2>Types</h2>
+<div class="item">
+<div class="item-head">
+<span class="sig">weft <strong>Copy</strong></span>
+
+</div>
+<p class="item-doc">Values that are copied rather than moved.</p>
+</div>
+<div class="item">
+<div class="item-head">
+<span class="sig">weft <strong>Eq</strong></span>
+
+</div>
+<p class="item-doc"><code>==</code> and <code>!=</code>.</p>
+<div class="members">
+<div class="member">
+<div class="member-head">
+<span class="sig">fn eq(self, other: Self) -&gt; bool</span>
+<span class="badge builtin">builtin</span>
+</div>
+<p class="member-doc">Whether the values are equal. Derived: every field is equal, and for a warp with cases, it's the same case.</p>
+</div>
+</div>
+</div>
+<div class="item">
+<div class="item-head">
+<span class="sig">weft <strong>Ord</strong>: Eq</span>
+
+</div>
+<p class="item-doc"><code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code>.</p>
+<div class="members">
+<div class="member">
+<div class="member-head">
+<span class="sig">fn lt(self, other: Self) -&gt; bool</span>
+<span class="badge builtin">builtin</span>
+</div>
+<p class="member-doc">Whether <code>self</code> comes first. Derived: fields compare in order, the first that differs decides, and earlier cases come first.</p>
+</div>
+</div>
+</div>
+<div class="item">
+<div class="item-head">
+<span class="sig">weft <strong>Hash</strong></span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="item-doc empty">undocumented in source</p>
+<div class="members">
+<div class="member">
+<div class="member-head">
+<span class="sig">fn hash(self) -&gt; u64</span>
+<span class="badge builtin">builtin</span><span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+</div>
+</div>
+<div class="item">
+<div class="item-head">
+<span class="sig">weft <strong>Integer</strong>: Ord, Copy, Show</span>
+<span class="badge builtin">builtin</span>
+</div>
+<p class="item-doc">Every integer type, <code>u1</code> through <code>i128</code>.</p>
+</div>
+</main>
+</div>
+</body>
+</html>

@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>std.num · Loom</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="../index.html">Loom <span class="dim">std</span></a>
+<ul>
+<li><a href="prelude.html">prelude</a></li>
+<li><a href="env.html">env</a></li>
+<li><a href="error.html">error</a></li>
+<li><a href="fmt.html">fmt</a></li>
+<li><a href="fs.html">fs</a></li>
+<li><a href="io.html">io</a></li>
+<li><a href="iter.html">iter</a></li>
+<li><a href="list.html">list</a></li>
+<li><a href="map.html">map</a></li>
+<li><a href="math.html">math</a></li>
+<li><a href="mem.html">mem</a></li>
+<li><a class="current" href="num.html">num</a></li>
+<li><a href="ops.html">ops</a></li>
+<li><a href="rand.html">rand</a></li>
+<li><a href="set.html">set</a></li>
+<li><a href="slice.html">slice</a></li>
+<li><a href="string.html">string</a></li>
+<li><a href="sync.html">sync</a></li>
+<li><a href="term.html">term</a></li>
+<li><a href="time.html">time</a></li>
+</ul></nav>
+<main>
+<div class="crumb"><a href="../index.html">std</a> / num</div>
+<h1>std.num</h1>
+<p class="summary">Numbers.</p>
+<h2>Types</h2>
+<div class="item">
+<div class="item-head">
+<span class="sig">warp <strong>NumError</strong>: Error</span>
+
+</div>
+<p class="item-doc">Why text didn't parse as a number.</p>
+<ul class="cases">
+<li><span class="sig">case Empty</span></li>
+<li><span class="sig">case Invalid</span></li>
+<li><span class="sig">case Overflow</span></li>
+</ul>
+</div>
+<div class="item">
+<div class="item-head">
+<span class="sig">weft <strong>Parse</strong></span>
+<span class="badge builtin">builtin</span>
+</div>
+<p class="item-doc">Types <code>str.parse</code> can make: every integer and float type.</p>
+</div>
+<div class="item">
+<div class="item-head">
+<span class="sig">weft <strong>Num</strong>: Ord, Copy, Show</span>
+<span class="badge builtin">builtin</span>
+</div>
+<p class="item-doc">Every number type: the integers and the floats.</p>
+</div>
+<div class="item">
+<div class="item-head">
+<span class="sig">warp <strong>Int</strong>[T]</span>
+<span class="badge builtin">builtin</span>
+</div>
+<p class="item-doc">The methods of every integer type, <code>T</code>.</p>
+<div class="members">
+<div class="member">
+<div class="member-head">
+<span class="sig">fn abs(self) -&gt; T</span>
+
+</div>
+<p class="member-doc">The value without its sign. Unravels for the smallest signed value.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn min(self, other: T) -&gt; T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn max(self, other: T) -&gt; T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn pow(self, exp: u32) -&gt; T</span>
+
+</div>
+<p class="member-doc"><code>self</code> to the power <code>exp</code>. Unravels when it doesn't fit.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn trailing_zeros(self) -&gt; u32</span>
+
+</div>
+<p class="member-doc">How many zero bits come after the lowest one bit (all of them for 0).</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn leading_zeros(self) -&gt; u32</span>
+
+</div>
+<p class="member-doc">How many zero bits come before the highest one bit.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn count_ones(self) -&gt; u32</span>
+
+</div>
+<p class="member-doc">How many bits are one.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn to_string(self) -&gt; String</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+</div>
+</div>
+<div class="item">
+<div class="item-head">
+<span class="sig">warp <strong>Float</strong>[T]</span>
+<span class="badge builtin">builtin</span>
+</div>
+<p class="item-doc">The methods of every float type, <code>T</code>.</p>
+<div class="members">
+<div class="member">
+<div class="member-head">
+<span class="sig">fn abs(self) -&gt; T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn min(self, other: T) -&gt; T</span>
+
+</div>
+<p class="member-doc">The smaller one; a NaN loses to a number.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn max(self, other: T) -&gt; T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn sqrt(self) -&gt; T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn floor(self) -&gt; T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn ceil(self) -&gt; T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn round(self) -&gt; T</span>
+
+</div>
+<p class="member-doc">Halfway rounds away from zero.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn trunc(self) -&gt; T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn pow(self, exp: T) -&gt; T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn is_nan(self) -&gt; bool</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn to_string(self) -&gt; String</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body>
+</html>

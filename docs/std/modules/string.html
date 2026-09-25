@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>std.string · Loom</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="../index.html">Loom <span class="dim">std</span></a>
+<ul>
+<li><a href="prelude.html">prelude</a></li>
+<li><a href="env.html">env</a></li>
+<li><a href="error.html">error</a></li>
+<li><a href="fmt.html">fmt</a></li>
+<li><a href="fs.html">fs</a></li>
+<li><a href="io.html">io</a></li>
+<li><a href="iter.html">iter</a></li>
+<li><a href="list.html">list</a></li>
+<li><a href="map.html">map</a></li>
+<li><a href="math.html">math</a></li>
+<li><a href="mem.html">mem</a></li>
+<li><a href="num.html">num</a></li>
+<li><a href="ops.html">ops</a></li>
+<li><a href="rand.html">rand</a></li>
+<li><a href="set.html">set</a></li>
+<li><a href="slice.html">slice</a></li>
+<li><a class="current" href="string.html">string</a></li>
+<li><a href="sync.html">sync</a></li>
+<li><a href="term.html">term</a></li>
+<li><a href="time.html">time</a></li>
+</ul></nav>
+<main>
+<div class="crumb"><a href="../index.html">std</a> / string</div>
+<h1>std.string</h1>
+<p class="summary">Text.</p>
+<h2>Types</h2>
+<div class="item">
+<div class="item-head">
+<span class="sig">warp <strong>String</strong></span>
+<span class="badge builtin">builtin</span>
+</div>
+<p class="item-doc">Owned, growable UTF-8 text. <code>str</code> is a view of text; a string literal converts to <code>String</code> wherever one is expected. A <code>String</code> has every method of <code>str</code>, too.</p>
+<div class="members">
+<div class="member">
+<div class="member-head">
+<span class="sig">fn with_capacity(n: usize) -&gt; String</span>
+
+</div>
+<p class="member-doc">An empty string with room for <code>n</code> bytes.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn of(chars: [char]) -&gt; String</span>
+
+</div>
+<p class="member-doc">The text of <code>chars</code>, in order.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn push(mut self, c: char)</span>
+
+</div>
+<p class="member-doc">Adds <code>c</code> at the end.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn push_str(mut self, s: str)</span>
+
+</div>
+<p class="member-doc">Adds <code>s</code> at the end.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn pop(mut self) -&gt; ?char</span>
+
+</div>
+<p class="member-doc">Takes the last character off, if there is one.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn clear(mut self)</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+</div>
+</div>
+<div class="item">
+<div class="item-head">
+<span class="sig">warp <strong>Str</strong></span>
+<span class="badge builtin">builtin</span>
+</div>
+<p class="item-doc">The methods of <code>str</code>: a view of UTF-8 text. Lengths and positions count bytes.</p>
+<div class="members">
+<div class="member">
+<div class="member-head">
+<span class="sig">fn len(self) -&gt; usize</span>
+
+</div>
+<p class="member-doc">How many bytes it takes.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn is_empty(self) -&gt; bool</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn char_count(self) -&gt; usize</span>
+
+</div>
+<p class="member-doc">How many characters it has.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn contains(self, part: str) -&gt; bool</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn starts_with(self, prefix: str) -&gt; bool</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn ends_with(self, suffix: str) -&gt; bool</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn find(self, part: str) -&gt; ?usize</span>
+
+</div>
+<p class="member-doc">The byte position of the first <code>part</code>, if there is one.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn trim(self) -&gt; str</span>
+
+</div>
+<p class="member-doc">Without whitespace at either end.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn trim_start(self) -&gt; str</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn trim_end(self) -&gt; str</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn to_upper(self) -&gt; String</span>
+
+</div>
+<p class="member-doc">Upper case, for ASCII letters.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn to_lower(self) -&gt; String</span>
+
+</div>
+<p class="member-doc">Lower case, for ASCII letters.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn replace(self, from: str, to: str) -&gt; String</span>
+
+</div>
+<p class="member-doc">Every <code>from</code> replaced with <code>to</code>.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn repeat(self, n: usize) -&gt; String</span>
+
+</div>
+<p class="member-doc"><code>n</code> copies, one after another.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn split(self, sep: str) -&gt; List[String]</span>
+
+</div>
+<p class="member-doc">The parts between each <code>sep</code>.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn chars(self) -&gt; Stream[char]</span>
+
+</div>
+<p class="member-doc">The characters, one at a time.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn bytes(self) -&gt; Stream[u8]</span>
+
+</div>
+<p class="member-doc">The bytes of its UTF-8, one at a time.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn lines(self) -&gt; Stream[str]</span>
+
+</div>
+<p class="member-doc">The lines, without their line breaks (a newline, or a carriage return and a newline).</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn words(self) -&gt; Stream[str]</span>
+
+</div>
+<p class="member-doc">The words: what's between runs of whitespace.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn to_string(self) -&gt; String</span>
+
+</div>
+<p class="member-doc">The text as a <code>String</code> of its own.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn copy(self) -&gt; String</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn parse[T: Parse](self) -&gt; T ! NumError</span>
+
+</div>
+<p class="member-doc">The number the text spells: <code>"42".parse[u8]()</code>. Decimal, with an optional sign; floats also take a fraction, an exponent, <code>inf</code>, <code>NaN</code>.</p>
+</div>
+</div>
+</div>
+<div class="item">
+<div class="item-head">
+<span class="sig">warp <strong>Char</strong></span>
+<span class="badge builtin">builtin</span>
+</div>
+<p class="item-doc">The methods of <code>char</code>. The tests are for ASCII.</p>
+<div class="members">
+<div class="member">
+<div class="member-head">
+<span class="sig">fn is_digit(self) -&gt; bool</span>
+
+</div>
+<p class="member-doc"><code>0</code> through <code>9</code>.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn is_alphabetic(self) -&gt; bool</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn is_alphanumeric(self) -&gt; bool</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn is_whitespace(self) -&gt; bool</span>
+
+</div>
+<p class="member-doc">A space, tab, newline, or carriage return.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn is_upper(self) -&gt; bool</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn is_lower(self) -&gt; bool</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn to_upper(self) -&gt; char</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn to_lower(self) -&gt; char</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn to_digit(self, radix: u32 = 10) -&gt; ?u32</span>
+
+</div>
+<p class="member-doc">Its value as a digit in <code>radix</code>: <code>'f'.to_digit(16)</code> is <code>15</code>.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn len_utf8(self) -&gt; usize</span>
+
+</div>
+<p class="member-doc">How many bytes it takes in UTF-8.</p>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body>
+</html>

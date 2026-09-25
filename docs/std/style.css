@@ -1,0 +1,366 @@
+/* Loom std spec: dark only, square corners, Georgia for prose, Pragmasevka
+   for code. Generated alongside the pages by gen.py — edit that, not this
+   file's callers. */
+
+:root {
+  --bg: #111110;
+  --bg-panel: #171715;
+  --bg-inset: #1c1c19;
+  --border: #34332e;
+  --text: #e7e4da;
+  --text-dim: #9c988a;
+  --accent: #d3a24c;
+  --accent-dim: #8a7550;
+  --todo: #d97757;
+  --builtin: #6f9bb5;
+  --extern: #7fa876;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 17px;
+  line-height: 1.55;
+}
+
+code, pre, kbd, .sig {
+  font-family: "Pragmasevka", "Iosevka", "Cascadia Code", Consolas, monospace;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.layout {
+  display: flex;
+  align-items: flex-start;
+  min-height: 100vh;
+}
+
+nav.sidebar {
+  flex: 0 0 220px;
+  border-right: 1px solid var(--border);
+  padding: 1.5rem 1rem;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+nav.sidebar .brand {
+  display: block;
+  font-weight: bold;
+  font-size: 1.05rem;
+  margin-bottom: 1.25rem;
+  color: var(--text);
+}
+
+nav.sidebar .brand .dim {
+  color: var(--text-dim);
+  font-weight: normal;
+}
+
+nav.sidebar ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+nav.sidebar li {
+  margin: 0;
+}
+
+nav.sidebar a {
+  display: block;
+  padding: 0.2rem 0;
+  color: var(--text-dim);
+  font-size: 0.95rem;
+}
+
+nav.sidebar a:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+nav.sidebar a.current {
+  color: var(--accent);
+  font-weight: bold;
+}
+
+main {
+  flex: 1 1 auto;
+  max-width: 46rem;
+  padding: 2.5rem 2.5rem 6rem;
+}
+
+.crumb {
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  margin-bottom: 0.5rem;
+}
+
+h1 {
+  margin: 0 0 0.3rem;
+  font-size: 1.9rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.6rem;
+}
+
+.summary {
+  color: var(--text-dim);
+  margin: 0.8rem 0 2rem;
+  font-size: 1.05rem;
+}
+
+h2 {
+  font-size: 1.1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.35rem;
+  margin: 2.5rem 0 1rem;
+}
+
+.item {
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  padding: 1rem 1.2rem;
+  margin-bottom: 1rem;
+}
+
+.item + .item {
+  margin-top: -0.15rem;
+}
+
+.item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-bottom: 0.4rem;
+}
+
+.sig {
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+.item-doc {
+  color: var(--text);
+  margin: 0.4rem 0;
+}
+
+.item-doc.empty {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.badge {
+  display: inline-block;
+  border: 1px solid currentColor;
+  padding: 0.02rem 0.4rem;
+  font-family: "Pragmasevka", "Iosevka", "Cascadia Code", Consolas, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.5;
+}
+
+.badge.todo {
+  color: var(--todo);
+}
+
+.badge.builtin {
+  color: var(--builtin);
+}
+
+.badge.extern {
+  color: var(--extern);
+}
+
+.members {
+  margin-top: 0.7rem;
+  border-top: 1px dashed var(--border);
+  padding-top: 0.6rem;
+}
+
+.member {
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.member:last-child {
+  border-bottom: none;
+}
+
+.member-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.member-doc {
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  margin: 0.25rem 0 0;
+}
+
+.member-doc.empty {
+  font-style: italic;
+}
+
+.fields, .cases {
+  margin: 0.6rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.92rem;
+}
+
+.fields li, .cases li {
+  padding: 0.15rem 0;
+  color: var(--text-dim);
+}
+
+.fields .sig, .cases .sig {
+  color: var(--text);
+}
+
+code {
+  background: var(--bg-inset);
+  padding: 0.05rem 0.3rem;
+  font-size: 0.9em;
+}
+
+pre {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  padding: 0.8rem 1rem;
+  overflow-x: auto;
+  margin: 0.6rem 0;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+}
+
+.reexports {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reexports li {
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.reexports a {
+  font-family: "Pragmasevka", "Iosevka", "Cascadia Code", Consolas, monospace;
+}
+
+.reexports .from {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  margin-left: 0.4rem;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  margin-top: 1.5rem;
+}
+
+.card {
+  background: var(--bg-panel);
+  padding: 1.1rem 1.2rem;
+  display: block;
+  color: var(--text);
+}
+
+.card:hover {
+  background: var(--bg-inset);
+  text-decoration: none;
+}
+
+.card .name {
+  font-family: "Pragmasevka", "Iosevka", "Cascadia Code", Consolas, monospace;
+  font-weight: bold;
+  color: var(--accent);
+  font-size: 1.05rem;
+}
+
+.card .desc {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--text-dim);
+  font-size: 0.92rem;
+}
+
+.card .count {
+  display: block;
+  margin-top: 0.5rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.legend {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 0.88rem;
+}
+
+.legend .badge {
+  margin-right: 0.3rem;
+}
+
+.legend div {
+  margin: 0.3rem 0;
+}
+
+footer {
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 760px) {
+  .layout {
+    display: block;
+  }
+  nav.sidebar {
+    position: static;
+    height: auto;
+    width: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  main {
+    max-width: none;
+    padding: 1.5rem 1.2rem 4rem;
+  }
+}

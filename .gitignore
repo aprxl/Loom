@@ -3,3 +3,4 @@
 /tests/**/*.actual
 /out*.lua
 /out*.lua.map
+__pycache__/
