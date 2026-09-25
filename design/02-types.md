@@ -39,7 +39,11 @@ is an error.
 
 **Untyped constants.** `const LIMIT = 15`, with no type, works like a literal:
 each use gets the type its context needs, and the value is checked against
-it. `const LIMIT: u32 = 15` has one type everywhere.
+it. `const LIMIT: u32 = 15` has one type everywhere. An untyped constant
+worked out from number literals and other untyped constants
+(`const HALF = LIMIT / 2`) is one too; its value is computed when compiling,
+exactly (integer `/` truncates). One that uses a typed constant has that
+constant's type.
 
 **`uint(n)` / `int(n)`** are compile-time functions that return the type with
 `n` bits, so `u12` is sugar for `uint(12)`. See [06-compile-time](06-compile-time.md).

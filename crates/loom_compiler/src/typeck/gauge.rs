@@ -531,9 +531,10 @@ impl Checker<'_> {
                 _ => None,
             },
             ExprKind::Def { def, .. } => match &self.p.def(*def).kind {
-                DefKind::Const(c) => match self.r.untyped_consts.get(def) {
-                    Some(&v) => Some(Val::Int(v)),
-                    None => sub(self, &c.value),
+                DefKind::Const(c) => match (self.r.untyped_consts.get(def), self.r.untyped_floats.get(def)) {
+                    (Some(&v), _) => Some(Val::Int(v)),
+                    (_, Some(&f)) => Some(Val::Float(f)),
+                    _ => sub(self, &c.value),
                 },
                 _ => None,
             },

@@ -238,13 +238,7 @@ impl Lowerer<'_> {
             },
             ExprKind::Map(pairs) => self.map_lit(e, pairs),
             ExprKind::Def { def, .. } => match &self.p.def(*def).kind {
-                DefKind::Const(_) => match self.typed.results.untyped_consts.get(def) {
-                    Some(&value) => self.int_value(value, ty),
-                    None => {
-                        self.const_refs.push(*def);
-                        Expr::field(Expr::name("C"), &self.def_name(*def))
-                    }
-                },
+                DefKind::Const(_) => self.const_value(*def, ty),
                 _ => {
                     self.unsupported(span, "this kind of value");
                     Expr::Nil
@@ -362,7 +356,7 @@ impl Lowerer<'_> {
         Expr::Int(value as u64 as i64)
     }
 
-    fn float_value(&self, v: f64, ty: Ty) -> Expr {
+    pub(super) fn float_value(&self, v: f64, ty: Ty) -> Expr {
         match self.is_float(ty) {
             Some(FloatTy::F32) => Expr::Float(v as f32 as f64),
             _ => Expr::Float(v),

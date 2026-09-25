@@ -93,6 +93,9 @@ impl Checker<'_> {
                 match &self.p.def(*def).kind {
                     DefKind::Const(_) => {
                         let ty = self.const_ty(*def);
+                        if let Some(&value) = self.r.untyped_floats.get(def) {
+                            return self.float_value_ty(value, span, expected);
+                        }
                         match self.r.untyped_consts.get(def) {
                             Some(&value) => self.int_value_ty(value, span, expected),
                             None => ty,
@@ -308,19 +311,7 @@ impl Checker<'_> {
             Lit::Int(i) => self.check_int_lit(i, negative, span, expected),
             Lit::Float(f) => match f.suffix {
                 Some(p) => self.tcx.prim(p).unwrap_or_else(|| self.unsupported(span, "`f16`")),
-                // A literal for a float gauge must be in it.
-                None if expected
-                    .is_some_and(|t| matches!(self.tcx.kind(t), TyKind::Gauge(_, b) if matches!(self.tcx.kind(*b), TyKind::Float(_)))) =>
-                {
-                    let ty = expected.expect("checked");
-                    let value = if negative { -f.value } else { f.value };
-                    self.check_into_gauge(ty, super::gauge::Val::Float(value), span);
-                    ty
-                }
-                None => match expected.map(|t| self.tcx.kind(t).clone()) {
-                    Some(TyKind::Float(_) | TyKind::FloatVar(_)) => expected.unwrap_or(self.tcx.f64),
-                    _ => self.new_var(VarKind::Float),
-                },
+                None => self.float_value_ty(if negative { -f.value } else { f.value }, span, expected),
             },
             Lit::Char(_) => self.tcx.char,
             Lit::Str(_) => self.tcx.str,
@@ -356,6 +347,24 @@ impl Checker<'_> {
                 None => self.unsupported(span, "`f16` and integers wider than 64 bits"),
             },
             None => self.int_value_ty(value, span, expected),
+        }
+    }
+
+    /// The type of a float value with no suffix: the expected float type, or
+    /// a fresh `{float}`. One for a float gauge must be in it.
+    fn float_value_ty(&mut self, value: f64, span: Span, expected: Option<Ty>) -> Ty {
+        let expected = expected.map(|t| self.resolve(t)).map(|t| match self.tcx.kind(t) {
+            TyKind::Optional(inner) => self.resolve(*inner),
+            _ => t,
+        });
+        match expected.map(|t| self.tcx.kind(t).clone()) {
+            Some(TyKind::Gauge(_, base)) if matches!(self.tcx.kind(base), TyKind::Float(_)) => {
+                let ty = expected.unwrap_or(self.tcx.f64);
+                self.check_into_gauge(ty, super::gauge::Val::Float(value), span);
+                ty
+            }
+            Some(TyKind::Float(_) | TyKind::FloatVar(_)) => expected.unwrap_or(self.tcx.f64),
+            _ => self.new_var(VarKind::Float),
         }
     }
 

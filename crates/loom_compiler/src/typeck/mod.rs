@@ -128,6 +128,8 @@ pub struct Results {
     /// Like Go's untyped constants, each use gets the type its context
     /// needs, so lowering writes the value in place.
     pub untyped_consts: HashMap<DefId, i128>,
+    /// Untyped constants whose value is a float, like `const TAU = 6.28`.
+    pub untyped_floats: HashMap<DefId, f64>,
     /// The layout of every warp used. A generic warp's field types mention
     /// its parameters.
     pub warps: HashMap<DefId, WarpInfo>,
@@ -1178,12 +1180,21 @@ impl<'p> Checker<'p> {
                     let ty = this.lower_ty(t);
                     this.check_coerce(&c.value, ty)
                 }
-                None => {
-                    if let Some(value) = int_literal_value(&c.value) {
-                        this.r.untyped_consts.insert(def, value);
+                // An untyped constant of numbers is a number, which each
+                // use types the way it would a literal.
+                None => match this.untyped_value(&c.value) {
+                    Some(gauge::Val::Int(v)) => {
+                        this.r.untyped_consts.insert(def, v);
+                        let int = |signed, bits| crate::ty::IntTy { signed, bits, size: false };
+                        let fits = [int(true, 32), int(true, 64), int(false, 64)].into_iter().find(|i| i.contains(v));
+                        this.tcx.intern(TyKind::Int(fits.unwrap_or(int(true, 64))))
                     }
-                    this.check_expr(&c.value, None)
-                }
+                    Some(gauge::Val::Float(f)) => {
+                        this.r.untyped_floats.insert(def, f);
+                        this.tcx.f64
+                    }
+                    _ => this.check_expr(&c.value, None),
+                },
             };
             this.finish_body(first_var);
             this.deep_resolve(ty)
@@ -1497,15 +1508,5 @@ fn is_str_literal(e: &Expr) -> bool {
             _ => false,
         },
         _ => false,
-    }
-}
-
-/// The value of an integer literal, possibly negated: what an untyped
-/// constant can hold.
-fn int_literal_value(e: &Expr) -> Option<i128> {
-    match &e.kind {
-        ExprKind::Lit(loom_syntax::ast::Lit::Int(i)) if i.suffix.is_none() => Some(i.value as i128),
-        ExprKind::Unary { op: loom_syntax::ast::UnaryOp::Neg, operand } => int_literal_value(operand).map(|v| -v),
-        _ => None,
     }
 }

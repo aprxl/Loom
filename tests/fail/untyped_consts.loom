@@ -1,0 +1,15 @@
+// Each use of an untyped constant must fit the type it gets.
+
+const BIG = 300
+const HUGE = BIG * 1_000_000_000_000
+const RATIO = 0.5
+
+type Percent = u8 where 0..=100
+
+fn main() {
+    let a: u8 = BIG                         //~ T0102
+    let b: i32 = HUGE                       //~ T0102
+    let c: Percent = BIG                    //~ T0102 G0201
+    let d: i32 = RATIO                      //~ T0101
+    let e: u64 = HUGE
+}

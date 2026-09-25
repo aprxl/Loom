@@ -392,6 +392,9 @@ impl Lowerer<'_> {
     /// A constant's value where it's used: untyped constants are written in
     /// place, typed ones read from `C`.
     pub(super) fn const_value(&mut self, def: DefId, ty: Ty) -> Expr {
+        if let Some(&value) = self.typed.results.untyped_floats.get(&def) {
+            return self.float_value(value, ty);
+        }
         match self.typed.results.untyped_consts.get(&def) {
             Some(&value) => self.int_value(value, ty),
             None => {

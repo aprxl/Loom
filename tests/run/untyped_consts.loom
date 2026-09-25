@@ -1,0 +1,31 @@
+// An untyped constant made of numbers works like a literal: each use gets
+// the type it needs, and must fit it. So can one made from others.
+
+use std.io.print
+
+const TAU = 6.28
+const TEN = 10
+const TWENTY = TEN * 2
+const BIG = 0xFFFF_FFFF_FFFF_FFFF
+const HALF = BIG / 2
+const NEG = -5
+const QUARTER = TAU / 4
+
+type Percent = u8 where 0..=100
+
+fn main() {
+    let x: f32 = TAU
+    let y: f64 = TEN
+    let z: u8 = TWENTY
+    print("{x} {y} {z}")
+    let a: u64 = BIG
+    let h: u64 = HALF
+    let n: i8 = NEG
+    print("{a} {h} {n}")
+    let q: f32 = QUARTER
+    print(q)
+    let p: Percent = TWENTY
+    print(p)
+    let row: [u8; TEN] = [0; TEN]
+    print(row.len())
+}

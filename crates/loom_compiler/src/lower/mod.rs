@@ -570,7 +570,10 @@ impl<'a> Lowerer<'a> {
                 let target = Expr::field(Expr::name("F"), &self.fn_name(id));
                 self.fns.push(Stmt { kind: StmtKind::Assign(vec![target], vec![func]), span: Some(span) });
             }
-            DefKind::Const(c) if !self.typed.results.untyped_consts.contains_key(&def) => {
+            DefKind::Const(c)
+                if !self.typed.results.untyped_consts.contains_key(&def)
+                    && !self.typed.results.untyped_floats.contains_key(&def) =>
+            {
                 let span = d.span;
                 self.const_refs.clear();
                 let body = self.body(span, |this| this.lower_into(&c.value, &Dest::Return));
