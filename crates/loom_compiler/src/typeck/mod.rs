@@ -25,6 +25,7 @@
 //! than guessed at.
 
 mod call;
+mod consts;
 mod dynamic;
 mod expr;
 mod fallible;
@@ -682,9 +683,7 @@ impl<'p> Checker<'p> {
             DefKind::Weft(w) => self.check_weft(inst.def, w),
             DefKind::Type(alias) if alias.gauge.is_some() => self.check_gauge_def(id, inst.def),
             DefKind::Type(_) => self.check_alias(inst.def),
-            DefKind::ConstBlock(e) => {
-                self.unsupported(e.span, "compile-time code");
-            }
+            DefKind::ConstBlock(e) => self.check_const_block(id, e),
             _ => {}
         }
         self.current = None;

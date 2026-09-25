@@ -1,0 +1,14 @@
+// `const assert` is checked while compiling.
+
+const SIZES: [u8; 3] = [1, 2, 4]
+const LIMIT = 10
+
+const assert(SIZES.len() == 3, "three sizes")
+const assert(LIMIT * 2 > 15 and not (LIMIT < 0))
+const assert(SIZES.len() == 4, "four sizes")      //~ K0101
+const assert(LIMIT / 3 == 4)                      //~ K0101
+
+fn limit() -> i32 = LIMIT
+const assert(limit() == 10)                       //~ U0102
+
+fn main() {}

@@ -95,6 +95,9 @@ codes! {
     // G02xx: gauges
     G0201 = "value outside a gauge";
 
+    // K01xx: compile-time code
+    K0101 = "a `const assert` failed";
+
     // L03xx: `once` values
     L0301 = "loose end: a `once` value isn't used up";
 

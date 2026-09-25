@@ -302,12 +302,14 @@ built in `crates/`, following the plan in `design/lua-backend.md`:
   unions, and `main ! E`; arrays, lists and slices; the methods of text,
   characters and numbers; lambdas, `Iter` and lazy streams; `defer`;
   gauges; maps and sets; `once` types; and tests. `examples/widgets.loom`,
-  `examples/tour.loom` and `examples/ledger.loom` run start to finish. `loom run <file>` runs a
-  program; `loom test <file>` runs its tests; `loom build <file>` writes the
-  Lua; `--emit tokens|ast|hir|lua` dumps a stage. The other examples use more than this; the compiler says so
-  rather than guessing.
-- **Next:** chip8, then compile-time code, spools and shuttles, one slice
-  at a time through every layer.
+  `examples/tour.loom`, `examples/ledger.loom` and `examples/chip8.loom`
+  run start to finish (chip8 wants a ROM: `loom run examples/chip8.loom --
+  game.ch8`). `loom run <file>` runs a program; `loom test <file>` runs its
+  tests; `loom build <file>` writes the Lua; `--emit tokens|ast|hir|lua`
+  dumps a stage. The other examples use more than this; the compiler says
+  so rather than guessing.
+- **Next:** compile-time code, then spools and shuttles, one slice at a
+  time through every layer.
 
 ```bash
 cargo run -p loom -- run tests/run/fizzbuzz.loom

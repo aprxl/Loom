@@ -101,9 +101,11 @@ language through every layer (type checking, lowering to Lua, the runtime,
     `examples/ledger.loom` runs, checked by `tests/examples/ledger.out`.
 15. tests (`test name() { … }`, `loom test`, checked by `tests/test`), and
     the host: `env.args`, `time.sleep`, `term.raw_mode`, `term.poll_keys`.
+16. `Rng` (in Loom), `rotate_left`/`rotate_right`, and `const assert` on
+    what the constant folder can work out (K0101). `examples/chip8.loom`
+    compiles and runs; `loom test examples/chip8.loom` passes its 3 tests.
 
-Next: the rest of chip8 (`Rng`, `rotate_right`, `const assert`), then
-compile-time code, spools and shuttles.
+Next: compile-time code (the Lua sandbox), then spools and shuttles.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and

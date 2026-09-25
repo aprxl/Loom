@@ -126,6 +126,14 @@ fn run_passes_arguments_to_the_program() {
 }
 
 #[test]
+fn chip8_tests_pass() {
+    let chip8 = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/chip8.loom");
+    let out = loom(&["test", chip8.to_str().expect("utf-8 path")]);
+    assert!(out.status.success(), "{}{}", text(&out.stdout), text(&out.stderr));
+    assert!(text(&out.stdout).ends_with("test result: ok. 3 passed; 0 failed\n"), "{}", text(&out.stdout));
+}
+
+#[test]
 fn test_runs_the_tests_and_fails_when_one_does() {
     let source = "test good() = assert(true)\ntest bad() = assert(false, \"nope\")\n";
     let path = temp_source("tests", source);

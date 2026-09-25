@@ -17,7 +17,7 @@
 //! when the predicate uses only arithmetic, comparisons and constants.
 
 use loom_syntax::Diagnostic;
-use loom_syntax::ast::{BinaryOp, Lit, UnaryOp};
+use loom_syntax::ast::{BinaryOp, FieldName, Lit, UnaryOp};
 use loom_syntax::diag::codes;
 use loom_syntax::source::Span;
 
@@ -567,6 +567,18 @@ impl Checker<'_> {
                 let (a, b) = (sub(self, lhs)?, sub(self, rhs)?);
                 binary(*op, a, b)
             }
+            // `xs.len()` of an array: its type says.
+            ExprKind::Call { callee, args } if args.is_empty() => match &callee.kind {
+                ExprKind::Field { base, field: FieldName::Named(name) } if name.name == "len" => {
+                    let ty = self.b.expr_ty.get(&base.id).copied()?;
+                    let ty = self.deep_resolve(ty);
+                    match *self.tcx.kind(ty) {
+                        TyKind::Array(_, n) => Some(Val::Int(i128::from(n))),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            },
             ExprKind::Chain { first, rest } => {
                 let mut prev = sub(self, first)?;
                 let mut all = true;

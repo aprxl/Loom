@@ -287,7 +287,7 @@ compares `vt.d` with `Button`'s descriptor, which is unique per type. An
 - An unravel inside a defer during an unravel replaces the first one.
 - `target.os` is the build host's OS; `target.pointer_bits` is 63.
 - A new `push` while the previous Burst is unfinished drains it silently.
-- The RNG is xoshiro in the runtime, never `math.random`.
+- The RNG is xoshiro256** written in Loom (`std.rand`), never `math.random`.
 
 ## Bundles and run mode
 
@@ -347,6 +347,16 @@ The fixture tests run programs sandboxed (`Host { sandbox: true }`): no
 environment variables (`env.get` gives `none`), files in memory starting
 empty, no terminal (`poll_keys` gives 0) and no waiting (`sleep` returns at
 once). What a sandboxed run prints doesn't depend on the machine.
+
+## Compile-time code
+
+The full design runs compile-time code in a sandboxed Lua VM (see
+`06-compile-time.md`). What's there so far is the Rust constant folder the
+gauges use: `const assert(cond, "message")` at the top of a module is
+checked when `cond` folds from literals, constants, arithmetic,
+comparisons, `and`/`or`/`not` and an array's `.len()`. A false one is
+K0101; anything the folder can't work out is U0102. Nothing of it reaches
+the bundle.
 
 ## Not supported in v1
 
