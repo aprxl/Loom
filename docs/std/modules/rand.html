@@ -40,9 +40,9 @@
 <div class="item">
 <div class="item-head">
 <span class="sig">warp <strong>Rng</strong></span>
-<span class="badge builtin">builtin</span>
+
 </div>
-<p class="item-doc">A deterministic xoshiro256** generator.</p>
+<p class="item-doc">A deterministic xoshiro256** generator: the same seed always gives the same numbers, on every machine. Not for secrets.</p>
 <div class="members">
 <div class="member">
 <div class="member-head">
@@ -50,6 +50,20 @@
 
 </div>
 <p class="member-doc">A generator that always produces the same sequence for <code>seed</code>.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn next_u64(mut self) -&gt; u64</span>
+
+</div>
+<p class="member-doc">The next 64 random bits.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn byte(mut self) -&gt; u8</span>
+
+</div>
+<p class="member-doc">A random byte: the top 8 bits of <code>next_u64</code>.</p>
 </div>
 </div>
 </div>

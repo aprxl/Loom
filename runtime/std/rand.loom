@@ -1,8 +1,42 @@
 // Pseudo-random numbers.
 
-/// A deterministic xoshiro256** generator.
-#builtin
+/// A deterministic xoshiro256** generator: the same seed always gives the
+/// same numbers, on every machine. Not for secrets.
 pub warp Rng {
+    s0: u64
+    s1: u64
+    s2: u64
+    s3: u64
+
     /// A generator that always produces the same sequence for `seed`.
-    pub fn seeded(seed: u64) -> Rng
+    pub fn seeded(seed: u64) -> Rng {
+        // splitmix64 spreads the seed over the four words of state, so
+        // nearby seeds give unrelated sequences (and none is all zeros).
+        var x = seed
+        var s: [u64; 4] = [0; 4]
+        for i in 0..4 {
+            x +%= 0x9E37_79B9_7F4A_7C15
+            var z = x
+            z = (z ~ (z >> 30)) *% 0xBF58_476D_1CE4_E5B9
+            z = (z ~ (z >> 27)) *% 0x94D0_49BB_1331_11EB
+            s[i] = z ~ (z >> 31)
+        }
+        Rng(s0: s[0], s1: s[1], s2: s[2], s3: s[3])
+    }
+
+    /// The next 64 random bits.
+    pub fn next_u64(mut self) -> u64 {
+        let result = (.s1 *% 5).rotate_left(7) *% 9
+        let t = .s1 << 17
+        .s2 ~= .s0
+        .s3 ~= .s1
+        .s1 ~= .s2
+        .s0 ~= .s3
+        .s2 ~= t
+        .s3 = .s3.rotate_left(45)
+        result
+    }
+
+    /// A random byte: the top 8 bits of `next_u64`.
+    pub fn byte(mut self) -> u8 = (.next_u64() >> 56) as u8
 }

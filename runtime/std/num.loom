@@ -30,6 +30,12 @@ pub warp Int[T] {
     pub fn leading_zeros(self) -> u32
     /// How many bits are one.
     pub fn count_ones(self) -> u32
+    /// The bits moved `n` places towards the top; those pushed out come back
+    /// in at the bottom. `n` counts modulo the type's width.
+    pub fn rotate_left(self, n: u32) -> T
+    /// The bits moved `n` places towards the bottom; those pushed out come
+    /// back in at the top. `n` counts modulo the type's width.
+    pub fn rotate_right(self, n: u32) -> T
     pub fn to_string(self) -> String
 }
 

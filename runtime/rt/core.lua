@@ -2201,6 +2201,24 @@ ext["std.num.Int.count_ones"] = function(d, v)
   return n
 end
 
+-- Rotates the type's bits `n` places left: Lua's `<<` and `>>` are logical
+-- on all 64 bits, and `wrapv` keeps the type's bits (sign-extending).
+local function rotl(d, v, n)
+  local bits = d.bits
+  n = n % bits
+  if n == 0 then return v end
+  local x = v & d.mask
+  return wrapv(d, (x << n) | (x >> (bits - n)))
+end
+
+ext["std.num.Int.rotate_left"] = function(d, v, n)
+  return rotl(d, v, n)
+end
+
+ext["std.num.Int.rotate_right"] = function(d, v, n)
+  return rotl(d, v, d.bits - n % d.bits)
+end
+
 local function to_string(d, v)
   return show(d, v, false)
 end

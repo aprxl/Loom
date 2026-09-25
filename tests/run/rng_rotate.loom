@@ -1,0 +1,32 @@
+// Rotations stay inside the type's width, and `Rng` is xoshiro256**: the
+// same seed gives the same numbers everywhere. (The expected values come
+// from a separate implementation of the reference algorithm.)
+
+use std.io.print
+use std.rand.Rng
+
+fn main() {
+    let a: u8 = 0b1000_0001
+    print("{a.rotate_left(1)} {a.rotate_right(1)} {a.rotate_left(9)}")
+    let one: u64 = 1
+    print(one.rotate_right(1))
+    let d: u4 = 0b0011
+    print(d.rotate_right(1))
+    let low: i8 = -128
+    let high: i8 = 64
+    print("{low.rotate_left(1)} {high.rotate_left(1)}")
+
+    var r = Rng.seeded(0x10AD)
+    print(r.next_u64())
+    print(r.next_u64())
+    print(r.byte())
+    var bytes: List[u8] = List()
+    for _ in 0..8 {
+        bytes.push(r.byte())
+    }
+    print(bytes.join(" "))
+    var again = Rng.seeded(0x10AD)
+    print(again.next_u64())
+    var zero = Rng.seeded(0)
+    print(zero.next_u64())
+}

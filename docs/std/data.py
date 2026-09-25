@@ -260,6 +260,8 @@ MODULES = [
        {"sig": "fn trailing_zeros(self) -> u32", "doc": "How many zero bits come after the lowest one bit (all of them for 0)."},
        {"sig": "fn leading_zeros(self) -> u32", "doc": "How many zero bits come before the highest one bit."},
        {"sig": "fn count_ones(self) -> u32", "doc": "How many bits are one."},
+       {"sig": "fn rotate_left(self, n: u32) -> T", "doc": "The bits moved `n` places towards the top; those pushed out come back in at the bottom. `n` counts modulo the type's width."},
+       {"sig": "fn rotate_right(self, n: u32) -> T", "doc": "The bits moved `n` places towards the bottom; those pushed out come back in at the top. `n` counts modulo the type's width."},
        {"sig": "fn to_string(self) -> String", "doc": None},
      ]},
     {"kind": "warp", "name": "Float", "suffix": "[T]", "builtin": True,
@@ -312,10 +314,12 @@ MODULES = [
   "name": "rand",
   "summary": "Pseudo-random numbers.",
   "types": [
-    {"kind": "warp", "name": "Rng", "builtin": True,
-     "doc": "A deterministic xoshiro256** generator.",
+    {"kind": "warp", "name": "Rng",
+     "doc": "A deterministic xoshiro256** generator: the same seed always gives the same numbers, on every machine. Not for secrets.",
      "methods": [
        {"sig": "fn seeded(seed: u64) -> Rng", "doc": "A generator that always produces the same sequence for `seed`."},
+       {"sig": "fn next_u64(mut self) -> u64", "doc": "The next 64 random bits."},
+       {"sig": "fn byte(mut self) -> u8", "doc": "A random byte: the top 8 bits of `next_u64`."},
      ]},
   ],
 },
