@@ -57,7 +57,7 @@ fn running_mean() ~> f64 <~ f64 {
   an iterator over what the shuttle yields before it reaches its next
   `pull`. The burst is lazy: iterating it is what actually runs the shuttle.
 - **`sh.close()`** makes pending and future `pull`s return `none`, and returns
-  the final burst.
+  the final burst. Pushing into a closed shuttle unravels.
 - `Burst` is a **`once`** type. You can't drop the outputs a push produced by
   accident. If you really don't care, call `.drain()`.
 

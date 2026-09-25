@@ -38,6 +38,7 @@ mod method;
 mod moves;
 mod pat;
 mod seq;
+mod shuttle;
 #[cfg(test)]
 mod tests;
 mod usefulness;
@@ -242,6 +243,10 @@ pub enum IterSource {
     MapPairs(Ty, Ty),
     /// A set's elements (copies).
     SetItems(Ty),
+    /// A generator (`Shuttle[T, ()]`): what it yields, until it ends.
+    Shuttle(Ty),
+    /// A `Burst[T]`: what its shuttle yields up to its next `pull`.
+    Burst(Ty),
 }
 
 /// An implicit conversion.
@@ -424,6 +429,8 @@ struct Std {
     set: Option<DefId>,
     iter: Option<DefId>,
     stream: Option<DefId>,
+    shuttle: Option<DefId>,
+    burst: Option<DefId>,
 }
 
 /// Where the enclosing loop's `break`s go.
@@ -504,6 +511,8 @@ struct Checker<'p> {
     in_defer: Option<Span>,
     /// Gauges being worked out, or found wrong (reported once).
     gauge_errors: HashSet<DefId>,
+    /// The shuttle whose body is being checked.
+    shuttle: Option<shuttle::ShuttleCtx>,
 }
 
 impl<'p> Checker<'p> {
@@ -532,6 +541,8 @@ impl<'p> Checker<'p> {
             set: find("std.set", "Set"),
             iter: find("std.iter", "Iter"),
             stream: find("std.iter", "Stream"),
+            shuttle: find("std.iter", "Shuttle"),
+            burst: find("std.iter", "Burst"),
         };
         Checker {
             p,
@@ -568,6 +579,7 @@ impl<'p> Checker<'p> {
             loops: Vec::new(),
             in_defer: None,
             gauge_errors: HashSet::new(),
+            shuttle: None,
         }
     }
 
@@ -857,14 +869,18 @@ impl<'p> Checker<'p> {
                 self.check_coerce(default, sig_param.ty);
             }
         }
+        // A shuttle's body runs when it's driven, and gives back nothing.
+        self.shuttle = self.shuttle_ctx(f, &sig);
+        let body_ty = if self.shuttle.is_some() { self.tcx.unit } else { sig.ret };
         if let Some(body) = &f.body {
-            self.ret = Some(sig.ret);
+            self.ret = Some(body_ty);
             self.loops.clear();
-            self.check_coerce(body, sig.ret);
+            self.check_coerce(body, body_ty);
             self.ret = None;
         }
+        self.shuttle = None;
         self.finish_body(first_var);
-        self.check_moves(f, sig.ret == self.tcx.unit);
+        self.check_moves(f, body_ty == self.tcx.unit);
     }
 
     /// A test takes nothing, and returns nothing or fails with an error:
@@ -964,10 +980,19 @@ impl<'p> Checker<'p> {
         let ret = match &f.ret {
             FnRet::Unit => self.tcx.unit,
             FnRet::Value(t) => self.lower_ty(t),
-            FnRet::Shuttle { .. } => {
-                self.unsupported(span, "shuttles");
+            FnRet::Shuttle { yields: Some((Some(_), _)), .. } => {
+                self.unsupported(span, "projections (`~> mut T`, `~> ref T`)");
                 self.implicit = mode;
                 return None;
+            }
+            FnRet::Shuttle { yields, pulls } => {
+                let t = yields.as_ref().map(|(_, t)| self.lower_ty(t));
+                let u = pulls.as_ref().map(|t| self.lower_ty(t));
+                if t.is_some_and(|t| self.tcx.is_error(t)) || u.is_some_and(|u| self.tcx.is_error(u)) {
+                    self.implicit = mode;
+                    return None;
+                }
+                self.shuttle_ty(t, u)
             }
         };
         // Callers read the variables a `Fresh` mode collected.

@@ -80,6 +80,9 @@ pub warp Char {
     pub fn to_lower(self) -> char
     /// Its value as a digit in `radix`: `'f'.to_digit(16)` is `15`.
     pub fn to_digit(self, radix: u32 = 10) -> ?u32
+    /// The value of a decimal digit: `'7'.digit()` is `7`. Unravels for
+    /// anything but `0` through `9`.
+    pub fn digit(self) -> u8
     /// How many bytes it takes in UTF-8.
     pub fn len_utf8(self) -> usize
 }

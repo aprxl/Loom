@@ -869,11 +869,16 @@ impl Checker<'_> {
             return;
         }
         let shown = self.show(ty);
+        let help = if self.burst_item(ty).is_some() {
+            "go through it with `for`, or call `.drain()` to throw its items away on purpose"
+        } else {
+            "keep it in a variable and tie it off, or pass it to a function that takes it"
+        };
         self.report(
             cx,
             Diagnostic::error(codes::L0301, format!("loose end: this `{shown}` is thrown away"))
                 .primary(e.span, format!("`{shown}` is a `once` type: it must be used up exactly once"))
-                .help("keep it in a variable and tie it off, or pass it to a function that takes it"),
+                .help(help),
         );
     }
 

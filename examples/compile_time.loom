@@ -198,7 +198,7 @@ fn main() {
     print(json)
     // {"name":"Ada","age":36,"roles":[{"Member":{"since":1843}},"Admin"],"email":null}
 
-    print("crc32 = {crc32(json.bytes()):08x}")
+    print("crc32 = {crc32(json.bytes().collect()):08x}")
 
     var recent = Ring[u32, 4]()               // Idx = u2, Len = u3
     for n in 1..=6 {

@@ -52,6 +52,14 @@ impl Checker<'_> {
         if let Some(t) = self.set_elem(ty) {
             return Some((IterSource::SetItems(t), t));
         }
+        if let Some((t, u)) = self.shuttle_parts(ty)
+            && self.resolve(u) == self.tcx.unit
+        {
+            return Some((IterSource::Shuttle(t), t));
+        }
+        if let Some(t) = self.burst_item(ty) {
+            return Some((IterSource::Burst(t), t));
+        }
         let iter = self.std.iter?;
         if self.stream_item(ty).is_some() || self.weaving(iter, ty).is_none() {
             return None;

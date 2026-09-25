@@ -104,6 +104,8 @@ impl Lowerer<'_> {
                 let d = self.desc(*t, span);
                 Expr::rt("set_stream", vec![d, v])
             }
+            IterSource::Shuttle(_) => Expr::rt("shuttle_stream", vec![v]),
+            IterSource::Burst(_) => Expr::rt("burst_stream", vec![v]),
             IterSource::Woven { next, item } => {
                 let boxed = self.opt_boxed(*item);
                 // A `mut self` that isn't a table comes back after the item.
@@ -124,6 +126,12 @@ impl Lowerer<'_> {
     /// generic `for`.
     pub(super) fn for_stream(&mut self, e: &hir::Expr, pat: &hir::Pat, iter: &hir::Expr, body: &Block) {
         let s = match self.tables().streams.get(&e.id).cloned() {
+            // Leaving a loop over a generator early closes it, which runs
+            // its `defer`s: `rt.shuttle_loop` gives the stream and a closer.
+            Some(IterSource::Shuttle(_)) => {
+                let v = self.lower_owned(iter);
+                Expr::rt("shuttle_loop", vec![v])
+            }
             // The iterator is changed as it goes, so it's a copy of a
             // `Copy` place.
             Some(source) => {

@@ -104,8 +104,12 @@ language through every layer (type checking, lowering to Lua, the runtime,
 16. `Rng` (in Loom), `rotate_left`/`rotate_right`, and `const assert` on
     what the constant folder can work out (K0101). `examples/chip8.loom`
     compiles and runs; `loom test examples/chip8.loom` passes its 3 tests.
+17. shuttles: generators (`~> T`), duplex shuttles (`~> T <~ U`) and sinks,
+    `yield`, `pull`, `push`/`close` and `once` bursts, as Lua coroutines.
+    `examples/lexer.loom` runs but for its `lexer.Frame.size` assert.
 
-Next: compile-time code (the Lua sandbox), then spools and shuttles.
+Next: threads (`loom`, `thread`, `loom for`, `Atomic`) for
+`examples/parallel.loom`, then compile-time code, then spools.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and

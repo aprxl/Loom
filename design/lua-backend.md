@@ -162,6 +162,38 @@ works on a copy of a `Copy` place, since `next` changes it. `map` and
 When an unravel happens inside the runtime (a stream's step, say), the host
 reports the first frame of the Lua traceback that maps to Loom code.
 
+## Shuttles
+
+Calling a shuttle function makes `rt.shuttle(body)`: a table holding a
+coroutine that runs the body when driven. `yield v` is
+`coroutine.yield(true, v)`; `pull` is `coroutine.yield(false)`, which the
+driver resumes with `true, input` for a push or `false` once closed (`none`).
+A `Burst` is `{sh, input, closing}`: going through it resumes the shuttle,
+hands its input to the first `pull`, and ends at the next `pull` or when the
+shuttle does. A generator's stream is the same, with no input to hand over.
+Both are `Stream` sources (`IterSource::Shuttle`, `IterSource::Burst`), so
+their items go through `for` and every `Stream` method.
+
+- A new `push` runs what's left of the previous burst first, throwing its
+  items away. Pushing into a closed shuttle unravels.
+- An unravel inside a shuttle closes its coroutine (running its pending
+  `defer`s) and is raised again, unchanged, where it was driven, so it keeps
+  the shuttle's Loom location.
+- A `for` loop directly over a generator (`for x in fib()`) passes Lua a
+  closing value: leaving the loop early closes the coroutine, which runs
+  the generator's `defer`s. A shuttle dropped part-way through any other way
+  (after `.take(3)`, say) is left to the garbage collector, and its `defer`s
+  don't run.
+- A shuttle keeps its parameters as long as it lives. Until the region
+  checker can follow a borrow that long, it only takes ones it owns:
+  `take` parameters, and `Copy` ones, which it copies when it's made (U0102
+  otherwise).
+- `yield`/`pull` in a shuttle that doesn't yield/pull is T0120; a shuttle
+  calling itself is T0121 (its frame would contain itself); neither can be
+  inside a `defer` (T0118). A burst is `once`, so dropping one is L0301.
+- Frames aren't laid out in Lua, so `f.Frame.size` waits for compile-time
+  reflection.
+
 ## `once` values and files
 
 `once` is checked entirely at compile time and leaves nothing at run time:
@@ -268,8 +300,7 @@ compares `vt.d` with `Button`'s descriptor, which is unique per type. An
   then unravels. The type checker keeps `return`, `fail`, `?` and
   `break`/`continue` from leaving a defer (T0118); the move checker keeps a
   defer's variables from moving while it still needs them (M0102).
-- Shuttles: `coroutine.create` with tagged yields `(OUT, v)` / `(PULL)`.
-  A coroutine that dies by error is `coroutine.close`d before re-raising.
+- Shuttles: see below.
 
 ## Defaults (decided; change here first)
 

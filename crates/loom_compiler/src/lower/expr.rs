@@ -233,6 +233,7 @@ impl Lowerer<'_> {
             ExprKind::Call { .. } if self.tables().new_lists.contains(&e.id) => match self.coll(ty) {
                 Some(Coll::Map(..)) => Expr::rt("map_new", Vec::new()),
                 Some(Coll::Set(_)) => Expr::rt("set_new", Vec::new()),
+                None if self.seq(ty).is_none() => Expr::Str(Vec::new()),
                 None => Self::new_list(),
             },
             ExprKind::Map(pairs) => self.map_lit(e, pairs),
@@ -299,6 +300,19 @@ impl Lowerer<'_> {
                     TyKind::Gauge(def, base) => self.gauge_cast(expr, *kind, def, base, span),
                     _ => self.cast(expr, *kind, ty),
                 }
+            }
+            // In a shuttle's body, which runs as a coroutine.
+            ExprKind::Yield { value, .. } => {
+                let v = self.lower_owned(value);
+                self.push(StmtKind::Call(Expr::rt("out", vec![v])));
+                Expr::Nil
+            }
+            ExprKind::Pull => {
+                let boxed = match self.tcx().kind(ty) {
+                    TyKind::Optional(u) => self.opt_boxed(*u),
+                    _ => false,
+                };
+                Expr::rt("pull", vec![Expr::Bool(boxed)])
             }
             ExprKind::Range { lo, hi, inclusive } => {
                 let bounds: Vec<&hir::Expr> = lo.iter().chain(hi.iter()).map(|b| b.as_ref()).collect();

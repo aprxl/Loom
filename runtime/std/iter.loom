@@ -87,3 +87,28 @@ pub warp Stream[T] {
     /// The items as text, with `sep` between them.
     pub fn join(take self, sep: str) -> String where T: Show
 }
+
+/// A shuttle: a function paused between the `T`s it yields and the `U`s it
+/// pulls. Calling `fn f() ~> T <~ U` makes one without running any of it.
+///
+/// A generator (`~> T`, which pulls nothing) is a stream of what it yields:
+/// `for x in fib()`, `fib().take(10)`.
+#builtin
+pub warp Shuttle[T, U] {
+    /// Resumes it with `input` as the value of its pending `pull` (the first
+    /// push starts it). The burst is what it yields before its next `pull`.
+    pub fn push(mut self, take input: U) -> Burst[T]
+    /// Makes its pending and later `pull`s give `none`. The burst is what it
+    /// yields from here on.
+    pub fn close(mut self) -> Burst[T]
+}
+
+/// What a shuttle yields between one input and its next `pull`. It's lazy:
+/// going through it is what runs the shuttle. It's `once`, so outputs can't
+/// be dropped by accident: go through it with `for` (or a `Stream` method),
+/// or `drain()` it.
+#builtin
+pub once warp Burst[T] {
+    /// Runs the shuttle to its next `pull`, throwing away what it yields.
+    pub fn drain(take self)
+}

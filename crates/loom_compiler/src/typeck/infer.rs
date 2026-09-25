@@ -261,6 +261,8 @@ impl Checker<'_> {
                 super::IterSource::MapPairs(self.deep_resolve(k), self.deep_resolve(v))
             }
             super::IterSource::SetItems(t) => super::IterSource::SetItems(self.deep_resolve(t)),
+            super::IterSource::Shuttle(t) => super::IterSource::Shuttle(self.deep_resolve(t)),
+            super::IterSource::Burst(t) => super::IterSource::Burst(self.deep_resolve(t)),
             super::IterSource::Woven { next, item } => super::IterSource::Woven { next, item: self.deep_resolve(item) },
         }
     }

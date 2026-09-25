@@ -6,7 +6,7 @@
 //! each field's [`Key`] and each case's tag.
 
 use loom_syntax::Diagnostic;
-use loom_syntax::ast::Vis;
+use loom_syntax::ast::{Vis, WarpModifier};
 use loom_syntax::diag::codes;
 use loom_syntax::source::Span;
 
@@ -241,7 +241,12 @@ impl Checker<'_> {
             TyKind::Tuple(items) => items.iter().any(|&t| self.is_once(t)),
             TyKind::Optional(t) | TyKind::Array(t, _) => self.is_once(t),
             TyKind::Result(t, e) => self.is_once(t) || self.is_once(e),
-            TyKind::Adt(_, args) if self.is_builtin_adt(ty) => args.iter().any(|&t| self.is_once(t)),
+            // A builtin warp is `once` when std declares it so (`Burst`), or
+            // when it holds `once` values (a `List` of them).
+            TyKind::Adt(def, args) if self.is_builtin_adt(ty) => {
+                matches!(&self.p.def(def).kind, DefKind::Warp(w) if w.modifier == WarpModifier::Once)
+                    || args.iter().any(|&t| self.is_once(t))
+            }
             TyKind::Adt(..) => self.adt_info(ty).is_some_and(|i| i.once),
             _ => false,
         }

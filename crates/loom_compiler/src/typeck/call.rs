@@ -44,6 +44,7 @@ impl Checker<'_> {
         self.b.expr_ty.insert(callee.id, self.tcx.error);
         match &callee.kind {
             ExprKind::Def { def, args: generic_args } if matches!(self.p.def(*def).kind, DefKind::Fn(_)) => {
+                self.check_shuttle_self_call(*def, callee.span);
                 let mut explicit = Vec::with_capacity(generic_args.len());
                 for arg in generic_args {
                     match arg {
@@ -76,7 +77,8 @@ impl Checker<'_> {
                 self.infer_args = true;
                 let ty = self.lower_ty(ty);
                 self.infer_args = false;
-                if matches!(self.seq(ty), Some(Seq::List(_))) || self.coll_parts(ty).is_some() {
+                let string = matches!(self.tcx.kind(ty), TyKind::Adt(d, _) if Some(*d) == self.std.string);
+                if matches!(self.seq(ty), Some(Seq::List(_))) || self.coll_parts(ty).is_some() || string {
                     return self.check_new_list(call, ty, expected, args);
                 }
                 match self.adt_info(ty) {

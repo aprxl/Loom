@@ -1211,6 +1211,123 @@ function rt.iter_stream(next, it, boxed, copy_out)
   end
 end
 
+-- Shuttles. A shuttle is `{co, ...}`: a coroutine running the function's
+-- body, which `yield v` suspends with `true, v` and `pull` with `false`.
+-- The driver resumes a pending `pull` with `true, input` for a push, or
+-- `false` once the shuttle is closed.
+--
+-- A burst is `{sh, input, closing}`: going through it runs the shuttle,
+-- handing over its input at the first `pull`, and ends at the next one (or
+-- when the shuttle does). Pushing again drops what's left of the previous
+-- burst, having run it. An unravel inside the shuttle closes its coroutine,
+-- which runs its pending `defer`s, and carries on in the driver.
+
+local co_create, co_resume, co_yield = coroutine.create, coroutine.resume, coroutine.yield
+local co_status, co_close = coroutine.status, coroutine.close
+
+function rt.shuttle(body)
+  return { co = co_create(body), done = false, at_pull = false, closed = false, burst = nil }
+end
+
+function rt.out(v)
+  co_yield(true, v)
+end
+
+function rt.pull(boxed)
+  local has, v = co_yield(false)
+  if not has then return nil end
+  if boxed then return { v } end
+  return v
+end
+
+-- Resumes `sh` with `...`: gives "out" and the value, "pull", or "done".
+local function resume(sh, ...)
+  local ok, is_out, v = co_resume(sh.co, ...)
+  if not ok then
+    sh.done = true
+    co_close(sh.co)
+    error(is_out, 0)
+  end
+  if co_status(sh.co) == "dead" then
+    sh.done = true
+    return "done"
+  end
+  if is_out then return "out", v end
+  return "pull"
+end
+
+-- The next item of burst `b`: `true, item`, or nothing once it's over.
+local function burst_next(b)
+  local sh = b.sh
+  while not b.over and not sh.done do
+    local what, v
+    if not sh.at_pull then
+      what, v = resume(sh)
+    elseif not b.delivered then
+      b.delivered = true
+      sh.at_pull = false
+      if b.closing then
+        what, v = resume(sh, false)
+      else
+        what, v = resume(sh, true, b.input)
+      end
+    elseif sh.closed then
+      sh.at_pull = false
+      what, v = resume(sh, false)
+    else
+      break
+    end
+    if what == "out" then return true, v end
+    if what == "pull" then sh.at_pull = true end
+  end
+  b.over = true
+  if sh.burst == b then sh.burst = nil end
+  return nil
+end
+
+local function drain(b)
+  while burst_next(b) do end
+end
+
+local function new_burst(sh, input, closing)
+  if sh.burst then drain(sh.burst) end
+  local b = { sh = sh, input = input, closing = closing, delivered = false, over = false }
+  sh.burst = b
+  return b
+end
+
+ext["std.iter.Shuttle.push"] = function(_, _, sh, input)
+  if sh.closed then error(MARK .. "can't push into a closed shuttle", 2) end
+  return new_burst(sh, input, false)
+end
+
+ext["std.iter.Shuttle.close"] = function(_, _, sh)
+  sh.closed = true
+  return new_burst(sh, nil, true)
+end
+
+ext["std.iter.Burst.drain"] = function(_, b)
+  drain(b)
+end
+
+function rt.burst_stream(b)
+  return function() return burst_next(b) end
+end
+
+--- A generator's items (it has no `pull` to stop at).
+function rt.shuttle_stream(sh)
+  local b = { sh = sh, delivered = true, over = false }
+  return function() return burst_next(b) end
+end
+
+local closes_shuttle = { __close = function(c) if not c.sh.done then c.sh.done = true co_close(c.sh.co) end end }
+
+--- `for x in generator`: the stream, and a value that closes the generator
+--- when the loop ends (early, its `defer`s run).
+function rt.shuttle_loop(sh)
+  return rt.shuttle_stream(sh), nil, nil, setmetatable({ sh = sh }, closes_shuttle)
+end
+
 ext["std.iter.Stream.next"] = function(d, s)
   local ok, v = s()
   if not ok then return nil end
@@ -2132,6 +2249,11 @@ ext["std.string.Char.to_digit"] = function(c, radix)
   end
   if v < radix then return v end
   return nil
+end
+
+ext["std.string.Char.digit"] = function(c)
+  if c < 48 or c > 57 then error(MARK .. "not a decimal digit: " .. show(rt.char, c, true), 2) end
+  return c - 48
 end
 
 ext["std.string.Char.len_utf8"] = function(c)

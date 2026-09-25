@@ -76,6 +76,8 @@ pub const RUNTIME_WARPS: &[&str] = &[
     "std.num.Int",
     "std.num.Float",
     "std.iter.Stream",
+    "std.iter.Shuttle",
+    "std.iter.Burst",
     "std.map.Map",
     "std.set.Set",
     "std.fs.File",
@@ -370,7 +372,12 @@ impl<'a> Lowerer<'a> {
             TyKind::Any(_) | TyKind::Union(_) => Expr::field(Expr::name("rt"), "anyd"),
             // Values nothing looks inside: shared rather than copied.
             TyKind::Fn(..) | TyKind::Range(_) => Expr::field(Expr::name("rt"), "opaque"),
-            TyKind::Adt(def, _) if self.p.def_path(*def) == "std.iter.Stream" => {
+            TyKind::Adt(def, _)
+                if matches!(
+                    self.p.def_path(*def).as_str(),
+                    "std.iter.Stream" | "std.iter.Shuttle" | "std.iter.Burst"
+                ) =>
+            {
                 Expr::field(Expr::name("rt"), "opaque")
             }
             TyKind::Adt(..) if self.coll(ty).is_some() => match self.coll(ty).expect("checked") {
@@ -544,10 +551,13 @@ impl<'a> Lowerer<'a> {
                 let span = d.span;
                 let params: Vec<String> = f.params.iter().map(|param| self.local_name(param.local)).collect();
                 let body_expr = f.body.as_ref().expect("checked above");
-                let unit = matches!(f.ret, FnRet::Unit);
+                let unit = matches!(f.ret, FnRet::Unit | FnRet::Shuttle { .. });
                 let mut body = self.body(span, |this| {
                     this.lower_into(body_expr, if unit { &Dest::Discard } else { &Dest::Return });
                 });
+                if matches!(f.ret, FnRet::Shuttle { .. }) {
+                    body = self.shuttle_maker(id, f, body, span);
+                }
                 // Scalar `mut` parameters go back to the caller after the result.
                 let outs = self.copy_outs(id, f);
                 if !outs.is_empty() {
@@ -572,6 +582,25 @@ impl<'a> Lowerer<'a> {
             }
             _ => {}
         }
+    }
+
+    /// What a shuttle function does when called: make the shuttle, whose
+    /// coroutine runs `body` once driven. It keeps copies of its `Copy`
+    /// parameters, since the caller may change the originals meanwhile.
+    fn shuttle_maker(&mut self, id: BodyId, f: &crate::hir::FnDef, body: Vec<Stmt>, span: Span) -> Vec<Stmt> {
+        let mut out = Vec::new();
+        let params = self.typed.results.sigs.get(&id).map(|s| s.params.clone()).unwrap_or_default();
+        for (param, sig) in f.params.iter().zip(&params) {
+            if sig.mode == loom_syntax::ast::ParamMode::Read && self.is_table(sig.ty) {
+                let name = Expr::name(self.local_name(param.local));
+                let d = self.desc(sig.ty, span);
+                let copy = Expr::rt("copy", vec![d, name.clone()]);
+                out.push(Stmt { kind: StmtKind::Assign(vec![name], vec![copy]), span: None });
+            }
+        }
+        let shuttle = Expr::rt("shuttle", vec![Expr::Function(Vec::new(), body)]);
+        out.push(Stmt { kind: StmtKind::Return(Some(shuttle)), span: None });
+        out
     }
 
     /// The body of a method std leaves to the compiler: a derived `show`,

@@ -24,7 +24,9 @@ has an implementation:
 - `Map[K, V]` and `Set[T]` (`map.loom`, `set.loom`);
 - `Stream[T]` (`iter.loom`), the lazy streams `chars()`, `indexed()` and
   friends make, whose methods arrays, lists, slices, ranges and `Iter` types
-  have too.
+  have too;
+- `Shuttle[T, U]` and `Burst[T]` (`iter.loom`): what shuttle functions make,
+  and what pushing into one gives back.
 
 A generic one's implementation gets the descriptor of each type argument
 first; a `mut self` method of `String` returns its result, then the new

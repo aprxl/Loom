@@ -440,10 +440,19 @@ impl Checker<'_> {
         self.tcx.intern(TyKind::Adt(map, vec![k, v]))
     }
 
-    /// `List()`: an empty list.
+    /// `List()`, `Map()`, `Set()` or `String()`: an empty one.
     pub(super) fn check_new_list(&mut self, call: &Expr, ty: Ty, expected: Option<Ty>, args: &[crate::hir::Arg]) -> Ty {
         if let Some(arg) = args.first() {
-            self.error(codes::T0104, arg.span, "`List()` takes no values", "use `[a, b]` or `List.filled(x, n)`");
+            let name = match self.tcx.kind(ty) {
+                TyKind::Adt(d, _) => self.p.def(*d).name.clone(),
+                _ => "List".into(),
+            };
+            let help = match name.as_str() {
+                "List" => "use `[a, b]` or `List.filled(x, n)`",
+                "String" => "use a string literal, or `s.to_string()`",
+                _ => "use a literal: `[k: v]`, or `Set.of(xs)`",
+            };
+            self.error(codes::T0104, arg.span, format!("`{name}()` takes no values"), help);
             return self.tcx.error;
         }
         if let Some(t) = expected {

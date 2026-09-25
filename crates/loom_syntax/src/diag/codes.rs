@@ -91,6 +91,8 @@ codes! {
     T0117 = "not a format spec";
     T0118 = "control flow can't leave a `defer`";
     T0119 = "a test's signature isn't `test name()` or `test name() ! E`";
+    T0120 = "`yield` or `pull` doesn't fit the shuttle";
+    T0121 = "shuttle calls itself";
 
     // G02xx: gauges
     G0201 = "value outside a gauge";

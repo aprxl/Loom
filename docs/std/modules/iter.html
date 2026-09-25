@@ -252,6 +252,45 @@
 </div>
 </div>
 </div>
+<div class="item">
+<div class="item-head">
+<span class="sig">warp <strong>Shuttle</strong>[T, U]</span>
+<span class="badge builtin">builtin</span>
+</div>
+<p class="item-doc">A shuttle: a function paused between the <code>T</code>s it yields and the <code>U</code>s it pulls. Calling <code>fn f() ~&gt; T &lt;~ U</code> makes one without running any of it. A generator (<code>~&gt; T</code>, which pulls nothing) is a stream of what it yields: <code>for x in fib()</code>, <code>fib().take(10)</code>.</p>
+<div class="members">
+<div class="member">
+<div class="member-head">
+<span class="sig">fn push(mut self, take input: U) -&gt; Burst[T]</span>
+
+</div>
+<p class="member-doc">Resumes it with <code>input</code> as the value of its pending <code>pull</code> (the first push starts it). The burst is what it yields before its next <code>pull</code>.</p>
+</div>
+<div class="member">
+<div class="member-head">
+<span class="sig">fn close(mut self) -&gt; Burst[T]</span>
+
+</div>
+<p class="member-doc">Makes its pending and later <code>pull</code>s give <code>none</code>. The burst is what it yields from here on.</p>
+</div>
+</div>
+</div>
+<div class="item">
+<div class="item-head">
+<span class="sig">once warp <strong>Burst</strong>[T]</span>
+<span class="badge builtin">builtin</span>
+</div>
+<p class="item-doc">What a shuttle yields between one input and its next <code>pull</code>. It's lazy: going through it is what runs the shuttle. It's <code>once</code>, so outputs can't be dropped by accident: go through it with <code>for</code> (or a <code>Stream</code> method), or <code>drain()</code> it.</p>
+<div class="members">
+<div class="member">
+<div class="member-head">
+<span class="sig">fn drain(take self)</span>
+
+</div>
+<p class="member-doc">Runs the shuttle to its next <code>pull</code>, throwing away what it yields.</p>
+</div>
+</div>
+</div>
 </main>
 </div>
 </body>

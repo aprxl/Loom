@@ -230,7 +230,9 @@ impl Checker<'_> {
                 self.tcx.never
             }
             ExprKind::Fail(value) => self.check_fail(e, value),
-            ExprKind::Yield { .. } | ExprKind::Pull => self.unsupported(span, "shuttles"),
+            ExprKind::Yield { place: Some(_), .. } => self.unsupported(span, "projections (`yield mut`, `yield ref`)"),
+            ExprKind::Yield { place: None, value } => self.check_yield(value, span),
+            ExprKind::Pull => self.check_pull(span),
             ExprKind::Unsafe { .. } => self.unsupported(span, "`unsafe` blocks"),
             ExprKind::Const(_) => self.unsupported(span, "compile-time code"),
             ExprKind::Lambda { params, body } => self.check_lambda(e, params, body, expected),

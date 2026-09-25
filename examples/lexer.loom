@@ -145,8 +145,8 @@ fn main() {
     // `push` returns a `once` Burst, so tokens can't be dropped by accident:
     //
     //     lex.push('x')
-    //     ^^^^^^^^^^^^^ error[L0301]: loose end: this `Burst[Token]` is never consumed
-    //                   = help: iterate it, or call `.drain()` to discard on purpose
+    //     ^^^^^^^^^^^^^ error[L0301]: loose end: this `Burst[Token]` is thrown away
+    //                   = help: go through it with `for`, or call `.drain()` to throw its items away on purpose
     //
     // And the frame really is fixed-size:
     const assert(lexer.Frame.size <= 64, "the lexer frame grew unexpectedly")

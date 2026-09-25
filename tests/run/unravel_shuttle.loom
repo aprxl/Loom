@@ -1,0 +1,18 @@
+// An unravel inside a shuttle comes out where it's driven, at the shuttle's
+// line, after the shuttle's defers have run.
+
+use std.io.print
+
+fn boom() ~> i32 {
+    defer print("boom's defer ran")
+    yield 1
+    let xs = [1, 2]
+    let i = 5
+    yield xs[i]
+}
+
+fn main() {
+    for x in boom() {
+        print(x)
+    }
+}

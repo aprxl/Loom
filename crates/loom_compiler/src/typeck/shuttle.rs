@@ -1,0 +1,127 @@
+//! Shuttles: functions that yield and pull (`fn f() ~> T <~ U`).
+//!
+//! Calling one makes a `Shuttle[T, U]` without running its body, which is
+//! checked as if it returned `()`: `yield v` takes a `T`, `pull` gives a
+//! `?U`, and `return` ends it. A generator (`~> T`) pulls nothing, a sink
+//! (`<~ U`) yields nothing.
+//!
+//! A shuttle keeps its parameters for as long as it lives, which can be
+//! longer than the call that made it. Until the region checker can follow
+//! a borrow that long, a shuttle only takes parameters it owns: `take`
+//! ones, and `Copy` ones, which it gets a copy of.
+
+use loom_syntax::Diagnostic;
+use loom_syntax::ast::ParamMode;
+use loom_syntax::diag::codes;
+use loom_syntax::source::Span;
+
+use super::{Checker, FnSig};
+use crate::hir::{self, DefId, Expr, FnRet};
+use crate::ty::{Ty, TyKind};
+
+/// The shuttle whose body is being checked: what it yields and pulls
+/// (`None` for a generator's input, or a sink's output).
+#[derive(Clone, Copy, Debug)]
+pub(super) struct ShuttleCtx {
+    pub yields: Option<Ty>,
+    pub pulls: Option<Ty>,
+}
+
+impl Checker<'_> {
+    /// `Shuttle[T, U]` for a shuttle's `~> T <~ U`, where a missing side is `()`.
+    pub(super) fn shuttle_ty(&mut self, yields: Option<Ty>, pulls: Option<Ty>) -> Ty {
+        let Some(shuttle) = self.std.shuttle else { return self.tcx.error };
+        let unit = self.tcx.unit;
+        self.tcx.intern(TyKind::Adt(shuttle, vec![yields.unwrap_or(unit), pulls.unwrap_or(unit)]))
+    }
+
+    /// `T` and `U` of `Shuttle[T, U]`.
+    pub(super) fn shuttle_parts(&self, ty: Ty) -> Option<(Ty, Ty)> {
+        match self.tcx.kind(self.resolve(ty)) {
+            TyKind::Adt(def, args) if Some(*def) == self.std.shuttle && args.len() == 2 => Some((args[0], args[1])),
+            _ => None,
+        }
+    }
+
+    /// `T` of `Burst[T]`.
+    pub(super) fn burst_item(&self, ty: Ty) -> Option<Ty> {
+        match self.tcx.kind(self.resolve(ty)) {
+            TyKind::Adt(def, args) if Some(*def) == self.std.burst => args.first().copied(),
+            _ => None,
+        }
+    }
+
+    /// For a shuttle's body: what it yields and pulls. Also checks that it
+    /// only takes parameters it can keep.
+    pub(super) fn shuttle_ctx(&mut self, f: &hir::FnDef, sig: &FnSig) -> Option<ShuttleCtx> {
+        let FnRet::Shuttle { yields, pulls } = &f.ret else { return None };
+        let (t, u) = self.shuttle_parts(sig.ret)?;
+        for (param, sig_param) in f.params.iter().zip(&sig.params) {
+            let kept = match sig_param.mode {
+                ParamMode::Take => true,
+                ParamMode::Read => self.is_copy(sig_param.ty),
+                ParamMode::Mut | ParamMode::Const => false,
+            };
+            if !kept {
+                let what =
+                    if param.is_self { "a shuttle that borrows `self`" } else { "a shuttle that borrows a parameter" };
+                self.unsupported(param.span, &format!("{what} (take it with `take`, or make it `Copy`)"));
+            }
+        }
+        Some(ShuttleCtx { yields: yields.as_ref().map(|_| t), pulls: pulls.as_ref().map(|_| u) })
+    }
+
+    /// `yield v`.
+    pub(super) fn check_yield(&mut self, value: &Expr, span: Span) -> Ty {
+        match self.shuttle.and_then(|s| s.yields) {
+            Some(t) => {
+                self.check_coerce(value, t);
+            }
+            None => {
+                self.check_expr(value, None);
+                self.wrong_side(span, "yield", "this shuttle only pulls: it has no `~> T`");
+            }
+        }
+        if self.in_defer.is_some() {
+            self.leaves_defer(span, "yield");
+        }
+        self.tcx.unit
+    }
+
+    /// `pull`: `?U`.
+    pub(super) fn check_pull(&mut self, span: Span) -> Ty {
+        if self.in_defer.is_some() {
+            self.leaves_defer(span, "pull");
+        }
+        match self.shuttle.and_then(|s| s.pulls) {
+            Some(u) => self.tcx.intern(TyKind::Optional(u)),
+            None => {
+                self.wrong_side(span, "pull", "this shuttle only yields: it has no `<~ U`");
+                self.tcx.error
+            }
+        }
+    }
+
+    /// A shuttle's frame is part of the shuttle value, so a shuttle that
+    /// makes another of itself would contain itself.
+    pub(super) fn check_shuttle_self_call(&mut self, callee: DefId, span: Span) {
+        if self.shuttle.is_none() || self.current != Some(callee) {
+            return;
+        }
+        let name = self.p.def(callee).name.clone();
+        self.diags.push(
+            Diagnostic::error(codes::T0121, format!("shuttle `{name}` can't make another `{name}` inside itself"))
+                .primary(span, "this shuttle would be part of its own frame")
+                .note("a shuttle's frame is stored inside the shuttle value, so it has a size known when compiling")
+                .help("allocate the inner one, `^name(…)`, which needs spools (not implemented yet)"),
+        );
+    }
+
+    fn wrong_side(&mut self, span: Span, what: &str, why: &str) {
+        self.diags.push(
+            Diagnostic::error(codes::T0120, format!("`{what}` doesn't fit this shuttle"))
+                .primary(span, why)
+                .help("the signature says what a shuttle does: `~> T` yields `T`s, `<~ U` pulls `U`s"),
+        );
+    }
+}

@@ -1,0 +1,21 @@
+[0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
+[55, 89, 144]
+1597
+early 0
+early closed
+whole 0
+whole 1
+whole 2
+whole closed
+pushed 1: []
+pushed 2: [(1, 2)]
+pushed 3: []
+pushed 4: [(3, 4)]
+pushed 5: []
+closed: (5, none)
+sum: 10
+1
+none
+3
+at 1,7
+at 2,7

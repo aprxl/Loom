@@ -1,0 +1,101 @@
+// Shuttles: generators, duplex shuttles and sinks, the bursts pushing
+// hands back, and when their `defer`s run.
+
+use std.io.print
+
+fn fib() ~> u64 {
+    var (a, b): (u64, u64) = (0, 1)
+    loop {
+        yield a
+        (a, b) = (b, a + b)
+    }
+}
+
+fn counted(name: str) ~> i32 {
+    defer print("{name} closed")
+    var i = 0
+    while i < 3 {
+        yield i
+        i += 1
+    }
+}
+
+// Pairs up what it's pushed; an odd one out comes out when it's closed.
+fn pairs() ~> (i32, ?i32) <~ i32 {
+    while pull is some(a) {
+        match pull {
+            some(b) => yield (a, some(b)),
+            none => {
+                yield (a, none)
+                return
+            }
+        }
+    }
+}
+
+fn summer() <~ i32 {
+    var total = 0
+    defer print("sum: {total}")
+    while pull is some(n) {
+        total += n
+    }
+}
+
+fn maybes() ~> ?i32 {
+    yield some(1)
+    yield none
+    yield some(3)
+}
+
+warp Point: Copy { x: i32, y: i32 }
+
+fn steps(from: Point, take label: String) ~> String {
+    for i in 1..=2 {
+        yield "{label} {from.x + i},{from.y}"
+    }
+}
+
+fn main() {
+    // A generator is a stream.
+    print(fib().take(10).collect())
+    print(fib().skip_while(_ < 50).take(3).collect())
+    let big = fib().find(_ > 1000)
+    print(big)
+
+    // Leaving a `for` loop over it early closes it: its defer runs.
+    for x in counted("early") {
+        if x == 1 { break }
+        print("early {x}")
+    }
+    // Run to the end, it runs as it finishes.
+    for x in counted("whole") {
+        print("whole {x}")
+    }
+
+    // Each push gives a burst: what it yields before its next pull.
+    var p = pairs()
+    for n in [1, 2, 3, 4, 5] {
+        let got = p.push(n).collect()
+        print("pushed {n}: {got}")
+    }
+    for pair in p.close() {
+        print("closed: {pair}")
+    }
+
+    var s = summer()
+    for n in 1..=4 {
+        s.push(n).drain()
+    }
+    s.close().drain()
+
+    for m in maybes() {
+        print(m)
+    }
+
+    var origin = Point(x: 0, y: 7)
+    let walk = steps(origin, "at")
+    origin.x = 100                          // the shuttle has its own copy
+    for step in walk {
+        print(step)
+    }
+}
