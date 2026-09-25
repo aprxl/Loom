@@ -49,7 +49,8 @@ pub struct Bundle {
 
 /// The `std` externs the runtime implements (see `rt.ext` in
 /// `runtime/rt/core.lua`). Calling any other extern is "not implemented yet".
-const EXTERNS: &[&str] = &["std.io.print", "std.error.unravel", "std.error.assert", "std.env.get"];
+const EXTERNS: &[&str] =
+    &["std.io.print", "std.error.unravel", "std.error.assert", "std.env.get", "std.fs.read", "std.fs.read_text"];
 
 /// The `#builtin` warps of std whose methods the runtime implements, every
 /// one (a test checks that `rt.ext` has them all).
@@ -65,6 +66,7 @@ pub const RUNTIME_WARPS: &[&str] = &[
     "std.iter.Stream",
     "std.map.Map",
     "std.set.Set",
+    "std.fs.File",
 ];
 
 /// Lowers a type-checked program. `typed` must have no errors.

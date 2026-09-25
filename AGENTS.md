@@ -97,7 +97,11 @@ language through every layer (type checking, lowering to Lua, the runtime,
 13. maps and sets: `Map()`, `[k: v]` literals, `m[k]` and `m[k] = v`, their
     methods, loops over them, and derived `hash`.
 
-Next: `once` warps (ledger), each through every layer at once. chip8 is close: `Rng`, `Duration` (`16.ms()`),
+14. `once` warps and loose ends (L0301), and `std.fs` files.
+    `examples/ledger.loom` runs, checked by `tests/examples/ledger.out`.
+
+Next: chip8 (`Rng`, `Duration`, `rotate_right`, `const assert`, the
+terminal), then compile-time code, spools and shuttles. chip8 is close: `Rng`, `Duration` (`16.ms()`),
 `rotate_right`, and `const assert`.
 
 Keep these green:

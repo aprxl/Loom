@@ -1706,6 +1706,74 @@ function rt.copy_coll(d, v)
   return copy_set(d.key, v)
 end
 
+-- Files. A `File` is `{path}`; each write opens, appends and closes, so
+-- nothing is left open when the program ends however it ends. A captured
+-- run (the tests) gets a file system in memory from the host instead of the
+-- disk, starting empty.
+
+local memory = host and host.memory_fs and {} or nil
+
+--- `T ! IoError` for an `io` failure: errno 2 is `NotFound`, 13 `Denied`.
+local function io_error(path, message, errno)
+  if errno == 2 then return { false, { tag = 1, path = path } } end
+  if errno == 13 then return { false, { tag = 2, path = path } } end
+  return { false, { tag = 3, message = message or "i/o error" } }
+end
+
+local function append(path, text)
+  if memory then
+    memory[path] = (memory[path] or "") .. text
+    return true
+  end
+  local f, message, errno = io.open(path, "ab")
+  if not f then return false, message, errno end
+  local ok, werr, wno = f:write(text)
+  f:close()
+  if not ok then return false, werr, wno end
+  return true
+end
+
+local function read_all(path)
+  if memory then
+    local text = memory[path]
+    if text == nil then return nil, path .. ": No such file or directory", 2 end
+    return text
+  end
+  local f, message, errno = io.open(path, "rb")
+  if not f then return nil, message, errno end
+  local text = f:read("a")
+  f:close()
+  return text
+end
+
+ext["std.fs.File.append"] = function(path)
+  local ok, message, errno = append(path, "")
+  if not ok then return io_error(path, message, errno) end
+  return { true, { path = path } }
+end
+
+ext["std.fs.File.write_line"] = function(f, line)
+  local ok, message, errno = append(f.path, line .. "\n")
+  if not ok then return io_error(f.path, message, errno) end
+  return { true, nil }
+end
+
+ext["std.fs.read_text"] = function(path)
+  local text, message, errno = read_all(path)
+  if text == nil then return io_error(path, message, errno) end
+  return { true, text }
+end
+
+ext["std.fs.read"] = function(path)
+  local text, message, errno = read_all(path)
+  if text == nil then return io_error(path, message, errno) end
+  local bytes = { n = #text }
+  for i = 1, #text do
+    bytes[i] = sbyte(text, i)
+  end
+  return { true, bytes }
+end
+
 -- Eager versions of `map` and `filter` for slices, which make lists.
 
 ext["std.slice.Slice.map"] = function(_, _, s, f)

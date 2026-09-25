@@ -12,6 +12,11 @@
 //! follows the code: a variable moved on one branch of an `if` counts as
 //! moved after it, and a loop's body is gone through twice, so a move in one
 //! iteration is caught by a use in the next.
+//!
+//! It also finds loose ends (L0301): a variable holding a `once` value that
+//! might still hold it when its scope ends, or when a `return`, `fail`, `?`
+//! or `break` leaves the scope, unless a fallback `defer x => ...` ties it
+//! off. (An unravel leaks it, by design.)
 
 use std::collections::{HashMap, HashSet};
 
@@ -22,7 +27,7 @@ use loom_syntax::source::Span;
 
 use super::{Checker, Receiver};
 use crate::hir::{Arg, Block, Expr, ExprKind, FnDef, GenericArg, HirId, LocalId, Pat, PatKind, StmtKind as HirStmt};
-use crate::ty::TyKind;
+use crate::ty::{Ty, TyKind};
 use loom_syntax::ast::FieldName;
 
 /// What may have been moved at a point in the code.
@@ -32,6 +37,8 @@ struct Flow {
     moved: Vec<(LocalId, Vec<String>, Span)>,
     /// No code gets here (after a `return` or a `break`).
     dead: bool,
+    /// Locals holding a `once` value that may not have been used up yet.
+    loose: Vec<LocalId>,
 }
 
 impl Flow {
@@ -48,7 +55,13 @@ impl Flow {
                 moved.push(m);
             }
         }
-        Flow { moved, dead: false }
+        let mut loose = self.loose;
+        for l in other.loose {
+            if !loose.contains(&l) {
+                loose.push(l);
+            }
+        }
+        Flow { moved, dead: false, loose }
     }
 }
 
@@ -87,6 +100,15 @@ struct MoveCx {
     /// Locals a `defer` in an enclosing block still needs at its end, with
     /// where that `defer` is.
     held: Vec<(LocalId, Span)>,
+    /// The `once` locals declared in each block being gone through,
+    /// innermost last.
+    scopes: Vec<Vec<LocalId>>,
+    /// Where the current function's (or lambda's) scopes start in `scopes`.
+    fn_base: usize,
+    /// Each loop being gone through, and how many scopes were open outside it.
+    loops: Vec<(HirId, usize)>,
+    /// Locals a fallback `defer` ties off.
+    covered: HashSet<LocalId>,
     reported: HashSet<(&'static str, Span)>,
 }
 
@@ -95,13 +117,18 @@ impl Checker<'_> {
     pub(super) fn check_moves(&mut self, f: &FnDef, ret_unit: bool) {
         let Some(body) = &f.body else { return };
         let mut cx = MoveCx::default();
+        cx.scopes.push(Vec::new());
         for param in &f.params {
             cx.depth_of.insert(param.local, 0);
             if param.mode != ParamMode::Take {
                 cx.borrowed.insert(param.local, Borrow::Param);
+            } else {
+                // A `once` value taken is this function's to use up.
+                self.declare(&mut cx, param.local);
             }
         }
         self.mv(&mut cx, body, !ret_unit);
+        self.end_scope(&mut cx, end_of(body.span), "the function ends");
     }
 
     /// Goes through `e`. `owning`: its value goes to an owning slot.
@@ -188,36 +215,54 @@ impl Checker<'_> {
                 let borrowed = is_seq && self.place_of(cx, iter).is_some();
                 for local in pat_locals(pat) {
                     cx.depth_of.insert(local, cx.depth);
+                    fresh(cx, local);
                     if borrowed {
                         cx.borrowed.insert(local, Borrow::LoopItem);
                     }
                 }
+                cx.loops.push((e.id, cx.scopes.len()));
                 self.mv_loop(cx, |this, cx| this.mv_block(cx, body, false));
+                cx.loops.pop();
             }
-            ExprKind::While { cond, body } => self.mv_loop(cx, |this, cx| {
-                this.mv(cx, cond, false);
-                this.mv_block(cx, body, false);
-            }),
-            ExprKind::Loop { body } => self.mv_loop(cx, |this, cx| this.mv_block(cx, body, false)),
-            ExprKind::Break { value, .. } => {
+            ExprKind::While { cond, body } => {
+                cx.loops.push((e.id, cx.scopes.len()));
+                self.mv_loop(cx, |this, cx| {
+                    this.mv(cx, cond, false);
+                    this.mv_block(cx, body, false);
+                });
+                cx.loops.pop();
+            }
+            ExprKind::Loop { body } => {
+                cx.loops.push((e.id, cx.scopes.len()));
+                self.mv_loop(cx, |this, cx| this.mv_block(cx, body, false));
+                cx.loops.pop();
+            }
+            ExprKind::Break { value, target } => {
                 if let Some(v) = value {
                     self.mv(cx, v, true);
                 }
+                self.leave_loop(cx, *target, e.span, "this `break` leaves");
                 cx.flow.dead = true;
             }
-            ExprKind::Continue { .. } => cx.flow.dead = true,
+            ExprKind::Continue { target } => {
+                self.leave_loop(cx, *target, e.span, "this `continue` leaves");
+                cx.flow.dead = true;
+            }
             ExprKind::Return(value) => {
                 if let Some(v) = value {
                     self.mv(cx, v, true);
                 }
+                self.leave_function(cx, e.span, "this returns");
                 cx.flow.dead = true;
             }
             ExprKind::Fail(v) => {
                 self.mv(cx, v, true);
+                self.leave_function(cx, e.span, "this fails");
                 cx.flow.dead = true;
             }
             ExprKind::Lambda { params, body } => {
                 let saved = cx.flow.clone();
+                let saved_base = std::mem::replace(&mut cx.fn_base, cx.scopes.len());
                 cx.depth += 1;
                 cx.in_defer.push(false);
                 for p in params {
@@ -227,9 +272,19 @@ impl Checker<'_> {
                 self.mv(cx, body, true);
                 cx.in_defer.pop();
                 cx.depth -= 1;
+                cx.fn_base = saved_base;
                 cx.flow = saved;
             }
-            ExprKind::Try(inner) => self.mv(cx, inner, owning),
+            ExprKind::Try(inner) => {
+                self.mv(cx, inner, owning);
+                // A `?` with no `mend` around it may leave the function.
+                let exits = self.b.tries.get(&e.id).is_some_and(|t| !matches!(t.exit, super::Exit::Mend(..)));
+                if exits {
+                    let saved = cx.flow.clone();
+                    self.leave_function(cx, e.span, "this `?` may return");
+                    cx.flow = saved;
+                }
+            }
             ExprKind::Mend { expr, handler, binding } => {
                 self.mv(cx, expr, owning);
                 if let Some(b) = binding {
@@ -286,6 +341,15 @@ impl Checker<'_> {
                             self.check_use(cx, l, parent, target.span);
                         }
                         cx.flow.moved.retain(|(m, p, _)| !(*m == l && p.starts_with(&path)));
+                        // A new `once` value over one still loose loses it.
+                        if path.is_empty() && self.local_is_once(l) {
+                            if cx.flow.loose.contains(&l) && !cx.covered.contains(&l) && !cx.flow.dead {
+                                self.loose_end(cx, l, target.span, "...but it gets a new value here while still loose");
+                            }
+                            if !cx.flow.loose.contains(&l) {
+                                cx.flow.loose.push(l);
+                            }
+                        }
                     }
                     _ => self.mv(cx, target, false),
                 }
@@ -311,29 +375,46 @@ impl Checker<'_> {
     fn mv_block(&mut self, cx: &mut MoveCx, block: &Block, owning: bool) {
         let Some((last, rest)) = block.stmts.split_last() else { return };
         let held = cx.held.len();
+        cx.scopes.push(Vec::new());
         for stmt in rest {
             self.mv_stmt(cx, stmt, false);
         }
         self.mv_stmt(cx, last, owning);
         // The block's defers have run.
         cx.held.truncate(held);
+        self.end_scope(cx, end_of(block.span), "the scope ends here");
     }
 
     fn mv_stmt(&mut self, cx: &mut MoveCx, stmt: &crate::hir::Stmt, owning: bool) {
         match &stmt.kind {
             HirStmt::Let { pat, init, .. } => {
                 self.mv(cx, init, true);
+                // `let _ = tx` throws it away; `let Tx(moves) = tx` ties it off.
+                if matches!(pat.kind, PatKind::Wild) {
+                    self.dropped(cx, init);
+                }
                 for local in pat_locals(pat) {
                     cx.depth_of.insert(local, cx.depth);
+                    fresh(cx, local);
+                    self.declare(cx, local);
                 }
             }
-            HirStmt::Expr(e) => self.mv(cx, e, owning),
+            HirStmt::Expr(e) => {
+                self.mv(cx, e, owning);
+                if !owning && !matches!(e.kind, ExprKind::Assign { .. }) {
+                    self.dropped(cx, e);
+                }
+            }
             HirStmt::Given { value, .. } => self.mv(cx, value, false),
             HirStmt::Spool { init, .. } => self.mv(cx, init, false),
             // The body runs at the end of the scope: what it moves, it
             // moves then. The fallback defer's own variable is its to move.
             HirStmt::Defer { binding, body } => {
                 let saved = cx.flow.clone();
+                if let Some(b) = binding {
+                    cx.covered.insert(*b);
+                }
+                let saved_base = std::mem::replace(&mut cx.fn_base, cx.scopes.len());
                 cx.depth += 1;
                 cx.in_defer.push(true);
                 cx.captures.push(Vec::new());
@@ -353,6 +434,7 @@ impl Checker<'_> {
                 }
                 cx.in_defer.pop();
                 cx.depth -= 1;
+                cx.fn_base = saved_base;
                 cx.flow = saved;
             }
             HirStmt::Item(_) => {}
@@ -569,6 +651,8 @@ impl Checker<'_> {
             cx.flow.moved.push((owner, Vec::new(), at));
         }
         cx.flow.moved.push((local, path.to_vec(), at));
+        // Moved away (or, for part of it, taken apart): used up.
+        cx.flow.loose.retain(|&l| l != owner && l != local);
         // A fallback defer on `owner` does nothing once it has moved.
         self.b.moves.insert(id, owner);
     }
@@ -606,6 +690,7 @@ impl Checker<'_> {
     fn bind_parts(&mut self, cx: &mut MoveCx, pat: &Pat, root: Option<&Root>) {
         for local in pat_locals(pat) {
             cx.depth_of.insert(local, cx.depth);
+            fresh(cx, local);
             if let Some(Root::Local(owner)) = root {
                 let owner = cx.parts_of.get(owner).copied().unwrap_or(*owner);
                 cx.parts_of.insert(local, owner);
@@ -706,4 +791,140 @@ fn collect_locals(pat: &Pat, out: &mut Vec<LocalId>) {
         | PatKind::ConstCase(_)
         | PatKind::Error => {}
     }
+}
+
+// ================================================================ loose ends
+
+impl Checker<'_> {
+    /// Whether local `l` holds a `once` value.
+    fn local_is_once(&mut self, l: LocalId) -> bool {
+        match self.b.local_ty.get(&l).copied() {
+            Some(ty) => self.is_once(ty),
+            None => false,
+        }
+    }
+
+    /// A new local of the innermost scope: loose, if it holds a `once` value.
+    fn declare(&mut self, cx: &mut MoveCx, l: LocalId) {
+        if !self.local_is_once(l) {
+            return;
+        }
+        if let Some(scope) = cx.scopes.last_mut() {
+            scope.push(l);
+        }
+        if !cx.flow.loose.contains(&l) {
+            cx.flow.loose.push(l);
+        }
+    }
+
+    /// Ends the innermost scope at `at`: its locals must be used up.
+    fn end_scope(&mut self, cx: &mut MoveCx, at: Span, why: &str) {
+        let Some(scope) = cx.scopes.pop() else { return };
+        if !cx.flow.dead {
+            for &l in &scope {
+                if cx.flow.loose.contains(&l) && !cx.covered.contains(&l) {
+                    self.loose_end(cx, l, at, &format!("...but it is still loose when {why}"));
+                }
+            }
+        }
+        cx.flow.loose.retain(|l| !scope.contains(l));
+    }
+
+    /// `return`, `fail` or `?` at `at`: every scope of the function ends.
+    fn leave_function(&mut self, cx: &mut MoveCx, at: Span, why: &str) {
+        self.leave_scopes(cx, cx.fn_base, at, why);
+    }
+
+    /// `break` or `continue` of loop `target`: the scopes inside it end.
+    fn leave_loop(&mut self, cx: &mut MoveCx, target: HirId, at: Span, why: &str) {
+        let Some(&(_, depth)) = cx.loops.iter().rev().find(|(id, _)| *id == target) else { return };
+        self.leave_scopes(cx, depth.max(cx.fn_base), at, why);
+    }
+
+    fn leave_scopes(&mut self, cx: &mut MoveCx, from: usize, at: Span, why: &str) {
+        if cx.flow.dead {
+            return;
+        }
+        let locals: Vec<LocalId> = cx.scopes.iter().skip(from).flatten().copied().collect();
+        for l in locals {
+            if cx.flow.loose.contains(&l) && !cx.covered.contains(&l) {
+                self.loose_end(cx, l, at, &format!("...but it is still loose when {why}"));
+            }
+        }
+    }
+
+    /// An expression statement (or `let _ = …`) whose `once` value is
+    /// thrown away.
+    fn dropped(&mut self, cx: &mut MoveCx, e: &Expr) {
+        if cx.flow.dead {
+            return;
+        }
+        let Some(&ty) = self.b.expr_ty.get(&e.id) else { return };
+        let ty = self.deep_resolve(ty);
+        // A variable read here isn't thrown away: it's still in its variable.
+        if matches!(e.kind, ExprKind::Local(_) | ExprKind::Field { .. } | ExprKind::LeadingDot(_)) {
+            return;
+        }
+        if !self.is_once(ty) {
+            return;
+        }
+        let shown = self.show(ty);
+        self.report(
+            cx,
+            Diagnostic::error(codes::L0301, format!("loose end: this `{shown}` is thrown away"))
+                .primary(e.span, format!("`{shown}` is a `once` type: it must be used up exactly once"))
+                .help("keep it in a variable and tie it off, or pass it to a function that takes it"),
+        );
+    }
+
+    /// Reports local `l` as a loose end: its value isn't used up by `at`.
+    fn loose_end(&mut self, cx: &mut MoveCx, l: LocalId, at: Span, label: &str) {
+        let local = self.p.local(l);
+        let (name, decl) = (local.name.clone(), local.span);
+        let ty = self.b.local_ty.get(&l).copied().map(|t| self.deep_resolve(t));
+        let shown = ty.map(|t| self.show(t)).unwrap_or_default();
+        let ties = ty.map(|t| self.tie_offs(t, &name)).unwrap_or_default();
+        let mut diag = Diagnostic::error(codes::L0301, format!("loose end: `{name}` is never tied off"))
+            .primary(decl, format!("`{shown}` is a `once` type: it must be used up exactly once"))
+            .secondary(at, label.to_string());
+        if !ties.is_empty() {
+            diag = diag.help(format!("tie it off with {}", ties.join(" or ")));
+            let simple = ties.iter().find(|t| t.ends_with("()`")).or(ties.first());
+            if let Some(first) = simple {
+                diag =
+                    diag.help(format!("or add `defer {name} => {}` right after it's created", first.trim_matches('`')));
+            }
+        } else {
+            diag = diag.help(format!("pass it to a function that takes it, or add `defer {name} => …`"));
+        }
+        self.report(cx, diag);
+    }
+
+    /// The calls that use up a value of `ty` held in `name`: its warp's
+    /// methods that take `self`, as `` `name.commit(..)` ``.
+    fn tie_offs(&mut self, ty: Ty, name: &str) -> Vec<String> {
+        let TyKind::Adt(def, _) = *self.tcx.kind(ty) else { return Vec::new() };
+        let crate::hir::DefKind::Warp(w) = &self.p.def(def).kind else { return Vec::new() };
+        let mut out = Vec::new();
+        for &m in &w.members {
+            if let crate::hir::DefKind::Fn(f) = &self.p.def(m).kind
+                && f.params.first().is_some_and(|p| p.is_self && p.mode == ParamMode::Take)
+            {
+                let args = if f.params.len() > 1 { ".." } else { "" };
+                out.push(format!("`{name}.{}({args})`", self.p.def(m).name));
+            }
+        }
+        out
+    }
+}
+
+/// A local bound anew (each time a loop's body runs, say): nothing has
+/// moved out of this value yet.
+fn fresh(cx: &mut MoveCx, local: LocalId) {
+    cx.flow.moved.retain(|(l, _, _)| *l != local);
+}
+
+/// Just the end of `span`: where a block's `}` is.
+fn end_of(span: Span) -> Span {
+    Span { lo: span.hi.saturating_sub(1), ..span }
 }

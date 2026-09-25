@@ -110,6 +110,8 @@ fn install_host(lua: &Lua, output: Output) -> mlua::Result<()> {
     let getenv =
         lua.create_function(move |_, name: String| Ok(if captured { None } else { std::env::var(name).ok() }))?;
     host.set("getenv", getenv)?;
+    // A captured run's files live in memory (see runtime/rt/core.lua).
+    host.set("memory_fs", captured)?;
     lua.globals().set("__LOOM_HOST", host)
 }
 

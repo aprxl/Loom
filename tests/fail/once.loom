@@ -1,0 +1,63 @@
+// `once` values must be used up exactly once.
+
+pub once warp Tx {
+    moves: List[i32] = List()
+    pub fn begin() -> Tx = Tx()
+    pub fn credit(mut self, amount: i32) = .moves.push(amount)
+    pub fn commit(take self, note: str) {
+        let Tx(moves) = self
+    }
+    pub fn rollback(take self) {
+        let Tx(_) = self
+    }
+}
+
+fn forgetful() {
+    var tx = Tx.begin()                     //~ L0301
+    tx.credit(5_00)
+}
+
+fn one_branch(b: bool) {
+    let tx = Tx.begin()                     //~ L0301
+    if b { tx.rollback() }
+}
+
+fn early(b: bool) -> ?i32 {
+    let tx = Tx.begin()                     //~ L0301
+    if b { return none }
+    tx.commit("done")
+    some(1)
+}
+
+fn thrown_away() {
+    Tx.begin()                              //~ L0301
+    let _ = Tx.begin()                      //~ L0301
+}
+
+fn overwritten() {
+    var tx = Tx.begin()                     //~ L0301
+    tx = Tx.begin()
+    tx.rollback()
+}
+
+fn in_loop() {
+    for i in 0..3 {
+        let tx = Tx.begin()                 //~ L0301
+        if i == 1 { continue }
+        tx.rollback()
+    }
+}
+
+// These are fine.
+fn tied(b: bool) {
+    let tx = Tx.begin()
+    if b { tx.rollback() } else { tx.commit("ok") }
+    var again = Tx.begin()
+    defer again => again.rollback()
+    if b { return }
+    again.commit("later")
+}
+
+fn pass_on(take tx: Tx) = tx.rollback()
+
+fn main() {}

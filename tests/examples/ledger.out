@@ -1,0 +1,6 @@
+transfer 1 ok
+stopped early: UnknownAccount(9)
+refused: Insufficient(account: 3, short_by: 6999)
+  #1: $0.25
+  #2: $29.75
+  #3: $30.00

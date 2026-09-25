@@ -301,12 +301,13 @@ built in `crates/`, following the plan in `design/lua-backend.md`:
   dispatch and type tests; optionals and errors: `?`, `mend`, `fail`,
   unions, and `main ! E`; arrays, lists and slices; the methods of text,
   characters and numbers; lambdas, `Iter` and lazy streams; `defer`;
-  gauges; and maps and sets. `examples/widgets.loom` and `examples/tour.loom` run start to
-  finish. `loom run <file>` runs a
+  gauges; maps and sets; and `once` types. `examples/widgets.loom`,
+  `examples/tour.loom` and `examples/ledger.loom` run start to finish. `loom run <file>` runs a
   program; `loom build <file>` writes the Lua; `--emit tokens|ast|hir|lua`
   dumps a stage. The other examples use more than this; the compiler says so
   rather than guessing.
-- **Next:** `once` types, one slice at a time through every layer.
+- **Next:** chip8, then compile-time code, spools and shuttles, one slice
+  at a time through every layer.
 
 ```bash
 cargo run -p loom -- run tests/run/fizzbuzz.loom

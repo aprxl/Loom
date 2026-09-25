@@ -93,6 +93,9 @@ codes! {
     // G02xx: gauges
     G0201 = "value outside a gauge";
 
+    // L03xx: `once` values
+    L0301 = "loose end: a `once` value isn't used up";
+
     // M01xx: moves and borrows
     M0101 = "use of a moved value";
     M0102 = "move out of a borrow";

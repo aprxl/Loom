@@ -36,6 +36,9 @@ pub struct WarpInfo {
     pub tuple: bool,
     /// Copied on assignment rather than moved (every field is `Copy`).
     pub copy: bool,
+    /// A `once` warp, or one holding a `once` value: its values must be used
+    /// up exactly once.
+    pub once: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -122,10 +125,11 @@ impl Checker<'_> {
         let p = self.p;
         let d = p.def(def);
         let DefKind::Warp(w) = &d.kind else { return None };
-        if w.modifier != loom_syntax::ast::WarpModifier::None {
-            self.unsupported(d.span, "`once` and `ref` warps");
+        if w.modifier == loom_syntax::ast::WarpModifier::Ref {
+            self.unsupported(d.span, "`ref` warps");
             return None;
         }
+        let once = w.modifier == loom_syntax::ast::WarpModifier::Once;
         if let Some(&param) = w.generics.iter().find(|&&g| !self.is_type_param(g)) {
             self.unsupported(p.def(param).span, "`const` and region parameters");
             return None;
@@ -173,10 +177,12 @@ impl Checker<'_> {
         self.self_ty = saved_self;
         self.subst = saved_subst;
         self.current = saved_current;
-        let mut info = WarpInfo { def, ty: this, name: d.name.clone(), fields, cases, tuple: w.tuple, copy: true };
+        let mut info =
+            WarpInfo { def, ty: this, name: d.name.clone(), fields, cases, tuple: w.tuple, copy: !once, once };
         // Insert first, so a warp that contains itself doesn't recurse forever.
         self.r.warps.insert(def, info.clone());
-        info.copy = info.field_tys().iter().all(|&t| self.is_copy(t));
+        info.once = once || info.field_tys().iter().any(|&t| self.is_once(t));
+        info.copy = !info.once && info.field_tys().iter().all(|&t| self.is_copy(t));
         self.r.warps.insert(def, info.clone());
         Some(info)
     }
@@ -219,11 +225,30 @@ impl Checker<'_> {
             // Insert first, so a warp that contains itself doesn't recurse forever.
             self.r.adts.insert(ty, info.clone());
         }
-        info.copy = info.field_tys().iter().all(|&t| self.is_copy(t));
+        info.once = info.once || info.field_tys().iter().any(|&t| self.is_once(t));
+        info.copy = !info.once && info.field_tys().iter().all(|&t| self.is_copy(t));
         if concrete {
             self.r.adts.insert(ty, info.clone());
         }
         Some(info)
+    }
+
+    /// Whether values of `ty` must be used up exactly once: a `once` warp,
+    /// or anything holding one (`List[Tx]` must be drained).
+    pub(super) fn is_once(&mut self, ty: Ty) -> bool {
+        let ty = self.resolve(ty);
+        match self.tcx.kind(ty).clone() {
+            TyKind::Tuple(items) => items.iter().any(|&t| self.is_once(t)),
+            TyKind::Optional(t) | TyKind::Array(t, _) => self.is_once(t),
+            TyKind::Result(t, e) => self.is_once(t) || self.is_once(e),
+            TyKind::Adt(_, args) if self.is_builtin_adt(ty) => args.iter().any(|&t| self.is_once(t)),
+            TyKind::Adt(..) => self.adt_info(ty).is_some_and(|i| i.once),
+            _ => false,
+        }
+    }
+
+    fn is_builtin_adt(&self, ty: Ty) -> bool {
+        matches!(self.tcx.kind(ty), TyKind::Adt(def, _) if self.p.def(*def).attrs.iter().any(|a| a.name == "builtin"))
     }
 
     /// Whether values of `ty` are copied (rather than moved) on assignment.

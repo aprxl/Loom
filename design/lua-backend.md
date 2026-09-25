@@ -162,6 +162,19 @@ works on a copy of a `Copy` place, since `next` changes it. `map` and
 When an unravel happens inside the runtime (a stream's step, say), the host
 reports the first frame of the Lua traceback that maps to Loom code.
 
+## `once` values and files
+
+`once` is checked entirely at compile time and leaves nothing at run time:
+the move checker keeps, along each path, the locals whose `once` value may
+not be used up yet, and reports one still there when its scope ends or a
+`return`, `fail`, `?` or `break` leaves it (L0301), unless a fallback defer
+ties it off. A warp holding a `once` value is `once` itself, and never
+`Copy`.
+
+A `File` is `{path}`: each write opens the file, appends and closes it, so
+none is left open however the program ends. Captured runs get an in-memory
+file system from the host.
+
 ## Maps and sets
 
 `keys[i]` and `vals[i]` are the i-th pair in insertion order, `hks[i]` the
