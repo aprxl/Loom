@@ -88,6 +88,7 @@ codes! {
     T0115 = "weave not allowed";
     T0116 = "ambiguous method";
     T0117 = "not a format spec";
+    T0118 = "control flow can't leave a `defer`";
 
     // M01xx: moves and borrows
     M0101 = "use of a moved value";

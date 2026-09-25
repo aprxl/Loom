@@ -133,6 +133,9 @@ struct Lowerer<'a> {
     main_error: Option<Expr>,
     /// Locals that stand for a place: `x` in `for mut x in xs` is `xs[i]`.
     aliases: HashMap<LocalId, Expr>,
+    /// For each local with a fallback `defer` in scope, that defer's flag:
+    /// true while the local's value is still there to clean up.
+    live_flags: HashMap<LocalId, Vec<String>>,
     reported: HashSet<String>,
 }
 
@@ -158,6 +161,7 @@ impl<'a> Lowerer<'a> {
             mend_labels: Vec::new(),
             main_error: None,
             aliases: HashMap::new(),
+            live_flags: HashMap::new(),
             reported: HashSet::new(),
         }
     }

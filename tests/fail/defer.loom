@@ -1,0 +1,35 @@
+// A `defer` runs as its scope ends: it can't leave, and what it uses must
+// still be there.
+
+warp Tx { name: String }
+
+fn consume(take s: String) {}
+
+fn leaves(o: ?i32) -> ?i32 {
+    defer return none                       //~ T0118
+    defer {
+        let v = o?                          //~ T0118
+        fail .Bad                           //~ T0118
+    }
+    for i in 0..3 {
+        defer {
+            if i > 1 { break }              //~ T0118
+            continue                        //~ T0118
+        }
+    }
+    defer {
+        for j in 0..3 { if j > 1 { break } }
+        let w = o mend 0
+    }
+    o
+}
+
+fn moves(take s: String, take t: String) {
+    defer consume(s)                        //~ M0102
+    defer print_len(t)
+    consume(t)                              //~ M0102
+}
+
+fn print_len(s: String) {}
+
+fn main() {}

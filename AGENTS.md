@@ -88,9 +88,12 @@ language through every layer (type checking, lowering to Lua, the runtime,
 10. moves: use after move, moving out of borrows and elements, overlapping
     `mut` arguments (M01xx); match exhaustiveness by pattern usefulness
     (nested patterns, integer ranges, twill patterns); functions over Lua's
-    200 locals; stack overflow as an unravel.
+    200 locals; stack overflow as an unravel;
+11. `defer` and fallback `defer x => …`, on every way out of a scope.
 
-Next: `defer`, gauges, and maps, each through every layer at once.
+Next: gauges and maps, then `once` warps (ledger), each through every
+layer at once. chip8 is close: `Rng`, `Duration` (`16.ms()`),
+`rotate_right`, and `const assert`.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and

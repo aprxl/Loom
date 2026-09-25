@@ -1,0 +1,12 @@
+use std.io.print
+
+fn inner() {
+    defer print("inner cleanup")
+    unravel("boom")
+}
+
+fn main() {
+    defer print("outer cleanup")
+    inner()
+    print("never")
+}

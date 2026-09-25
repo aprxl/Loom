@@ -215,8 +215,16 @@ compares `vt.d` with `Button`'s descriptor, which is unique per type. An
 - `continue`: `while c do do BODY end ::cN:: end`.
 - Labeled break: `goto bN` with the label right after the outer loop.
 - Never `repeat … until` (its condition sees body locals).
-- `defer`: `local d <close> = rt.defer(fn)`. Fallback defers add a liveness
-  flag, cleared right before the consuming call.
+- `defer`: `local d <close> = rt.defer(function() … end)`, so Lua runs it
+  however the block ends: its end, `return`, `break`, a `goto` out (`?`,
+  `continue`), or an error (an unravel). A value being returned is worked
+  out before the defers run. `defer x => …` adds a flag, `local f = true`,
+  that each move of `x` sets to false (the move checker records where they
+  are) and a new value of `x` sets back; the body runs only while it's true.
+  So a value moved into a call is the call's to clean up, even if that call
+  then unravels. The type checker keeps `return`, `fail`, `?` and
+  `break`/`continue` from leaving a defer (T0118); the move checker keeps a
+  defer's variables from moving while it still needs them (M0102).
 - Shuttles: `coroutine.create` with tagged yields `(OUT, v)` / `(PULL)`.
   A coroutine that dies by error is `coroutine.close`d before re-raising.
 

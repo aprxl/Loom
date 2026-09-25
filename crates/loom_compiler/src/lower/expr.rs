@@ -214,6 +214,7 @@ impl Lowerer<'_> {
         if let Some(&id) = self.tables().fn_values.get(&e.id) {
             return self.fn_value(id, span);
         }
+        self.moved_away(e.id);
         match &e.kind {
             ExprKind::Lambda { params, body } => self.lambda(e, params, body),
             ExprKind::Lit(lit) => self.lit(lit, false, ty),
@@ -637,6 +638,8 @@ impl Lowerer<'_> {
         if self.tables().closure_calls.contains(&call.id) {
             return self.call_value(callee, args);
         }
+        // `.consume()` in a method takes `self`.
+        self.moved_away(callee.id);
         let Some(info) = self.tables().calls.get(&call.id).cloned() else {
             self.unsupported(call.span, "this call");
             return Expr::Nil;
@@ -958,6 +961,13 @@ impl Lowerer<'_> {
     /// The statements of a block, with its last expression delivered to `dest`.
     pub(super) fn block_into(&mut self, block: &Block, dest: &Dest) {
         let Some((last, rest)) = block.stmts.split_last() else { return };
+        // A fallback defer's flag is a local of this block.
+        let flags = self.live_flags.clone();
+        self.block_stmts_into(last, rest, dest);
+        self.live_flags = flags;
+    }
+
+    fn block_stmts_into(&mut self, last: &hir::Stmt, rest: &[hir::Stmt], dest: &Dest) {
         for stmt in rest {
             self.stmt(stmt);
         }
@@ -980,7 +990,8 @@ impl Lowerer<'_> {
             }
             HirStmt::Expr(e) => self.lower_into(e, &Dest::Discard),
             HirStmt::Item(_) => {}
-            HirStmt::Given { .. } | HirStmt::Spool { .. } | HirStmt::Defer { .. } => {
+            HirStmt::Defer { binding, body } => self.defer(*binding, body, stmt.span),
+            HirStmt::Given { .. } | HirStmt::Spool { .. } => {
                 self.unsupported(stmt.span, "this statement");
             }
         }
@@ -1291,6 +1302,16 @@ impl Lowerer<'_> {
     // ------------------------------------------------------------ assignment
 
     fn assign(&mut self, target: &hir::Expr, op: AssignOp, value: &hir::Expr) {
+        self.assign_inner(target, op, value);
+        // A new value to clean up.
+        if let (ExprKind::Local(l), AssignOp::Assign) = (&target.kind, op) {
+            for flag in self.live_flags.get(l).cloned().unwrap_or_default() {
+                self.push(StmtKind::Assign(vec![Expr::name(flag)], vec![Expr::Bool(true)]));
+            }
+        }
+    }
+
+    fn assign_inner(&mut self, target: &hir::Expr, op: AssignOp, value: &hir::Expr) {
         match (&target.kind, op) {
             (ExprKind::Local(local), AssignOp::Assign) if self.overwrites(*local) => {
                 // A whole new value for a `mut` parameter: written into the

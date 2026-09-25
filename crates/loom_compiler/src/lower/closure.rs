@@ -6,9 +6,9 @@
 //! (see runtime/rt/core.lua), so a `for` loop over one is Lua's generic
 //! `for`.
 
-use super::lir::{Expr, StmtKind};
+use super::lir::{Expr, Stmt, StmtKind};
 use super::{Dest, Lowerer};
-use crate::hir::{self, Block, DefKind, LambdaParam};
+use crate::hir::{self, Block, DefKind, LambdaParam, LocalId};
 use crate::ty::TyKind;
 use crate::typeck::{BodyId, IterSource};
 use loom_syntax::ast::ParamMode;
@@ -46,6 +46,34 @@ impl Lowerer<'_> {
             return self.extern_fn(def, span).unwrap_or(Expr::Nil);
         }
         Expr::field(Expr::name("F"), &self.fn_name(id))
+    }
+
+    /// `defer body`: code for the end of the block, in a function a
+    /// `<close>` local calls. `defer x => body` also keeps a flag that each
+    /// move of `x` clears, and runs `body` only while it's set.
+    pub(super) fn defer(&mut self, binding: Option<LocalId>, body: &hir::Expr, span: Span) {
+        let flag = binding.map(|_| self.new_temp());
+        if let Some(flag) = &flag {
+            self.push(StmtKind::Local(vec![flag.clone()], vec![Expr::Bool(true)]));
+        }
+        let saved_mends = std::mem::take(&mut self.mend_labels);
+        let mut stmts = self.body(body.span, |this| this.lower_into(body, &Dest::Discard));
+        self.mend_labels = saved_mends;
+        if let (Some(flag), Some(local)) = (flag, binding) {
+            stmts = vec![Stmt { kind: StmtKind::If(vec![(Expr::name(flag.clone()), stmts)], None), span: Some(span) }];
+            self.live_flags.entry(local).or_default().push(flag);
+        }
+        let d = self.new_temp();
+        self.push(StmtKind::LocalClose(d, Expr::rt("defer", vec![Expr::Function(Vec::new(), stmts)])));
+    }
+
+    /// If `e` moves a local's value away, clears that local's fallback
+    /// defer flags: there's nothing left to clean up.
+    pub(super) fn moved_away(&mut self, id: hir::HirId) {
+        let Some(local) = self.tables().moves.get(&id).copied() else { return };
+        for flag in self.live_flags.get(&local).cloned().unwrap_or_default() {
+            self.push(StmtKind::Assign(vec![Expr::name(flag)], vec![Expr::Bool(false)]));
+        }
     }
 
     /// `f(a, b)` where `f` is a function value.

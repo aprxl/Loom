@@ -143,6 +143,10 @@ impl Checker<'_> {
     /// Where a `?` with no `mend` around it goes: out of the function, which
     /// must be able to carry what it failed with.
     fn exit_function(&mut self, unwrap: Unwrap, err_ty: Ty, span: Span) -> Option<Exit> {
+        if self.in_defer.is_some() {
+            self.leaves_defer(span, "?");
+            return None;
+        }
         // A lambda whose return type nothing gave yet: a `?` in it makes it
         // return what the `?` passes on (`xs.map(s => s.first()? + 1)`).
         if let Some(ret) = self.ret

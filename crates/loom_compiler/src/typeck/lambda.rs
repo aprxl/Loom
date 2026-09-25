@@ -88,7 +88,9 @@ impl Checker<'_> {
         let saved_loops = std::mem::take(&mut self.loops);
         let saved_mends = std::mem::take(&mut self.mends);
         let saved_argument = std::mem::replace(&mut self.in_argument, false);
+        let saved_defer = self.in_defer.take();
         self.check_coerce(body, ret);
+        self.in_defer = saved_defer;
         self.in_argument = saved_argument;
         self.mends = saved_mends;
         self.loops = saved_loops;

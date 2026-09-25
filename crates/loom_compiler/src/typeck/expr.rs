@@ -190,7 +190,25 @@ impl Checker<'_> {
                 self.check_break(*target, value.as_deref(), span);
                 self.tcx.never
             }
-            ExprKind::Continue { .. } => self.tcx.never,
+            ExprKind::Continue { target } => {
+                if self.in_defer.is_some() && !self.loops.iter().any(|l| l.id == *target) {
+                    self.leaves_defer(span, "continue");
+                }
+                self.tcx.never
+            }
+            ExprKind::Return(_) | ExprKind::Fail(_) if self.in_defer.is_some() => {
+                let (inner, what) = match &e.kind {
+                    ExprKind::Return(v) => (v.as_deref(), "return"),
+                    ExprKind::Fail(v) => (Some(v.as_ref()), "fail"),
+                    _ => unreachable!(),
+                };
+                // Already an error: nothing says what the value should be.
+                if let Some(v) = inner {
+                    self.check_expr(v, Some(self.tcx.error));
+                }
+                self.leaves_defer(span, what);
+                self.tcx.never
+            }
             ExprKind::Return(value) => {
                 let ret = self.ret.unwrap_or(self.tcx.unit);
                 match value {
@@ -488,8 +506,16 @@ impl Checker<'_> {
             StmtKind::Spool { init, .. } => {
                 self.unsupported(init.span, "spools");
             }
+            // The body runs when the scope ends, however it ends. It can't
+            // leave: loops and `mend`s outside it are out of reach.
             StmtKind::Defer { body, .. } => {
-                self.unsupported(body.span, "`defer`");
+                let saved_loops = std::mem::take(&mut self.loops);
+                let saved_mends = std::mem::take(&mut self.mends);
+                let saved_defer = self.in_defer.replace(body.span);
+                self.check_expr(body, None);
+                self.in_defer = saved_defer;
+                self.mends = saved_mends;
+                self.loops = saved_loops;
             }
         }
     }
@@ -549,6 +575,18 @@ impl Checker<'_> {
 
     // ------------------------------------------------------------ loops
 
+    /// Reports `what` (`return`, `?`…) trying to leave a `defer`'s body.
+    pub(super) fn leaves_defer(&mut self, span: Span, what: &str) {
+        let at = self.in_defer.expect("inside a defer");
+        self.diags.push(
+            Diagnostic::error(codes::T0118, format!("`{what}` can't leave a `defer`"))
+                .primary(span, "this would leave the deferred code")
+                .secondary(at, "it runs when the scope ends, from here")
+                .note("a `defer` runs while its scope is already ending, so it can't change where that goes")
+                .help("handle it inside: `mend`, or an `if`"),
+        );
+    }
+
     fn in_loop(
         &mut self,
         id: crate::hir::HirId,
@@ -562,7 +600,15 @@ impl Checker<'_> {
     }
 
     fn check_break(&mut self, target: crate::hir::HirId, value: Option<&Expr>, span: Span) {
-        let Some(index) = self.loops.iter().rposition(|l| l.id == target) else { return };
+        let Some(index) = self.loops.iter().rposition(|l| l.id == target) else {
+            if let Some(v) = value {
+                self.check_expr(v, None);
+            }
+            if self.in_defer.is_some() {
+                self.leaves_defer(span, "break");
+            }
+            return;
+        };
         let (takes_value, expected, break_ty) = {
             let ctx = &self.loops[index];
             (ctx.takes_value, ctx.expected, ctx.break_ty)

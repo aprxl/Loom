@@ -39,28 +39,31 @@ fn fix_block(stmts: &mut Vec<Stmt>, outer: usize, next: &mut u32) {
             _ => Vec::new(),
         })
         .collect();
-    let own = if outer + declared.len() > MAX_ACTIVE {
-        *next += 1;
-        let table = format!("_L{next}");
-        let names: HashSet<String> = declared.into_iter().collect();
-        let old = std::mem::take(stmts);
-        stmts.push(Stmt { kind: StmtKind::Local(vec![table.clone()], vec![Expr::Table(Vec::new())]), span: None });
-        for mut stmt in old {
-            rename_stmt(&mut stmt, &names, &table);
-            match stmt.kind {
-                // A table's missing field is already nil.
-                StmtKind::Local(_, values) if values.is_empty() => {}
-                StmtKind::Local(targets, values) => {
-                    let targets = targets.into_iter().map(|n| Expr::field(Expr::name(table.clone()), &n)).collect();
-                    stmts.push(Stmt { kind: StmtKind::Assign(targets, values), span: stmt.span });
+    // A `<close>` local has to stay a local.
+    let closing = stmts.iter().filter(|s| matches!(s.kind, StmtKind::LocalClose(..))).count();
+    let own = closing
+        + if outer + closing + declared.len() > MAX_ACTIVE {
+            *next += 1;
+            let table = format!("_L{next}");
+            let names: HashSet<String> = declared.into_iter().collect();
+            let old = std::mem::take(stmts);
+            stmts.push(Stmt { kind: StmtKind::Local(vec![table.clone()], vec![Expr::Table(Vec::new())]), span: None });
+            for mut stmt in old {
+                rename_stmt(&mut stmt, &names, &table);
+                match stmt.kind {
+                    // A table's missing field is already nil.
+                    StmtKind::Local(_, values) if values.is_empty() => {}
+                    StmtKind::Local(targets, values) => {
+                        let targets = targets.into_iter().map(|n| Expr::field(Expr::name(table.clone()), &n)).collect();
+                        stmts.push(Stmt { kind: StmtKind::Assign(targets, values), span: stmt.span });
+                    }
+                    kind => stmts.push(Stmt { kind, span: stmt.span }),
                 }
-                kind => stmts.push(Stmt { kind, span: stmt.span }),
             }
-        }
-        1
-    } else {
-        declared.len()
-    };
+            1
+        } else {
+            declared.len()
+        };
     let active = outer + own;
     for stmt in stmts.iter_mut() {
         match &mut stmt.kind {
@@ -149,6 +152,7 @@ fn visit_stmt(stmt: &mut Stmt, f: &mut impl FnMut(&mut Expr)) {
 fn visit_stmt_exprs(stmt: &mut Stmt, f: &mut impl FnMut(&mut Expr)) {
     match &mut stmt.kind {
         StmtKind::Local(_, values) => values.iter_mut().for_each(f),
+        StmtKind::LocalClose(_, value) => f(value),
         StmtKind::Assign(targets, values) => {
             targets.iter_mut().for_each(&mut *f);
             values.iter_mut().for_each(f);

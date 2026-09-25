@@ -333,6 +333,14 @@ end
 --- The descriptor of `any W` types: the value's own is in its vtable.
 rt.anyd = { kind = "any" }
 
+-- `defer`: the deferred code, in a value for a `<close>` local, which Lua
+-- closes however its block ends (an error included).
+local deferred = { __close = function(d) d[1]() end }
+
+function rt.defer(f)
+  return setmetatable({ f }, deferred)
+end
+
 --- Values nothing looks inside, like functions: shared, never copied.
 rt.opaque = { kind = "opaque" }
 

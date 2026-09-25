@@ -215,6 +215,9 @@ pub struct Body {
     /// Values turned into a `Stream` to loop over or to call its methods
     /// on: the `for` loop, or the method call, and where the items come from.
     pub streams: HashMap<HirId, IterSource>,
+    /// Expressions whose value moves out of a local (or part of it): which
+    /// local. A fallback `defer` on it is off from there.
+    pub moves: HashMap<HirId, LocalId>,
 }
 
 /// How a value that isn't a `Stream` gives its items one at a time.
@@ -484,6 +487,8 @@ struct Checker<'p> {
     current: Option<DefId>,
     ret: Option<Ty>,
     loops: Vec<LoopCtx>,
+    /// The `defer` whose body is being checked: nothing in it may leave it.
+    in_defer: Option<Span>,
 }
 
 impl<'p> Checker<'p> {
@@ -544,6 +549,7 @@ impl<'p> Checker<'p> {
             current: None,
             ret: None,
             loops: Vec::new(),
+            in_defer: None,
         }
     }
 

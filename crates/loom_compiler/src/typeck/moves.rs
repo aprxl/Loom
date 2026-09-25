@@ -80,6 +80,13 @@ struct MoveCx {
     depth: u32,
     /// The place each in-place dot-block's leading dots start from.
     subjects: HashMap<HirId, (Root, Vec<String>)>,
+    /// For each level of depth: whether it's a `defer`'s body (or a lambda's).
+    in_defer: Vec<bool>,
+    /// The outer locals each `defer` body being gone through uses.
+    captures: Vec<Vec<LocalId>>,
+    /// Locals a `defer` in an enclosing block still needs at its end, with
+    /// where that `defer` is.
+    held: Vec<(LocalId, Span)>,
     reported: HashSet<(&'static str, Span)>,
 }
 
@@ -210,11 +217,13 @@ impl Checker<'_> {
             ExprKind::Lambda { params, body } => {
                 let saved = cx.flow.clone();
                 cx.depth += 1;
+                cx.in_defer.push(false);
                 for p in params {
                     cx.depth_of.insert(p.local, cx.depth);
                     cx.borrowed.insert(p.local, Borrow::LambdaParam);
                 }
                 self.mv(cx, body, true);
+                cx.in_defer.pop();
                 cx.depth -= 1;
                 cx.flow = saved;
             }
@@ -299,10 +308,13 @@ impl Checker<'_> {
 
     fn mv_block(&mut self, cx: &mut MoveCx, block: &Block, owning: bool) {
         let Some((last, rest)) = block.stmts.split_last() else { return };
+        let held = cx.held.len();
         for stmt in rest {
             self.mv_stmt(cx, stmt, false);
         }
         self.mv_stmt(cx, last, owning);
+        // The block's defers have run.
+        cx.held.truncate(held);
     }
 
     fn mv_stmt(&mut self, cx: &mut MoveCx, stmt: &crate::hir::Stmt, owning: bool) {
@@ -316,7 +328,31 @@ impl Checker<'_> {
             HirStmt::Expr(e) => self.mv(cx, e, owning),
             HirStmt::Given { value, .. } => self.mv(cx, value, false),
             HirStmt::Spool { init, .. } => self.mv(cx, init, false),
-            HirStmt::Defer { body, .. } => self.mv(cx, body, false),
+            // The body runs at the end of the scope: what it moves, it
+            // moves then. The fallback defer's own variable is its to move.
+            HirStmt::Defer { binding, body } => {
+                let saved = cx.flow.clone();
+                cx.depth += 1;
+                cx.in_defer.push(true);
+                cx.captures.push(Vec::new());
+                let own = binding.map(|b| (b, cx.depth_of.insert(b, cx.depth)));
+                self.mv(cx, body, false);
+                // What the body uses must still be there when it runs.
+                for local in cx.captures.pop().unwrap_or_default() {
+                    if Some(local) != *binding {
+                        cx.held.push((local, stmt.span));
+                    }
+                }
+                if let Some((b, before)) = own {
+                    match before {
+                        Some(d) => cx.depth_of.insert(b, d),
+                        None => cx.depth_of.remove(&b),
+                    };
+                }
+                cx.in_defer.pop();
+                cx.depth -= 1;
+                cx.flow = saved;
+            }
             HirStmt::Item(_) => {}
         }
     }
@@ -379,7 +415,7 @@ impl Checker<'_> {
             && let Some(Receiver::Local(l)) = info.receiver
         {
             // `.consume()` in a method: takes `self`.
-            self.move_local(cx, l, &[], callee.span, callee.span);
+            self.move_local(cx, callee.id, l, &[], callee.span);
         }
         for (i, arg) in args.iter().enumerate() {
             let take = mode_of(super::ArgSource::Arg(i)) == ParamMode::Take;
@@ -444,6 +480,12 @@ impl Checker<'_> {
         }
         let Root::Local(local) = root else { return };
         self.check_use(cx, local, &path, e.span);
+        if let Some(captured) = cx.captures.last_mut()
+            && cx.depth_of.get(&local).is_some_and(|&d| d < cx.depth)
+            && !captured.contains(&local)
+        {
+            captured.push(local);
+        }
         if !owning || self.is_copy_expr(e) {
             return;
         }
@@ -457,11 +499,12 @@ impl Checker<'_> {
             );
             return;
         }
-        self.move_local(cx, local, &path, e.span, e.span);
+        self.move_local(cx, e.id, local, &path, e.span);
     }
 
     /// Moves `local`'s place at `path`, or reports why it can't be.
-    fn move_local(&mut self, cx: &mut MoveCx, local: LocalId, path: &[String], span: Span, at: Span) {
+    fn move_local(&mut self, cx: &mut MoveCx, id: HirId, local: LocalId, path: &[String], span: Span) {
+        let at = span;
         let name = self.p.local(local).name.clone();
         let (owner, borrow) = match cx.parts_of.get(&local) {
             Some(&owner) => (owner, cx.borrowed.get(&owner).copied()),
@@ -486,12 +529,30 @@ impl Checker<'_> {
         }
         let declared = cx.depth_of.get(&owner).copied().unwrap_or(0);
         if declared < cx.depth {
-            self.report(
-                cx,
+            let diag = if cx.in_defer.last() == Some(&true) {
+                Diagnostic::error(codes::M0102, format!("can't move `{name}` in a `defer`"))
+                    .primary(span, "moved here")
+                    .note("the deferred code runs at the end of the scope, when the value may be gone")
+                    .help(format!("to clean up `{name}` only while it's still here, write `defer {name} => …`"))
+            } else {
                 Diagnostic::error(codes::M0102, format!("can't move `{name}` out of the lambda that uses it"))
                     .primary(span, "moved here")
                     .note("a lambda borrows the variables it uses")
-                    .help("copy it (`x.copy()`) instead"),
+                    .help("copy it (`x.copy()`) instead")
+            };
+            self.report(cx, diag);
+            return;
+        }
+        if let Some(&(_, at_defer)) = cx.held.iter().find(|(l, _)| *l == owner) {
+            let owner_name = self.p.local(owner).name.clone();
+            self.report(
+                cx,
+                Diagnostic::error(codes::M0102, format!("can't move `{owner_name}`: a `defer` still needs it"))
+                    .primary(span, "moved here")
+                    .secondary(at_defer, "this runs at the end of the scope and uses it")
+                    .help(format!(
+                        "to clean up `{owner_name}` only while it's still here, write `defer {owner_name} => …`"
+                    )),
             );
             return;
         }
@@ -499,6 +560,8 @@ impl Checker<'_> {
             cx.flow.moved.push((owner, Vec::new(), at));
         }
         cx.flow.moved.push((local, path.to_vec(), at));
+        // A fallback defer on `owner` does nothing once it has moved.
+        self.b.moves.insert(id, owner);
     }
 
     /// Reports a use of `local` at `path` after (part of) it was moved.

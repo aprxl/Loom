@@ -1,0 +1,119 @@
+// `defer`: code that runs when its scope ends, however it ends, in reverse
+// order of declaration.
+
+use std.io.print
+
+warp Tx {
+    name: String
+    pub fn commit(take self) { print("commit {.name}") }
+    pub fn rollback(take self) { print("rollback {.name}") }
+}
+
+warp Oops: Error {
+    case Bad
+}
+
+fn plain() {
+    defer print("first declared, last run")
+    defer print("second declared, first run")
+    print("body")
+}
+
+// The value is worked out before the defers run.
+fn returns(n: i32) -> i32 {
+    var x = n
+    defer print("defer sees x = {x}")
+    if n > 5 { return x * 10 }
+    x += 1
+    x
+}
+
+fn fails(bad: bool) -> i32 ! Oops {
+    defer print("cleanup after fails({bad})")
+    if bad { fail .Bad }
+    1
+}
+
+fn tries(o: ?i32) -> ?i32 {
+    defer print("cleanup after tries")
+    let v = o?
+    v + 1
+}
+
+fn loops() {
+    for i in 0..4 {
+        defer print("end of iteration {i}")
+        if i == 1 { continue }
+        if i == 3 { break }
+        print("iteration {i}")
+    }
+    var n = 0
+    let found = loop {
+        defer n += 100
+        n += 1
+        if n > 1 { break n }
+    }
+    print("found {found}, n {n}")
+}
+
+fn blocks() {
+    defer print("outer")
+    {
+        defer print("inner")
+        print("in the block")
+    }
+    print("after the block")
+}
+
+fn transfer(good: bool, early: bool) -> i32 ! Oops {
+    let tx = Tx("t{good}{early}")
+    defer tx => tx.rollback()
+    if early { fail .Bad }
+    if good {
+        tx.commit()
+        return 1
+    }
+    0
+}
+
+fn reuse() {
+    var tx = Tx("first")
+    defer tx => tx.rollback()
+    tx.commit()
+    tx = Tx("second")                      // a new value to clean up
+}
+
+fn in_lambda() {
+    [1, 2].each(x => {
+        defer print("after {x}")
+        print("with {x}")
+    })
+}
+
+fn mended() -> i32 {
+    let v = {
+        defer print("left the block")
+        let a = tries(none)?
+        a
+    } mend -1
+    v
+}
+
+fn main() {
+    plain()
+    print(returns(3))
+    print(returns(9))
+    print("{fails(false):?}")
+    print("{fails(true):?}")
+    print("{tries(some(1)):?} {tries(none):?}")
+    loops()
+    blocks()
+    print("{transfer(true, false):?}")
+    print("{transfer(false, false):?}")
+    print("{transfer(false, true):?}")
+    reuse()
+    in_lambda()
+    print(mended())
+    defer print("main's defer runs last")
+    print("end of main")
+}

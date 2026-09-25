@@ -765,6 +765,8 @@ impl Checker<'_> {
                 None
             }
             (Some(found), None) | (None, Some(found)) => Some(found),
+            // Where the expected type is already an error, it was reported.
+            (None, None) if expected.is_some_and(|t| self.tcx.is_error(t)) => None,
             (None, None) => {
                 let mut diag = Diagnostic::error(codes::T0111, format!("`.{name}` doesn't name anything here"))
                     .primary(span, "nothing called this in context");

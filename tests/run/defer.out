@@ -1,0 +1,42 @@
+body
+second declared, first run
+first declared, last run
+defer sees x = 4
+4
+defer sees x = 9
+90
+cleanup after fails(false)
+ok(1)
+cleanup after fails(true)
+err(Bad)
+cleanup after tries
+cleanup after tries
+some(2) none
+iteration 0
+end of iteration 0
+end of iteration 1
+iteration 2
+end of iteration 2
+end of iteration 3
+found 102, n 202
+in the block
+inner
+after the block
+outer
+commit ttruefalse
+ok(1)
+rollback tfalsefalse
+ok(0)
+rollback tfalsetrue
+err(Bad)
+commit first
+rollback second
+with 1
+after 1
+with 2
+after 2
+cleanup after tries
+left the block
+-1
+end of main
+main's defer runs last

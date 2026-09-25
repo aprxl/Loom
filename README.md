@@ -300,13 +300,13 @@ built in `crates/`, following the plan in `design/lua-backend.md`:
   generics, checked and compiled per instance; `any W` with dynamic
   dispatch and type tests; optionals and errors: `?`, `mend`, `fail`,
   unions, and `main ! E`; arrays, lists and slices; the methods of text,
-  characters and numbers; and lambdas, `Iter` and lazy streams.
+  characters and numbers; lambdas, `Iter` and lazy streams; and `defer`.
   `examples/widgets.loom` runs start to finish. `loom run <file>` runs a
   program; `loom build <file>` writes the Lua; `--emit tokens|ast|hir|lua`
   dumps a stage. The other examples use more than this; the compiler says so
   rather than guessing.
-- **Next:** `defer`, gauges and maps, one slice at a time through every
-  layer.
+- **Next:** gauges and maps, then `once` types, one slice at a time
+  through every layer.
 
 ```bash
 cargo run -p loom -- run tests/run/fizzbuzz.loom

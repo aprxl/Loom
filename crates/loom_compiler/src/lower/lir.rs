@@ -79,6 +79,9 @@ pub struct Stmt {
 pub enum StmtKind {
     /// `local a, b = x, y` (no values: just the declaration).
     Local(Vec<String>, Vec<Expr>),
+    /// `local name <close> = value`: closed when its block ends, however it
+    /// ends (a `defer`).
+    LocalClose(String, Expr),
     Assign(Vec<Expr>, Vec<Expr>),
     /// A call evaluated for its effects.
     Call(Expr),
@@ -168,6 +171,11 @@ impl Printer {
                     self.write(" = ");
                     self.exprs(values);
                 }
+                self.end_line();
+            }
+            StmtKind::LocalClose(name, value) => {
+                self.write(&format!("local {name} <close> = "));
+                self.expr(value, 0);
                 self.end_line();
             }
             StmtKind::Assign(targets, values) => {
