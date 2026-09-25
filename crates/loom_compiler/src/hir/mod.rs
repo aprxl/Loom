@@ -133,6 +133,8 @@ pub struct Module {
     pub imports: IndexMap<String, Import>,
     /// Every top-level definition, named or not (weaves, `const` blocks), in source order.
     pub decls: Vec<DefId>,
+    /// Its `test`s, in source order. Their names aren't in `items`: nothing calls a test.
+    pub tests: Vec<DefId>,
 }
 
 #[derive(Clone, Copy, Debug)]

@@ -566,13 +566,14 @@ fn where_str(preds: &[WherePred]) -> String {
 }
 
 fn fn_decl(f: &FnDecl) -> String {
-    let qualifier = match f.qualifier {
-        FnQualifier::None => "",
-        FnQualifier::Const => "const ",
-        FnQualifier::Unsafe => "unsafe ",
+    let keyword = match f.qualifier {
+        FnQualifier::None => "fn",
+        FnQualifier::Const => "const fn",
+        FnQualifier::Unsafe => "unsafe fn",
+        FnQualifier::Test => "test",
     };
     let params: Vec<String> = f.params.iter().map(param).collect();
-    let mut s = format!("{qualifier}fn {}{}({})", f.name.name, generics(&f.generics), params.join(", "));
+    let mut s = format!("{keyword} {}{}({})", f.name.name, generics(&f.generics), params.join(", "));
     match &f.ret {
         FnRet::Unit => {}
         FnRet::Value(t) => {

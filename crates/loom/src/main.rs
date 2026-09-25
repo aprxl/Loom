@@ -5,11 +5,10 @@
 //!   stage with `--emit tokens|ast|hir|lua`.
 //! - `run` compiles, writes the bundle to a temporary file, and runs it in a
 //!   child process (`loom lua-host`), whose exit code it passes on.
-//! - `lua-host` (hidden) runs a bundle and reports how it ended, with Loom
-//!   source locations.
-//!
-//! `test` exists so the CLI has its final shape, and says it isn't
-//! implemented yet.
+//! - `test` compiles a file's tests (and only then are they compiled) and
+//!   runs each in a child process the same way, which prints a report.
+//! - `lua-host` (hidden) runs a bundle, or a test bundle's tests, and
+//!   reports how it ended, with Loom source locations.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -19,6 +18,7 @@ use loom_compiler::hir::{self, Resolved};
 use loom_compiler::lower::{self, Bundle};
 use loom_compiler::modules::FsLoader;
 use loom_compiler::typeck::{self, Typed};
+use loom_host::{Host, Outcome, Output};
 use loom_syntax::diag::{ColorMode, emit_to_stderr};
 use loom_syntax::token::dump_tokens;
 use loom_syntax::{Diagnostic, FileId, SourceDb, lex, parse, pretty};
@@ -61,12 +61,18 @@ enum Command {
     },
     /// Check a Loom file for errors without writing anything.
     Check { file: PathBuf },
-    /// Run a file's `#test` functions.
+    /// Run a file's tests (`test name() { … }`).
     Test { file: PathBuf },
-    /// Run a Lua bundle in the bundled VM (used internally by `loom run`).
+    /// Run a Lua bundle in the bundled VM (used internally by `loom run` and `loom test`).
     #[command(hide = true)]
     LuaHost {
         bundle: PathBuf,
+        /// The bundle holds tests: run each and print a report.
+        #[arg(long)]
+        test: bool,
+        /// The program's name, the first of `env.args()`.
+        #[arg(long)]
+        program: Option<String>,
         #[arg(last = true)]
         args: Vec<String>,
     },
@@ -126,15 +132,10 @@ fn run(cli: Cli) -> ExitCode {
         Command::Build { file, out, emit } => build(&file, out.as_deref(), emit, color),
         Command::Check { file } => check(&file, color),
         Command::Run { file, args } => run_file(&file, &args, color),
-        Command::Test { .. } => not_yet("loom test"),
-        Command::LuaHost { bundle, .. } => lua_host(&bundle),
+        Command::Test { file } => test_file(&file, color),
+        Command::LuaHost { bundle, test: true, .. } => lua_host_tests(&bundle),
+        Command::LuaHost { bundle, test: false, program, args } => lua_host(&bundle, program, args),
     }
-}
-
-fn not_yet(what: &str) -> ExitCode {
-    eprintln!("error: `{what}` isn't implemented yet");
-    eprintln!("  = help: `loom run <file>` compiles and runs a program; `loom check <file>` checks one");
-    ExitCode::from(EXIT_COMPILE_ERROR)
 }
 
 /// Loads `path` into a fresh source database.
@@ -211,8 +212,14 @@ fn check(path: &Path, color: ColorMode) -> ExitCode {
 
 /// Compiles the program rooted at `path` to a Lua bundle.
 fn compile(path: &Path, color: ColorMode) -> Result<(SourceDb, Bundle), ExitCode> {
+    compile_with(path, color, lower::lower)
+}
+
+type Lowering = fn(&SourceDb, &hir::Program, &Typed) -> Result<Bundle, Vec<Diagnostic>>;
+
+fn compile_with(path: &Path, color: ColorMode, lowering: Lowering) -> Result<(SourceDb, Bundle), ExitCode> {
     let (db, resolved, typed) = typecheck(path, color)?;
-    match lower::lower(&db, &resolved.program, &typed) {
+    match lowering(&db, &resolved.program, &typed) {
         Ok(bundle) => Ok((db, bundle)),
         Err(diagnostics) => {
             report(&db, path, &diagnostics, "compile", color)?;
@@ -290,67 +297,144 @@ fn write_bundle(path: &Path, bundle: &Bundle) -> Result<(), ExitCode> {
 fn run_file(path: &Path, args: &[String], color: ColorMode) -> ExitCode {
     let run = || -> Result<ExitCode, ExitCode> {
         let (_, bundle) = compile(path, color)?;
-        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("main");
-        let bundle_path = std::env::temp_dir().join(format!("loom-{}-{stem}.lua", std::process::id()));
-        write_bundle(&bundle_path, &bundle)?;
-        let exe = std::env::current_exe().map_err(|e| {
-            eprintln!("error: can't find the loom executable: {e}");
-            ExitCode::from(EXIT_INTERNAL)
-        })?;
-        let status = std::process::Command::new(exe).arg("lua-host").arg(&bundle_path).arg("--").args(args).status();
-        let _ = std::fs::remove_file(&bundle_path);
-        let _ = std::fs::remove_file(map_path(&bundle_path));
-        match status {
-            Ok(status) => Ok(status.code().map_or(ExitCode::from(EXIT_INTERNAL), |c| ExitCode::from(c as u8))),
-            Err(e) => {
-                eprintln!("error: can't start the program: {e}");
-                Err(ExitCode::from(EXIT_INTERNAL))
-            }
-        }
+        let program = ["--program".to_string(), path.display().to_string()];
+        spawn_host(path, &bundle, &program, args)
     };
     run().unwrap_or_else(|code| code)
 }
 
-/// `loom lua-host`: runs a bundle and reports how it ended.
-fn lua_host(bundle: &Path) -> ExitCode {
-    let lua = match std::fs::read_to_string(bundle) {
-        Ok(text) => text,
-        Err(e) => {
-            eprintln!("error: can't read `{}`: {e}", bundle.display());
-            return ExitCode::from(EXIT_INTERNAL);
-        }
+/// `loom test`: compile the tests, then run them in a child process, which
+/// prints the report.
+fn test_file(path: &Path, color: ColorMode) -> ExitCode {
+    let run = || -> Result<ExitCode, ExitCode> {
+        let (_, bundle) = compile_with(path, color, lower::lower_tests)?;
+        spawn_host(path, &bundle, &["--test".to_string()], &[])
     };
-    let map = std::fs::read_to_string(map_path(bundle)).ok().and_then(|t| loom_host::SourceMap::parse(&t));
-    match loom_host::run_bundle(&lua, map.as_ref(), loom_host::Output::Stdout) {
-        loom_host::Outcome::Finished => ExitCode::SUCCESS,
-        loom_host::Outcome::Unravel { message, location } => {
-            eprintln!("unravel: {message}");
-            print_location(location.as_ref());
-            ExitCode::from(EXIT_UNRAVEL)
-        }
-        loom_host::Outcome::Failed { message } => {
-            eprintln!("error: {message}");
-            ExitCode::from(EXIT_FAILED)
-        }
-        loom_host::Outcome::Crash { message, location } => {
-            eprintln!("internal error: {message}");
-            print_location(location.as_ref());
-            eprintln!("  = note: this is a bug in Loom, not in your program");
-            ExitCode::from(EXIT_INTERNAL)
+    run().unwrap_or_else(|code| code)
+}
+
+/// Writes `bundle` to a temporary file and runs `loom lua-host` on it with
+/// `flags`, passing `args` to the program.
+fn spawn_host(path: &Path, bundle: &Bundle, flags: &[String], args: &[String]) -> Result<ExitCode, ExitCode> {
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("main");
+    let bundle_path = std::env::temp_dir().join(format!("loom-{}-{stem}.lua", std::process::id()));
+    write_bundle(&bundle_path, bundle)?;
+    let exe = std::env::current_exe().map_err(|e| {
+        eprintln!("error: can't find the loom executable: {e}");
+        ExitCode::from(EXIT_INTERNAL)
+    })?;
+    let status =
+        std::process::Command::new(exe).arg("lua-host").arg(&bundle_path).args(flags).arg("--").args(args).status();
+    let _ = std::fs::remove_file(&bundle_path);
+    let _ = std::fs::remove_file(map_path(&bundle_path));
+    match status {
+        Ok(status) => Ok(status.code().map_or(ExitCode::from(EXIT_INTERNAL), |c| ExitCode::from(c as u8))),
+        Err(e) => {
+            eprintln!("error: can't start the program: {e}");
+            Err(ExitCode::from(EXIT_INTERNAL))
         }
     }
 }
 
+/// Reads a bundle and its source map, if it has one.
+fn read_bundle(bundle: &Path) -> Result<(String, Option<loom_host::SourceMap>), ExitCode> {
+    let lua = std::fs::read_to_string(bundle).map_err(|e| {
+        eprintln!("error: can't read `{}`: {e}", bundle.display());
+        ExitCode::from(EXIT_INTERNAL)
+    })?;
+    let map = std::fs::read_to_string(map_path(bundle)).ok().and_then(|t| loom_host::SourceMap::parse(&t));
+    Ok((lua, map))
+}
+
+/// `loom lua-host`: runs a bundle and reports how it ended.
+fn lua_host(bundle: &Path, program: Option<String>, args: Vec<String>) -> ExitCode {
+    let (lua, map) = match read_bundle(bundle) {
+        Ok(read) => read,
+        Err(code) => return code,
+    };
+    let program = program.unwrap_or_else(|| bundle.display().to_string());
+    let host = Host { output: Output::Stdout, sandbox: false, args: std::iter::once(program).chain(args).collect() };
+    let outcome = loom_host::run_bundle(&lua, map.as_ref(), host);
+    if let Some(text) = describe(&outcome) {
+        eprint!("{text}");
+    }
+    exit_code(&outcome)
+}
+
+/// `loom lua-host --test`: runs a test bundle's tests and prints a report.
+/// It fails if any test does.
+fn lua_host_tests(bundle: &Path) -> ExitCode {
+    let (lua, map) = match read_bundle(bundle) {
+        Ok(read) => read,
+        Err(code) => return code,
+    };
+    let runs = match loom_host::run_tests(&lua, map.as_ref(), false) {
+        Ok(runs) => runs,
+        Err(outcome) => {
+            eprint!("{}", describe(&outcome).unwrap_or_default());
+            return exit_code(&outcome);
+        }
+    };
+    let plural = |n: usize| if n == 1 { "" } else { "s" };
+    println!("running {} test{}", runs.len(), plural(runs.len()));
+    for run in &runs {
+        let verdict = if run.outcome == Outcome::Finished { "ok" } else { "FAILED" };
+        println!("test {} ... {verdict}", run.name);
+    }
+    let failed: Vec<&loom_host::TestRun> = runs.iter().filter(|r| r.outcome != Outcome::Finished).collect();
+    if !failed.is_empty() {
+        println!("\nfailures:");
+        for run in &failed {
+            println!("\n---- {} ----", run.name);
+            print!("{}", run.output);
+            if !run.output.is_empty() && !run.output.ends_with('\n') {
+                println!();
+            }
+            print!("{}", describe(&run.outcome).unwrap_or_default());
+        }
+    }
+    let verdict = if failed.is_empty() { "ok" } else { "FAILED" };
+    println!("\ntest result: {verdict}. {} passed; {} failed", runs.len() - failed.len(), failed.len());
+    // A crash is Loom's bug, whatever else happened.
+    if let Some(crash) = failed.iter().find(|r| matches!(r.outcome, Outcome::Crash { .. })) {
+        return exit_code(&crash.outcome);
+    }
+    if failed.is_empty() { ExitCode::SUCCESS } else { ExitCode::from(EXIT_FAILED) }
+}
+
+fn exit_code(outcome: &Outcome) -> ExitCode {
+    ExitCode::from(match outcome {
+        Outcome::Finished => 0,
+        Outcome::Unravel { .. } => EXIT_UNRAVEL,
+        Outcome::Failed { .. } => EXIT_FAILED,
+        Outcome::Crash { .. } => EXIT_INTERNAL,
+    })
+}
+
+/// What went wrong, for a run that didn't finish: the message, and where.
+fn describe(outcome: &Outcome) -> Option<String> {
+    Some(match outcome {
+        Outcome::Finished => return None,
+        Outcome::Unravel { message, location } => {
+            format!("unravel: {message}\n{}", location_text(location.as_ref()))
+        }
+        Outcome::Failed { message } => format!("error: {message}\n"),
+        Outcome::Crash { message, location } => format!(
+            "internal error: {message}\n{}  = note: this is a bug in Loom, not in your program\n",
+            location_text(location.as_ref())
+        ),
+    })
+}
+
 /// `  --> file:line:col` and the source line, with a caret under the column.
-fn print_location(location: Option<&loom_host::Location>) {
-    let Some(at) = location else { return };
-    eprintln!("  --> {}:{}:{}", at.file, at.line, at.column);
-    let Ok(text) = std::fs::read_to_string(&at.file) else { return };
-    let Some(line) = text.lines().nth(at.line.saturating_sub(1) as usize) else { return };
+fn location_text(location: Option<&loom_host::Location>) -> String {
+    let Some(at) = location else { return String::new() };
+    let mut out = format!("  --> {}:{}:{}\n", at.file, at.line, at.column);
+    let Ok(text) = std::fs::read_to_string(&at.file) else { return out };
+    let Some(line) = text.lines().nth(at.line.saturating_sub(1) as usize) else { return out };
     let number = at.line.to_string();
     let pad = " ".repeat(number.len());
     let caret = " ".repeat(at.column.saturating_sub(1) as usize);
-    eprintln!("{pad} |");
-    eprintln!("{number} | {line}");
-    eprintln!("{pad} | {caret}^");
+    out.push_str(&format!("{pad} |\n{number} | {line}\n{pad} | {caret}^\n"));
+    out
 }

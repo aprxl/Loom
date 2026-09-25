@@ -51,6 +51,7 @@ codes! {
     S0209 = "`pub(get)` outside a field";
     S0210 = "missing initializer";
     S0211 = "nesting is too deep";
+    S0212 = "test inside a function";
 
     // N01xx: names and modules
     N0101 = "unknown name";
@@ -89,6 +90,7 @@ codes! {
     T0116 = "ambiguous method";
     T0117 = "not a format spec";
     T0118 = "control flow can't leave a `defer`";
+    T0119 = "a test's signature isn't `test name()` or `test name() ! E`";
 
     // G02xx: gauges
     G0201 = "value outside a gauge";

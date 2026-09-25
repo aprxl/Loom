@@ -41,7 +41,7 @@ SEP          = NL | ";" | "," ;
 
 (* ------------------------------------------------------------------ items *)
 
-file         = { item SEP } ;
+file         = { ( item | test_decl ) SEP } ;       (* tests only at the top level *)
 
 item         = { attribute } , [ "pub" ] ,
                ( use_decl | const_decl | type_decl | warp_decl | weft_decl
@@ -92,6 +92,7 @@ returns      = "->" , type , [ "!" , error_type ]
              | "<~" , type ;
 givens       = "given" , IDENT , ":" , type , { "," , IDENT , ":" , type } ;
 fn_body      = block | "=" , expr ;
+test_decl    = "test" , IDENT , "(" , ")" , [ "!" , error_type ] , fn_body ;   (* `test` is contextual *)
 
 generics     = "[" , gparam , { "," , gparam } , "]" ;
 gparam       = TYPE_IDENT , [ ":" , weft_list ]

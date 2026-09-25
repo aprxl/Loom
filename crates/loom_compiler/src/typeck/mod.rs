@@ -46,7 +46,7 @@ mod weave;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use loom_syntax::Diagnostic;
-use loom_syntax::ast::ParamMode;
+use loom_syntax::ast::{FnQualifier, ParamMode};
 use loom_syntax::diag::codes;
 use loom_syntax::source::Span;
 
@@ -648,8 +648,16 @@ impl<'p> Checker<'p> {
                 self.r.reachable.push(id);
                 self.check_forward_instance(id);
             }
-            // A generic function is only checked for particular types.
-            DefKind::Fn(_) if inst.args.is_empty() && self.is_generic(inst.def) => {}
+            // A generic function is only checked for particular types, and
+            // nothing gives a test any.
+            DefKind::Fn(f) if inst.args.is_empty() && self.is_generic(inst.def) => {
+                if f.qualifier == FnQualifier::Test {
+                    self.diags.push(
+                        Diagnostic::error(codes::T0119, "a test can't have generic parameters or `given`s")
+                            .primary(d.span, "in this test"),
+                    );
+                }
+            }
             DefKind::Fn(f) => {
                 self.r.reachable.push(id);
                 let mark = self.diags.len();
@@ -840,6 +848,9 @@ impl<'p> Checker<'p> {
 
     fn check_fn_body(&mut self, id: BodyId, f: &hir::FnDef) {
         let Some(sig) = self.fn_sig(id) else { return };
+        if f.qualifier == FnQualifier::Test {
+            self.check_test_sig(f, &sig);
+        }
         let first_var = self.vars.len();
         for (param, sig_param) in f.params.iter().zip(&sig.params) {
             self.b.local_ty.insert(param.local, sig_param.ty);
@@ -855,6 +866,30 @@ impl<'p> Checker<'p> {
         }
         self.finish_body(first_var);
         self.check_moves(f, sig.ret == self.tcx.unit);
+    }
+
+    /// A test takes nothing, and returns nothing or fails with an error:
+    /// `loom test` calls it with no arguments and looks at how it ended.
+    fn check_test_sig(&mut self, f: &hir::FnDef, sig: &FnSig) {
+        let Some(def) = self.current else { return };
+        let span = self.p.def(def).span;
+        let returns_error = matches!(self.tcx.kind(sig.ret), TyKind::Result(ok, _) if *ok == self.tcx.unit);
+        let problem = if !f.params.is_empty() {
+            Some("a test can't have parameters")
+        } else if !f.generics.is_empty() || !f.givens.is_empty() {
+            Some("a test can't have generic parameters or `given`s")
+        } else if sig.ret != self.tcx.unit && !returns_error && sig.ret != self.tcx.error {
+            Some("a test returns nothing, or `! E`")
+        } else {
+            None
+        };
+        if let Some(problem) = problem {
+            self.diags.push(
+                Diagnostic::error(codes::T0119, problem)
+                    .primary(span, "in this test")
+                    .help("write it as `test name() { … }`, or `test name() ! E { … }` to use `?` in it"),
+            );
+        }
     }
 
     // ------------------------------------------------------------ signatures and types

@@ -1,0 +1,20 @@
+running 4 tests
+test adds ... ok
+test halves ... ok
+test fails_with_an_error ... FAILED
+test unravels ... FAILED
+
+failures:
+
+---- fails_with_an_error ----
+about to halve 3
+error: Bad(n: 3)
+
+---- unravels ----
+unravel: three is not four
+  --> tests/test/report.loom:29:5
+   |
+29 |     assert(xs.len() == 4, "three is not four")
+   |     ^
+
+test result: FAILED. 2 passed; 2 failed

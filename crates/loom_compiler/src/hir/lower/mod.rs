@@ -333,7 +333,10 @@ impl<'a> Resolver<'a> {
             let defs = self.collect_item(m, item);
             if let Some(def) = defs.def {
                 self.p.modules[m.index()].decls.push(def);
-                self.declare_in_module(m, def);
+                match &item.kind {
+                    ast::ItemKind::Fn(f) if f.qualifier == ast::FnQualifier::Test => self.declare_test(m, def),
+                    _ => self.declare_in_module(m, def),
+                }
             }
             if matches!(item.kind, ast::ItemKind::Extern(_)) {
                 for def in defs.members.iter().flatten() {
@@ -360,6 +363,22 @@ impl<'a> Resolver<'a> {
             }
         }
         prefix.truncate(depth);
+    }
+
+    /// A test is only named in its module's list of tests, where two can't
+    /// share a name.
+    fn declare_test(&mut self, m: ModuleId, def: DefId) {
+        let name = &self.p.def(def).name;
+        if let Some(&first) = self.p.module(m).tests.iter().find(|&&t| self.p.def(t).name == *name) {
+            let (first_span, span) = (self.p.def(first).span, self.p.def(def).span);
+            self.report(
+                Diagnostic::error(codes::N0104, format!("there are two tests called `{name}`"))
+                    .primary(span, "defined again here")
+                    .secondary(first_span, "first defined here"),
+            );
+            return;
+        }
+        self.p.modules[m.index()].tests.push(def);
     }
 
     fn declare_in_module(&mut self, m: ModuleId, def: DefId) {
@@ -788,5 +807,6 @@ fn empty_module(path: String, file: Option<FileId>, parent: Option<ModuleId>) ->
         items: IndexMap::new(),
         imports: IndexMap::new(),
         decls: Vec::new(),
+        tests: Vec::new(),
     }
 }

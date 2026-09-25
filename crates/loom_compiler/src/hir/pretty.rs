@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
-use loom_syntax::ast::{AssignOp, FieldName, ParamMode, PlaceMode, UnaryOp, Vis, WarpModifier};
+use loom_syntax::ast::{AssignOp, FieldName, FnQualifier, ParamMode, PlaceMode, UnaryOp, Vis, WarpModifier};
 use loom_syntax::pretty::lit_str;
 
 use super::{
@@ -206,7 +206,8 @@ impl Printer<'_> {
         if let Some(abi) = &f.abi {
             let _ = write!(s, "extern {abi:?} ");
         }
-        let _ = write!(s, "fn {name}{}(", self.generics(&f.generics));
+        let keyword = if f.qualifier == FnQualifier::Test { "test" } else { "fn" };
+        let _ = write!(s, "{keyword} {name}{}(", self.generics(&f.generics));
         let params: Vec<String> = f
             .params
             .iter()

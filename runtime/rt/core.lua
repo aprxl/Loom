@@ -887,6 +887,40 @@ rt.ext["std.env.get"] = function(name)
   return os.getenv(name)
 end
 
+rt.ext["std.env.args"] = function()
+  local src = host and host.args or { [1] = "main" }
+  local args = { n = 0 }
+  for i, a in ipairs(src) do
+    args[i] = a
+    args.n = i
+  end
+  return args
+end
+
+-- Waiting and the terminal need the host (`loom run`); a sandboxed run
+-- doesn't wait, and has no keys held.
+local function needs_host(what)
+  error(MARK .. what .. " needs `loom run`: this Lua has no Loom host", 3)
+end
+
+rt.ext["std.time.sleep"] = function(d)
+  if not host then needs_host("time.sleep") end
+  host.sleep(d.nanos)
+end
+
+rt.ext["std.term.raw_mode"] = function(on)
+  if not host then needs_host("term.raw_mode") end
+  local problem = host.raw_mode(on)
+  if problem then error(MARK .. problem, 2) end
+end
+
+rt.ext["std.term.poll_keys"] = function(keymap)
+  if not host then needs_host("term.poll_keys") end
+  local bits, problem = host.poll_keys(keymap)
+  if problem then error(MARK .. problem, 2) end
+  return bits
+end
+
 rt.ext["std.error.unravel"] = function(message)
   error(MARK .. message, 2)
 end

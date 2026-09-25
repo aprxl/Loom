@@ -87,9 +87,16 @@ impl Parser<'_> {
             TokenKind::Keyword(Keyword::Ref) => self.nth_is_kw(1, Keyword::Warp),
             TokenKind::Keyword(Keyword::Unsafe) => self.nth_is_kw(1, Keyword::Fn),
             TokenKind::Keyword(Keyword::Const) => self.nth_is_kw(1, Keyword::Fn) || self.at_const_decl(),
-            TokenKind::Ident => self.at_contextual("once") && self.nth_is_kw(1, Keyword::Warp),
+            TokenKind::Ident => (self.at_contextual("once") && self.nth_is_kw(1, Keyword::Warp)) || self.at_test(),
             _ => false,
         }
+    }
+
+    /// `test name(` (or `test name[`): a test, where `test` is a keyword only here.
+    fn at_test(&self) -> bool {
+        self.at_contextual("test")
+            && matches!(self.nth_kind(1), TokenKind::Ident)
+            && (self.nth_is_punct(2, Punct::LParen) || self.nth_is_punct(2, Punct::LBracket))
     }
 
     /// `const NAME =` or `const NAME:` (as opposed to compile-time code).
@@ -122,6 +129,7 @@ impl Parser<'_> {
                 ItemKind::Fn(self.fn_decl(NameCase::Value))
             }
             TokenKind::Keyword(Keyword::Fn) => ItemKind::Fn(self.fn_decl(NameCase::Value)),
+            TokenKind::Ident if self.at_test() => ItemKind::Fn(self.fn_decl(NameCase::Value)),
             TokenKind::Keyword(Keyword::Type) => ItemKind::Type(self.type_decl()),
             TokenKind::Keyword(Keyword::Warp) => ItemKind::Warp(self.warp(WarpModifier::None)),
             TokenKind::Keyword(Keyword::Ref) if self.nth_is_kw(1, Keyword::Warp) => {
@@ -452,10 +460,16 @@ impl Parser<'_> {
             FnQualifier::Const
         } else if self.eat_kw(Keyword::Unsafe).is_some() {
             FnQualifier::Unsafe
+        } else if self.at_test() {
+            FnQualifier::Test
         } else {
             FnQualifier::None
         };
-        self.expect_kw(Keyword::Fn);
+        if qualifier == FnQualifier::Test {
+            self.bump();
+        } else {
+            self.expect_kw(Keyword::Fn);
+        }
         let name = self.ident(name_case, "function");
         let generics = self.generic_params();
         let params = self.params();

@@ -172,7 +172,7 @@ ties it off. A warp holding a `once` value is `once` itself, and never
 `Copy`.
 
 A `File` is `{path}`: each write opens the file, appends and closes it, so
-none is left open however the program ends. Captured runs get an in-memory
+none is left open however the program ends. Sandboxed runs get an in-memory
 file system from the host.
 
 ## Maps and sets
@@ -202,7 +202,7 @@ intervals, literal checks and `is` narrowing are all at compile time. A
 narrowing only happens for a local that can't change and already has the
 gauge's base type.
 
-Captured runs (the test harness) see an empty environment through the
+Sandboxed runs (the fixture tests) see an empty environment through the
 host's `getenv`, so `env.get` gives the same answer on every machine.
 
 ## Text and primitive methods
@@ -321,6 +321,32 @@ location through the map and prints a rustc-style report.
 Implemented so far: 0, 1, 2, 70 and 101. Still to come: Ctrl-C
 (130), `process.exit`, an instruction budget, and `--lua PATH` to run a bundle
 in an external interpreter.
+
+The host gives the program `env.args()` (the Loom file's path, then the
+arguments after `--`), `time.sleep`, and the terminal: `term.raw_mode` and
+`term.poll_keys` go through crossterm. Where the terminal reports key
+releases (the Windows console does), a key is held from its press to its
+release; elsewhere a key counts as held for the one poll after it's pressed.
+In raw mode Ctrl-C arrives as a key, so `poll_keys` unravels with
+"interrupted (Ctrl-C)" and the program's `defer`s restore the terminal. The
+host turns raw mode off, too, if the program ends with it on.
+
+### Tests
+
+`loom test` lowers the same program with `lower_tests`: test bodies are
+lowered only then, and the bundle returns `{{name, run}, …}` for the root
+module's tests instead of `main`. `loom lua-host --test` calls each `run` in
+one VM, collecting its output separately, and prints a report like cargo's.
+A test that returns `! E` is wrapped like `main`: `run` returns the error's
+text when it fails. `loom test` exits with 0 when every test passed, 1 when
+one failed, and 70 when one hit a Loom bug.
+
+### Sandboxed runs
+
+The fixture tests run programs sandboxed (`Host { sandbox: true }`): no
+environment variables (`env.get` gives `none`), files in memory starting
+empty, no terminal (`poll_keys` gives 0) and no waiting (`sleep` returns at
+once). What a sandboxed run prints doesn't depend on the machine.
 
 ## Not supported in v1
 

@@ -99,10 +99,11 @@ language through every layer (type checking, lowering to Lua, the runtime,
 
 14. `once` warps and loose ends (L0301), and `std.fs` files.
     `examples/ledger.loom` runs, checked by `tests/examples/ledger.out`.
+15. tests (`test name() { … }`, `loom test`, checked by `tests/test`), and
+    the host: `env.args`, `time.sleep`, `term.raw_mode`, `term.poll_keys`.
 
-Next: chip8 (`Rng`, `Duration`, `rotate_right`, `const assert`, the
-terminal), then compile-time code, spools and shuttles. chip8 is close: `Rng`, `Duration` (`16.ms()`),
-`rotate_right`, and `const assert`.
+Next: the rest of chip8 (`Rng`, `rotate_right`, `const assert`), then
+compile-time code, spools and shuttles.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and

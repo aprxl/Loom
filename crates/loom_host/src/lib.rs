@@ -4,14 +4,16 @@
 //! hidden `lua-host` subcommand), the test harness, and compile-time `const`
 //! evaluation. Exactly one of the `lua54` / `lua55` features is enabled.
 //!
-//! [`run`] runs a compiled bundle and classifies how it ended; [`srcmap`]
-//! maps bundle lines back to Loom source. Still to come (see
+//! [`run`] runs a compiled bundle (or its tests) and classifies how it
+//! ended; [`srcmap`] maps bundle lines back to Loom source; [`term`] is the
+//! terminal `std.term` talks to. Still to come (see
 //! `design/lua-backend.md`): an instruction budget and Ctrl-C handling.
 
 pub mod run;
 pub mod srcmap;
+pub mod term;
 
-pub use run::{Outcome, Output, run_bundle};
+pub use run::{Host, Outcome, Output, TestRun, run_bundle, run_tests};
 pub use srcmap::{Location, SourceMap};
 
 use mlua::{Lua, Table};

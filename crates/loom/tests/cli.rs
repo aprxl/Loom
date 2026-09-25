@@ -116,15 +116,25 @@ fn missing_files_are_reported() {
 }
 
 #[test]
-fn unfinished_commands_say_so() {
-    let path = temp_source(
-        "hello",
-        "fn main() {}
-",
-    );
+fn run_passes_arguments_to_the_program() {
+    let source = "use std.env\nuse std.io.print\n\nfn main() {\n    let args = env.args()\n    print(args.len())\n    for a in args.skip(1) {\n        print(a)\n    }\n}\n";
+    let path = temp_source("args", source);
+    let path = path.to_str().expect("utf-8 path");
+    let out = loom(&["run", path, "--", "one", "two"]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert_eq!(text(&out.stdout), "3\none\ntwo\n");
+}
+
+#[test]
+fn test_runs_the_tests_and_fails_when_one_does() {
+    let source = "test good() = assert(true)\ntest bad() = assert(false, \"nope\")\n";
+    let path = temp_source("tests", source);
     let out = loom(&["test", path.to_str().expect("utf-8 path")]);
-    assert_eq!(out.status.code(), Some(2));
-    assert!(text(&out.stderr).contains("isn't implemented yet"));
+    assert_eq!(out.status.code(), Some(1), "{}", text(&out.stderr));
+    let report = text(&out.stdout);
+    assert!(report.contains("test good ... ok\ntest bad ... FAILED\n"), "{report}");
+    assert!(report.contains("unravel: nope"), "{report}");
+    assert!(report.ends_with("test result: FAILED. 1 passed; 1 failed\n"), "{report}");
 }
 
 #[test]

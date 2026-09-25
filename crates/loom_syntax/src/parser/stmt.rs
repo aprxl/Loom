@@ -1,7 +1,7 @@
 //! Blocks and statements.
 
 use super::{NameCase, Parser};
-use crate::ast::{AssignOp, BinaryOp, Block, Expr, ExprKind, Stmt, StmtKind};
+use crate::ast::{AssignOp, BinaryOp, Block, Expr, ExprKind, FnQualifier, ItemKind, Stmt, StmtKind};
 use crate::diag::{Diagnostic, codes};
 use crate::token::{Keyword, Punct, TokenKind};
 
@@ -84,7 +84,20 @@ impl Parser<'_> {
             }
             // Labeled loops (`outer: for …`) are expressions: see `primary`.
             _ if self.at_item_start() => match self.item() {
-                Some(item) => StmtKind::Item(Box::new(item)),
+                Some(item) => {
+                    if let ItemKind::Fn(f) = &item.kind
+                        && f.qualifier == FnQualifier::Test
+                    {
+                        let span = f.name.span;
+                        self.error_at(
+                            codes::S0212,
+                            span,
+                            "a test can't be inside a function",
+                            "move it to the top level",
+                        );
+                    }
+                    StmtKind::Item(Box::new(item))
+                }
                 None => StmtKind::Expr(Expr { kind: ExprKind::Error, span: start }),
             },
             _ => StmtKind::Expr(self.stmt_expr()),

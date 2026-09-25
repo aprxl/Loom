@@ -1,19 +1,21 @@
 //! Running a compiled bundle.
 //!
-//! The bundle is one Lua chunk that returns `main`. The host gives it a
-//! `__LOOM_HOST` table (so output goes through Rust's stdout, which writes
-//! UTF-8 correctly to the Windows console), calls `main`, and classifies
-//! what happened. An unravel is a string starting with the runtime's
-//! marker, raised at the Loom code's position; anything else that escapes
-//! is a bug in the compiler or runtime.
+//! The bundle is one Lua chunk that returns `main`, or for `loom test` a
+//! list of `{name, run}` tests. The host gives it a `__LOOM_HOST` table
+//! (so output goes through Rust's stdout, which writes UTF-8 correctly to
+//! the Windows console), calls what it returned, and classifies what
+//! happened. An unravel is a string starting with the runtime's marker,
+//! raised at the Loom code's position; anything else that escapes is a bug
+//! in the compiler or runtime.
 
 use std::cell::RefCell;
 use std::io::Write as _;
 use std::rc::Rc;
 
-use mlua::{Function, Lua};
+use mlua::{Function, Lua, Table};
 
 use crate::srcmap::{Location, SourceMap};
+use crate::term::Term;
 
 /// The marker at the start of every unravel message (`rt.MARK`).
 pub const UNRAVEL_MARK: &str = "\u{1f}LOOM\u{1f}";
@@ -22,9 +24,27 @@ pub const UNRAVEL_MARK: &str = "\u{1f}LOOM\u{1f}";
 #[derive(Clone, Debug)]
 pub enum Output {
     Stdout,
-    /// Collected, for tests. A captured run also sees an empty environment,
-    /// so what it prints doesn't depend on the machine.
+    /// Collected in a buffer.
     Capture(Rc<RefCell<Vec<u8>>>),
+}
+
+/// What a program run gets from the machine it runs on.
+#[derive(Clone, Debug)]
+pub struct Host {
+    pub output: Output,
+    /// No environment variables, files in memory (starting empty), no
+    /// terminal and no waiting: a run whose output doesn't depend on the
+    /// machine, for the fixture tests.
+    pub sandbox: bool,
+    /// `env.args()`: the program's name, then its arguments.
+    pub args: Vec<String>,
+}
+
+impl Host {
+    /// A sandboxed run whose output lands in `buffer`.
+    pub fn captured(buffer: Rc<RefCell<Vec<u8>>>) -> Host {
+        Host { output: Output::Capture(buffer), sandbox: true, args: vec!["main".into()] }
+    }
 }
 
 /// How a run ended.
@@ -36,7 +56,7 @@ pub enum Outcome {
         message: String,
         location: Option<Location>,
     },
-    /// `main ! E` returned an error, shown here.
+    /// `main ! E` (or a test) returned an error, shown here.
     Failed {
         message: String,
     },
@@ -48,16 +68,55 @@ pub enum Outcome {
 }
 
 /// Runs `bundle`, mapping error positions through `map`.
-pub fn run_bundle(bundle: &str, map: Option<&SourceMap>, output: Output) -> Outcome {
+pub fn run_bundle(bundle: &str, map: Option<&SourceMap>, host: Host) -> Outcome {
     let lua = Lua::new();
-    let result = install_host(&lua, output.clone()).and_then(|()| {
+    let stdout = matches!(host.output, Output::Stdout);
+    let term = Rc::new(RefCell::new(Term::default()));
+    let result = install_host(&lua, host, term.clone()).and_then(|()| {
         let main: Function = lua.load(bundle).set_name("=bundle").eval()?;
         // `main ! E` returns its error's text when it fails.
         main.call::<Option<mlua::String>>(())
     });
-    if let Output::Stdout = output {
+    term.borrow_mut().restore();
+    if stdout {
         let _ = std::io::stdout().flush();
     }
+    outcome(result, map)
+}
+
+/// One test of a test bundle, and how it went.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TestRun {
+    pub name: String,
+    pub outcome: Outcome,
+    /// What it printed.
+    pub output: String,
+}
+
+/// Runs the tests of a bundle built by `lower_tests`, one after another,
+/// each with its own output. `Err` if the bundle doesn't even load.
+pub fn run_tests(bundle: &str, map: Option<&SourceMap>, sandbox: bool) -> Result<Vec<TestRun>, Outcome> {
+    let lua = Lua::new();
+    let buffer = Rc::new(RefCell::new(Vec::new()));
+    let host = Host { output: Output::Capture(buffer.clone()), sandbox, args: vec!["test".into()] };
+    let term = Rc::new(RefCell::new(Term::default()));
+    let tests = install_host(&lua, host, term.clone())
+        .and_then(|()| lua.load(bundle).set_name("=bundle").eval::<Table>())
+        .map_err(|e| outcome(Err(e), map))?;
+    let mut runs = Vec::new();
+    for test in tests.sequence_values::<Table>() {
+        let (name, run) =
+            test.and_then(|t| Ok((t.get::<String>(1)?, t.get::<Function>(2)?))).map_err(|e| outcome(Err(e), map))?;
+        let result = run.call::<Option<mlua::String>>(());
+        term.borrow_mut().restore();
+        let output = String::from_utf8_lossy(&std::mem::take(&mut *buffer.borrow_mut())).into_owned();
+        runs.push(TestRun { name, outcome: outcome(result, map), output });
+    }
+    Ok(runs)
+}
+
+/// How a call into the bundle ended.
+fn outcome(result: mlua::Result<Option<mlua::String>>, map: Option<&SourceMap>) -> Outcome {
     match result {
         Ok(None) => Outcome::Finished,
         Ok(Some(message)) => Outcome::Failed { message: message.to_string_lossy() },
@@ -94,9 +153,10 @@ fn traceback_location(text: &str, map: Option<&SourceMap>) -> Option<Location> {
     })
 }
 
-fn install_host(lua: &Lua, output: Output) -> mlua::Result<()> {
-    let host = lua.create_table()?;
-    let captured = matches!(output, Output::Capture(_));
+fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> mlua::Result<()> {
+    let table = lua.create_table()?;
+    let sandbox = host.sandbox;
+    let output = host.output;
     let write = lua.create_function(move |_, s: mlua::String| {
         match &output {
             Output::Stdout => {
@@ -106,13 +166,38 @@ fn install_host(lua: &Lua, output: Output) -> mlua::Result<()> {
         }
         Ok(())
     })?;
-    host.set("write", write)?;
+    table.set("write", write)?;
     let getenv =
-        lua.create_function(move |_, name: String| Ok(if captured { None } else { std::env::var(name).ok() }))?;
-    host.set("getenv", getenv)?;
-    // A captured run's files live in memory (see runtime/rt/core.lua).
-    host.set("memory_fs", captured)?;
-    lua.globals().set("__LOOM_HOST", host)
+        lua.create_function(move |_, name: String| Ok(if sandbox { None } else { std::env::var(name).ok() }))?;
+    table.set("getenv", getenv)?;
+    // A sandboxed run's files live in memory (see runtime/rt/core.lua).
+    table.set("memory_fs", sandbox)?;
+    table.set("args", lua.create_sequence_from(host.args)?)?;
+    let sleep = lua.create_function(move |_, nanos: i64| {
+        if !sandbox {
+            std::thread::sleep(std::time::Duration::from_nanos(nanos as u64));
+        }
+        Ok(())
+    })?;
+    table.set("sleep", sleep)?;
+    // The terminal: each returns an error message when it fails, which the
+    // runtime unravels with. A sandboxed run has no terminal and no keys held.
+    let raw_term = term.clone();
+    let raw_mode = lua.create_function(move |_, on: bool| {
+        Ok(if sandbox { None } else { raw_term.borrow_mut().raw_mode(on).err() })
+    })?;
+    table.set("raw_mode", raw_mode)?;
+    let poll_keys = lua.create_function(move |_, keymap: String| {
+        if sandbox {
+            return Ok((Some(0), None));
+        }
+        Ok(match term.borrow_mut().poll_keys(&keymap) {
+            Ok(bits) => (Some(bits), None),
+            Err(message) => (None, Some(message)),
+        })
+    })?;
+    table.set("poll_keys", poll_keys)?;
+    lua.globals().set("__LOOM_HOST", table)
 }
 
 /// The message of a Lua error, without mlua's decorations or the Lua
@@ -156,7 +241,7 @@ mod tests {
 
     fn capture(bundle: &str) -> (Outcome, String) {
         let buffer = Rc::new(RefCell::new(Vec::new()));
-        let outcome = run_bundle(bundle, None, Output::Capture(buffer.clone()));
+        let outcome = run_bundle(bundle, None, Host::captured(buffer.clone()));
         let text = String::from_utf8(buffer.borrow().clone()).expect("utf-8 output");
         (outcome, text)
     }
@@ -175,7 +260,7 @@ mod tests {
             lines: vec![Mapping { lua_line: 2, file: 0, line: 7, column: 5 }],
         };
         let bundle = "return function()\n  error('\\31LOOM\\31boom', 1)\nend";
-        let outcome = run_bundle(bundle, Some(&map), Output::Capture(Default::default()));
+        let outcome = run_bundle(bundle, Some(&map), Host::captured(Default::default()));
         assert_eq!(
             outcome,
             Outcome::Unravel {
@@ -191,5 +276,35 @@ mod tests {
         assert!(matches!(outcome, Outcome::Crash { .. }), "{outcome:?}");
         let (outcome, _) = capture("this isn't lua");
         assert!(matches!(outcome, Outcome::Crash { .. }), "{outcome:?}");
+    }
+
+    #[test]
+    fn runs_each_test_with_its_own_output() {
+        let bundle = "local w = __LOOM_HOST.write\n\
+                      return {\n\
+                      {'quiet', function() end},\n\
+                      {'loud', function() w('one\\n') return 'it broke' end},\n\
+                      {'gives_up', function() w('two\\n') error('\\31LOOM\\31nope', 1) end},\n\
+                      }";
+        let runs = run_tests(bundle, None, true).expect("the bundle loads");
+        let summary: Vec<(&str, &Outcome, &str)> =
+            runs.iter().map(|r| (r.name.as_str(), &r.outcome, r.output.as_str())).collect();
+        assert_eq!(
+            summary,
+            [
+                ("quiet", &Outcome::Finished, ""),
+                ("loud", &Outcome::Failed { message: "it broke".into() }, "one\n"),
+                ("gives_up", &Outcome::Unravel { message: "nope".into(), location: None }, "two\n"),
+            ]
+        );
+    }
+
+    #[test]
+    fn sees_its_arguments() {
+        let buffer = Rc::new(RefCell::new(Vec::new()));
+        let host = Host { args: vec!["prog".into(), "rom.ch8".into()], ..Host::captured(buffer.clone()) };
+        let bundle = "return function() local a = __LOOM_HOST.args __LOOM_HOST.write(a[1] .. ' ' .. a[2]) end";
+        assert_eq!(run_bundle(bundle, None, host), Outcome::Finished);
+        assert_eq!(buffer.borrow().as_slice(), b"prog rom.ch8");
     }
 }

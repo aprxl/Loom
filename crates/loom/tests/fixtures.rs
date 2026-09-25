@@ -5,6 +5,7 @@
 //!   message on that file's first line, at the Loom line its second line
 //!   names (`line 4`); otherwise it must finish.
 //! - `tests/examples/NAME.out` is the exact output of `examples/NAME.loom`.
+//! - `tests/test/NAME.out` is the report `loom test` prints for `NAME.loom`.
 //! - `tests/fail/NAME.loom` must fail to compile with exactly the
 //!   diagnostics its `//~ CODE …` comments list, on the lines they're on.
 //!
@@ -17,7 +18,7 @@ use std::rc::Rc;
 use loom_compiler::hir::resolve;
 use loom_compiler::modules::FsLoader;
 use loom_compiler::{lower, typeck};
-use loom_host::{Outcome, Output, run_bundle};
+use loom_host::{Host, Outcome, run_bundle};
 use loom_syntax::diag::render_plain;
 use loom_syntax::{Diagnostic, SourceDb};
 
@@ -68,7 +69,7 @@ fn run_corpus() {
             continue;
         };
         let buffer = Rc::new(RefCell::new(Vec::new()));
-        let outcome = run_bundle(&bundle.lua, Some(&bundle.map), Output::Capture(buffer.clone()));
+        let outcome = run_bundle(&bundle.lua, Some(&bundle.map), Host::captured(buffer.clone()));
         let out = String::from_utf8_lossy(&buffer.borrow()).into_owned();
         let expected = std::fs::read_to_string(path.with_extension("out")).unwrap_or_default();
         if out != expected {
@@ -129,7 +130,7 @@ fn examples_corpus() {
             continue;
         };
         let buffer = Rc::new(RefCell::new(Vec::new()));
-        let outcome = run_bundle(&bundle.lua, Some(&bundle.map), Output::Capture(buffer.clone()));
+        let outcome = run_bundle(&bundle.lua, Some(&bundle.map), Host::captured(buffer.clone()));
         let out = String::from_utf8_lossy(&buffer.borrow()).into_owned();
         let expected = std::fs::read_to_string(out_path).unwrap_or_default();
         if out != expected {
@@ -140,6 +141,36 @@ fn examples_corpus() {
         }
     }
     assert!(failures.is_empty(), "{} examples failed:\n\n{}", failures.len(), failures.join("\n\n"));
+}
+
+/// `tests/test/NAME.out` is what `loom test tests/test/NAME.loom` prints,
+/// run from the repository root. It exits with 0 when every test passed,
+/// and 1 otherwise.
+#[test]
+fn test_corpus() {
+    let mut failures = Vec::new();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let paths = corpus("test");
+    assert!(!paths.is_empty());
+    for path in &paths {
+        let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("?").to_string();
+        let out = std::process::Command::new(env!("CARGO_BIN_EXE_loom"))
+            .current_dir(&root)
+            .args(["--color", "never", "test", &format!("tests/test/{name}.loom")])
+            .output()
+            .expect("the loom binary runs");
+        let report = String::from_utf8_lossy(&out.stdout).into_owned();
+        let expected = std::fs::read_to_string(path.with_extension("out")).unwrap_or_default();
+        if report != expected {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            failures.push(format!("{name}: report differs\n--- expected\n{expected}--- got\n{report}{stderr}"));
+        }
+        let want = if expected.contains("\ntest result: ok.") { 0 } else { 1 };
+        if out.status.code() != Some(want) {
+            failures.push(format!("{name}: exited with {:?}, expected {want}", out.status.code()));
+        }
+    }
+    assert!(failures.is_empty(), "{} test fixtures failed:\n\n{}", failures.len(), failures.join("\n\n"));
 }
 
 #[test]

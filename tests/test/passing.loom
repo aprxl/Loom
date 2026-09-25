@@ -1,0 +1,22 @@
+// A test passes when it returns, or when its `! E` never fails. `main` is
+// compiled but not run.
+
+use std.io.print
+
+fn fib(n: u32) -> u64 = if n < 2 { n as u64 } else { fib(n - 1) + fib(n - 2) }
+
+test fib_starts_right() {
+    assert(fib(0) == 0 and fib(1) == 1 and fib(10) == 55)
+}
+
+test parses() ! any Error {
+    assert("42".parse[u8]()? == 42)
+}
+
+test prints_quietly() {
+    print("only failing tests show what they printed")
+}
+
+fn main() {
+    print("not a test")
+}

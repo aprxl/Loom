@@ -13,6 +13,7 @@ lua54 = ["mlua/lua54"]
 lua55 = ["mlua/lua55"]
 
 [dependencies]
+crossterm.workspace = true
 mlua.workspace = true
 
 [lints]

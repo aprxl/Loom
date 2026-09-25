@@ -564,7 +564,7 @@ fn wefts_weaves_externs_uses() {
          type Port = u16 where 1..\n\
          type Even = i64 where _ % 2 == 0\n\
          const HOUSE: AccountId = 1\n\
-         #test\n#layout(bits, big)\nfn t() {}",
+         #inline\n#layout(bits, big)\nfn t() {}",
     );
     let rendered: Vec<String> = m.items.iter().map(|i| pretty::item(i).trim_end().to_string()).collect();
     assert_eq!(rendered[0], "(use std.io.print)");
@@ -581,7 +581,17 @@ fn wefts_weaves_externs_uses() {
     assert_eq!(rendered[7], "(type Port = u16 where (.. 1 _))");
     assert_eq!(rendered[8], "(type Even = i64 where (== (% _ 2) 0))");
     assert_eq!(rendered[9], "(const HOUSE: AccountId 1)");
-    assert_eq!(rendered[10], "#test()\n#layout(bits big)\n(fn t() (block))");
+    assert_eq!(rendered[10], "#inline()\n#layout(bits big)\n(fn t() (block))");
+}
+
+#[test]
+fn tests_are_items_where_test_is_a_keyword() {
+    let m = module("test adds() = assert(1 + 1 == 2)\ntest fails() ! Fault {\n    let test = 1\n}");
+    assert_eq!(pretty::item(&m.items[0]), "(test adds() = (call assert (== (+ 1 1) 2)))\n");
+    let second = pretty::item(&m.items[1]);
+    assert!(second.starts_with("(test fails()"), "{second}");
+    // Anywhere else `test` is a name.
+    assert!(second.contains("(let test 1)"), "{second}");
 }
 
 #[test]
@@ -628,6 +638,7 @@ fn name_cases_are_enforced() {
     // Extern declarations keep their foreign names.
     assert!(module_codes("extern \"C\" { fn GetTickCount() -> u32 }").is_empty());
     assert_eq!(module_codes("fn f() { pub(get) }"), [codes::S0209]);
+    assert_eq!(module_codes("fn f() {\n    test g() {}\n}"), [codes::S0212]);
 }
 
 // ================================================================ errors and recovery

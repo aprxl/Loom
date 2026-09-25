@@ -203,28 +203,25 @@ fn main() ! any Error {
         for _ in 0..11 { cpu.step()? }                     // ~660 instructions per second
         cpu.tick()
         render(cpu.screen)
-        time.sleep(16.ms())
+        time.sleep(time.ms(16))
     }
 }
 
 // ---------------------------------------------------------------- tests
 
-#test
-fn add_sets_carry() ! Fault {
+test add_sets_carry() ! Fault {
     var c = Chip8().{ .v[1] = 200; .v[2] = 100 }
     c.exec(0x8124)?                                        // V1 += V2
     assert(c.v[1] == 44 and c.v[0xF] == 1)                 // 300 = 0x12C → 0x2C, carry 1
 }
 
-#test
-fn sub_sets_not_borrow() ! Fault {
+test sub_sets_not_borrow() ! Fault {
     var c = Chip8().{ .v[3] = 5; .v[4] = 9 }
     c.exec(0x8345)?                                        // V3 -= V4
     assert(c.v[3] == 252 and c.v[0xF] == 0)                // borrowed → VF = 0
 }
 
-#test
-fn call_and_return() ! Fault {
+test call_and_return() ! Fault {
     var c = Chip8()
     c.exec(0x2ABC)?
     assert(c.pc == 0xABC and c.sp == 1)

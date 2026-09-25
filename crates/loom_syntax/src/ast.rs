@@ -206,6 +206,8 @@ pub enum FnQualifier {
     Const,
     /// `unsafe fn`: callers must be inside `unsafe`.
     Unsafe,
+    /// `test name() { … }`: run by `loom test`, left out of every other build.
+    Test,
 }
 
 #[derive(Clone, Debug, PartialEq)]

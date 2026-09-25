@@ -25,8 +25,9 @@ overflow-policy operators.
   Some keywords are *contextual*: `take` only at the start of a parameter (so
   `iter.take(3)` is an ordinary method call), `from` only inside a case field
   (so `fn transfer(from: AccountId, ...)` is fine), `get` only inside `pub(get)`,
-  `where` only after a type in a declaration, and `once` only directly before
-  `warp` (so `iter.once()` still works).
+  `where` only after a type in a declaration, `once` only directly before
+  `warp` (so `iter.once()` still works), and `test` only at the start of an
+  item, before a name and `(` (so `let test = 1` is fine).
 
 ### Literals
 
@@ -108,7 +109,7 @@ fn add(a: i32, b: i32) -> i32 {
 
 fn add(a: i32, b: i32) -> i32 = a + b    // expression body
 
-fn connect(host: str, port: u16 = 80, timeout: Duration = 5.secs()) -> Conn ! NetError
+fn connect(host: str, port: u16 = 80, timeout: Duration = time.secs(5)) -> Conn ! NetError
 
 fn save(data: [u8]) ! IoError            // "returns nothing, might fail": `-> ()` is omitted
 ```
@@ -116,7 +117,7 @@ fn save(data: [u8]) ! IoError            // "returns nothing, might fail": `-> (
 The full shape of a signature is
 `fn name[generics](params) -> Ret ! Err given ctx: Type where bounds`.
 
-- **Named arguments.** Any parameter can be passed by name: `connect("db", timeout: 1.secs())`.
+- **Named arguments.** Any parameter can be passed by name: `connect("db", timeout: time.secs(1))`.
   Named arguments come after positional ones.
 - **Parameter conventions**: `x: T` reads, `mut x: T` edits in place,
   `take x: T` consumes. Mutation is marked at the call site too:
@@ -381,8 +382,32 @@ says so and suggests `.copy()`.
 
 ## Attributes
 
-`#name` or `#name(args)` go before an item: `#inline`, `#test`,
+`#name` or `#name(args)` go before an item: `#inline`,
 `#layout(C)`, `#layout(bits, big)`, `#deprecated("use foo")`.
+
+## Tests
+
+A test is written like a function, with `test` in place of `fn`:
+
+```loom
+test adds() = assert(1 + 1 == 2)
+
+test parses_ports() ! any Error {
+    assert("8080".parse[u16]()? == 8080)
+}
+```
+
+- `loom test file.loom` runs the file's tests, one after another, and
+  reports each. A test fails when it unravels (a failed `assert`, say) or
+  returns an error. It prints nothing unless it fails; then it shows what it
+  printed.
+- Tests exist only for `loom test`. Every other build leaves them out, and
+  nothing can call one: a test's name isn't in scope, so a test and a
+  function can share it. Two tests can't.
+- A test takes no parameters and returns nothing, or `! E` so it can use `?`
+  (T0119). Tests go at the top level of a module (S0212).
+- Tests are type-checked by every command, so `loom check` catches a broken
+  one.
 
 ## Modules and bolts
 

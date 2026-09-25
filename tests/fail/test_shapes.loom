@@ -1,0 +1,12 @@
+// A test takes nothing, and returns nothing or `! E`.
+
+test takes(n: i32) {}                       //~ T0119
+test gives() -> i32 = 1                     //~ T0119
+test maybe() -> ?i32 = none                 //~ T0119
+test generic[T]() {}                        //~ T0119
+
+// These are fine.
+test plain() {}
+test fallible() ! any Error {}
+
+fn main() {}

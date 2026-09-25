@@ -1,0 +1,6 @@
+running 3 tests
+test fib_starts_right ... ok
+test parses ... ok
+test prints_quietly ... ok
+
+test result: ok. 3 passed; 0 failed
