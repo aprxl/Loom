@@ -190,6 +190,19 @@ impl Checker<'_> {
             self.check_expr(index, None);
             return self.tcx.error;
         }
+        // `m[key]`: the value for `key`.
+        if let Some((k, v)) = self.map_types(base_ty) {
+            if matches!(index.kind, ExprKind::Range { .. }) {
+                self.b.expr_ty.insert(index.id, self.tcx.error);
+                self.error(codes::T0103, index.span, "a map can't be sliced", "a range of keys");
+                return self.tcx.error;
+            }
+            let saved = std::mem::replace(&mut self.in_argument, true);
+            self.check_coerce(index, k);
+            self.in_argument = saved;
+            self.require_hash(k, index.span);
+            return v;
+        }
         let Some(seq) = self.seq(base_ty) else {
             let base_ty = self.resolve(base_ty);
             if matches!(self.tcx.kind(base_ty), TyKind::Str) || Some(base_ty) == self.string_ty_opt() {
@@ -338,6 +351,93 @@ impl Checker<'_> {
             via: format!("[T].{name}"),
             stream: None,
         })
+    }
+
+    /// `K` and `V`, for a `Map[K, V]`.
+    pub(super) fn map_types(&self, ty: Ty) -> Option<(Ty, Ty)> {
+        match self.tcx.kind(self.resolve(ty)) {
+            TyKind::Adt(def, args) if Some(*def) == self.std.map && args.len() == 2 => Some((args[0], args[1])),
+            _ => None,
+        }
+    }
+
+    /// `T`, for a `Set[T]`.
+    pub(super) fn set_elem(&self, ty: Ty) -> Option<Ty> {
+        match self.tcx.kind(self.resolve(ty)) {
+            TyKind::Adt(def, args) if Some(*def) == self.std.set && args.len() == 1 => Some(args[0]),
+            _ => None,
+        }
+    }
+
+    /// The types a map or a set holds: `[K, V]` or `[T]`.
+    pub(super) fn coll_parts(&self, ty: Ty) -> Option<Vec<Ty>> {
+        match self.map_types(ty) {
+            Some((k, v)) => Some(vec![k, v]),
+            None => self.set_elem(ty).map(|t| vec![t]),
+        }
+    }
+
+    /// Reports a key type that can't be hashed.
+    pub(super) fn require_hash(&mut self, key: Ty, span: Span) {
+        let key = self.deep_resolve(key);
+        if self.tcx.is_lenient(key) || self.has_vars(key) {
+            return;
+        }
+        if let Some(hash) = self.std.hash
+            && !self.weaves(key, hash)
+        {
+            let shown = self.show(key);
+            self.diags.push(
+                Diagnostic::error(codes::T0108, format!("`{shown}` can't be a key: it doesn't weave `Hash`"))
+                    .primary(span, "a key")
+                    .help("keys are numbers, text, `char`s, `bool`s, or warps that weave `Hash`"),
+            );
+        }
+    }
+
+    /// Reports lending a map's value as `mut` when it isn't a table: there's
+    /// no place in the map to write its new value back to. (A table value,
+    /// like a list, is changed where it is.) Returns whether it was reported.
+    pub(super) fn mut_map_value(&mut self, e: &Expr) -> bool {
+        let ExprKind::Index { base, .. } = &e.kind else { return false };
+        let Some(base_ty) = self.b.expr_ty.get(&base.id).copied() else { return false };
+        let Some((_, v)) = self.map_types(base_ty) else { return false };
+        if self.is_table_backed(v) {
+            return false;
+        }
+        self.diags.push(
+            Diagnostic::error(codes::T0107, "a map's value can't be lent as `mut`")
+                .primary(e.span, "a number, text or enum in a map")
+                .help("take it out, change it, and put it back: `var n = m[k]; f(mut n); m[k] = n`"),
+        );
+        true
+    }
+
+    /// `[k: v, …]`: a map, of the expected types or the first pair's.
+    pub(super) fn check_map_lit(&mut self, e: &Expr, pairs: &[(Expr, Expr)], expected: Option<Ty>) -> Ty {
+        let expected = expected.and_then(|t| self.map_types(t));
+        let (k, v) = match expected {
+            Some(kv) => kv,
+            None if pairs.is_empty() => {
+                self.error(
+                    codes::T0110,
+                    e.span,
+                    "can't tell the types of this empty map",
+                    "add a type annotation, like `let m: Map[str, i32] = [:]`",
+                );
+                return self.tcx.error;
+            }
+            None => (self.new_var(VarKind::Type), self.new_var(VarKind::Type)),
+        };
+        for (key, value) in pairs {
+            self.check_coerce(key, k);
+            self.check_coerce(value, v);
+        }
+        if let Some((key, _)) = pairs.first() {
+            self.require_hash(k, key.span);
+        }
+        let Some(map) = self.std.map else { return self.tcx.error };
+        self.tcx.intern(TyKind::Adt(map, vec![k, v]))
     }
 
     /// `List()`: an empty list.

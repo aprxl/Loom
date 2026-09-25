@@ -56,7 +56,7 @@ SourceDb → lex → Tokens → parse → AST → resolve/desugar → HIR
 | `Stream[T]` | a Lua function: each call gives `true, item`, or nothing once done |
 | ranges (as values) | `{lo, hi, inclusive}` |
 | `^T` | the table itself for table-backed T; `{v}` box for scalars |
-| Map / Set | insertion-ordered: `{keys, vals, idx, n}` |
+| Map / Set | insertion-ordered: `{keys, vals, hks, idx, n}` (a set has no `vals`) |
 
 ## Calling convention
 
@@ -161,6 +161,20 @@ works on a copy of a `Copy` place, since `next` changes it. `map` and
 
 When an unravel happens inside the runtime (a stream's step, say), the host
 reports the first frame of the Lua traceback that maps to Loom code.
+
+## Maps and sets
+
+`keys[i]` and `vals[i]` are the i-th pair in insertion order, `hks[i]` the
+key's hash key and `idx[hk]` its position. A key that's a Lua number,
+boolean or string is its own hash key; any other (a tuple, a record) is its
+debug text, the same for equal values. (So a warp that writes its own `eq`
+and `hash` is still keyed structurally, for now.) Removing an entry moves
+the later ones down, keeping the order. `m[k]` is `rt.map_at` (it unravels
+when the key is missing) and is a place: `m[k].count += 1` changes the value
+in the map, and `m[k] op= v` becomes `rt.map_set`. A scalar value in a map
+can't be lent as `mut`, since there's no Lua place to write it back to.
+Maps and sets compare equal with the same contents in any order, and derive
+`hash` as FNV-1a of the debug text.
 
 ## Gauges
 

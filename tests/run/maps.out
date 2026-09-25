@@ -1,0 +1,16 @@
+[ada: 37, alan: 41, grace: 85] 3 41 none true
+ada is 37
+alan is 41
+grace is 85
+41 none [ada: 37, grace: 85]
+none 1 [ada: 37, grace: 85, zed: 2]
+[ada, grace, zed] 124 3 [(ada, 37), (grace, 85), (zed, 2)]
+38
+[(0, 0): c, (1, -1): b] b none
+one-two false
+6 100 6
+6 false true
+{3, 1, 2} 3 true false true true {1, 2, 4}
+[1, 2, 4] [10, 20, 40]
+{the, cat, and, hat} 4
+[:] true {}

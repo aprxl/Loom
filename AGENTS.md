@@ -94,7 +94,10 @@ language through every layer (type checking, lowering to Lua, the runtime,
     `as|` into them, `is` tests and narrowing, interval arithmetic, and
     `env.get`. `examples/tour.loom` runs, checked by `tests/examples/tour.out`.
 
-Next: maps, then `once` warps (ledger), each through every layer at once. chip8 is close: `Rng`, `Duration` (`16.ms()`),
+13. maps and sets: `Map()`, `[k: v]` literals, `m[k]` and `m[k] = v`, their
+    methods, loops over them, and derived `hash`.
+
+Next: `once` warps (ledger), each through every layer at once. chip8 is close: `Rng`, `Duration` (`16.ms()`),
 `rotate_right`, and `const assert`.
 
 Keep these green:

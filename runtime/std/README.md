@@ -21,6 +21,7 @@ has an implementation:
   (`string.loom`);
 - `Int[T]` and `Float[T]`, the methods of every integer and float type
   (`num.loom`);
+- `Map[K, V]` and `Set[T]` (`map.loom`, `set.loom`);
 - `Stream[T]` (`iter.loom`), the lazy streams `chars()`, `indexed()` and
   friends make, whose methods arrays, lists, slices, ranges and `Iter` types
   have too.

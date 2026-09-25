@@ -237,6 +237,10 @@ pub enum IterSource {
     /// A type that weaves `Iter`: its `next`, until it gives `none`. `item`
     /// is the type of what it gives.
     Woven { next: BodyId, item: Ty },
+    /// A map's pairs (copies), by its key and value types.
+    MapPairs(Ty, Ty),
+    /// A set's elements (copies).
+    SetItems(Ty),
 }
 
 /// An implicit conversion.
@@ -415,6 +419,8 @@ struct Std {
     float_warp: Option<DefId>,
     parse: Option<DefId>,
     num: Option<DefId>,
+    map: Option<DefId>,
+    set: Option<DefId>,
     iter: Option<DefId>,
     stream: Option<DefId>,
 }
@@ -521,6 +527,8 @@ impl<'p> Checker<'p> {
             float_warp: find("std.num", "Float"),
             parse: find("std.num", "Parse"),
             num: find("std.num", "Num"),
+            map: find("std.map", "Map"),
+            set: find("std.set", "Set"),
             iter: find("std.iter", "Iter"),
             stream: find("std.iter", "Stream"),
         };
@@ -1304,6 +1312,13 @@ impl<'p> Checker<'p> {
                 _ => self.weaves(seq.elem(), weft),
             };
         }
+        // A map or a set shows and compares like its contents; it's moved,
+        // never `Copy`.
+        if let Some(parts) = self.coll_parts(ty)
+            && [self.std.show, self.std.eq, self.std.copy, self.std.hash].contains(&Some(weft))
+        {
+            return [self.std.show, self.std.eq].contains(&Some(weft)) && parts.iter().all(|&t| self.weaves(t, weft));
+        }
         // A union weaves what every one of its types weaves.
         if let TyKind::Union(members) = self.tcx.kind(ty) {
             return members.iter().all(|&m| self.weaves(m, weft));
@@ -1339,10 +1354,15 @@ impl<'p> Checker<'p> {
                 || is_string(ty)
                 || matches!(kind, TyKind::Tuple(items) if all(self, items))
         } else if w == self.std.ord {
-            numeric || matches!(kind, TyKind::Char | TyKind::Str) || is_string(ty)
+            // Tuples compare item by item.
+            numeric
+                || matches!(kind, TyKind::Char | TyKind::Str)
+                || is_string(ty)
+                || matches!(kind, TyKind::Tuple(items) if !items.is_empty() && all(self, items))
         } else if w == self.std.hash {
             matches!(kind, TyKind::Int(_) | TyKind::IntVar(_) | TyKind::Bool | TyKind::Char | TyKind::Str)
                 || is_string(ty)
+                || matches!(kind, TyKind::Tuple(items) if !items.is_empty() && all(self, items))
         } else if w == self.std.copy {
             scalar
                 || matches!(kind, TyKind::Str | TyKind::Unit)

@@ -1,0 +1,50 @@
+// Maps and sets: insertion order, keys of every hashable kind, and value
+// semantics.
+
+use std.io.print
+
+warp P: Eq, Hash, Ord { x: i32, y: i32 }
+warp Stock: Eq { count: u32 = 0 }
+
+fn main() {
+    var ages: Map[str, u8] = ["ada": 36, "alan": 41]
+    ages["grace"] = 85
+    ages["ada"] = 37                           // replaces, keeps its place
+    print("{ages} {ages.len()} {ages["alan"]} {ages.get("bob")} {ages.has("grace")}")
+    for (name, age) in ages { print("{name} is {age}") }
+    print("{ages.remove("alan")} {ages.remove("zed")} {ages}")
+    print("{ages.insert("zed", 1)} {ages.insert("zed", 2)} {ages}")
+    print("{ages.keys().collect()} {ages.values().sum()} {ages.pairs().count()} {ages.sorted()}")
+    ages["ada"] += 1
+    print(ages["ada"])
+
+    // Keys that aren't plain values.
+    var grid: Map[(i32, i32), char] = [:]
+    grid[(0, 0)] = 'a'
+    grid[(1, -1)] = 'b'
+    grid[(0, 0)] = 'c'
+    print("{grid} {grid[(1, -1)]} {grid.get((2, 2))}")
+    var points: Map[P, str] = Map()
+    points[P(1, 2)] = "one-two"
+    print("{points[P(1, 2)]} {points.has(P(2, 1))}")
+
+    // Values are owned: taking one out gives a copy.
+    var stock: Map[str, Stock] = ["nails": Stock(5)]
+    var s = stock["nails"]
+    s.count = 100
+    stock["nails"].count += 1
+    print("{stock["nails"].count} {s.count} {(stock.get("nails") mend Stock()).count}")
+    let copy = stock.copy()
+    stock["nails"].count = 0
+    print("{copy["nails"].count} {stock == copy} {copy == copy.copy()}")
+
+    // Sets.
+    var seen = Set.of([3, 1, 3, 2, 1])
+    print("{seen} {seen.len()} {seen.insert(4)} {seen.insert(1)} {seen.has(2)} {seen.remove(3)} {seen}")
+    print("{seen.sorted()} {seen.map(_ * 10).collect()}")
+    var words: Set[String] = Set()
+    for w in "the cat and the hat".words() { words.insert(w.to_string()) }
+    print("{words} {words.len()}")
+    var e: Map[i32, i32] = [:]
+    print("{e} {e.is_empty()} {Set[i32]()}")
+}

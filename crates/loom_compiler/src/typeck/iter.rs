@@ -45,6 +45,13 @@ impl Checker<'_> {
         if let TyKind::Range(elem) = *self.tcx.kind(ty) {
             return Some((IterSource::Range(elem), elem));
         }
+        if let Some((k, v)) = self.map_types(ty) {
+            let item = self.tcx.intern(TyKind::Tuple(vec![k, v]));
+            return Some((IterSource::MapPairs(k, v), item));
+        }
+        if let Some(t) = self.set_elem(ty) {
+            return Some((IterSource::SetItems(t), t));
+        }
         let iter = self.std.iter?;
         if self.stream_item(ty).is_some() || self.weaving(iter, ty).is_none() {
             return None;

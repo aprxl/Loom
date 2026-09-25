@@ -1,5 +1,37 @@
 // Hash maps.
 
-/// A map from `K` to `V` that remembers insertion order.
+/// A map from `K` to `V` that remembers insertion order: going through it,
+/// and showing it, follow the order keys were first added. Build one with
+/// `Map()`, or a literal where a map is expected:
+/// `let ages: Map[str, u8] = ["ada": 36, "alan": 41]` (`[:]` is empty).
+///
+/// `m[k]` is the value for `k`, and unravels when there's none (`m.get(k)`
+/// gives an optional); `m[k] = v` adds or replaces it. `for (k, v) in m`
+/// goes through the pairs, and a map has the methods of `Stream` too, over
+/// its pairs. Keys must be `Hash`.
 #builtin
-pub warp Map[K, V]
+pub warp Map[K, V] {
+    /// How many keys there are.
+    pub fn len(self) -> usize
+    pub fn is_empty(self) -> bool
+    /// The value for `key`.
+    pub fn get(self, key: K) -> ?V where K: Hash
+    /// Whether there's a value for `key`.
+    pub fn has(self, key: K) -> bool where K: Hash
+    /// Adds `value` for `key`, and gives back the value it replaces.
+    pub fn insert(mut self, take key: K, take value: V) -> ?V where K: Hash
+    /// Takes out the value for `key`; later keys keep their order.
+    pub fn remove(mut self, key: K) -> ?V where K: Hash
+    /// Removes every key.
+    pub fn clear(mut self)
+    /// The keys, in order.
+    pub fn keys(self) -> Stream[K]
+    /// The values, in the order of their keys.
+    pub fn values(self) -> Stream[V]
+    /// The pairs, in order.
+    pub fn pairs(self) -> Stream[(K, V)]
+    /// A list of the pairs, sorted by key.
+    pub fn sorted(self) -> List[(K, V)] where K: Ord
+    /// A deep copy.
+    pub fn copy(self) -> Map[K, V]
+}

@@ -333,6 +333,17 @@ end
 --- The descriptor of `any W` types: the value's own is in its vtable.
 rt.anyd = { kind = "any" }
 
+--- A derived `hash`: FNV-1a (64-bit) of the value's debug text, which is
+--- the same for equal values.
+function rt.hash(d, v)
+  local h = -3750763034362895579 -- 0xcbf29ce484222325
+  local s = show(d, v, true)
+  for i = 1, #s do
+    h = (h ~ sbyte(s, i)) * 1099511628211
+  end
+  return h
+end
+
 -- Gauges. `check` is the gauge's own test, which the compiler writes.
 
 --- `v as G`: `v`, if it's in the gauge.
@@ -479,6 +490,8 @@ local function copy(d, v)
       t[i] = copy(elem, v[i])
     end
     return t
+  elseif kind == "map" or kind == "set" then
+    return rt.copy_coll(d, v)
   end
   return v
 end
@@ -535,6 +548,15 @@ eq = function(d, a, b)
     if an ~= bn then return false end
     for i = 1, an do
       if not eq(d.elem, at[ao + i], bt[bo + i]) then return false end
+    end
+    return true
+  elseif kind == "map" or kind == "set" then
+    -- The same keys (and values for them), in any order.
+    if a.n ~= b.n then return false end
+    for i = 1, a.n do
+      local j = b.idx[a.hks[i]]
+      if j == nil then return false end
+      if kind == "map" and not eq(d.val, a.vals[i], b.vals[j]) then return false end
     end
     return true
   elseif d.eq then
@@ -687,6 +709,19 @@ show = function(d, v, debug)
       out[i] = show(d.elem, t[o + i], debug)
     end
     return "[" .. concat(out, ", ") .. "]"
+  elseif kind == "map" then
+    if v.n == 0 then return "[:]" end
+    local out = {}
+    for i = 1, v.n do
+      out[i] = show(d.key, v.keys[i], debug) .. ": " .. show(d.val, v.vals[i], debug)
+    end
+    return "[" .. concat(out, ", ") .. "]"
+  elseif kind == "set" then
+    local out = {}
+    for i = 1, v.n do
+      out[i] = show(d.key, v.keys[i], debug)
+    end
+    return "{" .. concat(out, ", ") .. "}"
   elseif kind == "tuple" then
     local parts = {}
     for i, item in ipairs(d.items) do
@@ -965,19 +1000,19 @@ end
 ext["std.slice.Slice.get"] = function(d, s, i)
   local t, o, n = parts(s)
   if i >= n then return nil end
-  return some(d, t[o + i + 1])
+  return some(d, copy(d, t[o + i + 1]))
 end
 
 ext["std.slice.Slice.first"] = function(d, s)
   local t, o, n = parts(s)
   if n == 0 then return nil end
-  return some(d, t[o + 1])
+  return some(d, copy(d, t[o + 1]))
 end
 
 ext["std.slice.Slice.last"] = function(d, s)
   local t, o, n = parts(s)
   if n == 0 then return nil end
-  return some(d, t[o + n])
+  return some(d, copy(d, t[o + n]))
 end
 
 ext["std.slice.Slice.index_of"] = function(d, s, x)
@@ -1422,6 +1457,253 @@ ext["std.slice.Slice.windows"] = function(_, s, size)
     at = at + 1
     return true, view
   end
+end
+
+-- Maps and sets, in insertion order: `{keys, vals, hks, idx, n}`. `keys[i]`
+-- and `vals[i]` are the i-th pair (a set has no `vals`), `hks[i]` its key's
+-- hash key, and `idx[hk]` its position. A key that's a Lua number, boolean
+-- or string is its own hash key; any other (a tuple, a record) is its
+-- debug text, which is the same for equal values.
+
+local function hkey(d, k)
+  local kind = d.kind
+  if kind == "int" or kind == "str" or kind == "char" or kind == "bool" or kind == "enum" then return k end
+  return show(d, k, true)
+end
+
+function rt.map_new()
+  return { keys = {}, vals = {}, hks = {}, idx = {}, n = 0 }
+end
+
+function rt.set_new()
+  return { keys = {}, hks = {}, idx = {}, n = 0 }
+end
+
+--- Adds or replaces the value for `k`; gives back the old value (or nil).
+local function map_put(dk, m, k, v)
+  local h = hkey(dk, k)
+  local i = m.idx[h]
+  if i ~= nil then
+    local old = m.vals[i]
+    m.vals[i] = v
+    return true, old
+  end
+  local n = m.n + 1
+  m.keys[n], m.hks[n], m.idx[h], m.n = k, h, n, n
+  if m.vals then m.vals[n] = v end
+  return false, nil
+end
+
+--- Takes out the entry at position `i`, moving the later ones down.
+local function take_at(m, i)
+  local n = m.n
+  m.idx[m.hks[i]] = nil
+  for j = i, n - 1 do
+    m.keys[j], m.hks[j] = m.keys[j + 1], m.hks[j + 1]
+    if m.vals then m.vals[j] = m.vals[j + 1] end
+    m.idx[m.hks[j]] = j
+  end
+  m.keys[n], m.hks[n] = nil, nil
+  if m.vals then m.vals[n] = nil end
+  m.n = n - 1
+end
+
+--- `m[k] = v`.
+function rt.map_set(dk, m, k, v)
+  map_put(dk, m, k, v)
+end
+
+--- `m[k]`: the value itself (a place), unravelling if there's none.
+function rt.map_at(dk, m, k)
+  local i = m.idx[hkey(dk, k)]
+  if i == nil then error(sformat("%skey not found: %s", MARK, show(dk, k, true)), 2) end
+  return m.vals[i]
+end
+
+--- `[k: v, …]`: the keys and values alternate in `kvs`.
+function rt.map_of(dk, kvs)
+  local m = rt.map_new()
+  for i = 1, kvs.n, 2 do
+    map_put(dk, m, kvs[i], kvs[i + 1])
+  end
+  return m
+end
+
+local function coll_len(_, _, m)
+  return m.n
+end
+
+local function coll_empty(_, _, m)
+  return m.n == 0
+end
+
+ext["std.map.Map.len"] = coll_len
+ext["std.map.Map.is_empty"] = coll_empty
+
+ext["std.map.Map.get"] = function(dk, dv, m, k)
+  local i = m.idx[hkey(dk, k)]
+  if i == nil then return nil end
+  return some(dv, copy(dv, m.vals[i]))
+end
+
+ext["std.map.Map.has"] = function(dk, _, m, k)
+  return m.idx[hkey(dk, k)] ~= nil
+end
+
+ext["std.map.Map.insert"] = function(dk, dv, m, k, v)
+  local had, old = map_put(dk, m, k, v)
+  if not had then return nil end
+  return some(dv, old)
+end
+
+ext["std.map.Map.remove"] = function(dk, dv, m, k)
+  local i = m.idx[hkey(dk, k)]
+  if i == nil then return nil end
+  local v = m.vals[i]
+  take_at(m, i)
+  return some(dv, v)
+end
+
+local function coll_clear(m)
+  m.keys, m.hks, m.idx, m.n = {}, {}, {}, 0
+  if m.vals then m.vals = {} end
+end
+
+ext["std.map.Map.clear"] = function(_, _, m)
+  coll_clear(m)
+end
+
+--- Copies of `m`'s entries, one at a time, made by `item(i)`.
+local function coll_stream(m, item)
+  local i, n = 0, m.n
+  return function()
+    if i >= n then return nil end
+    i = i + 1
+    return true, item(i)
+  end
+end
+
+ext["std.map.Map.keys"] = function(dk, _, m)
+  return coll_stream(m, function(i) return copy(dk, m.keys[i]) end)
+end
+
+ext["std.map.Map.values"] = function(_, dv, m)
+  return coll_stream(m, function(i) return copy(dv, m.vals[i]) end)
+end
+
+local function map_pairs(dk, dv, m)
+  return coll_stream(m, function(i) return { copy(dk, m.keys[i]), copy(dv, m.vals[i]) } end)
+end
+ext["std.map.Map.pairs"] = map_pairs
+rt.map_stream = map_pairs
+
+--- A stable sort of `items` by `key(item)`, compared as `d` says.
+local function sort_by(d, items, n, key)
+  for i = 2, n do
+    local x = items[i]
+    local j = i - 1
+    while j >= 1 and cmp(d, key(items[j]), key(x)) > 0 do
+      items[j + 1] = items[j]
+      j = j - 1
+    end
+    items[j + 1] = x
+  end
+end
+
+ext["std.map.Map.sorted"] = function(dk, dv, m)
+  local out, n = {}, m.n
+  for i = 1, n do
+    out[i] = { copy(dk, m.keys[i]), copy(dv, m.vals[i]) }
+  end
+  sort_by(dk, out, n, function(p) return p[1] end)
+  out.n = n
+  return out
+end
+
+local function copy_map(dk, dv, m)
+  local out = rt.map_new()
+  for i = 1, m.n do
+    map_put(dk, out, copy(dk, m.keys[i]), copy(dv, m.vals[i]))
+  end
+  return out
+end
+ext["std.map.Map.copy"] = copy_map
+
+-- Sets.
+
+ext["std.set.Set.of"] = function(d, xs)
+  local t, o, n = parts(xs)
+  local s = rt.set_new()
+  for i = 1, n do
+    if s.idx[hkey(d, t[o + i])] == nil then map_put(d, s, copy(d, t[o + i])) end
+  end
+  return s
+end
+
+ext["std.set.Set.len"] = function(_, s)
+  return s.n
+end
+
+ext["std.set.Set.is_empty"] = function(_, s)
+  return s.n == 0
+end
+
+ext["std.set.Set.has"] = function(d, s, x)
+  return s.idx[hkey(d, x)] ~= nil
+end
+
+ext["std.set.Set.insert"] = function(d, s, x)
+  if s.idx[hkey(d, x)] ~= nil then return false end
+  map_put(d, s, x)
+  return true
+end
+
+ext["std.set.Set.remove"] = function(d, s, x)
+  local i = s.idx[hkey(d, x)]
+  if i == nil then return false end
+  take_at(s, i)
+  return true
+end
+
+ext["std.set.Set.clear"] = function(_, s)
+  coll_clear(s)
+end
+
+ext["std.set.Set.sorted"] = function(d, s)
+  local out, n = {}, s.n
+  for i = 1, n do
+    out[i] = copy(d, s.keys[i])
+  end
+  sort_by(d, out, n, function(x) return x end)
+  out.n = n
+  return out
+end
+
+local function copy_set(d, s)
+  local out = rt.set_new()
+  for i = 1, s.n do
+    map_put(d, out, copy(d, s.keys[i]))
+  end
+  return out
+end
+ext["std.set.Set.copy"] = copy_set
+
+function rt.set_stream(d, s)
+  return coll_stream(s, function(i) return copy(d, s.keys[i]) end)
+end
+
+--- The descriptor of `Map[K, V]` and of `Set[T]`.
+function rt.mapd(dk, dv)
+  return { kind = "map", key = dk, val = dv }
+end
+
+function rt.setd(d)
+  return { kind = "set", key = d }
+end
+
+function rt.copy_coll(d, v)
+  if d.kind == "map" then return copy_map(d.key, d.val, v) end
+  return copy_set(d.key, v)
 end
 
 -- Eager versions of `map` and `filter` for slices, which make lists.

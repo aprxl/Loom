@@ -1,0 +1,15 @@
+// Maps used wrongly.
+
+fn bump(mut n: i32) { n += 1 }
+
+fn main() {
+    let unknown = [:]                        //~ T0110
+    var floats: Map[f64, i32] = Map()
+    floats[1.5] = 2                          //~ T0108
+    var counts: Map[str, i32] = ["a": 1]
+    let part = counts["a".."b"]              //~ T0103
+    var lists: Map[str, List[i32]] = [:]
+    let taken = lists["x"]                   //~ M0103
+    bump(mut counts["a"])                    //~ T0107
+    let names = Set.of([1.5, 2.5])           //~ T0108
+}

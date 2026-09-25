@@ -63,6 +63,8 @@ pub const RUNTIME_WARPS: &[&str] = &[
     "std.num.Int",
     "std.num.Float",
     "std.iter.Stream",
+    "std.map.Map",
+    "std.set.Set",
 ];
 
 /// Lowers a type-checked program. `typed` must have no errors.
@@ -307,6 +309,16 @@ impl<'a> Lowerer<'a> {
             TyKind::Adt(def, _) if self.p.def_path(*def) == "std.iter.Stream" => {
                 Expr::field(Expr::name("rt"), "opaque")
             }
+            TyKind::Adt(..) if self.coll(ty).is_some() => match self.coll(ty).expect("checked") {
+                seq::Coll::Map(k, v) => {
+                    let (dk, dv) = (self.desc(k, span), self.desc(v, span));
+                    Expr::rt("mapd", vec![dk, dv])
+                }
+                seq::Coll::Set(t) => {
+                    let d = self.desc(t, span);
+                    Expr::rt("setd", vec![d])
+                }
+            },
             TyKind::Array(..) | TyKind::Adt(..) if self.seq(ty).is_some() => {
                 let seq = self.seq(ty).expect("checked");
                 self.seq_desc(seq, span)
@@ -513,6 +525,7 @@ impl<'a> Lowerer<'a> {
             }
             "std.ops.Eq.eq" => ret(Expr::rt("eq", vec![d, arg(0), arg(1)])),
             "std.ops.Ord.lt" => ret(Expr::bin("<", Expr::rt("cmp", vec![d, arg(0), arg(1)]), Expr::Int(0))),
+            "std.ops.Hash.hash" => ret(Expr::rt("hash", vec![d, arg(0)])),
             "std.error.Error.message" => ret(Expr::rt("show", vec![d, arg(0), Expr::Bool(false)])),
             _ => {
                 self.unsupported(span, &format!("deriving `{path}`"));

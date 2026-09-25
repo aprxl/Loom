@@ -176,8 +176,10 @@ impl Checker<'_> {
                 let iter_ty = self.b.expr_ty.get(&iter.id).copied().map(|t| self.deep_resolve(t));
                 let is_seq = iter_ty.is_some_and(|t| self.seq(t).is_some());
                 // A loop over a list reads it, and its items are borrowed
-                // from it; a stream's items are its own.
-                if is_seq {
+                // from it; one over a map or a set reads it and gets copies;
+                // a stream's items are its own.
+                let is_coll = iter_ty.is_some_and(|t| self.coll_parts(t).is_some());
+                if is_seq || is_coll {
                     self.mv(cx, iter, false);
                 } else {
                     let ranged = iter_ty.is_some_and(|t| matches!(self.tcx.kind(t), TyKind::Range(_)));
@@ -407,8 +409,15 @@ impl Checker<'_> {
         let recv_mode = mode_of(super::ArgSource::Receiver);
         if let Some(base) = base {
             // A stream made from a list or a range only reads it.
-            let reads =
-                matches!(self.b.streams.get(&call.id), Some(super::IterSource::Seq(_) | super::IterSource::Range(_)));
+            let reads = matches!(
+                self.b.streams.get(&call.id),
+                Some(
+                    super::IterSource::Seq(_)
+                        | super::IterSource::Range(_)
+                        | super::IterSource::MapPairs(..)
+                        | super::IterSource::SetItems(_)
+                )
+            );
             let through = !info.through.is_empty();
             self.mv(cx, base, recv_mode == ParamMode::Take && !reads && !through);
         } else if recv_mode == ParamMode::Take

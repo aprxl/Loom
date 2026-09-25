@@ -14,6 +14,13 @@ use crate::hir::{self, ExprKind, GenericArg, PatKind};
 use crate::ty::{Ty, TyKind};
 use crate::typeck::Seq;
 
+/// A map or a set, with the types it holds.
+#[derive(Clone, Copy, Debug)]
+pub(super) enum Coll {
+    Map(Ty, Ty),
+    Set(Ty),
+}
+
 impl Lowerer<'_> {
     /// The sequence `ty` is, if it's one.
     pub(super) fn seq(&self, ty: Ty) -> Option<Seq> {
@@ -59,6 +66,9 @@ impl Lowerer<'_> {
     pub(super) fn index(&mut self, base: &hir::Expr, args: &[GenericArg]) -> Expr {
         let [GenericArg::Expr(index)] = args else { return Expr::Nil };
         let base_ty = self.ty_of(base);
+        if let Some(Coll::Map(k, _)) = self.coll(base_ty) {
+            return self.map_index(base, index, k);
+        }
         let Some(seq) = self.seq(base_ty) else {
             // `s[a..b]`: the text between two byte positions.
             let ExprKind::Range { lo, hi, inclusive } = &index.kind else { return Expr::Nil };
@@ -147,6 +157,68 @@ impl Lowerer<'_> {
         }
         self.push(StmtKind::NumFor(control, lo, hi, body_stmts));
         self.after_loop();
+    }
+
+    /// A map's key and value types, or a set's element type.
+    pub(super) fn coll(&self, ty: Ty) -> Option<Coll> {
+        let TyKind::Adt(def, args) = self.tcx().kind(ty) else { return None };
+        let d = self.p.def(*def);
+        match (d.name.as_str(), self.p.module(d.module).path.as_str(), args.as_slice()) {
+            ("Map", "std.map", [k, v]) => Some(Coll::Map(*k, *v)),
+            ("Set", "std.set", [t]) => Some(Coll::Set(*t)),
+            _ => None,
+        }
+    }
+
+    /// `[k: v, …]`: `rt.map_of` with the keys and values in turn.
+    pub(super) fn map_lit(&mut self, e: &hir::Expr, pairs: &[(hir::Expr, hir::Expr)]) -> Expr {
+        let Some(Coll::Map(k, _)) = self.coll(self.ty_of(e)) else { return Expr::Nil };
+        let dk = self.desc(k, e.span);
+        let items: Vec<&hir::Expr> = pairs.iter().flat_map(|(k, v)| [k, v]).collect();
+        let values = self.lower_owned_operands(&items);
+        let n = values.len() as i64;
+        let mut entries: Vec<(TableKey, Expr)> =
+            values.into_iter().enumerate().map(|(i, v)| (TableKey::Index(i as i64 + 1), v)).collect();
+        entries.push((TableKey::Name("n".into()), Expr::Int(n)));
+        Expr::rt("map_of", vec![dk, Expr::Record(entries)])
+    }
+
+    /// `m[key]`: the value itself, unravelling when there's none.
+    pub(super) fn map_index(&mut self, base: &hir::Expr, key: &hir::Expr, k: Ty) -> Expr {
+        let dk = self.desc(k, key.span);
+        let m = if self.is_place(base) { self.lower_place(base) } else { self.lower_expr(base) };
+        let m = self.spill(m);
+        let key = self.lower_expr(key);
+        Expr::rt("map_at", vec![dk, m, key])
+    }
+
+    /// `m[key] = value`, and `m[key] op= value`.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn map_assign(
+        &mut self,
+        base: &hir::Expr,
+        key: &hir::Expr,
+        k: Ty,
+        v: Ty,
+        op: loom_syntax::ast::AssignOp,
+        value: &hir::Expr,
+        span: loom_syntax::source::Span,
+    ) {
+        let dk = self.desc(k, span);
+        let m = if self.is_place(base) { self.lower_place(base) } else { self.lower_expr(base) };
+        let m = self.spill_always(m);
+        let key = self.lower_owned(key);
+        let key = self.spill_always(key);
+        let new = match op {
+            loom_syntax::ast::AssignOp::Assign => self.lower_owned(value),
+            loom_syntax::ast::AssignOp::Compound(bin) => {
+                let current = Expr::rt("map_at", vec![dk.clone(), m.clone(), key.clone()]);
+                let current = self.spill_always(current);
+                let operand = self.lower_expr(value);
+                self.apply(bin, current, operand, v, span)
+            }
+        };
+        self.push(StmtKind::Call(Expr::rt("map_set", vec![dk, m, key, new])));
     }
 
     /// `List()`: an empty list.

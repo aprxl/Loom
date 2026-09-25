@@ -13,6 +13,7 @@ use loom_syntax::ast::{AssignOp, BinaryOp, CastKind, Lit, ParamMode, UnaryOp};
 use loom_syntax::source::Span;
 
 use super::lir::{Expr, Stmt, StmtKind};
+use super::seq::Coll;
 use super::{Dest, LoopInfo, Lowerer};
 use crate::hir::{self, Block, DefKind, ExprKind, HirId, PatKind, StmtKind as HirStmt, TemplatePart};
 use crate::ty::{FloatTy, IntTy, Ty, TyKind};
@@ -229,7 +230,12 @@ impl Lowerer<'_> {
             ExprKind::Array(items) => self.array_lit(items),
             ExprKind::ArrayRepeat { value, .. } => self.array_repeat(e, value),
             ExprKind::Index { base, args } => self.index(base, args),
-            ExprKind::Call { .. } if self.tables().new_lists.contains(&e.id) => Self::new_list(),
+            ExprKind::Call { .. } if self.tables().new_lists.contains(&e.id) => match self.coll(ty) {
+                Some(Coll::Map(..)) => Expr::rt("map_new", Vec::new()),
+                Some(Coll::Set(_)) => Expr::rt("set_new", Vec::new()),
+                None => Self::new_list(),
+            },
+            ExprKind::Map(pairs) => self.map_lit(e, pairs),
             ExprKind::Def { def, .. } => match &self.p.def(*def).kind {
                 DefKind::Const(_) => match self.typed.results.untyped_consts.get(def) {
                     Some(&value) => self.int_value(value, ty),
@@ -739,7 +745,10 @@ impl Lowerer<'_> {
         // stream of them. A list's or a range's stream only reads it; an
         // `Iter`'s changes it, so it gets its own copy.
         let stream = self.tables().streams.get(&call.id).cloned();
-        let reads_only = matches!(stream, Some(IterSource::Seq(_) | IterSource::Range(_)));
+        let reads_only = matches!(
+            stream,
+            Some(IterSource::Seq(_) | IterSource::Range(_) | IterSource::MapPairs(..) | IterSource::SetItems(_))
+        );
         let mut operands: Vec<(&hir::Expr, bool)> = Vec::with_capacity(args.len() + 1);
         if let Some(base) = receiver_base {
             operands.push((base, owned(receiver_slot) && !reads_only));
@@ -1331,6 +1340,12 @@ impl Lowerer<'_> {
     }
 
     fn assign_inner(&mut self, target: &hir::Expr, op: AssignOp, value: &hir::Expr) {
+        if let ExprKind::Index { base, args } = &target.kind
+            && let Some(Coll::Map(k, v)) = self.coll(self.ty_of(base))
+            && let [hir::GenericArg::Expr(key)] = args.as_slice()
+        {
+            return self.map_assign(base, key, k, v, op, value, target.span);
+        }
         match (&target.kind, op) {
             (ExprKind::Local(local), AssignOp::Assign) if self.overwrites(*local) => {
                 // A whole new value for a `mut` parameter: written into the
@@ -1384,7 +1399,7 @@ impl Lowerer<'_> {
     }
 
     /// `a op b` on two already-lowered values of type `ty` (for `op=`).
-    fn apply(&mut self, op: BinaryOp, a: Expr, b: Expr, ty: Ty, span: Span) -> Expr {
+    pub(super) fn apply(&mut self, op: BinaryOp, a: Expr, b: Expr, ty: Ty, span: Span) -> Expr {
         use BinaryOp as B;
         if let Some(float) = self.is_float(ty) {
             let v = match op {

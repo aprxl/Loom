@@ -96,6 +96,14 @@ impl Lowerer<'_> {
                 let d = self.desc(*elem, span);
                 Expr::rt("range_stream", vec![d, v])
             }
+            IterSource::MapPairs(kt, vt) => {
+                let (dk, dv) = (self.desc(*kt, span), self.desc(*vt, span));
+                Expr::rt("map_stream", vec![dk, dv, v])
+            }
+            IterSource::SetItems(t) => {
+                let d = self.desc(*t, span);
+                Expr::rt("set_stream", vec![d, v])
+            }
             IterSource::Woven { next, item } => {
                 let boxed = self.opt_boxed(*item);
                 // A `mut self` that isn't a table comes back after the item.

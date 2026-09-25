@@ -76,7 +76,7 @@ impl Checker<'_> {
                 self.infer_args = true;
                 let ty = self.lower_ty(ty);
                 self.infer_args = false;
-                if matches!(self.seq(ty), Some(Seq::List(_))) {
+                if matches!(self.seq(ty), Some(Seq::List(_))) || self.coll_parts(ty).is_some() {
                     return self.check_new_list(call, ty, expected, args);
                 }
                 match self.adt_info(ty) {
@@ -237,7 +237,10 @@ impl Checker<'_> {
                         }
                     }
                 }
-                if first.mode == ParamMode::Mut && !recv.mutable {
+                // A scalar in a map has no place to change in (reported).
+                let map_value = first.mode == ParamMode::Mut
+                    && recv.expr.is_some_and(|e| !self.is_table_backed(first.ty) && self.mut_map_value(e));
+                if first.mode == ParamMode::Mut && !recv.mutable && !map_value {
                     let span = recv.expr.map_or(call.span, |e| e.span);
                     self.diags.push(
                         Diagnostic::error(codes::T0107, format!("`{name}` changes the value it's called on"))
@@ -373,6 +376,9 @@ impl Checker<'_> {
     fn check_mut_arg(&mut self, arg: &Arg, param: &SigParam) {
         match (arg.mutable, param.mode == ParamMode::Mut) {
             (true, true) => {
+                if self.mut_map_value(&arg.value) {
+                    return;
+                }
                 if self.place(&arg.value) != Some(true) {
                     self.diags.push(
                         Diagnostic::error(codes::T0107, "a `mut` argument must be something that can change")

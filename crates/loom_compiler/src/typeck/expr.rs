@@ -114,7 +114,7 @@ impl Checker<'_> {
             ExprKind::Tuple(items) => self.check_tuple(items, expected),
             ExprKind::Array(items) => self.check_array_lit(e, items, expected),
             ExprKind::ArrayRepeat { value, count } => self.check_array_repeat(value, count, expected),
-            ExprKind::Map(_) => self.unsupported(span, "map literals"),
+            ExprKind::Map(pairs) => self.check_map_lit(e, pairs, expected),
             ExprKind::Block(block) => self.check_block(block, expected),
             ExprKind::If { cond, then, else_, deferred } => {
                 if deferred.is_some() {

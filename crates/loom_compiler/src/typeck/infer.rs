@@ -257,6 +257,10 @@ impl Checker<'_> {
         match source {
             super::IterSource::Range(t) => super::IterSource::Range(self.deep_resolve(t)),
             super::IterSource::Seq(t) => super::IterSource::Seq(self.deep_resolve(t)),
+            super::IterSource::MapPairs(k, v) => {
+                super::IterSource::MapPairs(self.deep_resolve(k), self.deep_resolve(v))
+            }
+            super::IterSource::SetItems(t) => super::IterSource::SetItems(self.deep_resolve(t)),
             super::IterSource::Woven { next, item } => super::IterSource::Woven { next, item: self.deep_resolve(item) },
         }
     }

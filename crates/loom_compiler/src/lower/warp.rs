@@ -82,7 +82,8 @@ impl Lowerer<'_> {
             ExprKind::Field { base, .. } => self.is_place(base),
             ExprKind::Index { base, args } => {
                 !matches!(args.as_slice(), [crate::hir::GenericArg::Expr(i)] if matches!(i.kind, ExprKind::Range { .. }))
-                    && self.seq(self.ty_of(base)).is_some()
+                    && (self.seq(self.ty_of(base)).is_some()
+                        || matches!(self.coll(self.ty_of(base)), Some(super::seq::Coll::Map(..))))
             }
             ExprKind::LeadingDot(_) => self.tables().fields.contains_key(&e.id),
             _ => false,
