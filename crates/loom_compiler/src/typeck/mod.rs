@@ -1389,6 +1389,11 @@ impl<'p> Checker<'p> {
         if let TyKind::Gauge(_, base) = *self.tcx.kind(ty) {
             return self.weaves(base, weft);
         }
+        // Two `any` or union values may hold different types, which have no
+        // order between them (they're just unequal).
+        if matches!(self.tcx.kind(ty), TyKind::Any(_) | TyKind::Union(_)) && Some(weft) == self.std.ord {
+            return false;
+        }
         if let TyKind::Any(wefts) = self.tcx.kind(ty) {
             return self.weft_closure(wefts).contains(&weft);
         }

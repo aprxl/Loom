@@ -52,6 +52,7 @@ codes! {
     S0210 = "missing initializer";
     S0211 = "nesting is too deep";
     S0212 = "test inside a function";
+    S0213 = "function without a body";
 
     // N01xx: names and modules
     N0101 = "unknown name";

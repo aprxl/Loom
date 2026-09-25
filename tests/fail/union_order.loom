@@ -1,0 +1,16 @@
+// Union and `any` values can be compared with `==` (values of different
+// types are unequal), but not ordered: there's no order between types.
+
+use std.io.print
+
+warp W: Ord { n: i32 }
+
+fn main() {
+    let a: i32 | str = 1
+    let b: i32 | str = "b"
+    print(a == b)
+    print(a < b)                            //~ T0103
+    let x: any Ord = W(n: 1)
+    let y: any Ord = W(n: 2)
+    print(x < y)                            //~ T0103
+}

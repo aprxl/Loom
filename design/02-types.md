@@ -424,3 +424,9 @@ match err {
 ```
 
 Unions are flat and unordered, so `(A | B) | A` is the same type as `A | B`.
+
+A union is `Show`, `Eq` or `Hash` when all its types are: two values are
+equal when they have the same type and are equal as it. It's never `Ord`,
+and neither is an `any`: values of different types have no order. A number
+literal converts to a union with exactly one integer type (or one float
+type): `let x: i32 | str = 1`.

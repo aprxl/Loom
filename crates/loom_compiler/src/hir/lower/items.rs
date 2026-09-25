@@ -1,5 +1,6 @@
 //! Lowering items, members, signatures, generics and types.
 
+use loom_syntax::Diagnostic;
 use loom_syntax::ast::{self, Ident, MemberKind};
 use loom_syntax::diag::codes;
 use loom_syntax::source::Span;
@@ -46,6 +47,7 @@ impl Resolver<'_> {
                 self.finish_def(def, &item.attrs, kind);
             }
             (K::Fn(f), Some(def)) => {
+                self.require_body(f, is_builtin(&item.attrs));
                 let kind = DefKind::Fn(self.lower_fn(def, f, None));
                 self.finish_def(def, &item.attrs, kind);
             }
@@ -131,8 +133,9 @@ impl Resolver<'_> {
             }
             ast::WarpBody::Members(ast_members) => {
                 self.bind_member_names(ast_members, member_defs);
+                let needs_body = !is_builtin(attrs);
                 for (member, defs) in ast_members.iter().zip(member_defs) {
-                    self.lower_member(member, defs, &mut fields, &mut cases, &mut members);
+                    self.lower_member(member, defs, &mut fields, &mut cases, &mut members, needs_body);
                 }
                 false
             }
@@ -149,6 +152,7 @@ impl Resolver<'_> {
         fields: &mut Vec<DefId>,
         cases: &mut Vec<DefId>,
         members: &mut Vec<DefId>,
+        needs_body: bool,
     ) {
         match &member.kind {
             MemberKind::Field(f) | MemberKind::Through(f) => {
@@ -183,6 +187,7 @@ impl Resolver<'_> {
             }
             MemberKind::Fn(f) => {
                 if let Some(&def) = defs.first() {
+                    self.require_body(f, !needs_body || is_builtin(&member.attrs));
                     let kind = DefKind::Fn(self.lower_fn(def, f, None));
                     self.finish_def(def, &member.attrs, kind);
                     members.push(def);
@@ -208,7 +213,7 @@ impl Resolver<'_> {
         self.self_type = true;
         let supers = w.supers.iter().map(|t| self.lower_ty(t)).collect();
         self.bind_member_names(&w.members, member_defs);
-        let members = self.lower_members(&w.members, member_defs);
+        let members = self.lower_members(&w.members, member_defs, false);
         self.pop_rib();
         self.finish_def(def, attrs, DefKind::Weft(WeftDef { generics, supers, members }));
     }
@@ -221,16 +226,37 @@ impl Resolver<'_> {
         let where_clause = self.lower_where(&w.where_clause);
         self.self_type = true;
         self.bind_member_names(&w.members, member_defs);
-        let members = self.lower_members(&w.members, member_defs);
+        let members = self.lower_members(&w.members, member_defs, true);
         self.pop_rib();
         self.finish_def(def, attrs, DefKind::Weave(WeaveDef { generics, weft, target, where_clause, members }));
     }
 
-    /// The members of a weft or weave: functions and types.
-    fn lower_members(&mut self, ast_members: &[ast::Member], member_defs: &[Vec<DefId>]) -> Vec<DefId> {
+    /// A function outside a weft or an `extern` block needs a body, unless
+    /// the compiler provides it (`#builtin`).
+    fn require_body(&mut self, f: &ast::FnDecl, builtin: bool) {
+        if f.body.is_some() || builtin {
+            return;
+        }
+        self.report(
+            Diagnostic::error(codes::S0213, format!("`{}` has no body", f.name.name))
+                .primary(f.name.span, "a body goes after the signature")
+                .help(
+                    "write it as `fn f() { … }` or `fn f() = …`; only wefts and `extern` blocks list signatures alone",
+                ),
+        );
+    }
+
+    /// The members of a weft or weave: functions and types. A weave's
+    /// functions need bodies; a weft's may be signatures alone.
+    fn lower_members(
+        &mut self,
+        ast_members: &[ast::Member],
+        member_defs: &[Vec<DefId>],
+        needs_body: bool,
+    ) -> Vec<DefId> {
         let (mut fields, mut cases, mut members) = (Vec::new(), Vec::new(), Vec::new());
         for (member, defs) in ast_members.iter().zip(member_defs) {
-            self.lower_member(member, defs, &mut fields, &mut cases, &mut members);
+            self.lower_member(member, defs, &mut fields, &mut cases, &mut members, needs_body);
         }
         members
     }
@@ -528,4 +554,9 @@ impl Resolver<'_> {
             }
         }
     }
+}
+
+/// Whether `attrs` has `#builtin`.
+fn is_builtin(attrs: &[ast::Attr]) -> bool {
+    attrs.iter().any(|a| a.name.name == "builtin")
 }

@@ -1,0 +1,17 @@
+// A function needs a body, unless it's in a weft or an `extern` block.
+
+weft Named {
+    fn name(self) -> str
+}
+
+warp Thing {
+    fn size(self) -> i32                    //~ S0213
+}
+
+weave Named into Thing {
+    fn name(self) -> str                    //~ S0213
+}
+
+fn helper(x: i32) -> i32                    //~ S0213
+
+fn main()                                   //~ S0213
