@@ -90,6 +90,9 @@ codes! {
     T0117 = "not a format spec";
     T0118 = "control flow can't leave a `defer`";
 
+    // G02xx: gauges
+    G0201 = "value outside a gauge";
+
     // M01xx: moves and borrows
     M0101 = "use of a moved value";
     M0102 = "move out of a borrow";

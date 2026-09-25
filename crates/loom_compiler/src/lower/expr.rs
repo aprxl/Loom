@@ -31,8 +31,11 @@ impl Lowerer<'_> {
     }
 
     /// The type of an expression as checked (before its coercion).
+    /// The type of an expression as checked (before its coercion). A gauge
+    /// is lowered as its base type.
     pub(super) fn ty_of(&self, e: &hir::Expr) -> Ty {
-        self.tables().expr_ty.get(&e.id).copied().unwrap_or(self.typed.tcx.error)
+        let ty = self.tables().expr_ty.get(&e.id).copied().unwrap_or(self.typed.tcx.error);
+        self.tcx().degauge(ty)
     }
 
     pub(super) fn int_of(&self, ty: Ty) -> Option<IntTy> {
@@ -40,7 +43,7 @@ impl Lowerer<'_> {
     }
 
     fn is_float(&self, ty: Ty) -> Option<FloatTy> {
-        match self.tcx().kind(ty) {
+        match self.tcx().kind(self.tcx().degauge(ty)) {
             TyKind::Float(f) => Some(*f),
             _ => None,
         }
@@ -279,7 +282,18 @@ impl Lowerer<'_> {
             ExprKind::Binary { op: op @ (BinaryOp::And | BinaryOp::Or), lhs, rhs } => self.short_circuit(*op, lhs, rhs),
             ExprKind::Binary { op, lhs, rhs } => self.binary(*op, lhs, rhs, ty),
             ExprKind::Chain { first, rest } => self.chain(first, rest),
-            ExprKind::Cast { expr, kind, .. } => self.cast(expr, *kind, ty),
+            ExprKind::Cast { expr, kind, .. } => {
+                // Into a gauge: converted to the base, then checked.
+                let raw = self.tables().expr_ty.get(&e.id).copied().unwrap_or(ty);
+                let target = match self.tcx().kind(raw) {
+                    TyKind::Optional(t) => *t,
+                    _ => raw,
+                };
+                match *self.tcx().kind(target) {
+                    TyKind::Gauge(def, base) => self.gauge_cast(expr, *kind, def, base, span),
+                    _ => self.cast(expr, *kind, ty),
+                }
+            }
             ExprKind::Range { lo, hi, inclusive } => {
                 let bounds: Vec<&hir::Expr> = lo.iter().chain(hi.iter()).map(|b| b.as_ref()).collect();
                 let mut vals = self.lower_operands(&bounds);
@@ -577,6 +591,11 @@ impl Lowerer<'_> {
             (CastKind::Opt, TyKind::Optional(t)) => *t,
             _ => ty,
         };
+        self.cast_to(inner, kind, target)
+    }
+
+    /// `inner` converted to `target` (with `as?`, `nil` when it doesn't fit).
+    pub(super) fn cast_to(&mut self, inner: &hir::Expr, kind: CastKind, target: Ty) -> Expr {
         let source = self.ty_of(inner);
         let v = self.lower_expr(inner);
         let span = inner.span;

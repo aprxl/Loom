@@ -22,7 +22,8 @@ pub const UNRAVEL_MARK: &str = "\u{1f}LOOM\u{1f}";
 #[derive(Clone, Debug)]
 pub enum Output {
     Stdout,
-    /// Collected, for tests.
+    /// Collected, for tests. A captured run also sees an empty environment,
+    /// so what it prints doesn't depend on the machine.
     Capture(Rc<RefCell<Vec<u8>>>),
 }
 
@@ -95,6 +96,7 @@ fn traceback_location(text: &str, map: Option<&SourceMap>) -> Option<Location> {
 
 fn install_host(lua: &Lua, output: Output) -> mlua::Result<()> {
     let host = lua.create_table()?;
+    let captured = matches!(output, Output::Capture(_));
     let write = lua.create_function(move |_, s: mlua::String| {
         match &output {
             Output::Stdout => {
@@ -105,6 +107,9 @@ fn install_host(lua: &Lua, output: Output) -> mlua::Result<()> {
         Ok(())
     })?;
     host.set("write", write)?;
+    let getenv =
+        lua.create_function(move |_, name: String| Ok(if captured { None } else { std::env::var(name).ok() }))?;
+    host.set("getenv", getenv)?;
     lua.globals().set("__LOOM_HOST", host)
 }
 

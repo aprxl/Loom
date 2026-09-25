@@ -162,6 +162,22 @@ works on a copy of a `Copy` place, since `next` changes it. `map` and
 When an unravel happens inside the runtime (a stream's step, say), the host
 reports the first frame of the Lua traceback that maps to Loom code.
 
+## Gauges
+
+A gauge's value is its base's: a Lua number, with its base's descriptor. The
+type checker keeps gauges apart (`TyKind::Gauge`); lowering sees their base
+types. Each gauge checked at run time gets a function, `F.Cents_12(v)`, of
+comparisons against its range or a call of its predicate (plus its base's
+range, for values from a wider type). `x as G` calls `rt.into_gauge`, which
+unravels; `as?` calls `rt.gauge_opt`; `as|` converts to the base saturating
+and then `rt.clamp`s to the range (NaN goes to the low end). Arithmetic
+intervals, literal checks and `is` narrowing are all at compile time. A
+narrowing only happens for a local that can't change and already has the
+gauge's base type.
+
+Captured runs (the test harness) see an empty environment through the
+host's `getenv`, so `env.get` gives the same answer on every machine.
+
 ## Text and primitive methods
 
 `str` and `String` are both Lua strings. `String`'s `mut self` methods

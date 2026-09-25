@@ -333,6 +333,29 @@ end
 --- The descriptor of `any W` types: the value's own is in its vtable.
 rt.anyd = { kind = "any" }
 
+-- Gauges. `check` is the gauge's own test, which the compiler writes.
+
+--- `v as G`: `v`, if it's in the gauge.
+function rt.into_gauge(check, v, name)
+  if not check(v) then error(sformat("%svalue out of range for `%s`", MARK, name), 2) end
+  return v
+end
+
+--- `v as? G`: `v` if it's in the gauge (and there is one), `nil` if not.
+function rt.gauge_opt(check, v)
+  if v ~= nil and check(v) then return v end
+  return nil
+end
+
+--- `v as| G`: the nearest value from `lo` to `hi` (either may be nil: no
+--- bound). NaN goes to the lower bound, as it does to 0 for integers.
+function rt.clamp(d, v, lo, hi)
+  if v ~= v then return lo or hi or 0.0 end
+  if lo ~= nil and rt.cmp(d, v, lo) < 0 then return lo end
+  if hi ~= nil and rt.cmp(d, hi, v) < 0 then return hi end
+  return v
+end
+
 -- `defer`: the deferred code, in a value for a `<close>` local, which Lua
 -- closes however its block ends (an error included).
 local deferred = { __close = function(d) d[1]() end }
@@ -822,6 +845,11 @@ end
 
 rt.ext["std.fmt.Fmt.put"] = function(f, x)
   f[#f + 1] = show(x[2].d, x[1], false)
+end
+
+rt.ext["std.env.get"] = function(name)
+  if host then return host.getenv(name) end
+  return os.getenv(name)
 end
 
 rt.ext["std.error.unravel"] = function(message)

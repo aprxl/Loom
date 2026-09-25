@@ -253,11 +253,19 @@ impl Lowerer<'_> {
 
     /// The type a pattern was checked against.
     pub(super) fn pat_ty(&self, pat: &hir::Pat) -> Ty {
-        self.tables().pat_ty.get(&pat.id).copied().unwrap_or(self.typed.tcx.error)
+        let ty = self.tables().pat_ty.get(&pat.id).copied().unwrap_or(self.typed.tcx.error);
+        self.tcx().degauge(ty)
     }
 
     /// The test for a case, record or twill pattern (see `pat_test`).
     pub(super) fn warp_pat_test(&mut self, pat: &hir::Pat, v: &Expr, ty: Ty) -> Option<Option<Expr>> {
+        // `x is Cents`, `c: Cents =>`: the gauge's check.
+        if let Some(&gauge) = self.tables().gauge_tests.get(&pat.id)
+            && let TyKind::Gauge(def, _) = *self.tcx().kind(gauge)
+        {
+            let check = self.gauge_check(def);
+            return Some(Some(Expr::call(check, vec![v.clone()])));
+        }
         match &pat.kind {
             PatKind::Case { fields, .. } => {
                 if let Some(&def) = self.tables().const_pats.get(&pat.id) {
@@ -360,6 +368,10 @@ impl Lowerer<'_> {
                 if let Some(first) = alts.first() {
                     self.bind_pat(first, v, declare);
                 }
+            }
+            // A gauge test binds the number itself; an `any` test, what's in it.
+            PatKind::TypeTest { local, .. } if self.tables().gauge_tests.contains_key(&pat.id) => {
+                bind(self, *local, v.clone())
             }
             PatKind::TypeTest { local, .. } => bind(self, *local, Expr::index(v.clone(), Expr::Int(1))),
             _ => {}

@@ -197,6 +197,12 @@ impl Checker<'_> {
             }
             let shown = self.show(base_ty);
             self.check_expr(index, None);
+            // `Index` weaves (`map[key]`) come with maps.
+            if let TyKind::Adt(def, _) = *self.tcx.kind(base_ty)
+                && self.is_builtin(def)
+            {
+                return self.unsupported(e.span, &format!("indexing `{shown}`"));
+            }
             self.error(codes::T0103, e.span, format!("`{shown}` can't be indexed"), "not an array, list or slice");
             return self.tcx.error;
         };
@@ -239,6 +245,24 @@ impl Checker<'_> {
     /// floats from `Float[T]`. The value is passed as it is.
     pub(super) fn prim_method(&mut self, ty: Ty, name: &str) -> Option<Found> {
         let ty = self.resolve(ty);
+        // A gauge has its base's methods, working in the base type, except
+        // `min` and `max`: the smaller or larger of two values in a range
+        // is in it too, so `amount.max(25)` is still a `Cents`.
+        if let TyKind::Gauge(_, base) = *self.tcx.kind(ty) {
+            let keeps = matches!(name, "min" | "max")
+                && matches!(self.tcx.kind(ty), TyKind::Gauge(def, _) if self.r.gauges.get(def).is_some_and(|g| g.range.is_some()));
+            let mut found = self.prim_method(base, name)?;
+            if keeps {
+                let warp = match self.tcx.kind(found.self_ty) {
+                    TyKind::Adt(w, _) => *w,
+                    _ => return Some(found),
+                };
+                let self_ty = self.tcx.intern(TyKind::Adt(warp, vec![ty]));
+                found.inst = self.member_instance(found.inst.def, self_ty);
+                found.self_ty = self_ty;
+            }
+            return Some(found);
+        }
         let (warp, args) = match self.tcx.kind(ty) {
             TyKind::Str => (self.std.str_warp?, Vec::new()),
             TyKind::Adt(def, _) if Some(*def) == self.std.string => (self.std.str_warp?, Vec::new()),

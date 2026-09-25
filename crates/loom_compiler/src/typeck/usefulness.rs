@@ -237,6 +237,11 @@ impl Checker<'_> {
     fn domain(&self, ty: Ty) -> Option<(i128, i128)> {
         match self.tcx.kind(self.resolve(ty)) {
             TyKind::Int(int) => Some((int.min(), int.max())),
+            // A range gauge's values are its range.
+            TyKind::Gauge(def, base) => match self.r.gauges.get(def).and_then(|g| g.range) {
+                Some(super::gauge::GaugeRange::Int { lo, hi }) => Some((lo, hi)),
+                _ => self.domain(*base),
+            },
             TyKind::Char => Some((0, 0x10_FFFF)),
             _ => None,
         }

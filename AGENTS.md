@@ -89,10 +89,12 @@ language through every layer (type checking, lowering to Lua, the runtime,
     `mut` arguments (M01xx); match exhaustiveness by pattern usefulness
     (nested patterns, integer ranges, twill patterns); functions over Lua's
     200 locals; stack overflow as an unravel;
-11. `defer` and fallback `defer x => …`, on every way out of a scope.
+11. `defer` and fallback `defer x => …`, on every way out of a scope;
+12. gauges: range and predicate gauges, literal checks (G0201), `as`/`as?`/
+    `as|` into them, `is` tests and narrowing, interval arithmetic, and
+    `env.get`. `examples/tour.loom` runs, checked by `tests/examples/tour.out`.
 
-Next: gauges and maps, then `once` warps (ledger), each through every
-layer at once. chip8 is close: `Rng`, `Duration` (`16.ms()`),
+Next: maps, then `once` warps (ledger), each through every layer at once. chip8 is close: `Rng`, `Duration` (`16.ms()`),
 `rotate_right`, and `const assert`.
 
 Keep these green:

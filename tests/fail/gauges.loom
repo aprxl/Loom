@@ -1,0 +1,31 @@
+// Getting into a gauge is checked.
+
+type Cents = i64 where 0..
+type AccountId = u32 where 1..
+type Even = i64 where _ % 2 == 0
+type Percent = f32 where 0.0..=1.0
+type Half = f64 where 0.0..0.5
+type Empty = u8 where 5..5                  //~ G0201
+type Wordy = str where 0..3                 //~ T0103
+fn limit() -> i32 = 3
+type Shifty = i32 where 0..limit()          //~ T0103
+
+const HOUSE: AccountId = 1
+const NOBODY: AccountId = 0                 //~ G0201
+
+fn f(n: i64, a: Cents, b: Cents) {
+    let x: Cents = -1                       //~ G0201
+    let y: Cents = n                        //~ T0101
+    let z: Cents = a - b                    //~ T0101
+    var w: Cents = a
+    w -= 1                                  //~ T0101
+    w += 1
+    let e: Even = 3                         //~ G0201
+    let p: Percent = 1.5                    //~ G0201
+    let q = n as% Cents                     //~ T0109
+    let r = n as| Even                      //~ T0109
+    let s = 0.7 as| Half                    //~ T0109
+    let t = "x" as Cents                    //~ T0109
+}
+
+fn main() {}

@@ -86,6 +86,10 @@ impl Checker<'_> {
         if self.tcx.is_error(tested) || self.tcx.is_error(scrutinee) {
             return;
         }
+        if matches!(self.tcx.kind(tested), TyKind::Gauge(..)) {
+            self.check_gauge_test(pat, tested, scrutinee);
+            return;
+        }
         if let TyKind::Union(members) = self.tcx.kind(scrutinee).clone() {
             if !members.contains(&tested) {
                 let (shown, union) = (self.show(tested), self.show(scrutinee));

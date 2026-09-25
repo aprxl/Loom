@@ -1,0 +1,70 @@
+// Gauges: numeric types limited to a range or a predicate.
+
+use std.io.print
+
+type Cents = i64 where 0..
+type Port = u16 where 1..
+type Percent = f32 where 0.0..=1.0
+type Even = i64 where _ % 2 == 0
+type Digit = u8 where 0..10
+type Big = u64 where 18446744073709551000..
+const LIMIT = 100
+type Small = i32 where -LIMIT..=LIMIT
+
+fn fee(balance: Cents, amount: Cents) -> Cents =
+    if balance >= 1000_00 { 0 } else { (amount / 100).max(25) }   // Cents / 100 is still a Cents
+
+fn parse_cents(s: str) -> ?Cents {
+    let n = s.parse[i64]() mend return none
+    if n is Cents { n } else { none }                              // `is` narrows `n`
+}
+
+fn describe(n: i64) -> String = match n {
+    e: Even => "even {e}"
+    _ => "odd {n}"
+}
+
+fn main() {
+    let a: Cents = 250
+    let b: Cents = 100
+    let sum = a + b                          // Cents + Cents: still a Cents
+    let diff = a - b                         // could be negative: an i64
+    let wide: i64 = a                        // a gauge widens to its base
+    print("{sum} {diff} {wide} {fee(50_00, 1234_00)} {fee(2000_00, 5_00)} {fee(10, 10_00)}")
+    var total: Cents = 0
+    total += a
+    total *= 2
+    print(total)
+
+    print("{parse_cents("42"):?} {parse_cents("-3"):?} {parse_cents("x"):?}")
+    print("{(-5) as? Cents} {7 as? Cents} {300 as| Digit} {-4 as| Digit} {5 as Digit}")
+    print("{1.7 as| Percent} {(-0.5) as| Percent} {0.25 as Percent} {2.0 as? Percent}")
+    print("{70000 as| Port} {0 as| Port} {(0.0 / 0.0) as| Percent}")
+    print("{describe(10)} {describe(7)} {12 as? Even} {13 as? Even}")
+    let e: Even = 4
+    let s: Small = -100
+    let big: Big = 18446744073709551615
+    print("{e} {s} {big} {big as? Big} {5 as? Big}")
+
+    // A gauge has its base's methods; `min` and `max` keep it.
+    let d: Digit = 7
+    let m: Digit = d.min(3)
+    print("{d.count_ones()} {m} {d.max(9)} {d + 1}")
+
+    // Gauges in collections and patterns.
+    let digits: List[Digit] = [1, 2, 3]
+    print("{digits} {digits.sum()}")
+    let p: Port = 8080
+    let kind = match p {
+        1..=1023 => "system"
+        1024..=49151 => "registered"
+        _ => "dynamic"
+    }
+    print(kind)
+    let level: Digit = 3
+    let word = match level {
+        0..=4 => "low"
+        5..=9 => "high"
+    }
+    print(word)
+}

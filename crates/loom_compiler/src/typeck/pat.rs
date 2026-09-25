@@ -15,6 +15,11 @@ impl Checker<'_> {
     pub(super) fn check_pat(&mut self, pat: &Pat, ty: Ty) {
         self.b.pat_ty.insert(pat.id, ty);
         let ty = self.resolve(ty);
+        // A literal or a range matches a gauge's value as its base's.
+        let ty = match pat.kind {
+            PatKind::Lit { .. } | PatKind::Range { .. } => self.tcx.degauge(ty),
+            _ => ty,
+        };
         let span = pat.span;
         match &pat.kind {
             PatKind::Wild | PatKind::Error => {}
@@ -171,6 +176,11 @@ impl Checker<'_> {
             },
             CasePath::Type(t) => {
                 let pty = self.lower_ty(t);
+                // `x is Cents`: a test for a gauge.
+                if matches!(self.tcx.kind(pty), TyKind::Gauge(..)) && fields.is_none() {
+                    self.check_gauge_test(pat, pty, ty);
+                    return;
+                }
                 match self.adt_info(pty) {
                     Some(info) if info.is_sum() => {
                         self.diags.push(

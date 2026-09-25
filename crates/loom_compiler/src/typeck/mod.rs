@@ -28,6 +28,7 @@ mod call;
 mod dynamic;
 mod expr;
 mod fallible;
+mod gauge;
 mod generic;
 mod infer;
 mod iter;
@@ -52,6 +53,7 @@ use loom_syntax::source::Span;
 use crate::hir::{self, DefId, DefKind, Expr, ExprKind, FnRet, HirId, LocalId, Program, TyKind as HirTy};
 use crate::ty::{Ty, TyCtx, TyKind};
 pub use fallible::{ErrConv, Exit, MendInfo, TryInfo, Unwrap};
+pub use gauge::{GaugeInfo, GaugeRange};
 use infer::{PendingLit, Var};
 pub use seq::Seq;
 pub use warp::{CaseFieldInfo, CaseInfo, FieldInfo, Key, WarpInfo};
@@ -142,6 +144,8 @@ pub struct Results {
     /// (with their super-wefts): the function for each weft method called
     /// through `any`.
     pub vtables: HashMap<VtableKey, Vec<(DefId, BodyId)>>,
+    /// Each gauge used: its base type and what it allows.
+    pub gauges: HashMap<DefId, gauge::GaugeInfo>,
 }
 
 /// A vtable: the type made into an `any`, and the wefts (with their
@@ -218,6 +222,8 @@ pub struct Body {
     /// Expressions whose value moves out of a local (or part of it): which
     /// local. A fallback `defer` on it is off from there.
     pub moves: HashMap<HirId, LocalId>,
+    /// Patterns that test for a gauge (`x is Cents`, `c: Cents =>`): which.
+    pub gauge_tests: HashMap<HirId, Ty>,
 }
 
 /// How a value that isn't a `Stream` gives its items one at a time.
@@ -489,6 +495,8 @@ struct Checker<'p> {
     loops: Vec<LoopCtx>,
     /// The `defer` whose body is being checked: nothing in it may leave it.
     in_defer: Option<Span>,
+    /// Gauges being worked out, or found wrong (reported once).
+    gauge_errors: HashSet<DefId>,
 }
 
 impl<'p> Checker<'p> {
@@ -550,6 +558,7 @@ impl<'p> Checker<'p> {
             ret: None,
             loops: Vec::new(),
             in_defer: None,
+            gauge_errors: HashSet::new(),
         }
     }
 
@@ -655,9 +664,8 @@ impl<'p> Checker<'p> {
             }
             DefKind::Weave(w) => self.check_weave_item(inst.def, w),
             DefKind::Weft(w) => self.check_weft(inst.def, w),
-            DefKind::Type(_) => {
-                self.unsupported(d.span, "type-checking `type` declarations");
-            }
+            DefKind::Type(alias) if alias.gauge.is_some() => self.check_gauge_def(id, inst.def),
+            DefKind::Type(_) => self.check_alias(inst.def),
             DefKind::ConstBlock(e) => {
                 self.unsupported(e.span, "compile-time code");
             }
@@ -990,7 +998,10 @@ impl<'p> Checker<'p> {
                         Some(value) => self.lower_ty(value),
                         None => self.weft_assoc(*def, span),
                     },
-                    DefKind::Type(_) => self.unsupported(span, "gauges and generic type aliases"),
+                    DefKind::Type(alias) if alias.gauge.is_some() && alias.generics.is_empty() => {
+                        self.gauge_ty(*def, span)
+                    }
+                    DefKind::Type(_) => self.unsupported(span, "generic type aliases"),
                     DefKind::GenericParam(_) => match self.subst.iter().find(|(g, _)| g == def) {
                         Some(&(_, ty)) => ty,
                         None => self.unsupported(span, "generic parameters here"),
@@ -1145,6 +1156,14 @@ impl<'p> Checker<'p> {
         if actual == target || self.tcx.is_lenient(actual) || self.tcx.has_error(target) {
             return true;
         }
+        // A gauge's value is a value of its base: it widens to it (and to
+        // whatever that widens to) for free.
+        // (Unless the target holds the gauge itself: `?Cents`, `Cents ! E`.)
+        if let TyKind::Gauge(_, base) = *self.tcx.kind(actual)
+            && !self.wraps(target, actual)
+        {
+            return self.coerce(e, base, target);
+        }
         // A literal whose type is still open takes the target's.
         if (self.has_vars(actual) || self.has_vars(target)) && self.unify(actual, target) {
             return true;
@@ -1226,6 +1245,14 @@ impl<'p> Checker<'p> {
             }
             None => {
                 self.mismatch(e.span, target, actual);
+                if let TyKind::Gauge(def, _) = *self.tcx.kind(target)
+                    && let Some(last) = self.diags.last_mut()
+                {
+                    let name = self.p.def(def).name.clone();
+                    *last = std::mem::replace(last, Diagnostic::error(codes::T0101, "")).help(format!(
+                        "getting into a gauge is checked: `x as {name}` (unravels), `x as? {name}` or `x as| {name}`"
+                    ));
+                }
                 let is_string = matches!(self.tcx.kind(actual), TyKind::Adt(d, _) if Some(*d) == self.std.string);
                 if is_string
                     && matches!(self.tcx.kind(target), TyKind::Str)
@@ -1240,12 +1267,28 @@ impl<'p> Checker<'p> {
         }
     }
 
+    /// Whether `outer` is `inner`, or an optional, result or union with
+    /// `inner` in it.
+    fn wraps(&self, outer: Ty, inner: Ty) -> bool {
+        outer == inner
+            || match self.tcx.kind(outer) {
+                TyKind::Optional(t) => self.wraps(*t, inner),
+                TyKind::Result(t, _) => self.wraps(*t, inner),
+                TyKind::Union(members) => members.contains(&inner),
+                _ => false,
+            }
+    }
+
     /// Whether `ty` weaves `weft`: built in (the primitive types, `String`,
     /// tuples and optionals of them), or through a weave.
     fn weaves(&self, ty: Ty, weft: DefId) -> bool {
         let ty = self.resolve(ty);
         if self.weaving(weft, ty).is_some() {
             return true;
+        }
+        // A gauge weaves what its base does.
+        if let TyKind::Gauge(_, base) = *self.tcx.kind(ty) {
+            return self.weaves(base, weft);
         }
         if let TyKind::Any(wefts) = self.tcx.kind(ty) {
             return self.weft_closure(wefts).contains(&weft);

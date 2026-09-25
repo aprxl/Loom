@@ -21,6 +21,7 @@
 mod closure;
 mod expr;
 mod fallible;
+mod gauge;
 mod limits;
 mod lir;
 mod seq;
@@ -28,7 +29,7 @@ mod warp;
 
 use std::collections::{HashMap, HashSet};
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use loom_host::srcmap::{Mapping, SourceMap};
 use loom_syntax::Diagnostic;
 use loom_syntax::diag::codes;
@@ -48,7 +49,7 @@ pub struct Bundle {
 
 /// The `std` externs the runtime implements (see `rt.ext` in
 /// `runtime/rt/core.lua`). Calling any other extern is "not implemented yet".
-const EXTERNS: &[&str] = &["std.io.print", "std.error.unravel", "std.error.assert"];
+const EXTERNS: &[&str] = &["std.io.print", "std.error.unravel", "std.error.assert", "std.env.get"];
 
 /// The `#builtin` warps of std whose methods the runtime implements, every
 /// one (a test checks that `rt.ext` has them all).
@@ -71,6 +72,7 @@ pub fn lower(db: &SourceDb, p: &Program, typed: &Typed) -> Result<Bundle, Vec<Di
     for &id in &typed.results.reachable {
         l.lower_instance(id);
     }
+    l.emit_gauges();
     if !l.diags.is_empty() {
         return Err(l.diags);
     }
@@ -136,6 +138,8 @@ struct Lowerer<'a> {
     /// For each local with a fallback `defer` in scope, that defer's flag:
     /// true while the local's value is still there to clean up.
     live_flags: HashMap<LocalId, Vec<String>>,
+    /// Gauges whose checking functions are needed, in the order first used.
+    gauges_used: IndexSet<DefId>,
     reported: HashSet<String>,
 }
 
@@ -162,6 +166,7 @@ impl<'a> Lowerer<'a> {
             main_error: None,
             aliases: HashMap::new(),
             live_flags: HashMap::new(),
+            gauges_used: IndexSet::new(),
             reported: HashSet::new(),
         }
     }
@@ -275,8 +280,10 @@ impl<'a> Lowerer<'a> {
     /// made of) first.
     fn desc(&mut self, ty: Ty, span: Span) -> Expr {
         // `str` and `String` are both Lua strings: one descriptor serves both.
+        // A gauge's values are its base's.
         let ty = match self.tcx().kind(ty) {
             TyKind::Adt(def, _) if self.is_string(*def) => self.tcx().str,
+            TyKind::Gauge(_, base) => *base,
             _ => ty,
         };
         if let Some(i) = self.descs.get_index_of(&ty) {

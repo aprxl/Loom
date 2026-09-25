@@ -242,6 +242,7 @@ impl Checker<'_> {
             | TyKind::Range(_)
             | TyKind::Var(_)
             | TyKind::Param(_)
+            | TyKind::Gauge(..)
             | TyKind::Error => true,
             TyKind::Tuple(items) => items.iter().all(|&t| self.is_copy(t)),
             TyKind::Optional(t) => self.is_copy(t),

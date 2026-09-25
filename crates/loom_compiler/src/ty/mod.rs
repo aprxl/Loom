@@ -50,6 +50,10 @@ pub enum TyKind {
     Any(Vec<DefId>),
     /// `[T; N]`: exactly `N` elements, stored inline and copied like a value.
     Array(Ty, u64),
+    /// A gauge (`type Cents = i64 where 0..`): a numeric type of its own,
+    /// with the values of its base (the second field, always a concrete
+    /// `Int` or `Float`) that its range or predicate allows.
+    Gauge(DefId, Ty),
     /// `A | B`: a value of one of these types. Always two or more members,
     /// sorted, none of them unions themselves (see [`TyCtx::union`]).
     Union(Vec<Ty>),
@@ -165,10 +169,20 @@ impl TyCtx {
         }
     }
 
+    /// The integer type of `ty`, or of its base when it's a gauge.
     pub fn as_int(&self, ty: Ty) -> Option<IntTy> {
         match self.kind(ty) {
             TyKind::Int(i) => Some(*i),
+            TyKind::Gauge(_, base) => self.as_int(*base),
             _ => None,
+        }
+    }
+
+    /// `ty`, or its base if it's a gauge.
+    pub fn degauge(&self, ty: Ty) -> Ty {
+        match self.kind(ty) {
+            TyKind::Gauge(_, base) => *base,
+            _ => ty,
         }
     }
 
@@ -315,7 +329,7 @@ impl TyCtx {
             TyKind::IntVar(_) => "{integer}".into(),
             TyKind::FloatVar(_) => "{float}".into(),
             TyKind::Var(_) => "_".into(),
-            TyKind::Param(def) => p.def(*def).name.clone(),
+            TyKind::Param(def) | TyKind::Gauge(def, _) => p.def(*def).name.clone(),
             TyKind::Error => "{error}".into(),
         }
     }

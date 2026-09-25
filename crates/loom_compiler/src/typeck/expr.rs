@@ -121,7 +121,8 @@ impl Checker<'_> {
                     return self.unsupported(span, "`const if`");
                 }
                 self.check_coerce(cond, self.tcx.bool);
-                self.check_if(then, else_.as_deref(), expected)
+                let narrowed = self.narrowings(cond);
+                self.check_if(then, else_.as_deref(), expected, &narrowed)
             }
             ExprKind::Match { scrutinee, arms } => self.check_match(scrutinee, arms, span, expected),
             ExprKind::For { pat, iter, body, is_const, is_loom } => {
@@ -305,6 +306,15 @@ impl Checker<'_> {
             Lit::Int(i) => self.check_int_lit(i, negative, span, expected),
             Lit::Float(f) => match f.suffix {
                 Some(p) => self.tcx.prim(p).unwrap_or_else(|| self.unsupported(span, "`f16`")),
+                // A literal for a float gauge must be in it.
+                None if expected
+                    .is_some_and(|t| matches!(self.tcx.kind(t), TyKind::Gauge(_, b) if matches!(self.tcx.kind(*b), TyKind::Float(_)))) =>
+                {
+                    let ty = expected.expect("checked");
+                    let value = if negative { -f.value } else { f.value };
+                    self.check_into_gauge(ty, super::gauge::Val::Float(value), span);
+                    ty
+                }
                 None => match expected.map(|t| self.tcx.kind(t).clone()) {
                     Some(TyKind::Float(_) | TyKind::FloatVar(_)) => expected.unwrap_or(self.tcx.f64),
                     _ => self.new_var(VarKind::Float),
@@ -358,6 +368,13 @@ impl Checker<'_> {
             // An integer literal can be a float: `let x: f64 = 0`.
             Some(TyKind::Int(_) | TyKind::Float(_) | TyKind::IntVar(_) | TyKind::FloatVar(_)) => {
                 expected.unwrap_or(self.tcx.i32)
+            }
+            // One for a gauge must fit its base, and be in it.
+            Some(TyKind::Gauge(_, base)) => {
+                self.check_int_range(value, base, span);
+                let ty = expected.expect("matched");
+                self.check_into_gauge(ty, super::gauge::Val::Int(value), span);
+                return ty;
             }
             _ => self.new_var(VarKind::Int),
         };
@@ -520,18 +537,24 @@ impl Checker<'_> {
         }
     }
 
-    fn check_if(&mut self, then: &Block, else_: Option<&Expr>, expected: Option<Ty>) -> Ty {
+    fn check_if(
+        &mut self,
+        then: &Block,
+        else_: Option<&Expr>,
+        expected: Option<Ty>,
+        narrowed: &[(crate::hir::LocalId, Ty)],
+    ) -> Ty {
         let Some(else_) = else_ else {
             // Without `else`, the `then` value is thrown away.
-            self.check_block(then, Some(self.tcx.unit));
+            self.with_narrowed(narrowed, |this| this.check_block(then, Some(this.tcx.unit)));
             return self.tcx.unit;
         };
         if let Some(t) = expected {
-            self.check_block(then, Some(t));
+            self.with_narrowed(narrowed, |this| this.check_block(then, Some(t)));
             self.check_coerce(else_, t);
             return t;
         }
-        let then_ty = self.check_block(then, None);
+        let then_ty = self.with_narrowed(narrowed, |this| this.check_block(then, None));
         if then_ty == self.tcx.never {
             return self.check_expr(else_, None);
         }
@@ -662,9 +685,19 @@ impl Checker<'_> {
                         self.b.expr_ty.insert(operand.id, ty);
                         ty
                     }
-                    _ => self.check_expr(operand, expected),
+                    _ => {
+                        let expected = expected.map(|t| self.tcx.degauge(self.resolve(t)));
+                        self.check_expr(operand, expected)
+                    }
                 };
                 let literal = matches!(operand.kind, ExprKind::Lit(_));
+                // A negative literal can be a gauge's value; negating a
+                // gauge's value gives its base type.
+                let ty = self.resolve(ty);
+                if literal && matches!(self.tcx.kind(ty), TyKind::Gauge(..)) {
+                    return ty;
+                }
+                let ty = self.tcx.degauge(ty);
                 match self.tcx.kind(self.resolve(ty)) {
                     TyKind::Int(i) if i.signed => ty,
                     // `-1` as a `u8` was already reported as out of range.
@@ -691,7 +724,9 @@ impl Checker<'_> {
                 }
             }
             UnaryOp::BitNot => {
+                let expected = expected.map(|t| self.tcx.degauge(self.resolve(t)));
                 let ty = self.check_expr(operand, expected);
+                let ty = self.tcx.degauge(self.resolve(ty));
                 self.require_operand(ty, Operand::Integer, "~", span)
             }
             UnaryOp::Not => self.check_coerce(operand, self.tcx.bool),
@@ -704,7 +739,9 @@ impl Checker<'_> {
         match op {
             B::And | B::Or => {
                 self.check_coerce(lhs, self.tcx.bool);
-                self.check_coerce(rhs, self.tcx.bool);
+                // `n is Cents and n > 5`: the right side sees `n` as a `Cents`.
+                let narrowed = if op == B::And { self.narrowings(lhs) } else { Vec::new() };
+                self.with_narrowed(&narrowed, |this| this.check_coerce(rhs, this.tcx.bool));
                 self.tcx.bool
             }
             B::Eq | B::Ne | B::Lt | B::Le | B::Gt | B::Ge => {
@@ -714,7 +751,9 @@ impl Checker<'_> {
             }
             B::Shl | B::Shr => {
                 // The amount can be any integer type; the result has the left side's type.
+                let expected = expected.map(|t| self.tcx.degauge(self.resolve(t)));
                 let ty = self.check_arith_operand(lhs, expected);
+                let ty = self.tcx.degauge(self.resolve(ty));
                 let amount = self.check_expr(rhs, None);
                 self.require_operand(amount, Operand::Integer, op.as_str(), rhs.span);
                 self.require_operand(ty, Operand::Integer, op.as_str(), span)
@@ -724,6 +763,9 @@ impl Checker<'_> {
                     B::Add | B::Sub | B::Mul | B::Div | B::Rem => Operand::Numeric,
                     _ => Operand::Integer,
                 };
+                // Gauges are worked with in their base type; the result is
+                // a gauge again when its range still holds every result.
+                let expected = expected.map(|t| self.tcx.degauge(self.resolve(t)));
                 // With an expected numeric type, both operands widen to it
                 // first: `let op: u16 = hi << 8 | lo`.
                 // An operand of a wider integer type widens the whole
@@ -752,7 +794,7 @@ impl Checker<'_> {
                 if matches!(op, B::AddChecked | B::SubChecked | B::MulChecked) && !self.tcx.is_error(ty) {
                     return self.tcx.optional(ty);
                 }
-                ty
+                self.gauge_arith(op, lhs, rhs, self.resolve(ty)).unwrap_or(ty)
             }
         }
     }
@@ -801,12 +843,21 @@ impl Checker<'_> {
             ),
             _ => false,
         };
-        let mut tys: Vec<Option<Ty>> =
-            operands.iter().map(|e| (!leading(e)).then(|| self.check_expr(e, None))).collect();
+        // A gauge is compared (and worked with) as its base type.
+        let mut tys: Vec<Option<Ty>> = operands
+            .iter()
+            .map(|e| {
+                (!leading(e)).then(|| {
+                    let ty = self.check_expr(e, None);
+                    self.tcx.degauge(self.resolve(ty))
+                })
+            })
+            .collect();
         let hint = tys.iter().flatten().next().copied();
         for (e, ty) in operands.iter().zip(tys.iter_mut()) {
             if ty.is_none() {
-                *ty = Some(self.check_expr(e, hint));
+                let t = self.check_expr(e, hint);
+                *ty = Some(self.tcx.degauge(self.resolve(t)));
             }
         }
         let tys: Vec<Ty> = tys.into_iter().flatten().collect();
@@ -861,9 +912,13 @@ impl Checker<'_> {
     fn check_cast(&mut self, e: &Expr, kind: CastKind, ty: &crate::hir::Ty, span: Span) -> Ty {
         let target = self.lower_ty(ty);
         let source = self.check_expr(e, None);
-        let source = self.resolve(source);
+        let source = self.tcx.degauge(self.resolve(source));
         if self.tcx.is_lenient(source) || self.tcx.is_error(target) {
             return self.tcx.error;
+        }
+        // Into a gauge: converted to its base, then checked.
+        if let TyKind::Gauge(def, _) = *self.tcx.kind(target) {
+            return self.check_gauge_cast(kind, source, target, def, span);
         }
         use TyKind as T;
         let allowed = match (self.tcx.kind(source), self.tcx.kind(target)) {
@@ -908,12 +963,20 @@ impl Checker<'_> {
                     BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem => Operand::Numeric,
                     _ => Operand::Integer,
                 };
-                self.require_operand(ty, need, bin.as_str(), target.span);
+                // `x += 1` on a gauge: worked out in the base type, and the
+                // result must stay in the gauge.
+                let gauge = matches!(self.tcx.kind(self.resolve(ty)), TyKind::Gauge(..));
+                let base = self.tcx.degauge(self.resolve(ty));
+                self.require_operand(base, need, bin.as_str(), target.span);
                 if matches!(bin, BinaryOp::Shl | BinaryOp::Shr) {
                     let amount = self.check_expr(value, None);
                     self.require_operand(amount, Operand::Integer, bin.as_str(), value.span);
                 } else {
-                    self.check_coerce(value, ty);
+                    self.check_coerce(value, base);
+                }
+                if gauge {
+                    let span = target.span.to(value.span);
+                    self.check_gauge_assign(ty, bin, target, value, span);
                 }
             }
         }
