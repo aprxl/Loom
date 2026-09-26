@@ -7,7 +7,7 @@ use loom_syntax::source::Span;
 use loom_syntax::token::IntLit;
 
 use super::infer::{PendingLit, VarKind};
-use super::{Checker, Coercion, LoopCtx};
+use super::{Checker, Coercion, Fence, LoopCtx};
 use crate::hir::{Block, DefKind, Expr, ExprKind, StmtKind, TemplatePart};
 use crate::ty::{Ty, TyKind};
 
@@ -85,7 +85,12 @@ impl Checker<'_> {
                 }
                 self.string_ty()
             }
-            ExprKind::Local(local) => self.b.local_ty.get(local).copied().unwrap_or(self.tcx.error),
+            ExprKind::Local(local) => {
+                if self.runtime_locals.as_ref().is_some_and(|outer| outer.contains(local)) {
+                    self.runtime_value(*local, span);
+                }
+                self.b.local_ty.get(local).copied().unwrap_or(self.tcx.error)
+            }
             ExprKind::Def { def, args } => {
                 if !args.is_empty() {
                     return self.unsupported(span, "explicit generic arguments");
@@ -195,12 +200,12 @@ impl Checker<'_> {
                 self.tcx.never
             }
             ExprKind::Continue { target } => {
-                if self.in_defer.is_some() && !self.loops.iter().any(|l| l.id == *target) {
-                    self.leaves_defer(span, "continue");
+                if self.fence.is_some() && !self.loops.iter().any(|l| l.id == *target) {
+                    self.leaves_fence(span, "continue");
                 }
                 self.tcx.never
             }
-            ExprKind::Return(_) | ExprKind::Fail(_) if self.in_defer.is_some() => {
+            ExprKind::Return(_) | ExprKind::Fail(_) if self.fence.is_some() => {
                 let (inner, what) = match &e.kind {
                     ExprKind::Return(v) => (v.as_deref(), "return"),
                     ExprKind::Fail(v) => (Some(v.as_ref()), "fail"),
@@ -210,7 +215,7 @@ impl Checker<'_> {
                 if let Some(v) = inner {
                     self.check_expr(v, Some(self.tcx.error));
                 }
-                self.leaves_defer(span, what);
+                self.leaves_fence(span, what);
                 self.tcx.never
             }
             ExprKind::Return(value) => {
@@ -237,7 +242,7 @@ impl Checker<'_> {
             ExprKind::Yield { place: None, value } => self.check_yield(value, span),
             ExprKind::Pull => self.check_pull(span),
             ExprKind::Unsafe { .. } => self.unsupported(span, "`unsafe` blocks"),
-            ExprKind::Const(_) => self.unsupported(span, "compile-time code"),
+            ExprKind::Const(inner) => self.check_const_expr(span, inner, expected),
             ExprKind::Lambda { params, body } => self.check_lambda(e, params, body, expected),
             ExprKind::Loom { .. } | ExprKind::Thread(_) => self.unsupported(span, "`loom` and `thread`"),
             ExprKind::Call { callee, args } => self.check_call(e, callee, args, expected),
@@ -316,7 +321,11 @@ impl Checker<'_> {
             Lit::Char(_) => self.tcx.char,
             Lit::Str(_) => self.tcx.str,
             Lit::Bool(_) => self.tcx.bool,
-            Lit::Bytes(_) => self.unsupported(span, "byte strings"),
+            // `b"GET"`: an array of its bytes.
+            Lit::Bytes(bytes) => {
+                let u8 = self.tcx.int(crate::ty::IntTy { signed: false, bits: 8, size: false });
+                self.tcx.intern(TyKind::Array(u8, bytes.len() as u64))
+            }
             Lit::None => match expected.map(|t| self.tcx.kind(t).clone()) {
                 // `expected` was unwrapped above; `none` needs the optional back.
                 Some(_) => match expected {
@@ -539,9 +548,9 @@ impl Checker<'_> {
             StmtKind::Defer { body, .. } => {
                 let saved_loops = std::mem::take(&mut self.loops);
                 let saved_mends = std::mem::take(&mut self.mends);
-                let saved_defer = self.in_defer.replace(body.span);
+                let saved_defer = self.fence.replace(Fence::Defer(body.span));
                 self.check_expr(body, None);
-                self.in_defer = saved_defer;
+                self.fence = saved_defer;
                 self.mends = saved_mends;
                 self.loops = saved_loops;
             }
@@ -609,16 +618,20 @@ impl Checker<'_> {
 
     // ------------------------------------------------------------ loops
 
-    /// Reports `what` (`return`, `?`…) trying to leave a `defer`'s body.
-    pub(super) fn leaves_defer(&mut self, span: Span, what: &str) {
-        let at = self.in_defer.expect("inside a defer");
-        self.diags.push(
-            Diagnostic::error(codes::T0118, format!("`{what}` can't leave a `defer`"))
+    /// Reports `what` (`return`, `?`…) trying to leave a `defer`'s body or
+    /// compile-time code.
+    pub(super) fn leaves_fence(&mut self, span: Span, what: &str) {
+        let diag = match self.fence.expect("inside a fence") {
+            Fence::Defer(at) => Diagnostic::error(codes::T0118, format!("`{what}` can't leave a `defer`"))
                 .primary(span, "this would leave the deferred code")
                 .secondary(at, "it runs when the scope ends, from here")
-                .note("a `defer` runs while its scope is already ending, so it can't change where that goes")
-                .help("handle it inside: `mend`, or an `if`"),
-        );
+                .note("a `defer` runs while its scope is already ending, so it can't change where that goes"),
+            Fence::Const(at) => Diagnostic::error(codes::K0106, format!("`{what}` can't leave compile-time code"))
+                .primary(span, "this would leave the `const` code")
+                .secondary(at, "it runs while compiling, from here")
+                .note("compile-time code runs before the program does, so it can't change where the program goes"),
+        };
+        self.diags.push(diag.help("handle it inside: `mend`, or an `if`"));
     }
 
     fn in_loop(
@@ -638,8 +651,8 @@ impl Checker<'_> {
             if let Some(v) = value {
                 self.check_expr(v, None);
             }
-            if self.in_defer.is_some() {
-                self.leaves_defer(span, "break");
+            if self.fence.is_some() {
+                self.leaves_fence(span, "break");
             }
             return;
         };

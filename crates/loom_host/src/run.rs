@@ -116,7 +116,7 @@ pub fn run_tests(bundle: &str, map: Option<&SourceMap>, sandbox: bool) -> Result
 }
 
 /// How a call into the bundle ended.
-fn outcome(result: mlua::Result<Option<mlua::String>>, map: Option<&SourceMap>) -> Outcome {
+pub(crate) fn outcome(result: mlua::Result<Option<mlua::String>>, map: Option<&SourceMap>) -> Outcome {
     match result {
         Ok(None) => Outcome::Finished,
         Ok(Some(message)) => Outcome::Failed { message: message.to_string_lossy() },
@@ -136,7 +136,7 @@ fn outcome(result: mlua::Result<Option<mlua::String>>, map: Option<&SourceMap>) 
 }
 
 /// The whole text of a Lua error, traceback included.
-fn full_text(e: &mlua::Error) -> String {
+pub(crate) fn full_text(e: &mlua::Error) -> String {
     match e {
         mlua::Error::RuntimeError(message) => message.clone(),
         mlua::Error::CallbackError { cause, traceback } => format!("{}\n{traceback}", full_text(cause)),
@@ -153,7 +153,7 @@ fn traceback_location(text: &str, map: Option<&SourceMap>) -> Option<Location> {
     })
 }
 
-fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> mlua::Result<()> {
+pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> mlua::Result<()> {
     let table = lua.create_table()?;
     let sandbox = host.sandbox;
     let output = host.output;
@@ -202,7 +202,7 @@ fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> mlua::Result<
 
 /// The message of a Lua error, without mlua's decorations or the Lua
 /// traceback mlua appends.
-fn error_text(e: &mlua::Error) -> String {
+pub(crate) fn error_text(e: &mlua::Error) -> String {
     let text = match e {
         mlua::Error::RuntimeError(message) | mlua::Error::SyntaxError { message, .. } => message.clone(),
         mlua::Error::CallbackError { cause, .. } => return error_text(cause),

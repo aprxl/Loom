@@ -41,6 +41,9 @@ overflow-policy operators.
 | map        | `["x": 1.5, "y": 2.0]` |
 | range      | `0..n`, `0..=n`, `..n`, `n..` |
 
+A byte string `b"GET"` is an array of its bytes (`[u8; 3]`), and passes
+where a `[u8]` is expected like any array. It holds ASCII only.
+
 Strings interpolate with `{expr}` or `{expr:spec}`. Write `{{` and `}}` for
 literal braces. An interpolated string is a **template**. It allocates a
 `String` only when it's stored somewhere that needs one. If you pass it

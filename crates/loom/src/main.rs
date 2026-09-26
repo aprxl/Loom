@@ -201,8 +201,9 @@ fn typecheck(path: &Path, color: ColorMode) -> Result<(SourceDb, Resolved, Typed
 
 fn check(path: &Path, color: ColorMode) -> ExitCode {
     let run = || -> Result<(), ExitCode> {
-        let (_, resolved, _) = typecheck(path, color)?;
+        let (db, resolved, typed) = typecheck(path, color)?;
         let p = &resolved.program;
+        report(&db, path, &lower::check(&db, p, &typed), "compile", color)?;
         let n = p.root.map_or(0, |root| p.module(root).decls.len());
         println!("{}: {n} item{}, no errors", path.display(), if n == 1 { "" } else { "s" });
         Ok(())

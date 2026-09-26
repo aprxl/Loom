@@ -6,9 +6,10 @@
 //!
 //! [`run`] runs a compiled bundle (or its tests) and classifies how it
 //! ended; [`srcmap`] maps bundle lines back to Loom source; [`term`] is the
-//! terminal `std.term` talks to. Still to come (see
-//! `design/lua-backend.md`): an instruction budget and Ctrl-C handling.
+//! terminal `std.term` talks to; [`consteval`] runs compile-time code in a
+//! sandbox. Still to come (see `design/lua-backend.md`): Ctrl-C handling.
 
+pub mod consteval;
 pub mod run;
 pub mod srcmap;
 pub mod term;

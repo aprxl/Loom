@@ -1,16 +1,35 @@
-//! Compile-time code at the top of a module. So far that's `const assert`
-//! whose condition the constant folder can work out: literals, constants,
-//! arithmetic and comparisons, and the length of an array. Anything else is
-//! "not implemented yet" (it needs the Lua sandbox, see
-//! design/06-compile-time.md).
+//! Compile-time code: `const` expressions (`const fib(20)`,
+//! `const { … }`), `const assert`, and `const` items at the top of a module
+//! or in a warp.
+//!
+//! The checker makes sure compile-time code can run while compiling: it
+//! can't read the locals around it (K0105), which have no values yet, and
+//! control flow can't leave it (K0106). Lowering then runs it in the
+//! sandbox (see `lower::consteval`). A `const assert` at the top of a
+//! module whose condition the constant folder can work out is decided
+//! here, without the sandbox.
+
+use std::collections::HashSet;
 
 use loom_syntax::Diagnostic;
 use loom_syntax::ast::{BinaryOp, Lit, UnaryOp};
 use loom_syntax::diag::codes;
+use loom_syntax::source::Span;
 
 use super::gauge::Val;
-use super::{BodyId, Checker};
-use crate::hir::{DefKind, Expr, ExprKind, StmtKind};
+use super::{BodyId, Checker, Fence};
+use crate::hir::{Arg, DefKind, Expr, ExprKind, LocalId, Program, StmtKind};
+use crate::ty::Ty;
+
+/// The arguments of `assert(…)` when `e` is a call of std's `assert`:
+/// `const assert(cond, message)` checks `cond` while compiling.
+pub(crate) fn assert_args<'e>(p: &Program, e: &'e Expr) -> Option<&'e [Arg]> {
+    let ExprKind::Call { callee, args } = &e.kind else { return None };
+    match &callee.kind {
+        ExprKind::Def { def, .. } if p.def_path(*def) == "std.error.assert" => Some(args),
+        _ => None,
+    }
+}
 
 impl Checker<'_> {
     /// The value of an untyped constant made of number literals and other
@@ -53,50 +72,84 @@ impl Checker<'_> {
         }
     }
 
-    /// `const …` as an item: `e` is the whole `const` expression.
+    /// `const inner`, at `span`: `inner` runs while compiling. A `const
+    /// assert(…)` is `()`; anything else has the type of its value.
+    pub(super) fn check_const_expr(&mut self, span: Span, inner: &Expr, expected: Option<Ty>) -> Ty {
+        let outer: HashSet<LocalId> = self.b.local_ty.keys().copied().collect();
+        let saved_locals = self.runtime_locals.replace(outer);
+        let saved_fence = self.fence.replace(Fence::Const(span));
+        let saved_loops = std::mem::take(&mut self.loops);
+        let saved_mends = std::mem::take(&mut self.mends);
+        let saved_subjects = std::mem::take(&mut self.subjects);
+        let saved_self = self.self_local.take();
+        let saved_shuttle = self.shuttle.take();
+        let ty = match assert_args(self.p, inner) {
+            Some(_) => self.check_coerce(inner, self.tcx.unit),
+            None => self.check_expr(inner, expected),
+        };
+        self.shuttle = saved_shuttle;
+        self.self_local = saved_self;
+        self.subjects = saved_subjects;
+        self.mends = saved_mends;
+        self.loops = saved_loops;
+        self.fence = saved_fence;
+        self.runtime_locals = saved_locals;
+        ty
+    }
+
+    /// Reports `local`, declared outside the compile-time code it's used in.
+    pub(super) fn runtime_value(&mut self, local: LocalId, span: Span) {
+        let l = self.p.local(local);
+        self.diags.push(
+            Diagnostic::error(codes::K0105, format!("`{}` has no value while compiling", l.name))
+                .primary(span, "read by compile-time code")
+                .secondary(l.span, "declared outside it, so it gets its value when the program runs")
+                .help("compile-time code can use constants, functions and its own locals"),
+        );
+    }
+
+    /// `const …` as an item: `e` is the whole `const` expression. A
+    /// `const assert` the constant folder can decide is decided here; the
+    /// rest is left to the sandbox.
     pub(super) fn check_const_block(&mut self, id: BodyId, e: &Expr) {
         let ExprKind::Const(inner) = &e.kind else {
             self.unsupported(e.span, "compile-time code");
             return;
         };
-        let assert = match &inner.kind {
-            ExprKind::Call { callee, args } => match &callee.kind {
-                ExprKind::Def { def, .. } if self.p.def_path(*def) == "std.error.assert" => Some(args),
-                _ => None,
-            },
-            _ => None,
-        };
-        let Some(args) = assert else {
-            self.unsupported(e.span, "compile-time code");
-            return;
-        };
         self.in_body(id, |this| {
             let first_var = this.vars.len();
-            let unit = this.tcx.unit;
             let mark = this.diags.len();
-            this.check_coerce(inner, unit);
+            this.check_const_expr(e.span, inner, None);
             this.finish_body(first_var);
             if this.diags.len() > mark {
                 return;
             }
-            let Some(cond) = args.first() else { return };
-            let title = match args.get(1).map(|a| &a.value.kind) {
-                None => Some("const assertion failed".to_string()),
-                Some(ExprKind::Lit(Lit::Str(s))) => Some(format!("const assertion failed: {s}")),
-                Some(_) => None,
-            };
-            match (this.fold(&cond.value, None), title) {
-                (Some(Val::Bool(true)), _) => {}
-                (Some(Val::Bool(false)), Some(title)) => {
-                    this.diags.push(Diagnostic::error(codes::K0101, title).primary(cond.value.span, "this is false"))
-                }
-                (Some(Val::Bool(false)), None) => {
-                    this.unsupported(args[1].value.span, "a `const assert` message that isn't a string literal");
-                }
-                _ => {
-                    this.unsupported(cond.value.span, "evaluating this at compile time");
-                }
+            this.check_value_moves(e);
+            if this.diags.len() > mark || this.folds_assert(inner) {
+                return;
             }
+            this.r.const_blocks.push(id);
         });
+    }
+
+    /// Decides a `const assert` with the constant folder, when it can:
+    /// whether it did.
+    fn folds_assert(&mut self, inner: &Expr) -> bool {
+        let Some(args) = assert_args(self.p, inner) else { return false };
+        let Some(cond) = args.first() else { return false };
+        match self.fold(&cond.value, None) {
+            Some(Val::Bool(true)) => true,
+            Some(Val::Bool(false)) => {
+                let title = match args.get(1).map(|a| &a.value.kind) {
+                    None => "const assertion failed".to_string(),
+                    Some(ExprKind::Lit(Lit::Str(s))) => format!("const assertion failed: {s}"),
+                    // The message needs computing: the sandbox does it.
+                    Some(_) => return false,
+                };
+                self.diags.push(Diagnostic::error(codes::K0101, title).primary(cond.value.span, "this is false"));
+                true
+            }
+            _ => false,
+        }
     }
 }

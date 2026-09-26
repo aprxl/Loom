@@ -107,9 +107,14 @@ language through every layer (type checking, lowering to Lua, the runtime,
 17. shuttles: generators (`~> T`), duplex shuttles (`~> T <~ U`) and sinks,
     `yield`, `pull`, `push`/`close` and `once` bursts, as Lua coroutines.
     `examples/lexer.loom` runs but for its `lexer.Frame.size` assert.
+18. compile-time code in a sandbox: constants computed by ordinary code,
+    `const` expressions, `const assert` anywhere (K0101–K0107), byte
+    strings.
 
-Next: threads (`loom`, `thread`, `loom for`, `Atomic`) for
-`examples/parallel.loom`, then compile-time code, then spools.
+Next: the rest of compile-time code (`const` parameters, `const if` and
+`const for`, reflection) for `examples/compile_time.loom`, then threads
+(`loom`, `thread`, `loom for`, `Atomic`) for `examples/parallel.loom`, then
+spools.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and

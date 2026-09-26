@@ -4,12 +4,12 @@
 //!
 //! ```text
 //! local rt = (function() <runtime/rt/core.lua> end)()
-//! local T, F, C, EXT, VT = {}, {}, {}, {}, {}
+//! local T, F, C, CI, EXT, VT = {}, {}, {}, {}, {}, {}
 //! T[1] = rt.int(32, true)            -- type descriptors
 //! EXT[1] = rt.ext["std.io.print"]    -- std externs it calls
 //! F.main_7 = function() … end        -- every reachable function
 //! VT[1] = {d = T[4], [31] = F.draw_9} -- vtables of values made `any`
-//! C.LIMIT_3 = …                      -- constants, in dependency order
+//! CI.LIMIT_3 = function() … end      -- constants, computed when first read
 //! return F.main_7
 //! ```
 //!
@@ -21,6 +21,7 @@
 //! every Lua line that starts a statement.
 
 mod closure;
+mod consteval;
 mod expr;
 mod fallible;
 mod gauge;
@@ -83,9 +84,10 @@ pub const RUNTIME_WARPS: &[&str] = &[
     "std.fs.File",
 ];
 
-/// Lowers a type-checked program, which starts at `main`. `typed` must have
-/// no errors. Its tests are left out.
+/// Lowers a type-checked program, which starts at `main`, after running its
+/// compile-time code. `typed` must have no errors. Its tests are left out.
 pub fn lower(db: &SourceDb, p: &Program, typed: &Typed) -> Result<Bundle, Vec<Diagnostic>> {
+    consteval::evaluate(db, p, typed, false)?;
     let mut l = Lowerer::new(p, typed);
     let Some(main) = l.find_main() else { return Err(l.diags) };
     l.lower_all(false);
@@ -99,6 +101,7 @@ pub fn lower(db: &SourceDb, p: &Program, typed: &Typed) -> Result<Bundle, Vec<Di
 /// Lowers a type-checked program for `loom test`: the bundle returns the
 /// root module's tests rather than `main`.
 pub fn lower_tests(db: &SourceDb, p: &Program, typed: &Typed) -> Result<Bundle, Vec<Diagnostic>> {
+    consteval::evaluate(db, p, typed, true)?;
     let mut l = Lowerer::new(p, typed);
     l.lower_all(true);
     let tests = p.root.map(|root| p.module(root).tests.clone()).unwrap_or_default();
@@ -109,11 +112,24 @@ pub fn lower_tests(db: &SourceDb, p: &Program, typed: &Typed) -> Result<Bundle, 
     Ok(l.assemble(db, Entry::Tests(tests)))
 }
 
-/// What a bundle returns: `main`, or the tests. Each comes with the
-/// descriptor of the error it can fail with, if it can.
+/// Runs the compile-time code of a type-checked program (its tests' too)
+/// and lowers the rest, reporting what that finds, for `loom check`.
+pub fn check(db: &SourceDb, p: &Program, typed: &Typed) -> Vec<Diagnostic> {
+    if let Err(diags) = consteval::evaluate(db, p, typed, true) {
+        return diags;
+    }
+    let mut l = Lowerer::new(p, typed);
+    l.lower_all(true);
+    l.diags
+}
+
+/// What a bundle returns: `main`, the tests, or the compile-time jobs. Each
+/// function comes with the descriptor of the error it can fail with, if it
+/// can.
 enum Entry {
     Main(DefId, Option<Expr>),
     Tests(Vec<(DefId, Option<Expr>)>),
+    ConstEval,
 }
 
 /// Where a lowered value goes.
@@ -150,9 +166,15 @@ struct Lowerer<'a> {
     externs: IndexMap<String, usize>,
     /// Vtables, by type and wefts, with the type's descriptor.
     vtables: IndexMap<(Ty, Vec<DefId>), Expr>,
-    /// Lowered functions and constants, in the order they were reached.
+    /// Lowered functions, in the order they were reached.
     fns: Vec<Stmt>,
-    consts: IndexMap<DefId, (Stmt, Vec<DefId>)>,
+    /// How each constant is computed (`CI.name = function() … end`).
+    consts: Vec<Stmt>,
+    /// Lowering for the sandbox (see `consteval`): the compile-time jobs.
+    eval: bool,
+    jobs: Vec<(consteval::Job, Expr)>,
+    /// Each constant by its name in `C`, with where it is and what to call it.
+    slots: IndexMap<String, (Span, String)>,
 
     // Per-body state.
     /// The body being lowered: where its types and decisions are recorded.
@@ -162,8 +184,6 @@ struct Lowerer<'a> {
     next_label: u32,
     loops: Vec<LoopInfo>,
     span: Option<Span>,
-    /// Typed constants this body reads, for ordering constant initializers.
-    const_refs: Vec<DefId>,
     /// The Lua local holding each dot-block's subject.
     subjects: HashMap<HirId, String>,
     /// The `mend`s whose left operand is being lowered, innermost last.
@@ -190,14 +210,16 @@ impl<'a> Lowerer<'a> {
             externs: IndexMap::new(),
             vtables: IndexMap::new(),
             fns: Vec::new(),
-            consts: IndexMap::new(),
+            consts: Vec::new(),
+            eval: false,
+            jobs: Vec::new(),
+            slots: IndexMap::new(),
             cur: BodyId(0),
             out: Vec::new(),
             next_temp: 0,
             next_label: 0,
             loops: Vec::new(),
             span: None,
-            const_refs: Vec::new(),
             subjects: HashMap::new(),
             mend_labels: Vec::new(),
             main_error: None,
@@ -575,13 +597,10 @@ impl<'a> Lowerer<'a> {
                     && !self.typed.results.untyped_floats.contains_key(&def) =>
             {
                 let span = d.span;
-                self.const_refs.clear();
                 let body = self.body(span, |this| this.lower_into(&c.value, &Dest::Return));
-                let deps = std::mem::take(&mut self.const_refs);
-                let init = Expr::call(Expr::Function(Vec::new(), body), Vec::new());
-                let target = Expr::field(Expr::name("C"), &self.def_name(def));
-                let stmt = Stmt { kind: StmtKind::Assign(vec![target], vec![init]), span: Some(span) };
-                self.consts.insert(def, (stmt, deps));
+                let key = self.def_name(def);
+                self.const_init(&key, body, span);
+                self.const_job(def, &key);
             }
             _ => {}
         }
@@ -675,7 +694,8 @@ impl<'a> Lowerer<'a> {
             loom_host::RT_CORE
         );
         let mut printer = Printer::new(&preamble);
-        printer.raw("local T, F, C, EXT, VT = {}, {}, {}, {}, {}");
+        printer.raw("local T, F, C, CI, EXT, VT = {}, {}, {}, {}, {}, {}");
+        printer.raw("local abort = rt.lazy(C, CI)");
         let descs = std::mem::take(&mut self.descs);
         for (i, (_, build)) in descs.iter().enumerate() {
             let target = Expr::index(Expr::name("T"), Expr::Int(i as i64 + 1));
@@ -710,7 +730,7 @@ impl<'a> Lowerer<'a> {
                 printer.stmt(&Stmt { kind: StmtKind::Assign(vec![target], vec![value]), span: None });
             }
         }
-        for mut stmt in self.const_order() {
+        for mut stmt in std::mem::take(&mut self.consts) {
             limits::fix(&mut stmt, &mut tables);
             printer.stmt(&stmt);
         }
@@ -725,6 +745,13 @@ impl<'a> Lowerer<'a> {
                     })
                     .collect();
                 Expr::Table(tests)
+            }
+            Entry::ConstEval => {
+                let jobs = std::mem::take(&mut self.jobs).into_iter().map(|(_, f)| f).collect();
+                Expr::Record(vec![
+                    (lir::TableKey::Name("abort".into()), Expr::name("abort")),
+                    (lir::TableKey::Name("jobs".into()), Expr::Table(jobs)),
+                ])
             }
         };
         printer.stmt(&Stmt { kind: StmtKind::Return(Some(result)), span: None });
@@ -746,33 +773,6 @@ impl<'a> Lowerer<'a> {
             stmt(StmtKind::If(vec![(failed, vec![stmt(StmtKind::Return(Some(shown)))])], None)),
         ];
         Expr::Function(Vec::new(), body)
-    }
-
-    /// Constant initializers ordered so each runs after the ones it reads.
-    fn const_order(&mut self) -> Vec<Stmt> {
-        let mut consts = std::mem::take(&mut self.consts);
-        let mut done = HashSet::new();
-        let mut out = Vec::new();
-        let keys: Vec<DefId> = consts.keys().copied().collect();
-        fn visit(
-            def: DefId,
-            consts: &mut IndexMap<DefId, (Stmt, Vec<DefId>)>,
-            done: &mut HashSet<DefId>,
-            out: &mut Vec<Stmt>,
-        ) {
-            if !done.insert(def) {
-                return;
-            }
-            let Some((stmt, deps)) = consts.get(&def).cloned() else { return };
-            for dep in deps {
-                visit(dep, consts, done, out);
-            }
-            out.push(stmt);
-        }
-        for def in keys {
-            visit(def, &mut consts, &mut done, &mut out);
-        }
-        out
     }
 }
 

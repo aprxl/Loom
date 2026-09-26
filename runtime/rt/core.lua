@@ -2449,4 +2449,49 @@ ext["std.num.Float.is_nan"] = function(_, v)
   return v ~= v
 end
 
+-- ================================================================ constants
+
+-- Markers of the ways compile-time code fails other than unravelling (see
+-- loom_host's consteval).
+local NOT_CONST = "\31LOOMK\31"
+local CYCLE = "\31LOOMC\31"
+local GAVE_UP = "\31LOOMS\31"
+
+--- Makes `C` compute each constant the first time it's read, from its
+--- initializer in `init`. Reading one while it's being computed means it
+--- needs its own value. Returns what the compile-time host calls after a
+--- failure: the constants being computed then are never computed again.
+function rt.lazy(C, init)
+  local busy, failed = {}, {}
+  setmetatable(C, {
+    __index = function(t, k)
+      if failed[k] then error(GAVE_UP, 0) end
+      if busy[k] then error(CYCLE .. k, 2) end
+      local f = init[k]
+      if f == nil then return nil end
+      busy[k] = true
+      local v = f()
+      busy[k] = nil
+      rawset(t, k, v)
+      return v
+    end,
+  })
+  return function()
+    for k in pairs(busy) do failed[k] = true end
+    busy = {}
+  end
+end
+
+-- Compile-time code can't reach outside the compiler: std's I/O fails.
+if host and host.const_eval then
+  local io_prefixes = { "std.io.", "std.env.", "std.fs.", "std.time.", "std.term." }
+  for name in pairs(ext) do
+    for _, prefix in ipairs(io_prefixes) do
+      if name:sub(1, #prefix) == prefix then
+        ext[name] = function() error(NOT_CONST .. name, 2) end
+      end
+    end
+  end
+end
+
 return rt

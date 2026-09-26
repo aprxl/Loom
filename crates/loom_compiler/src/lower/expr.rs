@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use loom_syntax::ast::{AssignOp, BinaryOp, CastKind, Lit, ParamMode, UnaryOp};
 use loom_syntax::source::Span;
 
-use super::lir::{Expr, Stmt, StmtKind};
+use super::lir::{Expr, Stmt, StmtKind, TableKey};
 use super::seq::Coll;
 use super::{Dest, LoopInfo, Lowerer};
 use crate::hir::{self, Block, DefKind, ExprKind, HirId, PatKind, StmtKind as HirStmt, TemplatePart};
@@ -308,6 +308,7 @@ impl Lowerer<'_> {
                 };
                 Expr::rt("pull", vec![Expr::Bool(boxed)])
             }
+            ExprKind::Const(inner) => self.lower_const(e, inner),
             ExprKind::Range { lo, hi, inclusive } => {
                 let bounds: Vec<&hir::Expr> = lo.iter().chain(hi.iter()).map(|b| b.as_ref()).collect();
                 let mut vals = self.lower_operands(&bounds);
@@ -338,7 +339,14 @@ impl Lowerer<'_> {
             Lit::Char(c) => Expr::Int(*c as i64),
             Lit::Str(s) => Expr::Str(s.clone().into_bytes()),
             Lit::Bool(b) => Expr::Bool(*b),
-            Lit::None | Lit::Bytes(_) => Expr::Nil,
+            Lit::Bytes(bytes) => {
+                let mut entries = vec![(TableKey::Name("n".into()), Expr::Int(bytes.len() as i64))];
+                for (i, &b) in bytes.iter().enumerate() {
+                    entries.push((TableKey::Index(i as i64 + 1), Expr::Int(b as i64)));
+                }
+                Expr::Record(entries)
+            }
+            Lit::None => Expr::Nil,
         }
     }
 

@@ -54,6 +54,7 @@ use loom_syntax::source::Span;
 
 use crate::hir::{self, DefId, DefKind, Expr, ExprKind, FnRet, HirId, LocalId, Program, TyKind as HirTy};
 use crate::ty::{Ty, TyCtx, TyKind};
+pub(crate) use consts::assert_args;
 pub use fallible::{ErrConv, Exit, MendInfo, TryInfo, Unwrap};
 pub use gauge::{GaugeInfo, GaugeRange};
 use infer::{PendingLit, Var};
@@ -150,6 +151,9 @@ pub struct Results {
     pub vtables: HashMap<VtableKey, Vec<(DefId, BodyId)>>,
     /// Each gauge used: its base type and what it allows.
     pub gauges: HashMap<DefId, gauge::GaugeInfo>,
+    /// `const` items (`const assert(…)` at the top of a module or in a
+    /// warp) left for the sandbox to run, in the order they were checked.
+    pub const_blocks: Vec<BodyId>,
 }
 
 /// A vtable: the type made into an `any`, and the wefts (with their
@@ -407,6 +411,15 @@ pub fn check(p: &Program) -> Typed {
     Typed { tcx: c.tcx, results: c.r, diagnostics: c.diags }
 }
 
+/// Code that control flow can't leave.
+#[derive(Clone, Copy, Debug)]
+enum Fence {
+    /// A `defer`'s body, from where it's declared.
+    Defer(Span),
+    /// Compile-time code: a `const` expression.
+    Const(Span),
+}
+
 /// `std` definitions the checker knows by name.
 #[derive(Debug, Default)]
 struct Std {
@@ -509,8 +522,12 @@ struct Checker<'p> {
     current: Option<DefId>,
     ret: Option<Ty>,
     loops: Vec<LoopCtx>,
-    /// The `defer` whose body is being checked: nothing in it may leave it.
-    in_defer: Option<Span>,
+    /// The `defer` or compile-time code being checked: nothing in it may
+    /// leave it.
+    fence: Option<Fence>,
+    /// Inside compile-time code: the locals declared outside it, which have
+    /// no values yet while compiling.
+    runtime_locals: Option<HashSet<LocalId>>,
     /// Gauges being worked out, or found wrong (reported once).
     gauge_errors: HashSet<DefId>,
     /// The shuttle whose body is being checked.
@@ -579,7 +596,8 @@ impl<'p> Checker<'p> {
             current: None,
             ret: None,
             loops: Vec::new(),
-            in_defer: None,
+            fence: None,
+            runtime_locals: None,
             gauge_errors: HashSet::new(),
             shuttle: None,
         }
@@ -740,8 +758,8 @@ impl<'p> Checker<'p> {
                     DefKind::Type(_) => {
                         self.unsupported(self.p.def(member).span, "types inside warps");
                     }
-                    DefKind::ConstBlock(e) => {
-                        self.unsupported(e.span, "compile-time code");
+                    DefKind::ConstBlock(_) => {
+                        self.queue_def(member);
                     }
                     _ => {}
                 }
@@ -1197,6 +1215,10 @@ impl<'p> Checker<'p> {
                 },
             };
             this.finish_body(first_var);
+            // An untyped number's value wasn't checked as an expression.
+            if !this.r.untyped_consts.contains_key(&def) && !this.r.untyped_floats.contains_key(&def) {
+                this.check_value_moves(&c.value);
+            }
             this.deep_resolve(ty)
         });
         self.current = saved_current;

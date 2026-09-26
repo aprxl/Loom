@@ -1,0 +1,10 @@
+// Compile-time code runs under a step budget, so a loop that never ends
+// can't hang the compiler.
+
+const FOREVER: u32 = {                                   //~ K0102
+    var n = 0u32
+    while n < 10 { n = (n +% 1) % 5 }
+    n
+}
+
+fn main() {}

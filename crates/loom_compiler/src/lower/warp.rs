@@ -75,10 +75,23 @@ impl Lowerer<'_> {
         }
     }
 
-    /// Whether `e` names a place: a variable, or a field of one.
+    /// Whether `e` names a place: a variable, a constant (computed once,
+    /// and read by every use), or a field of one.
     pub(super) fn is_place(&self, e: &hir::Expr) -> bool {
+        let typed_const = |def: &DefId| {
+            matches!(self.p.def(*def).kind, DefKind::Const(_))
+                && !self.typed.results.untyped_consts.contains_key(def)
+                && !self.typed.results.untyped_floats.contains_key(def)
+        };
         match &e.kind {
             ExprKind::Local(_) => true,
+            ExprKind::Def { def, .. } => typed_const(def),
+            ExprKind::Const(inner) => crate::typeck::assert_args(self.p, inner).is_none(),
+            ExprKind::Assoc { .. } => matches!(
+                self.tables().assoc_values.get(&e.id),
+                Some(crate::typeck::AssocValue::Const(def)) if typed_const(def)
+            ),
+            ExprKind::LeadingDot(_) if self.tables().leading_consts.get(&e.id).is_some_and(typed_const) => true,
             ExprKind::Field { base, .. } => self.is_place(base),
             ExprKind::Index { base, args } => {
                 !matches!(args.as_slice(), [crate::hir::GenericArg::Expr(i)] if matches!(i.kind, ExprKind::Range { .. }))
@@ -191,7 +204,12 @@ impl Lowerer<'_> {
                     None => base,
                 }
             }
-            _ => self.field_value(e).unwrap_or(Expr::Nil),
+            // A constant: `C.NAME`, which every read shares.
+            ExprKind::Def { .. } | ExprKind::Const(_) | ExprKind::Assoc { .. } => self.lower_raw(e),
+            _ => match self.field_value(e) {
+                Some(v) => v,
+                None => self.lower_raw(e),
+            },
         }
     }
 
@@ -397,10 +415,7 @@ impl Lowerer<'_> {
         }
         match self.typed.results.untyped_consts.get(&def) {
             Some(&value) => self.int_value(value, ty),
-            None => {
-                self.const_refs.push(def);
-                Expr::field(Expr::name("C"), &self.def_name(def))
-            }
+            None => Expr::field(Expr::name("C"), &self.def_name(def)),
         }
     }
 

@@ -1,0 +1,39 @@
+// Compile-time code runs in a sandbox while compiling. What goes wrong
+// there is a compile error.
+
+use std.io.print
+
+fn fib(n: u32) -> u32 = if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+
+fn loud(n: i32) -> i32 {
+    print("computing")
+    n
+}
+
+const FIB10 = fib(10)
+const assert(fib(10) == 55, "fib(10) is 55")
+const assert(FIB10 == 56, "fib(10) is {FIB10}")          //~ K0101
+
+const HUGE: u8 = {                                       //~ K0103
+    var x: u8 = 250
+    for _ in 0..10 { x += 1 }
+    x
+}
+
+const NOISY: i32 = loud(3)                               //~ K0104
+
+const ALPHA: i32 = BETA + 1                                     //~ K0107
+const BETA: i32 = helper()
+fn helper() -> i32 = ALPHA * 2
+
+warp Packet {
+    size: u16
+    const assert(fib(5) == 6)                            //~ K0101
+}
+
+fn main() {
+    let x = const fib(12)
+    const assert(fib(12) == 144)
+    const assert(fib(3) == 3, "fib(3) is {fib(3)}")      //~ K0101
+    print(x)
+}

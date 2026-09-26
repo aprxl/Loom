@@ -82,16 +82,16 @@ impl Checker<'_> {
                 self.wrong_side(span, "yield", "this shuttle only pulls: it has no `~> T`");
             }
         }
-        if self.in_defer.is_some() {
-            self.leaves_defer(span, "yield");
+        if self.fence.is_some() {
+            self.leaves_fence(span, "yield");
         }
         self.tcx.unit
     }
 
     /// `pull`: `?U`.
     pub(super) fn check_pull(&mut self, span: Span) -> Ty {
-        if self.in_defer.is_some() {
-            self.leaves_defer(span, "pull");
+        if self.fence.is_some() {
+            self.leaves_fence(span, "pull");
         }
         match self.shuttle.and_then(|s| s.pulls) {
             Some(u) => self.tcx.intern(TyKind::Optional(u)),

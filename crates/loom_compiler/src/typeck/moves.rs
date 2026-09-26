@@ -154,6 +154,15 @@ impl Checker<'_> {
         self.end_scope(&mut cx, end_of(body.span), "the function ends");
     }
 
+    /// Checks the moves in `e`, a constant's value or compile-time code,
+    /// whose types are known.
+    pub(super) fn check_value_moves(&mut self, e: &Expr) {
+        let mut cx = MoveCx::default();
+        cx.scopes.push(Vec::new());
+        self.mv(&mut cx, e, true);
+        self.end_scope(&mut cx, end_of(e.span), "the value is ready");
+    }
+
     /// Goes through `e`. `owning`: its value goes to an owning slot.
     fn mv(&mut self, cx: &mut MoveCx, e: &Expr, owning: bool) {
         match &e.kind {
@@ -403,6 +412,8 @@ impl Checker<'_> {
                 }
             }
             ExprKind::Yield { value, .. } => self.mv(cx, value, true),
+            // It can only use its own locals.
+            ExprKind::Const(inner) => self.mv(cx, inner, owning),
             ExprKind::Lit(_)
             | ExprKind::Def { .. }
             | ExprKind::Type(_)
@@ -412,7 +423,6 @@ impl Checker<'_> {
             | ExprKind::Loom { .. }
             | ExprKind::Thread(_)
             | ExprKind::Pull
-            | ExprKind::Const(_)
             | ExprKind::ConstField { .. }
             | ExprKind::Deref(_)
             | ExprKind::Error => {}

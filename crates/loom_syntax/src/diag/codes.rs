@@ -100,6 +100,12 @@ codes! {
 
     // K01xx: compile-time code
     K0101 = "a `const assert` failed";
+    K0102 = "compile-time code ran out of its budget";
+    K0103 = "compile-time code unravelled";
+    K0104 = "compile-time code can't do I/O";
+    K0105 = "a runtime value in compile-time code";
+    K0106 = "control flow can't leave compile-time code";
+    K0107 = "a constant needs its own value";
 
     // L03xx: `once` values
     L0301 = "loose end: a `once` value isn't used up";
