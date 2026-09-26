@@ -109,10 +109,10 @@ impl Lowerer<'_> {
     }
 
     /// `v`, the value of `e`, copied if `e` is a place of a table-backed
-    /// `Copy` type.
+    /// `Copy` type or part of a constant.
     fn copied_place(&mut self, e: &hir::Expr, v: Expr) -> Expr {
         let ty = self.ty_of(e);
-        if self.is_place(e) && self.is_table(ty) && self.is_copy(ty) {
+        if self.copies_into_owner(e, ty) {
             let d = self.desc(ty, e.span);
             return Expr::rt("copy", vec![d, v]);
         }
@@ -1485,7 +1485,8 @@ fn binds_anything(pat: &hir::Pat) -> bool {
 fn mentions_locals(e: &hir::Expr) -> bool {
     match &e.kind {
         ExprKind::Local(_) => true,
-        ExprKind::Lit(_) | ExprKind::Def { .. } => false,
+        // Compile-time code can't read the locals around it.
+        ExprKind::Lit(_) | ExprKind::Def { .. } | ExprKind::Const(_) => false,
         ExprKind::Unary { operand, .. } => mentions_locals(operand),
         ExprKind::Binary { lhs, rhs, .. } => mentions_locals(lhs) || mentions_locals(rhs),
         ExprKind::Tuple(items) => items.iter().any(mentions_locals),

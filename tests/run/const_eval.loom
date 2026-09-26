@@ -53,6 +53,26 @@ const FONT: [u8; 3] = [1, 2, 3]
 warp P: Copy { x: i32 }
 const ORIGIN: P = P(x: 0)
 
+// Whether or not its type is `Copy`: every use of a constant gets its own.
+warp Config { names: List[str], limit: u8 }
+const CONFIG: Config = Config(names: ["a", "b"], limit: 3)
+const DIGITS: [u8] = [1, 2, 3, 4][1..3]
+
+// `const` expressions anywhere an expression goes.
+fn counter(n: i32) ~> i32 {
+    let base = const 10 * 10
+    for i in 0..n { yield base + i }
+}
+
+fn pad(x: i32, by: i32 = const 2 * 3) -> i32 = x + by
+
+warp Pair { items: [u8; 2] = const [7, 8] }
+
+fn id[T](x: T) -> T {
+    const assert(fib(6) == 8)
+    x
+}
+
 fn nth_fib(i: usize) -> u64 {
     // Computed once while compiling; every call reads the table.
     let table = const {
@@ -81,4 +101,15 @@ fn main() {
     print("{f} {g} {FONT} {o.x} {ORIGIN.x}")
     let frame = Frame(tag: 1, len: 2)
     print(frame.tag + frame.len as u8)
+
+    var primes = PRIMES
+    primes.push(31)
+    var names = CONFIG.names
+    names.push("c")
+    var digits = DIGITS
+    print("{primes.len()} {PRIMES.len()} {CONFIG.names} {digits}")
+    for x in counter(2) { print(x) }
+    var pair = Pair()
+    pair.items[0] = 1
+    print("{pad(1)} {pair.items} {Pair().items} {id(3)} {id("s")}")
 }

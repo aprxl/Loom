@@ -78,20 +78,9 @@ impl Lowerer<'_> {
     /// Whether `e` names a place: a variable, a constant (computed once,
     /// and read by every use), or a field of one.
     pub(super) fn is_place(&self, e: &hir::Expr) -> bool {
-        let typed_const = |def: &DefId| {
-            matches!(self.p.def(*def).kind, DefKind::Const(_))
-                && !self.typed.results.untyped_consts.contains_key(def)
-                && !self.typed.results.untyped_floats.contains_key(def)
-        };
         match &e.kind {
             ExprKind::Local(_) => true,
-            ExprKind::Def { def, .. } => typed_const(def),
-            ExprKind::Const(inner) => crate::typeck::assert_args(self.p, inner).is_none(),
-            ExprKind::Assoc { .. } => matches!(
-                self.tables().assoc_values.get(&e.id),
-                Some(crate::typeck::AssocValue::Const(def)) if typed_const(def)
-            ),
-            ExprKind::LeadingDot(_) if self.tables().leading_consts.get(&e.id).is_some_and(typed_const) => true,
+            _ if self.is_const(e) => true,
             ExprKind::Field { base, .. } => self.is_place(base),
             ExprKind::Index { base, args } => {
                 !matches!(args.as_slice(), [crate::hir::GenericArg::Expr(i)] if matches!(i.kind, ExprKind::Range { .. }))
@@ -103,11 +92,47 @@ impl Lowerer<'_> {
         }
     }
 
-    /// Lowers `e` for a slot that owns its value: a place of a table-backed
-    /// `Copy` type is copied, so the two don't share a table.
+    /// Whether `e` is a constant that lives in `C`: a typed one, or a
+    /// `const` expression.
+    fn is_const(&self, e: &hir::Expr) -> bool {
+        let typed_const = |def: &DefId| {
+            matches!(self.p.def(*def).kind, DefKind::Const(_))
+                && !self.typed.results.untyped_consts.contains_key(def)
+                && !self.typed.results.untyped_floats.contains_key(def)
+        };
+        match &e.kind {
+            ExprKind::Def { def, .. } => typed_const(def),
+            ExprKind::Const(inner) => crate::typeck::assert_args(self.p, inner).is_none(),
+            ExprKind::Assoc { .. } => matches!(
+                self.tables().assoc_values.get(&e.id),
+                Some(crate::typeck::AssocValue::Const(def)) if typed_const(def)
+            ),
+            ExprKind::LeadingDot(_) => self.tables().leading_consts.get(&e.id).is_some_and(typed_const),
+            _ => false,
+        }
+    }
+
+    /// Whether `e` is a constant or part of one (`TABLE[i]`, `CONFIG.name`).
+    fn in_const(&self, e: &hir::Expr) -> bool {
+        match &e.kind {
+            ExprKind::Field { base, .. } | ExprKind::Index { base, .. } => self.is_place(e) && self.in_const(base),
+            _ => self.is_const(e),
+        }
+    }
+
+    /// Whether the value of `e`, of type `ty`, must be copied for a slot
+    /// that owns it, so the two don't share a table: a place of a `Copy`
+    /// type, or any part of a constant (every use of a constant gets a
+    /// value of its own).
+    pub(super) fn copies_into_owner(&self, e: &hir::Expr, ty: Ty) -> bool {
+        self.is_table(ty) && ((self.is_place(e) && self.is_copy(ty)) || self.in_const(e))
+    }
+
+    /// Lowers `e` for a slot that owns its value, copied if
+    /// [`copies_into_owner`](Self::copies_into_owner) says so.
     pub(super) fn lower_owned(&mut self, e: &hir::Expr) -> Expr {
         let ty = self.ty_of(e);
-        if self.is_place(e) && self.is_table(ty) && self.is_copy(ty) {
+        if self.copies_into_owner(e, ty) {
             let v = self.lower_raw(e);
             let d = self.desc(ty, e.span);
             let copied = Expr::rt("copy", vec![d, v]);

@@ -424,8 +424,10 @@ through the normal backend (`lower/consteval.rs`, `loom_host::consteval`):
   type checker reports it without the sandbox. Array lengths and gauge
   bounds must fold: a type can't depend on the sandbox yet (U0102).
 
-A constant is a place: `var t = TABLE` copies a table-backed `Copy`
-constant like it copies a variable, so changing `t` leaves `TABLE` alone.
+A constant is one table in `C`, and every use gets a value of its own:
+`var t = TABLE` (or `CONFIG.names`, or `TABLE[i]`) copies what it reads into
+an owning slot, `Copy` or not, so changing `t` leaves `TABLE` alone. Reads
+that don't own (`TABLE.len()`, `for x in TABLE`) share it.
 
 ## Not supported in v1
 

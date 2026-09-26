@@ -21,6 +21,11 @@ let n = const fib(30)                          // any eligible call, evaluated o
 const assert(Header.size == 20, "wire format changed")
 ```
 
+A constant is a value, and every use of it gets that same value: changing
+a copy (`var names = CONFIG.names`) leaves the constant alone. So a constant
+can't hold anything that changes as it's used, like a shuttle, a stream or
+a `once` value (K0108).
+
 A function can run at compile time if everything it does is *const-safe*:
 pure computation, allocation in the compiler's own spool, and the
 compile-time builtins. No I/O (except `embed`), no `unsafe`, no threads. You

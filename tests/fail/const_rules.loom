@@ -26,4 +26,12 @@ fn g() -> ?i32 {
     x
 }
 
-fn main() {}
+fn numbers(n: i32) ~> i32 {
+    for i in 0..n { yield i }
+}
+
+const NUMBERS: Shuttle[i32, ()] = numbers(3)             //~ K0108
+
+fn main() {
+    let s = const numbers(2)                             //~ K0108
+}

@@ -252,7 +252,7 @@ impl Checker<'_> {
         }
     }
 
-    fn is_builtin_adt(&self, ty: Ty) -> bool {
+    pub(super) fn is_builtin_adt(&self, ty: Ty) -> bool {
         matches!(self.tcx.kind(ty), TyKind::Adt(def, _) if self.p.def(*def).attrs.iter().any(|a| a.name == "builtin"))
     }
 

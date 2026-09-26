@@ -19,7 +19,7 @@ use loom_syntax::source::Span;
 use super::gauge::Val;
 use super::{BodyId, Checker, Fence};
 use crate::hir::{Arg, DefKind, Expr, ExprKind, LocalId, Program, StmtKind};
-use crate::ty::Ty;
+use crate::ty::{Ty, TyKind};
 
 /// The arguments of `assert(…)` when `e` is a call of std's `assert`:
 /// `const assert(cond, message)` checks `cond` while compiling.
@@ -85,7 +85,11 @@ impl Checker<'_> {
         let saved_shuttle = self.shuttle.take();
         let ty = match assert_args(self.p, inner) {
             Some(_) => self.check_coerce(inner, self.tcx.unit),
-            None => self.check_expr(inner, expected),
+            None => {
+                let ty = self.check_expr(inner, expected);
+                self.check_const_holds(ty, span);
+                ty
+            }
         };
         self.shuttle = saved_shuttle;
         self.self_local = saved_self;
@@ -95,6 +99,51 @@ impl Checker<'_> {
         self.fence = saved_fence;
         self.runtime_locals = saved_locals;
         ty
+    }
+
+    /// Reports a constant of type `ty`, at `span`, that holds something
+    /// that changes as it's used: every use of a constant gets the same value.
+    pub(super) fn check_const_holds(&mut self, ty: Ty, span: Span) {
+        let Some(what) = self.stateful(ty, 0) else { return };
+        let shown = self.show(ty);
+        self.diags.push(
+            Diagnostic::error(codes::K0108, format!("a constant can't hold {what}"))
+                .primary(span, format!("this is `{shown}`"))
+                .note(format!("every use of a constant gets the same value, and {what} changes as it's used"))
+                .help("make it in a function, and call that where it's needed"),
+        );
+    }
+
+    /// What in `ty` a constant can't hold, if anything.
+    fn stateful(&mut self, ty: Ty, depth: u32) -> Option<&'static str> {
+        let ty = self.resolve(ty);
+        if depth > 8 {
+            return None;
+        }
+        if let TyKind::Adt(def, _) = self.tcx.kind(ty) {
+            match self.p.def_path(*def).as_str() {
+                "std.iter.Stream" => return Some("a stream"),
+                "std.iter.Shuttle" | "std.iter.Burst" => return Some("a shuttle"),
+                _ => {}
+            }
+        }
+        if self.is_once(ty) {
+            return Some("a `once` value");
+        }
+        let parts: Vec<Ty> = match self.tcx.kind(ty).clone() {
+            TyKind::Tuple(items) | TyKind::Union(items) => items,
+            TyKind::Optional(t) | TyKind::Array(t, _) | TyKind::Range(t) => vec![t],
+            TyKind::Result(t, e) => vec![t, e],
+            TyKind::Adt(_, args) if self.is_builtin_adt(ty) => args,
+            TyKind::Adt(..) => {
+                let info = self.adt_info(ty)?;
+                let fields = info.fields.iter().map(|f| f.ty);
+                let cases = info.cases.iter().flat_map(|c| c.fields.iter().flatten().map(|f| f.ty));
+                fields.chain(cases).collect()
+            }
+            _ => Vec::new(),
+        };
+        parts.into_iter().find_map(|t| self.stateful(t, depth + 1))
     }
 
     /// Reports `local`, declared outside the compile-time code it's used in.

@@ -1218,6 +1218,7 @@ impl<'p> Checker<'p> {
             // An untyped number's value wasn't checked as an expression.
             if !this.r.untyped_consts.contains_key(&def) && !this.r.untyped_floats.contains_key(&def) {
                 this.check_value_moves(&c.value);
+                this.check_const_holds(ty, p.def(def).span);
             }
             this.deep_resolve(ty)
         });

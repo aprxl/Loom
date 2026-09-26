@@ -515,6 +515,14 @@ local function copy(d, v)
     return t
   elseif kind == "map" or kind == "set" then
     return rt.copy_coll(d, v)
+  elseif kind == "slice" then
+    -- A view of copies: only a constant's slices are copied.
+    local t, o, n = parts(v)
+    local out = { n = n }
+    for i = 1, n do
+      out[i] = copy(d.elem, t[o + i])
+    end
+    return { t = out, o = 0, n = n }
   end
   return v
 end

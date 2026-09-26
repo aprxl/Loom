@@ -87,7 +87,7 @@ impl Lowerer<'_> {
             TyKind::Optional(t) | TyKind::Result(t, _) => *t,
             _ => ty,
         };
-        if self.is_place(inner) && self.is_table(inner_ty) && self.is_copy(inner_ty) {
+        if self.copies_into_owner(inner, inner_ty) {
             let d = self.desc(inner_ty, e.span);
             return Expr::rt("copy", vec![d, v]);
         }
@@ -171,7 +171,9 @@ impl Lowerer<'_> {
             }
             // An owning destination gets its own copy of a place's value.
             let owning = !matches!(dest, Dest::Discard);
-            if owning && this.is_table(ty) && this.is_copy(ty) && (this.is_place(left) || info.unwrap.is_some()) {
+            let copies =
+                this.copies_into_owner(left, ty) || (this.is_table(ty) && this.is_copy(ty) && info.unwrap.is_some());
+            if owning && copies {
                 let d = this.desc(ty, e.span);
                 v = Expr::rt("copy", vec![d, v]);
             }
