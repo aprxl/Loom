@@ -4,7 +4,7 @@ MODULES = [
 
 {
   "name": "prelude",
-  "summary": "The prelude: names every module can use without a `use`.",
+  "summary": "The prelude: names every module can use without a `use`. A module's own items and imports shadow these.",
   "reexports": [
     {"name": "String", "from": "string"},
     {"name": "List", "from": "list"},
@@ -299,7 +299,7 @@ MODULES = [
 
 {
   "name": "ops",
-  "summary": "The wefts behind operators and value semantics. A warp that lists `Eq`, `Ord` or `Hash` in its header without writing the method gets one that works field by field.",
+  "summary": "The wefts behind operators and value semantics. A warp that lists `Eq`, `Ord` or `Hash` in its header without writing the method gets one that works field by field (see 02-types, \"Deriving\").",
   "types": [
     {"kind": "weft", "name": "Copy",
      "doc": "Values that are copied rather than moved."},
@@ -503,7 +503,7 @@ MODULES = [
   "summary": "Time.",
   "types": [
     {"kind": "warp", "name": "Duration",
-     "doc": None,
+     "doc": "A span of time, in nanoseconds.",
      "fields": ["nanos: u64"]},
   ],
   "functions": [

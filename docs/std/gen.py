@@ -8,8 +8,7 @@ import html
 import os
 import re
 
-ROOT = r"C:\Users\April\Develop\Loom"
-OUT = os.path.join(ROOT, "docs", "std")
+OUT = os.path.dirname(os.path.abspath(__file__))
 
 # ---------------------------------------------------------------- helpers
 
