@@ -7,8 +7,11 @@
 //!   child process (`loom lua-host`), whose exit code it passes on.
 //! - `test` compiles a file's tests (and only then are they compiled) and
 //!   runs each in a child process the same way, which prints a report.
+//! - `docs` opens the documentation, which is built into the binary.
 //! - `lua-host` (hidden) runs a bundle, or a test bundle's tests, and
 //!   reports how it ended, with Loom source locations.
+
+mod docs;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -63,6 +66,12 @@ enum Command {
     Check { file: PathBuf },
     /// Run a file's tests (`test name() { … }`).
     Test { file: PathBuf },
+    /// Open the documentation (the language and std) in your browser. It's built in, so it works offline.
+    Docs {
+        /// Only print where the docs are; don't open a browser.
+        #[arg(long)]
+        no_open: bool,
+    },
     /// Run a Lua bundle in the bundled VM (used internally by `loom run` and `loom test`).
     #[command(hide = true)]
     LuaHost {
@@ -133,6 +142,7 @@ fn run(cli: Cli) -> ExitCode {
         Command::Check { file } => check(&file, color),
         Command::Run { file, args } => run_file(&file, &args, color),
         Command::Test { file } => test_file(&file, color),
+        Command::Docs { no_open } => docs::docs(!no_open),
         Command::LuaHost { bundle, test: true, .. } => lua_host_tests(&bundle),
         Command::LuaHost { bundle, test: false, program, args } => lua_host(&bundle, program, args),
     }

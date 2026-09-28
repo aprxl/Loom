@@ -403,6 +403,17 @@ A test that returns `! E` is wrapped like `main`: `run` returns the error's
 text when it fails. `loom test` exits with 0 when every test passed, 1 when
 one failed, and 70 when one hit a Loom bug.
 
+### Docs
+
+`loom docs` opens the documentation site, like `zig std`. `crates/loom/build.rs`
+builds every page and stylesheet under `docs/` into the binary, so the docs
+work offline and match that `loom`. They're unpacked into
+`%TEMP%/loom-docs-<version>-<hash>/`, a folder per build's docs (the hash
+covers every file), and the landing page is opened with the system's
+default program (`explorer.exe`, `open`, or `xdg-open`). `--no-open` only
+prints its path. A test checks that every relative link in the site points
+at a page that's built in.
+
 ### Sandboxed runs
 
 The fixture tests run programs sandboxed (`Host { sandbox: true }`): no

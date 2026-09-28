@@ -308,7 +308,7 @@ built in `crates/`, following the plan in `design/lua-backend.md`:
   run start to finish (chip8 wants a ROM: `loom run examples/chip8.loom --
   game.ch8`). `loom run <file>` runs a program; `loom test <file>` runs its
   tests; `loom build <file>` writes the Lua; `--emit tokens|ast|hir|lua`
-  dumps a stage. The other examples use more than this; the compiler says
+  dumps a stage; `loom docs` opens the documentation in your browser. The other examples use more than this; the compiler says
   so rather than guessing.
 - **Next:** reflection and derive-by-default, then threads, then spools,
   one slice at a time through every layer.
@@ -316,4 +316,5 @@ built in `crates/`, following the plan in `design/lua-backend.md`:
 ```bash
 cargo run -p loom -- run tests/run/fizzbuzz.loom
 cargo run -p loom -- build tests/run/fizzbuzz.loom --emit lua
+cargo run -p loom -- docs
 ```

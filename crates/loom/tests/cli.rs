@@ -116,6 +116,18 @@ fn missing_files_are_reported() {
 }
 
 #[test]
+fn docs_unpacks_the_site() {
+    let out = loom(&["docs", "--no-open"]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let page = PathBuf::from(text(&out.stdout).trim_end());
+    let html = std::fs::read_to_string(&page).expect("the landing page is unpacked");
+    assert!(html.contains("<html"), "{html}");
+    // Unpacking again is a no-op, and says the same.
+    let again = loom(&["docs", "--no-open"]);
+    assert_eq!(text(&again.stdout), text(&out.stdout));
+}
+
+#[test]
 fn run_passes_arguments_to_the_program() {
     let source = "use std.env\nuse std.io.print\n\nfn main() {\n    let args = env.args()\n    print(args.len())\n    for a in args.skip(1) {\n        print(a)\n    }\n}\n";
     let path = temp_source("args", source);
