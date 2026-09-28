@@ -41,6 +41,7 @@ mod seq;
 mod shuttle;
 #[cfg(test)]
 mod tests;
+mod unroll;
 mod usefulness;
 mod warp;
 mod weave;
@@ -59,6 +60,7 @@ pub use fallible::{ErrConv, Exit, MendInfo, TryInfo, Unwrap};
 pub use gauge::{GaugeInfo, GaugeRange};
 use infer::{PendingLit, Var};
 pub use seq::Seq;
+pub(crate) use unroll::TARGET;
 pub use warp::{CaseFieldInfo, CaseInfo, FieldInfo, Key, WarpInfo};
 pub use weave::{Impl, Weaving};
 
@@ -237,6 +239,10 @@ pub struct Body {
     pub gauge_tests: HashMap<HirId, Ty>,
     /// Uses of `const` generic parameters (`N`): their values here.
     pub const_values: HashMap<HirId, crate::ty::ConstVal>,
+    /// Each `const if`: whether it takes its first branch.
+    pub const_ifs: HashMap<HirId, bool>,
+    /// Each `const for`: the body checked for each item, in order.
+    pub unrolled: HashMap<HirId, Vec<BodyId>>,
 }
 
 /// How a value that isn't a `Stream` gives its items one at a time.
@@ -546,6 +552,13 @@ struct Checker<'p> {
     runtime_locals: Option<HashSet<LocalId>>,
     /// The `const` parameters in scope, with their values (or variables).
     const_locals: Vec<(LocalId, Ty)>,
+    /// How many times something unsupported was met, reported or not:
+    /// `unsupported` reports each thing once per definition.
+    unsupported_hits: usize,
+    /// The body whose tables are `self.b`.
+    cur_body: Option<BodyId>,
+    /// `const for` loops: `break` and `continue` can't target them.
+    const_loops: HashSet<HirId>,
     /// Gauges being worked out, or found wrong (reported once).
     gauge_errors: HashSet<DefId>,
     /// The shuttle whose body is being checked.
@@ -618,6 +631,9 @@ impl<'p> Checker<'p> {
             fence: None,
             runtime_locals: None,
             const_locals: Vec::new(),
+            cur_body: None,
+            unsupported_hits: 0,
+            const_loops: HashSet::new(),
             gauge_errors: HashSet::new(),
             shuttle: None,
         }
@@ -638,6 +654,7 @@ impl<'p> Checker<'p> {
     /// Reports a feature this compiler doesn't implement yet, once per
     /// definition, and returns the error type.
     fn unsupported(&mut self, span: Span, what: &str) -> Ty {
+        self.unsupported_hits += 1;
         if self.unsupported_seen.insert((self.current, what.to_string())) {
             self.diags.push(
                 Diagnostic::error(codes::U0102, format!("not implemented yet: {what}"))
@@ -686,7 +703,9 @@ impl<'p> Checker<'p> {
     fn in_body<T>(&mut self, id: BodyId, f: impl FnOnce(&mut Self) -> T) -> T {
         let tables = std::mem::take(&mut self.r.bodies[id.0 as usize]);
         let saved = std::mem::replace(&mut self.b, tables);
+        let saved_id = self.cur_body.replace(id);
         let out = f(self);
+        self.cur_body = saved_id;
         self.r.bodies[id.0 as usize] = std::mem::replace(&mut self.b, saved);
         out
     }

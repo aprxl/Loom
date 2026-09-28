@@ -507,6 +507,7 @@ impl Checker<'_> {
                     patch: super::generic::Patch::Construct(id),
                     span,
                     bounds: Vec::new(),
+                    body: self.cur_body,
                 });
                 super::generic::UNKNOWN
             } else {

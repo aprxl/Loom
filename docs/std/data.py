@@ -469,6 +469,25 @@ MODULES = [
 },
 
 {
+  "name": "target",
+  "summary": "What `target` describes: the machine the program is built for. On the Lua backend that's the machine doing the build, with 63-bit pointers (`usize` is 63 bits).",
+  "types": [
+    {"kind": "warp", "name": "Os", "suffix": ": Eq, Show",
+     "doc": "An operating system.",
+     "cases": ["Windows", "Linux", "MacOS", "Other"]},
+    {"kind": "warp", "name": "Arch", "suffix": ": Eq, Show",
+     "doc": "A processor architecture.",
+     "cases": ["Amd64", "Arm64", "Other"]},
+    {"kind": "warp", "name": "Endian", "suffix": ": Eq, Show",
+     "doc": "The order of a number's bytes in memory.",
+     "cases": ["Little", "Big"]},
+    {"kind": "warp", "name": "Target",
+     "doc": "The type of `target`, known at compile time: `const if target.os == .Windows`.",
+     "fields": ["pub os: Os", "pub arch: Arch", "pub endian: Endian", "pub pointer_bits: u8"]},
+  ],
+},
+
+{
   "name": "term",
   "summary": "The terminal.",
   "functions": [

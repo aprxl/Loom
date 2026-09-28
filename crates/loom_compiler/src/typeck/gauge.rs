@@ -56,6 +56,8 @@ pub(super) enum Val {
     Int(i128),
     Float(f64),
     Bool(bool),
+    /// A unit case: `.Windows`.
+    Case(crate::hir::DefId),
 }
 
 /// The values an expression may have, as far as the checker can tell.
@@ -74,7 +76,7 @@ impl GaugeRange {
                 let f = match v {
                     Val::Int(i) => i as f64,
                     Val::Float(f) => f,
-                    Val::Bool(_) => return false,
+                    Val::Bool(_) | Val::Case(_) => return false,
                 };
                 (if lo_incl { lo <= f } else { lo < f }) && (if hi_incl { f <= hi } else { f < hi })
             }
@@ -311,6 +313,7 @@ impl Checker<'_> {
             Val::Int(i) => i.to_string(),
             Val::Float(f) => format!("{f:?}"),
             Val::Bool(b) => b.to_string(),
+            Val::Case(c) => self.p.def(c).name.clone(),
         };
         match self.gauge_allows(def, v) {
             Some(true) => {}
@@ -527,6 +530,16 @@ impl Checker<'_> {
                 None => self.const_param_val(e),
             },
             ExprKind::Def { .. } if self.const_param_val(e).is_some() => self.const_param_val(e),
+            // `target.os`
+            ExprKind::Field { base, field: FieldName::Named(name) }
+                if matches!(base.kind, ExprKind::Intrinsic(crate::hir::Intrinsic::Target)) =>
+            {
+                self.target_val(&name.name)
+            }
+            // `.Windows`, `Os.Windows`: a case with nothing in it.
+            _ if self.b.constructs.get(&e.id).is_some_and(|c| c.case.is_some() && c.fields.is_empty()) => {
+                self.b.constructs[&e.id].case.map(Val::Case)
+            }
             ExprKind::Block(block) => match block.stmts.as_slice() {
                 [only] => match &only.kind {
                     StmtKind::Expr(e) => sub(self, e),
@@ -624,6 +637,13 @@ impl Checker<'_> {
 /// `a op b` at compile time.
 fn binary(op: BinaryOp, a: Val, b: Val) -> Option<Val> {
     use BinaryOp as B;
+    if let (Val::Case(x), Val::Case(y)) = (a, b) {
+        return match op {
+            B::Eq => Some(Val::Bool(x == y)),
+            B::Ne => Some(Val::Bool(x != y)),
+            _ => None,
+        };
+    }
     let (a, b) = match (a, b) {
         (Val::Int(x), Val::Float(y)) => (Val::Float(x as f64), Val::Float(y)),
         (Val::Float(x), Val::Int(y)) => (Val::Float(x), Val::Float(y as f64)),

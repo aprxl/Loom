@@ -108,6 +108,7 @@ codes! {
     K0107 = "a constant needs its own value";
     K0108 = "a constant can't hold this";
     K0109 = "a `const` argument isn't known at compile time";
+    K0110 = "a `const if` or `const for` isn't known at compile time";
 
     // L03xx: `once` values
     L0301 = "loose end: a `once` value isn't used up";

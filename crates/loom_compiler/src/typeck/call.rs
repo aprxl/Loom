@@ -198,7 +198,11 @@ impl Checker<'_> {
             let Some((sig, full, bounds)) = self.generic_sig(inst, explicit, call.span) else {
                 return self.check_args_alone(args);
             };
-            (sig, generic::UNKNOWN, Some(Pending { inst: full, patch: Patch::Call(call.id), span: call.span, bounds }))
+            (
+                sig,
+                generic::UNKNOWN,
+                Some(Pending { inst: full, patch: Patch::Call(call.id), span: call.span, bounds, body: self.cur_body }),
+            )
         } else {
             let bounds = self.parent_bounds(def, &inst.args);
             if !self.check_bounds(def, call.span, &bounds) {
@@ -703,6 +707,12 @@ impl Checker<'_> {
             && let Some(Member::AssocFn(f) | Member::Method(f)) = self.member(def, name)
         {
             return self.fn_value(e, f);
+        }
+        // Reflection, which only exists at compile time.
+        if matches!(name, "name" | "kind" | "size" | "align" | "bits" | "fields" | "cases")
+            && !matches!(self.tcx.kind(ty), TyKind::Adt(def, _) if self.member(*def, name).is_some())
+        {
+            return self.unsupported(span, &format!("reflection (`T.{name}`)"));
         }
         let Some(info) = self.adt_info(ty) else {
             let shown = self.show(ty);

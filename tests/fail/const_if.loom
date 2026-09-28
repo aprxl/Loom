@@ -1,0 +1,18 @@
+// `const if` and `const for` are decided while compiling, from what the
+// constant folder can work out.
+
+fn is_even(n: i32) -> bool = n % 2 == 0
+fn take_it(take s: String) {}
+
+fn main() {
+    var n = 3
+    const if n > 2 { }                                   //~ K0105
+    const for i in 0..n { }                              //~ K0105
+    const if is_even(4) { }                              //~ K0110
+    const for i in 0..100000 { }                         //~ K0102
+    const for i in 0..3 { if i == 1 { break } }          //~ U0102
+    let s = String()
+    const for i in 0..2 { take_it(s) }                   //~ M0101
+    const if true { nope() }                             //~ N0101
+    const if false { nope() } else { let x: str = 1 }    //~ T0101
+}

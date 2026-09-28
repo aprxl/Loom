@@ -326,6 +326,7 @@ impl Lowerer<'_> {
                 Expr::rt("pull", vec![Expr::Bool(boxed)])
             }
             ExprKind::Const(inner) => self.lower_const(e, inner),
+            ExprKind::Intrinsic(hir::Intrinsic::Target) => self.target_value(ty),
             ExprKind::Range { lo, hi, inclusive } => {
                 let bounds: Vec<&hir::Expr> = lo.iter().chain(hi.iter()).map(|b| b.as_ref()).collect();
                 let mut vals = self.lower_operands(&bounds);
@@ -951,6 +952,17 @@ impl Lowerer<'_> {
                 let body = self.nested(|this| this.block_into(block, dest));
                 self.push(StmtKind::Do(body));
             }
+            // `const if`: only the branch taken.
+            ExprKind::If { then, else_, deferred: Some(_), .. } => {
+                match (self.tables().const_ifs.get(&e.id).copied(), else_) {
+                    (Some(true), _) => {
+                        let body = self.nested(|this| this.block_into(then, dest));
+                        self.push(StmtKind::Do(body));
+                    }
+                    (Some(false), Some(else_)) => self.lower_into(else_, dest),
+                    _ => self.deliver(Expr::Nil, dest),
+                }
+            }
             ExprKind::If { cond, then, else_, .. } => self.if_into(cond, then, else_.as_deref(), dest),
             ExprKind::Match { scrutinee, arms } => self.match_into(scrutinee, arms, dest),
             ExprKind::Loop { body } => {
@@ -975,6 +987,13 @@ impl Lowerer<'_> {
                     self.push(StmtKind::While(Expr::Bool(true), full));
                 }
                 self.after_loop();
+            }
+            // `const for`: the body once per item, each with its own tables.
+            ExprKind::For { body, is_const: true, .. } => {
+                for id in self.tables().unrolled.get(&e.id).cloned().unwrap_or_default() {
+                    let stmts = self.in_body(id, |this| this.nested(|this| this.block_into(body, &Dest::Discard)));
+                    self.push(StmtKind::Do(stmts));
+                }
             }
             ExprKind::For { pat, iter, body, .. } => match self.seq(self.ty_of(iter)) {
                 Some(seq) => self.for_seq(e, pat, iter, body, seq),

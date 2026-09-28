@@ -132,7 +132,8 @@ impl Checker<'_> {
                 self.check_assoc_value(e, ty, &name.name, name.span)
             }
             ExprKind::BuiltinCase(_) => self.unsupported(span, "`some`, `ok` and `err`"),
-            ExprKind::Intrinsic(_) => self.unsupported(span, "`target` and `heap`"),
+            ExprKind::Intrinsic(crate::hir::Intrinsic::Target) => self.target_ty(span),
+            ExprKind::Intrinsic(_) => self.unsupported(span, "`heap`"),
             ExprKind::LeadingDot(field) => self.check_leading_value(e, field, expected),
             ExprKind::Tuple(items) => self.check_tuple(items, expected),
             ExprKind::Array(items) => self.check_array_lit(e, items, expected),
@@ -140,8 +141,8 @@ impl Checker<'_> {
             ExprKind::Map(pairs) => self.check_map_lit(e, pairs, expected),
             ExprKind::Block(block) => self.check_block(block, expected),
             ExprKind::If { cond, then, else_, deferred } => {
-                if deferred.is_some() {
-                    return self.unsupported(span, "`const if`");
+                if let Some(deferred) = deferred {
+                    return self.check_const_if(e, (cond, then, else_.as_deref()), deferred, expected);
                 }
                 self.check_coerce(cond, self.tcx.bool);
                 let narrowed = self.narrowings(cond);
@@ -150,7 +151,7 @@ impl Checker<'_> {
             ExprKind::Match { scrutinee, arms } => self.check_match(scrutinee, arms, span, expected),
             ExprKind::For { pat, iter, body, is_const, is_loom } => {
                 if *is_const {
-                    return self.unsupported(span, "`const for`");
+                    return self.check_const_for(e, pat, iter, body);
                 }
                 if *is_loom {
                     return self.unsupported(span, "`loom for`");
@@ -210,9 +211,15 @@ impl Checker<'_> {
                     (_, None) => self.tcx.never,
                 }
             }
+            ExprKind::Break { target, .. } if self.const_loops.contains(target) => {
+                self.unsupported(span, "`break` out of a `const for`")
+            }
             ExprKind::Break { target, value } => {
                 self.check_break(*target, value.as_deref(), span);
                 self.tcx.never
+            }
+            ExprKind::Continue { target } if self.const_loops.contains(target) => {
+                self.unsupported(span, "`continue` in a `const for`")
             }
             ExprKind::Continue { target } => {
                 if self.fence.is_some() && !self.loops.iter().any(|l| l.id == *target) {

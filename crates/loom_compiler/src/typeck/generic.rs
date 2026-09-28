@@ -49,6 +49,8 @@ pub(super) struct Pending {
     pub patch: Patch,
     pub span: Span,
     pub bounds: Vec<Bound>,
+    /// The body whose tables to patch: a `const for`'s items each have their own.
+    pub body: Option<BodyId>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -385,17 +387,21 @@ impl Checker<'_> {
                 continue;
             }
             let id = self.instance(Instance { args, self_ty, ..pending.inst });
-            match pending.patch {
+            let patch = |this: &mut Self| match pending.patch {
                 Patch::Call(call) => {
-                    if let Some(c) = self.b.calls.get_mut(&call) {
+                    if let Some(c) = this.b.calls.get_mut(&call) {
                         c.callee = id;
                     }
                 }
                 Patch::Construct(e) => {
-                    if let Some(c) = self.b.constructs.get_mut(&e) {
+                    if let Some(c) = this.b.constructs.get_mut(&e) {
                         c.defaults = id;
                     }
                 }
+            };
+            match pending.body {
+                Some(body) if Some(body) != self.cur_body => self.in_body(body, patch),
+                _ => patch(self),
             }
         }
     }

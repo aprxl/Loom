@@ -42,7 +42,7 @@ impl Checker<'_> {
         }
         match self.fold(e, None)? {
             v @ (Val::Int(_) | Val::Float(_)) => Some(v),
-            Val::Bool(_) => None,
+            Val::Bool(_) | Val::Case(_) => None,
         }
     }
 
@@ -75,6 +75,16 @@ impl Checker<'_> {
     /// `const inner`, at `span`: `inner` runs while compiling. A `const
     /// assert(…)` is `()`; anything else has the type of its value.
     pub(super) fn check_const_expr(&mut self, span: Span, inner: &Expr, expected: Option<Ty>) -> Ty {
+        let ty = self.check_const_code(span, inner, expected);
+        if assert_args(self.p, inner).is_none() {
+            self.check_const_holds(ty, span);
+        }
+        ty
+    }
+
+    /// Checks `inner`, compile-time code at `span`: it can't read the locals
+    /// around it, and control flow can't leave it.
+    pub(super) fn check_const_code(&mut self, span: Span, inner: &Expr, expected: Option<Ty>) -> Ty {
         let outer: HashSet<LocalId> = self.b.local_ty.keys().copied().collect();
         let saved_locals = self.runtime_locals.replace(outer);
         let saved_fence = self.fence.replace(Fence::Const(span));
@@ -85,11 +95,7 @@ impl Checker<'_> {
         let saved_shuttle = self.shuttle.take();
         let ty = match assert_args(self.p, inner) {
             Some(_) => self.check_coerce(inner, self.tcx.unit),
-            None => {
-                let ty = self.check_expr(inner, expected);
-                self.check_const_holds(ty, span);
-                ty
-            }
+            None => self.check_expr(inner, expected),
         };
         self.shuttle = saved_shuttle;
         self.self_local = saved_self;

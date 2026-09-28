@@ -1,0 +1,63 @@
+// `const if` and `const for`: control flow decided while compiling.
+
+use std.io.print
+
+const DEBUG = false
+const SIZES = [1, 2, 4]
+
+fn largest[T: Ord](a: T, b: T) -> T = if a < b { b } else { a }
+
+/// A branch that isn't taken isn't checked: it can name what doesn't exist.
+fn page_size() -> usize {
+    const if target.pointer_bits == 63 {
+        4096
+    } else {
+        std.sys.page_size()
+    }
+}
+
+fn bits(const n: u8) -> str {
+    const if n <= 8 { "small" } else { "big" }
+}
+
+fn describe[const N: usize](xs: [i32; N]) -> str {
+    const if N > 2 { "long" } else { "short" }
+}
+
+fn main() {
+    print(page_size())
+    print("{bits(4)} {bits(16)} {describe([1, 2, 3])} {describe([1])}")
+    const if DEBUG { print("debug on") } else if SIZES.len() == 3 { print("three sizes") } else { print("?") }
+    let width: i32 = const if DEBUG { 64 } else { 32 }
+    print(width)
+    const if false {
+        let s: str = 5
+        undefined_thing()
+    }
+
+    // Written out once per item; the item is known at compile time.
+    const for i in 0..3 {
+        const if i > 0 { print("--") }
+        let zeros = [0u8; i + 1]
+        print("{i}: {zeros}")
+    }
+    var total = 0
+    const for (i, s) in SIZES.indexed() {
+        total += i as i32 * 10 + s
+    }
+    print(total)
+    const for i in 0..2 {
+        print(largest(i, 1))
+        let add = (y: i32) => y + i
+        print(add(10))
+        const for j in [5, 6] { print("{i}{j}") }
+    }
+    var squares = List()
+    const for k in 1..=3 {
+        var sq = k * k
+        squares.push(sq)
+    }
+    print(squares)
+    print(target.pointer_bits)
+    const assert(target.os == target.os and target.pointer_bits == 63)
+}

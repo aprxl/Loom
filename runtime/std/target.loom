@@ -1,0 +1,32 @@
+//! What `target` describes: the machine the program is built for. On the
+//! Lua backend that's the machine doing the build, with 63-bit pointers
+//! (`usize` is 63 bits).
+
+/// An operating system.
+pub warp Os: Eq, Show {
+    case Windows
+    case Linux
+    case MacOS
+    case Other
+}
+
+/// A processor architecture.
+pub warp Arch: Eq, Show {
+    case Amd64
+    case Arm64
+    case Other
+}
+
+/// The order of a number's bytes in memory.
+pub warp Endian: Eq, Show {
+    case Little
+    case Big
+}
+
+/// The type of `target`, known at compile time: `const if target.os == .Windows`.
+pub warp Target {
+    pub os: Os
+    pub arch: Arch
+    pub endian: Endian
+    pub pointer_bits: u8
+}

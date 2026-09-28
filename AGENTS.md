@@ -114,9 +114,12 @@ language through every layer (type checking, lowering to Lua, the runtime,
     `warp Ring[T, const N: usize]`, value generic arguments, `const assert`
     per instance, `uint(n)`/`int(n)`, types inside warps, and `?T.take()`.
     `examples/compile_time.loom` compiles but for `const if`.
+20. `const if` (only the branch taken is checked) and `const for`
+    (unrolled, each item checked on its own), and `target` (`std.target`).
+    `examples/compile_time.loom` fails only for reflection and `std.sys`.
 
-Next: the rest of compile-time code (`const if` and `const for`, `target`,
-reflection) for `examples/compile_time.loom`, then threads
+Next: reflection (`T.kind`, `T.fields`, `T.cases`, `v.(f)`, `v is .(c)`)
+and derive-by-default for `examples/compile_time.loom`, then threads
 (`loom`, `thread`, `loom for`, `Atomic`) for `examples/parallel.loom`, then
 spools.
 

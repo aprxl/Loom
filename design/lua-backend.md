@@ -446,6 +446,22 @@ through the normal backend (`lower/consteval.rs`, `loom_host::consteval`):
   type checker reports it without the sandbox. Array lengths and gauge
   bounds must fold: a type can't depend on the sandbox yet (U0102).
 
+**`const if` and `const for`** are decided while type-checking
+(`typeck/unroll.rs`), so their conditions and sequences must fold (K0110):
+the sandbox runs after type checking, and what's in a branch decides what
+gets checked. A `const if` checks, move-checks and lowers only the branch it
+takes, reporting that branch's name-resolution errors; the other is never
+looked at. A `const for` goes over a range, an array literal (or a constant
+holding one) or `.indexed()` of those, at most 10 000 items (K0102); its
+body is checked once per item in a `Body` of its own, with the loop
+variable standing for the item like a `const` parameter, and lowered once
+per item in a `do … end`. `break` and `continue` can't target a `const for`
+yet (U0102).
+
+`target` is a `std.target.Target` record: `os`, `arch` and `endian` of the
+machine doing the build, and `pointer_bits` 63. `std.sys` (the platform's
+own APIs) and reflection (`T.kind`, `T.fields`, …) are U0102 for now.
+
 A constant is one table in `C`, and every use gets a value of its own:
 `var t = TABLE` (or `CONFIG.names`, or `TABLE[i]`) copies what it reads into
 an owning slot, `Copy` or not, so changing `t` leaves `TABLE` alone. Reads

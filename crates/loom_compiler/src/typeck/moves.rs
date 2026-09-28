@@ -200,6 +200,21 @@ impl Checker<'_> {
                 }
             }
             ExprKind::Block(block) | ExprKind::Unsafe { body: block, .. } => self.mv_block(cx, block, owning),
+            // `const if`: only the branch taken exists.
+            ExprKind::If { then, else_, deferred: Some(_), .. } => {
+                if self.b.const_ifs.get(&e.id) == Some(&true) {
+                    self.mv_block(cx, then, owning);
+                } else if let Some(else_) = else_.as_ref().filter(|_| self.b.const_ifs.contains_key(&e.id)) {
+                    self.mv(cx, else_, owning);
+                }
+            }
+            // `const for`: its body once per item, one after another, each
+            // with that item's tables.
+            ExprKind::For { body, is_const: true, .. } => {
+                for id in self.b.unrolled.get(&e.id).cloned().unwrap_or_default() {
+                    self.in_body(id, |this| this.mv_block(cx, body, false));
+                }
+            }
             ExprKind::If { cond, then, else_, .. } => {
                 self.mv(cx, cond, false);
                 let before = cx.flow.clone();

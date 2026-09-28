@@ -53,6 +53,7 @@ const EMBEDDED_STD: &[(&str, &str)] = &[
     ("slice", include_str!("../../../runtime/std/slice.loom")),
     ("string", include_str!("../../../runtime/std/string.loom")),
     ("sync", include_str!("../../../runtime/std/sync.loom")),
+    ("target", include_str!("../../../runtime/std/target.loom")),
     ("term", include_str!("../../../runtime/std/term.loom")),
     ("time", include_str!("../../../runtime/std/time.loom")),
 ];

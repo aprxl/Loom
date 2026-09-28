@@ -768,6 +768,15 @@ impl<'a> Resolver<'a> {
         }
         match self.module_member(m, &ident.name, self.module) {
             Ok(Some(binding)) => Some(binding),
+            // The platform's own APIs (`std.sys.win32`) are part of the
+            // design, but not of the Lua backend yet.
+            Ok(None) if self.p.module(m).path == "std" && ident.name == "sys" => {
+                self.report(
+                    Diagnostic::error(codes::U0102, "not implemented yet: `std.sys`, the platform's own APIs")
+                        .primary(ident.span, "not supported by this compiler yet"),
+                );
+                None
+            }
             Ok(None) => {
                 let path = self.p.module(m).path.clone();
                 self.error(codes::N0105, ident.span, format!("there's no `{}` in `{path}`", ident.name), "not found");
