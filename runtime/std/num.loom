@@ -30,6 +30,12 @@ pub warp Int[T] {
     pub fn leading_zeros(self) -> u32
     /// How many bits are one.
     pub fn count_ones(self) -> u32
+    /// Whether it's 2 to the power of something: one bit is one, and it's
+    /// above zero.
+    pub fn is_power_of_two(self) -> bool
+    /// The base-2 logarithm, rounded down: the position of the highest one
+    /// bit. Unravels for zero and below.
+    pub fn log2(self) -> u32
     /// The bits moved `n` places towards the top; those pushed out come back
     /// in at the bottom. `n` counts modulo the type's width.
     pub fn rotate_left(self, n: u32) -> T

@@ -1,0 +1,25 @@
+// `?T.take()`, and integers' `log2` and `is_power_of_two`.
+
+use std.io.print
+
+warp Slots { items: [?u32; 2] = [some(5), none], name: ?String = some("x") }
+
+fn main() {
+    var a: ?i32 = some(3)
+    let b = a.take()
+    print("{a:?} {b:?}")
+    var s = Slots()
+    let c = s.items[0].take()
+    print("{s.items:?} {c:?}")
+    let n = s.name.take()
+    print("{s.name:?} {n:?}")
+    var nested: ??i32 = some(none)
+    let v = nested.take()
+    print("{nested:?} {v:?}")
+
+    for x in [1u64, 2, 3, 64, 0x8000_0000_0000_0000] {
+        print("{x} {x.is_power_of_two()} {x.log2()}")
+    }
+    print("{0u8.is_power_of_two()} {(-4i32).is_power_of_two()} {255u8.log2()}")
+    print(0u32.log2())
+}

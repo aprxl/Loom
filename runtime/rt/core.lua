@@ -2372,6 +2372,28 @@ ext["std.num.Int.count_ones"] = function(d, v)
   return n
 end
 
+-- `?T`'s methods. A scalar `mut self` comes back after the result.
+ext["std.option.Optional.take"] = function(_, v)
+  return v, nil
+end
+
+ext["std.num.Int.is_power_of_two"] = function(d, v)
+  if d.signed and v < 0 then return false end
+  return v ~= 0 and v & (v - 1) == 0
+end
+
+ext["std.num.Int.log2"] = function(d, v)
+  if v == 0 or (d.signed and v < 0) then
+    error(MARK .. "log2 of " .. rt.fmt(d, v, nil) .. ": it needs a number above zero", 2)
+  end
+  local n, bits = -1, v
+  while bits ~= 0 do
+    bits = bits >> 1
+    n = n + 1
+  end
+  return n
+end
+
 -- Rotates the type's bits `n` places left: Lua's `<<` and `>>` are logical
 -- on all 64 bits, and `wrapv` keeps the type's bits (sign-extending).
 local function rotl(d, v, n)

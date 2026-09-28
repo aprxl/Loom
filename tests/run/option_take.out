@@ -1,0 +1,10 @@
+none some(3)
+[none, none] some(5)
+none some("x")
+none some(none)
+1 true 0
+2 true 1
+3 false 1
+64 true 6
+9223372036854775808 true 63
+false false 7

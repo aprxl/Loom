@@ -76,6 +76,7 @@ pub const RUNTIME_WARPS: &[&str] = &[
     "std.string.Char",
     "std.num.Int",
     "std.num.Float",
+    "std.option.Optional",
     "std.iter.Stream",
     "std.iter.Shuttle",
     "std.iter.Burst",

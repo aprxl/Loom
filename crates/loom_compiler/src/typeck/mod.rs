@@ -437,6 +437,7 @@ struct Std {
     str_warp: Option<DefId>,
     char_warp: Option<DefId>,
     int_warp: Option<DefId>,
+    optional: Option<DefId>,
     float_warp: Option<DefId>,
     parse: Option<DefId>,
     num: Option<DefId>,
@@ -553,6 +554,7 @@ impl<'p> Checker<'p> {
             str_warp: find("std.string", "Str"),
             char_warp: find("std.string", "Char"),
             int_warp: find("std.num", "Int"),
+            optional: find("std.option", "Optional"),
             float_warp: find("std.num", "Float"),
             parse: find("std.num", "Parse"),
             num: find("std.num", "Num"),
@@ -1503,7 +1505,11 @@ impl<'p> Checker<'p> {
         let ty = self.resolve(ty);
         match self.tcx.kind(ty).clone() {
             TyKind::Tuple(items) => !items.is_empty(),
-            TyKind::Adt(def, _) if self.is_builtin(def) => Some(def) != self.std.string,
+            // `String` is a Lua string, and `?T` (whose methods are
+            // `Optional[T]`'s) a value or `nil`.
+            TyKind::Adt(def, _) if self.is_builtin(def) => {
+                Some(def) != self.std.string && Some(def) != self.std.optional
+            }
             TyKind::Array(..) => true,
             TyKind::Adt(..) => self.adt_info(ty).is_some_and(|i| !i.unit_only()),
             // A `mut self` method called through `any` changes the value in

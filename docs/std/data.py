@@ -273,6 +273,8 @@ MODULES = [
        {"sig": "fn trailing_zeros(self) -> u32", "doc": "How many zero bits come after the lowest one bit (all of them for 0)."},
        {"sig": "fn leading_zeros(self) -> u32", "doc": "How many zero bits come before the highest one bit."},
        {"sig": "fn count_ones(self) -> u32", "doc": "How many bits are one."},
+       {"sig": "fn is_power_of_two(self) -> bool", "doc": "Whether it's 2 to the power of something: one bit is one, and it's above zero."},
+       {"sig": "fn log2(self) -> u32", "doc": "The base-2 logarithm, rounded down: the position of the highest one bit. Unravels for zero and below."},
        {"sig": "fn rotate_left(self, n: u32) -> T", "doc": "The bits moved `n` places towards the top; those pushed out come back in at the bottom. `n` counts modulo the type's width."},
        {"sig": "fn rotate_right(self, n: u32) -> T", "doc": "The bits moved `n` places towards the bottom; those pushed out come back in at the top. `n` counts modulo the type's width."},
        {"sig": "fn to_string(self) -> String", "doc": None},
@@ -320,6 +322,18 @@ MODULES = [
      ]},
     {"kind": "weft", "name": "Integer", "suffix": ": Ord, Copy, Show", "builtin": True,
      "doc": "Every integer type, `u1` through `i128`."},
+  ],
+},
+
+{
+  "name": "option",
+  "summary": "Optional values: `?T`.",
+  "types": [
+    {"kind": "warp", "name": "Optional", "suffix": "[T]", "builtin": True,
+     "doc": "The methods of every optional type, `?T`.",
+     "methods": [
+       {"sig": "fn take(mut self) -> ?T", "doc": "The value, leaving `none` in its place."},
+     ]},
   ],
 },
 

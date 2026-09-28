@@ -1,0 +1,8 @@
+//! Optional values: `?T`.
+
+/// The methods of every optional type, `?T`.
+#builtin
+pub warp Optional[T] {
+    /// The value, leaving `none` in its place.
+    pub fn take(mut self) -> ?T
+}

@@ -282,6 +282,7 @@ impl Checker<'_> {
             TyKind::Char => (self.std.char_warp?, Vec::new()),
             TyKind::Int(_) | TyKind::IntVar(_) => (self.std.int_warp?, vec![ty]),
             TyKind::Float(_) | TyKind::FloatVar(_) => (self.std.float_warp?, vec![ty]),
+            TyKind::Optional(inner) => (self.std.optional?, vec![*inner]),
             _ => return None,
         };
         let Some(Member::Method(m)) = self.member(warp, name) else { return None };
