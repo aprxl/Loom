@@ -86,7 +86,10 @@ impl Checker<'_> {
                 self.string_ty()
             }
             ExprKind::Local(local) => {
-                if self.runtime_locals.as_ref().is_some_and(|outer| outer.contains(local)) {
+                // A `const` parameter has its value while compiling, too.
+                if let Some(TyKind::Value(v)) = self.const_param_of(e).map(|t| self.tcx.kind(t).clone()) {
+                    self.b.const_values.insert(e.id, v);
+                } else if self.runtime_locals.as_ref().is_some_and(|outer| outer.contains(local)) {
                     self.runtime_value(*local, span);
                 }
                 self.b.local_ty.get(local).copied().unwrap_or(self.tcx.error)
@@ -108,6 +111,18 @@ impl Checker<'_> {
                     }
                     DefKind::Fn(_) => self.fn_value(e, *def),
                     DefKind::Case(_) => self.unsupported(span, "cases"),
+                    // `N` in `warp Ring[T, const N: usize]`: its value in this instance.
+                    DefKind::GenericParam(g) if self.is_const_param(*def) => {
+                        let crate::hir::GenericParamKind::Const { ty } = &g.kind else { unreachable!() };
+                        let ty = self.lower_ty(ty);
+                        match self.const_param_of(e).map(|t| self.tcx.kind(t).clone()) {
+                            Some(TyKind::Value(v)) => {
+                                self.b.const_values.insert(e.id, v);
+                                ty
+                            }
+                            _ => self.unsupported(span, "`const` parameters outside an instance"),
+                        }
+                    }
                     _ => self.unsupported(span, "this kind of value"),
                 }
             }

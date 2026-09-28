@@ -1,0 +1,96 @@
+// `const` parameters: values known at compile time, which the function or
+// warp is specialized for, and which types can use.
+
+use std.io.print
+
+/// A `const` parameter: each length gets its own function.
+fn zeros(const n: usize) -> [f32; n] = [0.0; n]
+
+/// Another function's `const` parameter can come from this one's.
+fn ones(const n: usize) -> [f32; n] {
+    var xs = zeros(n)
+    for mut x in xs { x = 1.0 }
+    xs
+}
+
+/// A `const` generic parameter, inferred from the array's length.
+fn sum[const N: usize](xs: [i32; N]) -> i32 {
+    const assert(N > 0, "summing nothing")
+    var s = 0
+    for x in xs { s += x }
+    s
+}
+
+fn pick(const first: bool) -> str = if first { "first" } else { "second" }
+
+/// A ring buffer whose cursor types are computed from its capacity: with
+/// N = 4 they're `u2`, so `+%= 1` wraps exactly at N.
+warp Ring[T, const N: usize] {
+    const assert(N.is_power_of_two(), "Ring capacity must be a power of two, got {N}")
+
+    type Idx = uint(N.log2())
+    type Len = uint(N.log2() + 1)
+
+    slots: [?T; N] = [none; N]
+    head: Idx = 0
+    tail: Idx = 0
+    pub(get) len: Len = 0
+
+    fn cap(self) -> usize = N
+
+    /// Adds to the back. When full, the oldest is dropped and returned.
+    pub fn push(mut self, take x: T) -> ?T {
+        let evicted = if .len == N { .pop() } else { none }
+        .slots[.tail] = x
+        .tail +%= 1
+        .len += 1
+        evicted
+    }
+
+    pub fn pop(mut self) -> ?T {
+        if .len == 0 { return none }
+        let x = .slots[.head].take()
+        .head +%= 1
+        .len -= 1
+        x
+    }
+}
+
+warp Grid[const W: u8, const H: u8] {
+    fn area(self) -> u16 = W as u16 * H as u16
+}
+
+const SIDE: u8 = 3
+
+fn main() {
+    print(zeros(3))
+    print(ones(2))
+    print(zeros(4).len())
+    print(sum([1, 2, 3]))
+    print(sum[2]([10, 20]))
+    print("{pick(true)} {pick(1 > 2)}")
+
+    var recent = Ring[u32, 4]()
+    for n in 1u32..=6 {
+        if recent.push(n) is some(old) { print("evicted {old}") }
+    }
+    while recent.pop() is some(n) { print("kept {n}") }
+    print(recent.cap())
+
+    var words = Ring[str, 2]()
+    words.push("a")
+    words.push("b")
+    print(words.push("c"))
+
+    // Computed types: `uint(3)` is `u3`.
+    let small: uint(3) = 7
+    let wide: int(12) = -2048
+    print("{small} {wide} {small +% 1}")
+
+    var maybe: ?str = some("here")
+    let got = maybe.take()
+    print("{got:?} {maybe:?}")
+
+    print(Grid[2, 5]().area())
+    print(Grid[SIDE, SIDE * 2]().area())
+}

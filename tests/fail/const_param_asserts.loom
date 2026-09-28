@@ -1,0 +1,18 @@
+// A `const assert` about `const` parameters holds for each instance.
+
+warp Ring[T, const N: usize] {
+    const assert(N.is_power_of_two(), "Ring capacity must be a power of two, got {N}")   //~ K0101
+    slots: [?T; N] = [none; N]
+}
+
+fn zeros(const n: usize) -> [f32; n] {
+    const assert(n < 100, "{n} zeros is too many")      //~ K0101
+    [0.0; n]
+}
+
+fn main() {
+    let fine = Ring[u32, 4]()
+    let odd = Ring[u32, 100]()
+    let few = zeros(3)
+    let many = zeros(300)
+}

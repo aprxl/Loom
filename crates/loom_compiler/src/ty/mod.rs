@@ -23,6 +23,14 @@ impl IntTy {
     pub const USIZE: IntTy = IntTy { signed: false, bits: 63, size: true };
 }
 
+/// A value known at compile time, standing where a type would: the
+/// argument of a `const` parameter (`Ring[u32, 4]`, `zeros(4)`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ConstVal {
+    Int(i128),
+    Bool(bool),
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum FloatTy {
     F32,
@@ -50,6 +58,12 @@ pub enum TyKind {
     Any(Vec<DefId>),
     /// `[T; N]`: exactly `N` elements, stored inline and copied like a value.
     Array(Ty, u64),
+    /// `[T; N]` whose length isn't known yet: a `const` parameter
+    /// ([`TyKind::Param`]) in a template, or a variable. It becomes an
+    /// [`TyKind::Array`] as soon as the length is a [`TyKind::Value`].
+    ArrayOf(Ty, Ty),
+    /// A value where a type would be: a `const` parameter's argument.
+    Value(ConstVal),
     /// A gauge (`type Cents = i64 where 0..`): a numeric type of its own,
     /// with the values of its base (the second field, always a concrete
     /// `Int` or `Float`) that its range or predicate allows.
@@ -223,6 +237,10 @@ impl TyCtx {
             TyKind::Tuple(items) => TyKind::Tuple(items.into_iter().map(|t| self.subst(t, map)).collect()),
             TyKind::Optional(t) => TyKind::Optional(self.subst(t, map)),
             TyKind::Array(t, n) => TyKind::Array(self.subst(t, map), n),
+            TyKind::ArrayOf(t, n) => {
+                let (t, n) = (self.subst(t, map), self.subst(n, map));
+                return self.array_of(t, n);
+            }
             TyKind::Result(t, e) => TyKind::Result(self.subst(t, map), self.subst(e, map)),
             TyKind::Range(t) => TyKind::Range(self.subst(t, map)),
             TyKind::Fn(params, ret) => {
@@ -238,6 +256,18 @@ impl TyCtx {
         self.intern(kind)
     }
 
+    /// `[elem; len]`: an array when `len` is a known length.
+    pub fn array_of(&mut self, elem: Ty, len: Ty) -> Ty {
+        match self.kind(len) {
+            TyKind::Value(ConstVal::Int(n)) if (0..=u32::MAX as i128).contains(n) => {
+                let n = *n as u64;
+                self.intern(TyKind::Array(elem, n))
+            }
+            TyKind::Error => len,
+            _ => self.intern(TyKind::ArrayOf(elem, len)),
+        }
+    }
+
     /// Whether `ty` is, or has in it, a type that was already reported as
     /// an error: `?{error}` shouldn't be reported again.
     pub fn has_error(&self, ty: Ty) -> bool {
@@ -247,7 +277,7 @@ impl TyCtx {
                 items.iter().any(|&t| self.has_error(t))
             }
             TyKind::Optional(t) | TyKind::Range(t) | TyKind::Array(t, _) => self.has_error(*t),
-            TyKind::Result(t, e) => self.has_error(*t) || self.has_error(*e),
+            TyKind::Result(t, e) | TyKind::ArrayOf(t, e) => self.has_error(*t) || self.has_error(*e),
             TyKind::Fn(params, ret) => params.iter().any(|&t| self.has_error(t)) || self.has_error(*ret),
             _ => false,
         }
@@ -259,7 +289,7 @@ impl TyCtx {
             TyKind::Param(_) => true,
             TyKind::Tuple(items) => items.iter().any(|&t| self.has_params(t)),
             TyKind::Optional(t) | TyKind::Range(t) | TyKind::Array(t, _) => self.has_params(*t),
-            TyKind::Result(t, e) => self.has_params(*t) || self.has_params(*e),
+            TyKind::Result(t, e) | TyKind::ArrayOf(t, e) => self.has_params(*t) || self.has_params(*e),
             TyKind::Fn(params, ret) => params.iter().any(|&t| self.has_params(t)) || self.has_params(*ret),
             TyKind::Adt(_, args) | TyKind::Union(args) => args.iter().any(|&t| self.has_params(t)),
             _ => false,
@@ -295,6 +325,9 @@ impl TyCtx {
             }
             TyKind::Optional(t) => format!("?{}", self.display_atom(p, *t)),
             TyKind::Array(t, n) => format!("[{}; {n}]", self.display(p, *t)),
+            TyKind::ArrayOf(t, n) => format!("[{}; {}]", self.display(p, *t), self.display(p, *n)),
+            TyKind::Value(ConstVal::Int(n)) => n.to_string(),
+            TyKind::Value(ConstVal::Bool(b)) => b.to_string(),
             TyKind::Result(t, e) => format!("{} ! {}", self.display_atom(p, *t), self.display_atom(p, *e)),
             TyKind::Range(t) => format!("Range[{}]", self.display(p, *t)),
             TyKind::Fn(params, ret) => {

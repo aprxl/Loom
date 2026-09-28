@@ -18,8 +18,8 @@ use loom_syntax::source::Span;
 
 use super::gauge::Val;
 use super::{BodyId, Checker, Fence};
-use crate::hir::{Arg, DefKind, Expr, ExprKind, LocalId, Program, StmtKind};
-use crate::ty::{Ty, TyKind};
+use crate::hir::{Arg, DefId, DefKind, Expr, ExprKind, LocalId, Program, StmtKind};
+use crate::ty::{ConstVal, Ty, TyKind};
 
 /// The arguments of `assert(…)` when `e` is a call of std's `assert`:
 /// `const assert(cond, message)` checks `cond` while compiling.
@@ -144,6 +144,63 @@ impl Checker<'_> {
             _ => Vec::new(),
         };
         parts.into_iter().find_map(|t| self.stateful(t, depth + 1))
+    }
+
+    /// What `e` stands for when it names a `const` parameter: its value (a
+    /// [`TyKind::Value`]), or in a template or at a call, the parameter or
+    /// variable standing for it.
+    pub(super) fn const_param_of(&self, e: &Expr) -> Option<Ty> {
+        match &e.kind {
+            ExprKind::Local(l) => self.const_locals.iter().rev().find(|(x, _)| x == l).map(|&(_, t)| self.resolve(t)),
+            ExprKind::Def { def, args } if args.is_empty() && self.is_const_param(*def) => {
+                self.subst.iter().find(|(g, _)| g == def).map(|&(_, t)| self.resolve(t))
+            }
+            _ => None,
+        }
+    }
+
+    /// The value of `e` if it names a `const` parameter whose value is known.
+    pub(super) fn const_param_val(&self, e: &Expr) -> Option<Val> {
+        match self.tcx.kind(self.const_param_of(e)?) {
+            TyKind::Value(ConstVal::Int(v)) => Some(Val::Int(*v)),
+            TyKind::Value(ConstVal::Bool(b)) => Some(Val::Bool(*b)),
+            _ => None,
+        }
+    }
+
+    /// Whether `def` is a `const` generic parameter (`const N: usize`).
+    pub(super) fn is_const_param(&self, def: DefId) -> bool {
+        matches!(&self.p.def(def).kind, DefKind::GenericParam(g) if matches!(g.kind, crate::hir::GenericParamKind::Const { .. }))
+    }
+
+    /// `e` as the argument of a `const` parameter of type `ty`: a
+    /// [`TyKind::Value`], or what stands for another `const` parameter.
+    /// `None` if it isn't known at compile time (reported).
+    pub(super) fn const_arg(&mut self, e: &Expr, ty: Ty) -> Option<Ty> {
+        if let Some(t) = self.const_param_of(e) {
+            return Some(t);
+        }
+        let value = match (self.fold(e, None), self.tcx.kind(self.tcx.degauge(ty))) {
+            (Some(Val::Int(v)), TyKind::Int(int)) => {
+                if !int.contains(v) {
+                    let shown = self.show(ty);
+                    self.error(codes::T0102, e.span, format!("`{v}` doesn't fit in `{shown}`"), "too big or too small");
+                    return None;
+                }
+                ConstVal::Int(v)
+            }
+            (Some(Val::Bool(b)), TyKind::Bool) => ConstVal::Bool(b),
+            (Some(_), _) => return None,
+            (None, _) => {
+                self.diags.push(
+                    Diagnostic::error(codes::K0109, "this `const` argument isn't known at compile time")
+                        .primary(e.span, "the constant folder can't work this out")
+                        .note("a `const` argument can use literals, constants, other `const` parameters, arithmetic and comparisons"),
+                );
+                return None;
+            }
+        };
+        Some(self.tcx.intern(TyKind::Value(value)))
     }
 
     /// Reports `local`, declared outside the compile-time code it's used in.

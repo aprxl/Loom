@@ -45,13 +45,19 @@ impl Checker<'_> {
         match &callee.kind {
             ExprKind::Def { def, args: generic_args } if matches!(self.p.def(*def).kind, DefKind::Fn(_)) => {
                 self.check_shuttle_self_call(*def, callee.span);
-                let mut explicit = Vec::with_capacity(generic_args.len());
-                for arg in generic_args {
-                    match arg {
-                        hir::GenericArg::Type(t) => explicit.push(self.lower_ty(t)),
-                        hir::GenericArg::Expr(e) => return self.unsupported(e.span, "value generic arguments"),
+                let params = match &self.p.def(*def).kind {
+                    DefKind::Fn(f) => f.generics.clone(),
+                    _ => Vec::new(),
+                };
+                let explicit = if generic_args.len() == params.len() {
+                    match self.generic_args(&params, generic_args) {
+                        Some(args) => args,
+                        None => return self.check_args_alone(args),
                     }
-                }
+                } else {
+                    // The wrong number: the call says so.
+                    generic_args.iter().map(|_| self.tcx.error).collect()
+                };
                 self.call_fn_with(call, Instance::of(*def), &explicit, args, None)
             }
             ExprKind::Field { base, field: FieldName::Named(name) } => {
@@ -264,7 +270,8 @@ impl Checker<'_> {
             self.pending.push(pending);
         }
         self.solve_projections();
-        sig.ret
+        // `zeros(4)` is a `[f32; 4]` now that its argument said what `n` is.
+        self.deep_resolve(sig.ret)
     }
 
     /// Whether calling `inst` needs generic arguments inferred: the function
@@ -347,11 +354,25 @@ impl Checker<'_> {
             }
             self.in_argument = saved;
             self.check_mut_arg(arg, &params[slot]);
+            // `zeros(4)`: the argument of a `const` parameter is part of
+            // which instance is called.
+            if let Some(value) = params[slot].value {
+                match self.const_arg(&arg.value, params[slot].ty) {
+                    Some(v) => {
+                        self.unify(value, v);
+                    }
+                    None => ok = false,
+                }
+            }
         }
         let mut sources = Vec::with_capacity(slots.len());
         for (slot, param) in slots.iter().zip(params) {
             match slot {
                 Some(i) => sources.push(ArgSource::Arg(*i)),
+                None if param.has_default && param.value.is_some() => {
+                    self.unsupported(span, "default values of `const` parameters");
+                    ok = false;
+                }
                 None if param.has_default => sources.push(ArgSource::Default),
                 None => {
                     self.error(

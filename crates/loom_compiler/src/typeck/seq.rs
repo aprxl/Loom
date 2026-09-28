@@ -67,6 +67,9 @@ impl Checker<'_> {
     /// The value of an integer expression known at compile time: literals,
     /// constants, and arithmetic on them. `None` if it isn't one.
     pub(super) fn const_int(&mut self, e: &Expr) -> Option<i128> {
+        if let Some(super::gauge::Val::Int(v)) = self.const_param_val(e) {
+            return Some(v);
+        }
         match &e.kind {
             ExprKind::Lit(Lit::Int(i)) => Some(i.value as i128),
             ExprKind::Unary { op: UnaryOp::Neg, operand } => self.const_int(operand).map(|v| -v),
@@ -108,6 +111,18 @@ impl Checker<'_> {
             Some(n) if (0..=u32::MAX as i128).contains(&n) => Some(n as u64),
             Some(n) => {
                 self.error(codes::T0102, e.span, format!("an array can't have {n} elements"), "not a length");
+                None
+            }
+            // A parameter that isn't `const` gets its value when the program runs.
+            None if matches!(e.kind, ExprKind::Local(_)) => {
+                let ExprKind::Local(local) = e.kind else { unreachable!() };
+                let name = self.p.local(local).name.clone();
+                self.diags.push(
+                    Diagnostic::error(codes::K0105, format!("`{name}` has no value while compiling"))
+                        .primary(e.span, "an array's length must be known at compile time")
+                        .secondary(self.p.local(local).span, "declared here")
+                        .help(format!("if it's a parameter, make it a `const` one: `const {name}: usize`")),
+                );
                 None
             }
             None => {

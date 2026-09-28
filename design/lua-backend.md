@@ -122,6 +122,28 @@ A generic function nobody calls isn't checked or emitted. An error in a
 generic body is reported once, with a note naming the instance it came from,
 even when several instances hit it.
 
+**`const` parameters** are generics whose arguments are values, of an
+integer type or `bool` for now. An instance's arguments are types, so a
+value is a type too (`TyKind::Value`): `Ring[u32, 4]` and `Ring[u32, 8]` are
+different types, and `zeros(4)` and `zeros(5)` different instances. An
+array whose length is a `const` parameter is `TyKind::ArrayOf` until the
+length is known (in a template, or at a call before the argument says),
+which is also how `fn sum[const N: usize](xs: [i32; N])` infers `N`.
+
+- A `const` argument must fold (the constant folder: literals, constants,
+  other `const` parameters, arithmetic, comparisons, `log2`,
+  `is_power_of_two`, `min`, `max`, `pow`); anything else is K0109. It's
+  checked against the parameter's type (T0102).
+- A `const` function parameter (`fn zeros(const n: usize)`) is still
+  passed at run time like any other; inside the instance, and in
+  compile-time code, it's its value.
+- `uint(n)` and `int(n)` are integer types of `n` bits. A generic warp's
+  field types are worked out again for each list of arguments, since
+  `type Idx = uint(N.log2())` can't be in the template.
+- A warp's `const assert`s run for each concrete instance of it, with a
+  note naming the instance (`in Ring[u32, 100]`); so do those in a
+  function's body, for each instance of the function.
+
 ## Sequences
 
 `xs[i]` checks `i` against the length (`rt.idx`, which also makes it

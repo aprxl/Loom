@@ -26,15 +26,18 @@ use crate::ty::{Ty, TyKind};
 /// finished. Nothing reads it when checking fails.
 pub(super) const UNKNOWN: BodyId = BodyId(u32::MAX);
 
-/// How a weft used as a parameter's type becomes a generic argument.
+/// How a weft used as a parameter's type, or a `const` parameter's value,
+/// becomes a generic argument.
 #[derive(Debug, Default)]
 pub(super) enum Implicit {
     /// Not in a parameter's type: a weft there isn't a type.
     #[default]
     Off,
-    /// At a call: each one gets a fresh variable, recorded with its weft.
-    Fresh(Vec<(Ty, DefId)>),
-    /// In an instance: the arguments, in the order the wefts appear.
+    /// At a call: each one gets a fresh variable, recorded with its weft
+    /// (none for a `const` parameter).
+    Fresh(Vec<(Ty, Option<DefId>)>),
+    /// In an instance: the arguments, in the order the wefts and `const`
+    /// parameters appear.
     Given { args: Vec<Ty>, next: usize },
 }
 
@@ -79,23 +82,26 @@ impl Checker<'_> {
             }
         };
         let mut params = match p.def(def).parent {
-            Some(parent) if matches!(p.def(def).kind, DefKind::Fn(_)) => own(parent),
+            Some(parent) if matches!(p.def(def).kind, DefKind::Fn(_) | DefKind::ConstBlock(_)) => own(parent),
             _ => Vec::new(),
         };
         params.extend(own(def));
         params
     }
 
-    /// Whether `def` is only checked for particular types: it, or the warp
-    /// it's in, has generic parameters, or a parameter's type is a weft.
+    /// Whether `def` is only checked for particular types (or values): it,
+    /// or the warp it's in, has generic parameters, a parameter's type is a
+    /// weft, or a parameter is `const`.
     pub(super) fn is_generic(&self, def: DefId) -> bool {
         !self.generic_params(def).is_empty() || self.implicit_count(def) > 0
     }
 
-    /// How many parameter types of function `def` are wefts.
+    /// How many parameter types of function `def` are wefts, plus how many
+    /// of its parameters are `const`.
     fn implicit_count(&self, def: DefId) -> usize {
         let DefKind::Fn(f) = &self.p.def(def).kind else { return 0 };
-        f.params.iter().filter_map(|p| p.ty.as_ref()).map(|t| self.wefts_in(t)).sum()
+        let wefts: usize = f.params.iter().filter_map(|p| p.ty.as_ref()).map(|t| self.wefts_in(t)).sum();
+        wefts + f.params.iter().filter(|p| p.mode == loom_syntax::ast::ParamMode::Const).count()
     }
 
     fn wefts_in(&self, t: &hir::Ty) -> usize {
@@ -113,6 +119,50 @@ impl Checker<'_> {
             HirTy::Array { elem, .. } => self.wefts_in(elem),
             _ => 0,
         }
+    }
+
+    /// Explicit generic arguments for `params` (`Ring[u32, 4]`): types for
+    /// type parameters, values for `const` ones. The counts must match.
+    /// `None` if one is wrong (reported).
+    pub(super) fn generic_args(&mut self, params: &[DefId], args: &[hir::GenericArg]) -> Option<Vec<Ty>> {
+        let mut out = Vec::with_capacity(args.len());
+        for (&g, arg) in params.iter().zip(args) {
+            let name = self.p.def(g).name.clone();
+            let ty = match (self.const_param_decl(g), arg) {
+                (None, hir::GenericArg::Type(t)) => self.lower_ty(t),
+                (Some(ty), hir::GenericArg::Expr(e)) => self.const_arg(e, ty)?,
+                // `Ring[u32, SIZE]`: a constant, or another `const` parameter,
+                // reads like a type.
+                (Some(ty), hir::GenericArg::Type(t)) => match &t.kind {
+                    HirTy::Def { def, args } if args.is_empty() => {
+                        let e = hir::Expr {
+                            id: HirId(u32::MAX),
+                            kind: hir::ExprKind::Def { def: *def, args: Vec::new() },
+                            span: t.span,
+                        };
+                        self.const_arg(&e, ty)?
+                    }
+                    _ => {
+                        self.error(codes::T0104, t.span, format!("`{name}` takes a value, not a type"), "a type");
+                        return None;
+                    }
+                },
+                (None, hir::GenericArg::Expr(e)) => {
+                    self.error(codes::T0104, e.span, format!("`{name}` takes a type, not a value"), "a value");
+                    return None;
+                }
+            };
+            out.push(ty);
+        }
+        Some(out)
+    }
+
+    /// The type of `const` generic parameter `g` (`usize` in
+    /// `const N: usize`), or `None` if it's a type parameter.
+    pub(super) fn const_param_decl(&mut self, g: DefId) -> Option<Ty> {
+        let DefKind::GenericParam(gp) = &self.p.def(g).kind else { return None };
+        let hir::GenericParamKind::Const { ty } = &gp.kind else { return None };
+        Some(self.lower_ty(ty))
     }
 
     /// What each generic parameter of `inst` stands for. An instance with
@@ -180,8 +230,8 @@ impl Checker<'_> {
             );
             return None;
         };
-        if let Some(&g) = f.generics.iter().find(|&&g| !self.is_type_param(g)) {
-            self.unsupported(p.def(g).span, "`const` and region parameters");
+        if let Some(&g) = f.generics.iter().find(|&&g| self.is_region_param(g)) {
+            self.unsupported(p.def(g).span, "region parameters");
             return None;
         }
         args.extend(own.iter().copied());
@@ -210,7 +260,9 @@ impl Checker<'_> {
         if let Implicit::Fresh(vars) = implicit {
             for (ty, weft) in vars {
                 args.push(ty);
-                bounds.push(Bound { ty, wefts: vec![weft], param: p.def(weft).name.clone() });
+                if let Some(weft) = weft {
+                    bounds.push(Bound { ty, wefts: vec![weft], param: p.def(weft).name.clone() });
+                }
             }
         }
         Some((sig, Instance { args, ..template }, bounds))
@@ -457,21 +509,38 @@ impl Checker<'_> {
     }
 
     /// `largest` with `T = u8`, or `Widget.area` for `Button`.
-    fn describe_instance(&mut self, inst: &Instance) -> String {
+    pub(super) fn describe_instance(&mut self, inst: &Instance) -> String {
         let p = self.p;
+        // `const assert(…)` in a warp: the warp, with its arguments.
+        if let (DefKind::ConstBlock(_), Some(parent)) = (&p.def(inst.def).kind, p.def(inst.def).parent) {
+            let ty = self.tcx.intern(TyKind::Adt(parent, inst.args.clone()));
+            return format!("`{}`", self.show(ty));
+        }
         let name = match p.def(inst.def).parent {
             Some(parent) if !p.def(parent).name.is_empty() => {
                 format!("{}.{}", p.def(parent).name, p.def(inst.def).name)
             }
             _ => p.def(inst.def).name.clone(),
         };
-        let params = self.generic_params(inst.def);
+        // The generic parameters' names, then the `const` parameters' (a
+        // weft as a parameter's type has none).
+        let mut names: Vec<Option<String>> =
+            self.generic_params(inst.def).iter().map(|&g| Some(p.def(g).name.clone())).collect();
+        if let DefKind::Fn(f) = &p.def(inst.def).kind {
+            for param in &f.params {
+                let wefts = param.ty.as_ref().map_or(0, |t| self.wefts_in(t));
+                names.extend(std::iter::repeat_n(None, wefts));
+                if param.mode == loom_syntax::ast::ParamMode::Const {
+                    names.push(Some(p.local(param.local).name.clone()));
+                }
+            }
+        }
         let mut parts = Vec::new();
         for (i, &arg) in inst.args.iter().enumerate() {
             let shown = self.show(arg);
-            match params.get(i) {
-                Some(&g) => parts.push(format!("{} = {shown}", p.def(g).name)),
-                None => parts.push(shown),
+            match names.get(i) {
+                Some(Some(name)) => parts.push(format!("{name} = {shown}")),
+                _ => parts.push(shown),
             }
         }
         let mut out = format!("`{name}`");

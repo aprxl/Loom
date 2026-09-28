@@ -223,6 +223,14 @@ impl Lowerer<'_> {
             ExprKind::Lambda { params, body } => self.lambda(e, params, body),
             ExprKind::Lit(lit) => self.lit(lit, false, ty),
             ExprKind::Template(parts) => self.template(parts),
+            // A `const` parameter: its value in this instance, which
+            // compile-time code (lowered on its own) can read too.
+            ExprKind::Local(_) if self.tables().const_values.contains_key(&e.id) => {
+                match self.tables().const_values[&e.id] {
+                    crate::ty::ConstVal::Int(v) => self.int_value(v, ty),
+                    crate::ty::ConstVal::Bool(b) => Expr::Bool(b),
+                }
+            }
             ExprKind::Local(local) => match self.aliases.get(local) {
                 Some(place) => place.clone(),
                 None => Expr::Name(self.local_name(*local)),
@@ -239,6 +247,15 @@ impl Lowerer<'_> {
             ExprKind::Map(pairs) => self.map_lit(e, pairs),
             ExprKind::Def { def, .. } => match &self.p.def(*def).kind {
                 DefKind::Const(_) => self.const_value(*def, ty),
+                // A `const` parameter: its value in this instance.
+                DefKind::GenericParam(_) => match self.tables().const_values.get(&e.id) {
+                    Some(&crate::ty::ConstVal::Int(v)) => self.int_value(v, ty),
+                    Some(&crate::ty::ConstVal::Bool(b)) => Expr::Bool(b),
+                    None => {
+                        self.unsupported(span, "this kind of value");
+                        Expr::Nil
+                    }
+                },
                 _ => {
                     self.unsupported(span, "this kind of value");
                     Expr::Nil

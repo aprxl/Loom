@@ -130,14 +130,35 @@ impl Checker<'_> {
             return None;
         }
         let once = w.modifier == loom_syntax::ast::WarpModifier::Once;
-        if let Some(&param) = w.generics.iter().find(|&&g| !self.is_type_param(g)) {
-            self.unsupported(p.def(param).span, "`const` and region parameters");
+        if let Some(&param) = w.generics.iter().find(|&&g| self.is_region_param(g)) {
+            self.unsupported(p.def(param).span, "region parameters");
             return None;
         }
         let params: Vec<(DefId, Ty)> = w.generics.iter().map(|&g| (g, self.tcx.intern(TyKind::Param(g)))).collect();
         let this = self.tcx.intern(TyKind::Adt(def, params.iter().map(|(_, t)| *t).collect()));
+        let (fields, cases) = self.warp_layout(def, w, this, params);
+        let mut info =
+            WarpInfo { def, ty: this, name: d.name.clone(), fields, cases, tuple: w.tuple, copy: !once, once };
+        // Insert first, so a warp that contains itself doesn't recurse forever.
+        self.r.warps.insert(def, info.clone());
+        info.once = once || info.field_tys().iter().any(|&t| self.is_once(t));
+        info.copy = !info.once && info.field_tys().iter().all(|&t| self.is_copy(t));
+        self.r.warps.insert(def, info.clone());
+        Some(info)
+    }
+
+    /// The fields and cases of warp `def`, whose type is `this`, with its
+    /// generic parameters standing for what `subst` says.
+    fn warp_layout(
+        &mut self,
+        def: DefId,
+        w: &hir::WarpDef,
+        this: Ty,
+        subst: Vec<(DefId, Ty)>,
+    ) -> (Vec<FieldInfo>, Vec<CaseInfo>) {
+        let p = self.p;
         let saved_self = self.self_ty.replace(this);
-        let saved_subst = std::mem::replace(&mut self.subst, params);
+        let saved_subst = std::mem::replace(&mut self.subst, subst);
         let saved_current = self.current.replace(def);
         let mut fields = Vec::new();
         for (i, &field) in w.fields.iter().enumerate() {
@@ -177,14 +198,12 @@ impl Checker<'_> {
         self.self_ty = saved_self;
         self.subst = saved_subst;
         self.current = saved_current;
-        let mut info =
-            WarpInfo { def, ty: this, name: d.name.clone(), fields, cases, tuple: w.tuple, copy: !once, once };
-        // Insert first, so a warp that contains itself doesn't recurse forever.
-        self.r.warps.insert(def, info.clone());
-        info.once = once || info.field_tys().iter().any(|&t| self.is_once(t));
-        info.copy = !info.once && info.field_tys().iter().all(|&t| self.is_copy(t));
-        self.r.warps.insert(def, info.clone());
-        Some(info)
+        (fields, cases)
+    }
+
+    /// Whether generic parameter `def` stands for a region (`@a`).
+    pub(super) fn is_region_param(&self, def: DefId) -> bool {
+        matches!(&self.p.def(def).kind, DefKind::GenericParam(g) if matches!(g.kind, hir::GenericParamKind::Region))
     }
 
     /// Whether generic parameter `def` stands for a type (rather than a
@@ -210,20 +229,34 @@ impl Checker<'_> {
             return None;
         }
         let map: Vec<(DefId, Ty)> = w.generics.iter().copied().zip(args.iter().copied()).collect();
+        let concrete = !self.has_vars(ty) && !self.tcx.has_params(ty);
         let mut info = template;
         info.ty = ty;
-        for f in &mut info.fields {
-            f.ty = self.tcx.subst(f.ty, &map);
-        }
-        for c in &mut info.cases {
-            for f in c.fields.iter_mut().flatten() {
+        if concrete {
+            // Written out again for these arguments: a field's type can be
+            // computed from them (`uint(N.log2())`).
+            let (fields, cases) = self.warp_layout(def, w, ty, map);
+            info.fields = fields;
+            info.cases = cases;
+        } else {
+            for f in &mut info.fields {
                 f.ty = self.tcx.subst(f.ty, &map);
             }
+            for c in &mut info.cases {
+                for f in c.fields.iter_mut().flatten() {
+                    f.ty = self.tcx.subst(f.ty, &map);
+                }
+            }
         }
-        let concrete = !self.has_vars(ty) && !self.tcx.has_params(ty);
         if concrete {
             // Insert first, so a warp that contains itself doesn't recurse forever.
             self.r.adts.insert(ty, info.clone());
+            // Its `const assert`s hold for these arguments.
+            for &member in &w.members {
+                if matches!(self.p.def(member).kind, DefKind::ConstBlock(_)) {
+                    self.instance(super::Instance { args: args.clone(), ..super::Instance::of(member) });
+                }
+            }
         }
         info.once = info.once || info.field_tys().iter().any(|&t| self.is_once(t));
         info.copy = !info.once && info.field_tys().iter().all(|&t| self.is_copy(t));
@@ -273,6 +306,7 @@ impl Checker<'_> {
             | TyKind::Var(_)
             | TyKind::Param(_)
             | TyKind::Gauge(..)
+            | TyKind::Value(_)
             | TyKind::Error => true,
             TyKind::Tuple(items) => items.iter().all(|&t| self.is_copy(t)),
             TyKind::Optional(t) => self.is_copy(t),
@@ -285,7 +319,7 @@ impl Checker<'_> {
                 None => self.adt_info(ty).is_some_and(|i| i.copy),
             },
             TyKind::Fn(..) | TyKind::Any(_) | TyKind::Union(_) => false,
-            TyKind::Array(t, _) => self.is_copy(t),
+            TyKind::Array(t, _) | TyKind::ArrayOf(t, _) => self.is_copy(t),
         }
     }
 

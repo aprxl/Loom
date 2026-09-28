@@ -31,6 +31,8 @@ use crate::typeck::{ArgSource, BodyId, Typed, assert_args};
 pub(super) struct Job {
     kind: JobKind,
     span: Span,
+    /// The body it's in, which may be an instance: `Ring[u32, 4]`.
+    body: BodyId,
 }
 
 #[derive(Clone, Debug)]
@@ -119,6 +121,10 @@ pub(super) fn evaluate(db: &SourceDb, p: &Program, typed: &Typed, tests: bool) -
                     .note(note)
             }
         };
+        let diag = match typed.results.instance_names.get(&job.body) {
+            Some(name) => diag.note(format!("in {name}")),
+            None => diag,
+        };
         diags.push(diag);
     }
     // In source order, rather than the order the jobs ran in.
@@ -162,7 +168,7 @@ impl Lowerer<'_> {
             let body = self.body(e.span, |this| this.lower_into(inner, &Dest::Return));
             self.const_init(&key, body, e.span);
             if self.eval {
-                self.read_job(&key, Job { kind: JobKind::Value, span: e.span });
+                self.read_job(&key, Job { kind: JobKind::Value, span: e.span, body: self.cur });
             }
         }
         Expr::field(Expr::name("C"), &key)
@@ -189,7 +195,7 @@ impl Lowerer<'_> {
         let span = self.p.def(def).span;
         self.slots.insert(key.to_string(), (span, format!("`{}`", self.p.def(def).name)));
         if self.eval {
-            self.read_job(key, Job { kind: JobKind::Const(def), span });
+            self.read_job(key, Job { kind: JobKind::Const(def), span, body: self.cur });
         }
     }
 
@@ -211,7 +217,7 @@ impl Lowerer<'_> {
             });
             this.push(StmtKind::If(vec![(Expr::Unary("not", Box::new(c)), fail)], None));
         });
-        let job = Job { kind: JobKind::Assert(cond.span), span: e.span };
+        let job = Job { kind: JobKind::Assert(cond.span), span: e.span, body: self.cur };
         self.jobs.push((job, Expr::Function(Vec::new(), body)));
     }
 

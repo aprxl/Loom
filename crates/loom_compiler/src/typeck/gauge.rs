@@ -522,7 +522,11 @@ impl Checker<'_> {
             ExprKind::Lit(Lit::Int(i)) => Some(Val::Int(i128::try_from(i.value).ok()?)),
             ExprKind::Lit(Lit::Float(f)) => Some(Val::Float(f.value)),
             ExprKind::Lit(Lit::Bool(b)) => Some(Val::Bool(*b)),
-            ExprKind::Local(l) => param.filter(|(p, _)| p == l).map(|(_, v)| v),
+            ExprKind::Local(l) => match param.filter(|(p, _)| p == l) {
+                Some((_, v)) => Some(v),
+                None => self.const_param_val(e),
+            },
+            ExprKind::Def { .. } if self.const_param_val(e).is_some() => self.const_param_val(e),
             ExprKind::Block(block) => match block.stmts.as_slice() {
                 [only] => match &only.kind {
                     StmtKind::Expr(e) => sub(self, e),
@@ -575,6 +579,25 @@ impl Checker<'_> {
                     let ty = self.deep_resolve(ty);
                     match *self.tcx.kind(ty) {
                         TyKind::Array(_, n) => Some(Val::Int(i128::from(n))),
+                        _ => None,
+                    }
+                }
+                // `N.log2()`: the integer methods that don't depend on the width.
+                ExprKind::Field { base, field: FieldName::Named(name) } => match (name.name.as_str(), sub(self, base)?)
+                {
+                    ("is_power_of_two", Val::Int(v)) => Some(Val::Bool(v > 0 && v & (v - 1) == 0)),
+                    ("log2", Val::Int(v)) if v > 0 => Some(Val::Int(127 - i128::from(v.leading_zeros()))),
+                    ("abs", Val::Int(v)) => Some(Val::Int(v.checked_abs()?)),
+                    _ => None,
+                },
+                _ => None,
+            },
+            ExprKind::Call { callee, args } if args.len() == 1 => match &callee.kind {
+                ExprKind::Field { base, field: FieldName::Named(name) } => {
+                    match (name.name.as_str(), sub(self, base)?, sub(self, &args[0].value)?) {
+                        ("min", Val::Int(a), Val::Int(b)) => Some(Val::Int(a.min(b))),
+                        ("max", Val::Int(a), Val::Int(b)) => Some(Val::Int(a.max(b))),
+                        ("pow", Val::Int(a), Val::Int(b)) => Some(Val::Int(a.checked_pow(u32::try_from(b).ok()?)?)),
                         _ => None,
                     }
                 }

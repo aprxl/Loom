@@ -154,6 +154,9 @@ pub struct Results {
     /// `const` items (`const assert(…)` at the top of a module or in a
     /// warp) left for the sandbox to run, in the order they were checked.
     pub const_blocks: Vec<BodyId>,
+    /// What each instance checked for particular types (or values) is, for
+    /// messages: `` `zeros` with `n = 4` ``, `` `Ring[u32, 4]` ``.
+    pub instance_names: HashMap<BodyId, String>,
 }
 
 /// A vtable: the type made into an `any`, and the wefts (with their
@@ -232,6 +235,8 @@ pub struct Body {
     pub moves: HashMap<HirId, LocalId>,
     /// Patterns that test for a gauge (`x is Cents`, `c: Cents =>`): which.
     pub gauge_tests: HashMap<HirId, Ty>,
+    /// Uses of `const` generic parameters (`N`): their values here.
+    pub const_values: HashMap<HirId, crate::ty::ConstVal>,
 }
 
 /// How a value that isn't a `Stream` gives its items one at a time.
@@ -298,6 +303,9 @@ pub struct SigParam {
     pub mode: ParamMode,
     pub ty: Ty,
     pub has_default: bool,
+    /// For a `const` parameter: its value, a [`TyKind::Value`] in an
+    /// instance, or a variable at a call until the argument gives it.
+    pub value: Option<Ty>,
 }
 
 #[derive(Clone, Debug)]
@@ -406,6 +414,13 @@ pub fn check(p: &Program) -> Typed {
         c.zonk();
         if !c.register_types() {
             break;
+        }
+    }
+    for i in 0..c.r.instances.len() {
+        let inst = c.r.instances[i].clone();
+        if !inst.args.is_empty() || inst.self_ty.is_some() {
+            let name = c.describe_instance(&inst);
+            c.r.instance_names.insert(BodyId(i as u32), name);
         }
     }
     Typed { tcx: c.tcx, results: c.r, diagnostics: c.diags }
@@ -529,6 +544,8 @@ struct Checker<'p> {
     /// Inside compile-time code: the locals declared outside it, which have
     /// no values yet while compiling.
     runtime_locals: Option<HashSet<LocalId>>,
+    /// The `const` parameters in scope, with their values (or variables).
+    const_locals: Vec<(LocalId, Ty)>,
     /// Gauges being worked out, or found wrong (reported once).
     gauge_errors: HashSet<DefId>,
     /// The shuttle whose body is being checked.
@@ -600,6 +617,7 @@ impl<'p> Checker<'p> {
             loops: Vec::new(),
             fence: None,
             runtime_locals: None,
+            const_locals: Vec::new(),
             gauge_errors: HashSet::new(),
             shuttle: None,
         }
@@ -717,7 +735,17 @@ impl<'p> Checker<'p> {
             DefKind::Weft(w) => self.check_weft(inst.def, w),
             DefKind::Type(alias) if alias.gauge.is_some() => self.check_gauge_def(id, inst.def),
             DefKind::Type(_) => self.check_alias(inst.def),
-            DefKind::ConstBlock(e) => self.check_const_block(id, e),
+            DefKind::ConstBlock(e) => {
+                // In a generic warp: checked for each list of arguments.
+                let mark = self.diags.len();
+                self.subst = self.instance_subst(&inst);
+                let this = self.instance_self(&inst);
+                let saved_self = std::mem::replace(&mut self.self_ty, this);
+                self.check_const_block(id, e);
+                self.self_ty = saved_self;
+                self.subst = Vec::new();
+                self.note_instance(mark, &inst);
+            }
             _ => {}
         }
         self.current = None;
@@ -757,9 +785,7 @@ impl<'p> Checker<'p> {
                     }
                     // `type Item = u8` for a weft the header lists.
                     DefKind::Type(_) if self.binds_assoc(w, member) => {}
-                    DefKind::Type(_) => {
-                        self.unsupported(self.p.def(member).span, "types inside warps");
-                    }
+                    // `type Idx = u8`: checked where it's used.
                     DefKind::ConstBlock(_) => {
                         self.queue_def(member);
                     }
@@ -885,7 +911,11 @@ impl<'p> Checker<'p> {
             self.check_test_sig(f, &sig);
         }
         let first_var = self.vars.len();
+        let const_locals = self.const_locals.len();
         for (param, sig_param) in f.params.iter().zip(&sig.params) {
+            if let Some(value) = sig_param.value {
+                self.const_locals.push((param.local, value));
+            }
             self.b.local_ty.insert(param.local, sig_param.ty);
             if let Some(default) = &param.default {
                 self.check_coerce(default, sig_param.ty);
@@ -903,6 +933,7 @@ impl<'p> Checker<'p> {
         self.shuttle = None;
         self.finish_body(first_var);
         self.check_moves(f, body_ty == self.tcx.unit);
+        self.const_locals.truncate(const_locals);
     }
 
     /// A test takes nothing, and returns nothing or fails with an error:
@@ -971,11 +1002,26 @@ impl<'p> Checker<'p> {
             return None;
         }
         let mut params = Vec::with_capacity(f.params.len());
+        let const_locals = self.const_locals.len();
+        let sig = self.lower_sig_params(f, span, &mut mode, &mut params);
+        self.const_locals.truncate(const_locals);
+        // Callers read the variables a `Fresh` mode collected.
+        self.implicit = mode;
+        sig
+    }
+
+    /// The parameters and return type of `f`. `mode` says how wefts as
+    /// parameter types, and `const` parameters, get their arguments. Each
+    /// `const` parameter's value goes into `self.const_locals`, for the
+    /// types after it (`fn zeros(const n: usize) -> [f32; n]`).
+    fn lower_sig_params(
+        &mut self,
+        f: &hir::FnDef,
+        span: Span,
+        mode: &mut generic::Implicit,
+        params: &mut Vec<SigParam>,
+    ) -> Option<FnSig> {
         for param in &f.params {
-            if param.mode == ParamMode::Const {
-                self.unsupported(param.span, "`const` parameters");
-                return None;
-            }
             let ty = if param.is_self {
                 match self.self_ty {
                     Some(ty) => ty,
@@ -985,44 +1031,113 @@ impl<'p> Checker<'p> {
                     }
                 }
             } else {
-                self.implicit = mode;
+                self.implicit = std::mem::take(mode);
                 let ty = param.ty.as_ref().map_or(self.tcx.error, |t| self.lower_ty(t));
-                mode = std::mem::take(&mut self.implicit);
+                *mode = std::mem::take(&mut self.implicit);
                 ty
             };
             if self.tcx.is_error(ty) {
-                self.implicit = mode;
                 return None;
+            }
+            let value = (param.mode == ParamMode::Const).then(|| match mode {
+                generic::Implicit::Fresh(vars) => {
+                    let var = self.new_var(infer::VarKind::Type);
+                    vars.push((var, None));
+                    var
+                }
+                generic::Implicit::Given { args, next } => {
+                    let value = args.get(*next).copied();
+                    *next += 1;
+                    value.unwrap_or(self.tcx.error)
+                }
+                generic::Implicit::Off => self.tcx.error,
+            });
+            if let Some(value) = value {
+                if !self.const_param_ty(ty) {
+                    let shown = self.show(ty);
+                    self.error(
+                        codes::T0101,
+                        param.span,
+                        format!("a `const` parameter can't be a `{shown}`"),
+                        "`const` parameters are integers or `bool`",
+                    );
+                    return None;
+                }
+                self.const_locals.push((param.local, value));
             }
             // A `mut` parameter shares the caller's table; a scalar one (a
             // number, a string, an enum) is copied back after the call.
             let name = self.p.local(param.local).name.clone();
-            params.push(SigParam { name, mode: param.mode, ty, has_default: param.default.is_some() });
+            params.push(SigParam { name, mode: param.mode, ty, has_default: param.default.is_some(), value });
         }
         let ret = match &f.ret {
             FnRet::Unit => self.tcx.unit,
             FnRet::Value(t) => self.lower_ty(t),
             FnRet::Shuttle { yields: Some((Some(_), _)), .. } => {
                 self.unsupported(span, "projections (`~> mut T`, `~> ref T`)");
-                self.implicit = mode;
                 return None;
             }
             FnRet::Shuttle { yields, pulls } => {
                 let t = yields.as_ref().map(|(_, t)| self.lower_ty(t));
                 let u = pulls.as_ref().map(|t| self.lower_ty(t));
                 if t.is_some_and(|t| self.tcx.is_error(t)) || u.is_some_and(|u| self.tcx.is_error(u)) {
-                    self.implicit = mode;
                     return None;
                 }
                 self.shuttle_ty(t, u)
             }
         };
-        // Callers read the variables a `Fresh` mode collected.
-        self.implicit = mode;
         if self.tcx.is_error(ret) {
             return None;
         }
-        Some(FnSig { params, ret })
+        Some(FnSig { params: std::mem::take(params), ret })
+    }
+
+    /// A type computed at compile time: `uint(8)` is `u8`, `int(12)` is
+    /// `i12`. In a generic warp's template, where `uint(N.log2())` can't
+    /// be worked out, it stands for itself: each instance works it out.
+    fn const_call_ty(&mut self, def: DefId, args: &[Expr], span: Span) -> Ty {
+        let signed = match self.p.def_path(def).as_str() {
+            "std.prelude.uint" => false,
+            "std.prelude.int" => true,
+            _ => return self.unsupported(span, "types computed by `const fn`s"),
+        };
+        let [bits] = args else {
+            return self.error_ty(codes::T0104, span, "`uint` and `int` take the number of bits");
+        };
+        let template = self
+            .subst
+            .iter()
+            .any(|&(g, t)| self.is_const_param(g) && !matches!(self.tcx.kind(self.resolve(t)), TyKind::Value(_)));
+        if template && self.fold(bits, None).is_none() {
+            return self.tcx.intern(TyKind::Param(def));
+        }
+        match self.fold(bits, None) {
+            Some(gauge::Val::Int(n)) if (1..=64).contains(&n) => {
+                self.tcx.int(crate::ty::IntTy { signed, bits: n as u8, size: false })
+            }
+            Some(gauge::Val::Int(n)) if n > 64 => self.unsupported(span, "integers wider than 64 bits"),
+            Some(gauge::Val::Int(n)) => {
+                self.error_ty(codes::T0102, bits.span, &format!("an integer type can't have {n} bits"))
+            }
+            _ => {
+                self.diags.push(
+                    Diagnostic::error(codes::K0109, "this `const` argument isn't known at compile time")
+                        .primary(bits.span, "the constant folder can't work this out"),
+                );
+                self.tcx.error
+            }
+        }
+    }
+
+    fn error_ty(&mut self, code: loom_syntax::diag::Code, span: Span, message: &str) -> Ty {
+        self.error(code, span, message, "here");
+        self.tcx.error
+    }
+
+    /// Whether a `const` parameter can have type `ty`: its values must be
+    /// ones [`TyKind::Value`] holds.
+    fn const_param_ty(&self, ty: Ty) -> bool {
+        matches!(self.tcx.kind(self.tcx.degauge(ty)), TyKind::Int(_) | TyKind::Bool)
     }
 
     /// The type a HIR type denotes.
@@ -1038,13 +1153,15 @@ impl<'p> Checker<'p> {
                 let infer = std::mem::take(&mut self.infer_args);
                 match &d.kind {
                     DefKind::Warp(w) => {
-                        let mut lowered = Vec::with_capacity(args.len());
-                        for arg in args {
-                            match arg {
-                                hir::GenericArg::Type(t) => lowered.push(self.lower_ty(t)),
-                                hir::GenericArg::Expr(e) => return self.unsupported(e.span, "value generic arguments"),
+                        let mut lowered = if args.len() == w.generics.len() {
+                            match self.generic_args(&w.generics, args) {
+                                Some(args) => args,
+                                None => return self.tcx.error,
                             }
-                        }
+                        } else {
+                            // The wrong number, reported below.
+                            args.iter().map(|_| self.tcx.error).collect()
+                        };
                         if lowered.is_empty() && !w.generics.is_empty() && infer {
                             lowered = w.generics.iter().map(|_| self.new_var(infer::VarKind::Type)).collect();
                         }
@@ -1072,7 +1189,7 @@ impl<'p> Checker<'p> {
                         if matches!(self.implicit, generic::Implicit::Fresh(_)) {
                             let var = self.new_var(infer::VarKind::Type);
                             if let generic::Implicit::Fresh(vars) = &mut self.implicit {
-                                vars.push((var, *def));
+                                vars.push((var, Some(*def)));
                             }
                             var
                         } else if let generic::Implicit::Given { args, next } = &mut self.implicit {
@@ -1133,6 +1250,12 @@ impl<'p> Checker<'p> {
             HirTy::Error => self.tcx.error,
             HirTy::Array { elem, len } => {
                 let elem = self.lower_ty(elem);
+                // `[T; N]` in a template, or at a call before `N` is known.
+                if let Some(n) = self.const_param_of(len)
+                    && !matches!(self.tcx.kind(n), TyKind::Value(_))
+                {
+                    return if self.tcx.is_error(elem) { elem } else { self.tcx.array_of(elem, n) };
+                }
                 match self.array_len(len) {
                     Some(n) if !self.tcx.is_error(elem) => self.tcx.intern(TyKind::Array(elem, n)),
                     _ => self.tcx.error,
@@ -1159,9 +1282,8 @@ impl<'p> Checker<'p> {
                 let ty = self.lower_ty(base);
                 self.assoc_named(ty, &name.name, span)
             }
-            HirTy::Local(_) | HirTy::ConstCall { .. } | HirTy::TypeType => {
-                self.unsupported(span, "types computed at compile time")
-            }
+            HirTy::ConstCall { def, args } => self.const_call_ty(*def, args, span),
+            HirTy::Local(_) | HirTy::TypeType => self.unsupported(span, "types computed at compile time"),
             HirTy::Infer => self.unsupported(span, "inferred error sets (`! _`)"),
         }
     }
