@@ -92,7 +92,7 @@ impl Lowerer<'_> {
         match &e.kind {
             ExprKind::Local(_) => true,
             _ if self.is_const(e) => true,
-            ExprKind::Field { base, .. } => self.is_place(base),
+            ExprKind::Field { base, .. } | ExprKind::ConstField { base, .. } => self.is_place(base),
             ExprKind::Index { base, args } => {
                 !matches!(args.as_slice(), [crate::hir::GenericArg::Expr(i)] if matches!(i.kind, ExprKind::Range { .. }))
                     && (self.seq(self.ty_of(base)).is_some()
@@ -238,11 +238,20 @@ impl Lowerer<'_> {
     pub(super) fn field_value(&mut self, e: &hir::Expr) -> Option<Expr> {
         let access = self.tables().fields.get(&e.id)?.clone();
         let base = match &e.kind {
-            ExprKind::Field { base, .. } => Some(base.as_ref()),
+            ExprKind::Field { base, .. } | ExprKind::ConstField { base, .. } => Some(base.as_ref()),
             _ => None,
         };
         let v = self.receiver(access.base, base);
         Some(Self::access(v, &access.key))
+    }
+
+    /// `v.(c)`: `v`, which must be case `case` when it runs (it's meant to
+    /// be read inside `if v is .(c)`), or it unravels.
+    pub(super) fn as_case(&mut self, v: Expr, case: DefId) -> Expr {
+        let Some(warp) = self.p.def(case).parent else { return v };
+        let Some(c) = self.warp(warp).and_then(|info| info.case_by_def(case)).cloned() else { return v };
+        let name = Expr::Str(format!(".{}", c.name).into_bytes());
+        Expr::rt("as_case", vec![v, Expr::Int(c.tag as i64), name])
     }
 
     /// Something that can be assigned to, as a Lua expression.
@@ -363,6 +372,14 @@ impl Lowerer<'_> {
                     }
                 }
                 Some(tests.into_iter().reduce(|a, b| Expr::bin("and", a, b)))
+            }
+            // `v is .(c)`: the tag of the case chosen at compile time.
+            PatKind::ConstCase(_) => {
+                let case_pat = self.tables().case_pats.get(&pat.id)?.clone();
+                let info = self.warp(case_pat.warp)?.clone();
+                let case = case_pat.case.and_then(|c| info.case_by_def(c))?;
+                let actual = if info.unit_only() { v.clone() } else { Expr::field(v.clone(), "tag") };
+                Some(Some(Expr::bin("==", actual, Expr::Int(case.tag as i64))))
             }
             // `is b: Button`: the value's vtable describes a `Button`.
             PatKind::TypeTest { .. } => {
@@ -495,6 +512,14 @@ impl Lowerer<'_> {
                 let def = self.tables().leading_consts.get(&e.id).copied()?;
                 Some(self.const_value(def, ty))
             }
+            // `v.(c)`: `v`, checked to be case `c`; `v.(f)`: its field.
+            ExprKind::ConstField { base, .. } => match self.tables().case_views.get(&e.id).copied() {
+                Some(case) => {
+                    let v = self.lower_expr(base);
+                    Some(self.as_case(v, case))
+                }
+                None => self.field_value(e),
+            },
             ExprKind::Assoc { .. } => match self.tables().assoc_values.get(&e.id).copied()? {
                 crate::typeck::AssocValue::Const(def) => Some(self.const_value(def, ty)),
                 crate::typeck::AssocValue::Int(v) => Some(self.int_value(v, ty)),

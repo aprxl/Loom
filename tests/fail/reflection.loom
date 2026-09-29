@@ -1,0 +1,33 @@
+// Reflection only exists while compiling, and `v.(f)` takes a field of
+// `v`'s own type.
+use std.io.print
+
+warp Point { x: i32, y: i32 }
+warp Size { w: i32, h: i32 }
+
+warp Shape {
+    case Dot
+    case Circle(r: f64)
+}
+
+fn main() {
+    let p = Point(1, 2)
+    let s = Shape.Circle(r: 1.0)
+    const for f in Size.fields {
+        print(p.(f))                                     //~ T0101
+    }
+    const for f in Point.fields {
+        print(f.nope)                                    //~ T0111
+    }
+    const for c in Shape.cases {
+        const for f in c.fields {
+            print(s.(f))                                 //~ T0111
+        }
+    }
+    const for c in Shape.cases {
+        if p is .(c) { }                                 //~ T0101
+    }
+    print(Point.size)                                    //~ U0102
+    var n = 0
+    print(p.(n))                                         //~ K0110
+}

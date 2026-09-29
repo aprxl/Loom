@@ -24,11 +24,28 @@ impl IntTy {
 }
 
 /// A value known at compile time, standing where a type would: the
-/// argument of a `const` parameter (`Ring[u32, 4]`, `zeros(4)`).
+/// argument of a `const` parameter (`Ring[u32, 4]`, `zeros(4)`), or what a
+/// `const for` item or a reflection query stands for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ConstVal {
     Int(i128),
     Bool(bool),
+    /// Text, interned in the [`TyCtx`] ([`TyCtx::sym`]): `T.name`, `f.name`.
+    Str(u32),
+    /// A unit case: `.Record`, what `T.kind` is.
+    Unit(DefId),
+    /// A field of `owner`: of the record, or of case `case`'s payload,
+    /// `index` in declaration order. Only compile-time code has these.
+    Field {
+        owner: Ty,
+        case: Option<DefId>,
+        index: u32,
+    },
+    /// A case of the sum `owner`. Only compile-time code has these.
+    Case {
+        owner: Ty,
+        case: DefId,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -106,6 +123,9 @@ pub struct TyCtx {
     pub i32: Ty,
     pub f64: Ty,
     pub usize: Ty,
+    /// Text compile-time values hold ([`ConstVal::Str`]).
+    syms: Vec<String>,
+    sym_ids: HashMap<String, u32>,
 }
 
 impl Default for TyCtx {
@@ -113,6 +133,8 @@ impl Default for TyCtx {
         let mut tcx = TyCtx {
             kinds: Vec::new(),
             ids: HashMap::new(),
+            syms: Vec::new(),
+            sym_ids: HashMap::new(),
             unit: Ty(0),
             bool: Ty(0),
             never: Ty(0),
@@ -137,6 +159,22 @@ impl Default for TyCtx {
 }
 
 impl TyCtx {
+    /// `s`, interned: the id a [`ConstVal::Str`] holds.
+    pub fn sym(&mut self, s: &str) -> u32 {
+        if let Some(&id) = self.sym_ids.get(s) {
+            return id;
+        }
+        let id = self.syms.len() as u32;
+        self.syms.push(s.to_string());
+        self.sym_ids.insert(s.to_string(), id);
+        id
+    }
+
+    /// The text of [`sym`](Self::sym) id `id`.
+    pub fn sym_str(&self, id: u32) -> &str {
+        &self.syms[id as usize]
+    }
+
     pub fn intern(&mut self, kind: TyKind) -> Ty {
         if let Some(&ty) = self.ids.get(&kind) {
             return ty;
@@ -328,6 +366,11 @@ impl TyCtx {
             TyKind::ArrayOf(t, n) => format!("[{}; {}]", self.display(p, *t), self.display(p, *n)),
             TyKind::Value(ConstVal::Int(n)) => n.to_string(),
             TyKind::Value(ConstVal::Bool(b)) => b.to_string(),
+            TyKind::Value(ConstVal::Str(s)) => format!("{:?}", self.sym_str(*s)),
+            TyKind::Value(ConstVal::Field { owner, index, .. }) => {
+                format!("{}.fields[{index}]", self.display(p, *owner))
+            }
+            TyKind::Value(ConstVal::Case { case, .. } | ConstVal::Unit(case)) => format!(".{}", p.def(*case).name),
             TyKind::Result(t, e) => format!("{} ! {}", self.display_atom(p, *t), self.display_atom(p, *e)),
             TyKind::Range(t) => format!("Range[{}]", self.display(p, *t)),
             TyKind::Fn(params, ret) => {

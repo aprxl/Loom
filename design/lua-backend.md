@@ -503,7 +503,24 @@ yet (U0102).
 
 `target` is a `std.target.Target` record: `os`, `arch` and `endian` of the
 machine doing the build, and `pointer_bits` 63. `std.sys` (the platform's
-own APIs) and reflection (`T.kind`, `T.fields`, …) are U0102 for now.
+own APIs) is U0102 for now.
+
+**Reflection** (`typeck/reflect.rs`) is worked out by the constant folder
+while type-checking, like a `const if` condition. `T.name` (a warp's own
+name, without arguments), `T.kind` (a case of `std.meta.Kind`), `T.fields`
+and `T.cases` (lists of `std.meta.Field` and `Case`, which `const for` goes
+over), `f.name`, `f.is_pub`, `c.name`, `c.fields`, and `.len()` and
+`.is_empty()` of the lists. Every expression that reads reflection and folds
+is recorded in `Body::const_values`, so lowering writes the value itself
+(`"x"`, `true`, a unit case's tag); a `Field`, a `Case` or a list of them
+needed at run time is K0111. At run time only two things are left:
+`v.(f)`, which is `v`'s field `f` (a place, assignable like `v.x`), and
+`v is .(c)`, a test of `v`'s tag. `v.(c).(f)` reads a payload field through
+`rt.as_case`, which unravels unless `v` is case `c` (it's meant to be used
+inside `if v is .(c)`). `T.size`, `T.align`, `T.bits`, `f.ty` and
+`T.weaves(W)` are U0102 for now, and the builtin structural `Show`, `Eq`
+and `Ord` haven't been replaced by default methods written with reflection
+yet.
 
 A constant is one table in `C`, and every use gets a value of its own:
 `var t = TABLE` (or `CONFIG.names`, or `TABLE[i]`) copies what it reads into

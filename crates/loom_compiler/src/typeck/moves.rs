@@ -165,9 +165,14 @@ impl Checker<'_> {
 
     /// Goes through `e`. `owning`: its value goes to an owning slot.
     fn mv(&mut self, cx: &mut MoveCx, e: &Expr, owning: bool) {
+        // Known while compiling (a `const for` item, `f.name`): the program
+        // gets the value itself, so nothing is read or moved.
+        if self.b.const_values.contains_key(&e.id) {
+            return;
+        }
         match &e.kind {
             ExprKind::Local(_) | ExprKind::LeadingDot(_) => self.mv_place(cx, e, owning),
-            ExprKind::Field { base, .. } => match self.place_of(cx, e) {
+            ExprKind::Field { base, .. } | ExprKind::ConstField { base, .. } => match self.place_of(cx, e) {
                 Some(_) => self.mv_place(cx, e, owning),
                 None => self.mv(cx, base, false),
             },
@@ -413,7 +418,6 @@ impl Checker<'_> {
             | ExprKind::Loom { .. }
             | ExprKind::Thread(_)
             | ExprKind::Pull
-            | ExprKind::ConstField { .. }
             | ExprKind::Deref(_)
             | ExprKind::Error => {}
         }
@@ -968,6 +972,17 @@ impl Checker<'_> {
                     Receiver::Expr => return None,
                 };
                 path.push(key);
+                Some((root, path))
+            }
+            // `v.(f)` is `v`'s field `f`, and `v.(c)` is `v` itself.
+            ExprKind::ConstField { base, .. } => {
+                let (root, mut path) = self.place_of(cx, base)?;
+                if let Some(access) = self.b.fields.get(&e.id) {
+                    path.push(match &access.key {
+                        super::warp::Key::Name(n) => n.clone(),
+                        super::warp::Key::Pos(i) => (i - 1).to_string(),
+                    });
+                }
                 Some((root, path))
             }
             _ => None,

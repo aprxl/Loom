@@ -633,6 +633,10 @@ impl Checker<'_> {
                 }
             };
         }
+        // `f.name`: what a compile-time `Field` or `Case` says.
+        if let Some(ty) = self.check_meta_member(base_ty, field, e.span) {
+            return ty;
+        }
         let Some(info) = self.adt_info(base_ty) else {
             let shown = self.show(base_ty);
             return self.unsupported(e.span, &format!("fields of `{shown}`"));
@@ -709,10 +713,10 @@ impl Checker<'_> {
             return self.fn_value(e, f);
         }
         // Reflection, which only exists at compile time.
-        if matches!(name, "name" | "kind" | "size" | "align" | "bits" | "fields" | "cases")
-            && !matches!(self.tcx.kind(ty), TyKind::Adt(def, _) if self.member(*def, name).is_some())
+        if !matches!(self.tcx.kind(ty), TyKind::Adt(def, _) if self.member(*def, name).is_some())
+            && let Some(ty) = self.check_reflect(name, span)
         {
-            return self.unsupported(span, &format!("reflection (`T.{name}`)"));
+            return ty;
         }
         let Some(info) = self.adt_info(ty) else {
             let shown = self.show(ty);
@@ -829,7 +833,9 @@ impl Checker<'_> {
     pub(super) fn place(&self, e: &Expr) -> Option<bool> {
         match &e.kind {
             ExprKind::Local(l) => Some(self.p.local(*l).mutable),
-            ExprKind::Field { base, .. } | ExprKind::Index { base, .. } => self.place(base),
+            ExprKind::Field { base, .. } | ExprKind::Index { base, .. } | ExprKind::ConstField { base, .. } => {
+                self.place(base)
+            }
             ExprKind::LeadingDot(_) => match self.b.fields.get(&e.id).map(|f| f.base) {
                 Some(Receiver::Local(l)) => Some(self.p.local(l).mutable),
                 Some(Receiver::Subject(id)) => Some(self.subject_mutable(id)),

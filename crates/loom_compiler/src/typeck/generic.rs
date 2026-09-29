@@ -350,6 +350,7 @@ impl Checker<'_> {
             }
             (ConstVal::Int(v), _) => (codes::T0101, format!("expected `{shown}`, found an integer"), v.to_string()),
             (ConstVal::Bool(b), _) => (codes::T0101, format!("expected `{shown}`, found a `bool`"), b.to_string()),
+            _ => (codes::T0101, format!("expected `{shown}`, found a compile-time value"), "that".into()),
         };
         self.diags.push(Diagnostic::error(code, message).primary(span, format!("`{param}` is {v} here")));
         false

@@ -23,7 +23,7 @@ use loom_syntax::source::Span;
 
 use super::{BodyId, Checker, Instance};
 use crate::hir::{DefId, DefKind, Expr, ExprKind, LocalId, StmtKind};
-use crate::ty::{Ty, TyKind};
+use crate::ty::{ConstVal, Ty, TyKind};
 
 /// What a gauge allows.
 #[derive(Clone, Debug)]
@@ -58,6 +58,52 @@ pub(super) enum Val {
     Bool(bool),
     /// A unit case: `.Windows`.
     Case(crate::hir::DefId),
+    /// Text: `T.name` (see [`TyCtx::sym`](crate::ty::TyCtx::sym)).
+    Str(u32),
+    /// A field: an item of `T.fields` (see [`ConstVal::Field`]).
+    Field {
+        owner: Ty,
+        case: Option<DefId>,
+        index: u32,
+    },
+    /// A case: an item of `T.cases`.
+    CaseInfo {
+        owner: Ty,
+        case: DefId,
+    },
+    /// `T.fields`, or `c.fields` for case `case`.
+    Fields {
+        owner: Ty,
+        case: Option<DefId>,
+    },
+    /// `T.cases`.
+    Cases(Ty),
+}
+
+impl Val {
+    /// This value as a [`ConstVal`], if one can hold it.
+    pub(super) fn to_const(self) -> Option<ConstVal> {
+        Some(match self {
+            Val::Int(i) => ConstVal::Int(i),
+            Val::Bool(b) => ConstVal::Bool(b),
+            Val::Str(s) => ConstVal::Str(s),
+            Val::Field { owner, case, index } => ConstVal::Field { owner, case, index },
+            Val::CaseInfo { owner, case } => ConstVal::Case { owner, case },
+            Val::Case(c) => ConstVal::Unit(c),
+            Val::Float(_) | Val::Fields { .. } | Val::Cases(_) => return None,
+        })
+    }
+
+    pub(super) fn of_const(v: ConstVal) -> Val {
+        match v {
+            ConstVal::Int(i) => Val::Int(i),
+            ConstVal::Bool(b) => Val::Bool(b),
+            ConstVal::Str(s) => Val::Str(s),
+            ConstVal::Field { owner, case, index } => Val::Field { owner, case, index },
+            ConstVal::Case { owner, case } => Val::CaseInfo { owner, case },
+            ConstVal::Unit(c) => Val::Case(c),
+        }
+    }
 }
 
 /// The values an expression may have, as far as the checker can tell.
@@ -76,7 +122,7 @@ impl GaugeRange {
                 let f = match v {
                     Val::Int(i) => i as f64,
                     Val::Float(f) => f,
-                    Val::Bool(_) | Val::Case(_) => return false,
+                    _ => return false,
                 };
                 (if lo_incl { lo <= f } else { lo < f }) && (if hi_incl { f <= hi } else { f < hi })
             }
@@ -314,6 +360,7 @@ impl Checker<'_> {
             Val::Float(f) => format!("{f:?}"),
             Val::Bool(b) => b.to_string(),
             Val::Case(c) => self.p.def(c).name.clone(),
+            _ => "that".into(),
         };
         match self.gauge_allows(def, v) {
             Some(true) => {}
@@ -548,6 +595,7 @@ impl Checker<'_> {
             ExprKind::Lit(Lit::Int(i)) => Some(Val::Int(i128::try_from(i.value).ok()?)),
             ExprKind::Lit(Lit::Float(f)) => Some(Val::Float(f.value)),
             ExprKind::Lit(Lit::Bool(b)) => Some(Val::Bool(*b)),
+            ExprKind::Lit(Lit::Str(s)) => Some(Val::Str(self.tcx.sym(s))),
             ExprKind::Local(l) => match param.filter(|(p, _)| p == l) {
                 Some((_, v)) => Some(v),
                 None => self.const_param_val(e),
@@ -562,6 +610,11 @@ impl Checker<'_> {
             // `.Windows`, `Os.Windows`: a case with nothing in it.
             _ if self.b.constructs.get(&e.id).is_some_and(|c| c.case.is_some() && c.fields.is_empty()) => {
                 self.b.constructs[&e.id].case.map(Val::Case)
+            }
+            // `f.name`, `c.fields`: what reflection says about a field or a case.
+            ExprKind::Field { base, field: FieldName::Named(name) } => {
+                let v = sub(self, base)?;
+                self.reflected_member(v, &name.name)
             }
             ExprKind::Block(block) => match block.stmts.as_slice() {
                 [only] => match &only.kind {
@@ -583,6 +636,10 @@ impl Checker<'_> {
             },
             ExprKind::Assoc { base, name } => {
                 let ty = self.lower_ty(base);
+                // `T.name`, `T.fields`: reflection.
+                if super::reflect::QUERIES.contains(&name.name.as_str()) {
+                    return self.reflect(ty, &name.name);
+                }
                 let int = self.tcx.as_int(ty)?;
                 match name.name.as_str() {
                     "MAX" => Some(Val::Int(int.max())),
@@ -650,7 +707,11 @@ impl Checker<'_> {
                     let ty = self.deep_resolve(ty);
                     match *self.tcx.kind(ty) {
                         TyKind::Array(_, n) => Some(Val::Int(i128::from(n))),
-                        _ => None,
+                        // `T.fields.len()`
+                        _ => {
+                            let v = sub(self, base)?;
+                            self.reflected_member(v, "len")
+                        }
                     }
                 }
                 // `N.log2()`: the integer methods that don't depend on the width.
@@ -659,6 +720,8 @@ impl Checker<'_> {
                     ("is_power_of_two", Val::Int(v)) => Some(Val::Bool(v > 0 && v & (v - 1) == 0)),
                     ("log2", Val::Int(v)) if v > 0 => Some(Val::Int(127 - i128::from(v.leading_zeros()))),
                     ("abs", Val::Int(v)) => Some(Val::Int(v.checked_abs()?)),
+                    // `c.fields.is_empty()`
+                    (name, v @ (Val::Fields { .. } | Val::Cases(_))) => self.reflected_member(v, name),
                     _ => None,
                 },
                 _ => None,
@@ -695,6 +758,14 @@ impl Checker<'_> {
 /// `a op b` at compile time.
 fn binary(op: BinaryOp, a: Val, b: Val) -> Option<Val> {
     use BinaryOp as B;
+    if let (Val::Str(x), Val::Str(y)) = (a, b) {
+        // Interned: the same text is the same id.
+        return match op {
+            B::Eq => Some(Val::Bool(x == y)),
+            B::Ne => Some(Val::Bool(x != y)),
+            _ => None,
+        };
+    }
     if let (Val::Case(x), Val::Case(y)) = (a, b) {
         return match op {
             B::Eq => Some(Val::Bool(x == y)),

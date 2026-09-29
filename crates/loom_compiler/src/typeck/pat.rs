@@ -91,9 +91,7 @@ impl Checker<'_> {
                 }
             }
             PatKind::Case { path, fields, rest } => self.check_case_pat(pat, path, fields.as_deref(), *rest, ty),
-            PatKind::ConstCase(_) => {
-                self.unsupported(span, "case patterns chosen at compile time");
-            }
+            PatKind::ConstCase(case) => self.check_const_case_pat(pat, case, ty),
             PatKind::Some(inner) => match self.tcx.kind(self.resolve(ty)).clone() {
                 TyKind::Optional(t) => self.check_pat(inner, t),
                 _ => self.wrong_wrapper(pat, inner, ty, "`some(…)` matches an optional"),

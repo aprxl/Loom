@@ -1,0 +1,13 @@
+// What reflection gives is known while compiling; a `Field`, a `Case` or a
+// list of them can't be kept for when the program runs.
+use std.io.print
+
+warp Point { x: i32, y: i32 }
+
+fn main() {
+    print(Point.fields.len())
+    let fields = Point.fields                            //~ K0111
+    const for f in Point.fields {
+        let kept = f                                     //~ K0111
+    }
+}

@@ -121,11 +121,16 @@ language through every layer (type checking, lowering to Lua, the runtime,
 20. `const if` (only the branch taken is checked) and `const for`
     (unrolled, each item checked on its own), and `target` (`std.target`).
     `examples/compile_time.loom` fails only for reflection and `std.sys`.
+21. reflection (`std.meta`): `T.name`, `T.kind`, `T.fields`, `T.cases`,
+    `f.name`, `c.fields`, `v.(f)`, `v is .(c)`, `v.(c).(f)`, and default
+    methods that reflect on `Self` (`ToJson`, checked by
+    `tests/run/derive_json`). `examples/compile_time.loom` fails only for
+    `std.sys`.
 
-Next: reflection (`T.kind`, `T.fields`, `T.cases`, `v.(f)`, `v is .(c)`)
-and derive-by-default for `examples/compile_time.loom`, then threads
-(`loom`, `thread`, `loom for`, `Atomic`) for `examples/parallel.loom`, then
-spools.
+Next: the checker gaps the review found (a move in a `match` guard, a lambda
+capturing what's lent as `mut`, `const` generics in type positions), then
+Loom's own interpreter next to the Lua backend (`design/vm.md` first), then
+threads on it, then spools.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and

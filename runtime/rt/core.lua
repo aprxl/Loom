@@ -458,6 +458,14 @@ function rt.idx(i, n)
   return i + 1
 end
 
+-- `v.(c)`: `v`, which must be the case with tag `tag` (`name` is `.Case`).
+-- A value of a sum with only unit cases is its tag.
+function rt.as_case(v, tag, name)
+  local actual = type(v) == "table" and v.tag or v
+  if actual ~= tag then error(sformat("%sthe value isn't %s", MARK, name), 2) end
+  return v
+end
+
 -- A loop over list `s` (or a slice of it, or a map or set: `what`), which had
 -- `n` items when it started: it can't change under the loop. The checker
 -- stops the loop's body from changing it, but not a lambda the body calls.

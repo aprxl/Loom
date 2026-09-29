@@ -87,6 +87,9 @@ impl Checker<'_> {
     pub(super) fn check_expr(&mut self, e: &Expr, expected: Option<Ty>) -> Ty {
         let ty = self.check_expr_inner(e, expected);
         self.b.expr_ty.insert(e.id, ty);
+        if self.reflective(e) {
+            self.record_reflected(e);
+        }
         ty
     }
 
@@ -295,7 +298,7 @@ impl Checker<'_> {
             ExprKind::Call { callee, args } => self.check_call(e, callee, args, expected),
             ExprKind::Index { base, args } => self.check_index(e, base, args),
             ExprKind::Field { base, field } => self.check_field(e, base, field),
-            ExprKind::ConstField { .. } => self.unsupported(span, "compile-time field access"),
+            ExprKind::ConstField { base, field } => self.check_const_field(e, base, field),
             ExprKind::Try(inner) => self.check_try(e, inner),
             ExprKind::Mend { expr, binding, handler } => self.check_mend(e, expr, *binding, handler),
             ExprKind::Deref(_) => self.unsupported(span, "spool pointers"),
@@ -1079,7 +1082,7 @@ impl Checker<'_> {
                 self.b.expr_ty.insert(target.id, ty);
                 Some(ty)
             }
-            ExprKind::Field { .. } | ExprKind::LeadingDot(_) => {
+            ExprKind::Field { .. } | ExprKind::LeadingDot(_) | ExprKind::ConstField { .. } => {
                 let ty = self.check_expr(target, None);
                 if self.tcx.is_error(ty) {
                     return None;

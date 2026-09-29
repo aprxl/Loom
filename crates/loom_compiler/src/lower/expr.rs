@@ -227,6 +227,46 @@ impl Lowerer<'_> {
         Expr::Name(t)
     }
 
+    /// A value known while compiling, of type `ty`, as a Lua value. A field
+    /// or a case has none: reflection only exists while compiling.
+    fn const_val(&mut self, v: crate::ty::ConstVal, ty: Ty, span: Span) -> Expr {
+        use crate::ty::ConstVal as C;
+        match v {
+            C::Int(v) => self.int_value(v, ty),
+            C::Bool(b) => Expr::Bool(b),
+            C::Str(s) => Expr::Str(self.tcx().sym_str(s).as_bytes().to_vec()),
+            // A unit case: its tag, or a table holding it.
+            C::Unit(case) => {
+                let info = self.p.def(case).parent.and_then(|w| self.warp(w)).cloned();
+                match info.as_ref().and_then(|info| info.case_by_def(case).map(|c| (info.unit_only(), c.tag))) {
+                    Some((true, tag)) => Expr::Int(tag as i64),
+                    Some((false, tag)) => {
+                        Expr::Record(vec![(super::lir::TableKey::Name("tag".into()), Expr::Int(tag as i64))])
+                    }
+                    None => Expr::Nil,
+                }
+            }
+            C::Field { .. } | C::Case { .. } => {
+                self.runtime_reflection(span);
+                Expr::Nil
+            }
+        }
+    }
+
+    /// Reports reflection the program would need when it runs.
+    pub(super) fn runtime_reflection(&mut self, span: Span) {
+        // Once, though a `const for` writes the code out many times.
+        let code = loom_syntax::diag::codes::K0111;
+        if self.diags.iter().any(|d| d.code == code && d.labels.first().is_some_and(|l| l.span == span)) {
+            return;
+        }
+        self.diags.push(
+            loom_syntax::Diagnostic::error(loom_syntax::diag::codes::K0111, "reflection only exists while compiling")
+                .primary(span, "needed when the program runs")
+                .help("read what you need from it at compile time: `f.name`, `self.(f)`, `const for f in T.fields`"),
+        );
+    }
+
     pub(super) fn lower_raw(&mut self, e: &hir::Expr) -> Expr {
         let span = e.span;
         let ty = self.ty_of(e);
@@ -237,18 +277,15 @@ impl Lowerer<'_> {
             return self.fn_value(id, span);
         }
         self.moved_away(e.id);
+        // Known while compiling: a `const` parameter, a `const for` item,
+        // what reflection says (`Self.name`).
+        if let Some(&v) = self.tables().const_values.get(&e.id) {
+            return self.const_val(v, ty, span);
+        }
         match &e.kind {
             ExprKind::Lambda { params, body } => self.lambda(e, params, body),
             ExprKind::Lit(lit) => self.lit(lit, false, ty),
             ExprKind::Template(parts) => self.template(parts),
-            // A `const` parameter: its value in this instance, which
-            // compile-time code (lowered on its own) can read too.
-            ExprKind::Local(_) if self.tables().const_values.contains_key(&e.id) => {
-                match self.tables().const_values[&e.id] {
-                    crate::ty::ConstVal::Int(v) => self.int_value(v, ty),
-                    crate::ty::ConstVal::Bool(b) => Expr::Bool(b),
-                }
-            }
             ExprKind::Local(local) => match self.aliases.get(local) {
                 Some(place) => place.clone(),
                 None => Expr::Name(self.local_name(*local)),
@@ -265,15 +302,6 @@ impl Lowerer<'_> {
             ExprKind::Map(pairs) => self.map_lit(e, pairs),
             ExprKind::Def { def, .. } => match &self.p.def(*def).kind {
                 DefKind::Const(_) => self.const_value(*def, ty),
-                // A `const` parameter: its value in this instance.
-                DefKind::GenericParam(_) => match self.tables().const_values.get(&e.id) {
-                    Some(&crate::ty::ConstVal::Int(v)) => self.int_value(v, ty),
-                    Some(&crate::ty::ConstVal::Bool(b)) => Expr::Bool(b),
-                    None => {
-                        self.unsupported(span, "this kind of value");
-                        Expr::Nil
-                    }
-                },
                 _ => {
                     self.unsupported(span, "this kind of value");
                     Expr::Nil
@@ -353,6 +381,11 @@ impl Lowerer<'_> {
                 Expr::Table(vec![lo, hi, Expr::Bool(*inclusive)])
             }
             ExprKind::Error => Expr::Nil,
+            // `T.fields` and the like, still needed when the program runs.
+            ExprKind::Assoc { name, .. } if crate::typeck::REFLECTION_QUERIES.contains(&name.name.as_str()) => {
+                self.runtime_reflection(span);
+                Expr::Nil
+            }
             _ => {
                 self.unsupported(span, "this expression");
                 Expr::Nil
@@ -1435,7 +1468,11 @@ impl Lowerer<'_> {
                 self.push(StmtKind::Call(Expr::rt("overwrite", vec![Expr::Name(name), v])));
             }
             (
-                ExprKind::Local(_) | ExprKind::Field { .. } | ExprKind::LeadingDot(_) | ExprKind::Index { .. },
+                ExprKind::Local(_)
+                | ExprKind::Field { .. }
+                | ExprKind::ConstField { .. }
+                | ExprKind::LeadingDot(_)
+                | ExprKind::Index { .. },
                 AssignOp::Assign,
             ) => {
                 let v = self.lower_owned(value);
@@ -1443,7 +1480,11 @@ impl Lowerer<'_> {
                 self.push(StmtKind::Assign(vec![place], vec![v]));
             }
             (
-                ExprKind::Local(_) | ExprKind::Field { .. } | ExprKind::LeadingDot(_) | ExprKind::Index { .. },
+                ExprKind::Local(_)
+                | ExprKind::Field { .. }
+                | ExprKind::ConstField { .. }
+                | ExprKind::LeadingDot(_)
+                | ExprKind::Index { .. },
                 AssignOp::Compound(bin),
             ) => {
                 let ty = self.ty_of(target);

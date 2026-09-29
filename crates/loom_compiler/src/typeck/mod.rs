@@ -37,6 +37,7 @@ mod lambda;
 mod method;
 mod moves;
 mod pat;
+mod reflect;
 mod seq;
 mod shuttle;
 #[cfg(test)]
@@ -59,6 +60,7 @@ pub(crate) use consts::assert_args;
 pub use fallible::{ErrConv, Exit, MendInfo, TryInfo, Unwrap};
 pub use gauge::{GaugeInfo, GaugeRange};
 use infer::{PendingLit, Var};
+pub(crate) use reflect::QUERIES as REFLECTION_QUERIES;
 pub use seq::Seq;
 pub(crate) use unroll::TARGET;
 pub use warp::{CaseFieldInfo, CaseInfo, FieldInfo, Key, WarpInfo};
@@ -247,6 +249,9 @@ pub struct Body {
     pub const_values: HashMap<HirId, crate::ty::ConstVal>,
     /// Each `const if`: whether it takes its first branch.
     pub const_ifs: HashMap<HirId, bool>,
+    /// Each `v.(c)`: `v` as its case `c`, whose payload `.(f)` reads
+    /// (see `reflect.rs`).
+    pub case_views: HashMap<HirId, DefId>,
     /// Each `const for`: the body checked for each item, in order.
     pub unrolled: HashMap<HirId, Vec<BodyId>>,
 }

@@ -1,0 +1,48 @@
+//! Reflection: what compile-time code can learn about a type. `T.name`,
+//! `T.kind`, `T.fields` and `T.cases` are known while compiling, and so is
+//! everything read from them; none of it is left in the program.
+
+/// What kind of type a type is: `T.kind`.
+pub warp Kind: Eq, Show {
+    /// A warp with fields and no cases.
+    case Record
+    /// A warp with cases.
+    case Sum
+    case Tuple
+    case Unit
+    case Bool
+    case Int
+    case Float
+    case Char
+    /// `str` and `String`.
+    case Str
+    /// `[T; N]`.
+    case Array
+    /// `[T]`.
+    case Slice
+    case List
+    case Map
+    case Set
+    /// `?T`.
+    case Optional
+    /// `T ! E`.
+    case Result
+    /// A function: `A => B`.
+    case Fn
+    /// `any W`.
+    case Any
+    /// `A | B`.
+    case Union
+    /// Any other type.
+    case Other
+}
+
+/// A field of a record, or of a case's payload: an item of `T.fields` or
+/// `c.fields`. It has a `name: str` and `is_pub: bool`, and `v.(f)` is
+/// `v`'s field `f`. Only compile-time code has one.
+#builtin pub warp Field: Copy {}
+
+/// A case of a sum: an item of `T.cases`. It has a `name: str` and
+/// `fields`, and `v is .(c)` tests whether `v` is case `c`. Only
+/// compile-time code has one.
+#builtin pub warp Case: Copy {}

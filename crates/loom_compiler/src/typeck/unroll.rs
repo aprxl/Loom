@@ -90,7 +90,7 @@ impl Checker<'_> {
         }
     }
 
-    fn std_item(&self, module: &str, name: &str) -> Option<crate::hir::DefId> {
+    pub(super) fn std_item(&self, module: &str, name: &str) -> Option<crate::hir::DefId> {
         self.p.modules.iter().find(|m| m.path == module)?.items.get(name).copied()
     }
 
@@ -258,10 +258,17 @@ impl Checker<'_> {
                         indexed.map(|(i, item)| Item::Tuple(vec![Item::Val(ConstVal::Int(i as i128)), item])).collect(),
                     )
                 }
-                _ => None,
+                _ => self.reflected_list(e),
             },
-            _ => None,
+            _ => self.reflected_list(e),
         }
+    }
+
+    /// `T.fields`, `c.fields` or `T.cases`, as `const for` items.
+    fn reflected_list(&mut self, e: &Expr) -> Option<Vec<Item>> {
+        let list = self.fold(e, None)?;
+        let items = self.reflected_items(list)?;
+        items.into_iter().map(|v| v.to_const().map(Item::Val)).collect()
     }
 
     /// The locals `pat` binds stand for the parts of `item`.

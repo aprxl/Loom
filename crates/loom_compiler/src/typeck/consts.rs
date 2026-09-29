@@ -42,7 +42,7 @@ impl Checker<'_> {
         }
         match self.fold(e, None)? {
             v @ (Val::Int(_) | Val::Float(_)) => Some(v),
-            Val::Bool(_) | Val::Case(_) => None,
+            _ => None,
         }
     }
 
@@ -168,8 +168,7 @@ impl Checker<'_> {
     /// The value of `e` if it names a `const` parameter whose value is known.
     pub(super) fn const_param_val(&self, e: &Expr) -> Option<Val> {
         match self.tcx.kind(self.const_param_of(e)?) {
-            TyKind::Value(ConstVal::Int(v)) => Some(Val::Int(*v)),
-            TyKind::Value(ConstVal::Bool(b)) => Some(Val::Bool(*b)),
+            TyKind::Value(v) => Some(Val::of_const(*v)),
             _ => None,
         }
     }
@@ -202,6 +201,9 @@ impl Checker<'_> {
                     Val::Float(_) => "a float",
                     Val::Bool(_) => "a `bool`",
                     Val::Case(_) => "a case",
+                    Val::Str(_) => "text",
+                    Val::Field { .. } | Val::Fields { .. } => "a field",
+                    Val::CaseInfo { .. } | Val::Cases(_) => "a case",
                 };
                 let shown = self.show(ty);
                 self.error(codes::T0101, e.span, format!("expected `{shown}`, found {found}"), "the parameter's type");

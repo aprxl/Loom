@@ -1,0 +1,20 @@
+Point is a Record
+  0: x (pub: true) = 1
+  1: y (pub: false) = 2
+Shape is a Sum
+  case Dot, 0 fields
+Shape is a Sum
+  case Circle, 1 fields
+    r = 1.5
+Shape is a Sum
+  case Rect, 2 fields
+    w = 2
+    h = 3
+Pair is a Record
+  0: first (pub: false) = a
+  1: second (pub: false) = true
+i32 is a Int
+str is a Str
+2
+false
+Point(x: 7, y: 7)

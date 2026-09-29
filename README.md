@@ -303,15 +303,16 @@ built in `crates/`, following the plan in `design/lua-backend.md`:
   characters and numbers; lambdas, `Iter` and lazy streams; `defer`;
   gauges; maps and sets; `once` types; tests; shuttles; and compile-time
   code (constants, `const` expressions and `const assert`, run in a
-  sandbox, `const` parameters, `const if` and `const for`). `examples/widgets.loom`,
+  sandbox, `const` parameters, `const if` and `const for`, and reflection:
+  `T.fields`, `v.(f)`, and default methods that derive from a type's shape). `examples/widgets.loom`,
   `examples/tour.loom`, `examples/ledger.loom` and `examples/chip8.loom`
   run start to finish (chip8 wants a ROM: `loom run examples/chip8.loom --
   game.ch8`). `loom run <file>` runs a program; `loom test <file>` runs its
   tests; `loom build <file>` writes the Lua; `--emit tokens|ast|hir|lua`
   dumps a stage; `loom docs` opens the documentation in your browser. The other examples use more than this; the compiler says
   so rather than guessing.
-- **Next:** reflection and derive-by-default, then threads, then spools,
-  one slice at a time through every layer.
+- **Next:** Loom's own interpreter next to the Lua backend, then threads on
+  it, then spools, one slice at a time through every layer.
 
 ```bash
 cargo run -p loom -- run tests/run/fizzbuzz.loom

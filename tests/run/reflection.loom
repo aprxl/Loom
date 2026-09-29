@@ -1,0 +1,63 @@
+// Reflection: `T.name`, `T.kind`, `T.fields` and `T.cases`, what fields and
+// cases say about themselves, `v.(f)`, `v is .(c)` and `v.(c).(f)`. It's all
+// worked out while compiling; what the program runs is straight-line code.
+use std.io.print
+
+warp Point: Show {
+    pub x: i32
+    y: i32
+}
+
+warp Shape: Show {
+    case Dot
+    case Circle(r: f64)
+    case Rect(w: f64, h: f64)
+}
+
+warp Pair[A, B] {
+    first: A
+    second: B
+}
+
+fn describe[T](v: T) {
+    print("{T.name} is a {T.kind}")
+    const if T.kind == .Record {
+        const for (i, f) in T.fields.indexed() {
+            print("  {i}: {f.name} (pub: {f.is_pub}) = {v.(f)}")
+        }
+    } else if T.kind == .Sum {
+        const for c in T.cases {
+            if v is .(c) {
+                print("  case {c.name}, {c.fields.len()} fields")
+                const for f in c.fields {
+                    print("    {f.name} = {v.(c).(f)}")
+                }
+            }
+        }
+    }
+}
+
+/// Sets every `i32` field named `x` or `y` to `n`.
+fn fill(mut p: Point, n: i32) {
+    const for f in Point.fields {
+        const if f.name == "x" or f.name == "y" {
+            p.(f) = n
+        }
+    }
+}
+
+fn main() {
+    describe(Point(1, 2))
+    describe(Shape.Dot)
+    describe(Shape.Circle(r: 1.5))
+    describe(Shape.Rect(w: 2.0, h: 3.0))
+    describe(Pair(first: "a", second: true))
+    describe(42)
+    describe("text")
+    print(Point.fields.len())
+    print(Shape.cases.is_empty())
+    const assert(Shape.cases.len() == 3)
+    var p = Point(0, 0)
+    fill(mut p, 7)
+    print(p)
+}

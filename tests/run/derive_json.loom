@@ -1,0 +1,114 @@
+// `derive` is a default method that reflects on `Self`: `ToJson` from
+// examples/compile_time.loom, which works for any warp that lists it.
+use std.io.print
+
+/// Anything that can write itself as JSON. There are no required methods.
+/// The default body works for *any* warp by walking its shape at compile
+/// time. `const if` and `const for` unroll while compiling, so each warp gets
+/// straight-line code with no runtime reflection left in the binary.
+pub weft ToJson {
+    fn to_json(self, mut out: String) {
+        const if Self.kind == .Record {
+            out.push('{')
+            const for (i, f) in Self.fields.indexed() {
+                const if i > 0 { out.push(',') }
+                out.push_json_key(f.name)
+                self.(f).to_json(mut out)                // `self.(f)`: field access by a compile-time Field
+            }
+            out.push('}')
+        } else if Self.kind == .Sum {
+            const for c in Self.cases {
+                if self is .(c) {                        // runtime test against a compile-time Case
+                    const if c.fields.is_empty() {
+                        out.push_json_str(c.name)        // unit case: "Admin"
+                    } else {
+                        out.push('{')
+                        out.push_json_key(c.name)
+                        out.push('{')
+                        const for (i, f) in c.fields.indexed() {
+                            const if i > 0 { out.push(',') }
+                            out.push_json_key(f.name)
+                            self.(c).(f).to_json(mut out)
+                        }
+                        out.push_str("}}}}")             // `}}` is one literal brace
+                    }
+                }
+            }
+        } else {
+            const unravel("ToJson can't be derived for {Self.name}; weave it by hand")
+        }
+    }
+}
+
+// Leaves are woven by hand. These are ordinary weaves.
+weave[T: Integer] ToJson into T {
+    fn to_json(self, mut out: String) = out.push_str("{self}")
+}
+weave ToJson into bool {
+    fn to_json(self, mut out: String) = out.push_str(if self { "true" } else { "false" })
+}
+weave ToJson into String {
+    fn to_json(self, mut out: String) = out.push_json_str(self)
+}
+weave[T: ToJson] ToJson into List[T] {
+    fn to_json(self, mut out: String) {
+        out.push('[')
+        for (i, x) in self.indexed() {
+            if i > 0 { out.push(',') }
+            x.to_json(mut out)
+        }
+        out.push(']')
+    }
+}
+weave[T: ToJson] ToJson into ?T {
+    fn to_json(self, mut out: String) = match self {
+        some(x) => x.to_json(mut out)
+        none => out.push_str("null")
+    }
+}
+
+// Two helpers as free functions. UFCS turns them into String methods
+// without touching String.
+fn push_json_str(mut out: String, s: str) {
+    out.push('"')
+    for c in s.chars() {
+        match c {
+            '"'  => out.push_str("\\\"")
+            '\\' => out.push_str("\\\\")
+            '\n' => out.push_str("\\n")
+            c if c < ' ' => out.push_str("\\u{c as u32:04x}")
+            _ => out.push(c)
+        }
+    }
+    out.push('"')
+}
+
+fn push_json_key(mut out: String, key: str) {
+    out.push_json_str(key)
+    out.push(':')
+}
+
+// Now any warp can opt in with nothing but a header.
+warp Role: ToJson {
+    case Guest
+    case Member(since: u16)
+    case Admin
+}
+
+warp User: ToJson {
+    name: String
+    age: u8
+    roles: List[Role]
+    email: ?String
+}
+
+fn main() {
+    let ada = User(name: "Ada", age: 36, roles: [.Member(since: 1843), .Admin], email: none)
+    var json = String()
+    ada.to_json(mut json)
+    print(json)
+    let bob = User(name: "Bob \"B\"", age: 7, roles: [], email: some("b@x"))
+    var more = String()
+    bob.to_json(mut more)
+    print(more)
+}
