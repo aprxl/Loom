@@ -117,7 +117,7 @@ pub weft ToJson {
                             out.push_json_key(f.name)
                             self.(c).(f).to_json(mut out)
                         }
-                        out.push_str("}}")
+                        out.push_str("}}}}")             // `}}` is one literal brace
                     }
                 }
             }
