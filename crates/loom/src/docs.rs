@@ -12,9 +12,7 @@ pub static FILES: &[(&str, &[u8])] = include!(concat!(env!("OUT_DIR"), "/docs.rs
 const DONE: &str = ".unpacked";
 
 /// The page `loom docs` opens.
-pub fn landing() -> &'static str {
-    ["index.html", "std/index.html"].into_iter().find(|p| FILES.iter().any(|(f, _)| f == p)).unwrap_or("index.html")
-}
+const LANDING: &str = "index.html";
 
 pub fn docs(open: bool) -> ExitCode {
     let dir = std::env::temp_dir().join(format!("loom-docs-{}-{:016x}", env!("CARGO_PKG_VERSION"), hash()));
@@ -22,7 +20,7 @@ pub fn docs(open: bool) -> ExitCode {
         eprintln!("error: can't write the docs to `{}`: {e}", dir.display());
         return ExitCode::from(super::EXIT_INTERNAL);
     }
-    let page = on_disk(&dir, landing());
+    let page = on_disk(&dir, LANDING);
     println!("{}", page.display());
     if open && let Err(e) = open_in_browser(&page) {
         eprintln!("error: can't open a browser: {e}");
@@ -81,7 +79,7 @@ mod tests {
 
     #[test]
     fn the_landing_page_is_built_in() {
-        assert!(FILES.iter().any(|(f, _)| *f == landing()), "no {} under docs/", landing());
+        assert!(FILES.iter().any(|(f, _)| *f == LANDING), "no {LANDING} under docs/");
     }
 
     /// Every relative link and stylesheet points at a page that's built in,

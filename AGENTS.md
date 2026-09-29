@@ -45,6 +45,10 @@ Read your own diff before committing. One logical change per commit.
   so builds are byte-for-byte reproducible.
 - Keep the design docs in sync when behavior changes. If an example stops being
   accurate, fix the example or the implementation, not both silently.
+- The docs site (`docs/`, opened by `loom docs`) is generated: edit
+  `docs/std/data.py` or `docs/lang/pages/*.md`, run `python docs/gen.py`,
+  and when behavior changes, `python docs/gen.py --check --loom
+  target/debug/loom.exe` (every sample in the language guide runs).
 
 ## Status
 
