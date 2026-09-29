@@ -98,7 +98,12 @@ caller's table instead, and a whole-value assignment to one goes through
 `rt.overwrite`. `mut` parameters of scalar types (numbers, strings, enums)
 are copied back: every `return` of the function also returns their final
 values, and the caller assigns them to where they came from
-(`local r, t = f(x); x = t`). A `mut self` method of a scalar type can't be
+(`local r, t = f(x); x = t`). A `return` reads them before the function's
+`defer`s run, so a function with both runs its body in an inner function
+and returns their values once that has returned. A tuple assignment writes
+into each `mut` parameter among its targets, after copying every part that's
+a table, since one may be another target's old value (`(a, b) = (b, a)`).
+A `mut self` method of a scalar type can't be
 called through `any` yet, since the `any` holds its own copy. A place
 converted to `any` or a union is copied too: the box owns its value.
 

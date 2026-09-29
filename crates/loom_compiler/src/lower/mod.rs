@@ -600,7 +600,18 @@ impl<'a> Lowerer<'a> {
                 }
                 // Scalar `mut` parameters go back to the caller after the result.
                 let outs = self.copy_outs(id, f);
-                if !outs.is_empty() {
+                if !outs.is_empty() && has_defer(&body) {
+                    // A `defer` may change them as the function ends, after
+                    // a `return` has read them: the body runs in a function
+                    // of its own, whose `defer`s are done when it returns.
+                    let call = Expr::call(Expr::Function(Vec::new(), body), Vec::new());
+                    let mut values = vec![Expr::name("r")];
+                    values.extend(outs.iter().cloned());
+                    body = vec![
+                        Stmt { kind: StmtKind::Local(vec!["r".into()], vec![call]), span: None },
+                        Stmt { kind: StmtKind::ReturnMany(values), span: None },
+                    ];
+                } else if !outs.is_empty() {
                     body = with_copy_outs(body, &outs);
                     let mut values = vec![Expr::Nil];
                     values.extend(outs.iter().cloned());
@@ -797,6 +808,19 @@ impl<'a> Lowerer<'a> {
 }
 
 /// `stmts` with every `return` also returning `outs` (see `copy_outs`).
+/// Whether `stmts` has a `defer` (a `<close>` local), outside any function
+/// in them.
+fn has_defer(stmts: &[Stmt]) -> bool {
+    stmts.iter().any(|stmt| match &stmt.kind {
+        StmtKind::LocalClose(..) => true,
+        StmtKind::If(arms, else_) => arms.iter().any(|(_, b)| has_defer(b)) || else_.as_deref().is_some_and(has_defer),
+        StmtKind::While(_, b) | StmtKind::NumFor(_, _, _, b) | StmtKind::GenFor(_, _, b) | StmtKind::Do(b) => {
+            has_defer(b)
+        }
+        _ => false,
+    })
+}
+
 fn with_copy_outs(stmts: Vec<Stmt>, outs: &[Expr]) -> Vec<Stmt> {
     stmts
         .into_iter()
