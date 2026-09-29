@@ -64,6 +64,12 @@ pub(crate) use unroll::TARGET;
 pub use warp::{CaseFieldInfo, CaseInfo, FieldInfo, Key, WarpInfo};
 pub use weave::{Impl, Weaving};
 
+/// How many instances in a row one may lead to (Rust stops at 128).
+const MAX_INSTANCE_DEPTH: u32 = 100;
+
+/// The most parts a type an instance is made for may have.
+const MAX_TYPE_SIZE: usize = 10_000;
+
 /// The output of type checking.
 #[derive(Debug)]
 pub struct Typed {
@@ -559,6 +565,15 @@ struct Checker<'p> {
     cur_body: Option<BodyId>,
     /// `const for` loops: `break` and `continue` can't target them.
     const_loops: HashSet<HirId>,
+    /// How many instances led to each (none for what the program names
+    /// itself): `inf(n + 1)` would lead to new ones forever.
+    depths: HashMap<BodyId, u32>,
+    /// The definitions whose instances nested too deeply (reported).
+    too_deep: HashSet<DefId>,
+    /// How many bodies `const for` loops have written out, and whether
+    /// going past the limit was reported.
+    unrolled_total: usize,
+    unroll_reported: bool,
     /// Gauges being worked out, or found wrong (reported once).
     gauge_errors: HashSet<DefId>,
     /// The shuttle whose body is being checked.
@@ -634,6 +649,10 @@ impl<'p> Checker<'p> {
             cur_body: None,
             unsupported_hits: 0,
             const_loops: HashSet::new(),
+            depths: HashMap::new(),
+            too_deep: HashSet::new(),
+            unrolled_total: 0,
+            unroll_reported: false,
             gauge_errors: HashSet::new(),
             shuttle: None,
         }
@@ -680,17 +699,60 @@ impl<'p> Checker<'p> {
     /// The body for `inst`, queuing it to be checked the first time. Its
     /// types are resolved first: an instance is keyed by what they are.
     fn instance(&mut self, mut inst: Instance) -> BodyId {
-        inst.args = inst.args.iter().map(|&t| self.deep_resolve(t)).collect();
-        inst.self_ty = inst.self_ty.map(|t| self.deep_resolve(t));
+        // `f[(T, T)]` calling itself doubles its type each time: that
+        // nests without end too, and gets too big to walk long before.
+        let mut sizes = HashMap::new();
+        let types = inst.args.iter().chain(inst.self_ty.iter());
+        let too_big = types.copied().any(|t| self.ty_size(t, &mut sizes) > MAX_TYPE_SIZE);
+        if !too_big {
+            inst.args = inst.args.iter().map(|&t| self.deep_resolve(t)).collect();
+            inst.self_ty = inst.self_ty.map(|t| self.deep_resolve(t));
+        }
         if let Some(id) = self.r.find(&inst) {
             return id;
         }
         let id = BodyId(self.r.instances.len() as u32);
+        let depth = self.cur_body.and_then(|b| self.depths.get(&b)).map_or(0, |d| d + 1);
+        self.depths.insert(id, depth);
         self.r.ids.insert(inst.clone(), id);
-        self.r.instances.push(inst);
+        self.r.instances.push(inst.clone());
         self.r.bodies.push(Body::default());
-        self.queue.push_back(id);
+        if depth <= MAX_INSTANCE_DEPTH && !too_big {
+            self.queue.push_back(id);
+        } else if self.too_deep.insert(inst.def) {
+            // Never checked: the program doesn't compile.
+            let def = self.p.def(inst.def);
+            let mut diag = Diagnostic::error(codes::T0122, format!("instances of `{}` nest without end", def.name))
+                .primary(def.span, "each instance needs another")
+                .help("a generic function that calls itself needs the same arguments, or ones that stop changing");
+            diag = if too_big {
+                diag.note(format!("the types it's instantiated with grow past {MAX_TYPE_SIZE} parts"))
+            } else {
+                diag.note(format!("it gets to {} after {MAX_INSTANCE_DEPTH} in a row", self.describe_instance(&inst)))
+            };
+            self.diags.push(diag);
+        }
         id
+    }
+
+    /// How many parts `ty` has, written out (up to `usize::MAX`): the size
+    /// of each type is worked out once, so a type made of shared halves
+    /// costs as much as its halves.
+    fn ty_size(&mut self, ty: Ty, sizes: &mut HashMap<Ty, usize>) -> usize {
+        let ty = self.resolve(ty);
+        if let Some(&n) = sizes.get(&ty) {
+            return n;
+        }
+        let parts: Vec<Ty> = match self.tcx.kind(ty) {
+            TyKind::Tuple(ts) | TyKind::Adt(_, ts) | TyKind::Union(ts) => ts.clone(),
+            TyKind::Optional(t) | TyKind::Range(t) | TyKind::Array(t, _) | TyKind::Gauge(_, t) => vec![*t],
+            TyKind::Result(a, b) | TyKind::ArrayOf(a, b) => vec![*a, *b],
+            TyKind::Fn(params, ret) => params.iter().chain([ret]).copied().collect(),
+            _ => Vec::new(),
+        };
+        let n = parts.into_iter().fold(1usize, |n, t| n.saturating_add(self.ty_size(t, sizes)));
+        sizes.insert(ty, n);
+        n
     }
 
     fn queue_def(&mut self, def: DefId) -> BodyId {

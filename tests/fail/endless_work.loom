@@ -1,0 +1,23 @@
+// Compile-time work that never ends is an error, not a hang.
+use std.io.print
+
+fn inf(const n: u64) -> u64 {                    //~ T0122
+    inf(n + 1)
+}
+
+fn double[T](x: T, n: i32) {                     //~ T0122
+    if n > 0 { double((x, x), n - 1) }
+}
+
+fn main() {
+    print(inf(0))
+    double(1, 3)
+    var total = 0
+    const for i in 0..100 {
+        const for j in 0..100 {
+            const for k in 0..100 {              //~ K0102
+                total += 1
+            }
+        }
+    }
+}

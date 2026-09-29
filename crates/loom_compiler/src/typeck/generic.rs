@@ -571,7 +571,12 @@ impl Checker<'_> {
         }
         let mut parts = Vec::new();
         for (i, &arg) in inst.args.iter().enumerate() {
-            let shown = self.show(arg);
+            let mut shown = self.show(arg);
+            // A type can be thousands of parts long (see `MAX_TYPE_SIZE`).
+            if let Some((cut, _)) = shown.char_indices().nth(80) {
+                shown.truncate(cut);
+                shown.push('…');
+            }
             match names.get(i) {
                 Some(Some(name)) => parts.push(format!("{name} = {shown}")),
                 _ => parts.push(shown),

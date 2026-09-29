@@ -94,6 +94,7 @@ codes! {
     T0119 = "a test's signature isn't `test name()` or `test name() ! E`";
     T0120 = "`yield` or `pull` doesn't fit the shuttle";
     T0121 = "shuttle calls itself";
+    T0122 = "instances nest without end";
 
     // G02xx: gauges
     G0201 = "value outside a gauge";

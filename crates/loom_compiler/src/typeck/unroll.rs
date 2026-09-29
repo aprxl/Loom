@@ -25,6 +25,9 @@ use crate::ty::{ConstVal, Ty, TyKind};
 /// How many items a `const for` may go over.
 const MAX_UNROLL: usize = 10_000;
 
+/// How many bodies all of a program's `const for` loops may write out.
+const MAX_UNROLL_TOTAL: usize = 50_000;
+
 /// An item of a `const for`'s sequence.
 #[derive(Clone, Debug)]
 enum Item {
@@ -166,6 +169,22 @@ impl Checker<'_> {
             );
             return self.tcx.unit;
         }
+        // Nested ones multiply: 100 × 100 × 100 is a million bodies.
+        self.unrolled_total += items.len();
+        if self.unrolled_total > MAX_UNROLL_TOTAL {
+            if !std::mem::replace(&mut self.unroll_reported, true) {
+                self.diags.push(
+                    Diagnostic::error(
+                        codes::K0102,
+                        format!("`const for` loops write out more than {MAX_UNROLL_TOTAL} bodies in all"),
+                    )
+                    .primary(iter.span, "this one goes past it")
+                    .note("the bodies of nested `const for` loops multiply")
+                    .help("use a plain `for`, which runs when the program does"),
+                );
+            }
+            return self.tcx.unit;
+        }
         self.const_loops.insert(e.id);
         let outer = self.b.local_ty.clone();
         let parent = self.cur_body.expect("checking a body");
@@ -176,6 +195,9 @@ impl Checker<'_> {
             let id = BodyId(self.r.instances.len() as u32);
             let inst = self.r.instance(parent).clone();
             self.r.instances.push(inst);
+            if let Some(&depth) = self.depths.get(&parent) {
+                self.depths.insert(id, depth);
+            }
             self.r.bodies.push(Body { local_ty: outer.clone(), ..Body::default() });
             self.in_body(id, |this| {
                 this.check_pat_irrefutable(pat, elem, "a `const for` loop");

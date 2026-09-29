@@ -121,13 +121,19 @@ variable move separately (`let a = p.first; let b = p.second`).
 ## Generics
 
 Each instance of a generic function is its own Lua function, named with its
-instance number (`F.largest_4_12`). So are a generic warp's methods, one per
+instance number after an `i` (`F.largest_4_i12`), which no other function's
+name can end with. So are a generic warp's methods, one per
 list of arguments it's used with. A generic warp's runtime descriptor is per
 type too (`Pair[i32, str]`), since its fields' descriptors differ.
 
 A generic function nobody calls isn't checked or emitted. An error in a
 generic body is reported once, with a note naming the instance it came from,
 even when several instances hit it.
+
+An instance that leads to another, and so on, more than 100 in a row
+(`inf(n + 1)`), or one made for a type of more than 10 000 parts
+(`f[(T, T)]` calling itself doubles `T`), is T0122 rather than a checker that
+never stops.
 
 **`const` parameters** are generics whose arguments are values, of an
 integer type or `bool` for now. An instance's arguments are types, so a
@@ -484,7 +490,8 @@ the sandbox runs after type checking, and what's in a branch decides what
 gets checked. A `const if` checks, move-checks and lowers only the branch it
 takes, reporting that branch's name-resolution errors; the other is never
 looked at. A `const for` goes over a range, an array literal (or a constant
-holding one) or `.indexed()` of those, at most 10 000 items (K0102); its
+holding one) or `.indexed()` of those, at most 10 000 items, and 50 000
+bodies for all of a program's `const for`s, nested ones multiplying (K0102); its
 body is checked once per item in a `Body` of its own, with the loop
 variable standing for the item like a `const` parameter, and lowered once
 per item in a `do … end`. `break` and `continue` can't target a `const for`
