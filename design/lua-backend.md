@@ -467,7 +467,9 @@ through the normal backend (`lower/consteval.rs`, `loom_host::consteval`):
   computed once.
 - **The sandbox** has no host I/O: std's `io`, `env`, `fs`, `time` and
   `term` externs fail with K0104. Unravelling is K0103. All jobs share a
-  budget of 100M Lua instructions and 1 GiB of memory: K0102. After a job
+  budget of 100M Lua instructions (coroutines count too: the hook is
+  global), 1 GiB of memory, and 20 seconds, for work inside Lua's C
+  functions that instructions don't show: K0102. After a job
   fails, the constants it was computing are marked failed, and jobs that
   need them are skipped rather than reporting the same failure again.
 - **Values aren't written into the bundle.** The real bundle computes each

@@ -44,7 +44,7 @@ Compile-time code runs in a sandboxed Lua VM, through the same backend as the pr
 
 ### Budget: K0102
 
-All compile-time code shares one budget: 100 million Lua VM steps and 1 GiB of memory. A loop that never ends stops with [K0102](diag:K0102) instead of hanging the compiler.
+All compile-time code shares one budget: 100 million Lua VM steps, 1 GiB of memory, and 20 seconds (for work inside Lua's own functions, such as building huge strings, which takes few steps). A loop that never ends stops with [K0102](diag:K0102) instead of hanging the compiler.
 
 @sample ct_err_budget
 

@@ -15,7 +15,7 @@
 //! Writing those values into the bundle instead is an optimization, left
 //! for Loom's own interpreter (see `design/lua-backend.md`).
 
-use loom_host::consteval::{JobResult, STEP_BUDGET, run_jobs};
+use loom_host::consteval::{Budget, JobResult, STEP_BUDGET, TIME_LIMIT, run_jobs};
 use loom_host::{Location, Outcome};
 use loom_syntax::Diagnostic;
 use loom_syntax::diag::codes;
@@ -108,14 +108,23 @@ pub(super) fn evaluate(db: &SourceDb, p: &Program, typed: &Typed, tests: bool) -
                     location,
                 )
             }
-            JobResult::OutOfBudget { memory, location } => {
-                let (title, note) = if memory {
-                    ("compile-time code ran out of memory".to_string(), "it may build something that never ends".into())
-                } else {
-                    (
+            JobResult::OutOfBudget { budget, location } => {
+                let (title, note) = match budget {
+                    Budget::Memory => (
+                        "compile-time code ran out of memory".to_string(),
+                        "it may build something that never ends".into(),
+                    ),
+                    Budget::Steps => (
                         "compile-time code ran out of steps".to_string(),
                         format!("compile-time code may take {STEP_BUDGET} Lua steps in all; this may never stop"),
-                    )
+                    ),
+                    Budget::Time => (
+                        "compile-time code ran out of time".to_string(),
+                        format!(
+                            "compile-time code may run for {} seconds in all; this may never stop",
+                            TIME_LIMIT.as_secs()
+                        ),
+                    ),
                 };
                 with_location(Diagnostic::error(codes::K0102, title).primary(job.span, what), "stopped at", location)
                     .note(note)

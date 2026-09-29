@@ -16,6 +16,7 @@
 
 use std::cell::Cell;
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use mlua::{Function, HookTriggers, Lua, Table, VmState};
 
@@ -27,11 +28,24 @@ use crate::{Host, Output};
 pub const STEP_BUDGET: u64 = 100_000_000;
 /// How much memory the compile-time VM may use.
 pub const MEMORY_LIMIT: usize = 1 << 30;
+/// How long compile-time code may run, for a whole build. Steps don't see
+/// the work inside Lua's C functions: building a string by 600 000 pushes
+/// copies it each time, in few steps.
+pub const TIME_LIMIT: Duration = Duration::from_secs(20);
 
 const NOT_CONST: &str = "\u{1f}LOOMK\u{1f}";
 const CYCLE: &str = "\u{1f}LOOMC\u{1f}";
 const GAVE_UP: &str = "\u{1f}LOOMS\u{1f}";
 const OUT_OF_STEPS: &str = "\u{1f}LOOMB\u{1f}";
+const OUT_OF_TIME: &str = "\u{1f}LOOMT\u{1f}";
+
+/// What compile-time code ran out of.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Budget {
+    Steps,
+    Memory,
+    Time,
+}
 
 /// How one job went.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -51,9 +65,9 @@ pub enum JobResult {
         key: String,
         location: Option<Location>,
     },
-    /// It ran out of steps or memory.
+    /// It ran out of steps, memory or time.
     OutOfBudget {
-        memory: bool,
+        budget: Budget,
         location: Option<Location>,
     },
     /// It needed a constant that already failed.
@@ -72,11 +86,15 @@ pub fn run_jobs(bundle: &str, map: Option<&SourceMap>) -> Result<Vec<JobResult>,
         .and_then(|_| lua.load(bundle).set_name("=bundle").eval::<Table>());
     let steps = Rc::new(Cell::new(0u64));
     let counter = steps.clone();
+    let start = Instant::now();
     // Global, so the coroutines shuttles run in count too.
     lua.set_global_hook(HookTriggers::new().every_nth_instruction(1000), move |_, _| {
         counter.set(counter.get() + 1000);
         if counter.get() > STEP_BUDGET {
             return Err(mlua::Error::runtime(OUT_OF_STEPS));
+        }
+        if start.elapsed() > TIME_LIMIT {
+            return Err(mlua::Error::runtime(OUT_OF_TIME));
         }
         Ok(VmState::Continue)
     })
@@ -98,7 +116,7 @@ pub fn run_jobs(bundle: &str, map: Option<&SourceMap>) -> Result<Vec<JobResult>,
             Err(e) => {
                 let _ = abort.call::<()>(());
                 let result = classify(&e, map);
-                out_of_steps |= matches!(result, JobResult::OutOfBudget { memory: false, .. });
+                out_of_steps |= matches!(result, JobResult::OutOfBudget { budget: Budget::Steps | Budget::Time, .. });
                 result
             }
         };
@@ -113,7 +131,7 @@ fn classify(e: &mlua::Error, map: Option<&SourceMap>) -> JobResult {
     if matches!(e, mlua::Error::MemoryError(_))
         || matches!(e, mlua::Error::CallbackError { cause, .. } if matches!(**cause, mlua::Error::MemoryError(_)))
     {
-        return JobResult::OutOfBudget { memory: true, location: None };
+        return JobResult::OutOfBudget { budget: Budget::Memory, location: None };
     }
     let location = || match outcome(Err(e.clone()), map) {
         Outcome::Unravel { location, .. } | Outcome::Crash { location, .. } => location,
@@ -121,7 +139,10 @@ fn classify(e: &mlua::Error, map: Option<&SourceMap>) -> JobResult {
     };
     let rest = strip_location(&text);
     if full.contains(OUT_OF_STEPS) {
-        return JobResult::OutOfBudget { memory: false, location: location() };
+        return JobResult::OutOfBudget { budget: Budget::Steps, location: location() };
+    }
+    if full.contains(OUT_OF_TIME) {
+        return JobResult::OutOfBudget { budget: Budget::Time, location: location() };
     }
     if rest.starts_with(GAVE_UP) {
         return JobResult::Skipped;
@@ -201,7 +222,7 @@ mod tests {
     #[test]
     fn endless_code_runs_out_of_steps() {
         let results = jobs("return { abort = abort, jobs = { function() while true do end end, function() end } }");
-        assert!(matches!(results[0], JobResult::OutOfBudget { memory: false, .. }), "{results:?}");
+        assert!(matches!(results[0], JobResult::OutOfBudget { budget: Budget::Steps, .. }), "{results:?}");
         assert_eq!(results[1], JobResult::Skipped);
     }
 
@@ -211,6 +232,6 @@ mod tests {
         let results = jobs(
             "return { abort = abort, jobs = { function() coroutine.wrap(function() while true do end end)() end } }",
         );
-        assert!(matches!(results[0], JobResult::OutOfBudget { memory: false, .. }), "{results:?}");
+        assert!(matches!(results[0], JobResult::OutOfBudget { budget: Budget::Steps, .. }), "{results:?}");
     }
 }
