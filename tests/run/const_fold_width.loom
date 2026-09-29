@@ -1,0 +1,24 @@
+// The constant folder computes what the program does: an integer's width
+// decides `~`, `<<` and `+%`, and an `f32` is rounded after each step, so a
+// `const if` agrees with the running program.
+use std.io.print
+
+const MASK: u8 = ~0x0F
+const AA: u8 = 200
+const BIG: f32 = 16777216.0
+
+fn shl(a: u8, n: u8) -> u8 = a << n
+fn id(const n: u8) -> u8 = n
+
+fn main() {
+    let m: u8 = MASK
+    print(m)
+    const if MASK == 240 { print("folded: 240") } else { print("folded: wrong") }
+    print(shl(AA, 1))
+    const if AA << 1 == 144 { print("folded: 144") } else { print("folded: wrong") }
+    const if AA +% 100 == 44 { print("folded: 44") } else { print("folded: wrong") }
+    let b = BIG
+    print(b + 1.0 == b)
+    const if BIG + 1.0 == BIG { print("folded: absorbed") } else { print("folded: wrong") }
+    print(id(~0u8))
+}

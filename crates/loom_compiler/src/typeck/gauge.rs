@@ -513,14 +513,37 @@ impl Checker<'_> {
     /// The value of `e`, if it's known at compile time: literals, constants
     /// and arithmetic on them. `param` is a predicate's parameter and its value.
     pub(super) fn fold(&mut self, e: &Expr, param: Option<(LocalId, Val)>) -> Option<Val> {
-        self.fold_depth(e, param, 0)
+        self.fold_depth(e, param, 0, None)
     }
 
-    fn fold_depth(&mut self, e: &Expr, param: Option<(LocalId, Val)>, depth: u32) -> Option<Val> {
+    /// Folds `e`, of type `want` if its own type isn't known here (it's in
+    /// a constant's initializer, checked in a body of its own). Its value is
+    /// what the program would compute: bits past an integer's width are
+    /// dropped where the program drops them (`~`, `<<`, `+%`), an `f32` is
+    /// rounded to one, and what the program would unravel on isn't a value.
+    fn fold_depth(&mut self, e: &Expr, param: Option<(LocalId, Val)>, depth: u32, want: Option<Ty>) -> Option<Val> {
         if depth > 64 {
             return None;
         }
-        let sub = |this: &mut Self, e: &Expr| this.fold_depth(e, param, depth + 1);
+        let ty = self.b.expr_ty.get(&e.id).copied().map(|t| self.resolve(t)).or(want);
+        let v = self.fold_node(e, param, depth, ty)?;
+        self.fit(v, ty)
+    }
+
+    /// `v` as a value of type `ty`: `None` if it isn't one.
+    fn fit(&self, v: Val, ty: Option<Ty>) -> Option<Val> {
+        match (v, ty.map(|t| self.tcx.kind(t))) {
+            (Val::Int(i), Some(TyKind::Int(int))) => int.contains(i).then_some(v),
+            (Val::Float(f), Some(TyKind::Float(crate::ty::FloatTy::F32))) => Some(Val::Float(f64::from(f as f32))),
+            _ => Some(v),
+        }
+    }
+
+    fn fold_node(&mut self, e: &Expr, param: Option<(LocalId, Val)>, depth: u32, ty: Option<Ty>) -> Option<Val> {
+        let sub = |this: &mut Self, e: &Expr| this.fold_depth(e, param, depth + 1, None);
+        // An operand of the same type as the result.
+        let same = |this: &mut Self, e: &Expr| this.fold_depth(e, param, depth + 1, ty);
+        let int = ty.and_then(|t| self.tcx.as_int(t));
         match &e.kind {
             ExprKind::Lit(Lit::Int(i)) => Some(Val::Int(i128::try_from(i.value).ok()?)),
             ExprKind::Lit(Lit::Float(f)) => Some(Val::Float(f.value)),
@@ -551,7 +574,10 @@ impl Checker<'_> {
                 DefKind::Const(c) => match (self.r.untyped_consts.get(def), self.r.untyped_floats.get(def)) {
                     (Some(&v), _) => Some(Val::Int(v)),
                     (_, Some(&f)) => Some(Val::Float(f)),
-                    _ => sub(self, &c.value),
+                    _ => {
+                        let declared = self.r.const_ty.get(def).copied();
+                        self.fold_depth(&c.value, param, depth + 1, declared)
+                    }
                 },
                 _ => None,
             },
@@ -564,11 +590,12 @@ impl Checker<'_> {
                     _ => None,
                 }
             }
-            ExprKind::Unary { op, operand } => match (op, sub(self, operand)?) {
+            ExprKind::Unary { op, operand } => match (op, same(self, operand)?) {
                 (UnaryOp::Neg, Val::Int(i)) => Some(Val::Int(i.checked_neg()?)),
                 (UnaryOp::Neg, Val::Float(f)) => Some(Val::Float(-f)),
                 (UnaryOp::Not, Val::Bool(b)) => Some(Val::Bool(!b)),
-                (UnaryOp::BitNot, Val::Int(i)) => Some(Val::Int(!i)),
+                // `~0x0F` is 240 as a `u8`: its width decides.
+                (UnaryOp::BitNot, Val::Int(i)) => Some(Val::Int(int.map_or(!i, |int| int.wrap(!i)))),
                 _ => None,
             },
             ExprKind::Binary { op: BinaryOp::And, lhs, rhs } => match sub(self, lhs)? {
@@ -582,8 +609,39 @@ impl Checker<'_> {
                 _ => None,
             },
             ExprKind::Binary { op, lhs, rhs } => {
-                let (a, b) = (sub(self, lhs)?, sub(self, rhs)?);
-                binary(*op, a, b)
+                use BinaryOp as B;
+                match op {
+                    // Shifts: the amount is of its own type, and must be below the width.
+                    B::Shl | B::Shr => {
+                        let (Val::Int(x), Val::Int(s)) = (same(self, lhs)?, sub(self, rhs)?) else { return None };
+                        let bits = int.map_or(64, |int| u32::from(int.bits));
+                        let s = u32::try_from(s).ok().filter(|&s| s < bits)?;
+                        Some(Val::Int(match (op, int) {
+                            (B::Shr, _) => x >> s,
+                            (_, Some(int)) => int.wrap(x << s),
+                            (_, None) => x.checked_shl(s)?,
+                        }))
+                    }
+                    B::AddWrap | B::SubWrap | B::MulWrap | B::AddSat | B::SubSat | B::MulSat => {
+                        let (Val::Int(x), Val::Int(y)) = (same(self, lhs)?, same(self, rhs)?) else { return None };
+                        let int = int?;
+                        let exact = match op {
+                            B::AddWrap | B::AddSat => x.checked_add(y)?,
+                            B::SubWrap | B::SubSat => x.checked_sub(y)?,
+                            _ => x.checked_mul(y)?,
+                        };
+                        let wraps = matches!(op, B::AddWrap | B::SubWrap | B::MulWrap);
+                        Some(Val::Int(if wraps { int.wrap(exact) } else { int.saturate(exact) }))
+                    }
+                    B::Add | B::Sub | B::Mul | B::Div | B::Rem | B::BitAnd | B::BitOr | B::BitXor => {
+                        let (a, b) = (same(self, lhs)?, same(self, rhs)?);
+                        binary(*op, a, b)
+                    }
+                    _ => {
+                        let (a, b) = (sub(self, lhs)?, sub(self, rhs)?);
+                        binary(*op, a, b)
+                    }
+                }
             }
             // `xs.len()` of an array: its type says.
             ExprKind::Call { callee, args } if args.is_empty() => match &callee.kind {
