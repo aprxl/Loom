@@ -1,0 +1,47 @@
+// `const` parameters inside a generic warp: as other warps' arguments
+// (`Matrix[C, R]`, `Buf[{CAP * 2}]`) and in lengths (`[f32; R * C]`), all
+// worked out per instance; inferred through another warp's arguments; and
+// constants the folder reads through (`IS_WIN`, `SIZES.len()`, `Cfg.CAP`).
+use std.io.print
+
+warp Matrix[const R: usize, const C: usize] {
+    cells: [f32; R * C] = [0.0; R * C]
+    fn transpose(self) -> Matrix[C, R] = Matrix[C, R]()
+    fn dims(self) -> (usize, usize) = (R, C)
+}
+
+warp Buf[const N: usize] {
+    data: [u8; N] = [0; N]
+    fn n(self) -> usize = N
+}
+
+warp Two[const CAP: usize] {
+    a: Buf[{CAP}] = Buf[CAP]()
+    b: Buf[{CAP * 2}] = Buf[CAP * 2]()
+    fn total(self) -> usize = .a.n() + .b.n()
+}
+
+warp Ring[T, const CAP: usize] {
+    slots: [?T; CAP] = [none; CAP]
+}
+
+fn capacity[const N: usize](r: Ring[u32, {N}]) -> usize = N
+
+const IS_WIN = target.os == .Windows
+const SIZES: [u8; 3] = [1, 2, 3]
+const LIMIT = SIZES.len()
+warp Cfg { const CAP = 4 }
+
+fn main() {
+    let m = Matrix[2, 3]()
+    print(m.dims())
+    print(m.transpose().dims())
+    print(m.cells.len())
+    let t = Two[3]()
+    print(t.total())
+    print(t.b.data)
+    print(capacity(Ring[u32, 4]()))
+    const if IS_WIN == (target.os == .Windows) { print("folded IS_WIN") }
+    const for i in 0..LIMIT { print(i) }
+    const for i in 0..Cfg.CAP { print(i) }
+}

@@ -577,6 +577,26 @@ impl Checker<'_> {
         self.fit(v, ty)
     }
 
+    /// The value of constant `def` (anything else: `None`), folded with its
+    /// own tables: `.Windows` and `SIZES.len()` in it were checked there.
+    fn fold_const(&mut self, def: DefId, depth: u32) -> Option<Val> {
+        let p = self.p;
+        let DefKind::Const(c) = &p.def(def).kind else { return None };
+        if let Some(&v) = self.r.untyped_consts.get(&def) {
+            return Some(Val::Int(v));
+        }
+        if let Some(&f) = self.r.untyped_floats.get(&def) {
+            return Some(Val::Float(f));
+        }
+        // Being checked right now (it names itself): no value yet.
+        if self.const_stack.contains(&def) {
+            return None;
+        }
+        let declared = self.const_ty(def);
+        let id = self.r.find(&Instance::of(def))?;
+        self.in_body(id, |this| this.fold_depth(&c.value, None, depth + 1, Some(declared)))
+    }
+
     /// `v` as a value of type `ty`: `None` if it isn't one.
     fn fit(&self, v: Val, ty: Option<Ty>) -> Option<Val> {
         match (v, ty.map(|t| self.tcx.kind(t))) {
@@ -623,17 +643,16 @@ impl Checker<'_> {
                 },
                 _ => None,
             },
-            ExprKind::Def { def, .. } => match &self.p.def(*def).kind {
-                DefKind::Const(c) => match (self.r.untyped_consts.get(def), self.r.untyped_floats.get(def)) {
-                    (Some(&v), _) => Some(Val::Int(v)),
-                    (_, Some(&f)) => Some(Val::Float(f)),
-                    _ => {
-                        let declared = self.r.const_ty.get(def).copied();
-                        self.fold_depth(&c.value, param, depth + 1, declared)
-                    }
-                },
-                _ => None,
+            ExprKind::Def { def, .. } => self.fold_const(*def, depth),
+            // `Cfg.CAP`, `.CAP`: an associated constant.
+            ExprKind::Assoc { .. } if self.b.assoc_values.contains_key(&e.id) => match self.b.assoc_values[&e.id] {
+                super::AssocValue::Const(def) => self.fold_const(def, depth),
+                super::AssocValue::Int(v) => Some(Val::Int(v)),
             },
+            ExprKind::LeadingDot(_) if self.b.leading_consts.contains_key(&e.id) => {
+                let def = self.b.leading_consts[&e.id];
+                self.fold_const(def, depth)
+            }
             ExprKind::Assoc { base, name } => {
                 let ty = self.lower_ty(base);
                 // `T.name`, `T.fields`: reflection.

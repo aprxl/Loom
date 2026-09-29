@@ -165,6 +165,29 @@ impl Checker<'_> {
         }
     }
 
+    /// A `const` parameter `e` depends on that has no value yet (in a
+    /// generic warp's template, `R * C` in `[f32; R * C]`): what stands for
+    /// it. Each instance works `e` out again with the values.
+    pub(super) fn unknown_const_in(&self, e: &Expr) -> Option<Ty> {
+        if let Some(t) = self.const_param_of(e) {
+            return (!matches!(self.tcx.kind(t), TyKind::Value(_))).then_some(t);
+        }
+        match &e.kind {
+            ExprKind::Binary { lhs, rhs, .. } => self.unknown_const_in(lhs).or_else(|| self.unknown_const_in(rhs)),
+            ExprKind::Unary { operand, .. } => self.unknown_const_in(operand),
+            ExprKind::Block(b) if b.stmts.len() == 1 => match &b.stmts[0].kind {
+                crate::hir::StmtKind::Expr(inner) => self.unknown_const_in(inner),
+                _ => None,
+            },
+            ExprKind::Call { callee, args } => match &callee.kind {
+                ExprKind::Field { base, .. } => self.unknown_const_in(base),
+                _ => None,
+            }
+            .or_else(|| args.iter().find_map(|a| self.unknown_const_in(&a.value))),
+            _ => None,
+        }
+    }
+
     /// The value of `e` if it names a `const` parameter whose value is known.
     pub(super) fn const_param_val(&self, e: &Expr) -> Option<Val> {
         match self.tcx.kind(self.const_param_of(e)?) {
@@ -183,6 +206,10 @@ impl Checker<'_> {
     /// `None` if it isn't known at compile time (reported).
     pub(super) fn const_arg(&mut self, e: &Expr, ty: Ty) -> Option<Ty> {
         if let Some(t) = self.const_param_of(e) {
+            return Some(t);
+        }
+        // `Buf[{CAP * 2}]` in a template: worked out for each instance.
+        if let Some(t) = self.unknown_const_in(e) {
             return Some(t);
         }
         let value = match (self.fold(e, None), self.tcx.kind(self.tcx.degauge(ty))) {

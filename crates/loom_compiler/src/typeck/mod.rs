@@ -1336,10 +1336,9 @@ impl<'p> Checker<'p> {
             HirTy::Error => self.tcx.error,
             HirTy::Array { elem, len } => {
                 let elem = self.lower_ty(elem);
-                // `[T; N]` in a template, or at a call before `N` is known.
-                if let Some(n) = self.const_param_of(len)
-                    && !matches!(self.tcx.kind(n), TyKind::Value(_))
-                {
+                // `[T; N]` (or `[T; R * C]`) in a template, or at a call before
+                // `N` is known.
+                if let Some(n) = self.unknown_const_in(len) {
                     return if self.tcx.is_error(elem) { elem } else { self.tcx.array_of(elem, n) };
                 }
                 match self.array_len(len) {

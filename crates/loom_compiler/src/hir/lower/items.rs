@@ -510,10 +510,34 @@ impl Resolver<'_> {
     pub(super) fn lower_generic_args(&mut self, args: &[ast::GenericArg]) -> Vec<GenericArg> {
         args.iter()
             .map(|a| match a {
+                // `Matrix[C, R]`: a name the parser took for a type may be a
+                // `const` parameter, an argument that's a value.
+                ast::GenericArg::Type(t) if self.names_const_param(t) => {
+                    let ast::TyKind::Path { segments, .. } = &t.kind else { unreachable!() };
+                    let name = ast::Expr { kind: ast::ExprKind::Name(segments[0].clone()), span: t.span };
+                    GenericArg::Expr(self.lower_expr(&name))
+                }
                 ast::GenericArg::Type(t) => GenericArg::Type(self.lower_ty(t)),
                 ast::GenericArg::Expr(e) => GenericArg::Expr(self.lower_expr(e)),
             })
             .collect()
+    }
+
+    /// Whether `t` is just the name of a `const` parameter: a generic one
+    /// (`const N: usize`) or a function's (`const n: usize`).
+    fn names_const_param(&mut self, t: &ast::Ty) -> bool {
+        let ast::TyKind::Path { segments, args } = &t.kind else { return false };
+        if segments.len() != 1 || !args.is_empty() {
+            return false;
+        }
+        match self.resolve_path(segments) {
+            PathRes::Value(def) => matches!(
+                &self.p.def(def).kind,
+                DefKind::GenericParam(g) if matches!(g.kind, crate::hir::GenericParamKind::Const { .. })
+            ),
+            PathRes::Local(_) => true,
+            _ => false,
+        }
     }
 
     pub(super) fn self_type_error(&mut self, span: Span) {
