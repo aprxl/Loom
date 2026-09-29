@@ -261,6 +261,7 @@ design/
   grammar.ebnf             a grammar sketch
   open-questions.md        the parts that aren't settled yet
   lua-backend.md           decisions for the Loom → Lua 5.4 backend
+  vm.md                    Treadle, Loom's own VM: the design and its milestones
 examples/
   tour.loom                everyday syntax in one file
   widgets.loom             OOP side: wefts, weaves, through, any, dot-blocks
@@ -311,8 +312,10 @@ built in `crates/`, following the plan in `design/lua-backend.md`:
   tests; `loom build <file>` writes the Lua; `--emit tokens|ast|hir|lua`
   dumps a stage; `loom docs` opens the documentation in your browser. The other examples use more than this; the compiler says
   so rather than guessing.
-- **Next:** Loom's own interpreter next to the Lua backend, then threads on
-  it, then spools, one slice at a time through every layer.
+- **Next:** Treadle, Loom's own VM, next to the Lua backend: a typed,
+  optimizing pipeline and a register interpreter, meant to outrun the
+  interpreters of other languages. `design/vm.md` has the design and the
+  milestones, including threads and spools on it.
 
 ```bash
 cargo run -p loom -- run tests/run/fizzbuzz.loom

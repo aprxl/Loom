@@ -7,7 +7,7 @@ Anything not built stops with a `U` code, and most stop with [U0102](diag:U0102)
 
 ## Next in line
 
-These are planned next, in this order: Loom's own interpreter, threads, spools.
+These are planned next, in this order: Loom's own VM (Treadle, designed in `design/vm.md`), threads, spools.
 
 ### Threads
 

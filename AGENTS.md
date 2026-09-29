@@ -127,10 +127,11 @@ language through every layer (type checking, lowering to Lua, the runtime,
     `tests/run/derive_json`). `examples/compile_time.loom` fails only for
     `std.sys`.
 
-Next: the checker gaps the review found (a move in a `match` guard, a lambda
-capturing what's lent as `mut`, `const` generics in type positions), then
-Loom's own interpreter next to the Lua backend (`design/vm.md` first), then
-threads on it, then spools.
+Next: Loom's own VM, Treadle, next to the Lua backend. `design/vm.md` is the
+design (a proposal: its decisions D1–D11 need a yes first) and its milestones
+V0–V9 say what each step builds and how it passes: V0 the skeleton, V1 the
+sequential language, V2 shuttles, V3 the optimizer, V4 compile-time code on
+Treadle, V5 threads, V6 spools, V7 Lua interop, V8 speed, V9 the default.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and
