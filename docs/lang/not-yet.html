@@ -29,6 +29,7 @@
 <li><a href="shuttles.html">Shuttles</a></li>
 <li><a href="compile-time.html">Compile-time code</a></li>
 <li><a href="const-params.html">Const parameters and control flow</a></li>
+<li><a href="reflection.html">Reflection</a></li>
 <li><a href="tests.html">Tests</a></li>
 <li><a class="current" href="not-yet.html">Not supported yet</a></li>
 </ul>
@@ -40,34 +41,7 @@
 <p>The design in <code>README.md</code> and <code>design/*.md</code> is bigger than what runs. This is the list of what doesn't run, from <code>design/lua-backend.md</code> and from trying it.</p>
 <p>Anything not built stops with a <code>U</code> code, and most stop with <a href="diagnostics.html#U0102">U0102</a>, "not implemented yet". The compiler doesn't guess and doesn't miscompile.</p>
 <h2 id="next-in-line">Next in line</h2>
-<p>These are planned next, in this order: reflection, threads, spools.</p>
-<h3 id="reflection">Reflection</h3>
-<p><code>T.name</code>, <code>T.kind</code>, <code>T.fields</code>, <code>T.cases</code>, <code>T.weaves(W)</code>, <code>v.(f)</code> and <code>v is .(c)</code>. Reflection is what will let <code>Show</code>, <code>Eq</code>, <code>Ord</code> and <code>Hash</code> be ordinary default methods that inspect the type. Until then, std's defaults for them, and <code>Error.message</code>, are built into the compiler.</p>
-<div class="sample" id="sample-nyet_reflect">
-<div class="sample-head"><span class="file">samples/nyet_reflect.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span></div>
-<pre class="code"><code><span class="k">use</span> std.io.print
-
-<span class="k">warp</span> <span class="t">Point</span> {
-    x: f64
-    y: f64
-}
-
-<span class="k">fn</span> main() {
-    <span class="c">// Reflection (`T.name`, `T.kind`, `T.fields`, `T.cases`) isn't built yet.</span>
-    <span class="k">const</span> <span class="k">for</span> f <span class="k">in</span> <span class="t">Point</span>.fields {
-        print(f.name)
-    }
-}</code></pre>
-<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[U0102]: not implemented yet: reflection (`T.fields`)</span>
-<span class="loc">   --&gt; nyet_reflect.loom:10:26</span>
-   |
-10 |     const for f in Point.fields {
-   |                          ^^^^^^ not supported by this compiler yet
-   |
-   = note: the type checker grows one milestone at a time; see design/lua-backend.md
-
-<span class="err">error: nyet_reflect.loom failed to type-check (1 error)</span></code></pre></div>
-</div>
+<p>These are planned next, in this order: Loom's own interpreter, threads, spools.</p>
 <h3 id="threads">Threads</h3>
 <p><code>loom { }</code> blocks, <code>thread</code>, <code>loom for</code>, <code>.join()</code>, and the types for sharing between threads, <code>Atomic[T]</code> and <code>Mutex[T]</code>. The two types are declared in <a href="../std/modules/sync.html">std.sync</a> and can't be built yet.</p>
 <div class="sample" id="sample-nyet_threads">
@@ -126,7 +100,7 @@
 <span class="err">error: nyet_spools.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
 <h2 id="compile-time-code">Compile-time code</h2>
-<p>The standard library's <code>std.sys</code> and reflection are not built:</p>
+<p>The standard library's <code>std.sys</code> is not built, and neither is layout reflection (<code>T.size</code>, <code>T.align</code>, <code>T.bits</code>), <code>f.ty</code> or <code>T.weaves(W)</code>:</p>
 <div class="sample" id="sample-nyet_sys">
 <div class="sample-head"><span class="file">samples/nyet_sys.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span></div>
 <pre class="code"><code><span class="k">fn</span> main() {
@@ -171,7 +145,7 @@
 <h2 id="running-programs">Running programs</h2>
 <ul><li>Ctrl-C handling (exit status 130), <code>process.exit</code>, an instruction budget for <code>loom run</code>, and running a bundle in an outside Lua (<code>--lua PATH</code>).</li><li>Async I/O and composing shuttles (<code>lexer().feed(parser())</code>) aren't in the design for this version.</li><li>The emitted Lua isn't optimized: checks the compiler could prove unneeded are still emitted. Speed comes later, with Loom's own interpreter.</li></ul>
 <h2 id="the-examples">The examples</h2>
-<p><code>examples/tour.loom</code>, <code>examples/widgets.loom</code>, <code>examples/ledger.loom</code> and <code>examples/chip8.loom</code> compile and run. <code>examples/lexer.loom</code> fails only at one line, the <code>lexer.Frame.size</code> assert, which needs reflection. <code>examples/compile_time.loom</code> fails only at reflection and <code>std.sys</code>. <code>examples/calc.loom</code> needs spools, <code>given</code> and <code>ref warp</code>, and <code>examples/parallel.loom</code> needs threads.</p>
+<p><code>examples/tour.loom</code>, <code>examples/widgets.loom</code>, <code>examples/ledger.loom</code> and <code>examples/chip8.loom</code> compile and run. <code>examples/lexer.loom</code> fails only at one line, the <code>lexer.Frame.size</code> assert, which needs reflection. <code>examples/compile_time.loom</code> fails only at <code>std.sys</code>. <code>examples/calc.loom</code> needs spools, <code>given</code> and <code>ref warp</code>, and <code>examples/parallel.loom</code> needs threads.</p>
 <div class="pager">
 <a href="tests.html">&larr; Tests</a>
 <a href="diagnostics.html">Diagnostic codes &rarr;</a>

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reflection · Loom</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a class="current" href="../lang/index.html">Language</a></li>
+<li><a href="../std/index.html">Standard library</a></li>
+<li><a href="../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Language</h3>
+<ul>
+<li><a href="index.html">Overview</a></li>
+<li><a href="start.html">Getting started</a></li>
+<li><a href="values.html">Values and control flow</a></li>
+<li><a href="types.html">Warps, wefts and weaves</a></li>
+<li><a href="generics.html">Generics and <code>any</code></a></li>
+<li><a href="collections.html">Collections and streams</a></li>
+<li><a href="errors.html">Optionals and errors</a></li>
+<li><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
+<li><a href="gauges.html">Gauges</a></li>
+<li><a href="shuttles.html">Shuttles</a></li>
+<li><a href="compile-time.html">Compile-time code</a></li>
+<li><a href="const-params.html">Const parameters and control flow</a></li>
+<li><a class="current" href="reflection.html">Reflection</a></li>
+<li><a href="tests.html">Tests</a></li>
+<li><a href="not-yet.html">Not supported yet</a></li>
+</ul>
+</nav>
+<main>
+<div class="crumb"><a href="index.html">Language</a> / Reflection</div>
+<h1>Reflection</h1>
+<p class="summary">What compile-time code learns about a type, and default methods that derive from a type's shape.</p>
+<p>Compile-time code can ask a type about itself. The answers are known while compiling, like a <code>const</code> parameter, so <code>const if</code> and <code>const for</code> can use them, and nothing reflective is left in the program. The types involved are in <a href="../std/modules/meta.html">std.meta</a>.</p>
+<h2 id="asking-a-type">Asking a type</h2>
+<table class="plain"><thead><tr><th>Expression</th><th>Gives you</th></tr></thead><tbody><tr><td><code>T.name</code></td><td>its name, <code>"Point"</code> (a warp's, without its arguments)</td></tr><tr><td><code>T.kind</code></td><td>a case of <code>Kind</code>: <code>.Record</code>, <code>.Sum</code>, <code>.Int</code>, <code>.Str</code>, <code>.List</code>, …</td></tr><tr><td><code>T.fields</code></td><td>a record's fields, a list of <code>Field</code>s</td></tr><tr><td><code>T.cases</code></td><td>a sum's cases, a list of <code>Case</code>s</td></tr><tr><td><code>f.name</code>, <code>f.is_pub</code></td><td>a field's name, and whether it's <code>pub</code></td></tr><tr><td><code>c.name</code>, <code>c.fields</code></td><td>a case's name, and its payload's fields</td></tr><tr><td><code>.len()</code>, <code>.is_empty()</code></td><td>of <code>T.fields</code>, <code>T.cases</code> or <code>c.fields</code></td></tr></tbody></table>
+<p>Two things use them in code that runs:</p>
+<ul><li><code>v.(f)</code> is <code>v</code>'s field <code>f</code>, where <code>f</code> is a <code>Field</code>. It reads and assigns like <code>v.x</code>.</li><li><code>v is .(c)</code> tests whether <code>v</code> is case <code>c</code>, and <code>v.(c).(f)</code> reads a field of that case's payload. Read it inside <code>if v is .(c)</code>: on any other case it unravels.</li></ul>
+<p><code>const for f in T.fields</code> writes its body out once per field, so <code>describe</code> below turns into straight-line code for each type it's called with.</p>
+<div class="sample" id="sample-refl_describe">
+<div class="sample-head"><span class="file">samples/refl_describe.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Point</span>: <span class="t">Show</span> {
+    <span class="k">pub</span> x: i32
+    y: i32
+}
+
+<span class="k">warp</span> <span class="t">Shape</span>: <span class="t">Show</span> {
+    <span class="k">case</span> <span class="t">Dot</span>
+    <span class="k">case</span> <span class="t">Circle</span>(r: f64)
+}
+
+<span class="k">fn</span> describe[T](v: T) {
+    print(<span class="s">"{</span>T.name<span class="s">} is a {</span>T.kind<span class="s">}"</span>)
+    <span class="k">const</span> <span class="k">if</span> T.kind == .<span class="t">Record</span> {
+        <span class="k">const</span> <span class="k">for</span> f <span class="k">in</span> T.fields {
+            print(<span class="s">"  {</span>f.name<span class="s">} = {</span>v.(f)<span class="s">}"</span>)
+        }
+    } <span class="k">else</span> <span class="k">if</span> T.kind == .<span class="t">Sum</span> {
+        <span class="k">const</span> <span class="k">for</span> c <span class="k">in</span> T.cases {
+            <span class="k">if</span> v <span class="k">is</span> .(c) {
+                print(<span class="s">"  case {</span>c.name<span class="s">}"</span>)
+                <span class="k">const</span> <span class="k">for</span> f <span class="k">in</span> c.fields {
+                    print(<span class="s">"    {</span>f.name<span class="s">} = {</span>v.(c).(f)<span class="s">}"</span>)
+                }
+            }
+        }
+    }
+}
+
+<span class="k">fn</span> main() {
+    describe(<span class="t">Point</span>(<span class="n">1</span>, <span class="n">2</span>))
+    describe(<span class="t">Shape</span>.<span class="t">Circle</span>(r: <span class="n">1.5</span>))
+    describe(<span class="t">Shape</span>.<span class="t">Dot</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>Point is a Record
+  x = 1
+  y = 2
+Shape is a Sum
+  case Circle
+    r = 1.5
+Shape is a Sum
+  case Dot</code></pre></div>
+</div>
+<h2 id="derive-is-a-default-method">Derive is a default method</h2>
+<p>Loom has no derive macros. A weft gives a default method that looks at <code>Self</code>, and every warp that lists the weft gets that method, worked out for its own fields. <code>examples/compile_time.loom</code> writes <code>ToJson</code> this way.</p>
+<div class="sample" id="sample-refl_derive">
+<div class="sample-head"><span class="file">samples/refl_derive.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">/// Anything that can list its fields. The default body works for any</span>
+<span class="c">/// record: `const for` writes out one line per field.</span>
+<span class="k">weft</span> <span class="t">Fields</span> {
+    <span class="k">fn</span> fields(<span class="k">self</span>) -&gt; <span class="t">String</span> {
+        <span class="k">var</span> out = <span class="t">String</span>()
+        <span class="k">const</span> <span class="k">for</span> (i, f) <span class="k">in</span> <span class="k">Self</span>.fields.indexed() {
+            <span class="k">const</span> <span class="k">if</span> i &gt; <span class="n">0</span> { out.push_str(<span class="s">", "</span>) }
+            out.push_str(<span class="s">"{</span>f.name<span class="s">}={</span><span class="k">self</span>.(f)<span class="s">}"</span>)
+        }
+        out
+    }
+}
+
+<span class="k">warp</span> <span class="t">Point</span>: <span class="t">Fields</span> { x: i32, y: i32 }
+<span class="k">warp</span> <span class="t">User</span>: <span class="t">Fields</span> { name: <span class="t">String</span>, age: u8 }
+
+<span class="k">fn</span> main() {
+    print(<span class="t">Point</span>(<span class="n">3</span>, <span class="n">4</span>).fields())
+    print(<span class="t">User</span>(name: <span class="s">"Ada"</span>, age: <span class="n">36</span>).fields())
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>x=3, y=4
+name=Ada, age=36</code></pre></div>
+</div>
+<p>Writing the method yourself replaces the default, like any other default method.</p>
+<h2 id="only-while-compiling">Only while compiling</h2>
+<p>A <code>Field</code>, a <code>Case</code> or a list of them has no value when the program runs. Anything read from one does: a name is text, <code>.len()</code> is a number. Keeping the list itself is <a href="diagnostics.html#K0111">K0111</a>.</p>
+<div class="sample" id="sample-refl_err_runtime">
+<div class="sample-head"><span class="file">samples/refl_err_runtime.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0111">K0111</a></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Point</span> { x: i32, y: i32 }
+
+<span class="k">fn</span> main() {
+    print(<span class="t">Point</span>.fields.len())
+    <span class="k">let</span> fields = <span class="t">Point</span>.fields
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[K0111]: reflection only exists while compiling</span>
+<span class="loc">  --&gt; refl_err_runtime.loom:7:18</span>
+  |
+7 |     let fields = Point.fields
+  |                  ^^^^^^^^^^^^ needed when the program runs
+  |
+  = help: read what you need from it at compile time: `f.name`, `self.(f)`, `const for f in T.fields`
+
+<span class="err">error: refl_err_runtime.loom failed to compile (1 error)</span></code></pre></div>
+</div>
+<h2 id="not-supported-yet">Not supported yet</h2>
+<ul><li><code>T.size</code>, <code>T.align</code>, <code>T.bits</code>, <code>f.ty</code> and <code>T.weaves(W)</code> are <a href="diagnostics.html#U0102">U0102</a>.</li><li>std's <code>Show</code>, <code>Eq</code>, <code>Ord</code> and <code>Hash</code> for warps are still built into the compiler rather than written as default methods with reflection.</li></ul>
+<div class="pager">
+<a href="const-params.html">&larr; Const parameters and control flow</a>
+<a href="tests.html">Tests &rarr;</a>
+</div>
+</main>
+</div>
+</body>
+</html>

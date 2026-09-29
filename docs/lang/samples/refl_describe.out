@@ -1,0 +1,8 @@
+Point is a Record
+  x = 1
+  y = 2
+Shape is a Sum
+  case Circle
+    r = 1.5
+Shape is a Sum
+  case Dot

@@ -29,6 +29,7 @@
 <li><a href="shuttles.html">Shuttles</a></li>
 <li><a class="current" href="compile-time.html">Compile-time code</a></li>
 <li><a href="const-params.html">Const parameters and control flow</a></li>
+<li><a href="reflection.html">Reflection</a></li>
 <li><a href="tests.html">Tests</a></li>
 <li><a href="not-yet.html">Not supported yet</a></li>
 </ul>
@@ -317,12 +318,12 @@
 <span class="err">error: ct_err_holds.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
 <h3 id="the-constant-folder">The constant folder</h3>
-<p>Two things are decided by a small evaluator in the compiler itself, not by the sandbox: what a <code>const</code> argument, a <code>const if</code> condition or a <code>const for</code> sequence is, and array lengths and gauge bounds. It handles literals, constants, <code>const</code> parameters, arithmetic, comparisons, <code>and</code>/<code>or</code>/<code>not</code>, an array's <code>.len()</code>, and a few integer methods. A top-level <code>const assert</code> that it can decide is reported without running the sandbox. When it can't work something out, you get <a href="diagnostics.html#K0109">K0109</a> or <a href="diagnostics.html#K0110">K0110</a> (see the next page), or <a href="diagnostics.html#U0102">U0102</a> for an array length or a type.</p>
+<p>Two things are decided by a small evaluator in the compiler itself, not by the sandbox: what a <code>const</code> argument, a <code>const if</code> condition or a <code>const for</code> sequence is, and array lengths and gauge bounds. It handles literals, constants, <code>const</code> parameters, arithmetic, comparisons, <code>and</code>/<code>or</code>/<code>not</code>, an array's <code>.len()</code>, a few integer methods, and <a href="reflection.html">reflection</a>. A top-level <code>const assert</code> that it can decide is reported without running the sandbox. When it can't work something out, you get <a href="diagnostics.html#K0109">K0109</a> or <a href="diagnostics.html#K0110">K0110</a> (see the next page), or <a href="diagnostics.html#U0102">U0102</a> for an array length or a type.</p>
 <h2 id="how-the-lua-backend-does-it">How the Lua backend does it</h2>
 <p>The compiler first builds a second Lua program whose "jobs" are the constants, <code>const</code> expressions and <code>const assert</code>s, and runs it in the sandbox. Then it builds the real program, which computes each constant again the first time it's read. The value is the same, because compile-time code can't depend on anything but itself, and the sandbox already proved it can't fail. Writing the computed values into the program instead is an optimization left for later.</p>
 <p><code>loom build</code>, <code>run</code>, <code>test</code> and <code>check</code> all run the compile-time jobs.</p>
 <h2 id="not-supported-yet">Not supported yet</h2>
-<p>Reflection (<code>T.name</code>, <code>T.fields</code>, <code>T.cases</code>, <code>v.(f)</code>) and types computed by <code>const fn</code>s are not built. <code>embed</code> and <code>embed_text</code> don't exist, and neither does <code>bolt.loom</code>. See <a href="not-yet.html">Not supported yet</a>.</p>
+<p>Types computed by <code>const fn</code>s are not built (<a href="reflection.html">reflection</a> is). <code>embed</code> and <code>embed_text</code> don't exist, and neither does <code>bolt.loom</code>. See <a href="not-yet.html">Not supported yet</a>.</p>
 <div class="pager">
 <a href="shuttles.html">&larr; Shuttles</a>
 <a href="const-params.html">Const parameters and control flow &rarr;</a>

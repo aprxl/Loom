@@ -60,4 +60,4 @@ A generic warp's field types are worked out again for each list of arguments, si
 
 ## Not supported yet
 
-Reflection (`T.kind`, `T.fields`), `std.sys`, and `const fn`s that return types are not built. `const` parameters of other types than integers and `bool` aren't either. See [Not supported yet](page:not-yet).
+`std.sys`, and `const fn`s that return types are not built. `const` parameters of other types than integers and `bool` aren't either. See [Not supported yet](page:not-yet).

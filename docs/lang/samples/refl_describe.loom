@@ -1,0 +1,36 @@
+use std.io.print
+
+warp Point: Show {
+    pub x: i32
+    y: i32
+}
+
+warp Shape: Show {
+    case Dot
+    case Circle(r: f64)
+}
+
+fn describe[T](v: T) {
+    print("{T.name} is a {T.kind}")
+    const if T.kind == .Record {
+        const for f in T.fields {
+            print("  {f.name} = {v.(f)}")
+        }
+    } else if T.kind == .Sum {
+        const for c in T.cases {
+            if v is .(c) {
+                print("  case {c.name}")
+                const for f in c.fields {
+                    print("    {f.name} = {v.(c).(f)}")
+                }
+            }
+        }
+    }
+}
+
+fn main() {
+    describe(Point(1, 2))
+    describe(Shape.Circle(r: 1.5))
+    describe(Shape.Dot)
+}
+//@ run

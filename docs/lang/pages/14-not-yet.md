@@ -7,13 +7,7 @@ Anything not built stops with a `U` code, and most stop with [U0102](diag:U0102)
 
 ## Next in line
 
-These are planned next, in this order: reflection, threads, spools.
-
-### Reflection
-
-`T.name`, `T.kind`, `T.fields`, `T.cases`, `T.weaves(W)`, `v.(f)` and `v is .(c)`. Reflection is what will let `Show`, `Eq`, `Ord` and `Hash` be ordinary default methods that inspect the type. Until then, std's defaults for them, and `Error.message`, are built into the compiler.
-
-@sample nyet_reflect
+These are planned next, in this order: Loom's own interpreter, threads, spools.
 
 ### Threads
 
@@ -29,7 +23,7 @@ These are planned next, in this order: reflection, threads, spools.
 
 ## Compile-time code
 
-The standard library's `std.sys` and reflection are not built:
+The standard library's `std.sys` is not built, and neither is layout reflection (`T.size`, `T.align`, `T.bits`), `f.ty` or `T.weaves(W)`:
 
 @sample nyet_sys
 
@@ -69,4 +63,4 @@ Also missing:
 
 ## The examples
 
-`examples/tour.loom`, `examples/widgets.loom`, `examples/ledger.loom` and `examples/chip8.loom` compile and run. `examples/lexer.loom` fails only at one line, the `lexer.Frame.size` assert, which needs reflection. `examples/compile_time.loom` fails only at reflection and `std.sys`. `examples/calc.loom` needs spools, `given` and `ref warp`, and `examples/parallel.loom` needs threads.
+`examples/tour.loom`, `examples/widgets.loom`, `examples/ledger.loom` and `examples/chip8.loom` compile and run. `examples/lexer.loom` fails only at one line, the `lexer.Frame.size` assert, which needs reflection. `examples/compile_time.loom` fails only at `std.sys`. `examples/calc.loom` needs spools, `given` and `ref warp`, and `examples/parallel.loom` needs threads.

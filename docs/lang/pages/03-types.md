@@ -51,7 +51,7 @@ A derived method needs every field to weave the weft too.
 
 @sample types_derive
 
-Right now these defaults are built into the compiler. Once reflection exists, they'll be ordinary default methods that inspect the type at compile time.
+Right now these defaults are built into the compiler. They're meant to become ordinary default methods that inspect the type with [reflection](page:reflection), as `ToJson` does.
 
 ## `through`
 

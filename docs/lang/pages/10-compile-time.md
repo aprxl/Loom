@@ -86,7 +86,7 @@ A constant is one value that every use copies, so it can't hold something that c
 
 ### The constant folder
 
-Two things are decided by a small evaluator in the compiler itself, not by the sandbox: what a `const` argument, a `const if` condition or a `const for` sequence is, and array lengths and gauge bounds. It handles literals, constants, `const` parameters, arithmetic, comparisons, `and`/`or`/`not`, an array's `.len()`, and a few integer methods. A top-level `const assert` that it can decide is reported without running the sandbox. When it can't work something out, you get [K0109](diag:K0109) or [K0110](diag:K0110) (see the next page), or [U0102](diag:U0102) for an array length or a type.
+Two things are decided by a small evaluator in the compiler itself, not by the sandbox: what a `const` argument, a `const if` condition or a `const for` sequence is, and array lengths and gauge bounds. It handles literals, constants, `const` parameters, arithmetic, comparisons, `and`/`or`/`not`, an array's `.len()`, a few integer methods, and [reflection](page:reflection). A top-level `const assert` that it can decide is reported without running the sandbox. When it can't work something out, you get [K0109](diag:K0109) or [K0110](diag:K0110) (see the next page), or [U0102](diag:U0102) for an array length or a type.
 
 ## How the Lua backend does it
 
@@ -96,4 +96,4 @@ The compiler first builds a second Lua program whose "jobs" are the constants, `
 
 ## Not supported yet
 
-Reflection (`T.name`, `T.fields`, `T.cases`, `v.(f)`) and types computed by `const fn`s are not built. `embed` and `embed_text` don't exist, and neither does `bolt.loom`. See [Not supported yet](page:not-yet).
+Types computed by `const fn`s are not built ([reflection](page:reflection) is). `embed` and `embed_text` don't exist, and neither does `bolt.loom`. See [Not supported yet](page:not-yet).

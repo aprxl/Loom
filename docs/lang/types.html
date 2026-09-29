@@ -29,6 +29,7 @@
 <li><a href="shuttles.html">Shuttles</a></li>
 <li><a href="compile-time.html">Compile-time code</a></li>
 <li><a href="const-params.html">Const parameters and control flow</a></li>
+<li><a href="reflection.html">Reflection</a></li>
 <li><a href="tests.html">Tests</a></li>
 <li><a href="not-yet.html">Not supported yet</a></li>
 </ul>
@@ -249,7 +250,7 @@ true true true
 [Version(major: 0, minor: 9), Version(major: 1, minor: 4), Version(major: 1, minor: 10)]
 1 still the same key</code></pre></div>
 </div>
-<p>Right now these defaults are built into the compiler. Once reflection exists, they'll be ordinary default methods that inspect the type at compile time.</p>
+<p>Right now these defaults are built into the compiler. They're meant to become ordinary default methods that inspect the type with <a href="reflection.html">reflection</a>, as <code>ToJson</code> does.</p>
 <h2 id="through"><code>through</code></h2>
 <p><code>through</code> forwards a field's methods, so a warp can reuse another's behavior without inheriting from it. Fields aren't forwarded, a method the outer warp defines wins, and a <code>Button</code> is not a <code>Frame</code>.</p>
 <div class="sample" id="sample-types_through">

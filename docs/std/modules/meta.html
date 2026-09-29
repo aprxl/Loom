@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>std.meta · Loom</title>
+<link rel="stylesheet" href="../../style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="../../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a href="../../lang/index.html">Language</a></li>
+<li><a class="current" href="../../std/index.html">Standard library</a></li>
+<li><a href="../../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Standard library</h3>
+<ul>
+<li><a href="../index.html">Overview</a></li>
+<li><a href="prelude.html">prelude</a></li>
+<li><a href="env.html">env</a></li>
+<li><a href="error.html">error</a></li>
+<li><a href="fmt.html">fmt</a></li>
+<li><a href="fs.html">fs</a></li>
+<li><a href="io.html">io</a></li>
+<li><a href="iter.html">iter</a></li>
+<li><a href="list.html">list</a></li>
+<li><a href="map.html">map</a></li>
+<li><a href="math.html">math</a></li>
+<li><a href="mem.html">mem</a></li>
+<li><a class="current" href="meta.html">meta</a></li>
+<li><a href="num.html">num</a></li>
+<li><a href="ops.html">ops</a></li>
+<li><a href="option.html">option</a></li>
+<li><a href="rand.html">rand</a></li>
+<li><a href="set.html">set</a></li>
+<li><a href="slice.html">slice</a></li>
+<li><a href="string.html">string</a></li>
+<li><a href="sync.html">sync</a></li>
+<li><a href="target.html">target</a></li>
+<li><a href="term.html">term</a></li>
+<li><a href="time.html">time</a></li>
+</ul>
+</nav>
+<main>
+<div class="crumb"><a href="../index.html">std</a> / meta</div>
+<h1>std.meta</h1>
+<p class="summary">Reflection: what compile-time code can learn about a type. <code>T.name</code>, <code>T.kind</code>, <code>T.fields</code> and <code>T.cases</code> are known while compiling, and so is everything read from them; none of it is left in the program.</p>
+<h2>Types</h2>
+<div class="item" id="Kind">
+<div class="item-head">
+<span class="sig">warp <strong>Kind</strong>: Eq, Show</span>
+
+</div>
+<p class="item-doc">What kind of type a type is: <code>T.kind</code>.</p>
+<ul class="cases">
+<li><span class="sig">case Record</span></li>
+<li><span class="sig">case Sum</span></li>
+<li><span class="sig">case Tuple</span></li>
+<li><span class="sig">case Unit</span></li>
+<li><span class="sig">case Bool</span></li>
+<li><span class="sig">case Int</span></li>
+<li><span class="sig">case Float</span></li>
+<li><span class="sig">case Char</span></li>
+<li><span class="sig">case Str</span></li>
+<li><span class="sig">case Array</span></li>
+<li><span class="sig">case Slice</span></li>
+<li><span class="sig">case List</span></li>
+<li><span class="sig">case Map</span></li>
+<li><span class="sig">case Set</span></li>
+<li><span class="sig">case Optional</span></li>
+<li><span class="sig">case Result</span></li>
+<li><span class="sig">case Fn</span></li>
+<li><span class="sig">case Any</span></li>
+<li><span class="sig">case Union</span></li>
+<li><span class="sig">case Other</span></li>
+</ul>
+</div>
+<div class="item" id="Field">
+<div class="item-head">
+<span class="sig">warp <strong>Field</strong>: Copy</span>
+<span class="badge builtin">builtin</span>
+</div>
+<p class="item-doc">A field of a record, or of a case's payload: an item of <code>T.fields</code> or <code>c.fields</code>. It has a <code>name: str</code> and <code>is_pub: bool</code>, and <code>v.(f)</code> is <code>v</code>'s field <code>f</code>. Only compile-time code has one.</p>
+</div>
+<div class="item" id="Case">
+<div class="item-head">
+<span class="sig">warp <strong>Case</strong>: Copy</span>
+<span class="badge builtin">builtin</span>
+</div>
+<p class="item-doc">A case of a sum: an item of <code>T.cases</code>. It has a <code>name: str</code> and <code>fields</code>, and <code>v is .(c)</code> tests whether <code>v</code> is case <code>c</code>. Only compile-time code has one.</p>
+</div>
+</main>
+</div>
+</body>
+</html>

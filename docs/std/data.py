@@ -253,6 +253,21 @@ MODULES = [
 },
 
 {
+  "name": "meta",
+  "summary": "Reflection: what compile-time code can learn about a type. `T.name`, `T.kind`, `T.fields` and `T.cases` are known while compiling, and so is everything read from them; none of it is left in the program.",
+  "types": [
+    {"kind": "warp", "name": "Kind", "suffix": ": Eq, Show",
+     "doc": "What kind of type a type is: `T.kind`.",
+     "cases": ["Record", "Sum", "Tuple", "Unit", "Bool", "Int", "Float", "Char", "Str", "Array", "Slice",
+               "List", "Map", "Set", "Optional", "Result", "Fn", "Any", "Union", "Other"]},
+    {"kind": "warp", "name": "Field", "suffix": ": Copy", "builtin": True,
+     "doc": "A field of a record, or of a case's payload: an item of `T.fields` or `c.fields`. It has a `name: str` and `is_pub: bool`, and `v.(f)` is `v`'s field `f`. Only compile-time code has one."},
+    {"kind": "warp", "name": "Case", "suffix": ": Copy", "builtin": True,
+     "doc": "A case of a sum: an item of `T.cases`. It has a `name: str` and `fields`, and `v is .(c)` tests whether `v` is case `c`. Only compile-time code has one."},
+  ],
+},
+
+{
   "name": "num",
   "summary": "Numbers.",
   "types": [

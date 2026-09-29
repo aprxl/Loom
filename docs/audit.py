@@ -118,7 +118,10 @@ def parse_module(path):
             continue
         if s.startswith("#builtin"):
             builtin = True
-            continue
+            # `#builtin pub warp Field: Copy {}`: the item can follow it.
+            s = s[len("#builtin"):].strip()
+            if not s:
+                continue
         ctx = stack[-1][0] if stack else "top"
         text, example = doc_and_example(docs)
         handled = False

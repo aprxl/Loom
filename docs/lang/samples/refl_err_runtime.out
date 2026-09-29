@@ -1,0 +1,9 @@
+error[K0111]: reflection only exists while compiling
+  --> docs/lang/samples/refl_err_runtime.loom:7:18
+  |
+7 |     let fields = Point.fields
+  |                  ^^^^^^^^^^^^ needed when the program runs
+  |
+  = help: read what you need from it at compile time: `f.name`, `self.(f)`, `const for f in T.fields`
+
+error: docs/lang/samples/refl_err_runtime.loom failed to compile (1 error)
