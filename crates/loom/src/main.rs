@@ -32,6 +32,10 @@ const EXIT_COMPILE_ERROR: u8 = 2;
 const EXIT_INTERNAL: u8 = 70;
 const EXIT_UNRAVEL: u8 = 101;
 
+/// How many diagnostics one report shows; the rest are counted. Past the
+/// first few, they're mostly the same mistake again.
+const MAX_SHOWN: usize = 50;
+
 #[derive(Debug, Parser)]
 #[command(name = "loom", version, about = "The Loom compiler: Loom → Lua 5.4")]
 struct Cli {
@@ -171,10 +175,15 @@ fn report(
     stage: &str,
     color: ColorMode,
 ) -> Result<(), ExitCode> {
-    if !diagnostics.is_empty()
-        && let Err(e) = emit_to_stderr(db, diagnostics, color)
+    let shown = &diagnostics[..diagnostics.len().min(MAX_SHOWN)];
+    if !shown.is_empty()
+        && let Err(e) = emit_to_stderr(db, shown, color)
     {
         eprintln!("error: couldn't write diagnostics: {e}");
+    }
+    let hidden = diagnostics.len() - shown.len();
+    if hidden > 0 {
+        eprintln!("note: {hidden} more not shown\n");
     }
     let errors = diagnostics.iter().filter(|d| d.is_error()).count();
     if errors == 0 {
