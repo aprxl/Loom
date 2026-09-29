@@ -123,6 +123,10 @@ struct MoveCx {
     /// Locals a `defer` in an enclosing block still needs at its end, with
     /// where that `defer` is.
     held: Vec<(LocalId, Span)>,
+    /// While a `match` guard is gone through: what it can't move, since the
+    /// next arm needs it when the guard is false (the arm's bindings and the
+    /// matched variable), with the guard.
+    guarding: Vec<(LocalId, Span)>,
     /// The `once` locals declared in each block being gone through,
     /// innermost last.
     scopes: Vec<Vec<LocalId>>,
@@ -240,7 +244,14 @@ impl Checker<'_> {
                     cx.flow = before.clone();
                     self.bind_parts(cx, &arm.pat, root.as_ref());
                     if let Some(guard) = &arm.guard {
+                        let mark = cx.guarding.len();
+                        let mut locals = pat_locals(&arm.pat);
+                        if let Some(Root::Local(l)) = root {
+                            locals.push(l);
+                        }
+                        cx.guarding.extend(locals.into_iter().map(|l| (l, guard.span)));
                         self.mv(cx, guard, false);
+                        cx.guarding.truncate(mark);
                     }
                     self.mv(cx, &arm.body, owning);
                     let flow = std::mem::take(&mut cx.flow);
@@ -584,6 +595,13 @@ impl Checker<'_> {
                 let shared = self.shares_table(&arg.value);
                 places.push((root, path, mode_of(super::ArgSource::Arg(i)), arg.value.span, shared));
             }
+            // A lambda uses what it captures whenever the callee calls it,
+            // so it may reach a value lent as `mut` behind the callee's back.
+            if matches!(arg.value.kind, ExprKind::Lambda { .. }) {
+                for &l in cx.lambda_caps.get(&arg.value.id).into_iter().flatten() {
+                    places.push((Root::Local(l), Vec::new(), ParamMode::Read, arg.value.span, true));
+                }
+            }
         }
         for (root, _, mode, span, _) in &places {
             if let (Root::Local(l), ParamMode::Mut) = (root, mode) {
@@ -631,12 +649,7 @@ impl Checker<'_> {
         let Root::Local(local) = root else { return };
         self.check_use(cx, local, &path, e.span);
         self.check_borrow(cx, local, e.span);
-        let declared = cx.depth_of.get(&local).copied();
-        for (depth, captured) in cx.captures.iter_mut() {
-            if declared.is_some_and(|d| d < *depth) && !captured.contains(&local) {
-                captured.push(local);
-            }
-        }
+        capture(cx, local);
         if !owning || self.is_copy_expr(e) {
             return;
         }
@@ -704,6 +717,17 @@ impl Checker<'_> {
                     .help(format!(
                         "to clean up `{owner_name}` only while it's still here, write `defer {owner_name} => …`"
                     )),
+            );
+            return;
+        }
+        if let Some(&(_, guard)) = cx.guarding.iter().find(|(l, _)| *l == owner || *l == local) {
+            let name = self.p.local(local).name.clone();
+            self.report(
+                cx,
+                Diagnostic::error(codes::M0102, format!("a guard can't move `{name}`"))
+                    .primary(span, "moved here")
+                    .secondary(guard, "when this is false, the next arm still needs it")
+                    .help("copy it (`x.copy()`), or test something that only reads it"),
             );
             return;
         }
@@ -820,6 +844,7 @@ impl Checker<'_> {
             return;
         }
         if let Some((Root::Local(l), path)) = self.place_of(cx, target) {
+            capture(cx, l);
             self.changes(cx, l, target.span);
             if let (true, AssignOp::Assign, Some(value)) = (path.is_empty(), op, value) {
                 self.new_borrow(cx, l, value);
@@ -1013,6 +1038,17 @@ impl Checker<'_> {
             && !self.diags.iter().any(|d| d.code.id == code.id && d.labels.iter().any(|l| l.primary && l.span == span))
         {
             self.diags.push(diag);
+        }
+    }
+}
+
+/// `local` is used inside each lambda being gone through that it's declared
+/// outside of: they capture it.
+fn capture(cx: &mut MoveCx, local: LocalId) {
+    let declared = cx.depth_of.get(&local).copied();
+    for (depth, captured) in cx.captures.iter_mut() {
+        if declared.is_some_and(|d| d < *depth) && !captured.contains(&local) {
+            captured.push(local);
         }
     }
 }

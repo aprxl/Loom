@@ -57,6 +57,16 @@ fn swap(mut a: i32, mut b: i32) {
 
 fn add_to(mut xs: List[i32], ys: [i32]) = xs.extend(ys)
 
+fn with_cb(mut xs: List[i32], cb: () => ()) = cb()
+
+fn guard(take o: ?String) {
+    match o {
+        some(s) if keep(s).len() > 3 => {}          //~ M0102
+        some(s) => { keep(s) }
+        none => {}
+    }
+}
+
 fn main() {
     var n = 1
     var m = 2
@@ -66,4 +76,6 @@ fn main() {
     add_to(mut xs, xs)                             //~ M0104
     var pair = (1, 2)
     swap(mut pair.0, mut pair.1)
+    with_cb(mut xs, () => xs.push(2))              //~ M0104
+    with_cb(mut xs, () => { let k = n })
 }
