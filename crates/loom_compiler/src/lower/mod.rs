@@ -314,13 +314,15 @@ impl<'a> Lowerer<'a> {
 
     /// The name of a function instance in `F`. A function checked as written
     /// is named after its definition; one checked for particular types (a
-    /// `Self`, generic arguments) also gets its instance number.
+    /// `Self`, generic arguments) also gets its instance number, after an
+    /// `i`: `f_5_i3`. A definition's name always ends in `_` and digits, so
+    /// it can't be an instance's (`fn f_5` is `f_5_3`).
     fn fn_name(&self, id: BodyId) -> String {
         let inst = self.typed.results.instance(id);
         if inst.self_ty.is_none() && inst.args.is_empty() && !inst.forward {
             self.def_name(inst.def)
         } else {
-            format!("{}_{}", self.def_name(inst.def), id.0)
+            format!("{}_i{}", self.def_name(inst.def), id.0)
         }
     }
 
