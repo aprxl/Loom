@@ -1,0 +1,11 @@
+// The same goes for a map, whether the loop is a `for` or a stream's `each`.
+use std.io.print
+
+fn main() {
+    var m = ["a": 1, "b": 2, "c": 3]
+    let drop_b = () => { m.remove("b"); () }
+    m.keys().each(k => {
+        print(k)
+        drop_b()
+    })
+}

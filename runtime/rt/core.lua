@@ -458,6 +458,15 @@ function rt.idx(i, n)
   return i + 1
 end
 
+-- A loop over list `s` (or a slice of it, or a map or set: `what`), which had
+-- `n` items when it started: it can't change under the loop. The checker
+-- stops the loop's body from changing it, but not a lambda the body calls.
+function rt.same_len(s, n, what)
+  if s.n ~= n then
+    error(sformat("%sthe %s changed while a loop went over it (len %d, now %d)", MARK, what or "list", n, s.n), 2)
+  end
+end
+
 --- A view of all of an array or a list.
 function rt.view(s)
   return { t = s, o = 0, n = s.n }
@@ -1184,9 +1193,11 @@ end
 --- describes.
 function rt.seq_stream(d, s)
   local t, o, n = parts(s)
+  local len = t.n
   local i = 0
   return function()
     if i >= n then return nil end
+    rt.same_len(t, len)
     i = i + 1
     return true, copy(d, t[o + i])
   end
@@ -1778,6 +1789,7 @@ local function coll_stream(m, item)
   local i, n = 0, m.n
   return function()
     if i >= n then return nil end
+    rt.same_len(m, n, m.vals and "map" or "set")
     i = i + 1
     return true, item(i)
   end

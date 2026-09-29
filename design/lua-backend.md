@@ -174,7 +174,11 @@ locals are fresh. Its body is lowered as a function of its own: `return`
 leaves the lambda, and a `?` in it leaves the lambda too (labels don't cross
 into a Lua function). A function's name used as a value is its `F` entry.
 Escape checking (the `^(…)` rule for stored closures) comes with the region
-checker; for now a stored lambda simply works.
+checker; for now a stored lambda simply works. Until then, a stored lambda
+can change a list, map or set while a loop goes over it (the move checker
+only stops the loop's body itself), so every loop over one checks, each
+time around, that its length hasn't changed, and unravels if it has
+(`rt.same_len`).
 
 A `Stream[T]` is a Lua function returning `true, item` (`true` first, since
 an item can be `nil`), so `for x in s` is Lua's generic `for _, x in s do`.

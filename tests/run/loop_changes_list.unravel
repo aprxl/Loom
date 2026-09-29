@@ -1,0 +1,2 @@
+the list changed while a loop went over it (len 3, now 0)
+line 8

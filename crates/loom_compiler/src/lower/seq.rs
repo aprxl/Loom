@@ -126,14 +126,18 @@ impl Lowerer<'_> {
     pub(super) fn for_seq(&mut self, e: &hir::Expr, pat: &hir::Pat, iter: &hir::Expr, body: &hir::Block, seq: Seq) {
         let v = if self.is_place(iter) { self.lower_place(iter) } else { self.lower_expr(iter) };
         let s = self.spill_always(v);
+        let mut guard = None;
         let (t, lo, hi) = match seq {
             Seq::Array(_, n) => (s, Expr::Int(1), Expr::Int(n as i64)),
             Seq::List(_) => {
                 let n = self.spill_always(Expr::field(s.clone(), "n"));
+                guard = Some(Expr::rt("same_len", vec![s.clone(), n.clone()]));
                 (s, Expr::Int(1), n)
             }
             Seq::Slice(_) => {
                 let t = self.spill_always(Expr::field(s.clone(), "t"));
+                let len = self.spill_always(Expr::field(t.clone(), "n"));
+                guard = Some(Expr::rt("same_len", vec![t.clone(), len]));
                 let o = self.spill_always(Expr::field(s.clone(), "o"));
                 let hi = Expr::bin("+", o.clone(), Expr::field(s, "n"));
                 (t, Expr::bin("+", o, Expr::Int(1)), hi)
@@ -145,11 +149,16 @@ impl Lowerer<'_> {
             PatKind::Bind(local) if self.p.local(*local).mutable => Some(*local),
             _ => None,
         };
-        let mut body_stmts = self.nested(|this| match alias {
-            Some(local) => {
-                this.aliases.insert(local, elem.clone());
+        let mut body_stmts = self.nested(|this| {
+            if let Some(guard) = guard {
+                this.push(StmtKind::Call(guard));
             }
-            None => this.bind_irrefutable(pat, elem.clone()),
+            match alias {
+                Some(local) => {
+                    this.aliases.insert(local, elem.clone());
+                }
+                None => this.bind_irrefutable(pat, elem.clone()),
+            }
         });
         body_stmts.extend(self.loop_body(e.id, Dest::Discard, body));
         if let Some(local) = alias {

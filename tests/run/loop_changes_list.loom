@@ -1,0 +1,12 @@
+// A lambda the loop's body calls can't change the list the loop goes over
+// either: the loop unravels rather than going on over a list that shrank.
+use std.io.print
+
+fn main() {
+    var zs: List[String] = ["a", "b", "c"]
+    let clear = () => zs.clear()
+    for x in zs {
+        print("{x} {x.len()}")
+        clear()
+    }
+}
