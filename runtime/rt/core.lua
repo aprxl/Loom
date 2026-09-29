@@ -2504,9 +2504,11 @@ local GAVE_UP = "\31LOOMS\31"
 --- needs its own value. Returns what the compile-time host calls after a
 --- failure: the constants being computed then are never computed again.
 function rt.lazy(C, init)
-  local busy, failed = {}, {}
+  -- `nils`: the constants computed to nil (`none`), which `C` can't hold.
+  local busy, failed, nils = {}, {}, {}
   setmetatable(C, {
     __index = function(t, k)
+      if nils[k] then return nil end
       if failed[k] then error(GAVE_UP, 0) end
       if busy[k] then error(CYCLE .. k, 2) end
       local f = init[k]
@@ -2514,7 +2516,7 @@ function rt.lazy(C, init)
       busy[k] = true
       local v = f()
       busy[k] = nil
-      rawset(t, k, v)
+      if v == nil then nils[k] = true else rawset(t, k, v) end
       return v
     end,
   })

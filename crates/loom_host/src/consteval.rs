@@ -178,19 +178,23 @@ mod tests {
     #[test]
     fn constants_are_computed_once_and_cycles_are_caught() {
         let results = jobs(
-            "local n = 0\n\
+            "local n, none = 0, 0\n\
                             CI.A = function() n = n + 1; return 7 end\n\
                             CI.B = function() return C.B end\n\
                             CI.D = function() return C.B + 1 end\n\
+                            CI.N = function() none = none + 1; return nil end\n\
                             return { abort = abort, jobs = {\n\
                             function() local _ = C.A + C.A; if n ~= 1 then return 'twice' end end,\n\
                             function() local _ = C.B end,\n\
                             function() local _ = C.D end,\n\
+                            function() local _, _ = C.N, C.N; if none ~= 1 then return 'nil twice' end end,\n\
                             } }",
         );
         assert_eq!(results[0], JobResult::Ok);
         assert!(matches!(&results[1], JobResult::Cycle { key, .. } if key == "B"), "{results:?}");
         assert_eq!(results[2], JobResult::Skipped);
+        // A constant that's `none` is computed once too.
+        assert_eq!(results[3], JobResult::Ok);
     }
 
     #[test]
