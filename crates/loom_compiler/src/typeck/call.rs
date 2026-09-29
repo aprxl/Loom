@@ -534,7 +534,11 @@ impl Checker<'_> {
         };
         match self.member(info.def, name) {
             Some(Member::Case(case)) => self.construct(call.id, &info, Some(case), Some(args), call.span),
-            Some(Member::AssocFn(def) | Member::Method(def)) => self.call_fn(call, Instance::of(def), args, None),
+            // `W[i32].zero()`: the warp's arguments are the function's too.
+            Some(Member::AssocFn(def) | Member::Method(def)) => {
+                let inst = self.member_instance(def, ty);
+                self.call_fn(call, inst, args, None)
+            }
             Some(Member::Const(_)) => {
                 self.error(
                     codes::T0106,

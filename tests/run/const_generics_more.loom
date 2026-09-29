@@ -13,6 +13,12 @@ warp Matrix[const R: usize, const C: usize] {
 warp Buf[const N: usize] {
     data: [u8; N] = [0; N]
     fn n(self) -> usize = N
+    fn capacity() -> usize = N
+}
+
+warp Cell[T] {
+    value: T
+    fn describe() -> str = "a cell"
 }
 
 warp Two[const CAP: usize] {
@@ -44,4 +50,6 @@ fn main() {
     const if IS_WIN == (target.os == .Windows) { print("folded IS_WIN") }
     const for i in 0..LIMIT { print(i) }
     const for i in 0..Cfg.CAP { print(i) }
+    print(Buf[5].capacity())
+    print(Cell[i32].describe())
 }
