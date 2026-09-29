@@ -796,7 +796,7 @@ impl Lowerer<'_> {
         let outs: Vec<usize> = modes
             .iter()
             .enumerate()
-            .filter(|(_, p)| p.mode == ParamMode::Mut && !self.is_table(p.ty))
+            .filter(|(_, p)| p.mode == ParamMode::Mut && !self.mut_in_place(p.ty))
             .map(|(k, _)| k)
             .collect();
         let shift = usize::from(receiver_base.is_some());

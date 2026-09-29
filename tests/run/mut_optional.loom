@@ -1,0 +1,79 @@
+// `mut` parameters of every kind of type, and `?T` ones in particular:
+// `none` is `nil`, so they're copied in and out rather than written into.
+use std.io.print
+warp P: Copy, Show { x: i32 }
+warp Bag: Show { xs: List[i32] }
+fn set_p(mut o: ?P) { o = some(P(1)) }
+fn clear_p(mut o: ?P) { o = none }
+fn bump_p(mut o: ?P) { if o is some(p) { o = some(P(p.x + 1)) } }
+fn set_i(mut o: ?i32) { o = some(5) }
+fn set_ii(mut o: ??i32) { o = some(none) }
+fn set_u(mut u: P | i32) { u = 42 }
+fn set_u2(mut u: P | i32) { u = P(9) }
+fn set_t(mut t: (i32, P)) { t = (7, P(7)) }
+fn set_tt(mut t: (i32, i32)) { t.0 = 100 }
+fn set_b(mut o: ?Bag) { o = some(Bag([1])) }
+fn set_l(mut l: ?List[i32]) { l = some([1, 2]) }
+fn set_a(mut a: [i32; 2]) { a = [9, 9] }
+fn set_s(mut s: str) { s = "changed" }
+fn set_r(mut r: i32 ! Bag) { r = ok(3) }
+fn set_rp(mut r: P ! P) { r = err(P(4)) }
+fn set_u_unit(mut o: ?()) { o = some(()) }
+fn grab(mut o: ?P) -> ?P { o.take() }
+fn main() {
+    var a: ?P = none
+    set_p(mut a)
+    print("{a:?}")
+    clear_p(mut a)
+    print("{a:?}")
+    a = some(P(5))
+    bump_p(mut a)
+    print("{a:?}")
+    var b: ?i32 = none
+    set_i(mut b)
+    print("{b:?}")
+    var c: ??i32 = none
+    set_ii(mut c)
+    print("{c:?}")
+    var u: P | i32 = P(1)
+    set_u(mut u)
+    print("{u:?}")
+    set_u2(mut u)
+    print("{u:?}")
+    var t = (1, P(1))
+    set_t(mut t)
+    print("{t:?}")
+    var tt = (1, 2)
+    set_tt(mut tt)
+    print("{tt:?}")
+    var ob: ?Bag = none
+    set_b(mut ob)
+    print("{ob:?}")
+    var ol: ?List[i32] = none
+    set_l(mut ol)
+    print("{ol:?}")
+    var arr = [1, 2]
+    set_a(mut arr)
+    print("{arr:?}")
+    var s: str = "orig"
+    set_s(mut s)
+    print(s)
+    var r: i32 ! Bag = err(Bag([]))
+    set_r(mut r)
+    print("{r:?}")
+    var rp: P ! P = ok(P(0))
+    set_rp(mut rp)
+    print("{rp:?}")
+    var uu: ?() = none
+    set_u_unit(mut uu)
+    print("{uu:?}")
+    var f: [?P; 2] = [none, none]
+    set_p(mut f[0])
+    print("{f:?}")
+    var w: List[?P] = [none]
+    set_p(mut w[0])
+    print("{w:?}")
+    var g: ?P = some(P(3))
+    let got = grab(mut g)
+    print("{got:?} {g:?}")
+}

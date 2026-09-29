@@ -1,0 +1,19 @@
+some(P(x: 1))
+none
+some(P(x: 6))
+some(5)
+some(none)
+42
+P(x: 9)
+(7, P(x: 7))
+(100, 2)
+some(Bag(xs: [1]))
+some([1, 2])
+[9, 9]
+changed
+ok(3)
+err(P(x: 4))
+some(())
+[some(P(x: 1)), none]
+[some(P(x: 1))]
+some(P(x: 3)) none

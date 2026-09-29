@@ -75,7 +75,9 @@ SourceDb → lex → Tokens → parse → AST → resolve/desugar → HIR
     generated `overwrite_T(dst, fresh)`;
   - scalar-backed: copy-in/copy-out via extra return values, always through
     temporaries (`local r, t = f(p.x); p.x = t`), because Lua's multiple
-    assignment has no defined evaluation order.
+    assignment has no defined evaluation order;
+  - `?T`, even when `T` is table-backed: copy-in/copy-out too, since
+    `none` is `nil` and nothing can be written into it.
 - Fallible functions return `true, v` or `false, e`, followed by copy-outs.
   *For now* a result is always the table `{true, v}` / `{false, e}`, in
   returns too: two slots are an optimization for later.

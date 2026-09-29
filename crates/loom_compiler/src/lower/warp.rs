@@ -78,6 +78,14 @@ impl Lowerer<'_> {
         }
     }
 
+    /// Whether a `mut` parameter of type `ty` is the caller's table, written
+    /// into in place; otherwise it's copied in and out. A `?T` isn't, even
+    /// when `T` is a table: `none` is `nil`, which nothing can be written
+    /// into.
+    pub(super) fn mut_in_place(&self, ty: Ty) -> bool {
+        self.is_table(ty) && !matches!(self.tcx().kind(ty), TyKind::Optional(_))
+    }
+
     /// Whether `e` names a place: a variable, a constant (computed once,
     /// and read by every use), or a field of one.
     pub(super) fn is_place(&self, e: &hir::Expr) -> bool {
@@ -269,7 +277,7 @@ impl Lowerer<'_> {
         let ty = self.tables().local_ty.get(&l).copied().unwrap_or(self.typed.tcx.error);
         local.mutable
             && matches!(local.kind, crate::hir::LocalKind::Param | crate::hir::LocalKind::SelfParam)
-            && self.is_table(ty)
+            && self.mut_in_place(ty)
     }
 
     // ------------------------------------------------------------ dot-blocks

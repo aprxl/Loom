@@ -115,7 +115,7 @@ impl Lowerer<'_> {
                     .sigs
                     .get(next)
                     .and_then(|s| s.params.first())
-                    .is_some_and(|p| p.mode == ParamMode::Mut && !self.is_table(p.ty));
+                    .is_some_and(|p| p.mode == ParamMode::Mut && !self.mut_in_place(p.ty));
                 let f = Expr::field(Expr::name("F"), &self.fn_name(*next));
                 Expr::rt("iter_stream", vec![f, v, Expr::Bool(boxed), Expr::Bool(copy_out)])
             }

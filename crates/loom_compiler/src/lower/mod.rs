@@ -657,7 +657,7 @@ impl<'a> Lowerer<'a> {
         sig.params
             .iter()
             .enumerate()
-            .filter(|(_, p)| p.mode == loom_syntax::ast::ParamMode::Mut && !self.is_table(p.ty))
+            .filter(|(_, p)| p.mode == loom_syntax::ast::ParamMode::Mut && !self.mut_in_place(p.ty))
             .map(|(k, _)| k)
             .collect()
     }
@@ -670,7 +670,7 @@ impl<'a> Lowerer<'a> {
         f.params
             .iter()
             .zip(&sig.params)
-            .filter(|(_, p)| p.mode == loom_syntax::ast::ParamMode::Mut && !self.is_table(p.ty))
+            .filter(|(_, p)| p.mode == loom_syntax::ast::ParamMode::Mut && !self.mut_in_place(p.ty))
             .map(|(param, _)| Expr::name(self.local_name(param.local)))
             .collect()
     }
