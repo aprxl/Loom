@@ -234,8 +234,16 @@ impl Checker<'_> {
         info.ty = ty;
         if concrete {
             // Written out again for these arguments: a field's type can be
-            // computed from them (`uint(N.log2())`).
+            // computed from them (`uint(N.log2())`). What goes wrong says
+            // which arguments did it.
+            let mark = self.diags.len();
             let (fields, cases) = self.warp_layout(def, w, ty, map);
+            if self.diags.len() > mark {
+                let name = format!("note: in `{}`", self.show(ty));
+                for diag in &mut self.diags[mark..] {
+                    diag.notes.push(name.clone());
+                }
+            }
             info.fields = fields;
             info.cases = cases;
         } else {
