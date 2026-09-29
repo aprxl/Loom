@@ -358,6 +358,9 @@ compares `vt.d` with `Button`'s descriptor, which is unique per type. An
 - Map and Set preserve insertion order.
 - f64 Display is Rust-like: `17`, `-3`, `1.5`, `inf`, `NaN`. Debug adds `.0`.
   Never Lua's `tostring`.
+- A format spec's width and precision are at most 65535, as in Rust (T0117
+  past that); a precision above 99 is U0102, since `string.format` stops
+  there.
 - Every type has a builtin structural Debug in v1.
 - An unravel inside a defer during an unravel replaces the first one.
 - `target.os` is the build host's OS; `target.pointer_bits` is 63.

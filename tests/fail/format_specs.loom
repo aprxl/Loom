@@ -1,0 +1,12 @@
+// A format spec's width and precision are 16-bit numbers, as in Rust, and
+// the Lua backend gives at most 99 digits after the point.
+use std.io.print
+
+fn main() {
+    let x = 3.25
+    let s = "hi"
+    print("{x:.99} {s:>65535}")
+    print("{x:.100}")                      //~ U0102
+    print("{s:<65536}")                    //~ T0117
+    print("{x:.99999999999999999999}")     //~ T0117
+}

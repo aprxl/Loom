@@ -11,9 +11,10 @@ use super::{Checker, Coercion, Fence, LoopCtx};
 use crate::hir::{Block, DefKind, Expr, ExprKind, StmtKind, TemplatePart};
 use crate::ty::{Ty, TyKind};
 
-/// Whether `s` is a format spec: `[[fill]align][+][#][0][width][.precision][type]`,
-/// as `rt.fmt` reads it.
-fn valid_spec(s: &str) -> bool {
+/// The width and precision of a format spec,
+/// `[[fill]align][+][#][0][width][.precision][type]`, as `rt.fmt` reads it;
+/// `None` if `s` isn't one. A number too big for a `u64` is `u64::MAX`.
+fn parse_spec(s: &str) -> Option<(Option<u64>, Option<u64>)> {
     let chars: Vec<char> = s.chars().collect();
     let align = |c: char| matches!(c, '<' | '>' | '^');
     let mut i = match chars.as_slice() {
@@ -26,20 +27,31 @@ fn valid_spec(s: &str) -> bool {
             i += 1;
         }
     }
-    while chars.get(i).is_some_and(|c| c.is_ascii_digit()) {
-        i += 1;
-    }
+    let number = |i: &mut usize| {
+        let start = *i;
+        while chars.get(*i).is_some_and(|c| c.is_ascii_digit()) {
+            *i += 1;
+        }
+        let digits: String = chars[start..*i].iter().collect();
+        (*i > start).then(|| digits.parse().unwrap_or(u64::MAX))
+    };
+    let width = number(&mut i);
+    let mut precision = None;
     if chars.get(i) == Some(&'.') {
         i += 1;
-        while chars.get(i).is_some_and(|c| c.is_ascii_digit()) {
-            i += 1;
-        }
+        precision = number(&mut i);
     }
     if chars.get(i).is_some_and(|c| matches!(c, '?' | 'x' | 'X' | 'o' | 'b')) {
         i += 1;
     }
-    i == chars.len()
+    (i == chars.len()).then_some((width, precision))
 }
+
+/// The widest width or precision, as in Rust.
+const MAX_SPEC_NUMBER: u64 = u16::MAX as u64;
+
+/// The most digits `rt.fmt` can give after the point (Lua's `%.99f`).
+const MAX_PRECISION: u64 = 99;
 
 /// What an operator needs from its operand type.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -51,6 +63,27 @@ enum Operand {
 }
 
 impl Checker<'_> {
+    /// Checks the format spec after `{expr:`, `expr` being at `span`.
+    fn check_spec(&mut self, spec: &str, span: Span) {
+        match parse_spec(spec) {
+            None => self.diags.push(
+                Diagnostic::error(codes::T0117, format!("`{spec}` isn't a format spec"))
+                    .primary(span, "what's after the `:` is read as a format spec")
+                    .help("a `:` inside `{…}` starts one: wrap the expression in parentheses to use it"),
+            ),
+            Some((width, precision)) if width.max(precision).is_some_and(|n| n > MAX_SPEC_NUMBER) => {
+                self.diags.push(
+                    Diagnostic::error(codes::T0117, format!("`{spec}` isn't a format spec"))
+                        .primary(span, format!("a width or precision can be {MAX_SPEC_NUMBER} at most")),
+                );
+            }
+            Some((_, Some(precision))) if precision > MAX_PRECISION => {
+                self.unsupported(span, &format!("a precision above {MAX_PRECISION}"));
+            }
+            Some(_) => {}
+        }
+    }
+
     pub(super) fn check_expr(&mut self, e: &Expr, expected: Option<Ty>) -> Ty {
         let ty = self.check_expr_inner(e, expected);
         self.b.expr_ty.insert(e.id, ty);
@@ -65,16 +98,8 @@ impl Checker<'_> {
                 for part in parts {
                     if let TemplatePart::Interp { expr, spec } = part {
                         let ty = self.check_expr(expr, None);
-                        if let Some(spec) = spec.as_deref()
-                            && !valid_spec(spec)
-                        {
-                            self.diags.push(
-                                Diagnostic::error(codes::T0117, format!("`{spec}` isn't a format spec"))
-                                    .primary(expr.span, "what's after the `:` is read as a format spec")
-                                    .help(
-                                        "a `:` inside `{…}` starts one: wrap the expression in parentheses to use it",
-                                    ),
-                            );
+                        if let Some(spec) = spec.as_deref() {
+                            self.check_spec(spec, expr.span);
                         }
                         // Checked once the body's types are known.
                         let debug = spec.as_deref().is_some_and(|s| s.contains('?'));
