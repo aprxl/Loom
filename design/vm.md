@@ -1,7 +1,8 @@
 # Treadle: Loom's own VM
 
-> **Status: a proposal for review. Nothing here is built yet.** The choices
-> that need a yes are collected in [Decisions to make](#3-decisions-to-make).
+> **Status: designed, not built.** The decisions in
+> [section 3](#3-decisions) were settled on 2026-09-29; development starts
+> with V0 when it's given the go.
 
 Loom runs today by compiling to Lua 5.4 (see [lua-backend](lua-backend.md)).
 That backend exists to get the whole language running with the right
@@ -20,7 +21,7 @@ the way to run Loom inside a Lua host.
 
 1. Goals
 2. Where the speed comes from
-3. Decisions to make
+3. Decisions
 4. Architecture
 5. Values and memory
 6. Heddle
@@ -116,20 +117,20 @@ compiler could have done.
 
 ---
 
-## 3. Decisions to make
+## 3. Decisions
 
-Each needs a yes, a no or a change before the milestone named. The
-recommendation comes first.
+Settled on 2026-09-29: every row as recommended, with D1 widened and D7
+narrowed as below.
 
-| # | Decision | Recommendation | By |
+| # | Decision | Decided | By |
 |---|---|---|---|
-| D1 | `unsafe` Rust in the VM | Allow it in one crate, `loom_vm`, in two modules (`mem` and `interp`). Every block gets a `// SAFETY:` comment, and a `checked` build turns every raw access into a checked one (§5.6). The all-safe alternative is an estimated 15–30% slower and makes shared-memory threads awkward | V0 |
+| D1 | `unsafe` Rust | Used wherever it makes sense, in any crate, not only the VM: for speed (unchecked access the verifier or an invariant already guarantees) or for what safe Rust can't express. Every block gets a `// SAFETY:` comment, and the VM's `checked` build turns its raw accesses into checked ones (§5.6). The all-safe alternative was an estimated 15–30% slower and made shared-memory threads awkward | V0 |
 | D2 | How the interpreter dispatches | A `match` loop on stable Rust now. In V8, try tail-call threading: Rust's `become` once it's stable, or a C interpreter generated from the same op table and built with clang-cl like the Lua VM. Keep it only if it wins at least 15% | V0, V8 |
 | D3 | `usize` on Treadle | 64 bits (`target.pointer_bits == 64`), like a native target. The Lua target keeps 63 | V0 |
 | D4 | Field order in memory | Largest alignment first, declaration order among equals. `#layout(C)` keeps declaration order. It's only visible through `T.size` and `f.offset` | V1 |
 | D5 | What `Shuttle[T, U]` and `Stream[T]` are | Existentials. A value made by a known function has that function's own type, sized and stored inline. Where the maker isn't known (a field, a list, two makers meeting in an `if`), the value is boxed like a large `any`. This needs a paragraph in 05-concurrency.md | V2 |
 | D6 | A `mut` argument when the callee unravels | Its writes are visible, as if it were passed by reference: a `defer` in the caller sees what the callee left. The Lua backend only copies back on return, and that's documented as a deviation | V1 |
-| D7 | Dropping a suspended shuttle | Runs its pending `defer`s, the same as closing it. The Lua backend leaves them to the garbage collector | V2 |
+| D7 | Dropping a suspended shuttle | Runs its pending `defer`s, the same as closing it: only the ones whose `defer` statement the shuttle has already run, in scopes it's still inside (§10.14). The Lua backend leaves them to the garbage collector | V2 |
 | D8 | `x.hash()` values | Deterministic, but each backend's own. Nothing may depend on them matching | V1 |
 | D9 | Where `#builtin` bodies come from | Loom code in `runtime/vm/*.loom` for anything that calls back into Loom (`map`, `sort`, `fold`, showing a list), and Rust natives for leaves (UTF-8, number formatting, I/O). A native never calls Loom code | V1 |
 | D10 | Where programs run | Inside `loom`'s own process: no child process, no temp file. Ctrl-C is a flag the VM checks (§9.5) | V1 |
@@ -156,14 +157,14 @@ recommendation comes first.
                                                           Treadle runs it
 ```
 
-| Crate | What | `unsafe` |
-|---|---|---|
-| `loom_compiler` | adds `ty::layout` (sizes, alignments, offsets and niches for a target), `heddle/` (the IR, its builder, verifier, printer and passes) and `codegen/` (instruction selection, register allocation, emission) | no |
-| `loom_isa` (new) | the op table, the instruction encoding, the image format, the bytecode verifier and the disassembler. Nothing but std, so the compiler and the VM share it | no |
-| `loom_vm` (new) | the interpreter, memory and the allocator, natives, unwinding, the scheduler (V5), spools (V6), and the bridge to Lua (V7, a feature) | yes (D1) |
-| `loom_sys` (new) | host services for both backends: the terminal, files (real or in memory), the environment, the clock. Moved out of `loom_host` | no |
-| `loom_host` | the Lua VM, as now | no |
-| `loom` | `run`, `test` and `build` get `--backend vm\|lua` (§18) | no |
+| Crate | What |
+|---|---|
+| `loom_compiler` | adds `ty::layout` (sizes, alignments, offsets and niches for a target), `heddle/` (the IR, its builder, verifier, printer and passes) and `codegen/` (instruction selection, register allocation, emission) |
+| `loom_isa` (new) | the op table, the instruction encoding, the image format, the bytecode verifier and the disassembler. Nothing but std, so the compiler and the VM share it |
+| `loom_vm` (new) | the interpreter, memory and the allocator, natives, unwinding, the scheduler (V5), spools (V6), and the bridge to Lua (V7, a feature) |
+| `loom_sys` (new) | host services for both backends: the terminal, files (real or in memory), the environment, the clock. Moved out of `loom_host` |
+| `loom_host` | the Lua VM, as now |
+| `loom` | `run`, `test` and `build` get `--backend vm\|lua` (§18) |
 
 The frontend doesn't change shape. Heddle is built from what the Lua lowering
 reads: the HIR, and each instance's `Body` of types and decisions (`calls`,
@@ -325,11 +326,14 @@ writes them without checking. That's sound when both of these hold:
 The second is trust in our own compiler, and the compiler has known gaps
 (the region checker doesn't exist yet). So:
 
-- **`unsafe` lives in one crate, in two modules**: `loom_vm::mem` (loads,
-  stores, the allocator) and `loom_vm::interp` (register access, the dispatch
-  loop). The workspace keeps `unsafe_code = "forbid"`. `loom_vm` sets `deny`
-  and allows it in those two modules only. Every block says why it's sound,
-  the way Loom's own `unsafe "…"` blocks have to.
+- **`unsafe` is used where it makes sense**, in any crate. In the VM that's
+  mostly `loom_vm::mem` (loads, stores, the allocator) and `loom_vm::interp`
+  (register access, the dispatch loop); elsewhere it's whatever a profile
+  or an API calls for. The workspace lint goes from `unsafe_code = "forbid"`
+  to `"warn"` when the first `unsafe` lands, so every use is deliberate
+  (`#[allow(unsafe_code)]` on the module or item). Every block says why it's
+  sound in a `// SAFETY:` comment, the way Loom's own `unsafe "…"` blocks
+  have to.
 - **The checked build** (`--features checked`): every access goes through a
   shadow map of live allocations and frames. An access outside them, a use
   after free, a double free, or a leak at exit is an internal error (exit
@@ -933,6 +937,15 @@ ordinary value stack, and the calls it makes are ordinary calls.
   close mode. It jumps to the landing pad for the current suspension point
   and runs the pending `defer`s and drops (D7). A `defer` that unravels there
   unravels in whoever closed it (the review's V5).
+  - **Only `defer`s the shuttle has reached run**: a `defer` whose statement
+    ran before the current suspension point, in a scope the shuttle is still
+    inside. One further down the body, or in a scope it already left, doesn't
+    run. A `defer` inside a loop runs once, for the iteration it's suspended
+    in. That's the same rule as for an unravel, and it falls out of the
+    landing pads: each suspension point's pad holds exactly the `defer`s in
+    scope there.
+  - A shuttle that never started runs no `defer`s; it only drops what it
+    owns (its `take` parameters). A finished one runs nothing.
 - **Projections** (`~> mut T`, `~> ref T`) yield an address. The caller uses
   the place until the end of the statement, then steps once more. The
   optimizer inlines them where it can (§7, pass 9).
@@ -1067,7 +1080,7 @@ On Treadle:
 | # | What | Treadle | Lua backend |
 |---|---|---|---|
 | P1 | writes to a `mut` argument when the callee unravels (D6) | visible | lost: copy-out happens on return only. Allowed to differ |
-| P2 | dropping a suspended shuttle (D7) | runs its `defer`s | left to the garbage collector. Allowed to differ |
+| P2 | dropping a suspended shuttle (D7) | runs the `defer`s it has reached | left to the garbage collector. Allowed to differ |
 | P3 | a `defer` that unravels while a generator is being closed (the review's V5) | unravels in whoever closed it | fixed to match |
 | P4 | `x.hash()` values (D8) | Treadle's own hash | FNV-1a of the debug text. Allowed to differ |
 | P5 | formatting numbers (the review's F2–F4) | one table of cases, Rust's formatting where the spec is silent | fixed to match |
@@ -1274,8 +1287,11 @@ Passing:
 4. A fixture pins `Frame.size` exactly: 40 for the lexer (Appendix B), 24 for
    `fib`, and a few more.
 5. New fixtures: a shuttle moved while suspended in the middle of a loop over
-   an array in its frame resumes correctly; a dropped generator runs its
-   `defer`s (P2); an unravel inside a generator reports the generator's line;
+   an array in its frame resumes correctly; a dropped generator runs the
+   `defer`s it has reached and none of the others (P2): not one further down
+   its body, not one in a scope it already left, and one inside a loop only
+   once; a generator dropped before it starts runs none; an unravel inside a
+   generator reports the generator's line;
    pushing after `close` unravels; the next `push` drains an unfinished burst.
 6. The checked build: nothing leaked with shuttles that were dropped, closed
    or finished.
@@ -1415,7 +1431,7 @@ oracle, and stays the way to run Loom inside a Lua host.
 
 | Risk | What keeps it in check |
 |---|---|
-| a memory bug in the `unsafe` code | two small modules, the verifier, the checked build on every fixture, the program generator, Miri when available |
+| a memory bug in `unsafe` code | a `// SAFETY:` comment on every block, the lint that makes each use deliberate, the verifier, the checked build on every fixture, the program generator, Miri when available |
 | frontend gaps turning into memory bugs (Lua's collector hid them) | V1's frontend prerequisites, dynamic guards until the checkers exist, the leak invariant |
 | a `match` loop in Rust leaves speed on the table | the op table makes the dispatch strategy replaceable (D2), and profile-guided optimization |
 | monomorphization and inlining make code big | the inlining budget, merging identical instances, and RESULTS.md, where cache misses show up as time |

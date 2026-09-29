@@ -41,6 +41,12 @@ Read your own diff before committing. One logical change per commit.
   N names, T types, M moves, L once, R regions, C concurrency, G gauges,
   P patterns, K const, U unsupported, I interop). Never invent a code inline.
 - Unsupported features fail with a `U` code. Never miscompile silently.
+- `unsafe` Rust is welcome wherever it makes sense: for speed, when an
+  invariant (the bytecode verifier, a checked bound) already guarantees what
+  a check would, or for what safe Rust can't express. Every block gets a
+  `// SAFETY:` comment saying why it's sound. The workspace lint moves from
+  `unsafe_code = "forbid"` to `"warn"` with the first use, so each use is a
+  deliberate `#[allow(unsafe_code)]`.
 - Anything whose iteration order can reach output uses `IndexMap`/`BTreeMap`,
   so builds are byte-for-byte reproducible.
 - Keep the design docs in sync when behavior changes. If an example stops being
@@ -128,7 +134,7 @@ language through every layer (type checking, lowering to Lua, the runtime,
     `std.sys`.
 
 Next: Loom's own VM, Treadle, next to the Lua backend. `design/vm.md` is the
-design (a proposal: its decisions D1–D11 need a yes first) and its milestones
+design (its decisions D1–D11 are settled) and its milestones
 V0–V9 say what each step builds and how it passes: V0 the skeleton, V1 the
 sequential language, V2 shuttles, V3 the optimizer, V4 compile-time code on
 Treadle, V5 threads, V6 spools, V7 Lua interop, V8 speed, V9 the default.
