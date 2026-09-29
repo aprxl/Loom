@@ -72,7 +72,8 @@ pub fn run_jobs(bundle: &str, map: Option<&SourceMap>) -> Result<Vec<JobResult>,
         .and_then(|_| lua.load(bundle).set_name("=bundle").eval::<Table>());
     let steps = Rc::new(Cell::new(0u64));
     let counter = steps.clone();
-    lua.set_hook(HookTriggers::new().every_nth_instruction(1000), move |_, _| {
+    // Global, so the coroutines shuttles run in count too.
+    lua.set_global_hook(HookTriggers::new().every_nth_instruction(1000), move |_, _| {
         counter.set(counter.get() + 1000);
         if counter.get() > STEP_BUDGET {
             return Err(mlua::Error::runtime(OUT_OF_STEPS));
@@ -202,5 +203,14 @@ mod tests {
         let results = jobs("return { abort = abort, jobs = { function() while true do end end, function() end } }");
         assert!(matches!(results[0], JobResult::OutOfBudget { memory: false, .. }), "{results:?}");
         assert_eq!(results[1], JobResult::Skipped);
+    }
+
+    /// A shuttle's code runs in a coroutine, which counts too.
+    #[test]
+    fn endless_coroutines_run_out_of_steps() {
+        let results = jobs(
+            "return { abort = abort, jobs = { function() coroutine.wrap(function() while true do end end)() end } }",
+        );
+        assert!(matches!(results[0], JobResult::OutOfBudget { memory: false, .. }), "{results:?}");
     }
 }
