@@ -3,7 +3,7 @@
 use std::io::{self, IsTerminal};
 
 use codespan_reporting::diagnostic as cs;
-use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
+use codespan_reporting::term::termcolor::{BufferWriter, ColorChoice};
 use codespan_reporting::term::{self, Chars, Config, Styles, StylesWriter};
 
 use super::{Diagnostic, Severity};
@@ -57,13 +57,17 @@ pub fn emit_to_stderr(db: &SourceDb, diags: &[Diagnostic], mode: ColorMode) -> i
         ColorMode::Auto if io::stderr().is_terminal() && std::env::var_os("NO_COLOR").is_none() => ColorChoice::Auto,
         ColorMode::Auto => ColorChoice::Never,
     };
-    let stream = StandardStream::stderr(choice);
-    let mut lock = stream.lock();
+    // Each diagnostic is rendered into a buffer and written at once: the
+    // renderer writes a character at a time, and unbuffered, a long line
+    // took thousands of writes per diagnostic.
+    let stderr = BufferWriter::stderr(choice);
     let styles = Styles::default();
-    let mut writer = StylesWriter::new(&mut lock, &styles);
     let config = config();
     for diag in diags {
+        let mut buffer = stderr.buffer();
+        let mut writer = StylesWriter::new(&mut buffer, &styles);
         term::emit_to_write_style(&mut writer, &config, db, &to_codespan(diag)).map_err(io::Error::other)?;
+        stderr.print(&buffer)?;
     }
     Ok(())
 }
