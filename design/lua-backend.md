@@ -373,6 +373,8 @@ compares `vt.d` with `Button`'s descriptor, which is unique per type. An
   past that); a precision above 99 is U0102, since `string.format` stops
   there.
 - Every type has a builtin structural Debug in v1.
+- A program may use 8 GiB of memory (the VM's limit); past that it unravels
+  with `out of memory`, rather than the process aborting.
 - An unravel inside a defer during an unravel replaces the first one.
 - `target.os` is the build host's OS; `target.pointer_bits` is 63.
 - A new `push` while the previous Burst is unfinished drains it silently.

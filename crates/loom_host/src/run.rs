@@ -67,9 +67,15 @@ pub enum Outcome {
     },
 }
 
+/// How much memory a program may use. Past it, it unravels; without a
+/// limit, an allocation the system refuses (`s.repeat(1 << 40)`) aborts
+/// the process.
+pub const RUN_MEMORY_LIMIT: usize = 8 << 30;
+
 /// Runs `bundle`, mapping error positions through `map`.
 pub fn run_bundle(bundle: &str, map: Option<&SourceMap>, host: Host) -> Outcome {
     let lua = Lua::new();
+    let _ = lua.set_memory_limit(RUN_MEMORY_LIMIT);
     let stdout = matches!(host.output, Output::Stdout);
     let term = Rc::new(RefCell::new(Term::default()));
     let result = install_host(&lua, host, term.clone()).and_then(|()| {
@@ -97,6 +103,7 @@ pub struct TestRun {
 /// each with its own output. `Err` if the bundle doesn't even load.
 pub fn run_tests(bundle: &str, map: Option<&SourceMap>, sandbox: bool) -> Result<Vec<TestRun>, Outcome> {
     let lua = Lua::new();
+    let _ = lua.set_memory_limit(RUN_MEMORY_LIMIT);
     let buffer = Rc::new(RefCell::new(Vec::new()));
     let host = Host { output: Output::Capture(buffer.clone()), sandbox, args: vec!["test".into()] };
     let term = Rc::new(RefCell::new(Term::default()));
@@ -120,6 +127,7 @@ pub(crate) fn outcome(result: mlua::Result<Option<mlua::String>>, map: Option<&S
     match result {
         Ok(None) => Outcome::Finished,
         Ok(Some(message)) => Outcome::Failed { message: message.to_string_lossy() },
+        Err(e) if is_memory_error(&e) => Outcome::Unravel { message: "out of memory".into(), location: None },
         Err(e) => {
             let mut outcome = classify(&error_text(&e), map);
             // Raised inside the runtime (a stream's step, say): the Loom
@@ -132,6 +140,15 @@ pub(crate) fn outcome(result: mlua::Result<Option<mlua::String>>, map: Option<&S
             }
             outcome
         }
+    }
+}
+
+/// Whether `e` is Lua running out of memory, maybe inside a callback.
+fn is_memory_error(e: &mlua::Error) -> bool {
+    match e {
+        mlua::Error::MemoryError(_) => true,
+        mlua::Error::CallbackError { cause, .. } => is_memory_error(cause),
+        _ => false,
     }
 }
 

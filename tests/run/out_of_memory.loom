@@ -1,0 +1,9 @@
+// A program that asks for more memory than there is unravels, rather than
+// taking the process down.
+use std.io.print
+
+fn main() {
+    print("before")
+    let s = "ab".repeat(1 << 40)
+    print(s.len())
+}

@@ -2119,6 +2119,10 @@ ext["std.string.Str.replace"] = function(s, from, to)
 end
 
 ext["std.string.Str.repeat"] = function(s, n)
+  -- Past the host's memory limit (8 GiB) it could never be made.
+  if #s > 0 and n > (8 << 30) // #s then
+    error(sformat("%sout of memory: the string would be %d times %d bytes", MARK, n, #s), 2)
+  end
   return srep(s, n)
 end
 
