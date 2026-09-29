@@ -20,7 +20,7 @@ use loom_syntax::source::Span;
 use super::infer::VarKind;
 use super::{BodyId, Checker, FnSig, Instance};
 use crate::hir::{self, DefId, DefKind, HirId, TyKind as HirTy};
-use crate::ty::{Ty, TyKind};
+use crate::ty::{ConstVal, Ty, TyKind};
 
 /// Stands in for an instance that isn't known yet, until the body is
 /// finished. Nothing reads it when checking fails.
@@ -68,6 +68,9 @@ pub(super) struct Bound {
     pub wefts: Vec<DefId>,
     /// The parameter, for messages: `T`, or the weft for an implicit one.
     pub param: String,
+    /// For a `const` parameter, its type, which the value inferred for it
+    /// must fit (`N` of `[i32; N]` inferred from a length).
+    pub value: Option<Ty>,
 }
 
 impl Checker<'_> {
@@ -253,9 +256,12 @@ impl Checker<'_> {
 
         let mut bounds = Vec::new();
         for (&g, &ty) in f.generics.iter().zip(&own) {
+            if let Some(decl) = self.const_param_decl(g) {
+                bounds.push(Bound { ty, wefts: Vec::new(), param: p.def(g).name.clone(), value: Some(decl) });
+            }
             let wefts = self.bounds_of(g, f);
             if !wefts.is_empty() {
-                bounds.push(Bound { ty, wefts, param: p.def(g).name.clone() });
+                bounds.push(Bound { ty, wefts, param: p.def(g).name.clone(), value: None });
             }
         }
         bounds.extend(self.parent_bounds(inst.def, &args[..parent_params]));
@@ -263,7 +269,7 @@ impl Checker<'_> {
             for (ty, weft) in vars {
                 args.push(ty);
                 if let Some(weft) = weft {
-                    bounds.push(Bound { ty, wefts: vec![weft], param: p.def(weft).name.clone() });
+                    bounds.push(Bound { ty, wefts: vec![weft], param: p.def(weft).name.clone(), value: None });
                 }
             }
         }
@@ -291,7 +297,7 @@ impl Checker<'_> {
                 }
             }
             if !wefts.is_empty() {
-                bounds.push(Bound { ty, wefts, param: self.p.def(g).name.clone() });
+                bounds.push(Bound { ty, wefts, param: self.p.def(g).name.clone(), value: None });
             }
         }
         bounds
@@ -306,6 +312,9 @@ impl Checker<'_> {
             let ty = self.deep_resolve(bound.ty);
             if self.tcx.is_lenient(ty) {
                 continue;
+            }
+            if let Some(decl) = bound.value {
+                ok &= self.check_const_value(ty, decl, &bound.param, span);
             }
             for &weft in &bound.wefts {
                 if !self.weaves(ty, weft) {
@@ -325,6 +334,25 @@ impl Checker<'_> {
             }
         }
         ok
+    }
+
+    /// Whether the value `ty` inferred for `const` parameter `param` fits
+    /// its type `decl`; reports it if not.
+    fn check_const_value(&mut self, ty: Ty, decl: Ty, param: &str, span: Span) -> bool {
+        let TyKind::Value(value) = self.tcx.kind(ty).clone() else { return true };
+        let decl_kind = self.tcx.kind(self.tcx.degauge(decl)).clone();
+        let shown = self.show(decl);
+        let (code, message, v) = match (value, decl_kind) {
+            (ConstVal::Int(v), TyKind::Int(int)) if int.contains(v) => return true,
+            (ConstVal::Bool(_), TyKind::Bool) => return true,
+            (ConstVal::Int(v), TyKind::Int(_)) => {
+                (codes::T0102, format!("`{v}` doesn't fit in `{shown}`"), v.to_string())
+            }
+            (ConstVal::Int(v), _) => (codes::T0101, format!("expected `{shown}`, found an integer"), v.to_string()),
+            (ConstVal::Bool(b), _) => (codes::T0101, format!("expected `{shown}`, found a `bool`"), b.to_string()),
+        };
+        self.diags.push(Diagnostic::error(code, message).primary(span, format!("`{param}` is {v} here")));
+        false
     }
 
     /// Whether an error was already reported inside `span`.

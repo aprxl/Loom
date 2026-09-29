@@ -5,6 +5,7 @@ use std.io.print
 fn sum[const N: usize](xs: [i32; N]) -> i32 = 0
 fn both[const N: usize](a: [i32; N], b: [i32; N]) -> i32 = 0
 fn pick(const first: bool) -> i32 = 0
+fn small[const N: u8](xs: [i32; N]) -> u8 = N
 fn label(const s: str) -> str = s                        //~ T0101
 fn sized(k: usize) -> [u8; k] = [0; k]                   //~ K0105
 
@@ -21,6 +22,9 @@ fn main() {
     let b = Grid[300, 1]()                               //~ T0102
     let c: Grid[2, 3] = Grid[3, 2]()                     //~ T0101
     let d = Grid[0, 1]()
+    let h = Grid[true, 1]()                              //~ T0101
+    let i: Grid[1.5, 2] = 3                              //~ T0101
+    print(small([0; 300]))                               //~ T0102
     let e: uint(0) = 0                                   //~ T0102
     let f: uint(k) = 1                                   //~ K0109
     let g: int(8) = 128                                  //~ T0102

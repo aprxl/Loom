@@ -196,7 +196,17 @@ impl Checker<'_> {
                 ConstVal::Int(v)
             }
             (Some(Val::Bool(b)), TyKind::Bool) => ConstVal::Bool(b),
-            (Some(_), _) => return None,
+            (Some(v), _) => {
+                let found = match v {
+                    Val::Int(_) => "an integer",
+                    Val::Float(_) => "a float",
+                    Val::Bool(_) => "a `bool`",
+                    Val::Case(_) => "a case",
+                };
+                let shown = self.show(ty);
+                self.error(codes::T0101, e.span, format!("expected `{shown}`, found {found}"), "the parameter's type");
+                return None;
+            }
             (None, _) => {
                 self.diags.push(
                     Diagnostic::error(codes::K0109, "this `const` argument isn't known at compile time")
