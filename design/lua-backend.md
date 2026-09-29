@@ -166,6 +166,13 @@ function would go over (a long body, with the temporaries that `if` and
 `match` values need), its locals become the fields of a table made at the
 start of the block (`local _L1 = {}`, `_L1.x_3`); see `lower/limits.rs`.
 
+Lua also has 255 registers per function, and each pending call and operand
+of an expression takes one, so a value whose Lua expression nests more than
+24 deep goes into a temporary (a sum of 200 terms works), and a template's
+pieces are joined in groups of 64. Parameters and `defer`s have to be real
+locals: a function with more than 100 parameters, or more than 150 `defer`s,
+is U0102.
+
 ## Lambdas and streams
 
 A lambda is a Lua closure. It sees the enclosing locals as upvalues, so

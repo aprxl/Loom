@@ -19,6 +19,21 @@ use crate::hir::{self, Block, DefKind, ExprKind, HirId, PatKind, StmtKind as Hir
 use crate::ty::{FloatTy, IntTy, Ty, TyKind};
 use crate::typeck::{ArgSource, Coercion, IterSource, Receiver};
 
+/// How deep a value's Lua expression may nest before it goes into a
+/// temporary (see `lower_expr`).
+const MAX_NESTING: u32 = 24;
+
+/// How many arguments one call may pass: each takes a register.
+const MAX_ARGS: usize = 64;
+
+/// `rt.cat(pieces…)`, in groups of at most [`MAX_ARGS`].
+fn cat(mut pieces: Vec<Expr>) -> Expr {
+    while pieces.len() > MAX_ARGS {
+        pieces = pieces.chunks(MAX_ARGS).map(|group| Expr::rt("cat", group.to_vec())).collect();
+    }
+    Expr::rt("cat", pieces)
+}
+
 impl Lowerer<'_> {
     pub(super) fn push(&mut self, kind: StmtKind) {
         self.out.push(Stmt { kind, span: self.span });
@@ -73,7 +88,10 @@ impl Lowerer<'_> {
     /// Lowers `e` to a Lua expression, with its coercion applied.
     pub(super) fn lower_expr(&mut self, e: &hir::Expr) -> Expr {
         let v = self.lower_raw(e);
-        self.coerce(e, v)
+        let v = self.coerce(e, v);
+        // Lua keeps a register for each pending call and operand, 255 at
+        // most, so a long `a + b + c + …` goes through temporaries.
+        if v.deeper_than(MAX_NESTING) { self.spill_always(v) } else { v }
     }
 
     pub(super) fn coerce(&mut self, e: &hir::Expr, v: Expr) -> Expr {
@@ -420,7 +438,7 @@ impl Lowerer<'_> {
         match pieces.len() {
             0 => Expr::Str(Vec::new()),
             1 if matches!(pieces[0], Expr::Str(_)) => pieces.remove(0),
-            _ => Expr::rt("cat", pieces),
+            _ => cat(pieces),
         }
     }
 

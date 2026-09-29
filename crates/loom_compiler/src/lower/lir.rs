@@ -59,6 +59,26 @@ impl Expr {
     pub fn is_constant(&self) -> bool {
         matches!(self, Expr::Nil | Expr::Bool(_) | Expr::Int(_) | Expr::Float(_) | Expr::Str(_))
     }
+
+    /// Whether this nests calls, tables and operators more than `n` deep
+    /// (not counting what's inside functions, which start again).
+    pub fn deeper_than(&self, n: u32) -> bool {
+        let Some(n) = n.checked_sub(1) else { return true };
+        match self {
+            Expr::Index(a, b) | Expr::Binary(_, a, b) => a.deeper_than(n) || b.deeper_than(n),
+            Expr::Field(a, _) | Expr::Unary(_, a) => a.deeper_than(n),
+            Expr::Call(callee, args) => callee.deeper_than(n) || args.iter().any(|a| a.deeper_than(n)),
+            Expr::Table(items) => items.iter().any(|a| a.deeper_than(n)),
+            Expr::Record(entries) => entries.iter().any(|(_, v)| v.deeper_than(n)),
+            Expr::Function(..)
+            | Expr::Nil
+            | Expr::Bool(_)
+            | Expr::Int(_)
+            | Expr::Float(_)
+            | Expr::Str(_)
+            | Expr::Name(_) => false,
+        }
+    }
 }
 
 /// A key in a keyed table constructor.

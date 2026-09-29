@@ -63,6 +63,10 @@ impl Lowerer<'_> {
             stmts = vec![Stmt { kind: StmtKind::If(vec![(Expr::name(flag.clone()), stmts)], None), span: Some(span) }];
             self.live_flags.entry(local).or_default().push(flag);
         }
+        self.defers += 1;
+        if self.defers == super::MAX_DEFERS + 1 {
+            self.unsupported(span, &format!("more than {} `defer`s in one function", super::MAX_DEFERS));
+        }
         let d = self.new_temp();
         self.push(StmtKind::LocalClose(d, Expr::rt("defer", vec![Expr::Function(Vec::new(), stmts)])));
     }

@@ -43,6 +43,12 @@ use crate::ty::{FloatTy, Ty, TyKind};
 use crate::typeck::{Body, BodyId, Typed};
 use lir::{Expr, Printer, Stmt, StmtKind};
 
+/// The most parameters a function may have: Lua allows 200 locals in all.
+const MAX_PARAMS: usize = 100;
+
+/// The most `defer`s one function may have, for the same reason.
+const MAX_DEFERS: usize = 150;
+
 /// A compiled program.
 #[derive(Debug)]
 pub struct Bundle {
@@ -196,6 +202,9 @@ struct Lowerer<'a> {
     /// For each local with a fallback `defer` in scope, that defer's flag:
     /// true while the local's value is still there to clean up.
     live_flags: HashMap<LocalId, Vec<String>>,
+    /// The `defer`s in the Lua function being lowered: each is a `<close>`
+    /// local, which has to stay a local.
+    defers: usize,
     /// Gauges whose checking functions are needed, in the order first used.
     gauges_used: IndexSet<DefId>,
     reported: HashSet<String>,
@@ -226,6 +235,7 @@ impl<'a> Lowerer<'a> {
             main_error: None,
             aliases: HashMap::new(),
             live_flags: HashMap::new(),
+            defers: 0,
             gauges_used: IndexSet::new(),
             reported: HashSet::new(),
         }
@@ -574,6 +584,11 @@ impl<'a> Lowerer<'a> {
             }
             DefKind::Fn(f) => {
                 let span = d.span;
+                // Each is a Lua local and a register at every call.
+                if f.params.len() > MAX_PARAMS {
+                    self.unsupported(span, &format!("functions with more than {MAX_PARAMS} parameters"));
+                    return;
+                }
                 let params: Vec<String> = f.params.iter().map(|param| self.local_name(param.local)).collect();
                 let body_expr = f.body.as_ref().expect("checked above");
                 let unit = matches!(f.ret, FnRet::Unit | FnRet::Shuttle { .. });
@@ -681,9 +696,11 @@ impl<'a> Lowerer<'a> {
     fn body(&mut self, span: Span, f: impl FnOnce(&mut Self)) -> Vec<Stmt> {
         let saved_out = std::mem::take(&mut self.out);
         let saved_loops = std::mem::take(&mut self.loops);
+        let saved_defers = std::mem::take(&mut self.defers);
         let saved_span = self.span.replace(span);
         f(self);
         self.span = saved_span;
+        self.defers = saved_defers;
         self.loops = saved_loops;
         std::mem::replace(&mut self.out, saved_out)
     }
