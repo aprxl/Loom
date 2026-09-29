@@ -11,6 +11,7 @@ fn main() {
     const if is_even(4) { }                              //~ K0110
     const for i in 0..100000 { }                         //~ K0102
     const for i in 0..3 { if i == 1 { break } }          //~ U0102
+    const for mut i in 0..2 { i += 5 }                   //~ U0102
     let s = String()
     const for i in 0..2 { take_it(s) }                   //~ M0101
     const if true { nope() }                             //~ N0101

@@ -246,6 +246,10 @@ impl Checker<'_> {
     fn bind_item(&mut self, pat: &Pat, item: &Item) {
         match (&pat.kind, item) {
             (PatKind::Wild, _) => {}
+            // Each item is a compile-time value, written into the code.
+            (PatKind::Bind(local), _) if self.p.local(*local).mutable => {
+                self.unsupported(pat.span, "a `mut` loop variable in a `const for`");
+            }
             (PatKind::Bind(local), Item::Val(v)) => {
                 let v = self.tcx.intern(TyKind::Value(*v));
                 self.const_locals.push((*local, v));
