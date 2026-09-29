@@ -1400,11 +1400,22 @@ impl Lowerer<'_> {
 
     fn assign(&mut self, target: &hir::Expr, op: AssignOp, value: &hir::Expr) {
         self.assign_inner(target, op, value);
-        // A new value to clean up.
-        if let (ExprKind::Local(l), AssignOp::Assign) = (&target.kind, op) {
-            for flag in self.live_flags.get(l).cloned().unwrap_or_default() {
-                self.push(StmtKind::Assign(vec![Expr::name(flag)], vec![Expr::Bool(true)]));
+        if op == AssignOp::Assign {
+            self.rearm(target);
+        }
+    }
+
+    /// Each local `target` gives a new value is a new value for its
+    /// fallback `defer` to clean up.
+    fn rearm(&mut self, target: &hir::Expr) {
+        match &target.kind {
+            ExprKind::Local(l) => {
+                for flag in self.live_flags.get(l).cloned().unwrap_or_default() {
+                    self.push(StmtKind::Assign(vec![Expr::name(flag)], vec![Expr::Bool(true)]));
+                }
             }
+            ExprKind::Tuple(items) => items.iter().for_each(|item| self.rearm(item)),
+            _ => {}
         }
     }
 
@@ -1446,21 +1457,55 @@ impl Lowerer<'_> {
                 // `(a, b) = (b, a)` swaps.
                 let v = self.lower_expr(value);
                 let t = self.spill_always(v);
-                self.assign_parts(target, &t);
+                let mut overwrites = Vec::new();
+                let copies = self.writes_into_caller(target);
+                self.assign_parts(target, &t, copies, &mut overwrites);
+                for (name, part) in overwrites {
+                    self.push(StmtKind::Call(Expr::rt("overwrite", vec![Expr::Name(name), part])));
+                }
             }
             _ => self.unsupported(target.span, "this assignment"),
         }
     }
 
-    fn assign_parts(&mut self, target: &hir::Expr, v: &Expr) {
+    /// Whether `target` has a `mut` parameter among its parts, which is
+    /// written into rather than given a new value.
+    fn writes_into_caller(&self, target: &hir::Expr) -> bool {
         match &target.kind {
+            ExprKind::Local(local) => self.overwrites(*local),
+            ExprKind::Tuple(items) => items.iter().any(|item| self.writes_into_caller(item)),
+            _ => false,
+        }
+    }
+
+    /// Assigns the parts of `v` to the parts of `target`. A `mut` parameter
+    /// is written into after every other part. When one is, each part that's
+    /// a table is copied first, since it may be a written-into table's old
+    /// value (`(a, b) = (b, a)`).
+    fn assign_parts(&mut self, target: &hir::Expr, v: &Expr, copies: bool, overwrites: &mut Vec<(String, Expr)>) {
+        let ty = self.ty_of(target);
+        let part = |this: &mut Self| {
+            if copies && this.is_table(ty) {
+                let d = this.desc(ty, target.span);
+                this.spill_always(Expr::rt("copy", vec![d, v.clone()]))
+            } else {
+                v.clone()
+            }
+        };
+        match &target.kind {
+            ExprKind::Local(local) if self.overwrites(*local) => {
+                let part = part(self);
+                overwrites.push((self.local_name(*local), part));
+            }
             ExprKind::Local(_) | ExprKind::Field { .. } | ExprKind::LeadingDot(_) => {
+                let part = part(self);
                 let place = self.lower_place(target);
-                self.push(StmtKind::Assign(vec![place], vec![v.clone()]));
+                self.push(StmtKind::Assign(vec![place], vec![part]));
             }
             ExprKind::Tuple(items) => {
                 for (i, item) in items.iter().enumerate() {
-                    self.assign_parts(item, &Expr::index(v.clone(), Expr::Int(i as i64 + 1)));
+                    let v = Expr::index(v.clone(), Expr::Int(i as i64 + 1));
+                    self.assign_parts(item, &v, copies, overwrites);
                 }
             }
             _ => self.unsupported(target.span, "this assignment"),

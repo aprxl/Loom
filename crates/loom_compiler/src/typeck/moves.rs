@@ -393,32 +393,7 @@ impl Checker<'_> {
             }
             ExprKind::Assign { target, op, value } => {
                 self.mv(cx, value, *op == AssignOp::Assign);
-                if let Some((Root::Local(l), path)) = self.place_of(cx, target) {
-                    self.changes(cx, l, target.span);
-                    if path.is_empty() && *op == AssignOp::Assign {
-                        self.new_borrow(cx, l, value);
-                    }
-                }
-                match (op, self.place_of(cx, target)) {
-                    // A whole new value: what was moved out of it is back.
-                    (AssignOp::Assign, Some((Root::Local(l), path))) => {
-                        let parent = &path[..path.len().saturating_sub(1)];
-                        if !path.is_empty() {
-                            self.check_use(cx, l, parent, target.span);
-                        }
-                        cx.flow.moved.retain(|(m, p, _)| !(*m == l && p.starts_with(&path)));
-                        // A new `once` value over one still loose loses it.
-                        if path.is_empty() && self.local_is_once(l) {
-                            if cx.flow.loose.contains(&l) && !cx.covered.contains(&l) && !cx.flow.dead {
-                                self.loose_end(cx, l, target.span, "...but it gets a new value here while still loose");
-                            }
-                            if !cx.flow.loose.contains(&l) {
-                                cx.flow.loose.push(l);
-                            }
-                        }
-                    }
-                    _ => self.mv(cx, target, false),
-                }
+                self.assign_target(cx, target, *op, Some(value));
             }
             ExprKind::Map(pairs) => {
                 for (key, value) in pairs {
@@ -827,6 +802,44 @@ impl Checker<'_> {
                 }
             }
             _ => {}
+        }
+    }
+
+    /// `target op= …`, once the value is gone through: `value` is it, when
+    /// it's all `target`'s (not a part of a tuple's).
+    fn assign_target(&mut self, cx: &mut MoveCx, target: &Expr, op: AssignOp, value: Option<&Expr>) {
+        // `(a, b) = (b, a)`: each part gets a new value.
+        if let (ExprKind::Tuple(items), AssignOp::Assign) = (&target.kind, op) {
+            for item in items {
+                self.assign_target(cx, item, op, None);
+            }
+            return;
+        }
+        if let Some((Root::Local(l), path)) = self.place_of(cx, target) {
+            self.changes(cx, l, target.span);
+            if let (true, AssignOp::Assign, Some(value)) = (path.is_empty(), op, value) {
+                self.new_borrow(cx, l, value);
+            }
+        }
+        match (op, self.place_of(cx, target)) {
+            // A whole new value: what was moved out of it is back.
+            (AssignOp::Assign, Some((Root::Local(l), path))) => {
+                let parent = &path[..path.len().saturating_sub(1)];
+                if !path.is_empty() {
+                    self.check_use(cx, l, parent, target.span);
+                }
+                cx.flow.moved.retain(|(m, p, _)| !(*m == l && p.starts_with(&path)));
+                // A new `once` value over one still loose loses it.
+                if path.is_empty() && self.local_is_once(l) {
+                    if cx.flow.loose.contains(&l) && !cx.covered.contains(&l) && !cx.flow.dead {
+                        self.loose_end(cx, l, target.span, "...but it gets a new value here while still loose");
+                    }
+                    if !cx.flow.loose.contains(&l) {
+                        cx.flow.loose.push(l);
+                    }
+                }
+            }
+            _ => self.mv(cx, target, false),
         }
     }
 
