@@ -1,0 +1,9 @@
+error[K0101]: const assertion failed: Ring capacity must be a power of two, got 100
+  --> docs/lang/samples/cp_err_assert.loom:2:18
+  |
+2 |     const assert(N.is_power_of_two(), "Ring capacity must be a power of two, got {N}")
+  |                  ^^^^^^^^^^^^^^^^^^^ this is false
+  |
+  = note: in `Ring[u32, 100]`
+
+error: docs/lang/samples/cp_err_assert.loom failed to compile (1 error)

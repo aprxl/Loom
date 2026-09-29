@@ -1,0 +1,23 @@
+use std.io.print
+
+// `n` must be known while compiling. Each length gets its own copy of the
+// function, and the length is part of the return type.
+fn zeros(const n: usize) -> [f32; n] = [0.0; n]
+
+// `N` is a generic parameter, worked out from the array's length.
+fn sum[const N: usize](xs: [i32; N]) -> i32 {
+    const assert(N > 0, "summing nothing")
+    var total = 0
+    for x in xs {
+        total += x
+    }
+    total
+}
+
+fn main() {
+    print(zeros(3))
+    print(zeros(4).len())
+    print(sum([1, 2, 3]))
+    print(sum[2]([10, 20]))
+}
+//@ run

@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Values and control flow · Loom</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a class="current" href="../lang/index.html">Language</a></li>
+<li><a href="../std/index.html">Standard library</a></li>
+<li><a href="../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Language</h3>
+<ul>
+<li><a href="index.html">Overview</a></li>
+<li><a href="start.html">Getting started</a></li>
+<li><a class="current" href="values.html">Values and control flow</a></li>
+<li><a href="types.html">Warps, wefts and weaves</a></li>
+<li><a href="generics.html">Generics and <code>any</code></a></li>
+<li><a href="collections.html">Collections and streams</a></li>
+<li><a href="errors.html">Optionals and errors</a></li>
+<li><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
+<li><a href="gauges.html">Gauges</a></li>
+<li><a href="shuttles.html">Shuttles</a></li>
+<li><a href="compile-time.html">Compile-time code</a></li>
+<li><a href="const-params.html">Const parameters and control flow</a></li>
+<li><a href="tests.html">Tests</a></li>
+<li><a href="not-yet.html">Not supported yet</a></li>
+</ul>
+</nav>
+<main>
+<div class="crumb"><a href="index.html">Language</a> / Values and control flow</div>
+<h1>Values and control flow</h1>
+<p class="summary">Numbers, text, <code>if</code>, <code>match</code>, loops, lambdas, and bit patterns.</p>
+<h2 id="numbers">Numbers</h2>
+<p><code>u12</code>, <code>i24</code> and <code>u4</code> are ordinary types: any width from 1 to 64 bits. A <code>uN</code> does its arithmetic at exactly N bits, so a <code>u12</code> overflows at 4096. <code>usize</code> and <code>isize</code> are 63 bits on the Lua backend. Types wider than 64 bits and <code>f16</code> are not supported yet (<a href="diagnostics.html#U0102">U0102</a>).</p>
+<p>Each arithmetic operator says what happens on overflow:</p>
+<table class="plain"><thead><tr><th>Operator</th><th>On overflow</th></tr></thead><tbody><tr><td><code>+ - *</code></td><td>unravels</td></tr><tr><td><code>+% -% *%</code></td><td>wraps around</td></tr><tr><td><code>+| -| *|</code></td><td>stops at the type's limit (saturates)</td></tr><tr><td><code>+? -? *?</code></td><td>gives an optional, <code>none</code> on overflow</td></tr></tbody></table>
+<p><code>as</code>, <code>as%</code>, <code>as|</code> and <code>as?</code> convert with the same four policies.</p>
+<div class="sample" id="sample-values_numbers">
+<div class="sample-head"><span class="file">samples/values_numbers.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fn</span> main() {
+    <span class="c">// Integers have any width up to 64 bits: `u12` and `i24` are ordinary types.</span>
+    <span class="k">let</span> a: u12 = <span class="n">4095</span>
+    print(<span class="s">"{</span>a +% <span class="n">1</span><span class="s">} {</span>a +| <span class="n">1</span><span class="s">} {</span>a +? <span class="n">1</span>:?<span class="s">}"</span>)      <span class="c">// wrap, saturate, checked</span>
+
+    <span class="k">let</span> b: u8 = <span class="n">200</span>
+    print(<span class="s">"{</span>b +% <span class="n">100</span><span class="s">} {</span>b +| <span class="n">100</span><span class="s">} {</span>b +? <span class="n">100</span>:?<span class="s">}"</span>)
+
+    <span class="c">// Casts have the same three policies.</span>
+    print(<span class="s">"{</span><span class="n">300</span> <span class="k">as</span>% u8<span class="s">} {</span><span class="n">300</span> <span class="k">as</span>| u8<span class="s">} {</span><span class="n">300</span> <span class="k">as</span>? u8:?<span class="s">}"</span>)
+
+    <span class="c">// Bits.</span>
+    <span class="k">let</span> flags: u8 = <span class="n">0b1010_0110</span>
+    print(<span class="s">"{</span>flags &amp; <span class="n">0x0F</span><span class="s">} {</span>flags | <span class="n">1</span><span class="s">} {</span>flags ~ <span class="n">0xFF</span><span class="s">} {</span>flags &gt;&gt; <span class="n">4</span><span class="s">} {</span>flags.count_ones()<span class="s">}"</span>)
+
+    <span class="c">// Integer division truncates; floats print the Rust way.</span>
+    print(<span class="s">"{</span><span class="n">7</span> / <span class="n">2</span><span class="s">} {</span>-<span class="n">7</span> / <span class="n">2</span><span class="s">} {</span><span class="n">7.0</span> / <span class="n">2.0</span><span class="s">} {</span><span class="n">2.5f32</span> * <span class="n">2.0</span><span class="s">}"</span>)
+    print(<span class="s">"{</span>(<span class="n">2.0</span>).sqrt():.<span class="n">4</span><span class="s">} {</span><span class="n">10</span>.pow(<span class="n">3</span>)<span class="s">} {</span>(-<span class="n">5</span>).abs()<span class="s">}"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>0 4095 none
+44 255 none
+44 255 none
+6 167 89 10 4
+3 -3 3.5 5
+1.4142 1000 5</code></pre></div>
+</div>
+<ul><li>The only implicit conversion is lossless integer widening (<code>u8</code> to <code>u16</code>). There is none between signed and unsigned, and none involving floats.</li><li>A number literal takes the type its context expects. With no context it becomes the first numeric type it meets, and otherwise <code>i32</code> (or <code>f64</code>).</li><li>Integer <code>/</code> and <code>%</code> truncate. A zero divisor unravels. A shift by the type's width or more unravels.</li><li>Bit operators bind tighter than comparisons, so <code>flags &amp; MASK == 0</code> means what it looks like.</li></ul>
+<h2 id="text">Text</h2>
+<p><code>str</code> is a view of UTF-8 text and <code>String</code> owns it. A string literal converts to <code>String</code> wherever one is expected. Lengths and positions count bytes, and slicing a string cuts on bytes, unravelling if it lands inside a character. The case and digit tests on <code>char</code> and the case changes on text cover ASCII only.</p>
+<div class="sample" id="sample-values_text">
+<div class="sample-head"><span class="file">samples/values_text.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fn</span> main() {
+    <span class="c">// `str` is a view of UTF-8 text; `String` owns it. Lengths count bytes.</span>
+    <span class="k">let</span> s = <span class="s">"  Hello, Wörld  "</span>
+    <span class="k">let</span> t = s.trim()
+    print(<span class="s">"[{</span>t<span class="s">}] {</span>t.len()<span class="s">} bytes, {</span>t.char_count()<span class="s">} characters"</span>)
+    print(<span class="s">"{</span>t.to_upper()<span class="s">} {</span>t.to_lower()<span class="s">} {</span>t.starts_with(<span class="s">"Hello"</span>)<span class="s">} {</span>t.find(<span class="s">"W"</span>):?<span class="s">}"</span>)
+    print(t[<span class="n">0</span>..<span class="n">5</span>])                           <span class="c">// slicing counts bytes</span>
+
+    <span class="k">var</span> out = <span class="t">String</span>()
+    <span class="k">for</span> c <span class="k">in</span> <span class="s">"a1b2c3"</span>.chars() {
+        <span class="k">if</span> c.is_digit() { out.push(c) }
+    }
+    out.push_str(<span class="s">"!"</span>)
+    print(out)
+
+    print(<span class="s">"a,b,,c"</span>.split(<span class="s">","</span>))
+    print(<span class="s">"{</span><span class="s">"42"</span>.parse[u8]():?<span class="s">} {</span><span class="s">"x1"</span>.parse[i32]():?<span class="s">} {</span><span class="s">"300"</span>.parse[u8]():?<span class="s">}"</span>)
+    print(<span class="s">"300"</span>.parse[u8]() <span class="k">mend</span> <span class="n">0</span>)
+    print(<span class="s">'f'</span>.to_digit(<span class="n">16</span>))
+    print(<span class="s">"ab"</span>.repeat(<span class="n">3</span>))
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>[Hello, Wörld] 13 bytes, 12 characters
+HELLO, WöRLD hello, wörld true some(7)
+Hello
+123!
+[a, b, , c]
+ok(42) err(Invalid) err(Overflow)
+0
+15
+ababab</code></pre></div>
+</div>
+<p>The full method lists are in <a href="../std/modules/string.html#Str">std.string</a> and <a href="../std/modules/num.html">std.num</a>.</p>
+<h2 id="control-flow">Control flow</h2>
+<p>Everything is an expression: <code>if</code>, <code>match</code> and blocks all have values. <code>match</code> must be exhaustive (<a href="diagnostics.html#P0101">P0101</a>), and an arm can have a guard. Loops are <code>for</code>, <code>while</code> and <code>loop</code>; <code>break</code> can carry a value, and a loop can have a label. Comparisons chain: <code>0 &lt;= x &lt; width</code>.</p>
+<div class="sample" id="sample-values_control">
+<div class="sample-head"><span class="file">samples/values_control.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fn</span> classify(n: i32) -&gt; str = <span class="k">match</span> n {
+    <span class="n">0</span> =&gt; <span class="s">"zero"</span>
+    <span class="n">1</span>..=<span class="n">9</span> =&gt; <span class="s">"small"</span>
+    <span class="n">10</span> | <span class="n">20</span> | <span class="n">30</span> =&gt; <span class="s">"round"</span>
+    x <span class="k">if</span> x &lt; <span class="n">0</span> =&gt; <span class="s">"negative"</span>
+    _ =&gt; <span class="s">"big"</span>
+}
+
+<span class="k">fn</span> main() {
+    <span class="k">for</span> n <span class="k">in</span> [<span class="n">0</span>, <span class="n">5</span>, <span class="n">20</span>, -<span class="n">4</span>, <span class="n">99</span>] {
+        print(<span class="s">"{</span>n<span class="s">}: {</span>classify(n)<span class="s">}"</span>)
+    }
+
+    <span class="c">// Ranges, `while`, `loop` with a value, labels.</span>
+    <span class="k">var</span> total = <span class="n">0</span>
+    <span class="k">for</span> i <span class="k">in</span> <span class="n">1</span>..=<span class="n">4</span> { total += i }
+    print(total)
+
+    <span class="k">var</span> n = <span class="n">27</span>
+    <span class="k">var</span> steps = <span class="n">0</span>
+    <span class="k">while</span> n != <span class="n">1</span> {
+        n = <span class="k">if</span> n % <span class="n">2</span> == <span class="n">0</span> { n / <span class="n">2</span> } <span class="k">else</span> { <span class="n">3</span> * n + <span class="n">1</span> }
+        steps += <span class="n">1</span>
+    }
+    print(<span class="s">"collatz: {</span>steps<span class="s">}"</span>)
+
+    <span class="k">let</span> found = <span class="k">loop</span> {
+        steps += <span class="n">1</span>
+        <span class="k">if</span> steps % <span class="n">7</span> == <span class="n">0</span> { <span class="k">break</span> steps }
+    }
+    print(found)
+
+    outer: <span class="k">for</span> row <span class="k">in</span> <span class="n">0</span>..<span class="n">3</span> {
+        <span class="k">for</span> col <span class="k">in</span> <span class="n">0</span>..<span class="n">3</span> {
+            <span class="k">if</span> col == <span class="n">2</span> { <span class="k">continue</span> outer }
+            <span class="k">if</span> row == <span class="n">2</span> { <span class="k">break</span> outer }
+            print(<span class="s">"{</span>row<span class="s">},{</span>col<span class="s">}"</span>)
+        }
+    }
+
+    <span class="c">// Chained comparisons, tuples, indexed loops.</span>
+    <span class="k">let</span> width = <span class="n">10</span>
+    <span class="k">let</span> x = <span class="n">4</span>
+    <span class="k">if</span> <span class="n">0</span> &lt;= x &lt; width { print(<span class="s">"in range"</span>) }
+
+    <span class="k">for</span> (i, name) <span class="k">in</span> [<span class="s">"a"</span>, <span class="s">"b"</span>, <span class="s">"c"</span>].indexed() {
+        print(<span class="s">"{</span>i<span class="s">}={</span>name<span class="s">}"</span>)
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>0: zero
+5: small
+20: round
+-4: negative
+99: big
+10
+collatz: 111
+112
+0,0
+0,1
+1,0
+1,1
+in range
+0=a
+1=b
+2=c</code></pre></div>
+</div>
+<h2 id="lambdas">Lambdas</h2>
+<p><code>x =&gt; x * 2</code> is a lambda. Its parameter types come from where it's passed, so a lambda stored in a <code>let</code> needs them written. A <code>_</code> inside an argument makes a hole lambda: each <code>_</code> is a new parameter, and the hole belongs to the innermost argument that holds it. A function's name is also a value. A lambda sees the variables around it.</p>
+<div class="sample" id="sample-values_lambdas">
+<div class="sample-head"><span class="file">samples/values_lambdas.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fn</span> apply(x: i32, f: i32 =&gt; i32) -&gt; i32 = f(x)
+
+<span class="k">fn</span> is_even(n: i32) -&gt; bool = n % <span class="n">2</span> == <span class="n">0</span>
+
+<span class="k">fn</span> main() {
+    <span class="c">// A lambda gets its parameter types from where it's passed.</span>
+    <span class="c">// Anywhere else, annotate them.</span>
+    <span class="k">let</span> double = (x: i32) =&gt; x * <span class="n">2</span>
+    print(apply(<span class="n">5</span>, double))
+    print(apply(<span class="n">5</span>, x =&gt; x + <span class="n">1</span>))
+
+    <span class="k">let</span> xs = [<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>, <span class="n">4</span>, <span class="n">5</span>, <span class="n">6</span>]
+    print(xs.filter(_ % <span class="n">2</span> == <span class="n">0</span>))               <span class="c">// hole lambda: n =&gt; n % 2 == 0</span>
+    print(xs.filter(is_even).sum())            <span class="c">// a function's name is a value</span>
+    print(xs.indexed().map(p =&gt; <span class="s">"{</span>p.<span class="n">0</span><span class="s">}:{</span>p.<span class="n">1</span><span class="s">}"</span>).join(<span class="s">" "</span>))
+    print(xs.reduce(_ + _))                    <span class="c">// two holes, two parameters</span>
+
+    <span class="c">// A lambda sees the locals around it.</span>
+    <span class="k">var</span> total = <span class="n">0</span>
+    xs.each(x =&gt; total += x)
+    print(total)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>10
+6
+[2, 4, 6]
+12
+0:1 1:2 2:3 3:4 4:5 5:6
+21
+21</code></pre></div>
+</div>
+<h2 id="twill-patterns">Twill patterns</h2>
+<p>A binary, octal or hex literal in a pattern can hold <code>?</code> (any digit) and lowercase letters, which capture. All the bits with the same letter become one unsigned integer exactly that wide. The pattern's width must equal the value's. The compiler checks twill arms for exhaustiveness bit by bit.</p>
+<div class="sample" id="sample-values_twill">
+<div class="sample-head"><span class="file">samples/values_twill.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">// A twill pattern matches bits. Digits must match, `?` is "don't care",</span>
+<span class="c">// and each lowercase letter is a capture: every bit with the same letter</span>
+<span class="c">// forms one integer exactly that wide.</span>
+<span class="k">fn</span> decode(op: u16) -&gt; <span class="t">String</span> = <span class="k">match</span> op {
+    <span class="n">0x00E0</span> =&gt; <span class="s">"clear"</span>
+    <span class="n">0x1nnn</span> =&gt; <span class="s">"jump to {</span>n<span class="s">}"</span>                  <span class="c">// n: u12</span>
+    <span class="n">0x6xkk</span> =&gt; <span class="s">"v{</span>x<span class="s">} = {</span>k<span class="s">}"</span>                   <span class="c">// x: u4, k: u8</span>
+    <span class="n">0x8xy4</span> =&gt; <span class="s">"v{</span>x<span class="s">} += v{</span>y<span class="s">}"</span>
+    <span class="n">0xFx??</span> =&gt; <span class="s">"misc {</span>x<span class="s">}"</span>
+    _ =&gt; <span class="s">"unknown"</span>
+}
+
+<span class="k">fn</span> utf8_kind(byte: u8) -&gt; str = <span class="k">match</span> byte {
+    <span class="n">0b0???_????</span> =&gt; <span class="s">"ascii"</span>
+    <span class="n">0b110?_????</span> =&gt; <span class="s">"starts a 2-byte character"</span>
+    <span class="n">0b1110_????</span> =&gt; <span class="s">"starts a 3-byte character"</span>
+    <span class="n">0b10??_????</span> =&gt; <span class="s">"continuation"</span>
+    _ =&gt; <span class="s">"other"</span>
+}
+
+<span class="k">fn</span> main() {
+    <span class="k">for</span> op <span class="k">in</span> [<span class="n">0x00E0</span>, <span class="n">0x1234</span>, <span class="n">0x6A42</span>, <span class="n">0x8AB4</span>, <span class="n">0xF107</span>, <span class="n">0x5000</span>] {
+        print(<span class="s">"{</span>op:<span class="n">04</span>X<span class="s">}: {</span>decode(op <span class="k">as</span> u16)<span class="s">}"</span>)
+    }
+    <span class="k">for</span> b <span class="k">in</span> [<span class="n">0x41</span>, <span class="n">0xC3</span>, <span class="n">0xE2</span>, <span class="n">0xA9</span>] {
+        print(<span class="s">"{</span>b:<span class="n">02</span>X<span class="s">}: {</span>utf8_kind(b <span class="k">as</span> u8)<span class="s">}"</span>)
+    }
+
+    <span class="c">// A twill pattern with no fixed digits can't fail, so `let` takes it.</span>
+    <span class="c">// The pattern is 9 bits wide, so the sum is worked out in `u9`.</span>
+    <span class="k">let</span> a: u8 = <span class="n">200</span>
+    <span class="k">let</span> b: u8 = <span class="n">100</span>
+    <span class="k">let</span> <span class="n">0bc_ssss_ssss</span> = a + b
+    print(<span class="s">"carry {</span>c<span class="s">}, sum {</span>s<span class="s">}"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>00E0: clear
+1234: jump to 564
+6A42: v10 = 66
+8AB4: v10 += v11
+F107: misc 1
+5000: unknown
+41: ascii
+C3: starts a 2-byte character
+E2: starts a 3-byte character
+A9: continuation
+carry 1, sum 44</code></pre></div>
+</div>
+<p>In hex twill patterns the digits <code>A</code>-<code>F</code> must be upper case. Lower case letters capture.</p>
+<h2 id="where-next">Where next</h2>
+<p><a href="types.html">Warps, wefts and weaves</a> introduces Loom's own data and behavior types.</p>
+<div class="pager">
+<a href="start.html">&larr; Getting started</a>
+<a href="types.html">Warps, wefts and weaves &rarr;</a>
+</div>
+</main>
+</div>
+</body>
+</html>

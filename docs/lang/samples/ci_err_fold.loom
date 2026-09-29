@@ -1,0 +1,10 @@
+fn is_even(n: i32) -> bool = n % 2 == 0
+
+fn main() {
+    // The condition has to be something the compiler can fold:
+    // literals, constants, arithmetic, comparisons. A function call
+    // isn't.
+    const if is_even(4) {
+    }
+}
+//@ check-fail K0110

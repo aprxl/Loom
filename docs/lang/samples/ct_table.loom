@@ -1,0 +1,25 @@
+use std.io.print
+
+// A constant's initializer is ordinary code. It runs while the program
+// compiles, so the table is ready before `main` starts.
+const SQUARES: [u32; 8] = {
+    var table = [0u32; 8]
+    for i in 0u32..8 {
+        table[i] = i * i
+    }
+    table
+}
+
+fn fib(n: u64) -> u64 = if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+
+// Any function can run at compile time. There's nothing to mark.
+const FIB_20 = fib(20)
+
+const assert(SQUARES[7] == 49, "seven squared")
+const assert(FIB_20 == 6765)
+
+fn main() {
+    print(SQUARES)
+    print(FIB_20)
+}
+//@ run

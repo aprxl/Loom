@@ -1,0 +1,10 @@
+error[K0104]: `std.io.print` can't run at compile time
+  --> docs/lang/samples/ct_err_io.loom:9:7
+  |
+9 | const NOISY: i32 = loud(3)
+  |       ^^^^^ while computing `NOISY`
+  |
+  = note: called at docs/lang/samples/ct_err_io.loom:4:5
+  = note: compile-time code computes; it can't read or write anything outside the compiler
+
+error: docs/lang/samples/ct_err_io.loom failed to compile (1 error)

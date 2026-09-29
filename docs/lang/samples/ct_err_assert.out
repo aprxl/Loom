@@ -1,0 +1,7 @@
+error[K0101]: const assertion failed: this one is wrong
+  --> docs/lang/samples/ct_err_assert.loom:6:14
+  |
+6 | const assert(double(LIMIT) == 21, "this one is wrong")
+  |              ^^^^^^^^^^^^^^^^^^^ this is false
+
+error: docs/lang/samples/ct_err_assert.loom failed to compile (1 error)

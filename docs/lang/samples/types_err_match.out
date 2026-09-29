@@ -1,0 +1,13 @@
+error[P0101]: this `match` doesn't cover every `Shape`
+   --> docs/lang/samples/types_err_match.loom:7:28
+   |  
+ 7 |   fn area(s: Shape) -> f64 = match s {
+   | /----------------------------^
+ 8 | |     .Circle(r) => 3.14 * r * r
+ 9 | |     .Rect(w, h) => w * h
+10 | | }
+   | \-^ not handled: `.Dot`
+   |  
+   = help: add an arm for `.Dot`, or `_ => …` for everything else
+
+error: docs/lang/samples/types_err_match.loom failed to type-check (1 error)

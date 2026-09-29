@@ -1,0 +1,10 @@
+error[K0108]: a constant can't hold a shuttle
+  --> docs/lang/samples/ct_err_holds.loom:8:7
+  |
+8 | const NUMBERS: Shuttle[i32, ()] = numbers(3)
+  |       ^^^^^^^ this is `Shuttle[i32, ()]`
+  |
+  = note: every use of a constant gets the same value, and a shuttle changes as it's used
+  = help: make it in a function, and call that where it's needed
+
+error: docs/lang/samples/ct_err_holds.loom failed to type-check (1 error)

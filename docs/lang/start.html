@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Getting started · Loom</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a class="current" href="../lang/index.html">Language</a></li>
+<li><a href="../std/index.html">Standard library</a></li>
+<li><a href="../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Language</h3>
+<ul>
+<li><a href="index.html">Overview</a></li>
+<li><a class="current" href="start.html">Getting started</a></li>
+<li><a href="values.html">Values and control flow</a></li>
+<li><a href="types.html">Warps, wefts and weaves</a></li>
+<li><a href="generics.html">Generics and <code>any</code></a></li>
+<li><a href="collections.html">Collections and streams</a></li>
+<li><a href="errors.html">Optionals and errors</a></li>
+<li><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
+<li><a href="gauges.html">Gauges</a></li>
+<li><a href="shuttles.html">Shuttles</a></li>
+<li><a href="compile-time.html">Compile-time code</a></li>
+<li><a href="const-params.html">Const parameters and control flow</a></li>
+<li><a href="tests.html">Tests</a></li>
+<li><a href="not-yet.html">Not supported yet</a></li>
+</ul>
+</nav>
+<main>
+<div class="crumb"><a href="index.html">Language</a> / Getting started</div>
+<h1>Getting started</h1>
+<p class="summary">Running a program, the <code>loom</code> commands, and the shape of a first program.</p>
+<h2 id="a-first-program">A first program</h2>
+<div class="sample" id="sample-start_hello">
+<div class="sample-head"><span class="file">samples/start_hello.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fn</span> main() {
+    print(<span class="s">"hello, loom"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>hello, loom</code></pre></div>
+</div>
+<p><code>print</code> isn't in the prelude, so the file says where it comes from with <code>use std.io.print</code>. <code>std</code> itself is always in scope, so <code>std.io.print("hi")</code> works without a <code>use</code>. Every program starts at <code>fn main()</code>.</p>
+<p>A bigger one:</p>
+<div class="sample" id="sample-start_basics">
+<div class="sample-head"><span class="file">samples/start_basics.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fn</span> add(a: i32, b: i32) -&gt; i32 {
+    a + b                                    <span class="c">// the last expression is the result</span>
+}
+
+<span class="k">fn</span> area(w: f64, h: f64 = <span class="n">1.0</span>) -&gt; f64 = w * h  <span class="c">// expression body, default argument</span>
+
+<span class="k">fn</span> main() {
+    <span class="k">let</span> x = <span class="n">5</span>                                <span class="c">// immutable</span>
+    <span class="k">var</span> count = <span class="n">0</span>                            <span class="c">// mutable</span>
+    count += add(x, <span class="n">2</span>)
+
+    <span class="k">let</span> (q, r) = (<span class="n">17</span> / <span class="n">5</span>, <span class="n">17</span> % <span class="n">5</span>)            <span class="c">// destructuring a tuple</span>
+    print(<span class="s">"count = {</span>count<span class="s">}, q = {</span>q<span class="s">}, r = {</span>r<span class="s">}"</span>)
+
+    <span class="c">// Strings are templates: `{expr}` and `{expr:spec}`.</span>
+    <span class="k">let</span> pi = <span class="n">3.14159265</span>
+    print(<span class="s">"pi = {</span>pi:.<span class="n">3</span><span class="s">}, [{</span>count:&gt;<span class="n">5</span><span class="s">}], {</span><span class="n">255</span>:<span class="n">04</span>X<span class="s">}, {</span><span class="s">"hi"</span>:?<span class="s">}"</span>)
+
+    print(area(<span class="n">2.0</span>, h: <span class="n">3.5</span>))                 <span class="c">// named argument</span>
+    print(area(<span class="n">4.0</span>))                         <span class="c">// the default</span>
+
+    <span class="k">let</span> kind = <span class="k">if</span> x &lt; <span class="n">0</span> { <span class="s">"negative"</span> } <span class="k">else</span> <span class="k">if</span> x == <span class="n">0</span> { <span class="s">"zero"</span> } <span class="k">else</span> { <span class="s">"positive"</span> }
+    print(kind)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>count = 7, q = 3, r = 2
+pi = 3.142, [    7], 00FF, "hi"
+7
+4
+positive</code></pre></div>
+</div>
+<ul><li><code>let</code> is immutable and <code>var</code> is mutable. Shadowing is allowed.</li><li>The last expression of a block is its value, so <code>a + b</code> needs no <code>return</code>.</li><li><code>fn f(...) -&gt; T = expr</code> is a function with an expression body.</li><li>Arguments can be named, and a parameter can have a default.</li><li>A string with <code>{expr}</code> in it is a template. <code>{expr:spec}</code> adds a format spec: <code>.3</code> for three decimals, <code>&gt;5</code> to right-align in five columns, <code>04X</code> for zero-padded upper-case hex, <code>?</code> for the debug form.</li><li>A newline ends a statement. Use <code>;</code> to put several on one line.</li><li>Comments are <code>// line</code>, <code>/* block, and /* they nest */ */</code>, and <code>/// doc</code>.</li></ul>
+<h2 id="names-have-a-case">Names have a case</h2>
+<p>The compiler enforces the case of a name, which lets the parser tell <code>Foo[x]</code> (type arguments) from <code>foo[x]</code> (an index).</p>
+<table class="plain"><thead><tr><th>Kind</th><th>Case</th><th>Example</th></tr></thead><tbody><tr><td>values, functions, fields, modules</td><td><code>snake_case</code></td><td><code>port_count</code></td></tr><tr><td>types, wefts, cases</td><td><code>PascalCase</code></td><td><code>Button</code></td></tr><tr><td>constants</td><td><code>SCREAMING_CASE</code>, two or more characters</td><td><code>MAX_SIZE</code></td></tr></tbody></table>
+<p>The four built-in cases <code>some</code>, <code>none</code>, <code>ok</code> and <code>err</code> are the only lowercase constructors.</p>
+<h2 id="modules">Modules</h2>
+<p>A file is a module, and a directory is a module made of its files. <code>use std.io.print</code> imports a name. A <code>use</code> path starts with <code>std</code> or with a module next to the root file: <code>use util.double</code> finds <code>util.loom</code>, and <code>use geometry.point.Point</code> finds <code>geometry/point.loom</code>. Items are private to their module unless marked <code>pub</code>.</p>
+<p>A name is looked up in the enclosing scopes, then the module's own items, then its imports, then the prelude. See <a href="../std/modules/prelude.html">std.prelude</a> for what the prelude holds. <code>target</code> and <code>heap</code> are also always in scope.</p>
+<h2 id="the-loom-command">The <code>loom</code> command</h2>
+<pre class="plain"><code>loom run FILE [-- ARGS...]     compile and run a program
+loom check FILE                report errors, write nothing
+loom build FILE [-o OUT]       write FILE.lua (and FILE.lua.map)
+loom test FILE                 run the file's tests</code></pre>
+<ul><li><code>loom run</code> compiles in memory and runs the result in the bundled Lua VM. Arguments after <code>--</code> go to the program, which reads them with <code>env.args()</code> (the first is the file's path).</li><li><code>loom build --emit tokens|ast|hir|lua</code> prints one stage of the compiler instead of writing Lua.</li><li><code>--color auto|always|never</code> controls colored diagnostics.</li></ul>
+<table class="plain"><thead><tr><th>Exit code</th><th>Meaning</th></tr></thead><tbody><tr><td>0</td><td>success</td></tr><tr><td>1</td><td><code>main</code> returned an error</td></tr><tr><td>2</td><td>a compile or usage error</td></tr><tr><td>70</td><td>an internal error: a bug in Loom, not in your program</td></tr><tr><td>101</td><td>the program unravelled</td></tr></tbody></table>
+<p>Ctrl-C (130), <code>process.exit</code> and an instruction budget for <code>run</code> aren't done yet.</p>
+<h2 id="where-next">Where next</h2>
+<p><a href="values.html">Values and control flow</a> covers numbers, text, <code>match</code> and lambdas. The parts that make Loom different start at <a href="types.html">Warps, wefts and weaves</a>.</p>
+<div class="pager">
+<a href="index.html">&larr; Overview</a>
+<a href="values.html">Values and control flow &rarr;</a>
+</div>
+</main>
+</div>
+</body>
+</html>

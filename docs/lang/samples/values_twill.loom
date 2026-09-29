@@ -1,0 +1,38 @@
+use std.io.print
+
+// A twill pattern matches bits. Digits must match, `?` is "don't care",
+// and each lowercase letter is a capture: every bit with the same letter
+// forms one integer exactly that wide.
+fn decode(op: u16) -> String = match op {
+    0x00E0 => "clear"
+    0x1nnn => "jump to {n}"                  // n: u12
+    0x6xkk => "v{x} = {k}"                   // x: u4, k: u8
+    0x8xy4 => "v{x} += v{y}"
+    0xFx?? => "misc {x}"
+    _ => "unknown"
+}
+
+fn utf8_kind(byte: u8) -> str = match byte {
+    0b0???_???? => "ascii"
+    0b110?_???? => "starts a 2-byte character"
+    0b1110_???? => "starts a 3-byte character"
+    0b10??_???? => "continuation"
+    _ => "other"
+}
+
+fn main() {
+    for op in [0x00E0, 0x1234, 0x6A42, 0x8AB4, 0xF107, 0x5000] {
+        print("{op:04X}: {decode(op as u16)}")
+    }
+    for b in [0x41, 0xC3, 0xE2, 0xA9] {
+        print("{b:02X}: {utf8_kind(b as u8)}")
+    }
+
+    // A twill pattern with no fixed digits can't fail, so `let` takes it.
+    // The pattern is 9 bits wide, so the sum is worked out in `u9`.
+    let a: u8 = 200
+    let b: u8 = 100
+    let 0bc_ssss_ssss = a + b
+    print("carry {c}, sum {s}")
+}
+//@ run

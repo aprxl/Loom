@@ -1,0 +1,18 @@
+use std.io.print
+
+warp Grid[const W: u8, const H: u8] {
+    fn area(self) -> u16 = W as u16 * H as u16
+}
+
+fn main() {
+    // `uint(n)` and `int(n)` are the integer types with `n` bits.
+    let small: uint(3) = 7
+    let wide: int(12) = -2048
+    print("{small} {wide}")
+
+    // Different arguments make different types.
+    print(Grid[2, 5]().area())
+    let g: Grid[3, 3] = Grid[3, 3]()
+    print(g.area())
+}
+//@ run

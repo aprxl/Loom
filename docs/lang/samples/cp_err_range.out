@@ -1,0 +1,7 @@
+error[T0102]: `300` doesn't fit in `u8`
+  --> docs/lang/samples/cp_err_range.loom:7:18
+  |
+7 |     let b = Grid[300, 1]()
+  |                  ^^^ too big or too small
+
+error: docs/lang/samples/cp_err_range.loom failed to type-check (1 error)

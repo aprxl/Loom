@@ -1,0 +1,25 @@
+use std.io.print
+
+warp Frame {
+    w: u16
+    h: u16
+    fn size(self) -> (u16, u16) = (.w, .h)
+    fn describe(self) -> String = "frame {.w}x{.h}"
+}
+
+// `through` forwards the field's methods. There is no inheritance:
+// a Button is not a Frame.
+warp Button {
+    through frame: Frame
+    label: String
+
+    fn describe(self) -> String = "button '{.label}' over {.frame.describe()}"   // overrides
+}
+
+fn main() {
+    let b = Button(Frame(10, 3), "OK")
+    print(b.size())                          // forwarded from Frame
+    print(b.describe())                      // Button's own
+    print(b.frame.w)                         // fields aren't forwarded
+}
+//@ run

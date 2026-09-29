@@ -1,0 +1,11 @@
+error[K0105]: `n` has no value while compiling
+  --> docs/lang/samples/ci_err_known.loom:3:14
+  |
+2 |     var n = 3
+  |         - declared outside it, so it gets its value when the program runs
+3 |     const if n > 2 {
+  |              ^ read by compile-time code
+  |
+  = help: compile-time code can use constants, functions and its own locals
+
+error: docs/lang/samples/ci_err_known.loom failed to type-check (1 error)

@@ -1,0 +1,52 @@
+use std.io.print
+
+fn classify(n: i32) -> str = match n {
+    0 => "zero"
+    1..=9 => "small"
+    10 | 20 | 30 => "round"
+    x if x < 0 => "negative"
+    _ => "big"
+}
+
+fn main() {
+    for n in [0, 5, 20, -4, 99] {
+        print("{n}: {classify(n)}")
+    }
+
+    // Ranges, `while`, `loop` with a value, labels.
+    var total = 0
+    for i in 1..=4 { total += i }
+    print(total)
+
+    var n = 27
+    var steps = 0
+    while n != 1 {
+        n = if n % 2 == 0 { n / 2 } else { 3 * n + 1 }
+        steps += 1
+    }
+    print("collatz: {steps}")
+
+    let found = loop {
+        steps += 1
+        if steps % 7 == 0 { break steps }
+    }
+    print(found)
+
+    outer: for row in 0..3 {
+        for col in 0..3 {
+            if col == 2 { continue outer }
+            if row == 2 { break outer }
+            print("{row},{col}")
+        }
+    }
+
+    // Chained comparisons, tuples, indexed loops.
+    let width = 10
+    let x = 4
+    if 0 <= x < width { print("in range") }
+
+    for (i, name) in ["a", "b", "c"].indexed() {
+        print("{i}={name}")
+    }
+}
+//@ run

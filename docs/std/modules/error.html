@@ -4,13 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>std.error · Loom</title>
-<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="../../style.css">
 </head>
 <body>
 <div class="layout">
 <nav class="sidebar">
-<a class="brand" href="../index.html">Loom <span class="dim">std</span></a>
+<a class="brand" href="../../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a href="../../lang/index.html">Language</a></li>
+<li><a class="current" href="../../std/index.html">Standard library</a></li>
+<li><a href="../../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Standard library</h3>
 <ul>
+<li><a href="../index.html">Overview</a></li>
 <li><a href="prelude.html">prelude</a></li>
 <li><a href="env.html">env</a></li>
 <li><a class="current" href="error.html">error</a></li>
@@ -33,20 +40,21 @@
 <li><a href="target.html">target</a></li>
 <li><a href="term.html">term</a></li>
 <li><a href="time.html">time</a></li>
-</ul></nav>
+</ul>
+</nav>
 <main>
 <div class="crumb"><a href="../index.html">std</a> / error</div>
 <h1>std.error</h1>
 <p class="summary">Errors and giving up.</p>
 <h2>Types</h2>
-<div class="item">
+<div class="item" id="Error">
 <div class="item-head">
 <span class="sig">weft <strong>Error</strong>: Show</span>
 
 </div>
 <p class="item-doc">Something that went wrong. The default <code>message</code> is built from the case name and payload.</p>
 <div class="members">
-<div class="member">
+<div class="member" id="Error.message">
 <div class="member-head">
 <span class="sig">fn message(self) -&gt; String</span>
 <span class="badge builtin">builtin</span>
@@ -55,7 +63,7 @@
 </div>
 </div>
 </div>
-<div class="item">
+<div class="item" id="Missing">
 <div class="item-head">
 <span class="sig">warp <strong>Missing</strong>: Error</span>
 
@@ -63,14 +71,14 @@
 <p class="item-doc">The error a <code>?</code> on an empty optional produces.</p>
 </div>
 <h2>Functions</h2>
-<div class="item">
+<div class="item" id="unravel">
 <div class="item-head">
 <span class="sig">fn <strong>unravel</strong>(message: str) -&gt; never</span>
 <span class="badge extern">extern</span>
 </div>
 <p class="item-doc">Gives up: unwinds the current thread, running <code>defer</code>s on the way out.</p>
 </div>
-<div class="item">
+<div class="item" id="assert">
 <div class="item-head">
 <span class="sig">fn <strong>assert</strong>(condition: bool, message: str = "assertion failed")</span>
 <span class="badge extern">extern</span>

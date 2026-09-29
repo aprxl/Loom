@@ -1,0 +1,4 @@
+fn main() {
+    let size = std.sys.page_size()
+}
+//@ check-fail U0102

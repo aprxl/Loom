@@ -1,0 +1,13 @@
+warp Shape {
+    case Circle(radius: f64)
+    case Rect(w: f64, h: f64)
+    case Dot
+}
+
+fn area(s: Shape) -> f64 = match s {
+    .Circle(r) => 3.14 * r * r
+    .Rect(w, h) => w * h
+}
+
+fn main() {}
+//@ check-fail P0101

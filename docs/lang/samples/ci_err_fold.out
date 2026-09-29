@@ -1,0 +1,9 @@
+error[K0110]: a `const if` condition must be known at compile time
+  --> docs/lang/samples/ci_err_fold.loom:7:14
+  |
+7 |     const if is_even(4) {
+  |              ^^^^^^^^^^ the constant folder can't work this out
+  |
+  = note: it can use literals, constants, `const` parameters, `target`, arithmetic and comparisons
+
+error: docs/lang/samples/ci_err_fold.loom failed to type-check (1 error)

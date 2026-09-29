@@ -1,0 +1,14 @@
+error[U0102]: not implemented yet: `loom` and `thread`
+   --> docs/lang/samples/nyet_threads.loom:10:18
+   |  
+10 |       let (a, b) = loom {
+   | /------------------^
+11 | |         let x = thread slow_sum(left)
+12 | |         let y = thread slow_sum(right)
+13 | |         (x.join(), y.join())
+14 | |     }
+   | \-----^ not supported by this compiler yet
+   |  
+   = note: the type checker grows one milestone at a time; see design/lua-backend.md
+
+error: docs/lang/samples/nyet_threads.loom failed to type-check (1 error)

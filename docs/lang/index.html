@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overview · Loom</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a class="current" href="../lang/index.html">Language</a></li>
+<li><a href="../std/index.html">Standard library</a></li>
+<li><a href="../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Language</h3>
+<ul>
+<li><a class="current" href="index.html">Overview</a></li>
+<li><a href="start.html">Getting started</a></li>
+<li><a href="values.html">Values and control flow</a></li>
+<li><a href="types.html">Warps, wefts and weaves</a></li>
+<li><a href="generics.html">Generics and <code>any</code></a></li>
+<li><a href="collections.html">Collections and streams</a></li>
+<li><a href="errors.html">Optionals and errors</a></li>
+<li><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
+<li><a href="gauges.html">Gauges</a></li>
+<li><a href="shuttles.html">Shuttles</a></li>
+<li><a href="compile-time.html">Compile-time code</a></li>
+<li><a href="const-params.html">Const parameters and control flow</a></li>
+<li><a href="tests.html">Tests</a></li>
+<li><a href="not-yet.html">Not supported yet</a></li>
+</ul>
+</nav>
+<main>
+<div class="crumb"><a href="index.html">Language</a></div>
+<h1>Overview</h1>
+<p class="summary">What the Loom compiler runs today, and what it doesn't.</p>
+<p>Loom is a statically typed language with no garbage collector. Data and behavior are separate threads, and you weave them together: a <strong>warp</strong> declares data, a <strong>weft</strong> declares behavior, and a <strong>weave</strong> joins the two.</p>
+<p>The compiler is written in Rust. It checks a program, erases everything the type system proved, and emits Lua 5.4, which a bundled VM runs. The whole language is designed, but only part of it works yet. These pages describe the part that does.</p>
+<div class="callout">Every code sample on these pages is a real file in <code>docs/lang/samples/</code>. <code>python docs/gen.py --check</code> runs each one and compares what happens with what the page says. If a sample doesn't behave as shown, the check fails.</div>
+<p>The design itself is in the repository: <code>README.md</code> and <code>design/*.md</code>. Where the two differ, the design says where Loom is going and these pages say where it is.</p>
+<h2 id="what-works-today">What works today</h2>
+<table class="plain"><thead><tr><th>Area</th><th>State</th><th>Page</th></tr></thead><tbody><tr><td>Numbers of every width up to 64 bits, overflow operators, casts</td><td>works</td><td><a href="values.html">Values and control flow</a></td></tr><tr><td>Strings, templates, characters, <code>parse</code></td><td>works</td><td><a href="values.html">Values and control flow</a></td></tr><tr><td>Functions, lambdas, <code>match</code>, twill patterns</td><td>works</td><td><a href="values.html">Values and control flow</a></td></tr><tr><td>Warps: records, cases, methods, the leading dot, dot-blocks</td><td>works</td><td><a href="types.html">Warps, wefts and weaves</a></td></tr><tr><td>Wefts, weaves, <code>through</code>, derived <code>Show</code>, <code>Eq</code>, <code>Ord</code>, <code>Hash</code></td><td>works</td><td><a href="types.html">Warps, wefts and weaves</a></td></tr><tr><td>Generics, <code>any W</code>, wefts as parameter types</td><td>works</td><td><a href="generics.html">Generics and <code>any</code></a></td></tr><tr><td>Arrays, lists, slices, maps, sets, lazy streams</td><td>works</td><td><a href="collections.html">Collections and streams</a></td></tr><tr><td>Optionals, results, <code>?</code>, <code>mend</code>, <code>fail</code>, error unions, <code>unravel</code></td><td>works</td><td><a href="errors.html">Optionals and errors</a></td></tr><tr><td>Moves, <code>mut</code> and <code>take</code> parameters, <code>once</code> warps, <code>defer</code></td><td>works</td><td><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></td></tr><tr><td>Gauges: number types limited to a range</td><td>works</td><td><a href="gauges.html">Gauges</a></td></tr><tr><td>Shuttles: generators, duplex shuttles, sinks</td><td>works</td><td><a href="shuttles.html">Shuttles</a></td></tr><tr><td>Constants computed by ordinary code, <code>const</code> expressions, <code>const assert</code></td><td>works</td><td><a href="compile-time.html">Compile-time code</a></td></tr><tr><td><code>const</code> parameters, <code>const if</code>, <code>const for</code>, <code>target</code></td><td>works</td><td><a href="const-params.html">Const parameters and control flow</a></td></tr><tr><td>Tests and <code>loom test</code></td><td>works</td><td><a href="tests.html">Tests</a></td></tr><tr><td>Reflection, derive written in Loom</td><td>not yet</td><td><a href="not-yet.html">Not supported yet</a></td></tr><tr><td>Threads: <code>loom</code>, <code>thread</code>, <code>loom for</code>, <code>Atomic</code>, <code>Mutex</code></td><td>not yet</td><td><a href="not-yet.html">Not supported yet</a></td></tr><tr><td>Spools, region pointers, <code>given</code>, <code>ref warp</code></td><td>not yet</td><td><a href="not-yet.html">Not supported yet</a></td></tr><tr><td><code>unsafe</code>, raw pointers, <code>extern "C"</code>, <code>std.sys</code>, reading standard input</td><td>not yet</td><td><a href="not-yet.html">Not supported yet</a></td></tr></tbody></table>
+<h2 id="how-to-read-a-sample">How to read a sample</h2>
+<p>Each sample shows its source, a tag saying what happens to it, and what it prints or what the compiler reports. A sample that fails to compile shows the exact diagnostic, and the tag links the code to the <a href="diagnostics.html">diagnostic codes</a> table.</p>
+<p>Anything the compiler doesn't do yet stops with a <code>U</code> code (usually <a href="diagnostics.html#U0102">U0102</a>, "not implemented yet"). It never compiles it wrongly.</p>
+<h2 id="the-standard-library">The standard library</h2>
+<p>Names like <code>print</code> come from <code>std</code>. The <a href="../std/index.html">standard library spec</a> lists every module and every item. Only the <a href="../std/modules/prelude.html">prelude</a> is in scope without a <code>use</code>.</p>
+<div class="pager">
+<span></span>
+<a href="start.html">Getting started &rarr;</a>
+</div>
+</main>
+</div>
+</body>
+</html>

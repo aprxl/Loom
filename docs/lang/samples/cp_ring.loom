@@ -1,0 +1,46 @@
+use std.io.print
+
+// A ring buffer whose cursors are exactly as wide as its capacity needs.
+// With N = 4 they are `u2`, so `+%= 1` wraps at N with no extra code.
+warp Ring[T, const N: usize] {
+    const assert(N.is_power_of_two(), "Ring capacity must be a power of two, got {N}")
+
+    type Idx = uint(N.log2())
+    type Len = uint(N.log2() + 1)
+
+    slots: [?T; N] = [none; N]
+    head: Idx = 0
+    tail: Idx = 0
+    pub(get) len: Len = 0
+
+    /// Adds to the back. When the ring is full, the oldest item is dropped
+    /// and returned.
+    pub fn push(mut self, take x: T) -> ?T {
+        let evicted = if .len == N { .pop() } else { none }
+        .slots[.tail] = x
+        .tail +%= 1
+        .len += 1
+        evicted
+    }
+
+    pub fn pop(mut self) -> ?T {
+        if .len == 0 { return none }
+        let x = .slots[.head].take()
+        .head +%= 1
+        .len -= 1
+        x
+    }
+}
+
+fn main() {
+    var recent = Ring[u32, 4]()
+    for n in 1u32..=6 {
+        if recent.push(n) is some(old) {
+            print("dropped {old}")
+        }
+    }
+    while recent.pop() is some(n) {
+        print("kept {n}")
+    }
+}
+//@ run

@@ -1,0 +1,7 @@
+error[G0201]: `-1` is outside the gauge `Cents`
+  --> docs/lang/samples/gauges_err.loom:3:24
+  |
+3 | const REFUND: Cents = -1
+  |                        ^ `Cents` is 0..
+
+error: docs/lang/samples/gauges_err.loom failed to type-check (1 error)

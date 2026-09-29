@@ -4,13 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>std.slice · Loom</title>
-<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="../../style.css">
 </head>
 <body>
 <div class="layout">
 <nav class="sidebar">
-<a class="brand" href="../index.html">Loom <span class="dim">std</span></a>
+<a class="brand" href="../../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a href="../../lang/index.html">Language</a></li>
+<li><a class="current" href="../../std/index.html">Standard library</a></li>
+<li><a href="../../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Standard library</h3>
 <ul>
+<li><a href="../index.html">Overview</a></li>
 <li><a href="prelude.html">prelude</a></li>
 <li><a href="env.html">env</a></li>
 <li><a href="error.html">error</a></li>
@@ -33,132 +40,133 @@
 <li><a href="target.html">target</a></li>
 <li><a href="term.html">term</a></li>
 <li><a href="time.html">time</a></li>
-</ul></nav>
+</ul>
+</nav>
 <main>
 <div class="crumb"><a href="../index.html">std</a> / slice</div>
 <h1>std.slice</h1>
 <p class="summary">Slices: views of contiguous elements.</p>
 <h2>Types</h2>
-<div class="item">
+<div class="item" id="Slice">
 <div class="item-head">
 <span class="sig">warp <strong>Slice</strong>[T]</span>
 <span class="badge builtin">builtin</span>
 </div>
 <p class="item-doc"><code>[T]</code>: a view of contiguous <code>T</code>s, in an array or a list. Arrays and lists have these methods too.</p>
 <div class="members">
-<div class="member">
+<div class="member" id="Slice.len">
 <div class="member-head">
 <span class="sig">fn len(self) -&gt; usize</span>
 
 </div>
 <p class="member-doc">How many elements there are.</p>
 </div>
-<div class="member">
+<div class="member" id="Slice.is_empty">
 <div class="member-head">
 <span class="sig">fn is_empty(self) -&gt; bool</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
-<div class="member">
+<div class="member" id="Slice.get">
 <div class="member-head">
 <span class="sig">fn get(self, i: usize) -&gt; ?T</span>
 
 </div>
 <p class="member-doc">The element at <code>i</code>, or <code>none</code> past the end.</p>
 </div>
-<div class="member">
+<div class="member" id="Slice.first">
 <div class="member-head">
 <span class="sig">fn first(self) -&gt; ?T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
-<div class="member">
+<div class="member" id="Slice.last">
 <div class="member-head">
 <span class="sig">fn last(self) -&gt; ?T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
-<div class="member">
+<div class="member" id="Slice.contains">
 <div class="member-head">
 <span class="sig">fn contains(self, x: T) -&gt; bool where T: Eq</span>
 
 </div>
 <p class="member-doc">Whether some element equals <code>x</code>.</p>
 </div>
-<div class="member">
+<div class="member" id="Slice.index_of">
 <div class="member-head">
 <span class="sig">fn index_of(self, x: T) -&gt; ?usize where T: Eq</span>
 
 </div>
 <p class="member-doc">The index of the first element equal to <code>x</code>.</p>
 </div>
-<div class="member">
+<div class="member" id="Slice.copy_from">
 <div class="member-head">
 <span class="sig">fn copy_from(mut self, src: [T])</span>
 
 </div>
 <p class="member-doc">Copies <code>src</code> over the start of this slice. Unravels if <code>src</code> is longer.</p>
 </div>
-<div class="member">
+<div class="member" id="Slice.fill">
 <div class="member-head">
 <span class="sig">fn fill(mut self, x: T)</span>
 
 </div>
 <p class="member-doc">Sets every element to a copy of <code>x</code>.</p>
 </div>
-<div class="member">
+<div class="member" id="Slice.swap">
 <div class="member-head">
 <span class="sig">fn swap(mut self, i: usize, j: usize)</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
-<div class="member">
+<div class="member" id="Slice.reverse">
 <div class="member-head">
 <span class="sig">fn reverse(mut self)</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
-<div class="member">
+<div class="member" id="Slice.sort">
 <div class="member-head">
 <span class="sig">fn sort(mut self) where T: Ord</span>
 
 </div>
 <p class="member-doc">Sorts in order, keeping equal elements in the order they were in.</p>
 </div>
-<div class="member">
+<div class="member" id="Slice.to_list">
 <div class="member-head">
 <span class="sig">fn to_list(self) -&gt; List[T]</span>
 
 </div>
 <p class="member-doc">A new list with a copy of every element.</p>
 </div>
-<div class="member">
+<div class="member" id="Slice.map">
 <div class="member-head">
 <span class="sig">fn map[U](self, f: T =&gt; U) -&gt; List[U]</span>
 
 </div>
 <p class="member-doc">A new list of <code>f</code> of each element. (<code>xs.indexed()</code> and the other methods of <code>Stream</code> work on slices too, lazily.)</p>
 </div>
-<div class="member">
+<div class="member" id="Slice.filter">
 <div class="member-head">
 <span class="sig">fn filter(self, f: T =&gt; bool) -&gt; List[T]</span>
 
 </div>
 <p class="member-doc">A new list with a copy of each element <code>f</code> says yes to.</p>
 </div>
-<div class="member">
+<div class="member" id="Slice.chunks">
 <div class="member-head">
 <span class="sig">fn chunks(self, n: usize) -&gt; Stream[[T]]</span>
 
 </div>
 <p class="member-doc">Views of <code>n</code> elements at a time, one after another; the last may be shorter. Unravels if <code>n</code> is 0.</p>
 </div>
-<div class="member">
+<div class="member" id="Slice.windows">
 <div class="member-head">
 <span class="sig">fn windows(self, n: usize) -&gt; Stream[[T]]</span>
 

@@ -1,0 +1,8 @@
+inner cleanup
+outer cleanup
+--- stderr ---
+unravel: something that should never happen
+  --> docs/lang/samples/errors_unravel.loom:5:5
+  |
+5 |     unravel("something that should never happen")
+  |     ^

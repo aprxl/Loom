@@ -1,0 +1,12 @@
+error[K0105]: `n` has no value while compiling
+  --> docs/lang/samples/ct_err_local.loom:5:25
+  |
+3 | fn f(n: i32) -> i32 {
+  |      - declared outside it, so it gets its value when the program runs
+4 |     let a = const twice(4)
+5 |     let b = const twice(n)
+  |                         ^ read by compile-time code
+  |
+  = help: compile-time code can use constants, functions and its own locals
+
+error: docs/lang/samples/ct_err_local.loom failed to type-check (1 error)

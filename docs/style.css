@@ -1,6 +1,6 @@
-/* Loom std spec: dark only, square corners, Georgia for prose, Pragmasevka
-   for code. Generated alongside the pages by gen.py — edit that, not this
-   file's callers. */
+/* Loom docs: dark only, square corners, Georgia for prose, Pragmasevka for
+   code. One stylesheet for the whole site (landing page, language pages, std
+   spec). Hand-written: gen.py links to it but doesn't produce it. */
 
 :root {
   --bg: #111110;
@@ -14,6 +14,9 @@
   --todo: #d97757;
   --builtin: #6f9bb5;
   --extern: #7fa876;
+  --type: #b7a3d6;
+  --err: #d97757;
+  --ok: #7fa876;
 }
 
 * {
@@ -104,6 +107,7 @@ nav.sidebar a.current {
 
 main {
   flex: 1 1 auto;
+  min-width: 0;
   max-width: 46rem;
   padding: 2.5rem 2.5rem 6rem;
 }
@@ -346,6 +350,177 @@ footer {
   border-top: 1px solid var(--border);
   color: var(--text-dim);
   font-size: 0.85rem;
+}
+
+/* ---- site navigation ---- */
+
+nav.sidebar .sections {
+  margin-bottom: 0.4rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid var(--border);
+}
+
+nav.sidebar .sections a {
+  color: var(--text);
+}
+
+nav.sidebar .sections a.current {
+  color: var(--accent);
+}
+
+nav.sidebar h3 {
+  margin: 1rem 0 0.3rem;
+  font-size: 0.75rem;
+  font-weight: normal;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+/* ---- prose pages ---- */
+
+main > p, main > ul, main > ol {
+  margin: 0.8rem 0;
+}
+
+main li {
+  margin: 0.25rem 0;
+}
+
+h3 {
+  font-size: 1.02rem;
+  margin: 1.8rem 0 0.5rem;
+}
+
+.callout {
+  border-left: 3px solid var(--accent-dim);
+  background: var(--bg-panel);
+  padding: 0.6rem 1rem;
+  margin: 1rem 0;
+  color: var(--text);
+}
+
+table.plain {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.95rem;
+}
+
+table.plain th, table.plain td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.4rem 0.7rem 0.4rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+table.plain th {
+  color: var(--text-dim);
+  font-weight: normal;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+table.codes td:first-child {
+  white-space: nowrap;
+}
+
+tr:target td {
+  background: var(--bg-inset);
+}
+
+pre.plain {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+}
+
+/* ---- code samples ---- */
+
+.sample {
+  margin: 1.2rem 0 1.6rem;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.sample:target {
+  border-color: var(--accent-dim);
+}
+
+.sample-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.35rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.sample-head .file {
+  font-family: "Pragmasevka", "Iosevka", "Cascadia Code", Consolas, monospace;
+}
+
+.tag {
+  font-family: "Pragmasevka", "Iosevka", "Cascadia Code", Consolas, monospace;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tag.ok { color: var(--ok); }
+.tag.warn { color: var(--accent); }
+.tag.err { color: var(--err); }
+
+.tag a {
+  color: inherit;
+}
+
+.sample pre {
+  margin: 0;
+  border: none;
+  background: none;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.sample-out {
+  border-top: 1px dashed var(--border);
+  background: var(--bg-inset);
+}
+
+.out-head {
+  padding: 0.3rem 0.9rem 0;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.sample-out pre {
+  color: var(--text-dim);
+  padding-top: 0.3rem;
+}
+
+pre .c { color: var(--text-dim); font-style: italic; }
+pre .k { color: var(--accent); }
+pre .s { color: var(--extern); }
+pre .n { color: var(--builtin); }
+pre .t { color: var(--type); }
+pre .err { color: var(--err); }
+pre .loc { color: var(--builtin); }
+
+.pager {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.cards.two {
+  grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
 }
 
 @media (max-width: 760px) {

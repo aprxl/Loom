@@ -1,0 +1,14 @@
+error[K0106]: `return` can't leave compile-time code
+  --> docs/lang/samples/ct_err_flow.loom:3:9
+  |  
+2 |       let x = const {
+  | /-------------'
+3 | |         return 0
+  | |         ^^^^^^^^ this would leave the `const` code
+4 | |     }
+  | \-----' it runs while compiling, from here
+  |  
+  = note: compile-time code runs before the program does, so it can't change where the program goes
+  = help: handle it inside: `mend`, or an `if`
+
+error: docs/lang/samples/ct_err_flow.loom failed to type-check (1 error)

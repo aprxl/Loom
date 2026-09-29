@@ -1,0 +1,9 @@
+error[U0102]: not implemented yet: spools
+  --> docs/lang/samples/nyet_spools.loom:8:19
+  |
+8 |     spool frame = Arena(1024)
+  |                   ^^^^^^^^^^^ not supported by this compiler yet
+  |
+  = note: the type checker grows one milestone at a time; see design/lua-backend.md
+
+error: docs/lang/samples/nyet_spools.loom failed to type-check (1 error)

@@ -1,0 +1,9 @@
+use std.io.print
+
+fn pick(const first: bool) -> str = if first { "first" } else { "second" }
+
+fn main() {
+    var k = 3
+    print(pick(k > 2))
+}
+//@ check-fail K0109

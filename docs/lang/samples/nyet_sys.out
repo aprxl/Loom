@@ -1,0 +1,7 @@
+error[U0102]: not implemented yet: `std.sys`, the platform's own APIs
+  --> docs/lang/samples/nyet_sys.loom:2:20
+  |
+2 |     let size = std.sys.page_size()
+  |                    ^^^ not supported by this compiler yet
+
+error: docs/lang/samples/nyet_sys.loom failed to resolve (1 error)

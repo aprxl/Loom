@@ -1,0 +1,15 @@
+body
+declared second, runs first
+declared first, runs last
+defer sees x = 4
+4
+defer sees x = 9
+90
+cleanup after fails(false)
+ok(1)
+cleanup after fails(true)
+err(Bad)
+iteration 0
+end of iteration 0
+end of iteration 1
+end of iteration 2

@@ -1,0 +1,44 @@
+use std.io.print
+
+warp Shape: Show {
+    case Circle(radius: f64)
+    case Rect(w: f64, h: f64)
+    case Dot                                 // no payload
+
+    fn area(self) -> f64 = match self {
+        .Circle(r) => 3.14159 * r * r
+        .Rect(w, h) => w * h
+        .Dot => 0
+    }
+}
+
+// Fields written beside the cases belong to every case.
+warp Token: Show {
+    line: u32
+
+    case Word(String)
+    case Number(i64)
+    case End
+}
+
+fn main() {
+    let shapes = [Shape.Circle(2.0), .Rect(w: 3, h: 4), .Dot]
+    for s in shapes {
+        print("{s}: {s.area()}")
+    }
+
+    let t = Token.Number(42, line: 7)
+    print("{t.line}: {t}")          // `line` needs no `match`
+    if t is .Number(n) and n > 40 {
+        print("big number {n}")
+    }
+
+    // `match` must cover every case.
+    let name = match t {
+        .Word(w) => w
+        .Number(_) => "a number"
+        .End => "the end"
+    }
+    print(name)
+}
+//@ run

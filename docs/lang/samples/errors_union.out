@@ -1,0 +1,5 @@
+ok 42
+io: Unreadable(path: "missing")
+text: Garbled
+loaded 42
+run failed: Garbled

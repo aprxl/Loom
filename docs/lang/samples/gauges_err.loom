@@ -1,0 +1,6 @@
+type Cents = i64 where 0..
+
+const REFUND: Cents = -1
+
+fn main() {}
+//@ check-fail G0201

@@ -1,0 +1,11 @@
+use std.io.print
+
+const PRIMES: List[u32] = [2, 3, 5, 7]
+
+fn main() {
+    // Every use of a constant gets a value of its own.
+    var mine = PRIMES
+    mine.push(11)
+    print("{mine} {PRIMES}")
+}
+//@ run

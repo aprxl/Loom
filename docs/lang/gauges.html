@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gauges · Loom</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a class="current" href="../lang/index.html">Language</a></li>
+<li><a href="../std/index.html">Standard library</a></li>
+<li><a href="../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Language</h3>
+<ul>
+<li><a href="index.html">Overview</a></li>
+<li><a href="start.html">Getting started</a></li>
+<li><a href="values.html">Values and control flow</a></li>
+<li><a href="types.html">Warps, wefts and weaves</a></li>
+<li><a href="generics.html">Generics and <code>any</code></a></li>
+<li><a href="collections.html">Collections and streams</a></li>
+<li><a href="errors.html">Optionals and errors</a></li>
+<li><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
+<li><a class="current" href="gauges.html">Gauges</a></li>
+<li><a href="shuttles.html">Shuttles</a></li>
+<li><a href="compile-time.html">Compile-time code</a></li>
+<li><a href="const-params.html">Const parameters and control flow</a></li>
+<li><a href="tests.html">Tests</a></li>
+<li><a href="not-yet.html">Not supported yet</a></li>
+</ul>
+</nav>
+<main>
+<div class="crumb"><a href="index.html">Language</a> / Gauges</div>
+<h1>Gauges</h1>
+<p class="summary">Number types limited to a range or a predicate.</p>
+<p>A <strong>gauge</strong> is a numeric type with a restriction: a range (<code>u16 where 1..</code>) or a predicate written as a hole lambda (<code>i64 where _ % 2 == 0</code>).</p>
+<p>A gauge is its own type. It widens to its base type by itself (a <code>Port</code> is a <code>u16</code>), and has its base's methods. Getting a number <strong>into</strong> a gauge is checked:</p>
+<table class="plain"><thead><tr><th>Form</th><th>When the value is outside</th></tr></thead><tbody><tr><td>a literal or a constant</td><td>compile error (<a href="diagnostics.html#G0201">G0201</a>)</td></tr><tr><td><code>x as Port</code></td><td>unravels</td></tr><tr><td><code>x as? Port</code></td><td>gives an optional</td></tr><tr><td><code>x as| Port</code></td><td>clamps into the range (range gauges only)</td></tr><tr><td><code>if x is Port { ... }</code></td><td>the test fails; inside the branch <code>x</code> is a <code>Port</code></td></tr></tbody></table>
+<p>Arithmetic on range gauges follows intervals at compile time. <code>Cents + Cents</code> can't go below zero, so it's still <code>Cents</code>. <code>Cents - Cents</code> can, so it's a plain <code>i64</code>. Overflow still unravels as usual.</p>
+<div class="sample" id="sample-gauges_basic">
+<div class="sample-head"><span class="file">samples/gauges_basic.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">// A gauge is a number type limited to a range or a predicate.</span>
+<span class="k">type</span> <span class="t">Cents</span> = i64 <span class="k">where</span> <span class="n">0</span>..
+<span class="k">type</span> <span class="t">Port</span> = u16 <span class="k">where</span> <span class="n">1</span>..
+<span class="k">type</span> <span class="t">Percent</span> = f32 <span class="k">where</span> <span class="n">0.0</span>..=<span class="n">1.0</span>
+<span class="k">type</span> <span class="t">Even</span> = i64 <span class="k">where</span> _ % <span class="n">2</span> == <span class="n">0</span>
+
+<span class="k">fn</span> fee(balance: <span class="t">Cents</span>, amount: <span class="t">Cents</span>) -&gt; <span class="t">Cents</span> =
+    <span class="k">if</span> balance &gt;= <span class="n">1000_00</span> { <span class="n">0</span> } <span class="k">else</span> { (amount / <span class="n">100</span>).max(<span class="n">25</span>) }
+
+<span class="k">fn</span> parse_cents(s: str) -&gt; ?<span class="t">Cents</span> {
+    <span class="k">let</span> n = s.parse[i64]() <span class="k">mend</span> <span class="k">return</span> <span class="k">none</span>
+    <span class="k">if</span> n <span class="k">is</span> <span class="t">Cents</span> { n } <span class="k">else</span> { <span class="k">none</span> }        <span class="c">// `is` narrows `n` inside the branch</span>
+}
+
+<span class="k">fn</span> main() {
+    <span class="k">let</span> a: <span class="t">Cents</span> = <span class="n">250</span>                       <span class="c">// a literal is checked while compiling</span>
+    <span class="k">let</span> b: <span class="t">Cents</span> = <span class="n">100</span>
+    <span class="k">let</span> sum = a + b                          <span class="c">// Cents + Cents can't go below zero: still Cents</span>
+    <span class="k">let</span> diff = a - b                         <span class="c">// could go below zero: a plain i64</span>
+    <span class="k">let</span> wide: i64 = a                        <span class="c">// a gauge widens to its base type</span>
+    print(<span class="s">"{</span>sum<span class="s">} {</span>diff<span class="s">} {</span>wide<span class="s">} {</span>fee(<span class="n">50_00</span>, <span class="n">1234_00</span>)<span class="s">}"</span>)
+
+    <span class="c">// Getting a checked value into a gauge from somewhere else:</span>
+    print(<span class="s">"{</span>parse_cents(<span class="s">"42"</span>):?<span class="s">} {</span>parse_cents(<span class="s">"-3"</span>):?<span class="s">}"</span>)
+    print(<span class="s">"{</span>(-<span class="n">5</span>) <span class="k">as</span>? <span class="t">Cents</span>:?<span class="s">} {</span><span class="n">7</span> <span class="k">as</span>? <span class="t">Cents</span>:?<span class="s">}"</span>)     <span class="c">// `as?` gives an optional</span>
+    print(<span class="s">"{</span><span class="n">70000</span> <span class="k">as</span>| <span class="t">Port</span><span class="s">} {</span><span class="n">1.7</span> <span class="k">as</span>| <span class="t">Percent</span><span class="s">}"</span>)     <span class="c">// `as|` clamps into the range</span>
+    print(<span class="s">"{</span><span class="n">12</span> <span class="k">as</span> <span class="t">Even</span><span class="s">}"</span>)                            <span class="c">// `as` unravels when it doesn't fit</span>
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>350 150 250 1234
+some(42) none
+none some(7)
+65535 1
+12</code></pre></div>
+</div>
+<p>A gauge's bounds must be known at compile time: literals and constants, not the result of a function call (<a href="diagnostics.html#T0103">T0103</a>). A literal outside the range is an error at the literal:</p>
+<div class="sample" id="sample-gauges_err">
+<div class="sample-head"><span class="file">samples/gauges_err.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#G0201">G0201</a></span></div>
+<pre class="code"><code><span class="k">type</span> <span class="t">Cents</span> = i64 <span class="k">where</span> <span class="n">0</span>..
+
+<span class="k">const</span> REFUND: <span class="t">Cents</span> = -<span class="n">1</span>
+
+<span class="k">fn</span> main() {}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[G0201]: `-1` is outside the gauge `Cents`</span>
+<span class="loc">  --&gt; gauges_err.loom:3:24</span>
+  |
+3 | const REFUND: Cents = -1
+  |                        ^ `Cents` is 0..
+
+<span class="err">error: gauges_err.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<h2 id="where-next">Where next</h2>
+<p><a href="shuttles.html">Shuttles</a> are functions that can pause.</p>
+<div class="pager">
+<a href="ownership.html">&larr; Moves, <code>once</code> and <code>defer</code></a>
+<a href="shuttles.html">Shuttles &rarr;</a>
+</div>
+</main>
+</div>
+</body>
+</html>

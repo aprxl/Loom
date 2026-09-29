@@ -1,0 +1,7 @@
+running 4 tests
+test clamps_low ... ok
+test clamps_high ... ok
+test parses_ports ... ok
+test quiet ... ok
+
+test result: ok. 4 passed; 0 failed

@@ -1,0 +1,3 @@
+starting
+--- stderr ---
+error: Missing(key: "port")

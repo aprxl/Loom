@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diagnostic codes · Loom</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a href="../lang/index.html">Language</a></li>
+<li><a href="../std/index.html">Standard library</a></li>
+<li><a class="current" href="../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Language</h3>
+<ul>
+<li><a href="index.html">Overview</a></li>
+<li><a href="start.html">Getting started</a></li>
+<li><a href="values.html">Values and control flow</a></li>
+<li><a href="types.html">Warps, wefts and weaves</a></li>
+<li><a href="generics.html">Generics and <code>any</code></a></li>
+<li><a href="collections.html">Collections and streams</a></li>
+<li><a href="errors.html">Optionals and errors</a></li>
+<li><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
+<li><a href="gauges.html">Gauges</a></li>
+<li><a href="shuttles.html">Shuttles</a></li>
+<li><a href="compile-time.html">Compile-time code</a></li>
+<li><a href="const-params.html">Const parameters and control flow</a></li>
+<li><a href="tests.html">Tests</a></li>
+<li><a href="not-yet.html">Not supported yet</a></li>
+</ul>
+</nav>
+<main>
+<div class="crumb"><a href="index.html">Language</a> / Diagnostic codes</div>
+<h1>Diagnostic codes</h1>
+<p class="summary">Every code the compiler can report, with its one-line meaning. Generated from <code>crates/loom_syntax/src/diag/codes.rs</code>.</p>
+<p>A diagnostic looks like <code>error[K0101]: const assertion failed</code>. The letter says which part of the compiler found it, and the digits are stable, so a code is safe to search for. Where a page of these docs shows the error, the code links to that sample.</p>
+<p>Anything the compiler doesn't do yet fails with a <code>U</code> code. It never compiles it wrongly. See <a href="not-yet.html">Not supported yet</a>.</p>
+<h2 id="group-S01xx">S01xx: lexer</h2>
+<table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
+<tr id="S0100"><td><code>S0100</code></td><td>unexpected character</td><td></td></tr>
+<tr id="S0101"><td><code>S0101</code></td><td>unterminated block comment</td><td></td></tr>
+<tr id="S0102"><td><code>S0102</code></td><td>unterminated string literal</td><td></td></tr>
+<tr id="S0103"><td><code>S0103</code></td><td>integer literal is too large</td><td></td></tr>
+<tr id="S0104"><td><code>S0104</code></td><td>invalid suffix on a numeric literal</td><td></td></tr>
+<tr id="S0105"><td><code>S0105</code></td><td>invalid digit in a numeric literal</td><td></td></tr>
+<tr id="S0106"><td><code>S0106</code></td><td>invalid twill pattern</td><td></td></tr>
+<tr id="S0107"><td><code>S0107</code></td><td>invalid character literal</td><td></td></tr>
+<tr id="S0108"><td><code>S0108</code></td><td>invalid escape sequence</td><td></td></tr>
+<tr id="S0109"><td><code>S0109</code></td><td>unmatched brace in a string</td><td></td></tr>
+<tr id="S0110"><td><code>S0110</code></td><td>non-ASCII character in a byte string</td><td></td></tr>
+<tr id="S0111"><td><code>S0111</code></td><td>unterminated interpolation</td><td></td></tr>
+</tbody></table>
+<h2 id="group-S02xx">S02xx: parser</h2>
+<table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
+<tr id="S0200"><td><code>S0200</code></td><td>unexpected token</td><td></td></tr>
+<tr id="S0201"><td><code>S0201</code></td><td>unclosed delimiter</td><td></td></tr>
+<tr id="S0202"><td><code>S0202</code></td><td>missing statement separator</td><td></td></tr>
+<tr id="S0203"><td><code>S0203</code></td><td>comparison chain mixes directions</td><td></td></tr>
+<tr id="S0204"><td><code>S0204</code></td><td>twill pattern outside a pattern</td><td></td></tr>
+<tr id="S0205"><td><code>S0205</code></td><td>assignment used as an expression</td><td></td></tr>
+<tr id="S0206"><td><code>S0206</code></td><td>hex digit used as a twill capture</td><td></td></tr>
+<tr id="S0207"><td><code>S0207</code></td><td>name has the wrong case</td><td></td></tr>
+<tr id="S0208"><td><code>S0208</code></td><td>parameter mode after the colon</td><td></td></tr>
+<tr id="S0209"><td><code>S0209</code></td><td><code>pub(get)</code> outside a field</td><td></td></tr>
+<tr id="S0210"><td><code>S0210</code></td><td>missing initializer</td><td></td></tr>
+<tr id="S0211"><td><code>S0211</code></td><td>nesting is too deep</td><td></td></tr>
+<tr id="S0212"><td><code>S0212</code></td><td>test inside a function</td><td></td></tr>
+<tr id="S0213"><td><code>S0213</code></td><td>function without a body</td><td></td></tr>
+</tbody></table>
+<h2 id="group-N01xx">N01xx: names and modules</h2>
+<table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
+<tr id="N0101"><td><code>N0101</code></td><td>unknown name</td><td></td></tr>
+<tr id="N0102"><td><code>N0102</code></td><td>unknown module</td><td></td></tr>
+<tr id="N0103"><td><code>N0103</code></td><td>item is private</td><td></td></tr>
+<tr id="N0104"><td><code>N0104</code></td><td>name defined twice</td><td></td></tr>
+<tr id="N0105"><td><code>N0105</code></td><td>not found in module</td><td></td></tr>
+<tr id="N0106"><td><code>N0106</code></td><td><code>self</code> outside a method</td><td></td></tr>
+<tr id="N0107"><td><code>N0107</code></td><td><code>Self</code> outside a warp, weft or weave</td><td></td></tr>
+<tr id="N0108"><td><code>N0108</code></td><td><code>break</code> or <code>continue</code> outside a loop</td><td></td></tr>
+<tr id="N0109"><td><code>N0109</code></td><td><code>_</code> placeholder outside a call argument</td><td></td></tr>
+<tr id="N0110"><td><code>N0110</code></td><td>import conflicts with another name</td><td></td></tr>
+<tr id="N0111"><td><code>N0111</code></td><td>expected a type</td><td></td></tr>
+<tr id="N0112"><td><code>N0112</code></td><td>expected a value</td><td></td></tr>
+<tr id="N0113"><td><code>N0113</code></td><td>unknown region</td><td></td></tr>
+<tr id="N0114"><td><code>N0114</code></td><td><code>yield</code> or <code>pull</code> outside a shuttle</td><td></td></tr>
+<tr id="N0115"><td><code>N0115</code></td><td>or-pattern alternatives bind different names</td><td></td></tr>
+<tr id="N0116"><td><code>N0116</code></td><td>no <code>main</code> function</td><td></td></tr>
+</tbody></table>
+<h2 id="group-T01xx">T01xx: types</h2>
+<table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
+<tr id="T0101"><td><code>T0101</code></td><td>mismatched types</td><td></td></tr>
+<tr id="T0102"><td><code>T0102</code></td><td>literal out of range</td><td><a href="const-params.html#sample-cp_err_range">Const parameters and control flow</a></td></tr>
+<tr id="T0103"><td><code>T0103</code></td><td>operator doesn't apply to this type</td><td></td></tr>
+<tr id="T0104"><td><code>T0104</code></td><td>wrong number of arguments</td><td></td></tr>
+<tr id="T0105"><td><code>T0105</code></td><td>bad named argument</td><td></td></tr>
+<tr id="T0106"><td><code>T0106</code></td><td>not callable</td><td></td></tr>
+<tr id="T0107"><td><code>T0107</code></td><td>can't assign here</td><td></td></tr>
+<tr id="T0108"><td><code>T0108</code></td><td>type doesn't weave a required weft</td><td></td></tr>
+<tr id="T0109"><td><code>T0109</code></td><td>cast not allowed</td><td></td></tr>
+<tr id="T0110"><td><code>T0110</code></td><td>can't infer a type</td><td></td></tr>
+<tr id="T0111"><td><code>T0111</code></td><td>not a value of this kind</td><td></td></tr>
+<tr id="T0112"><td><code>T0112</code></td><td><code>mut</code> argument doesn't match its parameter</td><td></td></tr>
+<tr id="T0113"><td><code>T0113</code></td><td>weave is missing a method</td><td></td></tr>
+<tr id="T0114"><td><code>T0114</code></td><td>method doesn't match its weft</td><td></td></tr>
+<tr id="T0115"><td><code>T0115</code></td><td>weave not allowed</td><td></td></tr>
+<tr id="T0116"><td><code>T0116</code></td><td>ambiguous method</td><td></td></tr>
+<tr id="T0117"><td><code>T0117</code></td><td>not a format spec</td><td></td></tr>
+<tr id="T0118"><td><code>T0118</code></td><td>control flow can't leave a <code>defer</code></td><td></td></tr>
+<tr id="T0119"><td><code>T0119</code></td><td>a test's signature isn't <code>test name()</code> or <code>test name() ! E</code></td><td></td></tr>
+<tr id="T0120"><td><code>T0120</code></td><td><code>yield</code> or <code>pull</code> doesn't fit the shuttle</td><td></td></tr>
+<tr id="T0121"><td><code>T0121</code></td><td>shuttle calls itself</td><td></td></tr>
+</tbody></table>
+<h2 id="group-G02xx">G02xx: gauges</h2>
+<table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
+<tr id="G0201"><td><code>G0201</code></td><td>value outside a gauge</td><td><a href="gauges.html#sample-gauges_err">Gauges</a></td></tr>
+</tbody></table>
+<h2 id="group-K01xx">K01xx: compile-time code</h2>
+<table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
+<tr id="K0101"><td><code>K0101</code></td><td>a <code>const assert</code> failed</td><td><a href="const-params.html#sample-cp_err_assert">Const parameters and control flow</a>, <a href="compile-time.html#sample-ct_err_assert">Compile-time code</a></td></tr>
+<tr id="K0102"><td><code>K0102</code></td><td>compile-time code ran out of its budget</td><td><a href="compile-time.html#sample-ct_err_budget">Compile-time code</a></td></tr>
+<tr id="K0103"><td><code>K0103</code></td><td>compile-time code unravelled</td><td><a href="compile-time.html#sample-ct_err_unravel">Compile-time code</a></td></tr>
+<tr id="K0104"><td><code>K0104</code></td><td>compile-time code can't do I/O</td><td><a href="compile-time.html#sample-ct_err_io">Compile-time code</a></td></tr>
+<tr id="K0105"><td><code>K0105</code></td><td>a runtime value in compile-time code</td><td><a href="const-params.html#sample-ci_err_known">Const parameters and control flow</a>, <a href="compile-time.html#sample-ct_err_local">Compile-time code</a></td></tr>
+<tr id="K0106"><td><code>K0106</code></td><td>control flow can't leave compile-time code</td><td><a href="compile-time.html#sample-ct_err_flow">Compile-time code</a></td></tr>
+<tr id="K0107"><td><code>K0107</code></td><td>a constant needs its own value</td><td><a href="compile-time.html#sample-ct_err_cycle">Compile-time code</a></td></tr>
+<tr id="K0108"><td><code>K0108</code></td><td>a constant can't hold this</td><td><a href="compile-time.html#sample-ct_err_holds">Compile-time code</a></td></tr>
+<tr id="K0109"><td><code>K0109</code></td><td>a <code>const</code> argument isn't known at compile time</td><td><a href="const-params.html#sample-cp_err_known">Const parameters and control flow</a></td></tr>
+<tr id="K0110"><td><code>K0110</code></td><td>a <code>const if</code> or <code>const for</code> isn't known at compile time</td><td><a href="const-params.html#sample-ci_err_fold">Const parameters and control flow</a></td></tr>
+</tbody></table>
+<h2 id="group-L03xx">L03xx: `once` values</h2>
+<table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
+<tr id="L0301"><td><code>L0301</code></td><td>loose end: a <code>once</code> value isn't used up</td><td><a href="ownership.html#sample-own_err_loose">Moves, once and defer</a>, <a href="shuttles.html#sample-shuttles_err">Shuttles</a></td></tr>
+</tbody></table>
+<h2 id="group-M01xx">M01xx: moves and borrows</h2>
+<table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
+<tr id="M0101"><td><code>M0101</code></td><td>use of a moved value</td><td><a href="ownership.html#sample-own_err_moved">Moves, once and defer</a></td></tr>
+<tr id="M0102"><td><code>M0102</code></td><td>move out of a borrow</td><td></td></tr>
+<tr id="M0103"><td><code>M0103</code></td><td>move out of an element</td><td></td></tr>
+<tr id="M0104"><td><code>M0104</code></td><td><code>mut</code> access overlaps another use</td><td><a href="ownership.html#sample-own_err_overlap">Moves, once and defer</a></td></tr>
+<tr id="M0105"><td><code>M0105</code></td><td>a borrow is used after what it borrows changed</td><td><a href="ownership.html#sample-own_err_borrow">Moves, once and defer</a></td></tr>
+</tbody></table>
+<h2 id="group-P01xx">P01xx: patterns</h2>
+<table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
+<tr id="P0101"><td><code>P0101</code></td><td>match isn't exhaustive</td><td><a href="types.html#sample-types_err_match">Warps, wefts and weaves</a></td></tr>
+<tr id="P0102"><td><code>P0102</code></td><td>refutable pattern in a binding</td><td></td></tr>
+</tbody></table>
+<h2 id="group-U01xx">U01xx: features the v1 compiler doesn't support (see design/lua-backend.md)</h2>
+<table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
+<tr id="U0101"><td><code>U0101</code></td><td>anonymous warp types aren't supported yet</td><td></td></tr>
+<tr id="U0102"><td><code>U0102</code></td><td>not implemented yet</td><td><a href="not-yet.html#sample-nyet_reflect">Not supported yet</a></td></tr>
+</tbody></table>
+<p>The letters R (regions), C (concurrency), I (interop) are set aside for features that aren't built yet. No code uses them.</p>
+</main>
+</div>
+</body>
+</html>

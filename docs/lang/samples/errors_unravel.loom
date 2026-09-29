@@ -1,0 +1,14 @@
+use std.io.print
+
+fn inner() {
+    defer print("inner cleanup")
+    unravel("something that should never happen")
+}
+
+// `unravel` is for bugs. It unwinds, running each `defer` on the way out.
+fn main() {
+    defer print("outer cleanup")
+    inner()
+    print("never printed")
+}
+//@ unravel

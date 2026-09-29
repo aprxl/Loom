@@ -1,0 +1,35 @@
+use std.io.print
+
+// `~> T` marks a generator: it yields `T`s. Calling it runs none of its body.
+fn fib() ~> u64 {
+    var (a, b): (u64, u64) = (0, 1)
+    loop {
+        yield a
+        (a, b) = (b, a + b)
+    }
+}
+
+fn countdown(name: str, from: i32) ~> i32 {
+    defer print("{name} closed")
+    var i = from
+    while i > 0 {
+        yield i
+        i -= 1
+    }
+}
+
+fn main() {
+    // A generator is a stream of what it yields.
+    print(fib().take(10).collect())
+    print(fib().skip_while(_ < 50).take(3).collect())
+
+    // Leaving a `for` loop early closes the generator, and its `defer` runs.
+    for n in countdown("early", 5) {
+        if n == 3 { break }
+        print(n)
+    }
+    for n in countdown("whole", 2) {
+        print(n)
+    }
+}
+//@ run

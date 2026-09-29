@@ -1,0 +1,6 @@
+fn main() {
+    var n = 3
+    const if n > 2 {
+    }
+}
+//@ check-fail K0105

@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Warps, wefts and weaves · Loom</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a class="current" href="../lang/index.html">Language</a></li>
+<li><a href="../std/index.html">Standard library</a></li>
+<li><a href="../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Language</h3>
+<ul>
+<li><a href="index.html">Overview</a></li>
+<li><a href="start.html">Getting started</a></li>
+<li><a href="values.html">Values and control flow</a></li>
+<li><a class="current" href="types.html">Warps, wefts and weaves</a></li>
+<li><a href="generics.html">Generics and <code>any</code></a></li>
+<li><a href="collections.html">Collections and streams</a></li>
+<li><a href="errors.html">Optionals and errors</a></li>
+<li><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
+<li><a href="gauges.html">Gauges</a></li>
+<li><a href="shuttles.html">Shuttles</a></li>
+<li><a href="compile-time.html">Compile-time code</a></li>
+<li><a href="const-params.html">Const parameters and control flow</a></li>
+<li><a href="tests.html">Tests</a></li>
+<li><a href="not-yet.html">Not supported yet</a></li>
+</ul>
+</nav>
+<main>
+<div class="crumb"><a href="index.html">Language</a> / Warps, wefts and weaves</div>
+<h1>Warps, wefts and weaves</h1>
+<p class="summary">Data types, behavior types, and how they are joined.</p>
+<p>A <strong>warp</strong> is a data type. A <strong>weft</strong> is a set of behavior. A <strong>weave</strong> gives a warp a weft's behavior. There is no inheritance.</p>
+<h2 id="records">Records</h2>
+<p>A warp with fields is a record. Fields can have defaults. A method takes <code>self</code>, and a function without <code>self</code> is an associated function, called on the type: <code>Point.origin()</code>.</p>
+<p><strong>Construction is a call.</strong> <code>Point(3, 4)</code> takes the fields in order, and <code>Point(y: 2)</code> names one and leaves the rest at their defaults. There are no <code>Point { x: 1 }</code> literals, so <code>if x == Foo {</code> is never ambiguous.</p>
+<div class="sample" id="sample-types_records">
+<div class="sample-head"><span class="file">samples/types_records.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Point</span>: <span class="t">Show</span> {                           <span class="c">// `Show` is derived: nothing to write</span>
+    x: f64 = <span class="n">0</span>                               <span class="c">// fields can have defaults</span>
+    y: f64 = <span class="n">0</span>
+
+    <span class="k">fn</span> len(<span class="k">self</span>) -&gt; f64 = (.x * .x + .y * .y).sqrt()   <span class="c">// `.x` is `self.x`</span>
+    <span class="k">fn</span> origin() -&gt; <span class="t">Point</span> = <span class="t">Point</span>()           <span class="c">// no `self`: called as `Point.origin()`</span>
+    <span class="k">fn</span> shift(<span class="k">mut</span> <span class="k">self</span>, dx: f64) { .x += dx }
+    <span class="k">const</span> UNIT = <span class="t">Point</span>(<span class="n">1</span>, <span class="n">0</span>)
+}
+
+<span class="k">warp</span> <span class="t">Meters</span>(f64)                             <span class="c">// a tuple warp with one field</span>
+
+<span class="k">fn</span> main() {
+    <span class="k">let</span> p = <span class="t">Point</span>(<span class="n">3</span>, <span class="n">4</span>)                      <span class="c">// construction is a call</span>
+    <span class="k">let</span> q = <span class="t">Point</span>(y: <span class="n">2</span>)                      <span class="c">// named; x takes its default</span>
+    print(<span class="s">"{</span>p<span class="s">} {</span>q<span class="s">} {</span>p.len()<span class="s">}"</span>)
+    print(<span class="s">"{</span><span class="t">Point</span>.origin()<span class="s">} {</span><span class="t">Point</span>.UNIT<span class="s">}"</span>)
+
+    <span class="k">var</span> moving = <span class="t">Point</span>()
+    moving.shift(<span class="n">2.5</span>)
+    print(moving)
+
+    <span class="c">// A dot-block edits a value and gives it back.</span>
+    <span class="k">let</span> moved = p.{ .x += <span class="n">10</span> }
+    print(<span class="s">"{</span>moved<span class="s">} {</span>p<span class="s">}"</span>)
+
+    <span class="c">// Any warp can be shown in its debug form with `:?`.</span>
+    <span class="k">let</span> m = <span class="t">Meters</span>(<span class="n">5.5</span>)
+    print(<span class="s">"{</span>m:?<span class="s">} {</span>m.<span class="n">0</span><span class="s">}"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>Point(x: 3.0, y: 4.0) Point(x: 0.0, y: 2.0) 5
+Point(x: 0.0, y: 0.0) Point(x: 1.0, y: 0.0)
+Point(x: 2.5, y: 0.0)
+Point(x: 13.0, y: 4.0) Point(x: 3.0, y: 4.0)
+Meters(5.5) 5.5</code></pre></div>
+</div>
+<ul><li><strong>The leading dot.</strong> <code>.x</code> means "relative to the thing in context". In a method that's <code>self</code>, so <code>.x</code> is <code>self.x</code> and <code>.0</code> is <code>self.0</code>. In a dot-block it's the block's subject. Where a type is expected, it's one of that type's cases: <code>.Red</code> is <code>Color.Red</code>.</li><li><strong>Dot-blocks.</strong> <code>expr.{ ... }</code> opens a block with <code>expr</code> as its subject. On a fresh value or an immutable place it yields the edited value (<code>p.{ .x += 10 }</code> above). On a <code>var</code> it edits the variable in place and yields <code>()</code>.</li><li><strong>Show.</strong> A warp is shown with <code>{p}</code> only if it weaves <code>Show</code>, which needs no code. Any warp can be shown in its debug form with <code>{p:?}</code>.</li><li><strong>Tuple warps.</strong> <code>warp Meters(f64)</code> is a record with one positional field. It has no body, so its methods go in a <code>weave</code>, where <code>.0</code> means <code>self.0</code>.</li><li><strong>Visibility.</strong> Fields and items are private to their module unless marked <code>pub</code>. <code>pub(get)</code> makes a field readable everywhere and writable only inside its module.</li></ul>
+<h2 id="cases">Cases</h2>
+<p>A warp with <code>case</code> lines is a sum type. Fields written beside the cases belong to every case, and can be read without a <code>match</code>.</p>
+<div class="sample" id="sample-types_cases">
+<div class="sample-head"><span class="file">samples/types_cases.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Shape</span>: <span class="t">Show</span> {
+    <span class="k">case</span> <span class="t">Circle</span>(radius: f64)
+    <span class="k">case</span> <span class="t">Rect</span>(w: f64, h: f64)
+    <span class="k">case</span> <span class="t">Dot</span>                                 <span class="c">// no payload</span>
+
+    <span class="k">fn</span> area(<span class="k">self</span>) -&gt; f64 = <span class="k">match</span> <span class="k">self</span> {
+        .<span class="t">Circle</span>(r) =&gt; <span class="n">3.14159</span> * r * r
+        .<span class="t">Rect</span>(w, h) =&gt; w * h
+        .<span class="t">Dot</span> =&gt; <span class="n">0</span>
+    }
+}
+
+<span class="c">// Fields written beside the cases belong to every case.</span>
+<span class="k">warp</span> <span class="t">Token</span>: <span class="t">Show</span> {
+    line: u32
+
+    <span class="k">case</span> <span class="t">Word</span>(<span class="t">String</span>)
+    <span class="k">case</span> <span class="t">Number</span>(i64)
+    <span class="k">case</span> <span class="t">End</span>
+}
+
+<span class="k">fn</span> main() {
+    <span class="k">let</span> shapes = [<span class="t">Shape</span>.<span class="t">Circle</span>(<span class="n">2.0</span>), .<span class="t">Rect</span>(w: <span class="n">3</span>, h: <span class="n">4</span>), .<span class="t">Dot</span>]
+    <span class="k">for</span> s <span class="k">in</span> shapes {
+        print(<span class="s">"{</span>s<span class="s">}: {</span>s.area()<span class="s">}"</span>)
+    }
+
+    <span class="k">let</span> t = <span class="t">Token</span>.<span class="t">Number</span>(<span class="n">42</span>, line: <span class="n">7</span>)
+    print(<span class="s">"{</span>t.line<span class="s">}: {</span>t<span class="s">}"</span>)          <span class="c">// `line` needs no `match`</span>
+    <span class="k">if</span> t <span class="k">is</span> .<span class="t">Number</span>(n) <span class="k">and</span> n &gt; <span class="n">40</span> {
+        print(<span class="s">"big number {</span>n<span class="s">}"</span>)
+    }
+
+    <span class="c">// `match` must cover every case.</span>
+    <span class="k">let</span> name = <span class="k">match</span> t {
+        .<span class="t">Word</span>(w) =&gt; w
+        .<span class="t">Number</span>(_) =&gt; <span class="s">"a number"</span>
+        .<span class="t">End</span> =&gt; <span class="s">"the end"</span>
+    }
+    print(name)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>Circle(radius: 2.0): 12.56636
+Rect(w: 3.0, h: 4.0): 12
+Dot: 0
+7: Number(42)
+big number 42
+a number</code></pre></div>
+</div>
+<p><code>match</code> and <code>is</code> see the cases. A <code>match</code> that leaves a case out is an error, and the compiler says which one:</p>
+<div class="sample" id="sample-types_err_match">
+<div class="sample-head"><span class="file">samples/types_err_match.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#P0101">P0101</a></span></div>
+<pre class="code"><code><span class="k">warp</span> <span class="t">Shape</span> {
+    <span class="k">case</span> <span class="t">Circle</span>(radius: f64)
+    <span class="k">case</span> <span class="t">Rect</span>(w: f64, h: f64)
+    <span class="k">case</span> <span class="t">Dot</span>
+}
+
+<span class="k">fn</span> area(s: <span class="t">Shape</span>) -&gt; f64 = <span class="k">match</span> s {
+    .<span class="t">Circle</span>(r) =&gt; <span class="n">3.14</span> * r * r
+    .<span class="t">Rect</span>(w, h) =&gt; w * h
+}
+
+<span class="k">fn</span> main() {}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[P0101]: this `match` doesn't cover every `Shape`</span>
+<span class="loc">   --&gt; types_err_match.loom:7:28</span>
+   |  
+ 7 |   fn area(s: Shape) -&gt; f64 = match s {
+   | /----------------------------^
+ 8 | |     .Circle(r) =&gt; 3.14 * r * r
+ 9 | |     .Rect(w, h) =&gt; w * h
+10 | | }
+   | \-^ not handled: `.Dot`
+   |  
+   = help: add an arm for `.Dot`, or `_ =&gt; …` for everything else
+
+<span class="err">error: types_err_match.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<h2 id="wefts-and-weaves">Wefts and weaves</h2>
+<p>A weft lists methods. A method with a body is a default. A warp joins a weft <strong>inline</strong> by listing it in its header, or <strong>separately</strong> with <code>weave</code>, which can live in another module.</p>
+<div class="sample" id="sample-types_wefts">
+<div class="sample-head"><span class="file">samples/types_wefts.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">weft</span> <span class="t">Shape</span> {
+    <span class="k">fn</span> area(<span class="k">self</span>) -&gt; f64
+    <span class="k">fn</span> name(<span class="k">self</span>) -&gt; str = <span class="s">"shape"</span>           <span class="c">// a default method</span>
+}
+
+<span class="c">// Inline: the warp lists the weft and writes its methods.</span>
+<span class="k">warp</span> <span class="t">Circle</span>: <span class="t">Shape</span> {
+    radius: f64
+    <span class="k">fn</span> area(<span class="k">self</span>) -&gt; f64 = <span class="n">3.0</span> * .radius * .radius
+}
+
+<span class="k">warp</span> <span class="t">Rect</span> {
+    w: f64
+    h: f64
+}
+
+<span class="c">// Separate: behavior added afterwards, possibly in another module.</span>
+<span class="k">weave</span> <span class="t">Shape</span> <span class="k">into</span> <span class="t">Rect</span> {
+    <span class="k">fn</span> area(<span class="k">self</span>) -&gt; f64 = .w * .h
+    <span class="k">fn</span> name(<span class="k">self</span>) -&gt; str = <span class="s">"rect"</span>
+}
+
+<span class="k">fn</span> describe(s: <span class="t">Shape</span>) -&gt; <span class="t">String</span> = <span class="s">"{</span>s.name()<span class="s">} with area {</span>s.area()<span class="s">}"</span>
+
+<span class="k">fn</span> main() {
+    print(describe(<span class="t">Circle</span>(<span class="n">2</span>)))
+    print(describe(<span class="t">Rect</span>(<span class="n">2</span>, <span class="n">3</span>)))
+    print(<span class="t">Shape</span>.name(<span class="t">Rect</span>(<span class="n">1</span>, <span class="n">1</span>)))            <span class="c">// call through the weft</span>
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>shape with area 12
+rect with area 6
+rect</code></pre></div>
+</div>
+<ul><li>A weft can require other wefts (<code>weft Ord: Eq</code>) and can have associated types (<code>type Item</code>; see <code>Iter</code> in <a href="../std/modules/iter.html#Iter">std.iter</a>).</li><li><code>Shape.name(x)</code> calls a weft's method explicitly. A default method is checked for each type that uses it.</li><li><code>weave W into T</code> is allowed only when <code>W</code> or <code>T</code> is defined in your program (<a href="diagnostics.html#T0115">T0115</a> otherwise).</li><li>A weft used as a parameter type is a generic: see <a href="generics.html">Generics and <code>any</code></a>.</li></ul>
+<h2 id="deriving">Deriving</h2>
+<p>List <code>Show</code>, <code>Eq</code>, <code>Ord</code> or <code>Hash</code> in a warp's header and leave the methods out, and the compiler supplies them:</p>
+<ul><li><code>Show</code> writes the debug form, less any fields every case shares: <code>Point(x: 3, y: 4)</code>.</li><li><code>Eq</code>: every field is equal and, for a warp with cases, it's the same case.</li><li><code>Ord</code>: fields compare in order and the first difference decides. Earlier cases come first.</li><li><code>Hash</code> makes a warp a usable map key. <code>Error</code> gets a <code>message</code> that is its <code>Show</code> form.</li></ul>
+<p>A derived method needs every field to weave the weft too.</p>
+<div class="sample" id="sample-types_derive">
+<div class="sample-head"><span class="file">samples/types_derive.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">// List `Show`, `Eq`, `Ord` or `Hash` and leave the methods out:</span>
+<span class="c">// they work field by field.</span>
+<span class="k">warp</span> <span class="t">Version</span>: <span class="t">Show</span>, <span class="t">Eq</span>, <span class="t">Ord</span>, <span class="t">Hash</span> {
+    major: u32
+    minor: u32
+}
+
+<span class="k">warp</span> <span class="t">Level</span>: <span class="t">Show</span>, <span class="t">Eq</span>, <span class="t">Ord</span> {
+    <span class="k">case</span> <span class="t">Low</span>
+    <span class="k">case</span> <span class="t">Mid</span>(u8)
+    <span class="k">case</span> <span class="t">High</span>
+}
+
+<span class="k">fn</span> main() {
+    <span class="k">let</span> a = <span class="t">Version</span>(<span class="n">1</span>, <span class="n">4</span>)
+    <span class="k">let</span> b = <span class="t">Version</span>(<span class="n">1</span>, <span class="n">10</span>)
+    print(<span class="s">"{</span>a<span class="s">} {</span>a == b<span class="s">} {</span>a &lt; b<span class="s">}"</span>)
+
+    <span class="c">// For a warp with cases, earlier cases come first.</span>
+    print(<span class="s">"{</span><span class="t">Level</span>.<span class="t">Low</span> &lt; <span class="t">Level</span>.<span class="t">High</span><span class="s">} {</span><span class="t">Level</span>.<span class="t">Mid</span>(<span class="n">3</span>) &lt; <span class="t">Level</span>.<span class="t">Mid</span>(<span class="n">5</span>)<span class="s">} {</span><span class="t">Level</span>.<span class="t">Mid</span>(<span class="n">9</span>) &lt; <span class="t">Level</span>.<span class="t">High</span><span class="s">}"</span>)
+
+    <span class="k">var</span> versions = [b, a, <span class="t">Version</span>(<span class="n">0</span>, <span class="n">9</span>)]
+    versions.sort()
+    print(versions)
+
+    <span class="c">// `Hash` makes a warp usable as a map key.</span>
+    <span class="k">var</span> notes: <span class="t">Map</span>[<span class="t">Version</span>, str] = <span class="t">Map</span>()
+    notes[a] = <span class="s">"old"</span>
+    notes[<span class="t">Version</span>(<span class="n">1</span>, <span class="n">4</span>)] = <span class="s">"still the same key"</span>
+    print(<span class="s">"{</span>notes.len()<span class="s">} {</span>notes[a]<span class="s">}"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>Version(major: 1, minor: 4) false true
+true true true
+[Version(major: 0, minor: 9), Version(major: 1, minor: 4), Version(major: 1, minor: 10)]
+1 still the same key</code></pre></div>
+</div>
+<p>Right now these defaults are built into the compiler. Once reflection exists, they'll be ordinary default methods that inspect the type at compile time.</p>
+<h2 id="through"><code>through</code></h2>
+<p><code>through</code> forwards a field's methods, so a warp can reuse another's behavior without inheriting from it. Fields aren't forwarded, a method the outer warp defines wins, and a <code>Button</code> is not a <code>Frame</code>.</p>
+<div class="sample" id="sample-types_through">
+<div class="sample-head"><span class="file">samples/types_through.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Frame</span> {
+    w: u16
+    h: u16
+    <span class="k">fn</span> size(<span class="k">self</span>) -&gt; (u16, u16) = (.w, .h)
+    <span class="k">fn</span> describe(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"frame {</span>.w<span class="s">}x{</span>.h<span class="s">}"</span>
+}
+
+<span class="c">// `through` forwards the field's methods. There is no inheritance:</span>
+<span class="c">// a Button is not a Frame.</span>
+<span class="k">warp</span> <span class="t">Button</span> {
+    <span class="k">through</span> frame: <span class="t">Frame</span>
+    label: <span class="t">String</span>
+
+    <span class="k">fn</span> describe(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"button '{</span>.label<span class="s">}' over {</span>.frame.describe()<span class="s">}"</span>   <span class="c">// overrides</span>
+}
+
+<span class="k">fn</span> main() {
+    <span class="k">let</span> b = <span class="t">Button</span>(<span class="t">Frame</span>(<span class="n">10</span>, <span class="n">3</span>), <span class="s">"OK"</span>)
+    print(b.size())                          <span class="c">// forwarded from Frame</span>
+    print(b.describe())                      <span class="c">// Button's own</span>
+    print(b.frame.w)                         <span class="c">// fields aren't forwarded</span>
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>(10, 3)
+button 'OK' over frame 10x3
+10</code></pre></div>
+</div>
+<h2 id="method-lookup">Method lookup</h2>
+<p><code>x.f(args)</code> looks for, in order:</p>
+<ol><li>a method in <code>x</code>'s warp body;</li><li>a method from a weave into <code>x</code>'s type;</li><li>for something with items that isn't a stream (an array, list, slice, range, or a type that weaves <code>Iter</code>), a method of <code>Stream</code>;</li><li>a method forwarded through <code>through</code>;</li><li>a free function in scope whose first parameter accepts <code>x</code>.</li></ol>
+<p>Two matches at one level are an ambiguity error; write <code>Weft.f(x)</code> or <code>module.f(x)</code> to choose.</p>
+<div class="sample" id="sample-types_ufcs">
+<div class="sample-head"><span class="file">samples/types_ufcs.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">// Any free function is a method on its first parameter.</span>
+<span class="k">fn</span> kib(n: usize) -&gt; usize = n * <span class="n">1024</span>
+<span class="k">fn</span> shout(s: str) -&gt; <span class="t">String</span> = s.to_upper()
+
+<span class="k">fn</span> main() {
+    print(<span class="n">64</span>.kib())                          <span class="c">// the same as kib(64)</span>
+    print(<span class="s">"hi"</span>.shout())
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>65536
+HI</code></pre></div>
+</div>
+<h2 id="where-next">Where next</h2>
+<p><a href="generics.html">Generics and <code>any</code></a> covers type parameters and dynamic dispatch.</p>
+<div class="pager">
+<a href="values.html">&larr; Values and control flow</a>
+<a href="generics.html">Generics and <code>any</code> &rarr;</a>
+</div>
+</main>
+</div>
+</body>
+</html>

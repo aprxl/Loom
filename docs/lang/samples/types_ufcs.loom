@@ -1,0 +1,11 @@
+use std.io.print
+
+// Any free function is a method on its first parameter.
+fn kib(n: usize) -> usize = n * 1024
+fn shout(s: str) -> String = s.to_upper()
+
+fn main() {
+    print(64.kib())                          // the same as kib(64)
+    print("hi".shout())
+}
+//@ run

@@ -1,0 +1,34 @@
+use std.io.print
+
+const DEBUG = false
+const SIZES = [1, 2, 4]
+
+/// The branch that isn't taken isn't checked, so it can name things that
+/// don't exist here.
+fn page_size() -> usize {
+    const if target.pointer_bits == 63 {
+        4096
+    } else {
+        std.sys.page_size()
+    }
+}
+
+fn describe[const N: usize](xs: [i32; N]) -> str {
+    const if N > 2 { "long" } else { "short" }
+}
+
+fn main() {
+    print(page_size())
+    print("{describe([1, 2, 3])} {describe([1])}")
+
+    const if DEBUG {
+        print("debug on")
+    } else if SIZES.len() == 3 {
+        print("three sizes")
+    }
+
+    // `const if` is an expression too.
+    let width: i32 = const if DEBUG { 64 } else { 32 }
+    print(width)
+}
+//@ run

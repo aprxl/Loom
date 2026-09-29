@@ -1,0 +1,22 @@
+use std.io.print
+
+fn main() {
+    // Integers have any width up to 64 bits: `u12` and `i24` are ordinary types.
+    let a: u12 = 4095
+    print("{a +% 1} {a +| 1} {a +? 1:?}")      // wrap, saturate, checked
+
+    let b: u8 = 200
+    print("{b +% 100} {b +| 100} {b +? 100:?}")
+
+    // Casts have the same three policies.
+    print("{300 as% u8} {300 as| u8} {300 as? u8:?}")
+
+    // Bits.
+    let flags: u8 = 0b1010_0110
+    print("{flags & 0x0F} {flags | 1} {flags ~ 0xFF} {flags >> 4} {flags.count_ones()}")
+
+    // Integer division truncates; floats print the Rust way.
+    print("{7 / 2} {-7 / 2} {7.0 / 2.0} {2.5f32 * 2.0}")
+    print("{(2.0).sqrt():.4} {10.pow(3)} {(-5).abs()}")
+}
+//@ run

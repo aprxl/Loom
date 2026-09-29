@@ -1,0 +1,21 @@
+use std.io.print
+
+const SIZES = [1, 2, 4]
+
+fn main() {
+    // `const for` is unrolled while compiling: the body is written out
+    // once per item, and each copy is checked on its own. `i` is a
+    // constant in each copy, so it can size an array.
+    const for i in 0..3 {
+        const if i > 0 { print("--") }
+        let zeros = [0u8; i + 1]
+        print("{i}: {zeros}")
+    }
+
+    var total = 0
+    const for (i, s) in SIZES.indexed() {
+        total += i as i32 * 10 + s
+    }
+    print(total)
+}
+//@ run

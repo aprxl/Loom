@@ -3,14 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Loom std</title>
-<link rel="stylesheet" href="style.css">
+<title>Loom standard library</title>
+<link rel="stylesheet" href="../style.css">
 </head>
 <body>
 <div class="layout">
 <nav class="sidebar">
-<a class="brand" href="index.html">Loom <span class="dim">std</span></a>
+<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a href="../lang/index.html">Language</a></li>
+<li><a class="current" href="../std/index.html">Standard library</a></li>
+<li><a href="../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Standard library</h3>
 <ul>
+<li><a class="current" href="index.html">Overview</a></li>
 <li><a href="modules/prelude.html">prelude</a></li>
 <li><a href="modules/env.html">env</a></li>
 <li><a href="modules/error.html">error</a></li>
@@ -33,7 +40,8 @@
 <li><a href="modules/target.html">target</a></li>
 <li><a href="modules/term.html">term</a></li>
 <li><a href="modules/time.html">time</a></li>
-</ul></nav>
+</ul>
+</nav>
 <main>
 <h1>The Loom standard library</h1>
 <p class="summary">What's implemented in <code>runtime/std</code>, one namespace
@@ -69,7 +77,7 @@ rather than given one here.</p>
 <div><span class="badge extern">extern</span> declared as <code>extern "lua"</code>, calling straight into the host.</div>
 <div><span class="badge todo">TODO</span> no doc comment in the source yet.</div>
 </div>
-<footer>Generated from <code>runtime/std/*.loom</code>. Re-run <code>docs/std/gen.py</code> after changing the standard library.</footer>
+<footer>Generated from <code>runtime/std/*.loom</code>. Run <code>python docs/gen.py</code> after changing the standard library.</footer>
 </main>
 </div>
 </body>

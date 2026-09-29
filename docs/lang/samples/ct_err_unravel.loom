@@ -1,0 +1,11 @@
+// Unravelling while compiling is a compile error.
+const HUGE: u8 = {
+    var x: u8 = 250
+    for _ in 0..10 {
+        x += 1
+    }
+    x
+}
+
+fn main() {}
+//@ check-fail K0103

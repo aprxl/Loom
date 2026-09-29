@@ -1,0 +1,33 @@
+use std.io.print
+
+warp Point: Show {                           // `Show` is derived: nothing to write
+    x: f64 = 0                               // fields can have defaults
+    y: f64 = 0
+
+    fn len(self) -> f64 = (.x * .x + .y * .y).sqrt()   // `.x` is `self.x`
+    fn origin() -> Point = Point()           // no `self`: called as `Point.origin()`
+    fn shift(mut self, dx: f64) { .x += dx }
+    const UNIT = Point(1, 0)
+}
+
+warp Meters(f64)                             // a tuple warp with one field
+
+fn main() {
+    let p = Point(3, 4)                      // construction is a call
+    let q = Point(y: 2)                      // named; x takes its default
+    print("{p} {q} {p.len()}")
+    print("{Point.origin()} {Point.UNIT}")
+
+    var moving = Point()
+    moving.shift(2.5)
+    print(moving)
+
+    // A dot-block edits a value and gives it back.
+    let moved = p.{ .x += 10 }
+    print("{moved} {p}")
+
+    // Any warp can be shown in its debug form with `:?`.
+    let m = Meters(5.5)
+    print("{m:?} {m.0}")
+}
+//@ run

@@ -1,0 +1,9 @@
+error[U0102]: not implemented yet: array lengths that aren't known at compile time
+  --> docs/lang/samples/nyet_types.loom:8:23
+  |
+8 |     let cells = [0u8; AREA]
+  |                       ^^^^ not supported by this compiler yet
+  |
+  = note: the type checker grows one milestone at a time; see design/lua-backend.md
+
+error: docs/lang/samples/nyet_types.loom failed to type-check (1 error)

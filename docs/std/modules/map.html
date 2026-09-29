@@ -4,13 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>std.map · Loom</title>
-<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="../../style.css">
 </head>
 <body>
 <div class="layout">
 <nav class="sidebar">
-<a class="brand" href="../index.html">Loom <span class="dim">std</span></a>
+<a class="brand" href="../../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a href="../../lang/index.html">Language</a></li>
+<li><a class="current" href="../../std/index.html">Standard library</a></li>
+<li><a href="../../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Standard library</h3>
 <ul>
+<li><a href="../index.html">Overview</a></li>
 <li><a href="prelude.html">prelude</a></li>
 <li><a href="env.html">env</a></li>
 <li><a href="error.html">error</a></li>
@@ -33,97 +40,98 @@
 <li><a href="target.html">target</a></li>
 <li><a href="term.html">term</a></li>
 <li><a href="time.html">time</a></li>
-</ul></nav>
+</ul>
+</nav>
 <main>
 <div class="crumb"><a href="../index.html">std</a> / map</div>
 <h1>std.map</h1>
 <p class="summary">Hash maps.</p>
 <h2>Types</h2>
-<div class="item">
+<div class="item" id="Map">
 <div class="item-head">
 <span class="sig">warp <strong>Map</strong>[K, V]</span>
 <span class="badge builtin">builtin</span>
 </div>
 <p class="item-doc">A map from <code>K</code> to <code>V</code> that remembers insertion order: going through it, and showing it, follow the order keys were first added. Build one with <code>Map()</code>, or a literal where a map is expected: <code>let ages: Map[str, u8] = ["ada": 36, "alan": 41]</code> (<code>[:]</code> is empty). <code>m[k]</code> is the value for <code>k</code>, and unravels when there's none (<code>m.get(k)</code> gives an optional); <code>m[k] = v</code> adds or replaces it. <code>for (k, v) in m</code> goes through the pairs, and a map has the methods of <code>Stream</code> too, over its pairs. Keys must be <code>Hash</code>.</p>
 <div class="members">
-<div class="member">
+<div class="member" id="Map.len">
 <div class="member-head">
 <span class="sig">fn len(self) -&gt; usize</span>
 
 </div>
 <p class="member-doc">How many keys there are.</p>
 </div>
-<div class="member">
+<div class="member" id="Map.is_empty">
 <div class="member-head">
 <span class="sig">fn is_empty(self) -&gt; bool</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
-<div class="member">
+<div class="member" id="Map.get">
 <div class="member-head">
 <span class="sig">fn get(self, key: K) -&gt; ?V where K: Hash</span>
 
 </div>
 <p class="member-doc">The value for <code>key</code>.</p>
 </div>
-<div class="member">
+<div class="member" id="Map.has">
 <div class="member-head">
 <span class="sig">fn has(self, key: K) -&gt; bool where K: Hash</span>
 
 </div>
 <p class="member-doc">Whether there's a value for <code>key</code>.</p>
 </div>
-<div class="member">
+<div class="member" id="Map.insert">
 <div class="member-head">
 <span class="sig">fn insert(mut self, take key: K, take value: V) -&gt; ?V where K: Hash</span>
 
 </div>
 <p class="member-doc">Adds <code>value</code> for <code>key</code>, and gives back the value it replaces.</p>
 </div>
-<div class="member">
+<div class="member" id="Map.remove">
 <div class="member-head">
 <span class="sig">fn remove(mut self, key: K) -&gt; ?V where K: Hash</span>
 
 </div>
 <p class="member-doc">Takes out the value for <code>key</code>; later keys keep their order.</p>
 </div>
-<div class="member">
+<div class="member" id="Map.clear">
 <div class="member-head">
 <span class="sig">fn clear(mut self)</span>
 
 </div>
 <p class="member-doc">Removes every key.</p>
 </div>
-<div class="member">
+<div class="member" id="Map.keys">
 <div class="member-head">
 <span class="sig">fn keys(self) -&gt; Stream[K]</span>
 
 </div>
 <p class="member-doc">The keys, in order.</p>
 </div>
-<div class="member">
+<div class="member" id="Map.values">
 <div class="member-head">
 <span class="sig">fn values(self) -&gt; Stream[V]</span>
 
 </div>
 <p class="member-doc">The values, in the order of their keys.</p>
 </div>
-<div class="member">
+<div class="member" id="Map.pairs">
 <div class="member-head">
 <span class="sig">fn pairs(self) -&gt; Stream[(K, V)]</span>
 
 </div>
 <p class="member-doc">The pairs, in order.</p>
 </div>
-<div class="member">
+<div class="member" id="Map.sorted">
 <div class="member-head">
 <span class="sig">fn sorted(self) -&gt; List[(K, V)] where K: Ord</span>
 
 </div>
 <p class="member-doc">A list of the pairs, sorted by key.</p>
 </div>
-<div class="member">
+<div class="member" id="Map.copy">
 <div class="member-head">
 <span class="sig">fn copy(self) -&gt; Map[K, V]</span>
 

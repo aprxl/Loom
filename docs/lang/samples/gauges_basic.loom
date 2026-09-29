@@ -1,0 +1,31 @@
+use std.io.print
+
+// A gauge is a number type limited to a range or a predicate.
+type Cents = i64 where 0..
+type Port = u16 where 1..
+type Percent = f32 where 0.0..=1.0
+type Even = i64 where _ % 2 == 0
+
+fn fee(balance: Cents, amount: Cents) -> Cents =
+    if balance >= 1000_00 { 0 } else { (amount / 100).max(25) }
+
+fn parse_cents(s: str) -> ?Cents {
+    let n = s.parse[i64]() mend return none
+    if n is Cents { n } else { none }        // `is` narrows `n` inside the branch
+}
+
+fn main() {
+    let a: Cents = 250                       // a literal is checked while compiling
+    let b: Cents = 100
+    let sum = a + b                          // Cents + Cents can't go below zero: still Cents
+    let diff = a - b                         // could go below zero: a plain i64
+    let wide: i64 = a                        // a gauge widens to its base type
+    print("{sum} {diff} {wide} {fee(50_00, 1234_00)}")
+
+    // Getting a checked value into a gauge from somewhere else:
+    print("{parse_cents("42"):?} {parse_cents("-3"):?}")
+    print("{(-5) as? Cents:?} {7 as? Cents:?}")     // `as?` gives an optional
+    print("{70000 as| Port} {1.7 as| Percent}")     // `as|` clamps into the range
+    print("{12 as Even}")                            // `as` unravels when it doesn't fit
+}
+//@ run

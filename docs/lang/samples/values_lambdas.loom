@@ -1,0 +1,25 @@
+use std.io.print
+
+fn apply(x: i32, f: i32 => i32) -> i32 = f(x)
+
+fn is_even(n: i32) -> bool = n % 2 == 0
+
+fn main() {
+    // A lambda gets its parameter types from where it's passed.
+    // Anywhere else, annotate them.
+    let double = (x: i32) => x * 2
+    print(apply(5, double))
+    print(apply(5, x => x + 1))
+
+    let xs = [1, 2, 3, 4, 5, 6]
+    print(xs.filter(_ % 2 == 0))               // hole lambda: n => n % 2 == 0
+    print(xs.filter(is_even).sum())            // a function's name is a value
+    print(xs.indexed().map(p => "{p.0}:{p.1}").join(" "))
+    print(xs.reduce(_ + _))                    // two holes, two parameters
+
+    // A lambda sees the locals around it.
+    var total = 0
+    xs.each(x => total += x)
+    print(total)
+}
+//@ run

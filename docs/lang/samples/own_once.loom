@@ -1,0 +1,32 @@
+use std.io.print
+
+// A `once` value must be used up exactly once. Here that means calling
+// `commit` or `rollback`, which take it and unpack it.
+pub once warp Tx {
+    moves: List[i32] = List()
+
+    pub fn begin() -> Tx = Tx()
+    pub fn credit(mut self, amount: i32) { .moves.push(amount) }
+    pub fn commit(take self) {
+        let Tx(moves) = self                 // destructuring ties the value off
+        print("committed {moves}")
+    }
+    pub fn rollback(take self) {
+        let Tx(_) = self
+        print("rolled back")
+    }
+}
+
+fn transfer(good: bool) {
+    var tx = Tx.begin()
+    defer tx => tx.rollback()                // runs only if `tx` is still loose
+    tx.credit(5)
+    if not good { return }                   // leaving early rolls back
+    tx.commit()                              // used up: the defer does nothing
+}
+
+fn main() {
+    transfer(true)
+    transfer(false)
+}
+//@ run

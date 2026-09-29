@@ -1,0 +1,4 @@
+ok 42
+error: Parse(Empty)
+error: Parse(NotANumber(text: "abc"))
+error: Range(TooBig(limit: 255))

@@ -1,0 +1,11 @@
+00E0: clear
+1234: jump to 564
+6A42: v10 = 66
+8AB4: v10 += v11
+F107: misc 1
+5000: unknown
+41: ascii
+C3: starts a 2-byte character
+E2: starts a 3-byte character
+A9: continuation
+carry 1, sum 44

@@ -1,0 +1,45 @@
+use std.io.print
+
+warp IoProblem: Error {
+    case Unreadable(path: String)
+}
+
+warp BadText: Error {
+    case Garbled
+}
+
+fn read(path: str) -> str ! IoProblem {
+    if path == "missing" { fail .Unreadable(path: path.to_string()) }
+    path
+}
+
+fn decode(text: str) -> i32 ! BadText {
+    if text == "junk" { fail .Garbled }
+    42
+}
+
+// A union type: the error is one or the other. Each error widens to it.
+fn load(path: str) -> i32 ! (IoProblem | BadText) {
+    let text = read(path)?
+    decode(text)?
+}
+
+// `any Error` accepts an error of any type.
+fn run(path: str) ! any Error {
+    let text = read(path)?
+    let v = decode(text)?
+    print("loaded {v}")
+}
+
+fn main() {
+    for path in ["config", "missing", "junk"] {
+        match load(path) {
+            ok(v) => print("ok {v}")
+            err(e: IoProblem) => print("io: {e.message()}")
+            err(e: BadText) => print("text: {e.message()}")
+        }
+    }
+    run("config") mend e => print("run failed: {e}")
+    run("junk") mend e => print("run failed: {e}")
+}
+//@ run

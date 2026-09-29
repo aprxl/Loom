@@ -1,0 +1,11 @@
+fn numbers(n: i32) ~> i32 {
+    for i in 0..n {
+        yield i
+    }
+}
+
+// A constant is a value that every use copies. A shuttle can't be one.
+const NUMBERS: Shuttle[i32, ()] = numbers(3)
+
+fn main() {}
+//@ check-fail K0108

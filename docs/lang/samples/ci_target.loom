@@ -1,0 +1,18 @@
+use std.io.print
+
+// A `const if` on `target` picks a branch while compiling.
+fn separator() -> str {
+    const if target.os == .Windows {
+        "\\"
+    } else {
+        "/"
+    }
+}
+
+fn main() {
+    // `target` describes the machine the program is built for.
+    print(target.pointer_bits)
+    print(target.endian == .Little)
+    print(separator().len())
+}
+//@ run

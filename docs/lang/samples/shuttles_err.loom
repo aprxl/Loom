@@ -1,0 +1,11 @@
+fn duplex() ~> i32 <~ i32 {
+    while pull is some(x) {
+        yield x
+    }
+}
+
+fn main() {
+    var d = duplex()
+    d.push(1)
+}
+//@ check-fail L0301

@@ -1,0 +1,13 @@
+error[L0301]: loose end: `tx` is never tied off
+   --> docs/lang/samples/own_err_loose.loom:14:9
+   |
+14 |     let tx = Tx.begin()
+   |         ^^ `Tx` is a `once` type: it must be used up exactly once
+15 |     if early { tx.commit() }
+16 | }
+   | - ...but it is still loose when the scope ends here
+   |
+   = help: tie it off with `tx.commit()` or `tx.rollback()`
+   = help: or add `defer tx => tx.commit()` right after it's created
+
+error: docs/lang/samples/own_err_loose.loom failed to type-check (1 error)

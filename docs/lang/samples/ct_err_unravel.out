@@ -1,0 +1,10 @@
+error[K0103]: compile-time code unravelled: arithmetic overflow
+  --> docs/lang/samples/ct_err_unravel.loom:2:7
+  |
+2 | const HUGE: u8 = {
+  |       ^^^^ while computing `HUGE`
+  |
+  = note: it unravelled at docs/lang/samples/ct_err_unravel.loom:5:9
+  = help: unravelling while compiling is a compile error
+
+error: docs/lang/samples/ct_err_unravel.loom failed to compile (1 error)

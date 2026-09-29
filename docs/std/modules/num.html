@@ -4,13 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>std.num · Loom</title>
-<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="../../style.css">
 </head>
 <body>
 <div class="layout">
 <nav class="sidebar">
-<a class="brand" href="../index.html">Loom <span class="dim">std</span></a>
+<a class="brand" href="../../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a href="../../lang/index.html">Language</a></li>
+<li><a class="current" href="../../std/index.html">Standard library</a></li>
+<li><a href="../../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Standard library</h3>
 <ul>
+<li><a href="../index.html">Overview</a></li>
 <li><a href="prelude.html">prelude</a></li>
 <li><a href="env.html">env</a></li>
 <li><a href="error.html">error</a></li>
@@ -33,13 +40,14 @@
 <li><a href="target.html">target</a></li>
 <li><a href="term.html">term</a></li>
 <li><a href="time.html">time</a></li>
-</ul></nav>
+</ul>
+</nav>
 <main>
 <div class="crumb"><a href="../index.html">std</a> / num</div>
 <h1>std.num</h1>
 <p class="summary">Numbers.</p>
 <h2>Types</h2>
-<div class="item">
+<div class="item" id="NumError">
 <div class="item-head">
 <span class="sig">warp <strong>NumError</strong>: Error</span>
 
@@ -51,105 +59,105 @@
 <li><span class="sig">case Overflow</span></li>
 </ul>
 </div>
-<div class="item">
+<div class="item" id="Parse">
 <div class="item-head">
 <span class="sig">weft <strong>Parse</strong></span>
 <span class="badge builtin">builtin</span>
 </div>
 <p class="item-doc">Types <code>str.parse</code> can make: every integer and float type.</p>
 </div>
-<div class="item">
+<div class="item" id="Num">
 <div class="item-head">
 <span class="sig">weft <strong>Num</strong>: Ord, Copy, Show</span>
 <span class="badge builtin">builtin</span>
 </div>
 <p class="item-doc">Every number type: the integers and the floats.</p>
 </div>
-<div class="item">
+<div class="item" id="Int">
 <div class="item-head">
 <span class="sig">warp <strong>Int</strong>[T]</span>
 <span class="badge builtin">builtin</span>
 </div>
 <p class="item-doc">The methods of every integer type, <code>T</code>.</p>
 <div class="members">
-<div class="member">
+<div class="member" id="Int.abs">
 <div class="member-head">
 <span class="sig">fn abs(self) -&gt; T</span>
 
 </div>
 <p class="member-doc">The value without its sign. Unravels for the smallest signed value.</p>
 </div>
-<div class="member">
+<div class="member" id="Int.min">
 <div class="member-head">
 <span class="sig">fn min(self, other: T) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
-<div class="member">
+<div class="member" id="Int.max">
 <div class="member-head">
 <span class="sig">fn max(self, other: T) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
-<div class="member">
+<div class="member" id="Int.pow">
 <div class="member-head">
 <span class="sig">fn pow(self, exp: u32) -&gt; T</span>
 
 </div>
 <p class="member-doc"><code>self</code> to the power <code>exp</code>. Unravels when it doesn't fit.</p>
 </div>
-<div class="member">
+<div class="member" id="Int.trailing_zeros">
 <div class="member-head">
 <span class="sig">fn trailing_zeros(self) -&gt; u32</span>
 
 </div>
 <p class="member-doc">How many zero bits come after the lowest one bit (all of them for 0).</p>
 </div>
-<div class="member">
+<div class="member" id="Int.leading_zeros">
 <div class="member-head">
 <span class="sig">fn leading_zeros(self) -&gt; u32</span>
 
 </div>
 <p class="member-doc">How many zero bits come before the highest one bit.</p>
 </div>
-<div class="member">
+<div class="member" id="Int.count_ones">
 <div class="member-head">
 <span class="sig">fn count_ones(self) -&gt; u32</span>
 
 </div>
 <p class="member-doc">How many bits are one.</p>
 </div>
-<div class="member">
+<div class="member" id="Int.is_power_of_two">
 <div class="member-head">
 <span class="sig">fn is_power_of_two(self) -&gt; bool</span>
 
 </div>
 <p class="member-doc">Whether it's 2 to the power of something: one bit is one, and it's above zero.</p>
 </div>
-<div class="member">
+<div class="member" id="Int.log2">
 <div class="member-head">
 <span class="sig">fn log2(self) -&gt; u32</span>
 
 </div>
 <p class="member-doc">The base-2 logarithm, rounded down: the position of the highest one bit. Unravels for zero and below.</p>
 </div>
-<div class="member">
+<div class="member" id="Int.rotate_left">
 <div class="member-head">
 <span class="sig">fn rotate_left(self, n: u32) -&gt; T</span>
 
 </div>
 <p class="member-doc">The bits moved <code>n</code> places towards the top; those pushed out come back in at the bottom. <code>n</code> counts modulo the type's width.</p>
 </div>
-<div class="member">
+<div class="member" id="Int.rotate_right">
 <div class="member-head">
 <span class="sig">fn rotate_right(self, n: u32) -&gt; T</span>
 
 </div>
 <p class="member-doc">The bits moved <code>n</code> places towards the bottom; those pushed out come back in at the top. <code>n</code> counts modulo the type's width.</p>
 </div>
-<div class="member">
+<div class="member" id="Int.to_string">
 <div class="member-head">
 <span class="sig">fn to_string(self) -&gt; String</span>
 <span class="badge todo">TODO</span>
@@ -158,84 +166,84 @@
 </div>
 </div>
 </div>
-<div class="item">
+<div class="item" id="Float">
 <div class="item-head">
 <span class="sig">warp <strong>Float</strong>[T]</span>
 <span class="badge builtin">builtin</span>
 </div>
 <p class="item-doc">The methods of every float type, <code>T</code>.</p>
 <div class="members">
-<div class="member">
+<div class="member" id="Float.abs">
 <div class="member-head">
 <span class="sig">fn abs(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
-<div class="member">
+<div class="member" id="Float.min">
 <div class="member-head">
 <span class="sig">fn min(self, other: T) -&gt; T</span>
 
 </div>
 <p class="member-doc">The smaller one; a NaN loses to a number.</p>
 </div>
-<div class="member">
+<div class="member" id="Float.max">
 <div class="member-head">
 <span class="sig">fn max(self, other: T) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
-<div class="member">
+<div class="member" id="Float.sqrt">
 <div class="member-head">
 <span class="sig">fn sqrt(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
-<div class="member">
+<div class="member" id="Float.floor">
 <div class="member-head">
 <span class="sig">fn floor(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
-<div class="member">
+<div class="member" id="Float.ceil">
 <div class="member-head">
 <span class="sig">fn ceil(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
-<div class="member">
+<div class="member" id="Float.round">
 <div class="member-head">
 <span class="sig">fn round(self) -&gt; T</span>
 
 </div>
 <p class="member-doc">Halfway rounds away from zero.</p>
 </div>
-<div class="member">
+<div class="member" id="Float.trunc">
 <div class="member-head">
 <span class="sig">fn trunc(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
-<div class="member">
+<div class="member" id="Float.pow">
 <div class="member-head">
 <span class="sig">fn pow(self, exp: T) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
-<div class="member">
+<div class="member" id="Float.is_nan">
 <div class="member-head">
 <span class="sig">fn is_nan(self) -&gt; bool</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
-<div class="member">
+<div class="member" id="Float.to_string">
 <div class="member-head">
 <span class="sig">fn to_string(self) -&gt; String</span>
 <span class="badge todo">TODO</span>

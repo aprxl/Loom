@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Optionals and errors · Loom</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a class="current" href="../lang/index.html">Language</a></li>
+<li><a href="../std/index.html">Standard library</a></li>
+<li><a href="../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Language</h3>
+<ul>
+<li><a href="index.html">Overview</a></li>
+<li><a href="start.html">Getting started</a></li>
+<li><a href="values.html">Values and control flow</a></li>
+<li><a href="types.html">Warps, wefts and weaves</a></li>
+<li><a href="generics.html">Generics and <code>any</code></a></li>
+<li><a href="collections.html">Collections and streams</a></li>
+<li><a class="current" href="errors.html">Optionals and errors</a></li>
+<li><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
+<li><a href="gauges.html">Gauges</a></li>
+<li><a href="shuttles.html">Shuttles</a></li>
+<li><a href="compile-time.html">Compile-time code</a></li>
+<li><a href="const-params.html">Const parameters and control flow</a></li>
+<li><a href="tests.html">Tests</a></li>
+<li><a href="not-yet.html">Not supported yet</a></li>
+</ul>
+</nav>
+<main>
+<div class="crumb"><a href="index.html">Language</a> / Optionals and errors</div>
+<h1>Optionals and errors</h1>
+<p class="summary"><code>?T</code>, <code>T ! E</code>, and the <code>?</code> and <code>mend</code> pair.</p>
+<p>Loom has two kinds of "didn't work": <strong>absence</strong> (<code>?T</code>) and <strong>failure</strong> (<code>T ! E</code>). One operator leaves either, and one keyword recovers from either.</p>
+<table class="plain"><thead><tr><th></th><th>Syntax</th></tr></thead><tbody><tr><td>optional</td><td><code>?T</code>, with values <code>some(x)</code> and <code>none</code></td></tr><tr><td>result</td><td><code>T ! E</code>, with values <code>ok(v)</code> and <code>err(e)</code>; <code>fn f() ! E</code> when there's no success value</td></tr><tr><td>raise</td><td><code>fail e</code></td></tr><tr><td>bail out</td><td>postfix <code>?</code></td></tr><tr><td>recover</td><td><code>expr mend fallback</code>, <code>expr mend e =&gt; handler</code></td></tr><tr><td>give up</td><td><code>unravel("message")</code></td></tr></tbody></table>
+<h2 id="optionals">Optionals</h2>
+<p>A <code>T</code> converts to <code>?T</code> by itself, so a function that returns <code>?i32</code> can end with a plain number. <code>?</code> unwraps an optional. If there's no value, it jumps to the nearest <code>mend</code> around it, or leaves the function with <code>none</code> if there isn't one. That one rule covers early return, optional chaining and try/catch.</p>
+<div class="sample" id="sample-errors_optional">
+<div class="sample-head"><span class="file">samples/errors_optional.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fn</span> find(xs: [i32], target: i32) -&gt; ?usize {
+    <span class="k">for</span> (i, x) <span class="k">in</span> xs.indexed() {
+        <span class="k">if</span> x == target { <span class="k">return</span> <span class="k">some</span>(i) }
+    }
+    <span class="k">none</span>
+}
+
+<span class="k">fn</span> first_even_plus_one(xs: [i32]) -&gt; ?i32 {
+    <span class="k">let</span> e = xs.find(_ % <span class="n">2</span> == <span class="n">0</span>)?             <span class="c">// no value: leave the function with `none`</span>
+    e + <span class="n">1</span>                                    <span class="c">// a plain value converts to `?i32`</span>
+}
+
+<span class="k">fn</span> main() {
+    <span class="k">let</span> xs = [<span class="n">3</span>, <span class="n">5</span>, <span class="n">8</span>, <span class="n">9</span>]
+    print(<span class="s">"{</span>find(xs, <span class="n">8</span>):?<span class="s">} {</span>find(xs, <span class="n">4</span>):?<span class="s">}"</span>)
+    print(<span class="s">"{</span>first_even_plus_one(xs):?<span class="s">} {</span>first_even_plus_one([<span class="n">1</span>, <span class="n">3</span>]):?<span class="s">}"</span>)
+
+    <span class="c">// `mend` gives a fallback.</span>
+    <span class="k">let</span> i = find(xs, <span class="n">4</span>) <span class="k">mend</span> <span class="n">0</span>
+    print(i)
+
+    <span class="c">// `?` jumps to the nearest `mend`, so a block can be a `try`.</span>
+    <span class="k">let</span> n = {
+        <span class="k">let</span> a = <span class="s">"12"</span>.parse[i32]()?
+        <span class="k">let</span> b = <span class="s">"x"</span>.parse[i32]()?
+        a + b
+    } <span class="k">mend</span> e =&gt; {
+        print(<span class="s">"could not add: {</span>e:?<span class="s">}"</span>)
+        -<span class="n">1</span>
+    }
+    print(n)
+
+    <span class="c">// `is` binds, and `and` sees the binding.</span>
+    <span class="k">if</span> find(xs, <span class="n">9</span>) <span class="k">is</span> <span class="k">some</span>(k) <span class="k">and</span> k &gt; <span class="n">2</span> {
+        print(<span class="s">"found late at {</span>k<span class="s">}"</span>)
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>some(2) none
+some(9) none
+0
+could not add: Invalid
+-1
+found late at 3</code></pre></div>
+</div>
+<ul><li><code>mend</code> has the lowest precedence of any binary operator, so put parentheses around it in arithmetic: <code>(counts.get(k) mend 0) + 1</code>.</li><li>A <code>?</code> has to sit inside the left side of the <code>mend</code> it jumps to. It can cross loops and blocks, but not a lambda or a shuttle.</li><li><code>mend</code> chains left to right: <code>a() mend b() mend 8080</code>.</li><li>In <code>mend e =&gt; ...</code>, <code>e</code> is the union of everything that can reach the <code>mend</code>.</li></ul>
+<h2 id="results-and-error-types">Results and error types</h2>
+<p>An error is a warp that weaves <code>Error</code>, usually with cases. <code>Error</code> gives it a <code>message</code> that shows the case and its payload. <code>fail .Empty</code> leaves the function with an error, and the leading dot picks the case from the declared error type.</p>
+<p>A <code>?</code> that leaves a function converts the error. A <code>from</code> case absorbs another error type: <code>case Parse(from ParseError)</code> means a <code>?</code> on a <code>ParseError</code> wraps it as <code>.Parse(...)</code>. At most one case can absorb a given type.</p>
+<div class="sample" id="sample-errors_results">
+<div class="sample-head"><span class="file">samples/errors_results.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">ParseError</span>: <span class="t">Error</span> {
+    <span class="k">case</span> <span class="t">Empty</span>
+    <span class="k">case</span> <span class="t">NotANumber</span>(text: <span class="t">String</span>)
+}
+
+<span class="k">warp</span> <span class="t">RangeError</span>: <span class="t">Error</span> {
+    <span class="k">case</span> <span class="t">TooBig</span>(limit: u8)
+}
+
+<span class="k">warp</span> <span class="t">AppError</span>: <span class="t">Error</span> {
+    <span class="k">case</span> <span class="t">Parse</span>(from <span class="t">ParseError</span>)              <span class="c">// `?` on a ParseError wraps it here</span>
+    <span class="k">case</span> <span class="t">Range</span>(from <span class="t">RangeError</span>)
+}
+
+<span class="k">fn</span> parse(text: str) -&gt; u32 ! <span class="t">ParseError</span> {
+    <span class="k">if</span> text.is_empty() { <span class="k">fail</span> .<span class="t">Empty</span> }
+    text.parse[u32]() <span class="k">mend</span> <span class="k">fail</span> .<span class="t">NotANumber</span>(text: text.to_string())
+}
+
+<span class="k">fn</span> small(n: u32) -&gt; u8 ! <span class="t">RangeError</span> {
+    n <span class="k">as</span>? u8 <span class="k">mend</span> <span class="k">fail</span> .<span class="t">TooBig</span>(limit: <span class="n">255</span>)
+}
+
+<span class="k">fn</span> load(text: str) -&gt; u8 ! <span class="t">AppError</span> {
+    <span class="k">let</span> n = parse(text)?                     <span class="c">// ParseError becomes AppError.Parse</span>
+    small(n)?
+}
+
+<span class="k">fn</span> main() {
+    <span class="k">for</span> text <span class="k">in</span> [<span class="s">"42"</span>, <span class="s">""</span>, <span class="s">"abc"</span>, <span class="s">"1000"</span>] {
+        <span class="k">match</span> load(text) {
+            <span class="k">ok</span>(v) =&gt; print(<span class="s">"ok {</span>v<span class="s">}"</span>)
+            <span class="k">err</span>(e) =&gt; print(<span class="s">"error: {</span>e<span class="s">}"</span>)
+        }
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>ok 42
+error: Parse(Empty)
+error: Parse(NotANumber(text: "abc"))
+error: Range(TooBig(limit: 255))</code></pre></div>
+</div>
+<h2 id="several-error-types">Several error types</h2>
+<p><code>A | B</code> is a union type, mostly used for errors. Each member converts to the union, and a <code>match</code> takes the members apart with type patterns. <code>any Error</code> accepts an error of any one type, which is handy for <code>main</code> and scripts.</p>
+<div class="sample" id="sample-errors_union">
+<div class="sample-head"><span class="file">samples/errors_union.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">IoProblem</span>: <span class="t">Error</span> {
+    <span class="k">case</span> <span class="t">Unreadable</span>(path: <span class="t">String</span>)
+}
+
+<span class="k">warp</span> <span class="t">BadText</span>: <span class="t">Error</span> {
+    <span class="k">case</span> <span class="t">Garbled</span>
+}
+
+<span class="k">fn</span> read(path: str) -&gt; str ! <span class="t">IoProblem</span> {
+    <span class="k">if</span> path == <span class="s">"missing"</span> { <span class="k">fail</span> .<span class="t">Unreadable</span>(path: path.to_string()) }
+    path
+}
+
+<span class="k">fn</span> decode(text: str) -&gt; i32 ! <span class="t">BadText</span> {
+    <span class="k">if</span> text == <span class="s">"junk"</span> { <span class="k">fail</span> .<span class="t">Garbled</span> }
+    <span class="n">42</span>
+}
+
+<span class="c">// A union type: the error is one or the other. Each error widens to it.</span>
+<span class="k">fn</span> load(path: str) -&gt; i32 ! (<span class="t">IoProblem</span> | <span class="t">BadText</span>) {
+    <span class="k">let</span> text = read(path)?
+    decode(text)?
+}
+
+<span class="c">// `any Error` accepts an error of any type.</span>
+<span class="k">fn</span> run(path: str) ! <span class="k">any</span> <span class="t">Error</span> {
+    <span class="k">let</span> text = read(path)?
+    <span class="k">let</span> v = decode(text)?
+    print(<span class="s">"loaded {</span>v<span class="s">}"</span>)
+}
+
+<span class="k">fn</span> main() {
+    <span class="k">for</span> path <span class="k">in</span> [<span class="s">"config"</span>, <span class="s">"missing"</span>, <span class="s">"junk"</span>] {
+        <span class="k">match</span> load(path) {
+            <span class="k">ok</span>(v) =&gt; print(<span class="s">"ok {</span>v<span class="s">}"</span>)
+            <span class="k">err</span>(e: <span class="t">IoProblem</span>) =&gt; print(<span class="s">"io: {</span>e.message()<span class="s">}"</span>)
+            <span class="k">err</span>(e: <span class="t">BadText</span>) =&gt; print(<span class="s">"text: {</span>e.message()<span class="s">}"</span>)
+        }
+    }
+    run(<span class="s">"config"</span>) <span class="k">mend</span> e =&gt; print(<span class="s">"run failed: {</span>e<span class="s">}"</span>)
+    run(<span class="s">"junk"</span>) <span class="k">mend</span> e =&gt; print(<span class="s">"run failed: {</span>e<span class="s">}"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>ok 42
+io: Unreadable(path: "missing")
+text: Garbled
+loaded 42
+run failed: Garbled</code></pre></div>
+</div>
+<div class="callout">A union of errors doesn't convert to <code>any Error</code> yet: <code>?</code> on a <code>! (A | B)</code> inside a <code>! any Error</code> function is <a href="diagnostics.html#T0108">T0108</a>. Widen the function's errors to the union instead.</div>
+<h2 id="main"><code>main</code></h2>
+<p><code>fn main() ! E</code> lets <code>?</code> leave <code>main</code>. An error that reaches the end is printed as <code>error: ...</code> on stderr, and the program exits with status 1.</p>
+<div class="sample" id="sample-errors_main">
+<div class="sample-head"><span class="file">samples/errors_main.loom</span><span class="tag warn">exits with an error</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">ConfigError</span>: <span class="t">Error</span> {
+    <span class="k">case</span> <span class="t">Missing</span>(key: <span class="t">String</span>)
+}
+
+<span class="k">fn</span> setting(key: str) -&gt; u16 ! <span class="t">ConfigError</span> = <span class="k">fail</span> .<span class="t">Missing</span>(key: key.to_string())
+
+<span class="c">// An error that reaches the end of `main` is shown, and the program</span>
+<span class="c">// exits with status 1.</span>
+<span class="k">fn</span> main() ! <span class="t">ConfigError</span> {
+    print(<span class="s">"starting"</span>)
+    <span class="k">let</span> port = setting(<span class="s">"port"</span>)?
+    print(<span class="s">"never printed: {</span>port<span class="s">}"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>starting</code></pre></div>
+<div class="sample-out"><div class="out-head">Error output</div><pre><code><span class="err">error: Missing(key: "port")</span></code></pre></div>
+</div>
+<h2 id="unravel"><code>unravel</code></h2>
+<p><code>unravel(message)</code> is for bugs, not for expected failures. Its type is <code>never</code>. It unwinds the current thread and runs <code>defer</code>s on the way out. Plain arithmetic overflow, a failed <code>as</code>, an out-of-range index and a failed <code>assert</code> all unravel. The program exits with status 101.</p>
+<div class="sample" id="sample-errors_unravel">
+<div class="sample-head"><span class="file">samples/errors_unravel.loom</span><span class="tag warn">unravels</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fn</span> inner() {
+    <span class="k">defer</span> print(<span class="s">"inner cleanup"</span>)
+    unravel(<span class="s">"something that should never happen"</span>)
+}
+
+<span class="c">// `unravel` is for bugs. It unwinds, running each `defer` on the way out.</span>
+<span class="k">fn</span> main() {
+    <span class="k">defer</span> print(<span class="s">"outer cleanup"</span>)
+    inner()
+    print(<span class="s">"never printed"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>inner cleanup
+outer cleanup</code></pre></div>
+<div class="sample-out"><div class="out-head">Error output</div><pre><code>unravel: something that should never happen
+<span class="loc">  --&gt; errors_unravel.loom:5:5</span>
+  |
+5 |     unravel("something that should never happen")
+  |     ^</code></pre></div>
+</div>
+<p><code>assert(condition, message)</code> unravels unless the condition holds. In compile-time code a failed assertion is a compile error: see <a href="compile-time.html">Compile-time code</a>.</p>
+<h2 id="where-next">Where next</h2>
+<p><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a> is about who owns a value and what runs when a scope ends.</p>
+<div class="pager">
+<a href="collections.html">&larr; Collections and streams</a>
+<a href="ownership.html">Moves, <code>once</code> and <code>defer</code> &rarr;</a>
+</div>
+</main>
+</div>
+</body>
+</html>

@@ -1,0 +1,11 @@
+error[M0104]: `n` is lent out as `mut` and used again in the same call
+  --> docs/lang/samples/own_err_overlap.loom:9:21
+  |
+9 |     swap(mut n, mut n)
+  |              -      ^ used here too
+  |              |       
+  |              lent as `mut` here
+  |
+  = help: a `mut` argument must be the only way the call reaches that value
+
+error: docs/lang/samples/own_err_overlap.loom failed to type-check (1 error)

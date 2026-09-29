@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tests · Loom</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a class="current" href="../lang/index.html">Language</a></li>
+<li><a href="../std/index.html">Standard library</a></li>
+<li><a href="../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Language</h3>
+<ul>
+<li><a href="index.html">Overview</a></li>
+<li><a href="start.html">Getting started</a></li>
+<li><a href="values.html">Values and control flow</a></li>
+<li><a href="types.html">Warps, wefts and weaves</a></li>
+<li><a href="generics.html">Generics and <code>any</code></a></li>
+<li><a href="collections.html">Collections and streams</a></li>
+<li><a href="errors.html">Optionals and errors</a></li>
+<li><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
+<li><a href="gauges.html">Gauges</a></li>
+<li><a href="shuttles.html">Shuttles</a></li>
+<li><a href="compile-time.html">Compile-time code</a></li>
+<li><a href="const-params.html">Const parameters and control flow</a></li>
+<li><a class="current" href="tests.html">Tests</a></li>
+<li><a href="not-yet.html">Not supported yet</a></li>
+</ul>
+</nav>
+<main>
+<div class="crumb"><a href="index.html">Language</a> / Tests</div>
+<h1>Tests</h1>
+<p class="summary"><code>test name() { ... }</code> and <code>loom test</code>.</p>
+<p>A test is written like a function, with <code>test</code> in place of <code>fn</code>. It takes no parameters and returns nothing, or <code>! E</code> so it can use <code>?</code>. <code>loom test FILE</code> runs the file's tests one after another and prints a report like cargo's.</p>
+<div class="sample" id="sample-tests_pass">
+<div class="sample-head"><span class="file">samples/tests_pass.loom</span><span class="tag ok">tests pass</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fn</span> clamp(n: i32, lo: i32, hi: i32) -&gt; i32 = <span class="k">if</span> n &lt; lo { lo } <span class="k">else</span> <span class="k">if</span> n &gt; hi { hi } <span class="k">else</span> { n }
+
+<span class="c">// A test is written like a function, with `test` in place of `fn`.</span>
+<span class="k">test</span> clamps_low() = assert(clamp(-<span class="n">5</span>, <span class="n">0</span>, <span class="n">10</span>) == <span class="n">0</span>)
+
+<span class="k">test</span> clamps_high() {
+    assert(clamp(<span class="n">50</span>, <span class="n">0</span>, <span class="n">10</span>) == <span class="n">10</span>, <span class="s">"50 should clamp to 10"</span>)
+}
+
+<span class="c">// A test may return an error, so it can use `?`.</span>
+<span class="k">test</span> parses_ports() ! <span class="k">any</span> <span class="t">Error</span> {
+    assert(<span class="s">"8080"</span>.parse[u16]()? == <span class="n">8080</span>)
+}
+
+<span class="c">// A passing test prints nothing.</span>
+<span class="k">test</span> quiet() {
+    print(<span class="s">"you only see this when the test fails"</span>)
+}
+
+<span class="c">// Tests aren't part of the program: `loom run` leaves them out, and</span>
+<span class="c">// there's no `main` here.</span></code></pre>
+<div class="sample-out"><div class="out-head">Test report</div><pre><code>running 4 tests
+test clamps_low ... ok
+test clamps_high ... ok
+test parses_ports ... ok
+test quiet ... ok
+
+test result: ok. 4 passed; 0 failed</code></pre></div>
+</div>
+<ul><li>A test passes when it returns. It <strong>fails</strong> when it unravels (a failed <code>assert</code>, say) or returns an error.</li><li>A passing test prints nothing. For a failing one the report shows what it printed, and then why it failed.</li><li><code>loom test</code> runs every test, even after one fails. A file of tests needs no <code>main</code>.</li><li>Tests exist only for <code>loom test</code>. <code>loom run</code> and <code>loom build</code> leave them out, and nothing can call one: a test's name isn't in scope, so a test and a function can share it. Two tests can't.</li><li>Tests go at the top level of a module (<a href="diagnostics.html#S0212">S0212</a> inside a function). A test with the wrong signature is <a href="diagnostics.html#T0119">T0119</a>.</li><li>Every command type-checks tests, so <code>loom check</code> catches a broken one.</li></ul>
+<div class="sample" id="sample-tests_fail">
+<div class="sample-head"><span class="file">samples/tests_fail.loom</span><span class="tag err">tests fail</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Oops</span>: <span class="t">Error</span> {
+    <span class="k">case</span> <span class="t">Bad</span>(n: i32)
+}
+
+<span class="k">fn</span> half(n: i32) -&gt; i32 ! <span class="t">Oops</span> {
+    <span class="k">if</span> n % <span class="n">2</span> != <span class="n">0</span> { <span class="k">fail</span> .<span class="t">Bad</span>(n) }
+    n / <span class="n">2</span>
+}
+
+<span class="k">test</span> halves() ! <span class="t">Oops</span> {
+    assert(half(<span class="n">8</span>)? == <span class="n">4</span>)
+}
+
+<span class="c">// A test fails when it returns an error...</span>
+<span class="k">test</span> odd_number() ! <span class="t">Oops</span> {
+    print(<span class="s">"about to halve 3"</span>)
+    <span class="k">let</span> h = half(<span class="n">3</span>)?
+    print(<span class="s">"never printed: {</span>h<span class="s">}"</span>)
+}
+
+<span class="c">// ...or unravels. `loom test` runs every test, even after a failure.</span>
+<span class="k">test</span> wrong_length() {
+    <span class="k">let</span> xs = [<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]
+    assert(xs.len() == <span class="n">4</span>, <span class="s">"three is not four"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Test report</div><pre><code>running 3 tests
+test halves ... ok
+test odd_number ... FAILED
+test wrong_length ... FAILED
+
+failures:
+
+---- odd_number ----
+about to halve 3
+error: Bad(n: 3)
+
+---- wrong_length ----
+unravel: three is not four
+  --&gt; tests_fail.loom:26:5
+   |
+26 |     assert(xs.len() == 4, "three is not four")
+   |     ^
+
+test result: FAILED. 1 passed; 2 failed</code></pre></div>
+</div>
+<p><code>loom test</code> exits with 0 when every test passed, 1 when one failed, and 70 when a test hit a bug in Loom. Tests run unsandboxed: they can read the environment and files.</p>
+<h2 id="where-next">Where next</h2>
+<p><a href="not-yet.html">Not supported yet</a> lists what's missing.</p>
+<div class="pager">
+<a href="const-params.html">&larr; Const parameters and control flow</a>
+<a href="not-yet.html">Not supported yet &rarr;</a>
+</div>
+</main>
+</div>
+</body>
+</html>

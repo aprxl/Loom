@@ -1,0 +1,24 @@
+use std.io.print
+
+fn main() {
+    // `str` is a view of UTF-8 text; `String` owns it. Lengths count bytes.
+    let s = "  Hello, Wörld  "
+    let t = s.trim()
+    print("[{t}] {t.len()} bytes, {t.char_count()} characters")
+    print("{t.to_upper()} {t.to_lower()} {t.starts_with("Hello")} {t.find("W"):?}")
+    print(t[0..5])                           // slicing counts bytes
+
+    var out = String()
+    for c in "a1b2c3".chars() {
+        if c.is_digit() { out.push(c) }
+    }
+    out.push_str("!")
+    print(out)
+
+    print("a,b,,c".split(","))
+    print("{"42".parse[u8]():?} {"x1".parse[i32]():?} {"300".parse[u8]():?}")
+    print("300".parse[u8]() mend 0)
+    print('f'.to_digit(16))
+    print("ab".repeat(3))
+}
+//@ run

@@ -1,0 +1,34 @@
+use std.io.print
+
+// Anything `for` can loop over is an `Iter`. Give a type `next` and it
+// gets every `Stream` method for free.
+warp Countdown: Iter {
+    n: u32
+    type Item = u32
+    fn next(mut self) -> ?u32 {
+        if .n == 0 { return none }
+        .n -= 1
+        .n + 1
+    }
+}
+
+fn main() {
+    // Streams are lazy: nothing runs until something asks for an item.
+    let evens = (1..=20).filter(_ % 2 == 0).map(n => n * n)
+    print(evens.take(4).collect())
+
+    print("hello world".chars().filter(_ != 'o').count())
+    print("one two  three".words().join("-"))
+    print(Countdown(4).collect())
+    print(Countdown(5).sum())
+
+    for (i, line) in "a\nb\nc".lines().indexed() {
+        print("{i}: {line}")
+    }
+
+    let xs = [4, 8, 15, 16, 23, 42]
+    print("{xs.fold(0, (acc, x) => acc + x)} {xs.max():?} {xs.position(_ == 15):?}")
+    print("{xs.all(_ > 3)} {xs.exists(_ > 40)} {xs.zip(xs.skip(1)).count()}")
+    print(xs.windows(2).map(w => w[1] - w[0]).collect())
+}
+//@ run

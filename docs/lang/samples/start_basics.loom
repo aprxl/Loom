@@ -1,0 +1,27 @@
+use std.io.print
+
+fn add(a: i32, b: i32) -> i32 {
+    a + b                                    // the last expression is the result
+}
+
+fn area(w: f64, h: f64 = 1.0) -> f64 = w * h  // expression body, default argument
+
+fn main() {
+    let x = 5                                // immutable
+    var count = 0                            // mutable
+    count += add(x, 2)
+
+    let (q, r) = (17 / 5, 17 % 5)            // destructuring a tuple
+    print("count = {count}, q = {q}, r = {r}")
+
+    // Strings are templates: `{expr}` and `{expr:spec}`.
+    let pi = 3.14159265
+    print("pi = {pi:.3}, [{count:>5}], {255:04X}, {"hi":?}")
+
+    print(area(2.0, h: 3.5))                 // named argument
+    print(area(4.0))                         // the default
+
+    let kind = if x < 0 { "negative" } else if x == 0 { "zero" } else { "positive" }
+    print(kind)
+}
+//@ run

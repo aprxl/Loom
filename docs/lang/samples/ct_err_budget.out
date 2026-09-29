@@ -1,0 +1,9 @@
+error[K0102]: compile-time code ran out of steps
+  --> docs/lang/samples/ct_err_budget.loom:3:7
+  |
+3 | const FOREVER: u32 = {
+  |       ^^^^^^^ while computing `FOREVER`
+  |
+  = note: compile-time code may take 100000000 Lua steps in all; this may never stop
+
+error: docs/lang/samples/ct_err_budget.loom failed to compile (1 error)

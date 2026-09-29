@@ -1,0 +1,44 @@
+use std.io.print
+
+// `~> T <~ U` pulls `U`s in and yields `T`s out. `pull` waits for an input
+// and gives `none` once the shuttle is closed.
+fn pairs() ~> (i32, ?i32) <~ i32 {
+    while pull is some(a) {
+        match pull {
+            some(b) => yield (a, some(b)),
+            none => {
+                yield (a, none)              // an odd one out, on close
+                return
+            }
+        }
+    }
+}
+
+// `<~ U` alone is a sink: it only pulls.
+fn summer() <~ i32 {
+    var total = 0
+    defer print("sum: {total}")
+    while pull is some(n) {
+        total += n
+    }
+}
+
+fn main() {
+    var p = pairs()
+    for n in [1, 2, 3, 4, 5] {
+        // Each push gives a burst: what the shuttle yields before it
+        // pulls again.
+        let got = p.push(n).collect()
+        print("pushed {n}: {got}")
+    }
+    for pair in p.close() {
+        print("closed: {pair}")
+    }
+
+    var s = summer()
+    for n in 1..=4 {
+        s.push(n).drain()                    // a burst is `once`: use it or drain it
+    }
+    s.close().drain()
+}
+//@ run

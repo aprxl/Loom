@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Const parameters and control flow · Loom</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a class="current" href="../lang/index.html">Language</a></li>
+<li><a href="../std/index.html">Standard library</a></li>
+<li><a href="../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Language</h3>
+<ul>
+<li><a href="index.html">Overview</a></li>
+<li><a href="start.html">Getting started</a></li>
+<li><a href="values.html">Values and control flow</a></li>
+<li><a href="types.html">Warps, wefts and weaves</a></li>
+<li><a href="generics.html">Generics and <code>any</code></a></li>
+<li><a href="collections.html">Collections and streams</a></li>
+<li><a href="errors.html">Optionals and errors</a></li>
+<li><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
+<li><a href="gauges.html">Gauges</a></li>
+<li><a href="shuttles.html">Shuttles</a></li>
+<li><a href="compile-time.html">Compile-time code</a></li>
+<li><a class="current" href="const-params.html">Const parameters and control flow</a></li>
+<li><a href="tests.html">Tests</a></li>
+<li><a href="not-yet.html">Not supported yet</a></li>
+</ul>
+</nav>
+<main>
+<div class="crumb"><a href="index.html">Language</a> / Const parameters and control flow</div>
+<h1>Const parameters and control flow</h1>
+<p class="summary"><code>const</code> parameters, <code>uint(n)</code>, <code>const if</code>, <code>const for</code>, and <code>target</code>.</p>
+<p>This page continues <a href="compile-time.html">Compile-time code</a>. A <code>const</code> parameter takes a value that's known while compiling, and the function or warp is specialized for it. <code>const if</code> and <code>const for</code> decide what code exists.</p>
+<h2 id="const-parameters"><code>const</code> parameters</h2>
+<p>A <code>const</code> parameter must be known at compile time. Each distinct value makes its own instance of the function, and the value can appear in types: the length in <code>[f32; n]</code> is the parameter. A <code>const</code> generic parameter (<code>const N: usize</code>) is worked out from the arguments, here from the array's length.</p>
+<div class="sample" id="sample-cp_zeros">
+<div class="sample-head"><span class="file">samples/cp_zeros.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">// `n` must be known while compiling. Each length gets its own copy of the</span>
+<span class="c">// function, and the length is part of the return type.</span>
+<span class="k">fn</span> zeros(<span class="k">const</span> n: usize) -&gt; [f32; n] = [<span class="n">0.0</span>; n]
+
+<span class="c">// `N` is a generic parameter, worked out from the array's length.</span>
+<span class="k">fn</span> sum[<span class="k">const</span> N: usize](xs: [i32; N]) -&gt; i32 {
+    <span class="k">const</span> assert(N &gt; <span class="n">0</span>, <span class="s">"summing nothing"</span>)
+    <span class="k">var</span> total = <span class="n">0</span>
+    <span class="k">for</span> x <span class="k">in</span> xs {
+        total += x
+    }
+    total
+}
+
+<span class="k">fn</span> main() {
+    print(zeros(<span class="n">3</span>))
+    print(zeros(<span class="n">4</span>).len())
+    print(sum([<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]))
+    print(sum[<span class="n">2</span>]([<span class="n">10</span>, <span class="n">20</span>]))
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>[0, 0, 0]
+4
+6
+30</code></pre></div>
+</div>
+<ul><li>The parameter's type is an integer type or <code>bool</code> for now. An argument is checked against it (<a href="diagnostics.html#T0102">T0102</a>).</li><li>An argument must be something the constant folder can work out: literals, constants, other <code>const</code> parameters, arithmetic, comparisons, and the integer methods <code>log2</code>, <code>is_power_of_two</code>, <code>min</code>, <code>max</code> and <code>pow</code>. Anything else is <a href="diagnostics.html#K0109">K0109</a>.</li></ul>
+<div class="sample" id="sample-cp_err_known">
+<div class="sample-head"><span class="file">samples/cp_err_known.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0109">K0109</a></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fn</span> pick(<span class="k">const</span> first: bool) -&gt; str = <span class="k">if</span> first { <span class="s">"first"</span> } <span class="k">else</span> { <span class="s">"second"</span> }
+
+<span class="k">fn</span> main() {
+    <span class="k">var</span> k = <span class="n">3</span>
+    print(pick(k &gt; <span class="n">2</span>))
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[K0109]: this `const` argument isn't known at compile time</span>
+<span class="loc">  --&gt; cp_err_known.loom:7:16</span>
+  |
+7 |     print(pick(k &gt; 2))
+  |                ^^^^^ the constant folder can't work this out
+  |
+  = note: a `const` argument can use literals, constants, other `const` parameters, arithmetic and comparisons
+
+<span class="err">error: cp_err_known.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<ul><li>A <code>const</code> function parameter (<code>fn zeros(const n: usize)</code>) is still passed at run time like any other. Inside the instance, and in compile-time code, it's its value.</li><li><code>zeros(4)</code> and <code>zeros(5)</code> are different instances, and <code>Ring[u32, 4]</code> and <code>Ring[u32, 8]</code> are different types.</li></ul>
+<div class="sample" id="sample-cp_err_range">
+<div class="sample-head"><span class="file">samples/cp_err_range.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#T0102">T0102</a></span></div>
+<pre class="code"><code><span class="k">warp</span> <span class="t">Grid</span>[<span class="k">const</span> W: u8, <span class="k">const</span> H: u8] {
+    <span class="k">fn</span> area(<span class="k">self</span>) -&gt; u16 = W <span class="k">as</span> u16 * H <span class="k">as</span> u16
+}
+
+<span class="k">fn</span> main() {
+    <span class="c">// 300 doesn't fit a `u8`.</span>
+    <span class="k">let</span> b = <span class="t">Grid</span>[<span class="n">300</span>, <span class="n">1</span>]()
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[T0102]: `300` doesn't fit in `u8`</span>
+<span class="loc">  --&gt; cp_err_range.loom:7:18</span>
+  |
+7 |     let b = Grid[300, 1]()
+  |                  ^^^ too big or too small
+
+<span class="err">error: cp_err_range.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<h2 id="types-from-numbers">Types from numbers</h2>
+<p><code>uint(n)</code> and <code>int(n)</code> are the integer types with <code>n</code> bits, for <code>n</code> from 1 to 64. <code>u12</code> is <code>uint(12)</code>. The argument must be known at compile time (<a href="diagnostics.html#K0109">K0109</a> if it isn't). Together with <code>const</code> parameters, this lets a type follow a number:</p>
+<div class="sample" id="sample-cp_types">
+<div class="sample-head"><span class="file">samples/cp_types.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Grid</span>[<span class="k">const</span> W: u8, <span class="k">const</span> H: u8] {
+    <span class="k">fn</span> area(<span class="k">self</span>) -&gt; u16 = W <span class="k">as</span> u16 * H <span class="k">as</span> u16
+}
+
+<span class="k">fn</span> main() {
+    <span class="c">// `uint(n)` and `int(n)` are the integer types with `n` bits.</span>
+    <span class="k">let</span> small: uint(<span class="n">3</span>) = <span class="n">7</span>
+    <span class="k">let</span> wide: int(<span class="n">12</span>) = -<span class="n">2048</span>
+    print(<span class="s">"{</span>small<span class="s">} {</span>wide<span class="s">}"</span>)
+
+    <span class="c">// Different arguments make different types.</span>
+    print(<span class="t">Grid</span>[<span class="n">2</span>, <span class="n">5</span>]().area())
+    <span class="k">let</span> g: <span class="t">Grid</span>[<span class="n">3</span>, <span class="n">3</span>] = <span class="t">Grid</span>[<span class="n">3</span>, <span class="n">3</span>]()
+    print(g.area())
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>7 -2048
+10
+9</code></pre></div>
+</div>
+<h2 id="warps-with-const-parameters">Warps with <code>const</code> parameters</h2>
+<p>A generic warp's field types are worked out again for each list of arguments, since <code>type Idx = uint(N.log2())</code> can't be resolved in the template. A <code>const assert</code> in a warp's body runs for each instance of it, and the error names the instance.</p>
+<div class="sample" id="sample-cp_ring">
+<div class="sample-head"><span class="file">samples/cp_ring.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">// A ring buffer whose cursors are exactly as wide as its capacity needs.</span>
+<span class="c">// With N = 4 they are `u2`, so `+%= 1` wraps at N with no extra code.</span>
+<span class="k">warp</span> <span class="t">Ring</span>[T, <span class="k">const</span> N: usize] {
+    <span class="k">const</span> assert(N.is_power_of_two(), <span class="s">"Ring capacity must be a power of two, got {</span>N<span class="s">}"</span>)
+
+    <span class="k">type</span> <span class="t">Idx</span> = uint(N.log2())
+    <span class="k">type</span> <span class="t">Len</span> = uint(N.log2() + <span class="n">1</span>)
+
+    slots: [?T; N] = [<span class="k">none</span>; N]
+    head: <span class="t">Idx</span> = <span class="n">0</span>
+    tail: <span class="t">Idx</span> = <span class="n">0</span>
+    <span class="k">pub</span>(get) len: <span class="t">Len</span> = <span class="n">0</span>
+
+    <span class="c">/// Adds to the back. When the ring is full, the oldest item is dropped</span>
+    <span class="c">/// and returned.</span>
+    <span class="k">pub</span> <span class="k">fn</span> push(<span class="k">mut</span> <span class="k">self</span>, <span class="k">take</span> x: T) -&gt; ?T {
+        <span class="k">let</span> evicted = <span class="k">if</span> .len == N { .pop() } <span class="k">else</span> { <span class="k">none</span> }
+        .slots[.tail] = x
+        .tail +%= <span class="n">1</span>
+        .len += <span class="n">1</span>
+        evicted
+    }
+
+    <span class="k">pub</span> <span class="k">fn</span> pop(<span class="k">mut</span> <span class="k">self</span>) -&gt; ?T {
+        <span class="k">if</span> .len == <span class="n">0</span> { <span class="k">return</span> <span class="k">none</span> }
+        <span class="k">let</span> x = .slots[.head].take()
+        .head +%= <span class="n">1</span>
+        .len -= <span class="n">1</span>
+        x
+    }
+}
+
+<span class="k">fn</span> main() {
+    <span class="k">var</span> recent = <span class="t">Ring</span>[u32, <span class="n">4</span>]()
+    <span class="k">for</span> n <span class="k">in</span> <span class="n">1u32</span>..=<span class="n">6</span> {
+        <span class="k">if</span> recent.push(n) <span class="k">is</span> <span class="k">some</span>(old) {
+            print(<span class="s">"dropped {</span>old<span class="s">}"</span>)
+        }
+    }
+    <span class="k">while</span> recent.pop() <span class="k">is</span> <span class="k">some</span>(n) {
+        print(<span class="s">"kept {</span>n<span class="s">}"</span>)
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>dropped 1
+dropped 2
+kept 3
+kept 4
+kept 5
+kept 6</code></pre></div>
+</div>
+<div class="sample" id="sample-cp_err_assert">
+<div class="sample-head"><span class="file">samples/cp_err_assert.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0101">K0101</a></span></div>
+<pre class="code"><code><span class="k">warp</span> <span class="t">Ring</span>[T, <span class="k">const</span> N: usize] {
+    <span class="k">const</span> assert(N.is_power_of_two(), <span class="s">"Ring capacity must be a power of two, got {</span>N<span class="s">}"</span>)
+    slots: [?T; N] = [<span class="k">none</span>; N]
+}
+
+<span class="k">fn</span> main() {
+    <span class="k">let</span> fine = <span class="t">Ring</span>[u32, <span class="n">4</span>]()
+    <span class="k">let</span> odd = <span class="t">Ring</span>[u32, <span class="n">100</span>]()
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[K0101]: const assertion failed: Ring capacity must be a power of two, got 100</span>
+<span class="loc">  --&gt; cp_err_assert.loom:2:18</span>
+  |
+2 |     const assert(N.is_power_of_two(), "Ring capacity must be a power of two, got {N}")
+  |                  ^^^^^^^^^^^^^^^^^^^ this is false
+  |
+  = note: in `Ring[u32, 100]`
+
+<span class="err">error: cp_err_assert.loom failed to compile (1 error)</span></code></pre></div>
+</div>
+<h2 id="const-if"><code>const if</code></h2>
+<p><code>const if cond { ... } else { ... }</code> is decided while compiling, and the whole <code>else if</code> chain with it. The compiler checks, and emits, only the branch it takes. <strong>The others are parsed but never type-checked</strong>, so they can name things that don't exist on this target, such as <code>std.sys.page_size()</code> below.</p>
+<div class="sample" id="sample-ci_basic">
+<div class="sample-head"><span class="file">samples/ci_basic.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">const</span> DEBUG = <span class="k">false</span>
+<span class="k">const</span> SIZES = [<span class="n">1</span>, <span class="n">2</span>, <span class="n">4</span>]
+
+<span class="c">/// The branch that isn't taken isn't checked, so it can name things that</span>
+<span class="c">/// don't exist here.</span>
+<span class="k">fn</span> page_size() -&gt; usize {
+    <span class="k">const</span> <span class="k">if</span> target.pointer_bits == <span class="n">63</span> {
+        <span class="n">4096</span>
+    } <span class="k">else</span> {
+        std.sys.page_size()
+    }
+}
+
+<span class="k">fn</span> describe[<span class="k">const</span> N: usize](xs: [i32; N]) -&gt; str {
+    <span class="k">const</span> <span class="k">if</span> N &gt; <span class="n">2</span> { <span class="s">"long"</span> } <span class="k">else</span> { <span class="s">"short"</span> }
+}
+
+<span class="k">fn</span> main() {
+    print(page_size())
+    print(<span class="s">"{</span>describe([<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>])<span class="s">} {</span>describe([<span class="n">1</span>])<span class="s">}"</span>)
+
+    <span class="k">const</span> <span class="k">if</span> DEBUG {
+        print(<span class="s">"debug on"</span>)
+    } <span class="k">else</span> <span class="k">if</span> SIZES.len() == <span class="n">3</span> {
+        print(<span class="s">"three sizes"</span>)
+    }
+
+    <span class="c">// `const if` is an expression too.</span>
+    <span class="k">let</span> width: i32 = <span class="k">const</span> <span class="k">if</span> DEBUG { <span class="n">64</span> } <span class="k">else</span> { <span class="n">32</span> }
+    print(width)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>4096
+long short
+three sizes
+32</code></pre></div>
+</div>
+<ul><li>The condition must be something the constant folder can work out, like a <code>const</code> argument: literals, constants, <code>const</code> parameters, <code>target</code>, arithmetic and comparisons. Otherwise it's <a href="diagnostics.html#K0110">K0110</a>, or <a href="diagnostics.html#K0105">K0105</a> if it reads a local variable.</li><li>It can be an expression. Its branches then have to give a value.</li></ul>
+<div class="sample" id="sample-ci_err_known">
+<div class="sample-head"><span class="file">samples/ci_err_known.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0105">K0105</a></span></div>
+<pre class="code"><code><span class="k">fn</span> main() {
+    <span class="k">var</span> n = <span class="n">3</span>
+    <span class="k">const</span> <span class="k">if</span> n &gt; <span class="n">2</span> {
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[K0105]: `n` has no value while compiling</span>
+<span class="loc">  --&gt; ci_err_known.loom:3:14</span>
+  |
+2 |     var n = 3
+  |         - declared outside it, so it gets its value when the program runs
+3 |     const if n &gt; 2 {
+  |              ^ read by compile-time code
+  |
+  = help: compile-time code can use constants, functions and its own locals
+
+<span class="err">error: ci_err_known.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<div class="sample" id="sample-ci_err_fold">
+<div class="sample-head"><span class="file">samples/ci_err_fold.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0110">K0110</a></span></div>
+<pre class="code"><code><span class="k">fn</span> is_even(n: i32) -&gt; bool = n % <span class="n">2</span> == <span class="n">0</span>
+
+<span class="k">fn</span> main() {
+    <span class="c">// The condition has to be something the compiler can fold:</span>
+    <span class="c">// literals, constants, arithmetic, comparisons. A function call</span>
+    <span class="c">// isn't.</span>
+    <span class="k">const</span> <span class="k">if</span> is_even(<span class="n">4</span>) {
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[K0110]: a `const if` condition must be known at compile time</span>
+<span class="loc">  --&gt; ci_err_fold.loom:7:14</span>
+  |
+7 |     const if is_even(4) {
+  |              ^^^^^^^^^^ the constant folder can't work this out
+  |
+  = note: it can use literals, constants, `const` parameters, `target`, arithmetic and comparisons
+
+<span class="err">error: ci_err_fold.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<h2 id="const-for"><code>const for</code></h2>
+<p><code>const for</code> is unrolled while compiling. Its body is checked once for each item, with the loop variable known at compile time, so each copy can use it in a type (<code>[0u8; i + 1]</code> above and below). It goes over a range, an array literal, a constant that holds an array, or <code>.indexed()</code> of one of those. It can run at most 10,000 times (<a href="diagnostics.html#K0102">K0102</a>). <code>break</code> and <code>continue</code> can't target a <code>const for</code> yet (<a href="diagnostics.html#U0102">U0102</a>).</p>
+<div class="sample" id="sample-ci_for">
+<div class="sample-head"><span class="file">samples/ci_for.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">const</span> SIZES = [<span class="n">1</span>, <span class="n">2</span>, <span class="n">4</span>]
+
+<span class="k">fn</span> main() {
+    <span class="c">// `const for` is unrolled while compiling: the body is written out</span>
+    <span class="c">// once per item, and each copy is checked on its own. `i` is a</span>
+    <span class="c">// constant in each copy, so it can size an array.</span>
+    <span class="k">const</span> <span class="k">for</span> i <span class="k">in</span> <span class="n">0</span>..<span class="n">3</span> {
+        <span class="k">const</span> <span class="k">if</span> i &gt; <span class="n">0</span> { print(<span class="s">"--"</span>) }
+        <span class="k">let</span> zeros = [<span class="n">0u8</span>; i + <span class="n">1</span>]
+        print(<span class="s">"{</span>i<span class="s">}: {</span>zeros<span class="s">}"</span>)
+    }
+
+    <span class="k">var</span> total = <span class="n">0</span>
+    <span class="k">const</span> <span class="k">for</span> (i, s) <span class="k">in</span> SIZES.indexed() {
+        total += i <span class="k">as</span> i32 * <span class="n">10</span> + s
+    }
+    print(total)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>0: [0]
+--
+1: [0, 0]
+--
+2: [0, 0, 0]
+37</code></pre></div>
+</div>
+<h2 id="target"><code>target</code></h2>
+<p><code>target</code> is a <code>std.target.Target</code>, always in scope. It has <code>os</code>, <code>arch</code>, <code>endian</code> and <code>pointer_bits</code>, and is known at compile time, so it works in <code>const if</code>. On the Lua backend it describes the machine doing the build, and <code>pointer_bits</code> is 63. See <a href="../std/modules/target.html">std.target</a>.</p>
+<div class="sample" id="sample-ci_target">
+<div class="sample-head"><span class="file">samples/ci_target.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">// A `const if` on `target` picks a branch while compiling.</span>
+<span class="k">fn</span> separator() -&gt; str {
+    <span class="k">const</span> <span class="k">if</span> target.os == .<span class="t">Windows</span> {
+        <span class="s">"\\"</span>
+    } <span class="k">else</span> {
+        <span class="s">"/"</span>
+    }
+}
+
+<span class="k">fn</span> main() {
+    <span class="c">// `target` describes the machine the program is built for.</span>
+    print(target.pointer_bits)
+    print(target.endian == .<span class="t">Little</span>)
+    print(separator().len())
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>63
+true
+1</code></pre></div>
+</div>
+<h2 id="not-supported-yet">Not supported yet</h2>
+<p>Reflection (<code>T.kind</code>, <code>T.fields</code>), <code>std.sys</code>, and <code>const fn</code>s that return types are not built. <code>const</code> parameters of other types than integers and <code>bool</code> aren't either. See <a href="not-yet.html">Not supported yet</a>.</p>
+<div class="pager">
+<a href="compile-time.html">&larr; Compile-time code</a>
+<a href="tests.html">Tests &rarr;</a>
+</div>
+</main>
+</div>
+</body>
+</html>

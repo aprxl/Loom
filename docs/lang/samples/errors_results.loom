@@ -1,0 +1,39 @@
+use std.io.print
+
+warp ParseError: Error {
+    case Empty
+    case NotANumber(text: String)
+}
+
+warp RangeError: Error {
+    case TooBig(limit: u8)
+}
+
+warp AppError: Error {
+    case Parse(from ParseError)              // `?` on a ParseError wraps it here
+    case Range(from RangeError)
+}
+
+fn parse(text: str) -> u32 ! ParseError {
+    if text.is_empty() { fail .Empty }
+    text.parse[u32]() mend fail .NotANumber(text: text.to_string())
+}
+
+fn small(n: u32) -> u8 ! RangeError {
+    n as? u8 mend fail .TooBig(limit: 255)
+}
+
+fn load(text: str) -> u8 ! AppError {
+    let n = parse(text)?                     // ParseError becomes AppError.Parse
+    small(n)?
+}
+
+fn main() {
+    for text in ["42", "", "abc", "1000"] {
+        match load(text) {
+            ok(v) => print("ok {v}")
+            err(e) => print("error: {e}")
+        }
+    }
+}
+//@ run

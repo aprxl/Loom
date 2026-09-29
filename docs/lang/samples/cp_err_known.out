@@ -1,0 +1,9 @@
+error[K0109]: this `const` argument isn't known at compile time
+  --> docs/lang/samples/cp_err_known.loom:7:16
+  |
+7 |     print(pick(k > 2))
+  |                ^^^^^ the constant folder can't work this out
+  |
+  = note: a `const` argument can use literals, constants, other `const` parameters, arithmetic and comparisons
+
+error: docs/lang/samples/cp_err_known.loom failed to type-check (1 error)

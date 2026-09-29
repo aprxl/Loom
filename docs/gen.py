@@ -1,0 +1,139 @@
+# Generates the whole docs site from its hand-kept sources.
+#
+#   python docs/gen.py                        regenerate every page
+#   python docs/gen.py --check [--loom PATH]  verify, changing nothing:
+#                                             1. docs/std/data.py matches runtime/std/*.loom
+#                                             2. the generated pages on disk are up to date
+#                                             3. every relative link and anchor resolves
+#                                             4. every Loom sample behaves as its page says
+#   python docs/gen.py --bless [--loom PATH]  run the samples and rewrite their .out files
+#
+# --loom names the compiler for the samples (default: $LOOM, else
+# target/release or target/debug in this repository). --check exits 1 on any
+# problem, so it can run in CI.
+#
+# Sources:            docs/std/data.py        the std spec (from runtime/std/*.loom)
+#                     docs/lang/pages/*.md    the language pages' prose
+#                     docs/lang/samples/*     every Loom code sample, and its output
+#                     crates/loom_syntax/src/diag/codes.rs   the diagnostic codes
+# Generated:          docs/index.html, docs/lang/*.html, docs/std/**/*.html
+# Hand-written:       docs/style.css
+import os
+import re
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(HERE, "std"))
+
+import audit  # noqa: E402
+import lang_pages  # noqa: E402
+import samples  # noqa: E402
+import std_pages  # noqa: E402
+from common import Writer  # noqa: E402
+from data import MODULES  # noqa: E402
+
+
+class MemoryWriter(Writer):
+    """A Writer that also keeps every file's text, for the link checker."""
+
+    def __init__(self, check=False):
+        super().__init__(check)
+        self.files = {}
+
+    def write(self, rel, text):
+        self.files[rel] = text
+        super().write(rel, text)
+
+
+def generate(check):
+    w = MemoryWriter(check=check)
+    std_pages.generate(MODULES, w)
+    lang_pages.generate(MODULES, w)
+    return w
+
+
+def check_links(files):
+    """Every relative href/src in the generated pages points at a real file and anchor."""
+    problems = []
+    ids = {rel: set(re.findall(r'\bid="([^"]+)"', text)) for rel, text in files.items()}
+    for rel, text in sorted(files.items()):
+        base = os.path.dirname(rel)
+        for target in re.findall(r'(?:href|src)="([^"]*)"', text):
+            if re.match(r"[a-z]+:", target) or target == "":
+                continue
+            path, _, frag = target.partition("#")
+            dest = os.path.normpath(os.path.join(base, path)).replace("\\", "/") if path else rel
+            if dest in files:
+                if frag and frag not in ids[dest]:
+                    problems.append(f"{rel}: link to {target!r}: no anchor #{frag} in {dest}")
+            elif not os.path.exists(os.path.join(HERE, *dest.split("/"))):
+                problems.append(f"{rel}: link to {target!r} goes nowhere ({dest})")
+    return problems
+
+
+def main(argv):
+    check = "--check" in argv
+    bless = "--bless" in argv
+    loom = None
+    if "--loom" in argv:
+        loom = argv[argv.index("--loom") + 1]
+    unknown = [a for a in argv if a.startswith("--") and a not in ("--check", "--bless", "--loom")]
+    if unknown:
+        print(f"unknown option {unknown[0]}; see the top of docs/gen.py")
+        return 2
+
+    if bless:
+        exe = samples.find_loom(loom)
+        if not exe:
+            print("no loom binary: pass --loom PATH or set $LOOM")
+            return 2
+        names, problems = samples.check(exe, bless=True)
+        for p in problems:
+            print(" -", p)
+        print(f"blessed {len(names)} samples with {exe}")
+        if problems:
+            return 1
+
+    if not check:
+        w = generate(check=False)
+        print(f"wrote {len(w.written)} files")
+        return 0
+
+    failed = False
+    print("std data against runtime/std ...")
+    problems = audit.audit(MODULES)
+    for p in problems:
+        print("  -", p)
+    failed |= bool(problems)
+
+    print("generated pages ...")
+    w = generate(check=True)
+    for rel in w.stale:
+        print(f"  - {rel} is out of date (run python docs/gen.py)")
+    failed |= bool(w.stale)
+
+    print("links ...")
+    problems = check_links(w.files)
+    for p in problems:
+        print("  -", p)
+    failed |= bool(problems)
+
+    print("samples ...")
+    exe = samples.find_loom(loom)
+    if not exe:
+        print("  - no loom binary: pass --loom PATH, set $LOOM, or build one with cargo")
+        failed = True
+    else:
+        names, problems = samples.check(exe)
+        for p in problems:
+            print("  -", p)
+        print(f"  {len(names)} samples run with {exe}")
+        failed |= bool(problems)
+
+    print("FAILED" if failed else "ok")
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

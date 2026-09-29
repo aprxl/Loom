@@ -1,0 +1,12 @@
+use std.io.print
+
+fn loud(n: i32) -> i32 {
+    print("computing")
+    n
+}
+
+// Printing is I/O. The compile-time sandbox has none.
+const NOISY: i32 = loud(3)
+
+fn main() {}
+//@ check-fail K0104

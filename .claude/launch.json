@@ -4,7 +4,7 @@
     {
       "name": "std-spec",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8878", "--directory", "docs/std"],
+      "runtimeArgs": ["-m", "http.server", "8878", "--directory", "docs"],
       "port": 8878
     }
   ]

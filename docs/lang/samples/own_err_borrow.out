@@ -1,0 +1,12 @@
+error[M0105]: `tail` borrows `xs`, which changed after it was made
+  --> docs/lang/samples/own_err_borrow.loom:7:11
+  |
+6 |     xs.push(4)
+  |     -- `xs` changes here
+7 |     print(tail)
+  |           ^^^^ used here
+  |
+  = note: `tail` reads `xs` as it is now, not as it was
+  = help: make `tail` after the change, or from a copy (`xs.copy()`)
+
+error: docs/lang/samples/own_err_borrow.loom failed to type-check (1 error)

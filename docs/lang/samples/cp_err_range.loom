@@ -1,0 +1,9 @@
+warp Grid[const W: u8, const H: u8] {
+    fn area(self) -> u16 = W as u16 * H as u16
+}
+
+fn main() {
+    // 300 doesn't fit a `u8`.
+    let b = Grid[300, 1]()
+}
+//@ check-fail T0102

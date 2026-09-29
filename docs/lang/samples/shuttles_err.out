@@ -1,0 +1,9 @@
+error[L0301]: loose end: this `Burst[i32]` is thrown away
+  --> docs/lang/samples/shuttles_err.loom:9:5
+  |
+9 |     d.push(1)
+  |     ^^^^^^^^^ `Burst[i32]` is a `once` type: it must be used up exactly once
+  |
+  = help: go through it with `for`, or call `.drain()` to throw its items away on purpose
+
+error: docs/lang/samples/shuttles_err.loom failed to type-check (1 error)

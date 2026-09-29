@@ -1,0 +1,19 @@
+running 3 tests
+test halves ... ok
+test odd_number ... FAILED
+test wrong_length ... FAILED
+
+failures:
+
+---- odd_number ----
+about to halve 3
+error: Bad(n: 3)
+
+---- wrong_length ----
+unravel: three is not four
+  --> docs/lang/samples/tests_fail.loom:26:5
+   |
+26 |     assert(xs.len() == 4, "three is not four")
+   |     ^
+
+test result: FAILED. 1 passed; 2 failed

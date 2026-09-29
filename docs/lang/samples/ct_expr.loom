@@ -1,0 +1,24 @@
+use std.io.print
+
+fn fib(n: u64) -> u64 = if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+
+fn nth_fib(i: usize) -> u64 {
+    // A `const` block is worked out once, while compiling. Every call
+    // of `nth_fib` reads the same table.
+    let table = const {
+        var t = [0u64; 20]
+        for k in 0..20 {
+            t[k] = fib(k as u64)
+        }
+        t
+    }
+    table[i]
+}
+
+fn main() {
+    // `const` in front of an expression: the call runs while compiling.
+    print(const fib(25))
+    print(nth_fib(10))
+    print(nth_fib(19))
+}
+//@ run

@@ -1,0 +1,10 @@
+warp Ring[T, const N: usize] {
+    const assert(N.is_power_of_two(), "Ring capacity must be a power of two, got {N}")
+    slots: [?T; N] = [none; N]
+}
+
+fn main() {
+    let fine = Ring[u32, 4]()
+    let odd = Ring[u32, 100]()
+}
+//@ check-fail K0101

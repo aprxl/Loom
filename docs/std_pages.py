@@ -1,37 +1,31 @@
-# Generates docs/std/*.html from data.py, which mirrors runtime/std/*.loom
-# exactly: every item with a doc comment carries it, every item without one
-# is marked TODO. Re-run after editing data.py or runtime/std itself; the
-# HTML files are not hand-edited.
+# Renders the standard library pages (docs/std/index.html and
+# docs/std/modules/*.html) from docs/std/data.py, which mirrors
+# runtime/std/*.loom exactly: every item with a doc comment carries it, every
+# item without one is marked TODO.
 #
-#   python docs/std/gen.py
-import html
-import os
+# The HTML files are generated, never hand-edited: `python docs/gen.py`.
 import re
 
-OUT = os.path.dirname(os.path.abspath(__file__))
+from common import esc, inline, page, sidebar
 
 # ---------------------------------------------------------------- helpers
 
-def esc(s):
-    return html.escape(s, quote=False)
 
-def inline(doc):
-    """Doc text -> HTML: escape, then turn `code` spans into <code>."""
-    if doc is None:
-        return None
-    out = esc(doc)
-    out = re.sub(r"`([^`]+)`", lambda m: f"<code>{m.group(1)}</code>", out)
-    return out
+def slug(name):
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", name)
+
 
 def doc_html(doc, empty_text="undocumented in source"):
     if doc:
         return f'<p class="item-doc">{inline(doc)}</p>'
     return f'<p class="item-doc empty">{empty_text}</p>'
 
+
 def member_doc_html(doc):
     if doc:
         return f'<p class="member-doc">{inline(doc)}</p>'
     return '<p class="member-doc empty">undocumented</p>'
+
 
 def badges(item):
     out = []
@@ -43,6 +37,7 @@ def badges(item):
         out.append('<span class="badge todo">TODO</span>')
     return "".join(out)
 
+
 def member_badges(m):
     out = []
     if m.get("builtin"):
@@ -51,13 +46,16 @@ def member_badges(m):
         out.append('<span class="badge todo">TODO</span>')
     return "".join(out)
 
+
 # ---------------------------------------------------------------- render
 
+
 def render_type(item):
+    tid = slug(item["name"])
     parts = [
-        '<div class="item">',
+        f'<div class="item" id="{tid}">',
         '<div class="item-head">',
-        f'<span class="sig">{esc(item["kind"])} <strong>{esc(item["name"])}</strong>{esc(item.get("suffix",""))}</span>',
+        f'<span class="sig">{esc(item["kind"])} <strong>{esc(item["name"])}</strong>{esc(item.get("suffix", ""))}</span>',
         badges(item),
         "</div>",
         doc_html(item.get("doc")),
@@ -77,7 +75,9 @@ def render_type(item):
     if item.get("methods"):
         parts.append('<div class="members">')
         for m in item["methods"]:
-            parts.append('<div class="member">')
+            m_name = re.match(r"(?:fn|type) (\w+)", m["sig"])
+            mid = f' id="{tid}.{slug(m_name.group(1))}"' if m_name else ""
+            parts.append(f'<div class="member"{mid}>')
             parts.append('<div class="member-head">')
             parts.append(f'<span class="sig">{esc(m["sig"])}</span>')
             parts.append(member_badges(m))
@@ -88,125 +88,79 @@ def render_type(item):
     parts.append("</div>")
     return "\n".join(parts)
 
+
 def render_fn(item):
-    parts = [
-        '<div class="item">',
+    return "\n".join([
+        f'<div class="item" id="{slug(item["name"])}">',
         '<div class="item-head">',
         f'<span class="sig">fn <strong>{esc(item["name"])}</strong>{esc(item["suffix"])}</span>',
         badges(item),
         "</div>",
         doc_html(item.get("doc")),
         "</div>",
-    ]
-    return "\n".join(parts)
+    ])
+
 
 def render_const(item):
-    parts = [
-        '<div class="item">',
+    return "\n".join([
+        f'<div class="item" id="{slug(item["name"])}">',
         '<div class="item-head">',
         f'<span class="sig">const <strong>{esc(item["name"])}</strong>{esc(item["suffix"])}</span>',
         badges(item),
         "</div>",
         doc_html(item.get("doc")),
         "</div>",
-    ]
-    return "\n".join(parts)
+    ])
+
 
 def render_reexports(reexports):
     parts = ['<ul class="reexports">']
     for r in reexports:
         parts.append(
-            f'<li><a href="{r["from"]}.html"><code>{esc(r["name"])}</code></a>'
+            f'<li><a href="{r["from"]}.html#{slug(r["name"])}"><code>{esc(r["name"])}</code></a>'
             f'<span class="from">from <code>std.{esc(r["from"])}</code></span></li>'
         )
     parts.append("</ul>")
     return "\n".join(parts)
 
-def sidebar(modules, current):
-    parts = ['<nav class="sidebar">', '<a class="brand" href="../index.html">Loom <span class="dim">std</span></a>', "<ul>"]
-    for m in modules:
-        cls = ' class="current"' if m["name"] == current else ""
-        parts.append(f'<li><a{cls} href="{m["name"]}.html">{esc(m["name"])}</a></li>')
-    parts.append("</ul></nav>")
-    return "\n".join(parts)
-
-def index_sidebar(modules):
-    parts = ['<nav class="sidebar">', '<a class="brand" href="index.html">Loom <span class="dim">std</span></a>', "<ul>"]
-    for m in modules:
-        parts.append(f'<li><a href="modules/{m["name"]}.html">{esc(m["name"])}</a></li>')
-    parts.append("</ul></nav>")
-    return "\n".join(parts)
-
-PAGE = """<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>std.{name} · Loom</title>
-<link rel="stylesheet" href="../style.css">
-</head>
-<body>
-<div class="layout">
-{sidebar}
-<main>
-<div class="crumb"><a href="../index.html">std</a> / {name}</div>
-<h1>std.{name}</h1>
-<p class="summary">{summary}</p>
-{body}
-</main>
-</div>
-</body>
-</html>
-"""
 
 def module_count(mod):
-    n = 0
-    n += len(mod.get("reexports", []))
-    n += len(mod.get("types", []))
-    n += len(mod.get("functions", []))
-    n += len(mod.get("consts", []))
-    return n
+    return (len(mod.get("reexports", [])) + len(mod.get("types", []))
+            + len(mod.get("functions", [])) + len(mod.get("consts", [])))
+
+
+def std_sidebar(modules, current, index=False):
+    """`index` is True for docs/std/index.html (modules live one level down)."""
+    here = "std" if index else "std/modules"
+    prefix = "modules/" if index else ""
+    entries = [("Overview", "index.html" if index else "../index.html", None)]
+    entries += [(esc(m["name"]), f'{prefix}{m["name"]}.html', m["name"]) for m in modules]
+    return sidebar(here, "std", "Standard library", entries, current)
+
 
 def render_module(mod, modules):
-    body = []
+    body = [
+        f'<div class="crumb"><a href="../index.html">std</a> / {esc(mod["name"])}</div>',
+        f'<h1>std.{esc(mod["name"])}</h1>',
+        f'<p class="summary">{inline(mod["summary"])}</p>',
+    ]
     if mod.get("reexports"):
         body.append("<h2>Re-exports</h2>")
         body.append(render_reexports(mod["reexports"]))
     if mod.get("types"):
         body.append("<h2>Types</h2>")
-        for t in mod["types"]:
-            body.append(render_type(t))
+        body += [render_type(t) for t in mod["types"]]
     if mod.get("consts"):
         body.append("<h2>Constants</h2>")
-        for c in mod["consts"]:
-            body.append(render_const(c))
+        body += [render_const(c) for c in mod["consts"]]
     if mod.get("functions"):
         body.append("<h2>Functions</h2>")
-        for f in mod["functions"]:
-            body.append(render_fn(f))
-    html_out = PAGE.format(
-        name=esc(mod["name"]),
-        summary=inline(mod["summary"]),
-        sidebar=sidebar(modules, mod["name"]),
-        body="\n".join(body),
-    )
-    path = os.path.join(OUT, "modules", f'{mod["name"]}.html')
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
-        f.write(html_out)
+        body += [render_fn(f) for f in mod["functions"]]
+    return page(f'std.{mod["name"]} · Loom', "std/modules",
+                std_sidebar(modules, mod["name"]), "\n".join(body))
 
-INDEX = """<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Loom std</title>
-<link rel="stylesheet" href="style.css">
-</head>
-<body>
-<div class="layout">
-{sidebar}
-<main>
-<h1>The Loom standard library</h1>
+
+INDEX_BODY = """<h1>The Loom standard library</h1>
 <p class="summary">What's implemented in <code>runtime/std</code>, one namespace
 per module. Every item's description is copied from its doc comment in the
 source; an item with none is marked <span class="badge todo">TODO</span>
@@ -219,32 +173,25 @@ rather than given one here.</p>
 <div><span class="badge extern">extern</span> declared as <code>extern "lua"</code>, calling straight into the host.</div>
 <div><span class="badge todo">TODO</span> no doc comment in the source yet.</div>
 </div>
-<footer>Generated from <code>runtime/std/*.loom</code>. Re-run <code>docs/std/gen.py</code> after changing the standard library.</footer>
-</main>
-</div>
-</body>
-</html>
-"""
+<footer>Generated from <code>runtime/std/*.loom</code>. Run <code>python docs/gen.py</code> after changing the standard library.</footer>"""
+
 
 def render_index(modules):
     cards = []
     for m in modules:
+        n = module_count(m)
         cards.append(
             f'<a class="card" href="modules/{m["name"]}.html">'
             f'<span class="name">std.{esc(m["name"])}</span>'
             f'<span class="desc">{inline(m["summary"])}</span>'
-            f'<span class="count">{module_count(m)} item{"s" if module_count(m) != 1 else ""}</span>'
+            f'<span class="count">{n} item{"s" if n != 1 else ""}</span>'
             f'</a>'
         )
-    html_out = INDEX.format(sidebar=index_sidebar(modules), cards="\n".join(cards))
-    with open(os.path.join(OUT, "index.html"), "w", encoding="utf-8", newline="\n") as f:
-        f.write(html_out)
+    return page("Loom standard library", "std", std_sidebar(modules, None, index=True),
+                INDEX_BODY.format(cards="\n".join(cards)))
 
-if __name__ == "__main__":
-    from data import MODULES
 
-    os.makedirs(os.path.join(OUT, "modules"), exist_ok=True)
-    render_index(MODULES)
-    for m in MODULES:
-        render_module(m, MODULES)
-    print(f"wrote index.html + {len(MODULES)} module pages")
+def generate(modules, writer):
+    writer.write("std/index.html", render_index(modules))
+    for m in modules:
+        writer.write(f'std/modules/{m["name"]}.html', render_module(m, modules))

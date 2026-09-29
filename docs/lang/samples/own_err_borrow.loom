@@ -1,0 +1,9 @@
+use std.io.print
+
+fn main() {
+    var xs: List[i32] = [1, 2, 3]
+    let tail = xs[1..]
+    xs.push(4)
+    print(tail)
+}
+//@ check-fail M0105

@@ -1,0 +1,7 @@
+const ALPHA: i32 = BETA + 1
+const BETA: i32 = helper()
+
+fn helper() -> i32 = ALPHA * 2
+
+fn main() {}
+//@ check-fail K0107

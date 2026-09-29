@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Collections and streams · Loom</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a class="current" href="../lang/index.html">Language</a></li>
+<li><a href="../std/index.html">Standard library</a></li>
+<li><a href="../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Language</h3>
+<ul>
+<li><a href="index.html">Overview</a></li>
+<li><a href="start.html">Getting started</a></li>
+<li><a href="values.html">Values and control flow</a></li>
+<li><a href="types.html">Warps, wefts and weaves</a></li>
+<li><a href="generics.html">Generics and <code>any</code></a></li>
+<li><a class="current" href="collections.html">Collections and streams</a></li>
+<li><a href="errors.html">Optionals and errors</a></li>
+<li><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
+<li><a href="gauges.html">Gauges</a></li>
+<li><a href="shuttles.html">Shuttles</a></li>
+<li><a href="compile-time.html">Compile-time code</a></li>
+<li><a href="const-params.html">Const parameters and control flow</a></li>
+<li><a href="tests.html">Tests</a></li>
+<li><a href="not-yet.html">Not supported yet</a></li>
+</ul>
+</nav>
+<main>
+<div class="crumb"><a href="index.html">Language</a> / Collections and streams</div>
+<h1>Collections and streams</h1>
+<p class="summary">Arrays, lists, slices, maps, sets, and lazy streams.</p>
+<h2 id="arrays-lists-and-slices">Arrays, lists and slices</h2>
+<ul><li><code>[T; N]</code> is a fixed-size array. <code>[1, 2, 3]</code> is one, and <code>[0u8; 4]</code> repeats a value.</li><li><code>List[T]</code> is a growable array. A literal becomes a list where a list is expected: <code>let xs: List[i32] = [1, 2]</code>.</li><li><code>[T]</code> is a slice, a view of contiguous <code>T</code>s. An array or a list passes as a slice, and has every slice method.</li></ul>
+<p>Indexing is bounds-checked, and an out-of-range index unravels. <code>get</code> gives an optional instead. <code>xs[a..b]</code> makes a view without copying. A view reads the list as it is now, so changing the list while a view is live is an error (<a href="diagnostics.html#M0105">M0105</a>). <code>for mut x in xs</code> edits the elements in place.</p>
+<div class="sample" id="sample-coll_lists">
+<div class="sample-head"><span class="file">samples/coll_lists.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fn</span> total(xs: [i32]) -&gt; i32 {                 <span class="c">// `[i32]` is a slice: arrays and lists pass as one</span>
+    <span class="k">var</span> t = <span class="n">0</span>
+    <span class="k">for</span> x <span class="k">in</span> xs { t += x }
+    t
+}
+
+<span class="k">fn</span> main() {
+    <span class="k">let</span> fixed = [<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]                    <span class="c">// an array: `[i32; 3]`</span>
+    <span class="k">let</span> zeros = [<span class="n">0u8</span>; <span class="n">4</span>]                     <span class="c">// repeat: four zero bytes</span>
+    <span class="k">var</span> xs: <span class="t">List</span>[i32] = [<span class="n">5</span>, <span class="n">3</span>, <span class="n">8</span>]            <span class="c">// a literal where a list is expected</span>
+    xs.push(<span class="n">1</span>)
+    xs.insert(<span class="n">0</span>, <span class="n">9</span>)
+    print(<span class="s">"{</span>xs<span class="s">} len {</span>xs.len()<span class="s">} first {</span>xs.first():?<span class="s">} last {</span>xs.last():?<span class="s">}"</span>)
+
+    xs.sort()
+    print(xs)
+    print(<span class="s">"{</span>total(fixed)<span class="s">} {</span>total(xs)<span class="s">} {</span>total(xs[<span class="n">1</span>..<span class="n">3</span>])<span class="s">}"</span>)   <span class="c">// slicing makes a view</span>
+    print(<span class="s">"{</span>zeros<span class="s">} {</span>xs.contains(<span class="n">8</span>)<span class="s">} {</span>xs.index_of(<span class="n">8</span>):?<span class="s">}"</span>)
+
+    <span class="c">// Indexing is bounds-checked; `get` gives an optional instead.</span>
+    print(<span class="s">"{</span>xs[<span class="n">0</span>]<span class="s">} {</span>xs.get(<span class="n">99</span>):?<span class="s">}"</span>)
+
+    <span class="c">// `for mut` edits the elements in place.</span>
+    <span class="k">for</span> <span class="k">mut</span> x <span class="k">in</span> xs { x *= <span class="n">2</span> }
+    print(xs)
+
+    print(xs.map(_ + <span class="n">1</span>))
+    print(xs.chunks(<span class="n">2</span>).collect())
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>[9, 5, 3, 8, 1] len 5 first some(9) last some(1)
+[1, 3, 5, 8, 9]
+6 26 8
+[0, 0, 0, 0] true some(3)
+1 none
+[2, 6, 10, 16, 18]
+[3, 7, 11, 17, 19]
+[[2, 6], [10, 16], [18]]</code></pre></div>
+</div>
+<p>An index whose type can't reach past the end (a <code>u4</code> into a <code>[u8; 16]</code>) needs no check.</p>
+<p>The methods are listed in <a href="../std/modules/list.html#List">std.list</a> and <a href="../std/modules/slice.html#Slice">std.slice</a>. On slices and lists, <code>map</code> and <code>filter</code> are eager and make new lists. The stream methods are lazy.</p>
+<h2 id="maps-and-sets">Maps and sets</h2>
+<p><code>Map[K, V]</code> and <code>Set[T]</code> remember the order things were first added, and going through one, or showing it, follows that order. Keys must weave <code>Hash</code>, which a warp gets by listing it. <code>m[k]</code> unravels when the key is missing, and <code>m.get(k)</code> gives an optional. <code>m[k] = v</code> adds or replaces. <code>[:]</code> is the empty map literal.</p>
+<div class="sample" id="sample-coll_maps">
+<div class="sample-head"><span class="file">samples/coll_maps.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fn</span> main() {
+    <span class="c">// Maps and sets remember insertion order.</span>
+    <span class="k">var</span> ages: <span class="t">Map</span>[str, u8] = [<span class="s">"ada"</span>: <span class="n">36</span>, <span class="s">"alan"</span>: <span class="n">41</span>]
+    ages[<span class="s">"grace"</span>] = <span class="n">85</span>                       <span class="c">// adds a key</span>
+    ages[<span class="s">"ada"</span>] = <span class="n">37</span>                         <span class="c">// replaces a value</span>
+    print(<span class="s">"{</span>ages<span class="s">} {</span>ages.len()<span class="s">}"</span>)
+    print(<span class="s">"{</span>ages[<span class="s">"alan"</span>]<span class="s">} {</span>ages.get(<span class="s">"nobody"</span>):?<span class="s">} {</span>ages.has(<span class="s">"ada"</span>)<span class="s">}"</span>)
+
+    <span class="k">for</span> (name, age) <span class="k">in</span> ages {
+        print(<span class="s">"{</span>name<span class="s">} is {</span>age<span class="s">}"</span>)
+    }
+    print(ages.keys().collect())
+    print(ages.remove(<span class="s">"alan"</span>))
+    print(ages.sorted())
+
+    <span class="c">// Counting words.</span>
+    <span class="k">var</span> counts: <span class="t">Map</span>[<span class="t">String</span>, u32] = <span class="t">Map</span>()
+    <span class="k">for</span> word <span class="k">in</span> <span class="s">"the cat and the hat and the bat"</span>.words() {
+        counts[word.to_string()] = (counts.get(word.to_string()) <span class="k">mend</span> <span class="n">0</span>) + <span class="n">1</span>
+    }
+    print(counts)
+
+    <span class="k">var</span> seen: <span class="t">Set</span>[i32] = <span class="t">Set</span>()
+    <span class="k">for</span> n <span class="k">in</span> [<span class="n">3</span>, <span class="n">1</span>, <span class="n">3</span>, <span class="n">2</span>, <span class="n">1</span>] {
+        <span class="k">if</span> seen.insert(n) { print(<span class="s">"new: {</span>n<span class="s">}"</span>) }
+    }
+    print(<span class="s">"{</span>seen<span class="s">} {</span>seen.sorted()<span class="s">} {</span>seen.has(<span class="n">2</span>)<span class="s">}"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>[ada: 37, alan: 41, grace: 85] 3
+41 none true
+ada is 37
+alan is 41
+grace is 85
+[ada, alan, grace]
+41
+[(ada, 37), (grace, 85)]
+[the: 3, cat: 1, and: 2, hat: 1, bat: 1]
+new: 3
+new: 1
+new: 2
+{3, 1, 2} [1, 2, 3] true</code></pre></div>
+</div>
+<p>Two maps are equal when they hold the same pairs in any order. See <a href="../std/modules/map.html#Map">std.map</a> and <a href="../std/modules/set.html#Set">std.set</a>.</p>
+<h2 id="streams">Streams</h2>
+<p>A <code>Stream[T]</code> is a lazy sequence: nothing runs until something asks for the next item. Methods that make a new stream use up the old one, so a stream is read once. <code>chars()</code>, <code>bytes()</code>, <code>lines()</code>, <code>words()</code>, <code>indexed()</code>, <code>chunks(n)</code> and <code>windows(n)</code> make streams. Ranges, arrays, lists, slices and maps have every stream method, and so does any type that weaves <code>Iter</code>. <code>for</code> loops over any of them.</p>
+<p>To make your own, weave <code>Iter</code>: give the type an <code>Item</code> and a <code>next</code> that returns <code>?Item</code>.</p>
+<div class="sample" id="sample-coll_streams">
+<div class="sample-head"><span class="file">samples/coll_streams.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">// Anything `for` can loop over is an `Iter`. Give a type `next` and it</span>
+<span class="c">// gets every `Stream` method for free.</span>
+<span class="k">warp</span> <span class="t">Countdown</span>: <span class="t">Iter</span> {
+    n: u32
+    <span class="k">type</span> <span class="t">Item</span> = u32
+    <span class="k">fn</span> next(<span class="k">mut</span> <span class="k">self</span>) -&gt; ?u32 {
+        <span class="k">if</span> .n == <span class="n">0</span> { <span class="k">return</span> <span class="k">none</span> }
+        .n -= <span class="n">1</span>
+        .n + <span class="n">1</span>
+    }
+}
+
+<span class="k">fn</span> main() {
+    <span class="c">// Streams are lazy: nothing runs until something asks for an item.</span>
+    <span class="k">let</span> evens = (<span class="n">1</span>..=<span class="n">20</span>).filter(_ % <span class="n">2</span> == <span class="n">0</span>).map(n =&gt; n * n)
+    print(evens.take(<span class="n">4</span>).collect())
+
+    print(<span class="s">"hello world"</span>.chars().filter(_ != <span class="s">'o'</span>).count())
+    print(<span class="s">"one two  three"</span>.words().join(<span class="s">"-"</span>))
+    print(<span class="t">Countdown</span>(<span class="n">4</span>).collect())
+    print(<span class="t">Countdown</span>(<span class="n">5</span>).sum())
+
+    <span class="k">for</span> (i, line) <span class="k">in</span> <span class="s">"a\nb\nc"</span>.lines().indexed() {
+        print(<span class="s">"{</span>i<span class="s">}: {</span>line<span class="s">}"</span>)
+    }
+
+    <span class="k">let</span> xs = [<span class="n">4</span>, <span class="n">8</span>, <span class="n">15</span>, <span class="n">16</span>, <span class="n">23</span>, <span class="n">42</span>]
+    print(<span class="s">"{</span>xs.fold(<span class="n">0</span>, (acc, x) =&gt; acc + x)<span class="s">} {</span>xs.max():?<span class="s">} {</span>xs.position(_ == <span class="n">15</span>):?<span class="s">}"</span>)
+    print(<span class="s">"{</span>xs.all(_ &gt; <span class="n">3</span>)<span class="s">} {</span>xs.exists(_ &gt; <span class="n">40</span>)<span class="s">} {</span>xs.zip(xs.skip(<span class="n">1</span>)).count()<span class="s">}"</span>)
+    print(xs.windows(<span class="n">2</span>).map(w =&gt; w[<span class="n">1</span>] - w[<span class="n">0</span>]).collect())
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>[4, 16, 36, 64]
+9
+one-two-three
+[4, 3, 2, 1]
+15
+0: a
+1: b
+2: c
+108 some(42) some(2)
+true true 5
+[4, 7, 1, 7, 19]</code></pre></div>
+</div>
+<p><code>sum</code> and <code>product</code> need <code>Num</code>, <code>min</code> and <code>max</code> need <code>Ord</code>, and <code>join</code> needs <code>Show</code>. See <a href="../std/modules/iter.html#Stream">std.iter</a> for the whole list. A generator function makes a stream too: see <a href="shuttles.html">Shuttles</a>.</p>
+<h2 id="where-next">Where next</h2>
+<p><a href="errors.html">Optionals and errors</a> covers <code>?T</code> and <code>T ! E</code>.</p>
+<div class="pager">
+<a href="generics.html">&larr; Generics and <code>any</code></a>
+<a href="errors.html">Optionals and errors &rarr;</a>
+</div>
+</main>
+</div>
+</body>
+</html>

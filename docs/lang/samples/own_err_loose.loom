@@ -1,0 +1,19 @@
+pub once warp Tx {
+    moves: List[i32] = List()
+
+    pub fn begin() -> Tx = Tx()
+    pub fn commit(take self) {
+        let Tx(moves) = self
+    }
+    pub fn rollback(take self) {
+        let Tx(_) = self
+    }
+}
+
+fn forgetful(early: bool) {
+    let tx = Tx.begin()
+    if early { tx.commit() }
+}
+
+fn main() {}
+//@ check-fail L0301

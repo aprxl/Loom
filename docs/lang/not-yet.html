@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Not supported yet · Loom</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a class="current" href="../lang/index.html">Language</a></li>
+<li><a href="../std/index.html">Standard library</a></li>
+<li><a href="../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Language</h3>
+<ul>
+<li><a href="index.html">Overview</a></li>
+<li><a href="start.html">Getting started</a></li>
+<li><a href="values.html">Values and control flow</a></li>
+<li><a href="types.html">Warps, wefts and weaves</a></li>
+<li><a href="generics.html">Generics and <code>any</code></a></li>
+<li><a href="collections.html">Collections and streams</a></li>
+<li><a href="errors.html">Optionals and errors</a></li>
+<li><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
+<li><a href="gauges.html">Gauges</a></li>
+<li><a href="shuttles.html">Shuttles</a></li>
+<li><a href="compile-time.html">Compile-time code</a></li>
+<li><a href="const-params.html">Const parameters and control flow</a></li>
+<li><a href="tests.html">Tests</a></li>
+<li><a class="current" href="not-yet.html">Not supported yet</a></li>
+</ul>
+</nav>
+<main>
+<div class="crumb"><a href="index.html">Language</a> / Not supported yet</div>
+<h1>Not supported yet</h1>
+<p class="summary">What the compiler doesn't do, said plainly.</p>
+<p>The design in <code>README.md</code> and <code>design/*.md</code> is bigger than what runs. This is the list of what doesn't run, from <code>design/lua-backend.md</code> and from trying it.</p>
+<p>Anything not built stops with a <code>U</code> code, and most stop with <a href="diagnostics.html#U0102">U0102</a>, "not implemented yet". The compiler doesn't guess and doesn't miscompile.</p>
+<h2 id="next-in-line">Next in line</h2>
+<p>These are planned next, in this order: reflection, threads, spools.</p>
+<h3 id="reflection">Reflection</h3>
+<p><code>T.name</code>, <code>T.kind</code>, <code>T.fields</code>, <code>T.cases</code>, <code>T.weaves(W)</code>, <code>v.(f)</code> and <code>v is .(c)</code>. Reflection is what will let <code>Show</code>, <code>Eq</code>, <code>Ord</code> and <code>Hash</code> be ordinary default methods that inspect the type. Until then, std's defaults for them, and <code>Error.message</code>, are built into the compiler.</p>
+<div class="sample" id="sample-nyet_reflect">
+<div class="sample-head"><span class="file">samples/nyet_reflect.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Point</span> {
+    x: f64
+    y: f64
+}
+
+<span class="k">fn</span> main() {
+    <span class="c">// Reflection (`T.name`, `T.kind`, `T.fields`, `T.cases`) isn't built yet.</span>
+    <span class="k">const</span> <span class="k">for</span> f <span class="k">in</span> <span class="t">Point</span>.fields {
+        print(f.name)
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[U0102]: not implemented yet: reflection (`T.fields`)</span>
+<span class="loc">   --&gt; nyet_reflect.loom:10:26</span>
+   |
+10 |     const for f in Point.fields {
+   |                          ^^^^^^ not supported by this compiler yet
+   |
+   = note: the type checker grows one milestone at a time; see design/lua-backend.md
+
+<span class="err">error: nyet_reflect.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<h3 id="threads">Threads</h3>
+<p><code>loom { }</code> blocks, <code>thread</code>, <code>loom for</code>, <code>.join()</code>, and the types for sharing between threads, <code>Atomic[T]</code> and <code>Mutex[T]</code>. The two types are declared in <a href="../std/modules/sync.html">std.sync</a> and can't be built yet.</p>
+<div class="sample" id="sample-nyet_threads">
+<div class="sample-head"><span class="file">samples/nyet_threads.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span></div>
+<pre class="code"><code><span class="k">fn</span> slow_sum(xs: [i32]) -&gt; i32 {
+    <span class="k">var</span> total = <span class="n">0</span>
+    <span class="k">for</span> x <span class="k">in</span> xs { total += x }
+    total
+}
+
+<span class="k">fn</span> main() {
+    <span class="k">let</span> left = [<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]
+    <span class="k">let</span> right = [<span class="n">4</span>, <span class="n">5</span>, <span class="n">6</span>]
+    <span class="k">let</span> (a, b) = <span class="k">loom</span> {
+        <span class="k">let</span> x = <span class="k">thread</span> slow_sum(left)
+        <span class="k">let</span> y = <span class="k">thread</span> slow_sum(right)
+        (x.join(), y.join())
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[U0102]: not implemented yet: `loom` and `thread`</span>
+<span class="loc">   --&gt; nyet_threads.loom:10:18</span>
+   |  
+10 |       let (a, b) = loom {
+   | /------------------^
+11 | |         let x = thread slow_sum(left)
+12 | |         let y = thread slow_sum(right)
+13 | |         (x.join(), y.join())
+14 | |     }
+   | \-----^ not supported by this compiler yet
+   |  
+   = note: the type checker grows one milestone at a time; see design/lua-backend.md
+
+<span class="err">error: nyet_threads.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<h3 id="spools">Spools</h3>
+<p><code>spool</code> bindings, <code>Arena</code>, <code>^T</code> allocation, region pointers (<code>^T@s</code>), and the region checker that goes with them. <a href="../std/modules/mem.html">std.mem</a> declares <code>Arena</code> and <code>Spool</code>.</p>
+<div class="sample" id="sample-nyet_spools">
+<div class="sample-head"><span class="file">samples/nyet_spools.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span></div>
+<pre class="code"><code><span class="k">use</span> std.mem.<span class="t">Arena</span>
+
+<span class="k">warp</span> <span class="t">Particle</span> {
+    x: f32
+}
+
+<span class="k">fn</span> main() {
+    <span class="k">spool</span> frame = <span class="t">Arena</span>(<span class="n">1024</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[U0102]: not implemented yet: spools</span>
+<span class="loc">  --&gt; nyet_spools.loom:8:19</span>
+  |
+8 |     spool frame = Arena(1024)
+  |                   ^^^^^^^^^^^ not supported by this compiler yet
+  |
+  = note: the type checker grows one milestone at a time; see design/lua-backend.md
+
+<span class="err">error: nyet_spools.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<h2 id="compile-time-code">Compile-time code</h2>
+<p>The standard library's <code>std.sys</code> and reflection are not built:</p>
+<div class="sample" id="sample-nyet_sys">
+<div class="sample-head"><span class="file">samples/nyet_sys.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span></div>
+<pre class="code"><code><span class="k">fn</span> main() {
+    <span class="k">let</span> size = std.sys.page_size()
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[U0102]: not implemented yet: `std.sys`, the platform's own APIs</span>
+<span class="loc">  --&gt; nyet_sys.loom:2:20</span>
+  |
+2 |     let size = std.sys.page_size()
+  |                    ^^^ not supported by this compiler yet
+
+<span class="err">error: nyet_sys.loom failed to resolve (1 error)</span></code></pre></div>
+</div>
+<p>Array lengths and gauge bounds must be something the compiler's own evaluator can fold. A call to one of your functions isn't. It's <a href="diagnostics.html#U0102">U0102</a> for an array length and <a href="diagnostics.html#T0103">T0103</a> for a gauge bound.</p>
+<div class="sample" id="sample-nyet_types">
+<div class="sample-head"><span class="file">samples/nyet_types.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span></div>
+<pre class="code"><code><span class="c">// A type can't depend on the compile-time sandbox yet, only on what the</span>
+<span class="c">// constant folder can work out: literals, constants, arithmetic.</span>
+<span class="k">fn</span> square(n: usize) -&gt; usize = n * n
+
+<span class="k">const</span> AREA: usize = square(<span class="n">4</span>)
+
+<span class="k">fn</span> main() {
+    <span class="k">let</span> cells = [<span class="n">0u8</span>; AREA]
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[U0102]: not implemented yet: array lengths that aren't known at compile time</span>
+<span class="loc">  --&gt; nyet_types.loom:8:23</span>
+  |
+8 |     let cells = [0u8; AREA]
+  |                       ^^^^ not supported by this compiler yet
+  |
+  = note: the type checker grows one milestone at a time; see design/lua-backend.md
+
+<span class="err">error: nyet_types.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<p>Also missing:</p>
+<ul><li><code>const fn</code>s that return types (<code>const fn fixed(...) -&gt; type</code>), and anonymous <code>warp { ... }</code> types (<a href="diagnostics.html#U0101">U0101</a>).</li><li><code>break</code> and <code>continue</code> out of a <code>const for</code>.</li><li><code>const</code> parameters that aren't integers or <code>bool</code>.</li><li><code>embed</code> and <code>embed_text</code>, and the <code>bolt.loom</code> manifest.</li></ul>
+<h2 id="memory-and-safety">Memory and safety</h2>
+<ul><li><code>given</code> parameters, <code>ref warp</code>, and projections (<code>~&gt; mut T</code>, the design's way to lend a place).</li><li><code>unsafe</code> blocks, raw pointers (<code>*T</code>), <code>extern "C"</code>, <code>Volatile</code>. <code>#layout(...)</code> is parsed but nothing acts on it.</li><li>User-written <code>Spool</code> weaves.</li><li>The region checker. A stored lambda simply works, without the escape check the design describes.</li></ul>
+<h2 id="types-and-library">Types and library</h2>
+<ul><li>Integers wider than 64 bits and <code>f16</code>.</li><li>Generic wefts (<code>weft From[T]</code>).</li><li><code>xs.sorted_by(...)</code> and other list methods the design mentions that std doesn't declare. <a href="../std/modules/list.html">std.list</a> and <a href="../std/modules/slice.html">std.slice</a> list what exists.</li><li>Reading standard input. <a href="../std/modules/io.html">std.io</a> has <code>print</code> and nothing else.</li><li>A <code>mut self</code> method of a scalar type can't be called through <code>any</code> yet, because the <code>any</code> holds its own copy.</li><li>A union of errors doesn't convert to <code>any Error</code>.</li><li>A warp that writes its own <code>eq</code> and <code>hash</code> is still keyed structurally in a <code>Map</code> or <code>Set</code>.</li></ul>
+<h2 id="running-programs">Running programs</h2>
+<ul><li>Ctrl-C handling (exit status 130), <code>process.exit</code>, an instruction budget for <code>loom run</code>, and running a bundle in an outside Lua (<code>--lua PATH</code>).</li><li>Async I/O and composing shuttles (<code>lexer().feed(parser())</code>) aren't in the design for this version.</li><li>The emitted Lua isn't optimized: checks the compiler could prove unneeded are still emitted. Speed comes later, with Loom's own interpreter.</li></ul>
+<h2 id="the-examples">The examples</h2>
+<p><code>examples/tour.loom</code>, <code>examples/widgets.loom</code>, <code>examples/ledger.loom</code> and <code>examples/chip8.loom</code> compile and run. <code>examples/lexer.loom</code> fails only at one line, the <code>lexer.Frame.size</code> assert, which needs reflection. <code>examples/compile_time.loom</code> fails only at reflection and <code>std.sys</code>. <code>examples/calc.loom</code> needs spools, <code>given</code> and <code>ref warp</code>, and <code>examples/parallel.loom</code> needs threads.</p>
+<div class="pager">
+<a href="tests.html">&larr; Tests</a>
+<a href="diagnostics.html">Diagnostic codes &rarr;</a>
+</div>
+</main>
+</div>
+</body>
+</html>

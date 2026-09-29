@@ -1,0 +1,11 @@
+error[M0101]: `s` is used after it was moved
+  --> docs/lang/samples/own_err_moved.loom:5:5
+  |
+4 |     let kept = keep(s)
+  |                     - moved here
+5 |     s.len()
+  |     ^ used here
+  |
+  = help: copy it before it moves (`x.copy()`), or give it a new value first
+
+error: docs/lang/samples/own_err_moved.loom failed to type-check (1 error)
