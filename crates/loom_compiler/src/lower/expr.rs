@@ -236,7 +236,7 @@ impl Lowerer<'_> {
                 None => Expr::Name(self.local_name(*local)),
             },
             ExprKind::Array(items) => self.array_lit(items),
-            ExprKind::ArrayRepeat { value, .. } => self.array_repeat(e, value),
+            ExprKind::ArrayRepeat { value, count } => self.array_repeat(e, value, count),
             ExprKind::Index { base, args } => self.index(base, args),
             ExprKind::Call { .. } if self.tables().new_lists.contains(&e.id) => match self.coll(ty) {
                 Some(Coll::Map(..)) => Expr::rt("map_new", Vec::new()),

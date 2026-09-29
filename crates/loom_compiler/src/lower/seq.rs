@@ -51,15 +51,16 @@ impl Lowerer<'_> {
     }
 
     /// `[x; n]`: `n` copies of `x`.
-    pub(super) fn array_repeat(&mut self, e: &hir::Expr, value: &hir::Expr) -> Expr {
-        let n = match self.tcx().kind(self.ty_of(e)) {
-            TyKind::Array(_, n) => *n as i64,
-            _ => 0,
-        };
+    pub(super) fn array_repeat(&mut self, e: &hir::Expr, value: &hir::Expr, count: &hir::Expr) -> Expr {
         let elem = self.ty_of(value);
         let v = self.lower_owned(value);
+        // An array's type has its length; a list's doesn't.
+        let n = match self.tcx().kind(self.ty_of(e)) {
+            TyKind::Array(_, n) => Expr::Int(*n as i64),
+            _ => self.lower_expr(count),
+        };
         let d = self.desc(elem, e.span);
-        Expr::rt("filled", vec![d, v, Expr::Int(n)])
+        Expr::rt("filled", vec![d, v, n])
     }
 
     /// `xs[i]` or `xs[a..b]`, as a value or as a place to assign to.
