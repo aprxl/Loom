@@ -9,8 +9,9 @@ use loom_syntax::token::PrimType;
 
 use crate::hir::{DefId, Program};
 
-/// An integer type. `usize`/`isize` are `size` types with 63 bits: that's
-/// `target.pointer_bits` on the Lua target (see design/lua-backend.md).
+/// An integer type. `usize`/`isize` are `size` types with
+/// `target.pointer_bits` bits: 63 on the Lua target, 64 on Treadle (see
+/// [`crate::target`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct IntTy {
     pub signed: bool,
@@ -20,7 +21,6 @@ pub struct IntTy {
 
 impl IntTy {
     pub const I32: IntTy = IntTy { signed: true, bits: 32, size: false };
-    pub const USIZE: IntTy = IntTy { signed: false, bits: 63, size: true };
 }
 
 /// A value known at compile time, standing where a type would: the
@@ -123,14 +123,24 @@ pub struct TyCtx {
     pub i32: Ty,
     pub f64: Ty,
     pub usize: Ty,
+    /// What the program is built for: how wide `usize` and `isize` are.
+    pub target: crate::target::Target,
     /// Text compile-time values hold ([`ConstVal::Str`]).
     syms: Vec<String>,
     sym_ids: HashMap<String, u32>,
 }
 
 impl Default for TyCtx {
+    /// A context for the Lua target.
     fn default() -> Self {
+        TyCtx::new(crate::target::Target::LUA)
+    }
+}
+
+impl TyCtx {
+    pub fn new(target: crate::target::Target) -> Self {
         let mut tcx = TyCtx {
+            target,
             kinds: Vec::new(),
             ids: HashMap::new(),
             syms: Vec::new(),
@@ -153,7 +163,7 @@ impl Default for TyCtx {
         tcx.char = tcx.intern(TyKind::Char);
         tcx.i32 = tcx.intern(TyKind::Int(IntTy::I32));
         tcx.f64 = tcx.intern(TyKind::Float(FloatTy::F64));
-        tcx.usize = tcx.intern(TyKind::Int(IntTy::USIZE));
+        tcx.usize = tcx.intern(TyKind::Int(target.usize()));
         tcx
     }
 }
@@ -254,7 +264,7 @@ impl TyCtx {
         Some(match p {
             PrimType::Int { signed, bits } if bits <= 64 => self.int(IntTy { signed, bits, size: false }),
             PrimType::Int { .. } | PrimType::F16 => return None,
-            PrimType::Isize => self.int(IntTy { signed: true, bits: 63, size: true }),
+            PrimType::Isize => self.int(self.target.isize()),
             PrimType::Usize => self.usize,
             PrimType::F32 => self.intern(TyKind::Float(FloatTy::F32)),
             PrimType::F64 => self.f64,

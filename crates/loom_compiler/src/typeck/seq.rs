@@ -312,7 +312,7 @@ impl Checker<'_> {
         let ty = self.resolve(ty);
         match self.tcx.kind(ty) {
             TyKind::Int(i) if !i.signed => {
-                if *i != crate::ty::IntTy::USIZE {
+                if *i != self.tcx.target.usize() {
                     self.b.coercions.insert(index.id, Coercion::Widen);
                 }
             }

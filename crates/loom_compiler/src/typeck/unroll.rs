@@ -20,6 +20,7 @@ use loom_syntax::source::Span;
 use super::gauge::Val;
 use super::{Body, BodyId, Checker};
 use crate::hir::{Block, ConstIfDeferred, DefKind, Expr, ExprKind, Pat, PatKind};
+use crate::target::Target;
 use crate::ty::{ConstVal, Ty, TyKind};
 
 /// How many items a `const for` may go over.
@@ -35,46 +36,14 @@ enum Item {
     Tuple(Vec<Item>),
 }
 
-/// What `target` says about the machine the program is built for: on the
-/// Lua backend, the one doing the build. Each is the name of a case of
-/// `std.target.Os`, `Arch` and `Endian`.
-pub(crate) struct TargetInfo {
-    pub os: &'static str,
-    pub arch: &'static str,
-    pub endian: &'static str,
-    pub pointer_bits: u8,
-}
-
-pub(crate) const TARGET: TargetInfo = TargetInfo {
-    os: if cfg!(windows) {
-        "Windows"
-    } else if cfg!(target_os = "linux") {
-        "Linux"
-    } else if cfg!(target_os = "macos") {
-        "MacOS"
-    } else {
-        "Other"
-    },
-    arch: if cfg!(target_arch = "x86_64") {
-        "Amd64"
-    } else if cfg!(target_arch = "aarch64") {
-        "Arm64"
-    } else {
-        "Other"
-    },
-    endian: if cfg!(target_endian = "little") { "Little" } else { "Big" },
-    // `usize` is 63 bits on the Lua backend (see design/lua-backend.md).
-    pointer_bits: 63,
-};
-
 impl Checker<'_> {
     /// `target.name` at compile time.
     pub(super) fn target_val(&mut self, name: &str) -> Option<Val> {
         let (warp, case) = match name {
-            "os" => ("Os", TARGET.os),
-            "arch" => ("Arch", TARGET.arch),
-            "endian" => ("Endian", TARGET.endian),
-            "pointer_bits" => return Some(Val::Int(i128::from(TARGET.pointer_bits))),
+            "os" => ("Os", Target::OS),
+            "arch" => ("Arch", Target::ARCH),
+            "endian" => ("Endian", Target::ENDIAN),
+            "pointer_bits" => return Some(Val::Int(i128::from(self.tcx.target.pointer_bits))),
             _ => return None,
         };
         let def = self.std_item("std.target", warp)?;

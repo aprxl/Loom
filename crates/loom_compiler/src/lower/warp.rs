@@ -106,7 +106,7 @@ impl Lowerer<'_> {
     /// `target`, as a value: a `std.target.Target` record.
     pub(super) fn target_value(&self, ty: Ty) -> Expr {
         let TyKind::Adt(def, _) = self.tcx().kind(ty) else { return Expr::Nil };
-        let t = crate::typeck::TARGET;
+        use crate::target::Target;
         let module = self.p.def(*def).module;
         // A unit case is its tag: its place among the warp's cases, from 1.
         let tag = |warp: &str, case: &str| {
@@ -117,10 +117,10 @@ impl Lowerer<'_> {
             Expr::Int(tag.map_or(0, |i| i as i64 + 1))
         };
         Expr::Record(vec![
-            (TableKey::Name("os".into()), tag("Os", t.os)),
-            (TableKey::Name("arch".into()), tag("Arch", t.arch)),
-            (TableKey::Name("endian".into()), tag("Endian", t.endian)),
-            (TableKey::Name("pointer_bits".into()), Expr::Int(i64::from(t.pointer_bits))),
+            (TableKey::Name("os".into()), tag("Os", Target::OS)),
+            (TableKey::Name("arch".into()), tag("Arch", Target::ARCH)),
+            (TableKey::Name("endian".into()), tag("Endian", Target::ENDIAN)),
+            (TableKey::Name("pointer_bits".into()), Expr::Int(i64::from(self.tcx().target.pointer_bits))),
         ])
     }
 

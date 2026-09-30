@@ -252,3 +252,22 @@ fn every_example_fails_only_with_not_implemented_yet() {
     }
     assert_eq!(seen, 8);
 }
+
+#[test]
+fn usize_and_target_follow_the_target() {
+    use crate::target::Target;
+    // 2^63 is a `usize` only where pointers have 64 bits, and `const if`
+    // sees the target's pointer width.
+    let src = "const BIG: usize = 9223372036854775808\n\
+               const assert(target.pointer_bits == 64)\n\
+               fn main() {}";
+    let mut db = SourceDb::new();
+    let root = db.add("test.loom", src);
+    let resolved = resolve(&mut db, root, &MemoryLoader::default());
+    let vm = super::check_for(&resolved.program, Target::VM);
+    let rendered: Vec<String> = vm.diagnostics.iter().map(|d| render_plain(&db, d)).collect();
+    assert!(vm.diagnostics.is_empty(), "{}", rendered.join("\n"));
+    let lua = check(&resolved.program);
+    let codes: Vec<Code> = lua.diagnostics.iter().map(|d| d.code).collect();
+    assert_eq!(codes, [codes::T0102, codes::K0101], "{codes:?}");
+}

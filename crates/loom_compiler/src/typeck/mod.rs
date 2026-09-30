@@ -62,7 +62,6 @@ pub use gauge::{GaugeInfo, GaugeRange};
 use infer::{PendingLit, Var};
 pub(crate) use reflect::QUERIES as REFLECTION_QUERIES;
 pub use seq::Seq;
-pub(crate) use unroll::TARGET;
 pub use warp::{CaseFieldInfo, CaseInfo, FieldInfo, Key, WarpInfo};
 pub use weave::{Impl, Weaving};
 
@@ -405,9 +404,16 @@ pub struct CasePat {
     pub keys: Vec<Key>,
 }
 
-/// Type-checks everything reachable from the root module of `p`.
+/// Type-checks everything reachable from the root module of `p`, for the
+/// Lua target.
 pub fn check(p: &Program) -> Typed {
-    let mut c = Checker::new(p);
+    check_for(p, crate::target::Target::LUA)
+}
+
+/// Type-checks everything reachable from the root module of `p`, for
+/// `target`: `usize` and `target` differ between targets.
+pub fn check_for(p: &Program, target: crate::target::Target) -> Typed {
+    let mut c = Checker::new(p, target);
     c.collect_weaves();
     if let Some(root) = p.root {
         for &def in &p.module(root).decls {
@@ -586,7 +592,7 @@ struct Checker<'p> {
 }
 
 impl<'p> Checker<'p> {
-    fn new(p: &'p Program) -> Self {
+    fn new(p: &'p Program, target: crate::target::Target) -> Self {
         let find = |module: &str, name: &str| {
             p.modules.iter().find(|m| m.path == module).and_then(|m| m.items.get(name).copied())
         };
@@ -617,7 +623,7 @@ impl<'p> Checker<'p> {
         };
         Checker {
             p,
-            tcx: TyCtx::default(),
+            tcx: TyCtx::new(target),
             r: Results::default(),
             b: Body::default(),
             diags: Vec::new(),
