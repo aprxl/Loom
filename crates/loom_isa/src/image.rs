@@ -13,6 +13,17 @@ pub struct Line {
     pub column: u32,
 }
 
+/// Where an unwind that starts in `start..end` (in words from the
+/// function's start) goes: the landing pad at `pad`, which runs the
+/// `defer`s and drops of that stretch of code and ends by going on to the
+/// next pad out, or with `resume`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Pad {
+    pub start: u32,
+    pub end: u32,
+    pub pad: u32,
+}
+
 /// A function's code and what calling it takes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Func {
@@ -29,10 +40,25 @@ pub struct Func {
     pub results: u16,
     /// Sorted by `pc`.
     pub lines: Vec<Line>,
+    /// Landing pads, sorted by `start`; ranges don't overlap.
+    pub pads: Vec<Pad>,
+}
+
+impl Func {
+    /// The landing pad for an unwind at `pc` (in words from the start).
+    pub fn pad_at(&self, pc: u32) -> Option<u32> {
+        let i = self.pads.partition_point(|p| p.start <= pc);
+        let p = self.pads.get(i.checked_sub(1)?)?;
+        (pc < p.end).then_some(p.pad)
+    }
 }
 
 /// What an internal-error instruction (`crash k`) says.
-pub const CRASHES: &[&str] = &["loom internal: no match arm matched", "loom internal: unreachable code was reached"];
+pub const CRASHES: &[&str] = &[
+    "loom internal: no match arm matched",
+    "loom internal: unreachable code was reached",
+    "loom internal: a function value called with the wrong number of arguments",
+];
 
 /// A compiled program.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -46,6 +72,9 @@ pub struct Image {
     pub natives: Vec<String>,
     /// Source file names, for [`Line::file`].
     pub files: Vec<String>,
+    /// What the program's data starts as, in 8-byte words: vtables,
+    /// constants and their flags. `gaddr` gives addresses in it.
+    pub data: Vec<u64>,
     /// The function to run: `main`.
     pub entry: Option<u32>,
 }

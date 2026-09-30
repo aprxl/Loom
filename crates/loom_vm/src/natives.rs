@@ -12,6 +12,7 @@ use loom_sys::Output;
 
 use crate::Trap;
 use crate::fmt::{self, Value};
+use crate::heap::Heap;
 
 /// What natives read and write.
 #[derive(Debug)]
@@ -27,6 +28,7 @@ pub(crate) struct Ctx<'i> {
     line_buffered: bool,
     /// The message of an unravel being built (`msg.*`).
     msg: Vec<u8>,
+    pub heap: Heap,
     /// How many instructions have been dispatched (with `stats`).
     pub dispatched: u64,
 }
@@ -51,8 +53,15 @@ impl<'i> Ctx<'i> {
             sink,
             line_buffered,
             msg: Vec::new(),
+            heap: Heap::default(),
             dispatched: 0,
         }
+    }
+
+    /// Where the image's text is.
+    pub fn rodata_range(&self) -> (u64, u64) {
+        let r = self.rodata.as_ptr_range();
+        (r.start as u64, r.end as u64)
     }
 
     /// The address of text literal `index`, which the verifier has checked.
@@ -127,6 +136,9 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
         "msg.str" => msg_str,
         "msg.fmt" | "msg.fmt2" => msg_fmt,
         "msg.unravel" => msg_unravel,
+        "mem.alloc" => mem_alloc,
+        "mem.free" => mem_free,
+        "mem.grow" => mem_grow,
         _ => return None,
     };
     let sig = native(name)?;
@@ -164,4 +176,44 @@ fn msg_fmt(ctx: &mut Ctx, args: &mut [u64], item: u16) -> Result<(), Trap> {
 fn msg_unravel(ctx: &mut Ctx, _: &mut [u64], _: u16) -> Result<(), Trap> {
     let msg = std::mem::take(&mut ctx.msg);
     Err(Trap::Unravel(String::from_utf8_lossy(&msg).into_owned()))
+}
+
+/// `mem.alloc(size, align) -> address`.
+fn mem_alloc(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    args[0] = ctx.heap.alloc(args[0], args[1])?;
+    Ok(())
+}
+
+/// `mem.free(address, size, align)`.
+fn mem_free(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.heap.free(args[0], args[1], args[2])
+}
+
+/// `mem.grow(header, element size, align, at least)`: makes room in the
+/// buffer of the list (or string) whose header (address, length, capacity)
+/// is at `header` for at least `at least` elements, at least doubling it.
+fn mem_grow(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let (header, size, align, want) = (args[0], args[1], args[2], args[3]);
+    // SAFETY: the compiler passes the address of a list's header, three
+    // words it owns (the checked build checks the buffer below).
+    let (ptr, cap) = unsafe {
+        let h = header as *const u64;
+        (h.read(), h.add(2).read())
+    };
+    if want <= cap {
+        return Ok(());
+    }
+    let new_cap = want.max(cap.saturating_mul(2)).max(4);
+    let (old_bytes, new_bytes) = match (cap.checked_mul(size), new_cap.checked_mul(size)) {
+        (Some(o), Some(n)) if n <= crate::heap::LIMIT => (o, n),
+        _ => return Err(Trap::OutOfMemory),
+    };
+    let moved = ctx.heap.realloc(ptr, old_bytes, new_bytes, align)?;
+    // SAFETY: as above.
+    unsafe {
+        let h = header as *mut u64;
+        h.write(moved);
+        h.add(2).write(if size == 0 { u64::MAX } else { new_cap });
+    }
+    Ok(())
 }

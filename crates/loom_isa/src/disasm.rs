@@ -12,6 +12,9 @@ pub fn disassemble(image: &Image) -> String {
         let entry = if image.entry == Some(i as u32) { "  (entry)" } else { "" };
         let _ =
             writeln!(out, "fn {} #{i}: frame {}, params {}, results {}{entry}", f.name, f.frame, f.params, f.results);
+        for p in &f.pads {
+            let _ = writeln!(out, "  pad {}..{} → {}", p.start, p.end, p.pad);
+        }
         let code = &image.code[f.entry as usize..(f.entry + f.len) as usize];
         let mut pc = 0;
         while pc < code.len() {
@@ -64,5 +67,17 @@ fn operands(image: &Image, op: Op, w: u64, ext: u64, pc: usize) -> String {
         }
         Form::Ret => format!("r{}, {}", a(w), b(w)),
         Form::K => format!("{}", a(w)),
+        Form::ABO => format!("r{}, r{}, {}", a(w), b(w), c(w) as u16 as i16),
+        Form::AF => format!("r{}, fp+{}", a(w), bc_u32(w)),
+        Form::AG => format!("r{}, data+{}", a(w), bc_u32(w)),
+        Form::ABZ => format!("r{}, r{}, {ext} bytes", a(w), b(w)),
+        Form::AZ => format!("r{}, {ext} bytes", a(w)),
+        Form::ABCZ => format!("r{}, r{}, r{} * {ext}", a(w), b(w), c(w)),
+        Form::AFn => {
+            let name = image.funcs.get(bc_u32(w) as usize).map_or("?", |f| f.name.as_str());
+            format!("r{}, {name}", a(w))
+        }
+        Form::CallR => format!("r{} at r{}, {} → {}", b(w), a(w), c(w) >> 8, c(w) & 0xFF),
+        Form::Z => String::new(),
     }
 }

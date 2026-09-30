@@ -4,6 +4,7 @@
 //! - `exec` is the interpreter: one `match` over [`loom_isa::Op`], with the
 //!   state that matters kept in locals.
 //! - `stack` holds frames, in segments that never move.
+//! - `heap` allocates what lists, strings and boxes own.
 //! - `ints` and `fmt` are the integer semantics and the formatting, in safe
 //!   Rust.
 //! - `natives` are the Rust functions bytecode calls.
@@ -15,6 +16,7 @@
 
 mod exec;
 mod fmt;
+mod heap;
 mod ints;
 mod natives;
 mod stack;
@@ -53,6 +55,12 @@ pub(crate) enum Trap {
     /// A float doesn't fit the integer type it's cast to.
     FloatRange(IntSpec),
     BadChar,
+    /// An index past the end of what it indexes.
+    Index {
+        index: u64,
+        len: u64,
+    },
+    OutOfMemory,
     StackOverflow,
     Interrupt,
     Unravel(String),
@@ -69,6 +77,8 @@ impl Trap {
             Trap::IntRange(to) => format!("value out of range for `{}`", to.name()),
             Trap::FloatRange(to) => format!("float out of range for `{}`", to.name()),
             Trap::BadChar => "not a valid `char`".into(),
+            Trap::Index { index, len } => format!("index {index} is out of bounds (len {len})"),
+            Trap::OutOfMemory => "out of memory".into(),
             Trap::StackOverflow => "stack overflow: too many calls inside each other".into(),
             Trap::Interrupt => "interrupted (Ctrl-C)".into(),
             Trap::Unravel(message) | Trap::Crash(message) => message.clone(),
@@ -93,7 +103,7 @@ pub fn run(image: &Image, host: Host, config: &Config) -> Outcome {
         Err(outcome) => return outcome,
     };
     match vm.call(entry, &[]) {
-        Ok(_) => Outcome::Finished,
+        Ok(_) => vm.leaks().unwrap_or(Outcome::Finished),
         Err(outcome) => outcome,
     }
 }
@@ -114,6 +124,17 @@ impl<'i> Vm<'i> {
         let machine =
             exec::Machine::load(image, host, config).map_err(|message| Outcome::Crash { message, location: None })?;
         Ok(Vm { image, machine })
+    }
+
+    /// With `checked`: an internal error if anything the program allocated
+    /// is still there. A program that ends without unravelling frees all
+    /// it allocated (design/vm.md §5.4), so a leak is a compiler bug.
+    pub fn leaks(&self) -> Option<Outcome> {
+        let (objects, bytes) = self.machine.ctx.heap.leaked();
+        (cfg!(feature = "checked") && objects > 0).then(|| Outcome::Crash {
+            message: format!("loom internal: {objects} objects ({bytes} bytes) were never freed"),
+            location: None,
+        })
     }
 
     /// How many instructions have been dispatched so far; `None` unless

@@ -58,6 +58,7 @@ pub fn generate(db: &SourceDb, module: &Module) -> Result<Image, String> {
             params: f.params().len() as u16,
             results: f.results.len() as u16,
             lines: out.lines,
+            pads: Vec::new(),
         });
         image.code.extend(out.code);
     }

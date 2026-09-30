@@ -9,7 +9,11 @@
 //! - every function, native, string and format item named exists, and each
 //!   call's window fits what it passes and gets back;
 //! - `ret` returns as many values as the function says, from its own frame;
-//! - a call's window leaves room below it for the linkage.
+//! - a call's window leaves room below it for the linkage;
+//! - an access at an offset from the frame pointer stays inside the frame,
+//!   and an address in the image's data stays inside that;
+//! - landing pads cover stretches of the function's own code, don't
+//!   overlap, and start at instructions.
 //!
 //! What a register *means* isn't checked: that's the compiler's job, and the
 //! checked build's.
@@ -194,8 +198,57 @@ fn verify_func(image: &Image, index: usize) -> Result<(), VerifyError> {
                     return Err(err(pc, "no such internal error".into()));
                 }
             }
+            Form::ABO | Form::ABZ => {
+                reg(a(w))?;
+                reg(b(w))?;
+            }
+            Form::AZ => reg(a(w))?,
+            Form::ABCZ => {
+                reg(a(w))?;
+                reg(b(w))?;
+                reg(c(w))?;
+            }
+            Form::AF => {
+                reg(a(w))?;
+                let width = u64::from(op.access_bytes().unwrap_or(0));
+                if u64::from(bc_u32(w)) + width > frame as u64 * 8 {
+                    return Err(err(pc, format!("fp+{} is outside the frame", bc_u32(w))));
+                }
+            }
+            Form::AG => {
+                reg(a(w))?;
+                if u64::from(bc_u32(w)) > image.data.len() as u64 * 8 {
+                    return Err(err(pc, format!("data+{} is outside the image's data", bc_u32(w))));
+                }
+            }
+            Form::AFn => {
+                reg(a(w))?;
+                if bc_u32(w) as usize >= image.funcs.len() {
+                    return Err(err(pc, "no such function".into()));
+                }
+            }
+            Form::CallR => {
+                let base = a(w);
+                reg(b(w))?;
+                if base < LINK_SLOTS {
+                    return Err(err(pc, "the call's window leaves no room for its linkage".into()));
+                }
+                let (params, results) = (c(w) >> 8, c(w) & 0xFF);
+                if base + params.max(results) > frame {
+                    return Err(err(pc, "the call's window doesn't fit the frame".into()));
+                }
+            }
+            Form::Z => {}
         }
         pc += op.form().words();
+    }
+    let mut last_end = 0;
+    for p in &f.pads {
+        let inside = p.start < p.end && p.end as usize <= code.len() && p.start >= last_end;
+        if !inside || !starts.contains(&(p.pad as usize)) || !starts.contains(&(p.start as usize)) {
+            return Err(err(p.start as usize, format!("bad landing pad {}..{} → {}", p.start, p.end, p.pad)));
+        }
+        last_end = p.end;
     }
     Ok(())
 }
@@ -209,8 +262,16 @@ mod tests {
     /// An image of one function with `code`, a frame of 4 registers and
     /// one result.
     fn image(code: Vec<u64>) -> Image {
-        let func =
-            Func { name: "f".into(), entry: 0, len: code.len() as u32, frame: 4, params: 1, results: 1, lines: vec![] };
+        let func = Func {
+            name: "f".into(),
+            entry: 0,
+            len: code.len() as u32,
+            frame: 4,
+            params: 1,
+            results: 1,
+            lines: vec![],
+            pads: vec![],
+        };
         Image {
             funcs: vec![func],
             code,
@@ -218,6 +279,7 @@ mod tests {
             fmts: vec![FmtItem { kind: ValueKind::Bool, debug: false, spec: None }],
             natives: vec!["out.fmt".into()],
             files: vec![],
+            data: vec![0; 2],
             entry: Some(0),
         }
     }
@@ -269,6 +331,34 @@ mod tests {
         rejects(vec![word(Op::AddTG, 0, 0, 0), 99, ret()], "bad integer type");
         rejects(vec![word(Op::CastT, 0, 0, 0), 0, ret()], "bad cast");
         rejects(vec![word(Op::Crash, 7, 0, 0)], "no such internal error");
+        rejects(vec![word(Op::Ld64, 4, 0, 0), ret()], "register r4");
+        rejects(vec![word(Op::St8, 0, 9, 0), ret()], "register r9");
+        rejects(vec![word_i32(Op::LdF64, 0, 25), ret()], "outside the frame");
+        rejects(vec![word_i32(Op::StF8, 0, 32), ret()], "outside the frame");
+        rejects(vec![word_i32(Op::Lea, 0, 33), ret()], "outside the frame");
+        rejects(vec![word_i32(Op::Gaddr, 0, 17), ret()], "outside the image's data");
+        rejects(vec![word(Op::Copy, 0, 5, 0), 8, ret()], "register r5");
+        rejects(vec![word(Op::Copy, 0, 1, 0)], "past the end");
+        rejects(vec![word_i32(Op::Ldfn, 0, 3), ret()], "no such function");
+        rejects(vec![word(Op::CallR, 2, 0, 0x0101), ret()], "no room for its linkage");
+        rejects(vec![word(Op::CallR, 3, 0, 0x0200), ret()], "window");
+        rejects(vec![word(Op::Resume, 0, 0, 0), word(Op::Idx, 0, 1, 7), 8, ret()], "register r7");
+    }
+
+    #[test]
+    fn checks_landing_pads() {
+        let code = vec![word(Op::AddTI32, 0, 0, 0), ret(), word(Op::Resume, 0, 0, 0)];
+        let mut img = image(code);
+        img.funcs[0].pads = vec![crate::image::Pad { start: 0, end: 1, pad: 2 }];
+        verify(&img).expect("a good pad");
+        img.funcs[0].pads = vec![crate::image::Pad { start: 0, end: 4, pad: 2 }];
+        assert!(verify(&img).is_err(), "past the end");
+        img.funcs[0].pads = vec![crate::image::Pad { start: 0, end: 1, pad: 7 }];
+        assert!(verify(&img).is_err(), "pad outside");
+        img.funcs[0].pads =
+            vec![crate::image::Pad { start: 0, end: 2, pad: 2 }, crate::image::Pad { start: 1, end: 2, pad: 2 }];
+        assert!(verify(&img).is_err(), "overlapping");
+        assert_eq!(img.funcs[0].pad_at(1), Some(2));
     }
 
     #[test]

@@ -51,13 +51,36 @@ pub enum Form {
     Ret,
     /// `a`: a 16-bit constant.
     K,
+    /// `a`, `b`: registers; `c`: an `i16` byte offset. A load writes `a`
+    /// from the address in `b` plus the offset; a store writes `b` to the
+    /// address in `a` plus the offset.
+    ABO,
+    /// `a`: a register; `b:c`: a byte offset from the frame pointer, which
+    /// the access (its width given by the op) stays inside the frame for.
+    AF,
+    /// `a`: a register; `b:c`: a byte offset into the image's data.
+    AG,
+    /// `a`, `b`: registers; an extension word: a byte count.
+    ABZ,
+    /// `a`: a register; an extension word: a byte count.
+    AZ,
+    /// `a`, `b`, `c`: registers; an extension word: a scale.
+    ABCZ,
+    /// `a`: a register; `b:c`: a function's index.
+    AFn,
+    /// `a`: where the callee's frame starts, as for [`Form::Call`]; `b`: the
+    /// register holding the function's index; `c`: how many parameters
+    /// (high byte) and results (low byte) the callee must have.
+    CallR,
+    /// No operands.
+    Z,
 }
 
 impl Form {
     /// How many words an instruction of this form takes.
     pub fn words(self) -> usize {
         match self {
-            Form::AK | Form::ABX | Form::ABCX => 2,
+            Form::AK | Form::ABX | Form::ABCX | Form::ABZ | Form::AZ | Form::ABCZ => 2,
             _ => 1,
         }
     }
@@ -100,7 +123,18 @@ impl Op {
 
     /// Whether control never goes on to the next instruction.
     pub fn ends_flow(self) -> bool {
-        matches!(self, Op::Jmp | Op::Loop | Op::Ret | Op::Unravel | Op::Crash)
+        matches!(self, Op::Jmp | Op::Loop | Op::Ret | Op::Unravel | Op::Crash | Op::Resume)
+    }
+
+    /// How many bytes a load or a store moves, if it's one.
+    pub fn access_bytes(self) -> Option<u32> {
+        Some(match self {
+            Op::Ld8S | Op::Ld8U | Op::St8 | Op::LdF8S | Op::LdF8U | Op::StF8 => 1,
+            Op::Ld16S | Op::Ld16U | Op::St16 | Op::LdF16S | Op::LdF16U | Op::StF16 => 2,
+            Op::Ld32S | Op::Ld32U | Op::St32 | Op::LdF32S | Op::LdF32U | Op::StF32 => 4,
+            Op::Ld64 | Op::St64 | Op::LdF64 | Op::StF64 => 8,
+            _ => return None,
+        })
     }
 }
 
@@ -355,6 +389,45 @@ ops! {
     // giving up
     Unravel = "unravel", AB;
     Crash = "crash", K;
+    // memory: loads (a = dst, b = address), sign- or zero-extending
+    Ld8S = "ld.i8", ABO;
+    Ld8U = "ld.u8", ABO;
+    Ld16S = "ld.i16", ABO;
+    Ld16U = "ld.u16", ABO;
+    Ld32S = "ld.i32", ABO;
+    Ld32U = "ld.u32", ABO;
+    Ld64 = "ld.64", ABO;
+    // stores (a = address, b = what's stored), of the value's low bytes
+    St8 = "st.8", ABO;
+    St16 = "st.16", ABO;
+    St32 = "st.32", ABO;
+    St64 = "st.64", ABO;
+    // the same at a byte offset from the frame pointer
+    LdF8S = "ldf.i8", AF;
+    LdF8U = "ldf.u8", AF;
+    LdF16S = "ldf.i16", AF;
+    LdF16U = "ldf.u16", AF;
+    LdF32S = "ldf.i32", AF;
+    LdF32U = "ldf.u32", AF;
+    LdF64 = "ldf.64", AF;
+    StF8 = "stf.8", AF;
+    StF16 = "stf.16", AF;
+    StF32 = "stf.32", AF;
+    StF64 = "stf.64", AF;
+    // addresses: in the frame, in the image's data, and an element's
+    Lea = "lea", AF;
+    Gaddr = "gaddr", AG;
+    Idx = "idx", ABCZ;
+    // blocks of memory: copy `ext` bytes from b's address to a's; zero them
+    Copy = "copy", ABZ;
+    Zero = "zero", AZ;
+    // unravel unless a < b (unsigned): an index and a length
+    Bounds = "bounds", AB;
+    // function values and calling them
+    Ldfn = "ldfn", AFn;
+    CallR = "callr", CallR;
+    // the end of a landing pad: unwinding goes on in the caller
+    Resume = "resume", Z;
 }
 
 #[cfg(test)]

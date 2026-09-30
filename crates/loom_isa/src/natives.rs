@@ -29,8 +29,11 @@ const fn sig(name: &'static str, args: u16, results: u16, imm: NativeImm) -> Nat
 }
 
 /// Every native. `out.*` write to the program's output; `msg.*` build the
-/// message of an unravel, which `msg.unravel` raises.
+/// message of an unravel, which `msg.unravel` raises; `mem.*` allocate.
 pub const NATIVES: &[NativeSig] = &[
+    sig("mem.alloc", 2, 1, NativeImm::None),
+    sig("mem.free", 3, 0, NativeImm::None),
+    sig("mem.grow", 4, 0, NativeImm::None),
     sig("out.str", 2, 0, NativeImm::None),
     sig("out.fmt", 1, 0, NativeImm::Fmt),
     sig("out.fmt2", 2, 0, NativeImm::Fmt),

@@ -13,6 +13,17 @@
 //! verifier before the loop starts, so the loop reads registers and code
 //! without bounds checks. Rare work (traps, growing the stack) is out of
 //! line.
+//!
+//! Loads and stores go straight to the address in a register: the compiler
+//! only makes addresses of memory the program owns (design/vm.md §5.6).
+//! The checked build verifies each against the live objects, the stack and
+//! the image's data, and reports a bad one as an internal error.
+//!
+//! A trap unwinds (§9.4): the current function's table of landing pads says
+//! where its `defer`s and drops for that instruction are, and the pad ends
+//! by jumping to the next pad out or with `resume`, which goes on in the
+//! caller at its call. The first trap is the one reported, unless a pad
+//! unravels in turn, which replaces it.
 
 #![allow(unsafe_code)]
 
@@ -21,6 +32,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use loom_isa::word::{a, b, bc_i32, bc_u32, c, c_i16, unpack_cast};
 use loom_isa::{Image, LINK_SLOTS, Op};
+
+use crate::heap::Heap;
 use loom_sys::Host;
 
 use crate::ints::{self, IntErr};
@@ -50,8 +63,12 @@ struct Callee {
 
 #[derive(Debug)]
 pub(crate) struct Machine<'i> {
+    image: &'i Image,
     code: &'i [u64],
     funcs: Vec<Callee>,
+    /// The program's data: the image's, which the program may change
+    /// (constants computed on first read).
+    data: Box<[u64]>,
     natives: Vec<(NativeFn, usize)>,
     pub ctx: Ctx<'i>,
     stack_limit: usize,
@@ -79,8 +96,10 @@ impl<'i> Machine<'i> {
             })
             .collect();
         Ok(Machine {
+            image,
             code: &image.code,
             funcs,
+            data: image.data.clone().into_boxed_slice(),
             natives,
             ctx: Ctx::new(image, host.output),
             stack_limit: config.stack_limit,
@@ -131,10 +150,18 @@ impl<'i> Machine<'i> {
         let mut pc = start.entry;
         let mut ticks = TICKS;
         let funcs = self.funcs.as_ptr();
+        let nfuncs = self.funcs.len();
         let natives = &self.natives;
         let ctx = &mut self.ctx;
         let interrupt = self.interrupt.clone();
+        let image = self.image;
+        let data_range = {
+            let r = self.data.as_mut_ptr_range();
+            (r.start as u64, r.end as u64)
+        };
         let fault = |trap: Trap, at: *const u64| Fault { trap, pc: at_index(at) };
+        // What's unwinding the stack, while landing pads run.
+        let mut in_flight: Option<Fault> = None;
 
         loop {
             // SAFETY: `pc` is always at an instruction of a verified
@@ -199,22 +226,93 @@ impl<'i> Machine<'i> {
                     if ticks < 0 {
                         ticks = TICKS;
                         if interrupt.as_ref().is_some_and(|i| i.load(Ordering::Relaxed)) {
-                            return Err(fault(Trap::Interrupt, at));
+                            throw!(Trap::Interrupt);
                         }
+                    }
+                }};
+            }
+            // Unwinds with `trap`: to this function's landing pad for this
+            // instruction, or out through its callers'. An internal error
+            // doesn't unwind: nothing about the state can be trusted.
+            macro_rules! throw {
+                ($trap:expr) => {{
+                    let trap = $trap;
+                    if matches!(trap, Trap::Crash(_)) {
+                        return Err(fault(trap, at));
+                    }
+                    in_flight = Some(fault(trap, at));
+                    match unwind(image, code_base, stack, fp, at, false) {
+                        Some((to, frame, end)) => {
+                            pc = to;
+                            fp = frame;
+                            seg_end = end;
+                            continue;
+                        }
+                        None => return Err(in_flight.take().expect("set just above")),
                     }
                 }};
             }
             macro_rules! int_trap {
                 ($e:expr) => {
-                    return Err(fault(
-                        match $e {
-                            IntErr::Overflow | IntErr::Range => Trap::Overflow,
-                            IntErr::DivZero => Trap::DivZero,
-                            IntErr::ShiftRange => Trap::ShiftRange,
-                        },
-                        at,
-                    ))
+                    throw!(match $e {
+                        IntErr::Overflow | IntErr::Range => Trap::Overflow,
+                        IntErr::DivZero => Trap::DivZero,
+                        IntErr::ShiftRange => Trap::ShiftRange,
+                    })
                 };
+            }
+            // In the checked build, an access must be inside a live object,
+            // the stack in use, the image's text or the program's data.
+            macro_rules! mem_check {
+                ($addr:expr, $len:expr) => {{
+                    if cfg!(feature = "checked") {
+                        let (addr, len) = ($addr, $len as u64);
+                        if !valid(&ctx.heap, stack, ctx.rodata_range(), data_range, addr, len) {
+                            return Err(fault(
+                                Trap::Crash(format!("loom internal: a bad memory access: {len} bytes at {addr:#x}")),
+                                at,
+                            ));
+                        }
+                    }
+                }};
+            }
+            // A load of a `$t` at register `b` plus the offset in `c`,
+            // widened to 64 bits by `$ext`.
+            macro_rules! load {
+                ($t:ty, $ext:expr) => {{
+                    let addr = r!(b(w)).wrapping_add(c_i16(w) as i64 as u64);
+                    mem_check!(addr, std::mem::size_of::<$t>());
+                    // SAFETY: the compiler only loads from memory the
+                    // program owns (see the module's documentation).
+                    let v = unsafe { (addr as *const $t).read_unaligned() };
+                    set!(a(w), $ext(v))
+                }};
+            }
+            macro_rules! store {
+                ($t:ty) => {{
+                    let addr = r!(a(w)).wrapping_add(c_i16(w) as i64 as u64);
+                    mem_check!(addr, std::mem::size_of::<$t>());
+                    let v = r!(b(w)) as $t;
+                    // SAFETY: as for loads.
+                    unsafe { (addr as *mut $t).write_unaligned(v) }
+                }};
+            }
+            // The same at a byte offset from the frame pointer, which the
+            // verifier checked is inside the frame.
+            macro_rules! load_f {
+                ($t:ty, $ext:expr) => {{
+                    // SAFETY: inside this frame (verified), which a call
+                    // made sure is inside the segment.
+                    let v = unsafe { ((fp as *const u8).add(bc_u32(w) as usize) as *const $t).read_unaligned() };
+                    set!(a(w), $ext(v))
+                }};
+            }
+            macro_rules! store_f {
+                ($t:ty) => {{
+                    let v = r!(a(w)) as $t;
+                    // SAFETY: as for `load_f`.
+                    unsafe { ((fp as *mut u8).add(bc_u32(w) as usize) as *mut $t).write_unaligned(v) }
+                }};
             }
             macro_rules! bin {
                 ($f:expr) => {{
@@ -575,7 +673,7 @@ impl<'i> Machine<'i> {
                     let (to, from) = unpack_cast(ext!()).expect("the verifier checked every cast");
                     match ints::cast_t(r!(b(w)), to, from) {
                         Ok(v) => set!(a(w), v),
-                        Err(_) => return Err(fault(Trap::IntRange(to), at)),
+                        Err(_) => throw!(Trap::IntRange(to)),
                     }
                 }
                 Op::CastW => {
@@ -596,7 +694,7 @@ impl<'i> Machine<'i> {
                     let f = if op == Op::FtoiT64 { f64::from_bits(x) } else { f64::from(f32::from_bits(x as u32)) };
                     match ints::ftoi_t(f, to) {
                         Ok(v) => set!(a(w), v),
-                        Err(_) => return Err(fault(Trap::FloatRange(to), at)),
+                        Err(_) => throw!(Trap::FloatRange(to)),
                     }
                 }
                 Op::FtoiS64 | Op::FtoiS32 => {
@@ -611,7 +709,7 @@ impl<'i> Machine<'i> {
                     let from = ints::spec(ext!());
                     match ints::to_char(r!(b(w)), from) {
                         Ok(v) => set!(a(w), v),
-                        Err(_) => return Err(fault(Trap::BadChar, at)),
+                        Err(_) => throw!(Trap::BadChar),
                     }
                 }
 
@@ -635,7 +733,7 @@ impl<'i> Machine<'i> {
                                 }
                                 seg_end = end;
                             }
-                            Err(trap) => return Err(fault(trap, at)),
+                            Err(trap) => throw!(trap),
                         }
                     }
                     // SAFETY: the linkage is just below the callee's frame:
@@ -657,7 +755,7 @@ impl<'i> Machine<'i> {
                     // registers are inside the frame.
                     let args = unsafe { std::slice::from_raw_parts_mut(fp.add(a(w)), regs) };
                     if let Err(trap) = native(ctx, args, c(w) as u16) {
-                        return Err(fault(trap, at));
+                        throw!(trap);
                     }
                 }
                 Op::Ret => {
@@ -697,12 +795,167 @@ impl<'i> Machine<'i> {
                     // SAFETY: `unravel` is given a text value.
                     let text = match unsafe { ctx.text(ptr, len) } {
                         Ok(t) => String::from_utf8_lossy(t).into_owned(),
-                        Err(trap) => return Err(fault(trap, at)),
+                        Err(trap) => throw!(trap),
                     };
-                    return Err(fault(Trap::Unravel(text), at));
+                    throw!(Trap::Unravel(text));
                 }
                 Op::Crash => return Err(fault(Trap::Crash(crash_message(a(w))), at)),
+
+                Op::Ld8S => load!(i8, |v: i8| v as i64 as u64),
+                Op::Ld8U => load!(u8, u64::from),
+                Op::Ld16S => load!(i16, |v: i16| v as i64 as u64),
+                Op::Ld16U => load!(u16, u64::from),
+                Op::Ld32S => load!(i32, |v: i32| v as i64 as u64),
+                Op::Ld32U => load!(u32, u64::from),
+                Op::Ld64 => load!(u64, |v: u64| v),
+                Op::St8 => store!(u8),
+                Op::St16 => store!(u16),
+                Op::St32 => store!(u32),
+                Op::St64 => store!(u64),
+                Op::LdF8S => load_f!(i8, |v: i8| v as i64 as u64),
+                Op::LdF8U => load_f!(u8, u64::from),
+                Op::LdF16S => load_f!(i16, |v: i16| v as i64 as u64),
+                Op::LdF16U => load_f!(u16, u64::from),
+                Op::LdF32S => load_f!(i32, |v: i32| v as i64 as u64),
+                Op::LdF32U => load_f!(u32, u64::from),
+                Op::LdF64 => load_f!(u64, |v: u64| v),
+                Op::StF8 => store_f!(u8),
+                Op::StF16 => store_f!(u16),
+                Op::StF32 => store_f!(u32),
+                Op::StF64 => store_f!(u64),
+                Op::Lea => set!(a(w), (fp as u64).wrapping_add(u64::from(bc_u32(w)))),
+                Op::Gaddr => set!(a(w), data_range.0 + u64::from(bc_u32(w))),
+                Op::Idx => {
+                    let scale = ext!();
+                    let v = r!(b(w)).wrapping_add(r!(c(w)).wrapping_mul(scale));
+                    set!(a(w), v)
+                }
+                Op::Copy => {
+                    let n = ext!();
+                    let (dst, src) = (r!(a(w)), r!(b(w)));
+                    mem_check!(dst, n);
+                    mem_check!(src, n);
+                    // SAFETY: both are memory the program owns, `n` bytes
+                    // each (checked in the checked build); they may overlap.
+                    unsafe { std::ptr::copy(src as *const u8, dst as *mut u8, n as usize) }
+                }
+                Op::Zero => {
+                    let n = ext!();
+                    let dst = r!(a(w));
+                    mem_check!(dst, n);
+                    // SAFETY: as for `copy`.
+                    unsafe { std::ptr::write_bytes(dst as *mut u8, 0, n as usize) }
+                }
+                Op::Bounds => {
+                    let (i, n) = (r!(a(w)), r!(b(w)));
+                    if i >= n {
+                        throw!(Trap::Index { index: i, len: n });
+                    }
+                }
+                Op::Ldfn => set!(a(w), u64::from(bc_u32(w))),
+                Op::CallR => {
+                    let index = r!(b(w)) as usize;
+                    if index >= nfuncs {
+                        return Err(fault(Trap::Crash(format!("loom internal: no function {index}")), at));
+                    }
+                    // SAFETY: just checked.
+                    let callee = unsafe { &*funcs.add(index) };
+                    if callee.params != c(w) >> 8 || callee.results != c(w) & 0xFF {
+                        return Err(fault(Trap::Crash(crash_message(2)), at));
+                    }
+                    // SAFETY: the window is inside this frame (verified).
+                    let window = unsafe { fp.add(a(w)) };
+                    let mut new_fp = window;
+                    if (seg_end as usize - window as usize) / 8 < callee.frame {
+                        match stack.grow(LINK_SLOTS + callee.frame) {
+                            Ok((start, end)) => {
+                                // SAFETY: as for `call`.
+                                unsafe {
+                                    new_fp = start.add(LINK_SLOTS);
+                                    std::ptr::copy_nonoverlapping(window, new_fp, callee.params);
+                                }
+                                seg_end = end;
+                            }
+                            Err(trap) => throw!(trap),
+                        }
+                    }
+                    // SAFETY: as for `call`.
+                    unsafe {
+                        let link = new_fp.sub(LINK_SLOTS);
+                        *link = pc as u64;
+                        *link.add(1) = fp as u64;
+                        *link.add(2) = window as u64;
+                    }
+                    fp = new_fp;
+                    pc = callee.entry;
+                    tick!();
+                }
+                Op::Resume => {
+                    // This frame's pads are done: on to the caller's.
+                    match unwind(image, code_base, stack, fp, at, true) {
+                        Some((to, frame, end)) => {
+                            pc = to;
+                            fp = frame;
+                            seg_end = end;
+                        }
+                        None => {
+                            let f = in_flight.take();
+                            return Err(f.unwrap_or_else(|| {
+                                fault(Trap::Crash("loom internal: `resume` with nothing unwinding".into()), at)
+                            }));
+                        }
+                    }
+                }
             }
         }
     }
+}
+
+/// Where an unwind at `at` in the frame at `fp` goes: the landing pad for
+/// it, first in this function and then out through its callers, each at
+/// the call it's in. With `pop`, this function's pads already ran. `None`
+/// when no function has one: the unwind reaches the host.
+fn unwind(
+    image: &Image,
+    code_base: *const u64,
+    stack: &mut Stack,
+    mut fp: *mut u64,
+    at: *const u64,
+    mut pop: bool,
+) -> Option<(*const u64, *mut u64, *mut u64)> {
+    let mut index = (at as usize - code_base as usize) / 8;
+    loop {
+        if !pop {
+            let f = &image.funcs[image.func_at(index as u32)?];
+            if let Some(pad) = f.pad_at(index as u32 - f.entry) {
+                // SAFETY: the verifier checked that the pad is an
+                // instruction of this function.
+                let to = unsafe { code_base.add((f.entry + pad) as usize) };
+                return Some((to, fp, stack.bounds().1));
+            }
+        }
+        pop = false;
+        // SAFETY: every frame has its linkage just below it (see `call`).
+        let (back, caller, dst) = unsafe {
+            let link = fp.sub(LINK_SLOTS);
+            (*link as *const u64, *link.add(1) as *mut u64, *link.add(2) as *mut u64)
+        };
+        if dst != fp {
+            stack.shrink();
+        }
+        if back.is_null() {
+            return None;
+        }
+        // The call is the word before where it returns to.
+        index = (back as usize - code_base as usize) / 8 - 1;
+        fp = caller;
+    }
+}
+
+/// Whether `len` bytes at `addr` are all memory the program may touch: a
+/// live object, the stack in use, the image's text or the program's data.
+fn valid(heap: &Heap, stack: &Stack, rodata: (u64, u64), data: (u64, u64), addr: u64, len: u64) -> bool {
+    let Some(end) = addr.checked_add(len) else { return false };
+    let inside = |(start, stop): (u64, u64)| addr >= start && end <= stop;
+    len == 0 || heap.holds(addr, len) || stack.holds(addr, len) || inside(rodata) || inside(data)
 }

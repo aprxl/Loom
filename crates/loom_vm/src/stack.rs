@@ -82,4 +82,12 @@ impl Stack {
         self.current -= 1;
         self.bounds().1
     }
+
+    /// Whether `len` bytes at `addr` are inside a segment in use.
+    pub fn holds(&self, addr: u64, len: u64) -> bool {
+        self.segments[..=self.current].iter().any(|s| {
+            let r = s.as_ptr_range();
+            addr >= r.start as u64 && addr.checked_add(len).is_some_and(|end| end <= r.end as u64)
+        })
+    }
 }
