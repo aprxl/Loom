@@ -2,9 +2,11 @@
 //!
 //! - `check` parses, resolves and type-checks a program.
 //! - `build` compiles it to a Lua bundle (plus a source map), or dumps a
-//!   stage with `--emit tokens|ast|hir|lua`.
+//!   stage with `--emit tokens|ast|hir|lua|heddle|bytecode` (the last two
+//!   are Treadle's, Loom's own VM).
 //! - `run` compiles, writes the bundle to a temporary file, and runs it in a
-//!   child process (`loom lua-host`), whose exit code it passes on.
+//!   child process (`loom lua-host`), whose exit code it passes on. With
+//!   `--backend vm` it runs the program on Treadle instead, in this process.
 //! - `test` compiles a file's tests (and only then are they compiled) and
 //!   runs each in a child process the same way, which prints a report.
 //! - `docs` opens the documentation, which is built into the binary.
@@ -20,6 +22,8 @@ use clap::{Parser, Subcommand, ValueEnum};
 use loom_compiler::hir::{self, Resolved};
 use loom_compiler::lower::{self, Bundle};
 use loom_compiler::modules::FsLoader;
+use loom_compiler::target::Target;
+use loom_compiler::treadle;
 use loom_compiler::typeck::{self, Typed};
 use loom_host::{Host, Outcome, Output};
 use loom_syntax::diag::{ColorMode, emit_to_stderr};
@@ -59,9 +63,12 @@ enum Command {
         #[arg(long, value_enum)]
         emit: Option<Emit>,
     },
-    /// Transpile a Loom file and run it with the bundled Lua VM.
+    /// Compile a Loom file and run it (on the bundled Lua VM, or on Treadle).
     Run {
         file: PathBuf,
+        /// What runs the program: Lua, or Treadle, Loom's own VM.
+        #[arg(long, value_enum, default_value_t = Backend::Lua)]
+        backend: Backend,
         /// Arguments passed to the program.
         #[arg(last = true)]
         args: Vec<String>,
@@ -101,6 +108,18 @@ enum Emit {
     Hir,
     /// The Lua bundle.
     Lua,
+    /// Treadle's IR, Heddle (design/vm.md).
+    Heddle,
+    /// Treadle's bytecode.
+    Bytecode,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum Backend {
+    /// Lua 5.4, bundled.
+    Lua,
+    /// Treadle, Loom's own VM.
+    Vm,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -144,7 +163,8 @@ fn run(cli: Cli) -> ExitCode {
     match cli.command {
         Command::Build { file, out, emit } => build(&file, out.as_deref(), emit, color),
         Command::Check { file } => check(&file, color),
-        Command::Run { file, args } => run_file(&file, &args, color),
+        Command::Run { file, backend: Backend::Lua, args } => run_file(&file, &args, color),
+        Command::Run { file, backend: Backend::Vm, args } => run_vm(&file, &args, color),
         Command::Test { file } => test_file(&file, color),
         Command::Docs { no_open } => docs::docs(!no_open),
         Command::LuaHost { bundle, test: true, .. } => lua_host_tests(&bundle),
@@ -210,10 +230,15 @@ fn resolve(path: &Path, color: ColorMode) -> Result<(SourceDb, Resolved), ExitCo
     Ok((db, resolved))
 }
 
-/// Resolves and type-checks the program rooted at `path`.
+/// Resolves and type-checks the program rooted at `path`, for Lua.
 fn typecheck(path: &Path, color: ColorMode) -> Result<(SourceDb, Resolved, Typed), ExitCode> {
+    typecheck_for(path, color, Target::LUA)
+}
+
+/// Resolves and type-checks the program rooted at `path` for `target`.
+fn typecheck_for(path: &Path, color: ColorMode, target: Target) -> Result<(SourceDb, Resolved, Typed), ExitCode> {
     let (db, resolved) = resolve(path, color)?;
-    let typed = typeck::check(&resolved.program);
+    let typed = typeck::check_for(&resolved.program, target);
     report(&db, path, &typed.diagnostics, "type-check", color)?;
     Ok((db, resolved, typed))
 }
@@ -268,6 +293,8 @@ fn build(path: &Path, out: Option<&Path>, emit: Option<Emit>, color: ColorMode) 
                 p.root.map(|root| hir::pretty::module(p, root)).unwrap_or_default()
             }
             Some(Emit::Lua) => compile(path, color)?.1.lua,
+            Some(Emit::Heddle) => loom_compiler::heddle::print(&compile_vm(path, color)?.heddle),
+            Some(Emit::Bytecode) => loom_isa::disassemble(&compile_vm(path, color)?.image),
             None => {
                 // A bundle and its source map.
                 let (_, bundle) = compile(path, color)?;
@@ -319,6 +346,33 @@ fn run_file(path: &Path, args: &[String], color: ColorMode) -> ExitCode {
         let (_, bundle) = compile(path, color)?;
         let program = ["--program".to_string(), path.display().to_string()];
         spawn_host(path, &bundle, &program, args)
+    };
+    run().unwrap_or_else(|code| code)
+}
+
+/// Compiles the program rooted at `path` for Treadle.
+fn compile_vm(path: &Path, color: ColorMode) -> Result<treadle::Compiled, ExitCode> {
+    let (db, resolved, typed) = typecheck_for(path, color, Target::VM)?;
+    match treadle::compile(&db, &resolved.program, &typed) {
+        Ok(compiled) => Ok(compiled),
+        Err(diagnostics) => {
+            report(&db, path, &diagnostics, "compile", color)?;
+            Err(ExitCode::from(EXIT_COMPILE_ERROR))
+        }
+    }
+}
+
+/// `loom run --backend vm`: compile for Treadle and run the program here.
+fn run_vm(path: &Path, args: &[String], color: ColorMode) -> ExitCode {
+    let run = || -> Result<ExitCode, ExitCode> {
+        let compiled = compile_vm(path, color)?;
+        let args = std::iter::once(path.display().to_string()).chain(args.iter().cloned()).collect();
+        let host = Host { output: Output::Stdout, sandbox: false, args };
+        let outcome = loom_vm::run(&compiled.image, host, &loom_vm::Config::default());
+        if let Some(text) = describe(&outcome) {
+            eprint!("{text}");
+        }
+        Ok(exit_code(&outcome))
     };
     run().unwrap_or_else(|code| code)
 }

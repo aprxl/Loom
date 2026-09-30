@@ -19,6 +19,7 @@ pub mod hir;
 pub mod lower;
 pub mod modules;
 pub mod target;
+pub mod treadle;
 pub mod ty;
 pub mod typeck;
 

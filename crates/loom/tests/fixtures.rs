@@ -9,6 +9,12 @@
 //! - `tests/fail/NAME.loom` must fail to compile with exactly the
 //!   diagnostics its `//~ CODE …` comments list, on the lines they're on.
 //!
+//! Every `tests/run` fixture also runs on Treadle, Loom's own VM, and must
+//! end the same way (`NAME.vm.out`, when there is one, is its output there:
+//! design/vm.md §14). `tests/vm_skip.txt` lists the fixtures Treadle can't
+//! run yet; one listed that passes is a failure too, so the list only
+//! shrinks.
+//!
 //! Every failure in a corpus is reported at once.
 
 use std::cell::RefCell;
@@ -17,8 +23,11 @@ use std::rc::Rc;
 
 use loom_compiler::hir::resolve;
 use loom_compiler::modules::FsLoader;
-use loom_compiler::{lower, typeck};
+use loom_compiler::target::Target;
+use loom_compiler::{lower, treadle, typeck};
 use loom_host::{Host, Outcome, run_bundle};
+use loom_isa::Image;
+use loom_syntax::diag::codes;
 use loom_syntax::diag::render_plain;
 use loom_syntax::{Diagnostic, SourceDb};
 
@@ -52,6 +61,87 @@ fn compile(path: &Path) -> (SourceDb, Vec<Diagnostic>, Option<lower::Bundle>) {
     }
 }
 
+/// What compiling `path` for Treadle gives: its diagnostics, and the image
+/// if there were none.
+fn compile_vm(path: &Path) -> (SourceDb, Vec<Diagnostic>, Option<Image>) {
+    let text = std::fs::read_to_string(path).expect("readable fixture");
+    let mut db = SourceDb::new();
+    let root = db.add(path.display().to_string(), text);
+    let resolved = resolve(&mut db, root, &FsLoader::new(path));
+    if resolved.has_errors() {
+        return (db, resolved.diagnostics, None);
+    }
+    let typed = typeck::check_for(&resolved.program, Target::VM);
+    if typed.has_errors() {
+        return (db, typed.diagnostics, None);
+    }
+    match treadle::compile(&db, &resolved.program, &typed) {
+        Ok(compiled) => (db, Vec::new(), Some(compiled.image)),
+        Err(diags) => (db, diags, None),
+    }
+}
+
+/// The fixtures Treadle can't run yet: `tests/vm_skip.txt`, a name per
+/// line followed by the milestone that fixes it (`# …` is a comment).
+fn vm_skips() -> Vec<String> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/vm_skip.txt");
+    let text = std::fs::read_to_string(path).expect("tests/vm_skip.txt");
+    text.lines()
+        .map(|l| l.split('#').next().unwrap_or_default().trim())
+        .filter(|l| !l.is_empty())
+        .map(|l| l.split_whitespace().next().unwrap_or_default().to_string())
+        .collect()
+}
+
+/// Checks how a run ended against a fixture's `.unravel` and `.error`
+/// files; the problem, if it's not right.
+fn check_outcome(path: &Path, outcome: Outcome) -> Option<String> {
+    let unravel = std::fs::read_to_string(path.with_extension("unravel")).ok();
+    let error = std::fs::read_to_string(path.with_extension("error")).ok();
+    match (unravel, outcome) {
+        (None, Outcome::Finished) if error.is_none() => None,
+        (None, Outcome::Failed { message }) if error.is_some() => {
+            let want = error.unwrap_or_default();
+            (message != want.trim_end()).then(|| format!("failed with {message:?}, expected {:?}", want.trim_end()))
+        }
+        (Some(spec), Outcome::Unravel { message, location }) => {
+            let mut lines = spec.lines();
+            let want_message = lines.next().unwrap_or_default();
+            let want_line = lines.next().and_then(|l| l.strip_prefix("line ")).and_then(|n| n.parse::<u32>().ok());
+            if message != want_message {
+                Some(format!("unraveled with {message:?}, expected {want_message:?}"))
+            } else if want_line.is_some() && location.as_ref().map(|l| l.line) != want_line {
+                Some(format!("unraveled at {location:?}, expected line {want_line:?}"))
+            } else {
+                None
+            }
+        }
+        (spec, outcome) => Some(format!("ended with {outcome:?}, expected {spec:?}")),
+    }
+}
+
+/// Runs a `tests/run` fixture on Treadle; the problem, if it doesn't end
+/// the way it should, and `Err` when Treadle can't compile it yet.
+fn run_on_vm(path: &Path) -> Result<Option<String>, String> {
+    let (db, diags, image) = compile_vm(path);
+    let Some(image) = image else {
+        let text = rendered(&db, &diags);
+        let not_yet = !diags.is_empty() && diags.iter().all(|d| d.code == codes::U0102);
+        return if not_yet { Err(text) } else { Ok(Some(format!("didn't compile for Treadle:\n{text}"))) };
+    };
+    let buffer = Rc::new(RefCell::new(Vec::new()));
+    let config = loom_vm::Config { stack_limit: 64 << 20, ..loom_vm::Config::default() };
+    let outcome = loom_vm::run(&image, Host::captured(buffer.clone()), &config);
+    let out = String::from_utf8_lossy(&buffer.borrow()).into_owned();
+    let vm_out = path.with_extension("vm.out");
+    let expected =
+        std::fs::read_to_string(if vm_out.exists() { vm_out } else { path.with_extension("out") }).unwrap_or_default();
+    if out != expected {
+        return Ok(Some(format!("output differs on Treadle\n--- expected\n{expected}--- got\n{out}")));
+    }
+    Ok(check_outcome(path, outcome).map(|p| format!("on Treadle: {p}")))
+}
+
 fn rendered(db: &SourceDb, diags: &[Diagnostic]) -> String {
     diags.iter().map(|d| render_plain(db, d)).collect::<Vec<_>>().join("\n")
 }
@@ -61,8 +151,25 @@ fn run_corpus() {
     let mut failures = Vec::new();
     let paths = corpus("run");
     assert!(!paths.is_empty());
+    let skips = vm_skips();
+    for skip in &skips {
+        if !paths.iter().any(|p| p.file_stem().and_then(|s| s.to_str()) == Some(skip)) {
+            failures.push(format!("tests/vm_skip.txt lists `{skip}`, which isn't a fixture"));
+        }
+    }
     for path in &paths {
         let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("?").to_string();
+        let skipped = skips.contains(&name);
+        match run_on_vm(path) {
+            Ok(None) if skipped => {
+                failures.push(format!("{name}: passes on Treadle now: take it out of tests/vm_skip.txt"));
+            }
+            Ok(Some(problem)) if !skipped => failures.push(format!("{name}: {problem}")),
+            Err(diags) if !skipped => failures.push(format!(
+                "{name}: Treadle can't run this yet: list it in tests/vm_skip.txt with its milestone\n{diags}"
+            )),
+            _ => {}
+        }
         let (db, diags, bundle) = compile(path);
         let Some(bundle) = bundle else {
             failures.push(format!("{name}: didn't compile:\n{}", rendered(&db, &diags)));
@@ -75,28 +182,8 @@ fn run_corpus() {
         if out != expected {
             failures.push(format!("{name}: output differs\n--- expected\n{expected}--- got\n{out}"));
         }
-        let unravel = std::fs::read_to_string(path.with_extension("unravel")).ok();
-        let error = std::fs::read_to_string(path.with_extension("error")).ok();
-        match (unravel, outcome) {
-            (None, Outcome::Finished) if error.is_none() => {}
-            (None, Outcome::Failed { message }) if error.is_some() => {
-                let want = error.unwrap_or_default();
-                if message != want.trim_end() {
-                    failures.push(format!("{name}: failed with {message:?}, expected {:?}", want.trim_end()));
-                }
-            }
-            (Some(spec), Outcome::Unravel { message, location }) => {
-                let mut lines = spec.lines();
-                let want_message = lines.next().unwrap_or_default();
-                let want_line = lines.next().and_then(|l| l.strip_prefix("line ")).and_then(|n| n.parse::<u32>().ok());
-                if message != want_message {
-                    failures.push(format!("{name}: unraveled with {message:?}, expected {want_message:?}"));
-                }
-                if want_line.is_some() && location.as_ref().map(|l| l.line) != want_line {
-                    failures.push(format!("{name}: unraveled at {location:?}, expected line {want_line:?}"));
-                }
-            }
-            (spec, outcome) => failures.push(format!("{name}: ended with {outcome:?}, expected {spec:?}")),
+        if let Some(problem) = check_outcome(path, outcome) {
+            failures.push(format!("{name}: {problem}"));
         }
     }
     assert!(

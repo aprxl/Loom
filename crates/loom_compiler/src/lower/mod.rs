@@ -119,6 +119,13 @@ pub fn lower_tests(db: &SourceDb, p: &Program, typed: &Typed) -> Result<Bundle, 
     Ok(l.assemble(db, Entry::Tests(tests)))
 }
 
+/// Runs the compile-time code of a type-checked program (its tests' too,
+/// with `tests`) and reports what fails, for backends other than Lua,
+/// which run it the same way (design/vm.md: V4 moves it onto Treadle).
+pub fn compile_time(db: &SourceDb, p: &Program, typed: &Typed, tests: bool) -> Result<(), Vec<Diagnostic>> {
+    consteval::evaluate(db, p, typed, tests)
+}
+
 /// Runs the compile-time code of a type-checked program (its tests' too)
 /// and lowers the rest, reporting what that finds, for `loom check`.
 pub fn check(db: &SourceDb, p: &Program, typed: &Typed) -> Vec<Diagnostic> {

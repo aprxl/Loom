@@ -9,7 +9,7 @@ fn largest[T: Ord](a: T, b: T) -> T = if a < b { b } else { a }
 
 /// A branch that isn't taken isn't checked: it can name what doesn't exist.
 fn page_size() -> usize {
-    const if target.pointer_bits == 63 {
+    const if target.pointer_bits >= 63 {
         4096
     } else {
         std.sys.page_size()
@@ -58,6 +58,7 @@ fn main() {
         squares.push(sq)
     }
     print(squares)
+    // 63 on Lua, 64 on Treadle (const_if.vm.out, design/vm.md P6).
     print(target.pointer_bits)
-    const assert(target.os == target.os and target.pointer_bits == 63)
+    const assert(target.os == target.os and target.pointer_bits >= 63)
 }

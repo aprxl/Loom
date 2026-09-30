@@ -257,3 +257,56 @@ fn resolution_errors_exit_with_code_2_and_suggest_imports() {
     assert!(stderr.contains("error[N0101]: there's no `print` in scope"), "{stderr}");
     assert!(stderr.contains("add `use std.io.print`"), "{stderr}");
 }
+
+// ------------------------------------------------------------ Treadle
+
+#[test]
+fn treadle_unravels_like_lua() {
+    // The same report, word for word, and the same exit code.
+    let path = temp_source(
+        "vm_unravel",
+        "use std.io.print\n\nfn bump(x: u8) -> u8 {\n    let y = x + 10\n    y\n}\n\nfn main() {\n    print(bump(200))\n    print(bump(250))\n}\n",
+    );
+    let file = path.to_str().expect("utf-8 path");
+    let lua = loom(&["run", file]);
+    let vm = loom(&["run", "--backend", "vm", file]);
+    assert_eq!(vm.status.code(), Some(101));
+    assert_eq!(lua.status.code(), Some(101));
+    assert_eq!(text(&vm.stdout), "210\n");
+    assert_eq!(text(&vm.stdout), text(&lua.stdout));
+    assert_eq!(text(&vm.stderr), text(&lua.stderr));
+    assert!(text(&vm.stderr).contains(":4:5"), "{}", text(&vm.stderr));
+}
+
+#[test]
+fn treadle_recurses_a_million_deep_and_overflows_cleanly() {
+    let deep = temp_source(
+        "vm_deep",
+        "use std.io.print\n\nfn down(n: u64) -> u64 = if n == 0 { 0 } else { down(n - 1) + 1 }\n\nfn main() {\n    print(down(1000000))\n}\n",
+    );
+    let out = loom(&["run", "--backend", "vm", deep.to_str().expect("utf-8 path")]);
+    assert_eq!((out.status.code(), text(&out.stdout)), (Some(0), "1000000\n".into()), "{}", text(&out.stderr));
+    let endless = temp_source(
+        "vm_endless",
+        "use std.io.print\n\nfn forever(n: u64) -> u64 = forever(n + 1) + 1\n\nfn main() {\n    print(forever(0))\n}\n",
+    );
+    let out = loom(&["run", "--backend", "vm", endless.to_str().expect("utf-8 path")]);
+    assert_eq!(out.status.code(), Some(101));
+    assert!(
+        text(&out.stderr).starts_with("unravel: stack overflow: too many calls inside each other"),
+        "{}",
+        text(&out.stderr)
+    );
+}
+
+#[test]
+fn emit_heddle_and_bytecode_show_treadle_s_code() {
+    let path = temp_source("vm_emit", "fn main() {\n    var x: i32 = 1\n    x += 2\n}\n");
+    let file = path.to_str().expect("utf-8 path");
+    let heddle = loom(&["build", file, "--emit", "heddle"]);
+    assert!(heddle.status.success(), "{}", text(&heddle.stderr));
+    assert!(text(&heddle.stdout).contains("fn main() -> ()"), "{}", text(&heddle.stdout));
+    let bytecode = loom(&["build", file, "--emit", "bytecode"]);
+    assert!(bytecode.status.success(), "{}", text(&bytecode.stderr));
+    assert!(text(&bytecode.stdout).contains("(entry)"), "{}", text(&bytecode.stdout));
+}

@@ -1,0 +1,66 @@
+# Fixtures of tests/run that Treadle, Loom's own VM, can't run yet: a name
+# per line, the milestone of design/vm.md that brings what it needs, and the
+# first thing it stops on. The fixture harness fails when one of these
+# passes, so take it out when it does: this list only gets shorter.
+
+any                  V1  `any` values, warps
+arrays               V1  arrays and lists
+borrows              V1  lists, slices
+calls                V1  `String`
+const_eval           V1  constants computed while compiling, byte strings
+const_fold_width     V1  constants with a type
+const_generics_more  V1  warps
+const_if             V1  lists
+const_params         V1  arrays
+copy_unwrap_bind     V1  optionals and results
+defer                V1  `defer`, results
+defer_mut_params     V1  `defer`, `String`
+derive_json          V1  warps, reflection
+exhaustive           V1  optionals and results
+fizzbuzz             V1  `String`
+gauges               V1  gauges, optionals
+generic_weaves       V1  warps, weaves
+generics             V1  warps, comparing text
+int_to_float         V1  lists
+iterators            V1  warps, streams
+lambdas              V1  lambdas
+long_expressions     V1  constants with a type
+loop_changes_list    V1  lists, lambdas
+loop_changes_map     V1  maps, lambdas
+main_fails           V1  `main ! E`
+many_locals          V1  lambdas
+maps                 V1  maps
+match                V1  `String`
+methods              V1  warps
+moves                V1  `String`
+mut_optional         V1  optionals
+mut_places           V1  lists
+mut_scalars          V1  methods of warps
+option_take          V1  optionals and results
+optionals            V1  optionals
+out_of_memory        V1  text methods
+overflow_policies    V1  `+?` and optionals
+reflection           V1  warps, reflection
+repeat_list          V1  lists
+results              V1  results
+rng_rotate           V1  methods of integers
+shadowing            V1  `String`
+strings              V1  text methods
+through              V1  warps, `through`
+through_scalars      V1  warps, `through`
+tuple_assign         V1  warps
+union_values         V1  unions
+unions               V1  unions
+unravel_chunks       V1  lists, slices
+unravel_defer        V1  `defer`
+unravel_index        V1  arrays
+unravel_open_range   V1  streams
+unravel_sum          V1  arrays
+untyped_consts       V1  arrays
+value_semantics      V1  warps
+warps                V1  warps
+weaves               V1  warps, weaves
+
+shuttles             V2  shuttles, streams
+unravel_closed       V2  shuttles
+unravel_shuttle      V2  shuttles

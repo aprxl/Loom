@@ -310,7 +310,9 @@ dependencies = [
  "clap",
  "loom_compiler",
  "loom_host",
+ "loom_isa",
  "loom_syntax",
+ "loom_vm",
 ]
 
 [[package]]

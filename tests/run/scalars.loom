@@ -1,0 +1,101 @@
+// Numbers, text and control flow without any warp, list or string value:
+// what Treadle's first milestone runs. Every line here must print the same
+// on both backends.
+
+use std.io.print
+
+fn gcd(a: u64, b: u64) -> u64 = if b == 0 { a } else { gcd(b, a % b) }
+
+fn clamp(x: i32, lo: i32 = 0, hi: i32 = 100) -> i32 = if x < lo { lo } else if x > hi { hi } else { x }
+
+fn swap(mut a: i16, mut b: i16) {
+    (a, b) = (b, a)
+}
+
+fn bump(mut n: u8, by: u8) -> bool {
+    n +%= by
+    n < by
+}
+
+fn classify(n: i32) -> str = match n {
+    0 => "zero"
+    1 | 2 | 3 => "small"
+    x if x < 0 => "negative"
+    4..=9 => "digit"
+    _ => "big"
+}
+
+fn decode(op: u16) -> (u8, u8, u8) = match op {
+    0x00E0 => (0, 0, 0)
+    0x8xy4 => (8, x, y)
+    0x1nnn => (1, (n >> 8) as% u8, n as% u8)
+    _ => (15, 15, 15)
+}
+
+fn first_square_over(limit: u32) -> u32 {
+    var i: u32 = 0
+    loop {
+        i += 1
+        if i * i > limit { break i }
+    }
+}
+
+fn pairs(n: i32) -> i32 {
+    var count = 0
+    outer: for a in 0..n {
+        for b in 0..n {
+            if b > a { continue outer }
+            if a + b > 6 { break outer }
+            count += 1
+        }
+    }
+    count
+}
+
+fn main() {
+    print(gcd(1071, 462))
+    print("{clamp(-5)} {clamp(50)} {clamp(500, hi: 200)}")
+    var (a, b) = (3i16, -4i16)
+    swap(mut a, mut b)
+    print((a, b))
+    var n: u8 = 250
+    let wrapped = bump(mut n, 10)
+    print("{n} {wrapped}")
+    print("{classify(0)} {classify(2)} {classify(-7)} {classify(5)} {classify(42)}")
+    print(decode(0x8AB4))
+    print(decode(0x1234))
+    print(decode(0x00E0))
+    print(first_square_over(50))
+    print(pairs(5))
+
+    // Widths and overflow policies.
+    let big: u64 = 18446744073709551615
+    print(big)
+    print(big / 3)
+    let small: u12 = 4095
+    print(small +% 1)
+    print(small +| 9)
+    print((200u8 as i16) - 300)
+    print(-128i8 as% u8)
+    print(1000 as% u8)
+    print(-1000 as| u8)
+    print(300u16 >> 2)
+    print(-16i32 >> 2)
+    print(0b1011u4 ~ 0b0110)
+    print(~0u8)
+
+    // Floats, chars and bools.
+    let third: f32 = 1.0 / 3.0
+    print(third)
+    print(third as f64)
+    print(7.9 as i32)
+    print(-7.9 as| u8)
+    print('A' as u32 + 1)
+    print((66 as char))
+    print(true as u8 + false as u8)
+    print(2.5 < 3.5 < 4.5)
+    print(3 >= 3 > 1)
+    print("{3.14159:.2} {255:#x} {42:>6} {7:+} {'x':?} {"tab\t":?}")
+    let c = 'q'
+    print(c is 'a'..='z' and c != 'z')
+}
