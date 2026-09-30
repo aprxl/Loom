@@ -485,7 +485,7 @@ MODULES = [
 
 {
   "name": "target",
-  "summary": "What `target` describes: the machine the program is built for. On the Lua backend that's the machine doing the build, with 63-bit pointers (`usize` is 63 bits).",
+  "summary": "What `target` describes: the machine the program is built for. That's the machine doing the build, with 63-bit pointers on the Lua backend (`usize` is 63 bits) and 64-bit ones on Treadle, Loom's own VM.",
   "types": [
     {"kind": "warp", "name": "Os", "suffix": ": Eq, Show",
      "doc": "An operating system.",
