@@ -27,7 +27,10 @@ fn main() {
     const for c in Shape.cases {
         if p is .(c) { }                                 //~ T0101
     }
-    print(Point.size)                                    //~ U0102
+    print(Point.bits)                                    //~ U0102
+    const for c in Shape.cases {
+        print(c.offset)                                  //~ T0111
+    }
     var n = 0
     print(p.(n))                                         //~ K0110
 }

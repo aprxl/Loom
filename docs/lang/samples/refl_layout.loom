@@ -1,0 +1,21 @@
+use std.io.print
+
+warp Header { flag: u8, len: u32, id: u16 }
+
+warp Token {
+    case Word(String)
+    case Number(u64)
+    case End
+}
+
+type MaybeToken = ?Token
+
+fn main() {
+    print("Header: {Header.size} bytes, aligned to {Header.align}")
+    const for f in Header.fields {
+        print("  {f.name} at {f.offset}")
+    }
+    print("Token: {Token.size} bytes, ?Token: {MaybeToken.size}")
+    const assert(Header.size == 8, "the header changed size")
+}
+//@ run

@@ -23,7 +23,7 @@ These are planned next, in this order: the rest of Loom's own VM, Treadle (desig
 
 ## Compile-time code
 
-The standard library's `std.sys` is not built, and neither is layout reflection (`T.size`, `T.align`, `T.bits`), `f.ty` or `T.weaves(W)`:
+The standard library's `std.sys` is not built, and neither are `T.bits` (which needs `#layout(bits)`), `f.ty` or `T.weaves(W)`:
 
 @sample nyet_sys
 

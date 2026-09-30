@@ -132,7 +132,8 @@ language through every layer (type checking, lowering to Lua, the runtime,
     (unrolled, each item checked on its own), and `target` (`std.target`).
     `examples/compile_time.loom` fails only for reflection and `std.sys`.
 21. reflection (`std.meta`): `T.name`, `T.kind`, `T.fields`, `T.cases`,
-    `f.name`, `c.fields`, `v.(f)`, `v is .(c)`, `v.(c).(f)`, and default
+    `f.name`, `c.fields`, `v.(f)`, `v is .(c)`, `v.(c).(f)`, `T.size`,
+    `T.align` and `f.offset` (from `ty::layout`), and default
     methods that reflect on `Self` (`ToJson`, checked by
     `tests/run/derive_json`). `examples/compile_time.loom` fails only for
     `std.sys`.

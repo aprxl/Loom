@@ -517,8 +517,10 @@ needed at run time is K0111. At run time only two things are left:
 `v.(f)`, which is `v`'s field `f` (a place, assignable like `v.x`), and
 `v is .(c)`, a test of `v`'s tag. `v.(c).(f)` reads a payload field through
 `rt.as_case`, which unravels unless `v` is case `c` (it's meant to be used
-inside `if v is .(c)`). `T.size`, `T.align`, `T.bits`, `f.ty` and
-`T.weaves(W)` are U0102 for now, and the builtin structural `Show`, `Eq`
+inside `if v is .(c)`). `T.size`, `T.align` and `f.offset` fold to the
+layout Treadle gives values (`ty::layout`): numbers no Lua code depends
+on. `T.bits`, `f.ty` and `T.weaves(W)` are U0102 for now, and the builtin
+structural `Show`, `Eq`
 and `Ord` haven't been replaced by default methods written with reflection
 yet.
 

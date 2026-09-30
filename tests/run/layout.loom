@@ -1,0 +1,50 @@
+// `T.size`, `T.align` and `f.offset`: how values are laid out in memory
+// (design/vm.md §5.2). Both backends answer the same, from `ty::layout`.
+
+use std.io.print
+
+warp Point { x: f64, y: f64 }
+warp Span(u32, u32)
+warp Token {
+    span: Span
+    case Ident(name: String)
+    case Int(u64)
+    case Eof
+}
+warp Color { case Red, Green, Blue }
+// Fields go largest alignment first.
+warp Header { flag: u8, len: u32, id: u16 }
+type Triple = (u8, u64, u16)
+type Three = [u16; 3]
+
+fn describe[T]() {
+    print("{T.name}: size {T.size}, align {T.align}")
+}
+
+fn main() {
+    print("u8 {u8.size} {u8.align}, u12 {u12.size}, i24 {i24.size}, u64 {u64.size}")
+    print("bool {bool.size}, char {char.size}, f32 {f32.size}, f64 {f64.size}")
+    print("str {str.size}, String {String.size}")
+    describe[Point]()
+    describe[Span]()
+    describe[Token]()
+    describe[Color]()
+    describe[Header]()
+    describe[Triple]()
+    describe[?char]()
+    describe[?Point]()
+    describe[?Token]()
+    describe[u32 ! u8]()
+    describe[Three]()
+    describe[List[Point]]()
+    const for f in Header.fields {
+        print("Header.{f.name} at {f.offset}")
+    }
+    const for c in Token.cases {
+        const for f in c.fields {
+            print("Token.{c.name}.{f.name} at {f.offset}")
+        }
+    }
+    const assert(Header.size == 8, "Header is 8 bytes")
+    const assert(Token.size == 40)
+}

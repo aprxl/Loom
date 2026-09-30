@@ -2,7 +2,9 @@
 //!
 //! `T.name`, `T.kind`, `T.fields` and `T.cases` are worked out by the
 //! constant folder (see `gauge.rs`), and so is everything read from them:
-//! `f.name`, `c.fields`, `.len()`, `.is_empty()`. `const for f in T.fields`
+//! `f.name`, `c.fields`, `.len()`, `.is_empty()`. So are `T.size`,
+//! `T.align` and `f.offset`, from the layout values have on the target
+//! (`ty::layout`, design/vm.md §5.2). `const for f in T.fields`
 //! goes over them, each item a [`ConstVal::Field`] or [`ConstVal::Case`]
 //! standing for its loop variable. Two things use them at run time, with
 //! nothing reflective left: `v.(f)`, which is `v`'s field `f`, and
@@ -13,6 +15,8 @@
 //! recorded (`Body::const_values`), so lowering writes it as a literal:
 //! `f.put("{fld.name}: ")` puts `"x: "`.
 
+use std::collections::HashSet;
+
 use loom_syntax::Diagnostic;
 use loom_syntax::ast::{FieldName, Vis};
 use loom_syntax::diag::codes;
@@ -21,6 +25,7 @@ use loom_syntax::source::Span;
 use super::gauge::Val;
 use super::{Checker, FieldAccess, Key, Receiver};
 use crate::hir::{DefId, Expr, ExprKind, Pat};
+use crate::ty::layout::{Layout, Layouts, Shape};
 use crate::ty::{ConstVal, Ty, TyKind};
 
 /// The reflection queries a type answers: `T.name`.
@@ -62,7 +67,8 @@ impl Checker<'_> {
                 let case = self.meta_ty("Case");
                 self.list_of(case)
             }
-            "size" | "align" | "bits" => self.unsupported(span, &format!("layout reflection (`T.{name}`)")),
+            "size" | "align" => self.tcx.usize,
+            "bits" => self.unsupported(span, "`T.bits` (it's for `#layout(bits)`)"),
             _ => return None,
         })
     }
@@ -78,13 +84,14 @@ impl Checker<'_> {
         Some(match (what, name) {
             (_, "name") => self.tcx.str,
             ("Field", "is_pub") => self.tcx.bool,
+            ("Field", "offset") => self.tcx.usize,
             ("Case", "fields") => {
                 let field = self.meta_ty("Field");
                 self.list_of(field)
             }
             ("Field", "ty") => self.unsupported(span, "`f.ty`"),
             _ => {
-                let has = if what == "Field" { "`name` and `is_pub`" } else { "`name` and `fields`" };
+                let has = if what == "Field" { "`name`, `is_pub` and `offset`" } else { "`name` and `fields`" };
                 self.diags.push(
                     Diagnostic::error(codes::T0111, format!("a `{what}` has no `{name}`"))
                         .primary(span, "no such member")
@@ -146,6 +153,52 @@ impl Checker<'_> {
             }
             "fields" => self.adt_info(ty).map(|_| Val::Fields { owner: ty, case: None }),
             "cases" => self.adt_info(ty).filter(|info| info.is_sum()).map(|_| Val::Cases(ty)),
+            "size" => Some(Val::Int(self.layout_of(ty)?.size as i128)),
+            "align" => Some(Val::Int(self.layout_of(ty)?.align as i128)),
+            _ => None,
+        }
+    }
+
+    /// How values of `ty` are laid out in memory on the target being
+    /// checked for (`ty::layout`), once every warp in it is described.
+    /// `None` for a type that has no layout, like one that holds itself.
+    fn layout_of(&mut self, ty: Ty) -> Option<Layout> {
+        self.describe_warps(ty, &mut HashSet::new());
+        Layouts::new(&self.tcx, self.p, &self.r).of(ty).cloned()
+    }
+
+    /// Works out the fields of every warp `ty` is made of, which the
+    /// layout reads.
+    fn describe_warps(&mut self, ty: Ty, seen: &mut HashSet<Ty>) {
+        let ty = self.deep_resolve(ty);
+        if !seen.insert(ty) {
+            return;
+        }
+        let parts: Vec<Ty> = match self.tcx.kind(ty).clone() {
+            TyKind::Adt(_, args) if self.is_builtin_adt(ty) => args,
+            TyKind::Adt(..) => self.adt_info(ty).map(|info| info.field_tys()).unwrap_or_default(),
+            TyKind::Tuple(items) | TyKind::Union(items) => items,
+            TyKind::Optional(t) | TyKind::Range(t) | TyKind::Array(t, _) | TyKind::Gauge(_, t) => vec![t],
+            TyKind::Result(t, e) => vec![t, e],
+            _ => Vec::new(),
+        };
+        for part in parts {
+            self.describe_warps(part, seen);
+        }
+    }
+
+    /// Where field `index` of `owner` (of case `case`'s payload) is, in
+    /// bytes from the start of the value.
+    fn field_offset(&mut self, owner: Ty, case: Option<DefId>, index: u32) -> Option<u64> {
+        let layout = self.layout_of(owner)?;
+        let i = index as usize;
+        match (layout.shape, case) {
+            (Shape::Fields(offsets), None) => offsets.get(i).copied(),
+            (Shape::Sum { shared, .. }, None) => shared.get(i).copied(),
+            (Shape::Sum { cases, .. }, Some(c)) => {
+                let tag = self.adt_info(owner)?.case_by_def(c)?.tag;
+                cases.get(tag as usize - 1)?.get(i).copied()
+            }
             _ => None,
         }
     }
@@ -230,6 +283,9 @@ impl Checker<'_> {
             }
             (Val::Field { owner, case, index }, "is_pub") => {
                 Some(Val::Bool(self.field_facts(owner, case, index)?.is_pub))
+            }
+            (Val::Field { owner, case, index }, "offset") => {
+                Some(Val::Int(self.field_offset(owner, case, index)? as i128))
             }
             (Val::CaseInfo { case, .. }, "name") => Some(Val::Str(self.tcx.sym(&self.p.def(case).name.clone()))),
             (Val::CaseInfo { owner, case }, "fields") => Some(Val::Fields { owner, case: Some(case) }),

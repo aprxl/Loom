@@ -261,7 +261,7 @@ MODULES = [
      "cases": ["Record", "Sum", "Tuple", "Unit", "Bool", "Int", "Float", "Char", "Str", "Array", "Slice",
                "List", "Map", "Set", "Optional", "Result", "Fn", "Any", "Union", "Other"]},
     {"kind": "warp", "name": "Field", "suffix": ": Copy", "builtin": True,
-     "doc": "A field of a record, or of a case's payload: an item of `T.fields` or `c.fields`. It has a `name: str` and `is_pub: bool`, and `v.(f)` is `v`'s field `f`. Only compile-time code has one."},
+     "doc": "A field of a record, or of a case's payload: an item of `T.fields` or `c.fields`. It has a `name: str`, `is_pub: bool` and `offset: usize` (where it starts in the value, in bytes), and `v.(f)` is `v`'s field `f`. Only compile-time code has one."},
     {"kind": "warp", "name": "Case", "suffix": ": Copy", "builtin": True,
      "doc": "A case of a sum: an item of `T.cases`. It has a `name: str` and `fields`, and `v is .(c)` tests whether `v` is case `c`. Only compile-time code has one."},
   ],

@@ -40,7 +40,7 @@
 <p class="summary">What compile-time code learns about a type, and default methods that derive from a type's shape.</p>
 <p>Compile-time code can ask a type about itself. The answers are known while compiling, like a <code>const</code> parameter, so <code>const if</code> and <code>const for</code> can use them, and nothing reflective is left in the program. The types involved are in <a href="../std/modules/meta.html">std.meta</a>.</p>
 <h2 id="asking-a-type">Asking a type</h2>
-<table class="plain"><thead><tr><th>Expression</th><th>Gives you</th></tr></thead><tbody><tr><td><code>T.name</code></td><td>its name, <code>"Point"</code> (a warp's, without its arguments)</td></tr><tr><td><code>T.kind</code></td><td>a case of <code>Kind</code>: <code>.Record</code>, <code>.Sum</code>, <code>.Int</code>, <code>.Str</code>, <code>.List</code>, …</td></tr><tr><td><code>T.fields</code></td><td>a record's fields, a list of <code>Field</code>s</td></tr><tr><td><code>T.cases</code></td><td>a sum's cases, a list of <code>Case</code>s</td></tr><tr><td><code>f.name</code>, <code>f.is_pub</code></td><td>a field's name, and whether it's <code>pub</code></td></tr><tr><td><code>c.name</code>, <code>c.fields</code></td><td>a case's name, and its payload's fields</td></tr><tr><td><code>.len()</code>, <code>.is_empty()</code></td><td>of <code>T.fields</code>, <code>T.cases</code> or <code>c.fields</code></td></tr></tbody></table>
+<table class="plain"><thead><tr><th>Expression</th><th>Gives you</th></tr></thead><tbody><tr><td><code>T.name</code></td><td>its name, <code>"Point"</code> (a warp's, without its arguments)</td></tr><tr><td><code>T.kind</code></td><td>a case of <code>Kind</code>: <code>.Record</code>, <code>.Sum</code>, <code>.Int</code>, <code>.Str</code>, <code>.List</code>, …</td></tr><tr><td><code>T.fields</code></td><td>a record's fields, a list of <code>Field</code>s</td></tr><tr><td><code>T.cases</code></td><td>a sum's cases, a list of <code>Case</code>s</td></tr><tr><td><code>T.size</code>, <code>T.align</code></td><td>how many bytes a value takes, and what its address is a multiple of</td></tr><tr><td><code>f.name</code>, <code>f.is_pub</code>, <code>f.offset</code></td><td>a field's name, whether it's <code>pub</code>, and where it starts in the value, in bytes</td></tr><tr><td><code>c.name</code>, <code>c.fields</code></td><td>a case's name, and its payload's fields</td></tr><tr><td><code>.len()</code>, <code>.is_empty()</code></td><td>of <code>T.fields</code>, <code>T.cases</code> or <code>c.fields</code></td></tr></tbody></table>
 <p>Two things use them in code that runs:</p>
 <ul><li><code>v.(f)</code> is <code>v</code>'s field <code>f</code>, where <code>f</code> is a <code>Field</code>. It reads and assigns like <code>v.x</code>.</li><li><code>v is .(c)</code> tests whether <code>v</code> is case <code>c</code>, and <code>v.(c).(f)</code> reads a field of that case's payload. Read it inside <code>if v is .(c)</code>: on any other case it unravels.</li></ul>
 <p><code>const for f in T.fields</code> writes its body out once per field, so <code>describe</code> below turns into straight-line code for each type it's called with.</p>
@@ -120,6 +120,36 @@ Shape is a Sum
 name=Ada, age=36</code></pre></div>
 </div>
 <p>Writing the method yourself replaces the default, like any other default method.</p>
+<h2 id="sizes">Sizes</h2>
+<p><code>T.size</code>, <code>T.align</code> and <code>f.offset</code> are how values are laid out in memory: fields ordered by alignment (the largest first), cases sharing space behind a tag, and <code>?T</code> costing nothing when <code>T</code> has bit patterns it never uses. Both backends give the same answers.</p>
+<div class="sample" id="sample-refl_layout">
+<div class="sample-head"><span class="file">samples/refl_layout.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Header</span> { flag: u8, len: u32, id: u16 }
+
+<span class="k">warp</span> <span class="t">Token</span> {
+    <span class="k">case</span> <span class="t">Word</span>(<span class="t">String</span>)
+    <span class="k">case</span> <span class="t">Number</span>(u64)
+    <span class="k">case</span> <span class="t">End</span>
+}
+
+<span class="k">type</span> <span class="t">MaybeToken</span> = ?<span class="t">Token</span>
+
+<span class="k">fn</span> main() {
+    print(<span class="s">"Header: {</span><span class="t">Header</span>.size<span class="s">} bytes, aligned to {</span><span class="t">Header</span>.align<span class="s">}"</span>)
+    <span class="k">const</span> <span class="k">for</span> f <span class="k">in</span> <span class="t">Header</span>.fields {
+        print(<span class="s">"  {</span>f.name<span class="s">} at {</span>f.offset<span class="s">}"</span>)
+    }
+    print(<span class="s">"Token: {</span><span class="t">Token</span>.size<span class="s">} bytes, ?Token: {</span><span class="t">MaybeToken</span>.size<span class="s">}"</span>)
+    <span class="k">const</span> assert(<span class="t">Header</span>.size == <span class="n">8</span>, <span class="s">"the header changed size"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>Header: 8 bytes, aligned to 4
+  flag at 6
+  len at 0
+  id at 4
+Token: 32 bytes, ?Token: 32</code></pre></div>
+</div>
 <h2 id="only-while-compiling">Only while compiling</h2>
 <p>A <code>Field</code>, a <code>Case</code> or a list of them has no value when the program runs. Anything read from one does: a name is text, <code>.len()</code> is a number. Keeping the list itself is <a href="diagnostics.html#K0111">K0111</a>.</p>
 <div class="sample" id="sample-refl_err_runtime">
@@ -143,7 +173,7 @@ name=Ada, age=36</code></pre></div>
 <span class="err">error: refl_err_runtime.loom failed to compile (1 error)</span></code></pre></div>
 </div>
 <h2 id="not-supported-yet">Not supported yet</h2>
-<ul><li><code>T.size</code>, <code>T.align</code>, <code>T.bits</code>, <code>f.ty</code> and <code>T.weaves(W)</code> are <a href="diagnostics.html#U0102">U0102</a>.</li><li>std's <code>Show</code>, <code>Eq</code>, <code>Ord</code> and <code>Hash</code> for warps are still built into the compiler rather than written as default methods with reflection.</li></ul>
+<ul><li><code>T.bits</code> (for <code>#layout(bits)</code>), <code>f.ty</code> and <code>T.weaves(W)</code> are <a href="diagnostics.html#U0102">U0102</a>.</li><li>std's <code>Show</code>, <code>Eq</code>, <code>Ord</code> and <code>Hash</code> for warps are still built into the compiler rather than written as default methods with reflection.</li></ul>
 <div class="pager">
 <a href="const-params.html">&larr; Const parameters and control flow</a>
 <a href="tests.html">Tests &rarr;</a>

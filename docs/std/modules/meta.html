@@ -82,7 +82,7 @@
 <span class="sig">warp <strong>Field</strong>: Copy</span>
 <span class="badge builtin">builtin</span>
 </div>
-<p class="item-doc">A field of a record, or of a case's payload: an item of <code>T.fields</code> or <code>c.fields</code>. It has a <code>name: str</code> and <code>is_pub: bool</code>, and <code>v.(f)</code> is <code>v</code>'s field <code>f</code>. Only compile-time code has one.</p>
+<p class="item-doc">A field of a record, or of a case's payload: an item of <code>T.fields</code> or <code>c.fields</code>. It has a <code>name: str</code>, <code>is_pub: bool</code> and <code>offset: usize</code> (where it starts in the value, in bytes), and <code>v.(f)</code> is <code>v</code>'s field <code>f</code>. Only compile-time code has one.</p>
 </div>
 <div class="item" id="Case">
 <div class="item-head">

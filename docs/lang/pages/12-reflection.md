@@ -11,7 +11,8 @@ Compile-time code can ask a type about itself. The answers are known while compi
 | `T.kind` | a case of `Kind`: `.Record`, `.Sum`, `.Int`, `.Str`, `.List`, … |
 | `T.fields` | a record's fields, a list of `Field`s |
 | `T.cases` | a sum's cases, a list of `Case`s |
-| `f.name`, `f.is_pub` | a field's name, and whether it's `pub` |
+| `T.size`, `T.align` | how many bytes a value takes, and what its address is a multiple of |
+| `f.name`, `f.is_pub`, `f.offset` | a field's name, whether it's `pub`, and where it starts in the value, in bytes |
 | `c.name`, `c.fields` | a case's name, and its payload's fields |
 | `.len()`, `.is_empty()` | of `T.fields`, `T.cases` or `c.fields` |
 
@@ -32,6 +33,12 @@ Loom has no derive macros. A weft gives a default method that looks at `Self`, a
 
 Writing the method yourself replaces the default, like any other default method.
 
+## Sizes
+
+`T.size`, `T.align` and `f.offset` are how values are laid out in memory: fields ordered by alignment (the largest first), cases sharing space behind a tag, and `?T` costing nothing when `T` has bit patterns it never uses. Both backends give the same answers.
+
+@sample refl_layout
+
 ## Only while compiling
 
 A `Field`, a `Case` or a list of them has no value when the program runs. Anything read from one does: a name is text, `.len()` is a number. Keeping the list itself is [K0111](diag:K0111).
@@ -40,5 +47,5 @@ A `Field`, a `Case` or a list of them has no value when the program runs. Anythi
 
 ## Not supported yet
 
-- `T.size`, `T.align`, `T.bits`, `f.ty` and `T.weaves(W)` are [U0102](diag:U0102).
+- `T.bits` (for `#layout(bits)`), `f.ty` and `T.weaves(W)` are [U0102](diag:U0102).
 - std's `Show`, `Eq`, `Ord` and `Hash` for warps are still built into the compiler rather than written as default methods with reflection.

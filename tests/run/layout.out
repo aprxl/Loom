@@ -1,0 +1,20 @@
+u8 1 1, u12 2, i24 4, u64 8
+bool 1, char 4, f32 4, f64 8
+str 16, String 24
+Point: size 16, align 8
+Span: size 8, align 4
+Token: size 40, align 8
+Color: size 1, align 1
+Header: size 8, align 4
+(u8, u64, u16): size 16, align 8
+?char: size 4, align 4
+?Point: size 24, align 8
+?Token: size 40, align 8
+u32 ! u8: size 8, align 4
+[u16; 3]: size 6, align 2
+List: size 24, align 8
+Header.flag at 6
+Header.len at 0
+Header.id at 4
+Token.Ident.name at 16
+Token.Int.0 at 16

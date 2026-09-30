@@ -1,0 +1,5 @@
+Header: 8 bytes, aligned to 4
+  flag at 6
+  len at 0
+  id at 4
+Token: 32 bytes, ?Token: 32

@@ -100,7 +100,7 @@
 <span class="err">error: nyet_spools.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
 <h2 id="compile-time-code">Compile-time code</h2>
-<p>The standard library's <code>std.sys</code> is not built, and neither is layout reflection (<code>T.size</code>, <code>T.align</code>, <code>T.bits</code>), <code>f.ty</code> or <code>T.weaves(W)</code>:</p>
+<p>The standard library's <code>std.sys</code> is not built, and neither are <code>T.bits</code> (which needs <code>#layout(bits)</code>), <code>f.ty</code> or <code>T.weaves(W)</code>:</p>
 <div class="sample" id="sample-nyet_sys">
 <div class="sample-head"><span class="file">samples/nyet_sys.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span></div>
 <pre class="code"><code><span class="k">fn</span> main() {
