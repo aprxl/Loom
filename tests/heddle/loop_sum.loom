@@ -1,0 +1,12 @@
+// A counted loop: one block parameter per variable that changes in it.
+fn sum(n: u32) -> u32 {
+    var total: u32 = 0
+    for i in 0..n {
+        total += i
+    }
+    total
+}
+
+fn main() {
+    let _ = sum(10)
+}

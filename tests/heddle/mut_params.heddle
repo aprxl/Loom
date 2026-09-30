@@ -1,0 +1,17 @@
+fn main() -> () {
+b0:
+    v0 = iconst 5
+    v1 = iconst 1
+    v2, v3 = call step(v0, v1)
+    v4 = iconst 7
+    v5, v6 = call step(v3, v4)
+    ret
+}
+
+fn step(v0: int, v1: int) -> (int, int) {
+b0(v0: int, v1: int):
+    v2 = add.i64 v0, v1
+    v3 = iconst 10
+    v4 = icmp.gt.s v2, v3
+    ret v4, v2
+}

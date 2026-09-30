@@ -1,0 +1,12 @@
+// A `mut` parameter comes back after the result, and the caller writes it
+// back where it came from.
+fn step(mut x: i64, by: i64 = 1) -> bool {
+    x += by
+    x > 10
+}
+
+fn main() {
+    var n: i64 = 5
+    let _ = step(mut n)
+    let _ = step(mut n, by: 7)
+}

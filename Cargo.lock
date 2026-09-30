@@ -319,6 +319,7 @@ version = "0.1.0"
 dependencies = [
  "indexmap",
  "loom_host",
+ "loom_isa",
  "loom_syntax",
  "mlua",
 ]

@@ -1,0 +1,25 @@
+fn main() -> () {
+b0:
+    v0 = iconst 10
+    v1 = call sum(v0)
+    ret
+}
+
+fn sum(v0: int) -> (int) {
+b0(v0: int):
+    v1 = iconst 0
+    v2 = iconst 0
+    jump b1(v2, v1)
+b1(v3: int, v5: int):
+    v4 = icmp.lt.u v3, v0
+    br v4, b2, b4
+b2:
+    v6 = add.u32 v5, v3
+    jump b3
+b3:
+    v7 = iconst 1
+    v8 = add%.u32 v3, v7
+    jump b1(v8, v6)
+b4:
+    ret v5
+}

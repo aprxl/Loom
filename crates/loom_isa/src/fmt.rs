@@ -4,7 +4,7 @@
 use crate::IntSpec;
 
 /// The kind of value a formatting native writes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ValueKind {
     Int(IntSpec),
     F32,
@@ -27,7 +27,7 @@ impl ValueKind {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Align {
     Left,
     Right,
@@ -35,7 +35,7 @@ pub enum Align {
 }
 
 /// `[[fill]align][+][#][0][width][.precision][type]`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Spec {
     pub fill: Option<char>,
     pub align: Option<Align>,
@@ -109,7 +109,7 @@ impl Spec {
 
 /// One thing a formatting native writes: a value of `kind`, in its debug
 /// form or not, with a spec or not.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FmtItem {
     pub kind: ValueKind,
     pub debug: bool,

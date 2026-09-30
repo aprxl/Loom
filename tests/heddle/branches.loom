@@ -1,0 +1,16 @@
+// `and`, `or` and `not` become branches, and `match` a chain of tests.
+fn pick(a: i32, b: i32) -> i32 {
+    if a > 0 and (b < 0 or not (a == b)) { a } else { b }
+}
+
+fn kind(n: u8) -> u8 = match n {
+    0 => 0
+    1 | 2 => 1
+    x if x > 200 => 3
+    _ => 2
+}
+
+fn main() {
+    let _ = pick(1, 2)
+    let _ = kind(7)
+}

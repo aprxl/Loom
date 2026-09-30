@@ -121,7 +121,7 @@ pub struct Forward {
 }
 
 /// An instance's index in [`Results::bodies`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct BodyId(pub u32);
 
 /// Types and decisions recorded for lowering.
