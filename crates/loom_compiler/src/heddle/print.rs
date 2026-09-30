@@ -12,7 +12,7 @@
 
 use std::fmt::Write as _;
 
-use super::{BitOp, Cmp, Edge, FOp, Func, InstKind, IntOp, Module, Policy, Term, VTy, Value};
+use super::{BitOp, Cmp, Edge, FOp, Func, InstKind, IntOp, Mem, Module, Policy, Term, VTy, Value};
 use crate::ty::{FloatTy, IntTy};
 
 pub fn print(module: &Module) -> String {
@@ -86,6 +86,9 @@ fn func(out: &mut String, module: &Module, f: &Func) {
     let params: Vec<String> = f.params().iter().map(|&p| format!("{}: {}", v(p), vty(f.ty(p)))).collect();
     let results: Vec<&str> = f.results.iter().map(|&t| vty(t)).collect();
     let _ = writeln!(out, "fn {}({}) -> ({}) {{", f.name, params.join(", "), results.join(", "));
+    for (i, s) in f.slots.iter().enumerate() {
+        let _ = writeln!(out, "  slot{i}: {} bytes, align {}", s.size, s.align);
+    }
     for (i, b) in f.blocks.iter().enumerate() {
         if b.params.is_empty() {
             let _ = writeln!(out, "b{i}:");
@@ -95,7 +98,8 @@ fn func(out: &mut String, module: &Module, f: &Func) {
         }
         for inst in &b.insts {
             let lhs = if inst.results.is_empty() { String::new() } else { format!("{} = ", list(&inst.results)) };
-            let _ = writeln!(out, "    {lhs}{}", kind(module, f, &inst.kind, &inst.results));
+            let pad = inst.unwind.map(|p| format!(" unwind b{}", p.0)).unwrap_or_default();
+            let _ = writeln!(out, "    {lhs}{}{pad}", kind(module, f, &inst.kind, &inst.results));
         }
         let term = match &b.term {
             None => "(no terminator)".to_string(),
@@ -105,8 +109,10 @@ fn func(out: &mut String, module: &Module, f: &Func) {
             Some(Term::Unravel { ptr, len }) => format!("unravel {}, {}", v(*ptr), v(*len)),
             Some(Term::UnravelMsg) => "unravel msg".into(),
             Some(Term::Crash(k)) => format!("crash {k}"),
+            Some(Term::Resume) => "resume".into(),
         };
-        let _ = writeln!(out, "    {term}");
+        let pad = b.term_unwind.map(|p| format!(" unwind b{}", p.0)).unwrap_or_default();
+        let _ = writeln!(out, "    {term}{pad}");
     }
     out.push_str("}\n");
 }
@@ -176,5 +182,36 @@ fn kind(module: &Module, f: &Func, k: &InstKind, results: &[Value]) -> String {
             format!("call {name}({})", list(args))
         }
         InstKind::Native { name, imm, args } => format!("native {name} #{imm}({})", list(args)),
+        InstKind::Slot(n) => format!("slot{n}"),
+        InstKind::Global(n) => format!("global+{n}"),
+        InstKind::Load { mem: m, ptr, off } => format!("load.{} {}{}", mem(*m), v(*ptr), offset(*off)),
+        InstKind::Store { mem: m, ptr, off, val } => {
+            format!("store.{} {}{}, {}", mem(*m), v(*ptr), offset(*off), v(*val))
+        }
+        InstKind::Copy { dst, src, size } => format!("copy {}, {}, {size}", v(*dst), v(*src)),
+        InstKind::Zero { dst, size } => format!("zero {}, {size}", v(*dst)),
+        InstKind::Index { base, index, scale } => format!("index {}, {} * {scale}", v(*base), v(*index)),
+        InstKind::Bounds { index, len } => format!("bounds {}, {}", v(*index), v(*len)),
+        InstKind::FuncRef(func) => {
+            let name = module.funcs.get(func.0 as usize).map_or("?", |f| f.name.as_str());
+            format!("fnref {name}")
+        }
+        InstKind::CallInd { callee, args } => format!("call_ind {}({})", v(*callee), list(args)),
     }
+}
+
+fn mem(m: Mem) -> &'static str {
+    match m {
+        Mem::I8 => "i8",
+        Mem::U8 => "u8",
+        Mem::I16 => "i16",
+        Mem::U16 => "u16",
+        Mem::I32 => "i32",
+        Mem::U32 => "u32",
+        Mem::W64 => "64",
+    }
+}
+
+fn offset(off: i32) -> String {
+    if off == 0 { String::new() } else { format!("{off:+}") }
 }

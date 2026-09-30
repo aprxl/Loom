@@ -6,8 +6,15 @@
 //! `bool`s and `char`s are all 64-bit integers there, kept normalized, so
 //! widening one is free. Integer instructions carry the Loom integer type
 //! and the overflow policy, so checks are exact.
-//! A Loom value of a compound type (a tuple, a `str`) is several values,
-//! one per scalar part.
+//! A Loom value of a small compound type (a tuple, a `str`) is several
+//! values, one per scalar part; other aggregates are memory: a slot in the
+//! frame, or on the heap, read and written with loads and stores.
+//!
+//! An instruction that can unravel names the landing pad to go to when it
+//! does, if there's anything to clean up (`Inst::unwind`): a block that
+//! runs `defer`s and drops and ends by jumping to the next pad out or with
+//! [`Term::Resume`]. Pads only read memory and the function's parameters,
+//! so any number of places can share one.
 //!
 //! [`build`] makes Heddle from the typed program; `codegen` turns it into
 //! Treadle bytecode. [`verify`] checks the SSA properties both rely on.
@@ -46,6 +53,41 @@ pub enum VTy {
     F64,
     /// An address.
     Ptr,
+}
+
+/// How a load or a store moves a value between memory and a register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Mem {
+    /// One byte, sign-extended when loaded.
+    I8,
+    U8,
+    I16,
+    U16,
+    I32,
+    /// Four bytes, zero-extended: an unsigned value, a `char`, an `f32`'s
+    /// bits.
+    U32,
+    /// Eight bytes: an `i64` or `u64`, an `f64`'s bits, an address.
+    W64,
+}
+
+impl Mem {
+    pub fn bytes(self) -> u64 {
+        match self {
+            Mem::I8 | Mem::U8 => 1,
+            Mem::I16 | Mem::U16 => 2,
+            Mem::I32 | Mem::U32 => 4,
+            Mem::W64 => 8,
+        }
+    }
+}
+
+/// A frame slot: memory in the function's frame for a value that lives in
+/// memory, with its size and alignment.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Slot {
+    pub size: u64,
+    pub align: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -203,6 +245,76 @@ pub enum InstKind {
         imm: u16,
         args: Vec<Value>,
     },
+    /// The address of frame slot `n` (`Func::slots`).
+    Slot(u32),
+    /// The address of byte `n` of the program's data (`Module::data`).
+    Global(u32),
+    /// The value at `ptr + off`.
+    Load {
+        mem: Mem,
+        ptr: Value,
+        off: i32,
+    },
+    /// Stores `val` at `ptr + off`.
+    Store {
+        mem: Mem,
+        ptr: Value,
+        off: i32,
+        val: Value,
+    },
+    /// Copies `size` bytes from `src` to `dst`.
+    Copy {
+        dst: Value,
+        src: Value,
+        size: u64,
+    },
+    /// Zeroes `size` bytes at `dst`.
+    Zero {
+        dst: Value,
+        size: u64,
+    },
+    /// `base + index * scale`: an element's address.
+    Index {
+        base: Value,
+        index: Value,
+        scale: u64,
+    },
+    /// Unravels unless `index < len` (unsigned).
+    Bounds {
+        index: Value,
+        len: Value,
+    },
+    /// A function as a value: its number.
+    FuncRef(FuncId),
+    /// Calls the function whose number `callee` holds, which takes as many
+    /// values as `args` and gives as many as the instruction's results.
+    CallInd {
+        callee: Value,
+        args: Vec<Value>,
+    },
+}
+
+impl InstKind {
+    /// Whether it can unravel, and so may need a landing pad.
+    pub fn can_unwind(&self) -> bool {
+        use InstKind as K;
+        match self {
+            K::Arith { policy, .. } => *policy == Policy::Trap,
+            K::Div { .. }
+            | K::Rem { .. }
+            | K::Shl { .. }
+            | K::Shr { .. }
+            | K::Neg { .. }
+            | K::IntCast { policy: Policy::Trap, .. }
+            | K::FloatToInt { sat: false, .. }
+            | K::IntToChar { .. }
+            | K::Call { .. }
+            | K::CallInd { .. }
+            | K::Native { .. }
+            | K::Bounds { .. } => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -211,6 +323,9 @@ pub struct Inst {
     pub results: Vec<Value>,
     /// The Loom statement it came from.
     pub span: Option<Span>,
+    /// Where it goes if it unravels, when there's cleaning up to do: a
+    /// landing pad.
+    pub unwind: Option<BlockId>,
 }
 
 /// An edge to a block, with an argument for each of its parameters.
@@ -238,6 +353,8 @@ pub enum Term {
     UnravelMsg,
     /// An internal error: `loom_isa::CRASHES[n]`.
     Crash(u16),
+    /// The end of a landing pad: unwinding goes on in the caller.
+    Resume,
 }
 
 impl Term {
@@ -265,6 +382,18 @@ pub struct Block {
     /// `None` only while building.
     pub term: Option<Term>,
     pub term_span: Option<Span>,
+    /// The landing pad of an unravelling terminator.
+    pub term_unwind: Option<BlockId>,
+}
+
+impl Block {
+    /// The landing pads its instructions and terminator unwind to.
+    pub fn pads(&self) -> Vec<BlockId> {
+        let mut out: Vec<BlockId> = self.insts.iter().filter_map(|i| i.unwind).chain(self.term_unwind).collect();
+        out.sort();
+        out.dedup();
+        out
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -275,6 +404,8 @@ pub struct Func {
     pub results: Vec<VTy>,
     /// The type of each value.
     pub types: Vec<VTy>,
+    /// Its frame slots, by [`InstKind::Slot`] number.
+    pub slots: Vec<Slot>,
 }
 
 impl Func {
@@ -295,6 +426,8 @@ pub struct Module {
     pub strings: Vec<Vec<u8>>,
     /// What the formatting natives format, by immediate.
     pub fmts: Vec<FmtItem>,
+    /// What the program's data starts as ([`InstKind::Global`]).
+    pub data: Vec<u64>,
     /// The function to run.
     pub entry: FuncId,
 }

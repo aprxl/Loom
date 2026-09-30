@@ -12,21 +12,28 @@
 //! 3. **Liveness and registers**: each value lives from its definition to
 //!    its last use, stretched over the blocks it's live across; a linear
 //!    scan gives each the lowest register free for all of that.
-//! 4. **Frame**: the values' registers, one temporary (for swaps at
-//!    edges), then scratch: natives take their arguments there, and calls
-//!    put their linkage and window there.
+//! 4. **Frame**: the values' registers, the frame slots (memory for values
+//!    that live in memory), two temporaries (for swaps at edges, and for a
+//!    function value being called), then scratch: natives take their
+//!    arguments there, and calls put their linkage and window there. A load
+//!    or store at a slot's address is one at an offset from the frame
+//!    pointer, with no address in a register.
 //! 5. **Emission**: block arguments become parallel moves on their edge (on
 //!    a small trampoline when the edge is one way out of a conditional
 //!    branch), and jumps are patched once every block's place is known.
+//!    Landing pads go after the code that runs normally, and each stretch
+//!    of instructions that unwinds to one becomes an entry of the
+//!    function's pad table.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use indexmap::IndexMap;
+use loom_isa::image::Pad;
 use loom_isa::word::{cast_spec, word, word_i32};
 use loom_isa::{Func as IsaFunc, Image, IntSpec, LINK_SLOTS, Line, Op};
 use loom_syntax::source::{SourceDb, Span};
 
-use crate::heddle::{BitOp, Cmp, Edge, FOp, Func, InstKind, IntOp, Module, Policy, Term, Value, inst_uses};
+use crate::heddle::{BitOp, Cmp, Edge, FOp, Func, InstKind, IntOp, Mem, Module, Policy, Term, Value, inst_uses};
 use crate::ty::{FloatTy, IntTy};
 
 /// Generates the bytecode of `module`.
@@ -36,6 +43,7 @@ pub fn generate(db: &SourceDb, module: &Module) -> Result<Image, String> {
     let mut image = Image {
         strings: module.strings.clone(),
         fmts: module.fmts.clone(),
+        data: module.data.clone(),
         entry: Some(module.entry.0),
         ..Image::default()
     };
@@ -58,7 +66,7 @@ pub fn generate(db: &SourceDb, module: &Module) -> Result<Image, String> {
             params: f.params().len() as u16,
             results: f.results.len() as u16,
             lines: out.lines,
-            pads: Vec::new(),
+            pads: out.pads,
         });
         image.code.extend(out.code);
     }
@@ -74,6 +82,7 @@ struct Emitted {
     code: Vec<u64>,
     frame: u16,
     lines: Vec<Line>,
+    pads: Vec<Pad>,
 }
 
 /// Where a jump goes, before blocks have places.
@@ -98,6 +107,16 @@ struct Emitter<'m> {
     reg: Vec<u16>,
     /// The temporary for breaking cycles of moves.
     tmp: u16,
+    /// The temporary for a function value being called, out of the way of
+    /// its arguments' moves; and for an address too far to fold.
+    tmp2: u16,
+    /// Each frame slot's byte offset from the frame pointer.
+    slot_at: Vec<u32>,
+    /// Values that are a frame slot's address: its number.
+    slot_of: HashMap<Value, usize>,
+    /// Stretches of code that unwind to a landing pad: where they start
+    /// and end, and the pad's block.
+    unwinds: Vec<(usize, usize, usize)>,
     /// Where natives' arguments go, and calls' linkage.
     scratch: u16,
     /// A call's window: past the linkage.
@@ -133,22 +152,39 @@ fn emit_func(
         rank[b] = i;
     }
     let fused = if fuse { fusions(f) } else { HashSet::new() };
-    let (folds, dead) = immediates(f, &fused);
+    let (folds, mut dead) = immediates(f, &fused);
+    // Slot addresses only loads and stores use need no register.
+    let (slot_of, folded_slots) = slot_uses(f);
+    dead.extend(folded_slots);
     let skip: HashSet<Value> = fused.union(&dead).copied().collect();
     // The window's place comes from how many registers values need; a
     // second pass then lets values sit in it, which only frees registers.
     let (_, first) = allocate(f, &order, &skip, None);
-    let window = first + 1 + LINK_SLOTS as u16;
-    let (reg, used) = allocate(f, &order, &skip, Some(window));
-    debug_assert!(used <= first);
-    let tmp = first;
-    let scratch = tmp + 1;
+    // The slots, after the values' registers, each at its alignment.
+    let mut slot_at = Vec::with_capacity(f.slots.len());
+    let mut bytes = u64::from(first) * 8;
+    for s in &f.slots {
+        bytes = bytes.div_ceil(s.align.max(1)) * s.align.max(1);
+        slot_at.push(bytes);
+        bytes += s.size;
+    }
+    let slot_words = bytes.div_ceil(8) - u64::from(first);
+    let Some(tmp) = u16::try_from(u64::from(first) + slot_words).ok().filter(|&t| t < u16::MAX - 8) else {
+        return Ok(Err(format!("`{}` needs more than 65535 registers", f.name)));
+    };
+    let Ok(slot_at) = slot_at.into_iter().map(u32::try_from).collect::<Result<Vec<u32>, _>>() else {
+        return Ok(Err(format!("`{}` has too much in its frame", f.name)));
+    };
+    let tmp2 = tmp + 1;
+    let scratch = tmp2 + 1;
+    let window = scratch + LINK_SLOTS as u16;
+    let (reg, _) = allocate(f, &order, &skip, Some(window));
     let mut frame = u32::from(scratch);
     let mut max = |n: u32| frame = frame.max(n);
     for b in &f.blocks {
         for inst in &b.insts {
             match &inst.kind {
-                InstKind::Call { args, .. } => {
+                InstKind::Call { args, .. } | InstKind::CallInd { args, .. } => {
                     max(u32::from(window) + args.len().max(inst.results.len()) as u32);
                 }
                 InstKind::Native { args, .. } => max(u32::from(scratch) + args.len() as u32),
@@ -170,6 +206,10 @@ fn emit_func(
         lines: Vec::new(),
         reg,
         tmp,
+        tmp2,
+        slot_at,
+        slot_of,
+        unwinds: Vec::new(),
         scratch,
         window,
         fixups: Vec::new(),
@@ -201,6 +241,17 @@ fn emit_func(
         e.edge_moves(&edge, span);
         e.jump_to(from, edge.block.0 as usize, span, true);
     }
+    // Each stretch of code with a landing pad, merged with the next when
+    // they share it.
+    let mut pads: Vec<Pad> = Vec::new();
+    for &(start, end, pad) in &e.unwinds {
+        let (start, end, pad) = (start as u32, end as u32, block_at[pad] as u32);
+        match pads.last_mut() {
+            Some(last) if last.end == start && last.pad == pad => last.end = end,
+            _ if start < end => pads.push(Pad { start, end, pad }),
+            _ => {}
+        }
+    }
     for fix in &e.fixups {
         let target = match fix.to {
             Label::Block(b) => block_at[b],
@@ -218,30 +269,80 @@ fn emit_func(
             (w & 0x0000_0000_FFFF_FFFF) | u64::from(off as u32) << 32
         };
     }
-    Ok(Ok(Emitted { code: e.code, frame, lines: e.lines }))
+    Ok(Ok(Emitted { code: e.code, frame, lines: e.lines, pads }))
 }
 
-/// Blocks in reverse postorder from the entry.
+/// Blocks in reverse postorder from the entry, then the landing pads (and
+/// what they jump to), each in reverse postorder from itself: out of the
+/// way of the code that runs normally.
 fn layout(f: &Func) -> Vec<usize> {
     let mut order = Vec::new();
     let mut seen = vec![false; f.blocks.len()];
-    let mut stack = vec![(0usize, 0usize)];
-    seen[0] = true;
-    while let Some((b, next)) = stack.pop() {
-        let succs = succs(f, b);
-        if next < succs.len() {
-            stack.push((b, next + 1));
-            let s = succs[next];
-            if !seen[s] {
-                seen[s] = true;
-                stack.push((s, 0));
+    let mut roots = vec![0usize];
+    let mut next_root = 0;
+    while next_root < roots.len() {
+        let root = roots[next_root];
+        next_root += 1;
+        if seen[root] {
+            continue;
+        }
+        let mut post = Vec::new();
+        let mut stack = vec![(root, 0usize)];
+        seen[root] = true;
+        while let Some((b, next)) = stack.pop() {
+            let succs = succs(f, b);
+            if next < succs.len() {
+                stack.push((b, next + 1));
+                let s = succs[next];
+                if !seen[s] {
+                    seen[s] = true;
+                    stack.push((s, 0));
+                }
+            } else {
+                post.push(b);
             }
-        } else {
-            order.push(b);
+        }
+        post.reverse();
+        for &b in &post {
+            roots.extend(f.blocks[b].pads().into_iter().map(|p| p.0 as usize));
+        }
+        order.extend(post);
+    }
+    order
+}
+
+/// The values that are frame slots' addresses, with their slots; and those
+/// whose every use is a load or a store (at an offset that stays inside
+/// the frame), which needs no register for the address.
+fn slot_uses(f: &Func) -> (HashMap<Value, usize>, HashSet<Value>) {
+    let mut slot_of = HashMap::new();
+    for b in &f.blocks {
+        for inst in &b.insts {
+            if let (InstKind::Slot(n), [r]) = (&inst.kind, inst.results.as_slice()) {
+                slot_of.insert(*r, *n as usize);
+            }
         }
     }
-    order.reverse();
-    order
+    let mut other: HashSet<Value> = HashSet::new();
+    for b in &f.blocks {
+        for inst in &b.insts {
+            let folded = match &inst.kind {
+                InstKind::Load { ptr, off, .. } if *off >= 0 => Some(*ptr),
+                InstKind::Store { ptr, off, .. } if *off >= 0 => Some(*ptr),
+                _ => None,
+            };
+            for u in inst_uses(&inst.kind) {
+                if Some(u) != folded || matches!(&inst.kind, InstKind::Store { val, .. } if *val == u) {
+                    other.insert(u);
+                }
+            }
+        }
+        for u in b.term.iter().flat_map(term_uses) {
+            other.insert(u);
+        }
+    }
+    let folded = slot_of.keys().copied().filter(|v| !other.contains(v)).collect();
+    (slot_of, folded)
 }
 
 fn succs(f: &Func, b: usize) -> Vec<usize> {
@@ -421,6 +522,11 @@ fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16
                 let params: HashSet<Value> = f.blocks[s].params.iter().copied().collect();
                 out.extend(live_in[s].iter().filter(|v| !params.contains(v)));
             }
+            // What a landing pad reads must survive every instruction that
+            // may unwind to it.
+            for pad in block.pads() {
+                out.extend(live_in[pad.0 as usize].iter().copied());
+            }
             let mut live = out.clone();
             for u in block.term.iter().flat_map(term_uses) {
                 live.insert(u);
@@ -475,13 +581,16 @@ fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16
                 touch(r, at);
             }
             match &inst.kind {
-                InstKind::Call { args, .. } => {
+                InstKind::Call { args, .. } | InstKind::CallInd { args, .. } => {
                     calls.push(at);
                     for (k, &a) in args.iter().enumerate() {
                         uses.entry(a).or_default().push(Use::CallArg(at, k as u16));
                     }
                     for (j, &r) in inst.results.iter().enumerate() {
                         result_of.insert(r, (at, j as u16));
+                    }
+                    if let InstKind::CallInd { callee, .. } = &inst.kind {
+                        uses.entry(*callee).or_default().push(Use::Other);
                     }
                 }
                 other => {
@@ -759,9 +868,14 @@ impl Emitter<'_> {
                 continue;
             }
             let fold = self.folds.get(&(b, i)).copied();
+            let start = self.code.len();
             self.inst(inst, fold)?;
+            if let Some(pad) = inst.unwind {
+                self.unwinds.push((start, self.code.len(), pad.0 as usize));
+            }
         }
         let span = block.term_span;
+        let term_start = self.code.len();
         match block.term.as_ref().expect("finished blocks end") {
             Term::Jump(e) => {
                 self.edge_moves(e, span);
@@ -809,8 +923,61 @@ impl Emitter<'_> {
                 self.put(span, word(Op::Crash, 1, 0, 0));
             }
             Term::Crash(k) => self.put(span, word(Op::Crash, *k, 0, 0)),
+            Term::Resume => self.put(span, word(Op::Resume, 0, 0, 0)),
+        }
+        if let Some(pad) = block.term_unwind {
+            self.unwinds.push((term_start, self.code.len(), pad.0 as usize));
         }
         Ok(())
+    }
+
+    /// The load or store op for `mem`, with a register address or at an
+    /// offset from the frame pointer.
+    fn mem_op(mem: Mem, store: bool, frame: bool) -> Op {
+        use Op as O;
+        match (mem, store, frame) {
+            (Mem::I8, false, false) => O::Ld8S,
+            (Mem::U8, false, false) => O::Ld8U,
+            (Mem::I16, false, false) => O::Ld16S,
+            (Mem::U16, false, false) => O::Ld16U,
+            (Mem::I32, false, false) => O::Ld32S,
+            (Mem::U32, false, false) => O::Ld32U,
+            (Mem::W64, false, false) => O::Ld64,
+            (Mem::I8, false, true) => O::LdF8S,
+            (Mem::U8, false, true) => O::LdF8U,
+            (Mem::I16, false, true) => O::LdF16S,
+            (Mem::U16, false, true) => O::LdF16U,
+            (Mem::I32, false, true) => O::LdF32S,
+            (Mem::U32, false, true) => O::LdF32U,
+            (Mem::W64, false, true) => O::LdF64,
+            (Mem::I8 | Mem::U8, true, false) => O::St8,
+            (Mem::I16 | Mem::U16, true, false) => O::St16,
+            (Mem::I32 | Mem::U32, true, false) => O::St32,
+            (Mem::W64, true, false) => O::St64,
+            (Mem::I8 | Mem::U8, true, true) => O::StF8,
+            (Mem::I16 | Mem::U16, true, true) => O::StF16,
+            (Mem::I32 | Mem::U32, true, true) => O::StF32,
+            (Mem::W64, true, true) => O::StF64,
+        }
+    }
+
+    /// Where a load or a store at `ptr + off` reaches: a byte offset from
+    /// the frame pointer when `ptr` is a slot's address; otherwise a
+    /// register and an `i16` offset, adding a far one into `tmp2` first.
+    fn address(&mut self, span: Option<Span>, ptr: Value, off: i32) -> Result<(u16, i16), u32> {
+        if let Some(&slot) = self.slot_of.get(&ptr)
+            && off >= 0
+        {
+            return Err(self.slot_at[slot] + off as u32);
+        }
+        match i16::try_from(off) {
+            Ok(off) => Ok((self.r(ptr), off)),
+            Err(_) => {
+                self.put_ext(span, word(Op::Ldk, self.tmp2, 0, 0), Some(off as i64 as u64));
+                self.put(span, word(Op::AddWU64, self.tmp2, self.r(ptr), self.tmp2));
+                Ok((self.tmp2, 0))
+            }
+        }
     }
 
     fn inst(&mut self, inst: &crate::heddle::Inst, fold: Option<Fold>) -> Result<(), String> {
@@ -1038,6 +1205,48 @@ impl Emitter<'_> {
                 }
                 let n = self.native(name);
                 self.put(span, word(Op::CallN, self.scratch, n, *imm));
+                for (i, &r) in inst.results.iter().enumerate() {
+                    self.mov(span, self.r(r), self.scratch + i as u16);
+                }
+            }
+            K::Slot(n) => {
+                let at = self.slot_at[*n as usize];
+                self.put(span, word_i32(Op::Lea, dst, at as i32));
+            }
+            K::Global(off) => self.put(span, word_i32(Op::Gaddr, dst, *off as i32)),
+            K::Load { mem, ptr, off } => match self.address(span, *ptr, *off) {
+                Ok((base, off)) => self.put(span, word(Self::mem_op(*mem, false, false), dst, base, off as u16)),
+                Err(at) => self.put(span, word_i32(Self::mem_op(*mem, false, true), dst, at as i32)),
+            },
+            K::Store { mem, ptr, off, val } => {
+                let v = self.r(*val);
+                match self.address(span, *ptr, *off) {
+                    Ok((base, off)) => self.put(span, word(Self::mem_op(*mem, true, false), base, v, off as u16)),
+                    Err(at) => self.put(span, word_i32(Self::mem_op(*mem, true, true), v, at as i32)),
+                }
+            }
+            K::Copy { dst: d, src, size } => {
+                self.put_ext(span, word(Op::Copy, self.r(*d), self.r(*src), 0), Some(*size));
+            }
+            K::Zero { dst: d, size } => self.put_ext(span, word(Op::Zero, self.r(*d), 0, 0), Some(*size)),
+            K::Index { base, index, scale } => {
+                self.put_ext(span, word(Op::Idx, dst, self.r(*base), self.r(*index)), Some(*scale));
+            }
+            K::Bounds { index, len } => self.put(span, word(Op::Bounds, self.r(*index), self.r(*len), 0)),
+            K::FuncRef(func) => self.put(span, word_i32(Op::Ldfn, dst, func.0 as i32)),
+            K::CallInd { callee, args } => {
+                // The function's number goes out of the window's way first.
+                self.mov(span, self.tmp2, self.r(*callee));
+                let moves = args.iter().enumerate().map(|(i, &a)| (self.window + i as u16, self.r(a))).collect();
+                self.parallel(span, moves);
+                let (params, results) = (args.len(), inst.results.len());
+                if params > 255 || results > 255 {
+                    return Err(format!("a function value called with {params} arguments in `{}`", self.f.name));
+                }
+                self.put(span, word(Op::CallR, self.window, self.tmp2, ((params as u16) << 8) | results as u16));
+                for (i, &r) in inst.results.iter().enumerate() {
+                    self.mov(span, self.r(r), self.window + i as u16);
+                }
             }
         }
         Ok(())

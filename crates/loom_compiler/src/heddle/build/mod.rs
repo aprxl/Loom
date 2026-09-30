@@ -68,6 +68,8 @@ struct FnState {
     span: Option<Span>,
     /// The function's `mut` scalar parameters, returned after its results.
     outs: Vec<Var>,
+    /// Frame slots: memory for values that live in memory.
+    slots: Vec<super::Slot>,
 }
 
 pub(super) struct Builder<'a> {
@@ -107,7 +109,13 @@ pub fn build(p: &Program, typed: &Typed) -> Result<Module, Vec<Diagnostic>> {
         return Err(b.diags);
     }
     let funcs = b.funcs.into_iter().map(|f| f.expect("every function queued is built")).collect();
-    let module = Module { funcs, strings: b.strings.into_keys().collect(), fmts: b.fmts.into_keys().collect(), entry };
+    let module = Module {
+        funcs,
+        strings: b.strings.into_keys().collect(),
+        fmts: b.fmts.into_keys().collect(),
+        data: Vec::new(),
+        entry,
+    };
     if let Err(e) = super::verify(&module) {
         let diag = Diagnostic::error(codes::U0102, format!("internal error: invalid Heddle: {e}"));
         return Err(vec![diag]);
@@ -351,7 +359,7 @@ impl<'a> Builder<'a> {
         let b = self.cur_block();
         let results: Vals = tys.iter().map(|&t| self.new_value(t)).collect();
         let span = self.f.span;
-        self.f.blocks[b.0 as usize].insts.push(Inst { kind, results: results.clone(), span });
+        self.f.blocks[b.0 as usize].insts.push(Inst { kind, results: results.clone(), span, unwind: None });
         results
     }
 
@@ -473,7 +481,9 @@ impl<'a> Builder<'a> {
                     // or dead code. Typing rules out reading it.
                     let v = self.new_value(ty);
                     let span = self.f.span;
-                    self.f.blocks[i].insts.insert(0, Inst { kind: InstKind::Undef, results: vec![v], span });
+                    self.f.blocks[i]
+                        .insts
+                        .insert(0, Inst { kind: InstKind::Undef, results: vec![v], span, unwind: None });
                     v
                 }
                 [one] => self.read_in(var, *one),
@@ -559,7 +569,7 @@ fn parse_spec(s: &str) -> Option<Spec> {
 /// every edge passes the same value to replaced by that value. `false`
 /// when a block that can run has no terminator.
 fn finish(name: String, state: FnState, results: Vec<VTy>) -> (Func, bool) {
-    let FnState { blocks, types, .. } = state;
+    let FnState { blocks, types, slots, .. } = state;
     let mut blocks = reachable(blocks);
     let complete = blocks.iter().all(|b| b.term.is_some());
     for b in &mut blocks {
@@ -641,17 +651,19 @@ fn finish(name: String, state: FnState, results: Vec<VTy>) -> (Func, bool) {
     }
     thread_jumps(&mut blocks);
     let blocks = reachable(blocks);
-    (Func { name, blocks, results, types }, complete)
+    (Func { name, blocks, results, types, slots }, complete)
 }
 
-/// The blocks the entry reaches, renumbered in order.
+/// The blocks the entry reaches, by jumping or by unwinding to a landing
+/// pad, renumbered in order.
 fn reachable(mut blocks: Vec<Block>) -> Vec<Block> {
     let mut keep = vec![false; blocks.len()];
     let mut stack = vec![0usize];
     keep[0] = true;
     while let Some(b) = stack.pop() {
-        for e in blocks[b].term.iter().flat_map(|t| t.edges()) {
-            let t = e.block.0 as usize;
+        let edges = blocks[b].term.iter().flat_map(|t| t.edges()).map(|e| e.block);
+        for t in edges.chain(blocks[b].pads()) {
+            let t = t.0 as usize;
             if !keep[t] {
                 keep[t] = true;
                 stack.push(t);
@@ -667,10 +679,15 @@ fn reachable(mut blocks: Vec<Block>) -> Vec<Block> {
         }
     }
     let mut kept: Vec<Block> = blocks.drain(..).zip(&keep).filter(|(_, k)| **k).map(|(b, _)| b).collect();
+    let renumbered = |b: BlockId| BlockId(renumber[b.0 as usize]);
     for b in &mut kept {
         for e in b.term.iter_mut().flat_map(|t| t.edges_mut()) {
-            e.block = BlockId(renumber[e.block.0 as usize]);
+            e.block = renumbered(e.block);
         }
+        for inst in &mut b.insts {
+            inst.unwind = inst.unwind.map(renumbered);
+        }
+        b.term_unwind = b.term_unwind.map(renumbered);
     }
     kept
 }
@@ -730,5 +747,28 @@ fn rewrite(k: &mut InstKind, f: impl Fn(Value) -> Value) {
         | K::FloatCast { a, .. }
         | K::IntToChar { a, .. } => *a = f(*a),
         K::Call { args, .. } | K::Native { args, .. } => args.iter_mut().for_each(|v| *v = f(*v)),
+        K::Slot(_) | K::Global(_) | K::FuncRef(_) => {}
+        K::Load { ptr, .. } => *ptr = f(*ptr),
+        K::Store { ptr, val, .. } => {
+            *ptr = f(*ptr);
+            *val = f(*val);
+        }
+        K::Copy { dst, src, .. } => {
+            *dst = f(*dst);
+            *src = f(*src);
+        }
+        K::Zero { dst, .. } => *dst = f(*dst),
+        K::Index { base, index, .. } => {
+            *base = f(*base);
+            *index = f(*index);
+        }
+        K::Bounds { index, len } => {
+            *index = f(*index);
+            *len = f(*len);
+        }
+        K::CallInd { callee, args } => {
+            *callee = f(*callee);
+            args.iter_mut().for_each(|v| *v = f(*v));
+        }
     }
 }

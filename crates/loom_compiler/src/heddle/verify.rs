@@ -3,7 +3,9 @@
 //! - every block ends in a terminator, and nothing jumps to the entry;
 //! - every edge passes one argument, of the right type, per parameter;
 //! - every value is defined exactly once;
-//! - every use is dominated by its definition.
+//! - every use is dominated by its definition;
+//! - landing pads exist, only instructions that can unravel have one, and
+//!   a pad reads no value but the function's parameters and its own.
 
 use std::collections::HashMap;
 
@@ -45,6 +47,21 @@ fn verify_func(f: &Func) -> Result<(), String> {
     }
     let mut preds = vec![Vec::new(); n];
     for (b, block) in f.blocks.iter().enumerate() {
+        for inst in &block.insts {
+            if let Some(pad) = inst.unwind {
+                if pad.0 as usize >= n || !f.blocks[pad.0 as usize].params.is_empty() {
+                    return Err(format!("b{b} unwinds to b{}, which isn't a landing pad", pad.0));
+                }
+                if !inst.kind.can_unwind() {
+                    return Err(format!("b{b} has a landing pad for an instruction that can't unravel"));
+                }
+            }
+        }
+        if let Some(pad) = block.term_unwind
+            && (pad.0 as usize >= n || !f.blocks[pad.0 as usize].params.is_empty())
+        {
+            return Err(format!("b{b} unwinds to b{}, which isn't a landing pad", pad.0));
+        }
         let term = block.term.as_ref().ok_or_else(|| format!("b{b} has no terminator"))?;
         for e in term.edges() {
             let target = f.blocks.get(e.block.0 as usize).ok_or_else(|| format!("b{b} jumps to a missing block"))?;
@@ -68,6 +85,22 @@ fn verify_func(f: &Func) -> Result<(), String> {
         }
     }
     let idom = dominators(f, &preds);
+    // What landing pads (reached only by unwinding) can see: the function's
+    // parameters, and what the pads themselves compute.
+    let pad_blocks: std::collections::HashSet<usize> = pad_reach(f);
+    let params: std::collections::HashSet<Value> = f.params().iter().copied().collect();
+    for &b in &pad_blocks {
+        let block = &f.blocks[b];
+        let mut seen: std::collections::HashSet<Value> = block.params.iter().copied().collect();
+        for inst in &block.insts {
+            for u in uses(&inst.kind) {
+                if !seen.contains(&u) && !params.contains(&u) && !pad_defined(f, &pad_blocks, u) {
+                    return Err(format!("the landing pad b{b} reads v{}, which isn't its own", u.0));
+                }
+            }
+            seen.extend(inst.results.iter().copied());
+        }
+    }
     let dominates = |a: usize, mut b: usize| loop {
         if a == b {
             return true;
@@ -84,7 +117,11 @@ fn verify_func(f: &Func) -> Result<(), String> {
         if idom[block].is_none() {
             return Ok(()); // unreachable: nothing runs it
         }
-        let ok = if db == block { di.is_none_or(|di| di < index) } else { dominates(db, block) };
+        let ok = if db == block {
+            di.is_none_or(|di| di < index)
+        } else {
+            dominates(db, block) || pad_blocks.contains(&block)
+        };
         if ok { Ok(()) } else { Err(format!("v{} is used in b{block} where its definition doesn't reach", v.0)) }
     };
     for (b, block) in f.blocks.iter().enumerate() {
@@ -136,7 +173,40 @@ pub(crate) fn uses(k: &super::InstKind) -> Vec<Value> {
         | K::FloatCast { a, .. }
         | K::IntToChar { a, .. } => vec![*a],
         K::Call { args, .. } | K::Native { args, .. } => args.clone(),
+        K::Slot(_) | K::Global(_) | K::FuncRef(_) => Vec::new(),
+        K::Load { ptr, .. } => vec![*ptr],
+        K::Store { ptr, val, .. } => vec![*ptr, *val],
+        K::Copy { dst, src, .. } => vec![*dst, *src],
+        K::Zero { dst, .. } => vec![*dst],
+        K::Index { base, index, .. } => vec![*base, *index],
+        K::Bounds { index, len } => vec![*index, *len],
+        K::CallInd { callee, args } => std::iter::once(*callee).chain(args.iter().copied()).collect(),
     }
+}
+
+/// The blocks only unwinding reaches: every landing pad, and what they
+/// jump to.
+fn pad_reach(f: &Func) -> std::collections::HashSet<usize> {
+    let mut out = std::collections::HashSet::new();
+    let mut stack: Vec<usize> = f.blocks.iter().flat_map(|b| b.pads()).map(|p| p.0 as usize).collect();
+    while let Some(b) = stack.pop() {
+        if b >= f.blocks.len() || !out.insert(b) {
+            continue;
+        }
+        for e in f.blocks[b].term.iter().flat_map(|t| t.edges()) {
+            stack.push(e.block.0 as usize);
+        }
+        stack.extend(f.blocks[b].pads().into_iter().map(|p| p.0 as usize));
+    }
+    out
+}
+
+/// Whether `v` is defined in one of the landing pads.
+fn pad_defined(f: &Func, pads: &std::collections::HashSet<usize>, v: Value) -> bool {
+    pads.iter().any(|&b| {
+        let block = &f.blocks[b];
+        block.params.contains(&v) || block.insts.iter().any(|i| i.results.contains(&v))
+    })
 }
 
 /// The immediate dominator of each block reachable from the entry (the
