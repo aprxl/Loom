@@ -1,0 +1,20 @@
+// `get`, `first`, `last` and `Map.get` give copies: an element can't be
+// moved out, so each gives a value of its own (a deep copy, for a type
+// that isn't `Copy`), and changing it leaves the original alone.
+
+use std.io.print
+
+fn main() {
+    let xss: List[List[i32]] = [[1, 2], [3]]
+    var first = xss.first() mend List()
+    first.push(9)
+    var second = xss.get(1) mend List()
+    second.push(8)
+    var last = xss.last() mend List()
+    last.clear()
+    print("{xss} {first} {second} {last}")
+    let m: Map[str, List[i32]] = ["a": [1]]
+    var v = m.get("a") mend List()
+    v.push(2)
+    print("{m} {v}")
+}

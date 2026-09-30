@@ -210,7 +210,7 @@ MODULES = [
      "methods": [
        {"sig": "fn len(self) -> usize", "doc": "How many keys there are."},
        {"sig": "fn is_empty(self) -> bool", "doc": None},
-       {"sig": "fn get(self, key: K) -> ?V where K: Hash", "doc": "The value for `key`."},
+       {"sig": "fn get(self, key: K) -> ?V where K: Hash", "doc": "A copy of the value for `key` (`m[key]` is the value itself)."},
        {"sig": "fn has(self, key: K) -> bool where K: Hash", "doc": "Whether there's a value for `key`."},
        {"sig": "fn insert(mut self, take key: K, take value: V) -> ?V where K: Hash", "doc": "Adds `value` for `key`, and gives back the value it replaces."},
        {"sig": "fn remove(mut self, key: K) -> ?V where K: Hash", "doc": "Takes out the value for `key`; later keys keep their order."},
@@ -395,9 +395,9 @@ MODULES = [
      "methods": [
        {"sig": "fn len(self) -> usize", "doc": "How many elements there are."},
        {"sig": "fn is_empty(self) -> bool", "doc": None},
-       {"sig": "fn get(self, i: usize) -> ?T", "doc": "The element at `i`, or `none` past the end."},
-       {"sig": "fn first(self) -> ?T", "doc": None},
-       {"sig": "fn last(self) -> ?T", "doc": None},
+       {"sig": "fn get(self, i: usize) -> ?T", "doc": "A copy of the element at `i`, or `none` past the end. (An element can't be moved out of a slice: it gives a value of its own, a deep copy for a type that isn't `Copy`.)"},
+       {"sig": "fn first(self) -> ?T", "doc": "A copy of the first element."},
+       {"sig": "fn last(self) -> ?T", "doc": "A copy of the last element."},
        {"sig": "fn contains(self, x: T) -> bool where T: Eq", "doc": "Whether some element equals `x`."},
        {"sig": "fn index_of(self, x: T) -> ?usize where T: Eq", "doc": "The index of the first element equal to `x`."},
        {"sig": "fn copy_from(mut self, src: [T])", "doc": "Copies `src` over the start of this slice. Unravels if `src` is longer."},

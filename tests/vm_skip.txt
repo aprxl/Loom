@@ -16,6 +16,7 @@ copy_unwrap_bind     V1  optionals and results
 defer                V1  `defer`, results
 defer_mut_params     V1  `defer`, `String`
 derive_json          V1  warps, reflection
+element_copies       V1  lists
 exhaustive           V1  optionals and results
 fizzbuzz             V1  `String`
 gauges               V1  gauges, optionals

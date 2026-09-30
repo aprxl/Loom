@@ -14,7 +14,7 @@ pub warp Map[K, V] {
     /// How many keys there are.
     pub fn len(self) -> usize
     pub fn is_empty(self) -> bool
-    /// The value for `key`.
+    /// A copy of the value for `key` (`m[key]` is the value itself).
     pub fn get(self, key: K) -> ?V where K: Hash
     /// Whether there's a value for `key`.
     pub fn has(self, key: K) -> bool where K: Hash

@@ -74,21 +74,21 @@
 <span class="sig">fn get(self, i: usize) -&gt; ?T</span>
 
 </div>
-<p class="member-doc">The element at <code>i</code>, or <code>none</code> past the end.</p>
+<p class="member-doc">A copy of the element at <code>i</code>, or <code>none</code> past the end. (An element can't be moved out of a slice: it gives a value of its own, a deep copy for a type that isn't <code>Copy</code>.)</p>
 </div>
 <div class="member" id="Slice.first">
 <div class="member-head">
 <span class="sig">fn first(self) -&gt; ?T</span>
-<span class="badge todo">TODO</span>
+
 </div>
-<p class="member-doc empty">undocumented</p>
+<p class="member-doc">A copy of the first element.</p>
 </div>
 <div class="member" id="Slice.last">
 <div class="member-head">
 <span class="sig">fn last(self) -&gt; ?T</span>
-<span class="badge todo">TODO</span>
+
 </div>
-<p class="member-doc empty">undocumented</p>
+<p class="member-doc">A copy of the last element.</p>
 </div>
 <div class="member" id="Slice.contains">
 <div class="member-head">

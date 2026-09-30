@@ -7,9 +7,13 @@ pub warp Slice[T] {
     /// How many elements there are.
     pub fn len(self) -> usize
     pub fn is_empty(self) -> bool
-    /// The element at `i`, or `none` past the end.
+    /// A copy of the element at `i`, or `none` past the end. (An element
+    /// can't be moved out of a slice: it gives a value of its own, a deep
+    /// copy for a type that isn't `Copy`.)
     pub fn get(self, i: usize) -> ?T
+    /// A copy of the first element.
     pub fn first(self) -> ?T
+    /// A copy of the last element.
     pub fn last(self) -> ?T
     /// Whether some element equals `x`.
     pub fn contains(self, x: T) -> bool where T: Eq
