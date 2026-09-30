@@ -136,6 +136,8 @@ impl<'a> Builder<'a> {
                 Some(def) => self.const_def(def, ty, span),
                 None => self.unsupported(span, "methods and fields of warps"),
             },
+            // Checked while compiling: nothing is left to run.
+            ExprKind::Const(inner) if crate::typeck::assert_args(self.p, inner).is_some() => Some(Vec::new()),
             ExprKind::Const(_) => self.unsupported(span, "`const` expressions computed while compiling"),
             ExprKind::Template(_) => self.unsupported(span, "`String`"),
             _ => self.unsupported(span, "this expression"),
