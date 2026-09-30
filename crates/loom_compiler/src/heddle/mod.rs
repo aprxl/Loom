@@ -18,6 +18,7 @@ mod verify;
 
 pub use build::build;
 pub use print::print;
+pub(crate) use verify::uses as inst_uses;
 pub use verify::verify;
 
 use loom_isa::FmtItem;

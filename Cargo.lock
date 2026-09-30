@@ -321,6 +321,8 @@ dependencies = [
  "loom_host",
  "loom_isa",
  "loom_syntax",
+ "loom_sys",
+ "loom_vm",
  "mlua",
 ]
 

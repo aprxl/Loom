@@ -13,6 +13,7 @@
 //! language. Still to come: `consteval`, `flow` (the analyses) and
 //! `lir_verify`. See `design/lua-backend.md` for the decisions they implement.
 
+pub mod codegen;
 pub mod heddle;
 pub mod hir;
 pub mod lower;
