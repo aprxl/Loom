@@ -28,6 +28,7 @@ Read your own diff before committing. One logical change per commit.
 | Path | What |
 |------|------|
 | `crates/loom_syntax` | source files, spans, diagnostics, tokens, lexer, parser, AST, AST printer (no C deps) |
+| `crates/loom_sys` | what a running program gets from its host, for both backends: output, arguments, outcomes |
 | `crates/loom_host` | the only owner of the Lua VM (mlua, vendored) |
 | `crates/loom_compiler` | everything semantic: resolve (`hir`, `modules`), then typeck, analyses, lowering, Lua emission |
 | `crates/loom` | the `loom` binary (build, run, check, test, hidden lua-host) |

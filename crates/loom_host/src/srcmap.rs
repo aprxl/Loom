@@ -29,13 +29,7 @@ pub struct Mapping {
     pub column: u32,
 }
 
-/// A Loom source location.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Location {
-    pub file: String,
-    pub line: u32,
-    pub column: u32,
-}
+pub use loom_sys::Location;
 
 impl SourceMap {
     pub fn to_text(&self) -> String {

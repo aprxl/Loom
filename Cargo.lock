@@ -328,6 +328,7 @@ name = "loom_host"
 version = "0.1.0"
 dependencies = [
  "crossterm",
+ "loom_sys",
  "mlua",
 ]
 
@@ -338,6 +339,10 @@ dependencies = [
  "codespan-reporting",
  "unicode-ident",
 ]
+
+[[package]]
+name = "loom_sys"
+version = "0.1.0"
 
 [[package]]
 name = "lua-src"

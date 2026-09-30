@@ -14,58 +14,13 @@ use std::rc::Rc;
 
 use mlua::{Function, Lua, Table};
 
+pub use loom_sys::{Host, Outcome, Output};
+
 use crate::srcmap::{Location, SourceMap};
 use crate::term::Term;
 
 /// The marker at the start of every unravel message (`rt.MARK`).
 pub const UNRAVEL_MARK: &str = "\u{1f}LOOM\u{1f}";
-
-/// Where a program's output goes.
-#[derive(Clone, Debug)]
-pub enum Output {
-    Stdout,
-    /// Collected in a buffer.
-    Capture(Rc<RefCell<Vec<u8>>>),
-}
-
-/// What a program run gets from the machine it runs on.
-#[derive(Clone, Debug)]
-pub struct Host {
-    pub output: Output,
-    /// No environment variables, files in memory (starting empty), no
-    /// terminal and no waiting: a run whose output doesn't depend on the
-    /// machine, for the fixture tests.
-    pub sandbox: bool,
-    /// `env.args()`: the program's name, then its arguments.
-    pub args: Vec<String>,
-}
-
-impl Host {
-    /// A sandboxed run whose output lands in `buffer`.
-    pub fn captured(buffer: Rc<RefCell<Vec<u8>>>) -> Host {
-        Host { output: Output::Capture(buffer), sandbox: true, args: vec!["main".into()] }
-    }
-}
-
-/// How a run ended.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Outcome {
-    Finished,
-    /// The program gave up (`unravel`, overflow, a failed assertion…).
-    Unravel {
-        message: String,
-        location: Option<Location>,
-    },
-    /// `main ! E` (or a test) returned an error, shown here.
-    Failed {
-        message: String,
-    },
-    /// A Lua error that isn't an unravel: a bug in Loom itself.
-    Crash {
-        message: String,
-        location: Option<Location>,
-    },
-}
 
 /// How much memory a program may use. Past it, it unravels; without a
 /// limit, an allocation the system refuses (`s.repeat(1 << 40)`) aborts

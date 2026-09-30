@@ -14,6 +14,7 @@ lua55 = ["mlua/lua55"]
 
 [dependencies]
 crossterm.workspace = true
+loom_sys.workspace = true
 mlua.workspace = true
 
 [lints]

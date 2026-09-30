@@ -12,6 +12,7 @@ publish = false
 # Internal crates. Anything that (transitively) reaches mlua is taken without
 # default features, so exactly one Lua version is enabled per build.
 loom_syntax = { path = "crates/loom_syntax" }
+loom_sys = { path = "crates/loom_sys" }
 loom_host = { path = "crates/loom_host", default-features = false }
 loom_compiler = { path = "crates/loom_compiler", default-features = false }
 

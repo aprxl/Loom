@@ -273,6 +273,7 @@ examples/
   compile_time.loom        compile-time tables, const params, reflection-based derive
 crates/
   loom_syntax/             source files, spans, diagnostics, the lexer, the parser and AST
+  loom_sys/                what a running program gets from its host, for both backends
   loom_host/               the bundled Lua VM (mlua, vendored, built with clang-cl)
   loom_compiler/           name resolution, type checking, lowering to Lua
   loom/                    the `loom` command-line tool
