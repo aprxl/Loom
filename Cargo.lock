@@ -333,6 +333,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "loom_isa"
+version = "0.1.0"
+
+[[package]]
 name = "loom_syntax"
 version = "0.1.0"
 dependencies = [
