@@ -121,6 +121,7 @@ codes! {
     M0103 = "move out of an element";
     M0104 = "`mut` access overlaps another use";
     M0105 = "a borrow is used after what it borrows changed";
+    M0106 = "a borrow outlives what it borrows";
 
     // P01xx: patterns
     P0101 = "match isn't exhaustive";

@@ -43,7 +43,7 @@ Also missing:
 - `given` parameters, `ref warp`, and projections (`~> mut T`, the design's way to lend a place).
 - `unsafe` blocks, raw pointers (`*T`), `extern "C"`, `Volatile`. `#layout(...)` is parsed but nothing acts on it.
 - User-written `Spool` weaves.
-- The region checker. A stored lambda simply works, without the escape check the design describes.
+- The region checker. Lambdas, slices and streams can't outlive the locals they borrow ([M0106](diag:M0106)), but nothing checks region pointers yet.
 
 ## Types and library
 

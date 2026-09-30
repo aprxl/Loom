@@ -1,0 +1,23 @@
+error[M0106]: a lambda that uses `k` can't be returned
+  --> docs/lang/samples/own_err_escape.loom:2:5
+  |
+1 | fn adder(k: i32) -> i32 => i32 {
+  |          - `k` is here
+2 |     x => x + k
+  |     ^^^^^^^^^^ returned here, it would outlive `k`
+  |
+  = note: a lambda borrows the variables it uses; a slice or a stream, what it's made from
+  = help: pass it as an argument or keep it in a local, or have it take what it needs as parameters
+
+error[M0106]: a lambda that uses `i` can't be stored
+  --> docs/lang/samples/own_err_escape.loom:8:17
+  |
+7 |     for i in 1..=3 {
+  |         - `i` is here
+8 |         fs.push(x => x * i)
+  |                 ^^^^^^^^^^ stored here, it would outlive `i`
+  |
+  = note: a lambda borrows the variables it uses; a slice or a stream, what it's made from
+  = help: pass it as an argument or keep it in a local, or have it take what it needs as parameters
+
+error: docs/lang/samples/own_err_escape.loom failed to type-check (2 errors)

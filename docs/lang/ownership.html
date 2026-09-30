@@ -164,7 +164,44 @@
 
 <span class="err">error: own_err_borrow.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
-<p>The codes are <a href="diagnostics.html#M0101">M0101</a> (use after move), <a href="diagnostics.html#M0102">M0102</a> (move out of a borrow), <a href="diagnostics.html#M0103">M0103</a> (move out of an element), <a href="diagnostics.html#M0104">M0104</a> (overlapping <code>mut</code>) and <a href="diagnostics.html#M0105">M0105</a> (a stale borrow).</p>
+<p>Nor can a borrow outlive what it borrows. A lambda that uses variables around it is passed as an argument or kept in a local, and that's all: returning it, storing it in a warp or a list, or passing it to a <code>take</code> parameter is an error, and so is keeping it in a variable declared outside the block of a variable it uses. The same goes for a slice of a local list, and a stream made from one or from such a lambda. (A lambda that uses nothing around it is a plain function value, and goes anywhere.)</p>
+<div class="sample" id="sample-own_err_escape">
+<div class="sample-head"><span class="file">samples/own_err_escape.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#M0106">M0106</a>, <a href="diagnostics.html#M0106">M0106</a></span></div>
+<pre class="code"><code><span class="k">fn</span> adder(k: i32) -&gt; i32 =&gt; i32 {
+    x =&gt; x + k
+}
+
+<span class="k">fn</span> main() {
+    <span class="k">var</span> fs: <span class="t">List</span>[i32 =&gt; i32] = <span class="t">List</span>()
+    <span class="k">for</span> i <span class="k">in</span> <span class="n">1</span>..=<span class="n">3</span> {
+        fs.push(x =&gt; x * i)
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[M0106]: a lambda that uses `k` can't be returned</span>
+<span class="loc">  --&gt; own_err_escape.loom:2:5</span>
+  |
+1 | fn adder(k: i32) -&gt; i32 =&gt; i32 {
+  |          - `k` is here
+2 |     x =&gt; x + k
+  |     ^^^^^^^^^^ returned here, it would outlive `k`
+  |
+  = note: a lambda borrows the variables it uses; a slice or a stream, what it's made from
+  = help: pass it as an argument or keep it in a local, or have it take what it needs as parameters
+
+<span class="err">error[M0106]: a lambda that uses `i` can't be stored</span>
+<span class="loc">  --&gt; own_err_escape.loom:8:17</span>
+  |
+7 |     for i in 1..=3 {
+  |         - `i` is here
+8 |         fs.push(x =&gt; x * i)
+  |                 ^^^^^^^^^^ stored here, it would outlive `i`
+  |
+  = note: a lambda borrows the variables it uses; a slice or a stream, what it's made from
+  = help: pass it as an argument or keep it in a local, or have it take what it needs as parameters
+
+<span class="err">error: own_err_escape.loom failed to type-check (2 errors)</span></code></pre></div>
+</div>
+<p>The codes are <a href="diagnostics.html#M0101">M0101</a> (use after move), <a href="diagnostics.html#M0102">M0102</a> (move out of a borrow), <a href="diagnostics.html#M0103">M0103</a> (move out of an element), <a href="diagnostics.html#M0104">M0104</a> (overlapping <code>mut</code>), <a href="diagnostics.html#M0105">M0105</a> (a stale borrow) and <a href="diagnostics.html#M0106">M0106</a> (a borrow that outlives what it borrows).</p>
 <h2 id="once-warps"><code>once</code> warps</h2>
 <p>A <code>once warp</code> describes values that must be used up exactly once. They can't be copied, and they can't just go out of scope. The ways to use one up are to destructure it (<code>let Tx(moves) = self</code>, which only code that can see its fields may do) or to pass it to a <code>take</code> parameter that does. A warp that holds a <code>once</code> value is <code>once</code> itself, and so is <code>List[Tx]</code>.</p>
 <div class="sample" id="sample-own_once">

@@ -57,6 +57,16 @@ made before can't be used (M0105). For the same reason, a `for` loop's body
 can't change what the loop goes over. A `Copy` value bound by a pattern is a
 copy, and doesn't borrow.
 
+Nor can such a value outlive what it borrows (M0106). A lambda that uses a
+variable around it is passed as an argument or kept in a local: returning
+it, storing it in a field, an element or a tuple, or passing it to a `take`
+parameter is an error, and so is keeping it in a variable declared outside
+the block of a variable it uses. A slice of a local list, and a stream made
+from one or from such a lambda, follow the same rule. A lambda that uses
+nothing around it is a plain function value, with no borrow. (`^(…)`, which
+copies what a lambda uses into a box it owns, will lift the rule for the
+lambdas that need to escape.)
+
 ```loom
 var xs: List[i32] = [1, 2, 3]
 let tail = xs[1..]

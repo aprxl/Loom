@@ -18,6 +18,11 @@
 //! changes, a borrow made before can't be used, and while a `for` loop goes
 //! over a local, its body can't change it. (Borrows are otherwise
 //! second-class, see 03-memory: this is the part that concerns locals.)
+//! Nor can a borrow outlive what it borrows (M0106): a lambda that captures
+//! a local is passed as an argument or kept in a local, never returned or
+//! stored, and so is a stream or a slice made from a local. Treadle runs a
+//! lambda over its enclosing frame, which is gone once the function returns
+//! (design/vm.md §10.9).
 //!
 //! It also finds loose ends (L0301): a variable holding a `once` value that
 //! might still hold it when its scope ends, or when a `return`, `fail`, `?`
@@ -88,6 +93,16 @@ enum Borrow {
     LambdaParam,
 }
 
+/// Where a value goes that mustn't outlive the locals it borrows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Escape {
+    /// Out of the function: returned, failed with, or yielded.
+    Out,
+    /// Into something that owns it: a field, an element, a tuple, a
+    /// `take` argument, a case's payload.
+    Stored,
+}
+
 /// Where a place starts.
 #[derive(Clone, Debug)]
 enum Root {
@@ -136,6 +151,11 @@ struct MoveCx {
     loops: Vec<(HirId, usize)>,
     /// Locals a fallback `defer` ties off.
     covered: HashSet<LocalId>,
+    /// How many blocks deep each local was declared: a borrow can't be
+    /// kept in a variable that outlives what it borrows.
+    scope_of: HashMap<LocalId, usize>,
+    /// The locals each local's lambda (or a stream holding one) captures.
+    captures_of: HashMap<LocalId, Vec<LocalId>>,
     reported: HashSet<(&'static str, Span)>,
 }
 
@@ -147,6 +167,7 @@ impl Checker<'_> {
         cx.scopes.push(Vec::new());
         for param in &f.params {
             cx.depth_of.insert(param.local, 0);
+            cx.scope_of.insert(param.local, cx.scopes.len());
             if param.mode != ParamMode::Take {
                 cx.borrowed.insert(param.local, Borrow::Param);
             } else {
@@ -155,6 +176,9 @@ impl Checker<'_> {
             }
         }
         self.mv(&mut cx, body, !ret_unit);
+        if !ret_unit {
+            self.check_escape(&cx, body, Escape::Out);
+        }
         self.end_scope(&mut cx, end_of(body.span), "the function ends");
     }
 
@@ -195,10 +219,12 @@ impl Checker<'_> {
             ExprKind::Tuple(items) | ExprKind::Array(items) => {
                 for item in items {
                     self.mv(cx, item, true);
+                    self.check_escape(cx, item, Escape::Stored);
                 }
             }
             ExprKind::ArrayRepeat { value, count } => {
                 self.mv(cx, value, true);
+                self.check_escape(cx, value, Escape::Stored);
                 self.mv(cx, count, false);
             }
             ExprKind::Template(parts) => {
@@ -278,6 +304,8 @@ impl Checker<'_> {
                 let borrowed = is_seq && self.place_of(cx, iter).is_some();
                 for local in pat_locals(pat) {
                     cx.depth_of.insert(local, cx.depth);
+                    // In the loop's body, a block deeper.
+                    cx.scope_of.insert(local, cx.scopes.len() + 1);
                     fresh(cx, local);
                     if borrowed {
                         cx.borrowed.insert(local, Borrow::LoopItem);
@@ -324,12 +352,14 @@ impl Checker<'_> {
             ExprKind::Return(value) => {
                 if let Some(v) = value {
                     self.mv(cx, v, true);
+                    self.check_escape(cx, v, Escape::Out);
                 }
                 self.leave_function(cx, e.span, "this returns");
                 cx.flow.dead = true;
             }
             ExprKind::Fail(v) => {
                 self.mv(cx, v, true);
+                self.check_escape(cx, v, Escape::Out);
                 self.leave_function(cx, e.span, "this fails");
                 cx.flow.dead = true;
             }
@@ -341,6 +371,7 @@ impl Checker<'_> {
                 cx.captures.push((cx.depth, Vec::new()));
                 for p in params {
                     cx.depth_of.insert(p.local, cx.depth);
+                    cx.scope_of.insert(p.local, cx.scopes.len() + 1);
                     cx.borrowed.insert(p.local, Borrow::LambdaParam);
                 }
                 self.mv(cx, body, true);
@@ -365,6 +396,7 @@ impl Checker<'_> {
                 self.mv(cx, expr, owning);
                 if let Some(b) = binding {
                     cx.depth_of.insert(*b, cx.depth);
+                    cx.scope_of.insert(*b, cx.scopes.len() + 1);
                 }
                 let before = cx.flow.clone();
                 self.mv(cx, handler, owning);
@@ -409,15 +441,23 @@ impl Checker<'_> {
             }
             ExprKind::Assign { target, op, value } => {
                 self.mv(cx, value, *op == AssignOp::Assign);
+                if *op == AssignOp::Assign {
+                    self.check_assigned_escape(cx, target, value);
+                }
                 self.assign_target(cx, target, *op, Some(value));
             }
             ExprKind::Map(pairs) => {
                 for (key, value) in pairs {
                     self.mv(cx, key, true);
                     self.mv(cx, value, true);
+                    self.check_escape(cx, key, Escape::Stored);
+                    self.check_escape(cx, value, Escape::Stored);
                 }
             }
-            ExprKind::Yield { value, .. } => self.mv(cx, value, true),
+            ExprKind::Yield { value, .. } => {
+                self.mv(cx, value, true);
+                self.check_escape(cx, value, Escape::Out);
+            }
             // It can only use its own locals.
             ExprKind::Const(inner) => self.mv(cx, inner, owning),
             ExprKind::Lit(_)
@@ -457,6 +497,7 @@ impl Checker<'_> {
                 }
                 for local in pat_locals(pat) {
                     cx.depth_of.insert(local, cx.depth);
+                    cx.scope_of.insert(local, cx.scopes.len());
                     fresh(cx, local);
                     self.declare(cx, local);
                 }
@@ -530,6 +571,7 @@ impl Checker<'_> {
         if matches!(callee.kind, ExprKind::BuiltinCase(_)) || self.b.constructs.contains_key(&call.id) {
             for arg in args {
                 self.mv(cx, &arg.value, true);
+                self.check_escape(cx, &arg.value, Escape::Stored);
             }
             return;
         }
@@ -580,6 +622,10 @@ impl Checker<'_> {
         for (i, arg) in args.iter().enumerate() {
             let take = mode_of(super::ArgSource::Arg(i)) == ParamMode::Take;
             self.mv(cx, &arg.value, take);
+            // Taken, it's the callee's to keep: `fs.push(x => x * k)`.
+            if take {
+                self.check_escape(cx, &arg.value, Escape::Stored);
+            }
         }
         // While a place is lent out as `mut`, nothing else in the call may
         // touch it: `swap(mut a, mut a)`. Different fields are fine.
@@ -848,6 +894,170 @@ impl Checker<'_> {
         }
     }
 
+    /// The locals that lambdas in the value of `e` capture: a lambda's own,
+    /// a local's that holds one, and those of the lambdas a call that gives
+    /// a borrow (a stream) was given. A captured local lives in the frame,
+    /// so it counts even when it's a parameter.
+    fn captured_roots(&mut self, cx: &MoveCx, e: &Expr, out: &mut Vec<LocalId>) {
+        let add = |out: &mut Vec<LocalId>, l: LocalId| {
+            if !out.contains(&l) {
+                out.push(l);
+            }
+        };
+        match &e.kind {
+            ExprKind::Lambda { .. } => {
+                for &l in cx.lambda_caps.get(&e.id).into_iter().flatten() {
+                    add(out, l);
+                }
+            }
+            ExprKind::Local(l) => {
+                for &c in cx.captures_of.get(l).into_iter().flatten() {
+                    add(out, c);
+                }
+            }
+            ExprKind::Call { callee, args } => {
+                let Some(&ty) = self.b.expr_ty.get(&e.id) else { return };
+                if !self.is_borrowing_ty(ty) {
+                    return;
+                }
+                let method = match &callee.kind {
+                    ExprKind::Index { base, .. } => base.as_ref(),
+                    _ => callee.as_ref(),
+                };
+                if let ExprKind::Field { base, .. } = &method.kind {
+                    self.captured_roots(cx, base, out);
+                }
+                for arg in args {
+                    self.captured_roots(cx, &arg.value, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// The locals the value of `e` can't outlive, if it's a borrow (a
+    /// function value, a slice or a stream): what its lambdas capture, and
+    /// the local variables it's a view of. (A parameter's elements are its
+    /// caller's, so a view of them can go anywhere the caller's can.)
+    fn escaping_roots(&mut self, cx: &MoveCx, e: &Expr) -> Vec<LocalId> {
+        let Some(&ty) = self.b.expr_ty.get(&e.id) else { return Vec::new() };
+        if !self.is_borrowing_ty(ty) {
+            return Vec::new();
+        }
+        let mut roots = Vec::new();
+        self.captured_roots(cx, e, &mut roots);
+        let mut viewed = Vec::new();
+        self.borrowed_roots(cx, e, &mut viewed);
+        for l in viewed {
+            let param = matches!(self.p.local(l).kind, crate::hir::LocalKind::Param | crate::hir::LocalKind::SelfParam);
+            // A local holding a borrow isn't what's borrowed: what it holds is.
+            let holder = matches!(e.kind, ExprKind::Local(x) if x == l);
+            if !param && !holder && !roots.contains(&l) {
+                roots.push(l);
+            }
+        }
+        roots
+    }
+
+    /// The expressions whose values `e`'s value is: itself, or the tails
+    /// of its blocks and branches.
+    fn value_leaves<'e>(e: &'e Expr, out: &mut Vec<&'e Expr>) {
+        let tail = |b: &'e Block| match b.stmts.last().map(|s| &s.kind) {
+            Some(HirStmt::Expr(t)) => Some(t),
+            _ => None,
+        };
+        match &e.kind {
+            ExprKind::Block(b) | ExprKind::Unsafe { body: b, .. } => {
+                if let Some(t) = tail(b) {
+                    Self::value_leaves(t, out);
+                }
+            }
+            ExprKind::If { then, else_, .. } => {
+                if let Some(t) = tail(then) {
+                    Self::value_leaves(t, out);
+                }
+                if let Some(e) = else_ {
+                    Self::value_leaves(e, out);
+                }
+            }
+            ExprKind::Match { arms, .. } => {
+                for arm in arms {
+                    Self::value_leaves(&arm.body, out);
+                }
+            }
+            ExprKind::Mend { expr, handler, .. } => {
+                Self::value_leaves(expr, out);
+                Self::value_leaves(handler, out);
+            }
+            _ => out.push(e),
+        }
+    }
+
+    /// Reports the value of `e` going `into` somewhere it would outlive a
+    /// local it borrows (M0106).
+    fn check_escape(&mut self, cx: &MoveCx, e: &Expr, into: Escape) {
+        let mut leaves = Vec::new();
+        Self::value_leaves(e, &mut leaves);
+        for leaf in leaves {
+            let roots = self.escaping_roots(cx, leaf);
+            if let Some(&root) = roots.first() {
+                let what = match into {
+                    Escape::Out => "returned",
+                    Escape::Stored => "stored",
+                };
+                self.report_escape(leaf, root, what);
+            }
+        }
+    }
+
+    /// `target = value`: a borrow can go into a variable that ends no later
+    /// than what it borrows, and into anything else (a field, an element, a
+    /// `mut` parameter, which is its caller's) not at all.
+    fn check_assigned_escape(&mut self, cx: &MoveCx, target: &Expr, value: &Expr) {
+        let mut leaves = Vec::new();
+        Self::value_leaves(value, &mut leaves);
+        for leaf in leaves {
+            let roots = self.escaping_roots(cx, leaf);
+            let Some(&first) = roots.first() else { continue };
+            let problem = match &target.kind {
+                ExprKind::Local(t)
+                    if !matches!(
+                        self.p.local(*t).kind,
+                        crate::hir::LocalKind::Param | crate::hir::LocalKind::SelfParam
+                    ) =>
+                {
+                    let depth = cx.scope_of.get(t).copied().unwrap_or(0);
+                    roots
+                        .iter()
+                        .find(|r| cx.scope_of.get(r).copied().unwrap_or(0) > depth)
+                        .map(|&r| (r, "kept in a variable that outlives it"))
+                }
+                ExprKind::Local(_) => Some((first, "stored in the caller's variable")),
+                _ => Some((first, "stored")),
+            };
+            if let Some((root, what)) = problem {
+                self.report_escape(leaf, root, what);
+            }
+        }
+    }
+
+    /// M0106 for `e`, whose value borrows `root`.
+    fn report_escape(&mut self, e: &Expr, root: LocalId, what: &str) {
+        let name = self.p.local(root).name.clone();
+        let thing =
+            if matches!(e.kind, ExprKind::Lambda { .. }) { "a lambda that uses" } else { "a value that borrows" };
+        let diag = Diagnostic::error(codes::M0106, format!("{thing} `{name}` can't be {what}"))
+            .primary(e.span, format!("{what} here, it would outlive `{name}`"))
+            .secondary(self.p.local(root).span, format!("`{name}` is here"))
+            .note("a lambda borrows the variables it uses; a slice or a stream, what it's made from")
+            .help("pass it as an argument or keep it in a local, or have it take what it needs as parameters");
+        let already =
+            self.diags.iter().any(|d| d.code == codes::M0106 && d.labels.iter().any(|l| l.primary && l.span == e.span));
+        if !already {
+            self.diags.push(diag);
+        }
+    }
+
     /// `target op= …`, once the value is gone through: `value` is it, when
     /// it's all `target`'s (not a part of a tuple's).
     fn assign_target(&mut self, cx: &mut MoveCx, target: &Expr, op: AssignOp, value: Option<&Expr>) {
@@ -891,9 +1101,16 @@ impl Checker<'_> {
     fn new_borrow(&mut self, cx: &mut MoveCx, l: LocalId, value: &Expr) {
         cx.flow.stale.retain(|(b, _, _)| *b != l);
         cx.borrows.remove(&l);
+        cx.captures_of.remove(&l);
         let Some(&ty) = self.b.local_ty.get(&l) else { return };
         if !self.is_borrowing_ty(ty) {
             return;
+        }
+        let mut captured = Vec::new();
+        self.captured_roots(cx, value, &mut captured);
+        captured.retain(|&r| r != l);
+        if !captured.is_empty() {
+            cx.captures_of.insert(l, captured);
         }
         let mut roots = Vec::new();
         self.borrowed_roots(cx, value, &mut roots);
@@ -960,6 +1177,8 @@ impl Checker<'_> {
     fn bind_parts(&mut self, cx: &mut MoveCx, pat: &Pat, root: Option<&Root>) {
         for local in pat_locals(pat) {
             cx.depth_of.insert(local, cx.depth);
+            // In the arm (or the rest of the condition's block), a block deeper.
+            cx.scope_of.insert(local, cx.scopes.len() + 1);
             fresh(cx, local);
             if let Some(Root::Local(owner)) = root {
                 let owner = cx.parts_of.get(owner).copied().unwrap_or(*owner);

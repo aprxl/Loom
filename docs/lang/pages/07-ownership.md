@@ -31,7 +31,11 @@ A borrow lasts as long as the call that received it, so a function can't return 
 
 @sample own_err_borrow
 
-The codes are [M0101](diag:M0101) (use after move), [M0102](diag:M0102) (move out of a borrow), [M0103](diag:M0103) (move out of an element), [M0104](diag:M0104) (overlapping `mut`) and [M0105](diag:M0105) (a stale borrow).
+Nor can a borrow outlive what it borrows. A lambda that uses variables around it is passed as an argument or kept in a local, and that's all: returning it, storing it in a warp or a list, or passing it to a `take` parameter is an error, and so is keeping it in a variable declared outside the block of a variable it uses. The same goes for a slice of a local list, and a stream made from one or from such a lambda. (A lambda that uses nothing around it is a plain function value, and goes anywhere.)
+
+@sample own_err_escape
+
+The codes are [M0101](diag:M0101) (use after move), [M0102](diag:M0102) (move out of a borrow), [M0103](diag:M0103) (move out of an element), [M0104](diag:M0104) (overlapping `mut`), [M0105](diag:M0105) (a stale borrow) and [M0106](diag:M0106) (a borrow that outlives what it borrows).
 
 ## `once` warps
 
