@@ -200,6 +200,30 @@ impl<'i> Machine<'i> {
                     }
                 }};
             }
+            // `c` is a 16-bit constant, sign-extended to 64 bits (the
+            // register of a value of any integer type that holds it).
+            macro_rules! imm {
+                ($f:expr) => {{
+                    let x = r!(b(w));
+                    set!(a(w), $f(x, c_i16(w) as i64 as u64))
+                }};
+            }
+            macro_rules! imm_t {
+                ($f:expr) => {{
+                    let x = r!(b(w));
+                    match $f(x, c_i16(w) as i64 as u64) {
+                        Ok(v) => set!(a(w), v),
+                        Err(e) => int_trap!(e),
+                    }
+                }};
+            }
+            macro_rules! branch_k {
+                ($f:expr) => {{
+                    if $f(r!(a(w)), b(w) as u16 as i16 as i64 as u64) {
+                        jump!(c_i16(w));
+                    }
+                }};
+            }
             macro_rules! un {
                 ($f:expr) => {{
                     let x = r!(b(w));
@@ -409,6 +433,30 @@ impl<'i> Machine<'i> {
                     let s = ints::spec(ext!());
                     bin_t!(|x, y| ints::shr(x, y, s))
                 }
+                Op::AddTKI8 => imm_t!(|x, k| ints::add_t(x, k, ints::I8)),
+                Op::AddTKI16 => imm_t!(|x, k| ints::add_t(x, k, ints::I16)),
+                Op::AddTKI32 => imm_t!(|x, k| ints::add_t(x, k, ints::I32)),
+                Op::AddTKI64 => imm_t!(|x, k| ints::add_t(x, k, ints::I64)),
+                Op::AddTKU8 => imm_t!(|x, k| ints::add_t(x, k, ints::U8)),
+                Op::AddTKU16 => imm_t!(|x, k| ints::add_t(x, k, ints::U16)),
+                Op::AddTKU32 => imm_t!(|x, k| ints::add_t(x, k, ints::U32)),
+                Op::AddTKU64 => imm_t!(|x, k| ints::add_t(x, k, ints::U64)),
+                Op::SubTKI8 => imm_t!(|x, k| ints::sub_t(x, k, ints::I8)),
+                Op::SubTKI16 => imm_t!(|x, k| ints::sub_t(x, k, ints::I16)),
+                Op::SubTKI32 => imm_t!(|x, k| ints::sub_t(x, k, ints::I32)),
+                Op::SubTKI64 => imm_t!(|x, k| ints::sub_t(x, k, ints::I64)),
+                Op::SubTKU8 => imm_t!(|x, k| ints::sub_t(x, k, ints::U8)),
+                Op::SubTKU16 => imm_t!(|x, k| ints::sub_t(x, k, ints::U16)),
+                Op::SubTKU32 => imm_t!(|x, k| ints::sub_t(x, k, ints::U32)),
+                Op::SubTKU64 => imm_t!(|x, k| ints::sub_t(x, k, ints::U64)),
+                Op::AddWKI8 => imm!(|x, k| ints::add_w(x, k, ints::I8)),
+                Op::AddWKI16 => imm!(|x, k| ints::add_w(x, k, ints::I16)),
+                Op::AddWKI32 => imm!(|x, k| ints::add_w(x, k, ints::I32)),
+                Op::AddWKI64 => imm!(|x, k| ints::add_w(x, k, ints::I64)),
+                Op::AddWKU8 => imm!(|x, k| ints::add_w(x, k, ints::U8)),
+                Op::AddWKU16 => imm!(|x, k| ints::add_w(x, k, ints::U16)),
+                Op::AddWKU32 => imm!(|x, k| ints::add_w(x, k, ints::U32)),
+                Op::AddWKU64 => imm!(|x, k| ints::add_w(x, k, ints::U64)),
                 Op::And => bin!(|x, y| x & y),
                 Op::Or => bin!(|x, y| x | y),
                 Op::Xor => bin!(|x, y| x ^ y),
@@ -451,6 +499,17 @@ impl<'i> Machine<'i> {
                 Op::JNLeF32 => {
                     branch!(|x, y| not_below(f32::from_bits(x as u32).partial_cmp(&f32::from_bits(y as u32)), true))
                 }
+
+                Op::JEqK => branch_k!(|x, k| x == k),
+                Op::JNeK => branch_k!(|x, k| x != k),
+                Op::JLtSK => branch_k!(|x, k| (x as i64) < (k as i64)),
+                Op::JLeSK => branch_k!(|x, k| (x as i64) <= (k as i64)),
+                Op::JGtSK => branch_k!(|x, k| (x as i64) > (k as i64)),
+                Op::JGeSK => branch_k!(|x, k| (x as i64) >= (k as i64)),
+                Op::JLtUK => branch_k!(|x: u64, k: u64| x < k),
+                Op::JLeUK => branch_k!(|x: u64, k: u64| x <= k),
+                Op::JGtUK => branch_k!(|x: u64, k: u64| x > k),
+                Op::JGeUK => branch_k!(|x: u64, k: u64| x >= k),
 
                 Op::Jmp => jump!(bc_i32(w) as isize),
                 Op::Loop => {

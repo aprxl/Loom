@@ -8,7 +8,8 @@
 //! Integer ops come in families specialized by width: `add.i32` for the
 //! common widths, and `add.gen`, whose extension word describes any other
 //! width (`u12`, `i24`) as an [`IntSpec`](crate::IntSpec). Trapping ops
-//! (`add`) unravel on overflow, `%` ops wrap and `|` ops saturate.
+//! (`add`) unravel on overflow, `%` ops wrap and `|` ops saturate. Ops
+//! ending in `k` take a small constant in place of a register.
 
 /// What an instruction's operand fields hold. Registers are counted in
 /// 8-byte slots from the frame pointer; offsets in words from the
@@ -31,6 +32,11 @@ pub enum Form {
     ABCX,
     /// `a`, `b`: registers; `c`: an `i16` offset to jump by.
     ABJ,
+    /// `a`, `b`: registers; `c`: an `i16` constant.
+    ABK,
+    /// `a`: a register; `b`: an `i16` constant; `c`: an `i16` offset to jump
+    /// by.
+    AKJ,
     /// `b:c`: an `i32` offset to jump by.
     J,
     /// `a`: a register; `b:c`: an `i32` offset to jump by.
@@ -194,6 +200,31 @@ ops! {
     MulSU32 = "mul|.u32", ABC;
     MulSU64 = "mul|.u64", ABC;
     MulSG = "mul|.gen", ABCX;
+    // with a 16-bit constant as the second operand
+    AddTKI8 = "addk.i8", ABK;
+    AddTKI16 = "addk.i16", ABK;
+    AddTKI32 = "addk.i32", ABK;
+    AddTKI64 = "addk.i64", ABK;
+    AddTKU8 = "addk.u8", ABK;
+    AddTKU16 = "addk.u16", ABK;
+    AddTKU32 = "addk.u32", ABK;
+    AddTKU64 = "addk.u64", ABK;
+    SubTKI8 = "subk.i8", ABK;
+    SubTKI16 = "subk.i16", ABK;
+    SubTKI32 = "subk.i32", ABK;
+    SubTKI64 = "subk.i64", ABK;
+    SubTKU8 = "subk.u8", ABK;
+    SubTKU16 = "subk.u16", ABK;
+    SubTKU32 = "subk.u32", ABK;
+    SubTKU64 = "subk.u64", ABK;
+    AddWKI8 = "add%k.i8", ABK;
+    AddWKI16 = "add%k.i16", ABK;
+    AddWKI32 = "add%k.i32", ABK;
+    AddWKI64 = "add%k.i64", ABK;
+    AddWKU8 = "add%k.u8", ABK;
+    AddWKU16 = "add%k.u16", ABK;
+    AddWKU32 = "add%k.u32", ABK;
+    AddWKU64 = "add%k.u64", ABK;
     // division, remainder, negation, bitwise not, shifts
     DivI8 = "div.i8", ABC;
     DivI16 = "div.i16", ABC;
@@ -273,6 +304,17 @@ ops! {
     JLeF32 = "jle.f32", ABJ;
     JNLtF32 = "jnlt.f32", ABJ;
     JNLeF32 = "jnle.f32", ABJ;
+    // compare with a 16-bit constant and branch: to `c` when it holds
+    JEqK = "jeqk", AKJ;
+    JNeK = "jnek", AKJ;
+    JLtSK = "jltk.s", AKJ;
+    JLeSK = "jlek.s", AKJ;
+    JGtSK = "jgtk.s", AKJ;
+    JGeSK = "jgek.s", AKJ;
+    JLtUK = "jltk.u", AKJ;
+    JLeUK = "jlek.u", AKJ;
+    JGtUK = "jgtk.u", AKJ;
+    JGeUK = "jgek.u", AKJ;
     // jumps
     Jmp = "jmp", J;
     Loop = "loop", J;

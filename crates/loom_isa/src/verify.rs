@@ -145,6 +145,14 @@ fn verify_func(image: &Image, index: usize) -> Result<(), VerifyError> {
                 reg(b(w))?;
                 target(c_i16(w))?;
             }
+            Form::ABK => {
+                reg(a(w))?;
+                reg(b(w))?;
+            }
+            Form::AKJ => {
+                reg(a(w))?;
+                target(c_i16(w))?;
+            }
             Form::J => target(bc_i32(w) as isize)?,
             Form::AJ => {
                 reg(a(w))?;
