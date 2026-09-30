@@ -1,0 +1,10 @@
+// Calls and returns: the naive Fibonacci.
+use std.io.print
+
+const SIZE = 32
+
+fn fib(n: i64) -> i64 = if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+
+fn main() {
+    print(fib(SIZE))
+}

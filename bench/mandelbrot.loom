@@ -1,0 +1,26 @@
+// Float arithmetic in a tight loop: the Mandelbrot set's escape counts
+// (the inner loop of examples/parallel.loom), summed over a grid.
+use std.io.print
+
+const SIZE = 400
+
+fn escape(cx: f64, cy: f64, limit: u16) -> u16 {
+    var (x, y, i) = (0.0, 0.0, 0u16)
+    while x * x + y * y <= 4.0 and i < limit {
+        (x, y) = (x * x - y * y + cx, 2.0 * x * y + cy)
+        i += 1
+    }
+    i
+}
+
+fn main() {
+    var total: u64 = 0
+    for row in 0..SIZE {
+        let cy = row as f64 / SIZE as f64 * 2.4 - 1.2
+        for col in 0..SIZE {
+            let cx = col as f64 / SIZE as f64 * 3.5 - 2.5
+            total += escape(cx, cy, 200)
+        }
+    }
+    print(total)
+}

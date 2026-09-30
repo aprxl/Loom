@@ -1,0 +1,5 @@
+# How many instructions Treadle dispatches for each benchmark at a small
+# size: name, size, count. crates/loom/tests/bench_counts.rs checks them
+# (with `--features vm-stats`); LOOM_BLESS=1 writes them anew.
+fib          20     109462
+mandelbrot   40     1124794
