@@ -27,6 +27,8 @@ pub(crate) struct Ctx<'i> {
     line_buffered: bool,
     /// The message of an unravel being built (`msg.*`).
     msg: Vec<u8>,
+    /// How many instructions have been dispatched (with `stats`).
+    pub dispatched: u64,
 }
 
 /// How much output is kept before it's written.
@@ -49,6 +51,7 @@ impl<'i> Ctx<'i> {
             sink,
             line_buffered,
             msg: Vec::new(),
+            dispatched: 0,
         }
     }
 

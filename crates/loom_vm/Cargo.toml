@@ -9,6 +9,8 @@ publish.workspace = true
 [features]
 # Run-time checks where the compiler is trusted: text reads, opcodes.
 checked = []
+# Counting the instructions each run dispatches (bench/counts.txt).
+stats = []
 
 [dependencies]
 loom_isa.workspace = true

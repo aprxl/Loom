@@ -116,6 +116,12 @@ impl<'i> Vm<'i> {
         Ok(Vm { image, machine })
     }
 
+    /// How many instructions have been dispatched so far; `None` unless
+    /// Treadle is built with the `stats` feature.
+    pub fn dispatched(&self) -> Option<u64> {
+        cfg!(feature = "stats").then_some(self.machine.ctx.dispatched)
+    }
+
     /// Calls function `func` with `args`, one register each, and gives its
     /// results; or how it ended when it didn't return. Output is flushed
     /// before this returns.
