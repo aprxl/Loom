@@ -1,45 +1,88 @@
 //! Patterns: tests as branches, and bindings.
+//!
+//! A pattern tests a value in registers or in memory. What it binds is a
+//! value of its own when it's plain data (`Copy`), and a view of the
+//! matched value otherwise: the binding's local is the address of that part
+//! of the value, and moving it moves out of the matched value (see
+//! `typeck/moves.rs`). A `let` owns what it binds instead.
 
 use loom_syntax::ast::BinaryOp;
+use loom_syntax::source::Span;
 
+use super::value::Val;
 use super::{BlockId, Builder};
 use crate::heddle::{BitOp, InstKind, VTy, Value};
 use crate::hir::{self, PatKind};
-use crate::ty::{IntTy, Ty};
+use crate::ty::{IntTy, Ty, TyKind};
 
 /// `u64`, for picking bits out of a value: its shifts never trap for an
 /// amount below 64, and never wrap.
 const BITS: IntTy = IntTy { signed: false, bits: 64, size: false };
 
+/// Whether a pattern's bindings own what they bind (a `let`), or view the
+/// matched value (a `match` arm, `is`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Binding {
+    Owned,
+    View,
+}
+
 impl<'a> Builder<'a> {
-    /// Jumps to `yes` if `pat` matches `vals` (a value of type `ty`), and to
+    /// The items of a tuple value: each item's value and type.
+    pub(super) fn tuple_items(&mut self, v: &Val, ty: Ty, span: Span) -> Option<Vec<(Val, Ty)>> {
+        let TyKind::Tuple(items) = self.tcx().kind(ty).clone() else {
+            return self.internal(span, "the items of something that isn't a tuple");
+        };
+        let items: Vec<Ty> = items.iter().map(|&t| self.tcx().degauge(t)).collect();
+        match v {
+            Val::Regs(vals) => {
+                let mut out = Vec::with_capacity(items.len());
+                let mut at = 0;
+                for t in items {
+                    let n = self.repr_of(t, span)?.parts().len();
+                    out.push((Val::Regs(vals[at..at + n].to_vec()), t));
+                    at += n;
+                }
+                Some(out)
+            }
+            &Val::Mem(ptr) => {
+                let offsets = self.field_offsets(ty, span)?;
+                let mut out = Vec::with_capacity(items.len());
+                for (t, off) in items.into_iter().zip(offsets) {
+                    out.push((self.load_val(ptr, off as i64, t, span)?, t));
+                }
+                Some(out)
+            }
+        }
+    }
+
+    /// Jumps to `yes` if `pat` matches `v` (a value of type `ty`), and to
     /// `no` if it doesn't.
-    pub(super) fn test_pat(
-        &mut self,
-        pat: &'a hir::Pat,
-        vals: &[Value],
-        ty: Ty,
-        yes: BlockId,
-        no: BlockId,
-    ) -> Option<()> {
+    pub(super) fn test_pat(&mut self, pat: &'a hir::Pat, v: &Val, ty: Ty, yes: BlockId, no: BlockId) -> Option<()> {
+        let span = pat.span;
+        if let Some(done) = self.test_warp_pat(pat, v, ty, yes, no) {
+            return done;
+        }
         match &pat.kind {
             PatKind::Wild | PatKind::Bind(_) | PatKind::Error => self.jump(yes),
             PatKind::Lit { lit, negative } => {
-                let v = self.lit(lit, *negative, ty, pat.span)?;
-                let c = self.compare(BinaryOp::Eq, vals, &v, ty, pat.span)?;
+                let lit_v = self.lit(lit, *negative, ty, span)?;
+                let vals = self.regs(v.clone(), ty, span)?;
+                let c = self.compare(BinaryOp::Eq, &vals, &lit_v, ty, span)?;
                 self.br(c, yes, no);
             }
             PatKind::Range { lo, hi, inclusive } => {
+                let vals = self.regs(v.clone(), ty, span)?;
                 let bound = |this: &mut Self, p: &Option<Box<hir::Pat>>| -> Option<Option<Vec<Value>>> {
                     match p.as_ref().map(|p| &p.kind) {
                         None => Some(None),
-                        Some(PatKind::Lit { lit, negative }) => Some(Some(this.lit(lit, *negative, ty, pat.span)?)),
-                        Some(_) => this.unsupported(pat.span, "this range pattern"),
+                        Some(PatKind::Lit { lit, negative }) => Some(Some(this.lit(lit, *negative, ty, span)?)),
+                        Some(_) => this.unsupported(span, "this range pattern"),
                     }
                 };
                 let (lo, hi) = (bound(self, lo)?, bound(self, hi)?);
                 if let Some(lo) = lo {
-                    let c = self.compare(BinaryOp::Le, &lo, vals, ty, pat.span)?;
+                    let c = self.compare(BinaryOp::Le, &lo, &vals, ty, span)?;
                     let next = self.new_block();
                     self.br(c, next, no);
                     self.enter(next);
@@ -47,20 +90,18 @@ impl<'a> Builder<'a> {
                 match hi {
                     Some(hi) => {
                         let op = if *inclusive { BinaryOp::Le } else { BinaryOp::Lt };
-                        let c = self.compare(op, vals, &hi, ty, pat.span)?;
+                        let c = self.compare(op, &vals, &hi, ty, span)?;
                         self.br(c, yes, no);
                     }
                     None => self.jump(yes),
                 }
             }
             PatKind::Tuple(pats) => {
-                let parts = self.tuple_parts(ty, pat.span)?;
-                let mut at = 0;
-                for (p, (item_ty, n)) in pats.iter().zip(parts) {
+                let items = self.tuple_items(v, ty, span)?;
+                for (p, (item, item_ty)) in pats.iter().zip(items) {
                     let next = self.new_block();
-                    self.test_pat(p, &vals[at..at + n], item_ty, next, no)?;
+                    self.test_pat(p, &item, item_ty, next, no)?;
                     self.enter(next);
-                    at += n;
                 }
                 self.jump(yes);
             }
@@ -68,15 +109,16 @@ impl<'a> Builder<'a> {
                 let (last, rest) = alts.split_last()?;
                 for alt in rest {
                     let next = self.new_block();
-                    self.test_pat(alt, vals, ty, yes, next)?;
+                    self.test_pat(alt, v, ty, yes, next)?;
                     self.enter(next);
                 }
-                self.test_pat(last, vals, ty, yes, no)?;
+                self.test_pat(last, v, ty, yes, no)?;
             }
             PatKind::Twill { pattern, .. } => {
                 if pattern.mask == 0 {
                     self.jump(yes);
                 } else {
+                    let vals = self.regs(v.clone(), ty, span)?;
                     let mask = self.iconst(pattern.mask as u64);
                     let masked = self.emit1(InstKind::Bit { op: BitOp::And, a: vals[0], b: mask }, VTy::Int);
                     let want = self.iconst(pattern.value as u64);
@@ -87,36 +129,72 @@ impl<'a> Builder<'a> {
                     self.br(c, yes, no);
                 }
             }
-            _ => return self.unsupported(pat.span, "this pattern"),
+            _ => return self.unsupported(span, "this pattern"),
         }
         Some(())
     }
 
-    /// Binds the names of a pattern that matched `vals`.
-    pub(super) fn bind_pat(&mut self, pat: &'a hir::Pat, vals: &[Value], ty: Ty) -> Option<()> {
+    /// Binds the names of a pattern that matched `v`, as views of it.
+    pub(super) fn bind_pat(&mut self, pat: &'a hir::Pat, v: &Val, ty: Ty) -> Option<()> {
+        self.bind_with(pat, v, ty, Binding::View)
+    }
+
+    /// Binds the names of `pat`, which matched `v`, a value of `ty`.
+    pub(super) fn bind_with(&mut self, pat: &'a hir::Pat, v: &Val, ty: Ty, how: Binding) -> Option<()> {
+        let span = pat.span;
+        if let Some(done) = self.bind_warp_pat(pat, v, ty, how) {
+            return done;
+        }
         match &pat.kind {
-            PatKind::Bind(l) => {
-                let vars = self.local_vars(*l, pat.span)?;
-                self.write_all(&vars, vals);
-            }
+            PatKind::Bind(l) => self.bind_local(*l, v.clone(), how, span)?,
             PatKind::Tuple(pats) => {
-                let parts = self.tuple_parts(ty, pat.span)?;
-                let mut at = 0;
-                for (p, (item_ty, n)) in pats.iter().zip(parts) {
-                    self.bind_pat(p, &vals[at..at + n], item_ty)?;
-                    at += n;
+                let items = self.tuple_items(v, ty, span)?;
+                for (p, (item, item_ty)) in pats.iter().zip(items) {
+                    self.bind_with(p, &item, item_ty, how)?;
                 }
             }
             PatKind::Twill { pattern, captures } => {
+                let vals = self.regs(v.clone(), ty, span)?;
                 for (capture, &l) in pattern.captures.iter().zip(captures) {
                     let value = self.twill_capture(vals[0], capture);
-                    let vars = self.local_vars(l, pat.span)?;
-                    self.write_all(&vars, &[value]);
+                    self.bind_local(l, Val::Regs(vec![value]), Binding::Owned, span)?;
+                }
+            }
+            PatKind::Or(alts) => {
+                // Checked alone when it binds anything (see `match_expr`).
+                if let Some(first) = alts.first() {
+                    self.bind_with(first, v, ty, how)?;
                 }
             }
             _ => {}
         }
         Some(())
+    }
+
+    /// Binds local `l` to `v`: a value of its own for plain data, or a view
+    /// of `v` (for `how == View`) when it owns memory.
+    pub(super) fn bind_local(&mut self, l: crate::hir::LocalId, v: Val, how: Binding, span: Span) -> Option<()> {
+        let ty = self.local_ty(l);
+        match (how, &v) {
+            (Binding::View, &Val::Mem(ptr)) if self.needs_drop(ty) => {
+                self.bind_ref(l, ptr);
+                Some(())
+            }
+            (Binding::View, _) => {
+                // A copy: what it was matched against may change while it's
+                // in scope.
+                let place = self.local_place(l, span)?;
+                let v = match v {
+                    Val::Mem(_) if self.in_regs(ty) => Val::Regs(self.regs(v, ty, span)?),
+                    v => v,
+                };
+                match &place {
+                    super::value::Place::At { ptr, off } => self.store_val(*ptr, *off, ty, &v, span),
+                    super::value::Place::Vars(_) => self.write_place(&place, ty, v, span),
+                }
+            }
+            (Binding::Owned, _) => self.bind_owned(l, v, span),
+        }
     }
 
     /// The bits of `v` a twill capture names, most significant first.
@@ -154,11 +232,16 @@ impl<'a> Builder<'a> {
         acc.unwrap_or_else(|| self.iconst(0))
     }
 
-    /// Binds a pattern that can't fail (`let`, `for`).
-    pub(super) fn bind_irrefutable(&mut self, pat: &'a hir::Pat, vals: &[Value], ty: Ty) -> Option<()> {
+    /// Binds a pattern that can't fail (`let`, `for`), owning what it binds.
+    pub(super) fn bind_irrefutable(&mut self, pat: &'a hir::Pat, v: Val, ty: Ty) -> Option<()> {
         match &pat.kind {
-            PatKind::Wild | PatKind::Bind(_) | PatKind::Tuple(_) | PatKind::Twill { .. } | PatKind::Error => {
-                self.bind_pat(pat, vals, ty)
+            PatKind::Wild => {
+                // `let _ = x` throws the value away: a temporary is dropped at
+                // the end of the statement, and a place keeps it.
+                Some(())
+            }
+            PatKind::Bind(_) | PatKind::Tuple(_) | PatKind::Twill { .. } | PatKind::Error | PatKind::Case { .. } => {
+                self.bind_with(pat, &v, ty, Binding::Owned)
             }
             _ => self.unsupported(pat.span, "this pattern in a `let`"),
         }
@@ -167,12 +250,7 @@ impl<'a> Builder<'a> {
 
 /// Whether a pattern binds any names.
 pub(super) fn binds_anything(pat: &hir::Pat) -> bool {
-    match &pat.kind {
-        PatKind::Bind(_) | PatKind::Rest(Some(_)) | PatKind::TypeTest { .. } => true,
-        PatKind::Tuple(pats) | PatKind::Slice(pats) | PatKind::Or(pats) => pats.iter().any(binds_anything),
-        PatKind::Case { fields, .. } => fields.iter().flatten().any(|f| binds_anything(&f.pat)),
-        PatKind::Twill { captures, .. } => !captures.is_empty(),
-        PatKind::Some(p) | PatKind::Ok(p) | PatKind::Err(p) => binds_anything(p),
-        _ => false,
-    }
+    let mut locals = Vec::new();
+    super::scan::pat_locals(pat, &mut locals);
+    !locals.is_empty()
 }

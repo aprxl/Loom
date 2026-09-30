@@ -329,6 +329,7 @@ fn slot_uses(f: &Func) -> (HashMap<Value, usize>, HashSet<Value>) {
             let folded = match &inst.kind {
                 InstKind::Load { ptr, off, .. } if *off >= 0 => Some(*ptr),
                 InstKind::Store { ptr, off, .. } if *off >= 0 => Some(*ptr),
+                InstKind::Offset { ptr, off } if u32::try_from(*off).is_ok() => Some(*ptr),
                 _ => None,
             };
             for u in inst_uses(&inst.kind) {
@@ -1214,6 +1215,17 @@ impl Emitter<'_> {
                 self.put(span, word_i32(Op::Lea, dst, at as i32));
             }
             K::Global(off) => self.put(span, word_i32(Op::Gaddr, dst, *off as i32)),
+            K::Offset { ptr, off } => {
+                if let (Some(&slot), Ok(at)) = (self.slot_of.get(ptr), u32::try_from(*off)) {
+                    // An address inside a frame slot: one `lea`.
+                    self.put(span, word_i32(Op::Lea, dst, (self.slot_at[slot] + at) as i32));
+                } else if let Ok(k) = i16::try_from(*off) {
+                    self.put(span, word(Op::AddWKU64, dst, self.r(*ptr), k as u16));
+                } else {
+                    self.put_ext(span, word(Op::Ldk, self.tmp2, 0, 0), Some(*off as u64));
+                    self.put(span, word(Op::AddWU64, dst, self.r(*ptr), self.tmp2));
+                }
+            }
             K::Load { mem, ptr, off } => match self.address(span, *ptr, *off) {
                 Ok((base, off)) => self.put(span, word(Self::mem_op(*mem, false, false), dst, base, off as u16)),
                 Err(at) => self.put(span, word_i32(Self::mem_op(*mem, false, true), dst, at as i32)),

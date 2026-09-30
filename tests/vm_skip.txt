@@ -53,7 +53,6 @@ tuple_assign         V1  warps
 union_values         V1  unions
 unions               V1  unions
 unravel_chunks       V1  lists, slices
-unravel_defer        V1  `defer`
 unravel_index        V1  arrays
 unravel_open_range   V1  streams
 unravel_sum          V1  arrays

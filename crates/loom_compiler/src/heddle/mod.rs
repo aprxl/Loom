@@ -273,6 +273,11 @@ pub enum InstKind {
         dst: Value,
         size: u64,
     },
+    /// `ptr + off`: a field's address.
+    Offset {
+        ptr: Value,
+        off: i64,
+    },
     /// `base + index * scale`: an element's address.
     Index {
         base: Value,

@@ -1,40 +1,101 @@
 //! Building Heddle from the typed program (design/vm.md §6.3).
 //!
 //! Each function instance the program reaches from `main` becomes a
-//! [`Func`]. Loom locals are *variables*; the builder turns them into SSA
-//! values as it goes, with Braun et al.'s algorithm ("Simple and Efficient
-//! Construction of Static Single Assignment Form", 2013): reading a
-//! variable in a block looks back through its predecessors, adding block
-//! parameters where paths meet. A block is *sealed* once all its
-//! predecessors are known. At the end, parameters every edge passes the
+//! [`Func`], and so do the lambdas it makes, the functions it uses as
+//! values (through a thunk that takes a function value's environment), and
+//! the code it needs for its types: dropping, copying, comparing, showing
+//! (*glue*, see `glue.rs`).
+//!
+//! Values are held as `repr.rs` says: in registers or in memory (see
+//! `value.rs`). Loom locals in registers are *variables*; the builder turns
+//! them into SSA values as it goes, with Braun et al.'s algorithm ("Simple
+//! and Efficient Construction of Static Single Assignment Form", 2013):
+//! reading a variable in a block looks back through its predecessors,
+//! adding block parameters where paths meet. A block is *sealed* once all
+//! its predecessors are known. At the end, parameters every edge passes the
 //! same value to are removed, and unreachable blocks dropped.
+//!
+//! Cleanups (drops and `defer`s) run on every way out of a scope, landing
+//! pads included (see `cleanup.rs`).
 //!
 //! What Treadle can't run yet is reported as U0102, like the Lua backend
 //! does.
 
+mod call;
+mod cleanup;
 mod expr;
+mod fallible;
+mod glue;
 mod pat;
+mod repr;
+mod scan;
 mod text;
+mod value;
+mod warp;
 
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::rc::Rc;
 
 use indexmap::IndexMap;
 use loom_isa::{FmtItem, IntSpec, Spec, ValueKind};
 use loom_syntax::Diagnostic;
+use loom_syntax::ast::ParamMode;
 use loom_syntax::diag::codes;
 use loom_syntax::source::Span;
 
 use super::{Block, BlockId, Edge, Func, FuncId, Inst, InstKind, Module, Term, VTy, Value};
 use crate::hir::{DefKind, FnRet, HirId, LocalId, Program};
+use crate::ty::layout::Layouts;
 use crate::ty::{FloatTy, IntTy, Ty, TyKind};
 use crate::typeck::{Body, BodyId, Instance, Typed};
+use repr::{Part, Repr};
+use value::{Storage, Val};
 
-/// A Loom value: one Heddle value per scalar part.
+/// A Loom value in registers: one Heddle value per scalar part.
 type Vals = Vec<Value>;
 
 /// A Loom local (or a part of one), before SSA construction.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct Var(u32);
+
+/// A function to build.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum FnKey {
+    /// A function instance of the program.
+    Body(BodyId),
+    /// Code for the values of a type.
+    Glue(Glue, Ty),
+}
+
+/// What glue does for a type's values.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum Glue {
+    /// Frees what a value owns: `drop(value's address)`.
+    Drop,
+}
+
+/// How a function takes its parameters and gives its result (its ABI).
+#[derive(Clone, Debug)]
+struct Abi {
+    /// The result's type, when it lives in memory: the caller passes the
+    /// address to write it at, first.
+    pub sret: Option<Ty>,
+    /// A function value's environment comes next.
+    pub env: bool,
+    pub params: Vec<ParamAbi>,
+    /// The result's parts, when it lives in registers.
+    pub results: Vec<VTy>,
+}
+
+/// How one parameter is passed.
+#[derive(Clone, Debug)]
+enum ParamAbi {
+    /// Its parts, in registers.
+    Regs(Rc<[Part]>),
+    /// Its address: a value in memory (read, the caller's; taken, the
+    /// callee's to drop), or any `mut` parameter (the caller's place).
+    Addr,
+}
 
 /// A loop being built: where `break` and `continue` go.
 #[derive(Debug)]
@@ -42,13 +103,23 @@ struct LoopCtx {
     id: HirId,
     brk: BlockId,
     cont: BlockId,
-    /// Where `break value` puts its value.
-    result: Vec<Var>,
+    /// Where `break value` puts its value: variables, or a slot.
+    result: LoopResult,
+    /// How many scopes were open outside the loop: `break` and `continue`
+    /// clean up the ones inside it.
+    scopes: usize,
+}
+
+#[derive(Clone, Debug)]
+enum LoopResult {
+    None,
+    Vars(Vec<Var>),
+    Slot(Value),
 }
 
 /// What building one function needs.
 #[derive(Debug, Default)]
-struct FnState {
+struct FnState<'a> {
     /// Whose tables expressions are read from.
     body: BodyId,
     blocks: Vec<Block>,
@@ -62,14 +133,38 @@ struct FnState {
     /// Parameters added to unsealed blocks, filled in when they're sealed.
     incomplete: HashMap<BlockId, Vec<(Var, Value)>>,
     var_ty: Vec<VTy>,
-    locals: HashMap<LocalId, Vec<Var>>,
+    locals: HashMap<LocalId, Storage>,
     loops: Vec<LoopCtx>,
     /// The Loom statement being built, for instructions' locations.
     span: Option<Span>,
-    /// The function's `mut` scalar parameters, returned after its results.
-    outs: Vec<Var>,
     /// Frame slots: memory for values that live in memory.
     slots: Vec<super::Slot>,
+    /// Values that are slots' addresses, by value.
+    slot_of: HashMap<Value, u32>,
+    /// What `scan` found about the body.
+    scan: scan::Scan,
+    /// The function's result type, and where it goes when it's in memory.
+    ret: Option<Ty>,
+    sret: Option<Value>,
+    /// The cleanup stack (see `cleanup.rs`), where each open scope starts
+    /// on it, and the landing pads made so far, by the live cleanups' ids.
+    cleanups: Vec<cleanup::Cleanup<'a>>,
+    scopes: Vec<usize>,
+    pads: HashMap<Vec<u32>, BlockId>,
+    next_cleanup: u32,
+    /// The depth of the scope of the statement being built: a `let`'s
+    /// local goes under its temporaries.
+    stmt_start: Option<usize>,
+    /// Temporaries in memory that own something, by address: their
+    /// cleanups.
+    temps: HashMap<Value, u32>,
+    /// While a landing pad is built.
+    in_pad: u32,
+    /// Each fallback `defer`'s flag, for the local it cleans up: slots
+    /// holding a byte.
+    defer_flags: HashMap<LocalId, Vec<u32>>,
+    /// Dot-blocks being built: their subjects' places.
+    subjects: HashMap<HirId, (value::Place, Ty)>,
 }
 
 pub(super) struct Builder<'a> {
@@ -78,11 +173,17 @@ pub(super) struct Builder<'a> {
     diags: Vec<Diagnostic>,
     reported: HashSet<String>,
     funcs: Vec<Option<Func>>,
-    ids: IndexMap<BodyId, FuncId>,
-    queue: VecDeque<BodyId>,
+    ids: IndexMap<FnKey, FuncId>,
+    queue: VecDeque<FnKey>,
     strings: IndexMap<Vec<u8>, u32>,
     fmts: IndexMap<FmtItem, u32>,
-    f: FnState,
+    layouts: Layouts<'a>,
+    reprs: HashMap<Ty, Option<Repr>>,
+    drops: HashMap<Ty, bool>,
+    /// Where `main` is: glue, which no one line of the program made, is
+    /// said to be there.
+    main_span: Option<Span>,
+    f: FnState<'a>,
 }
 
 /// Builds the Heddle of the program that starts at `main`. `typed` must be
@@ -98,12 +199,17 @@ pub fn build(p: &Program, typed: &Typed) -> Result<Module, Vec<Diagnostic>> {
         queue: VecDeque::new(),
         strings: IndexMap::new(),
         fmts: IndexMap::new(),
+        layouts: Layouts::new(&typed.tcx, p, &typed.results),
+        reprs: HashMap::new(),
+        drops: HashMap::new(),
+        main_span: None,
         f: FnState::default(),
     };
     let Some(main) = b.find_main() else { return Err(b.diags) };
-    let entry = b.func_id(main);
-    while let Some(id) = b.queue.pop_front() {
-        b.build_func(id);
+    b.main_span = Some(p.def(typed.results.instance(main).def).span);
+    let entry = b.func_id(FnKey::Body(main));
+    while let Some(key) = b.queue.pop_front() {
+        b.build_func(key);
     }
     if !b.diags.is_empty() {
         return Err(b.diags);
@@ -162,19 +268,19 @@ impl<'a> Builder<'a> {
 
     // ------------------------------------------------------------ functions
 
-    /// The function instance `id` becomes, queuing it to be built.
-    fn func_id(&mut self, id: BodyId) -> FuncId {
-        if let Some(&f) = self.ids.get(&id) {
+    /// The function `key` becomes, queuing it to be built.
+    fn func_id(&mut self, key: FnKey) -> FuncId {
+        if let Some(&f) = self.ids.get(&key) {
             return f;
         }
         let f = FuncId(self.funcs.len() as u32);
         self.funcs.push(None);
-        self.ids.insert(id, f);
-        self.queue.push_back(id);
+        self.ids.insert(key, f);
+        self.queue.push_back(key);
         f
     }
 
-    fn func_name(&self, id: BodyId) -> String {
+    fn body_name(&self, id: BodyId) -> String {
         let inst = self.typed.results.instance(id);
         let mut name = self.p.def(inst.def).name.clone();
         if let Some(parent) = self.p.def(inst.def).parent.filter(|&w| !self.p.def(w).name.is_empty()) {
@@ -186,34 +292,142 @@ impl<'a> Builder<'a> {
         name
     }
 
-    fn build_func(&mut self, id: BodyId) {
-        let p = self.p;
-        let inst = self.typed.results.instance(id);
-        let def = p.def(inst.def);
-        let fid = self.ids[&id];
-        let name = self.func_name(id);
-        self.f = FnState { body: id, ..FnState::default() };
+    fn key_name(&self, key: FnKey) -> String {
+        match key {
+            FnKey::Body(id) => self.body_name(id),
+            FnKey::Glue(g, ty) => {
+                let what = match g {
+                    Glue::Drop => "drop",
+                };
+                format!("{what}[{}]", self.tcx().display(self.p, ty))
+            }
+        }
+    }
+
+    /// The glue function `g` for `ty`.
+    fn glue(&mut self, g: Glue, ty: Ty) -> FuncId {
+        let ty = self.tcx().degauge(ty);
+        self.func_id(FnKey::Glue(g, ty))
+    }
+
+    fn build_func(&mut self, key: FnKey) {
+        let fid = self.ids[&key];
+        let name = self.key_name(key);
+        let body = match key {
+            FnKey::Body(id) => id,
+            FnKey::Glue(..) => BodyId(0),
+        };
+        self.f = FnState { body, ..FnState::default() };
         let entry = self.new_block();
         self.f.sealed[entry.0 as usize] = true;
         self.f.cur = Some(entry);
         let reported = self.diags.len();
-        let func = match &def.kind {
-            DefKind::Fn(f) if f.abi.is_none() && f.body.is_some() && !inst.forward => self.fn_body(id, f, def.span),
-            _ => self.unsupported(def.span, &format!("calling `{}`", p.def_path(inst.def))),
+        let span = self.key_span(key);
+        self.f.span = Some(span);
+        let results = match key {
+            FnKey::Body(id) => self.body_func(id),
+            FnKey::Glue(g, ty) => self.glue_func(g, ty),
         };
-        let results = func.unwrap_or_default();
         let state = std::mem::take(&mut self.f);
-        let (func, complete) = finish(name, state, results);
+        let (func, complete) = finish(name, state, results.unwrap_or_default());
         // Code that can run but doesn't end is a builder bug, unless
         // something was reported (and nothing runs).
         if !complete && self.diags.len() == reported {
             self.diags.push(
                 Diagnostic::error(codes::U0102, format!("internal error: Treadle lost track of `{}`", func.name))
-                    .primary(def.span, "while building this")
+                    .primary(span, "while building this")
                     .note("this is a bug in Loom, not in your program"),
             );
         }
         self.funcs[fid.0 as usize] = Some(func);
+    }
+
+    fn key_span(&self, key: FnKey) -> Span {
+        match key {
+            FnKey::Body(id) => self.p.def(self.typed.results.instance(id).def).span,
+            FnKey::Glue(..) => self.main_span.expect("set before anything is built"),
+        }
+    }
+
+    /// How a function with these parameters and result is called.
+    fn abi(&mut self, params: &[(ParamMode, Ty)], ret: Ty, env: bool, span: Span) -> Option<Abi> {
+        let sret = match self.repr_of(ret, span)? {
+            Repr::Regs(_) => None,
+            Repr::Mem { .. } => Some(ret),
+        };
+        let results = match self.repr_of(ret, span)? {
+            Repr::Regs(parts) => parts.iter().map(|p| p.vty).collect(),
+            Repr::Mem { .. } => Vec::new(),
+        };
+        let mut out = Vec::with_capacity(params.len());
+        for &(mode, ty) in params {
+            out.push(match (mode, self.repr_of(ty, span)?) {
+                (ParamMode::Mut, _) | (_, Repr::Mem { .. }) => ParamAbi::Addr,
+                (_, Repr::Regs(parts)) => ParamAbi::Regs(parts),
+            });
+        }
+        Some(Abi { sret, env, params: out, results })
+    }
+
+    /// The ABI of function instance `id`.
+    fn body_abi(&mut self, id: BodyId, span: Span) -> Option<Abi> {
+        let sig = self.typed.results.sigs.get(&id)?.clone();
+        let params: Vec<(ParamMode, Ty)> = sig.params.iter().map(|p| (p.mode, self.tcx().degauge(p.ty))).collect();
+        self.abi(&params, sig.ret, false, span)
+    }
+
+    /// A function instance of the program.
+    fn body_func(&mut self, id: BodyId) -> Option<Vec<VTy>> {
+        let p = self.p;
+        let inst = self.typed.results.instance(id);
+        let def = p.def(inst.def);
+        match &def.kind {
+            DefKind::Fn(f) if f.abi.is_none() && f.body.is_some() && !inst.forward => self.fn_body(id, f, def.span),
+            _ => self.unsupported(def.span, &format!("calling `{}`", p.def_path(inst.def))),
+        }
+    }
+
+    /// Makes the entry block's parameters for `abi`: the result's address,
+    /// the environment, then each parameter's values.
+    fn entry_params(&mut self, abi: &Abi) -> (Option<Value>, Option<Value>, Vec<Vals>) {
+        let entry = BlockId(0);
+        let new = |this: &mut Self, ty: VTy| {
+            let v = this.new_value(ty);
+            this.f.blocks[entry.0 as usize].params.push(v);
+            v
+        };
+        let sret = abi.sret.map(|_| new(self, VTy::Ptr));
+        let env = abi.env.then(|| new(self, VTy::Ptr));
+        let params = abi
+            .params
+            .iter()
+            .map(|p| match p {
+                ParamAbi::Regs(parts) => parts.iter().map(|part| new(self, part.vty)).collect(),
+                ParamAbi::Addr => vec![new(self, VTy::Ptr)],
+            })
+            .collect();
+        (sret, env, params)
+    }
+
+    /// Binds parameter local `l` (of `mode`, passed as `abi`) to its entry
+    /// values.
+    fn bind_param(&mut self, l: LocalId, mode: ParamMode, abi: &ParamAbi, vals: Vals, span: Span) -> Option<()> {
+        let ty = self.local_ty(l);
+        match abi {
+            ParamAbi::Addr => {
+                let ptr = vals[0];
+                self.f.locals.insert(l, Storage::At(ptr));
+                // A value in memory it takes is its own to drop.
+                if mode == ParamMode::Take && self.needs_drop(ty) {
+                    self.add_cleanup(cleanup::CleanupKind::Drop { at: cleanup::Stable::Param(ptr), ty });
+                }
+            }
+            ParamAbi::Regs(_) => {
+                let place = self.local_place(l, span)?;
+                self.write_place(&place, ty, Val::Regs(vals), span)?;
+            }
+        }
+        Some(())
     }
 
     /// Builds a function's body; gives its result types.
@@ -222,36 +436,45 @@ impl<'a> Builder<'a> {
         if matches!(f.ret, FnRet::Shuttle { .. }) {
             return self.unsupported(span, "shuttles");
         }
-        let entry = BlockId(0);
-        for (param, sp) in f.params.iter().zip(&sig.params) {
-            let tys = self.flat(sp.ty, param.span)?;
-            let vars = self.local_vars(param.local, param.span)?;
-            for (&var, &ty) in vars.iter().zip(&tys) {
-                let v = self.new_value(ty);
-                self.f.blocks[entry.0 as usize].params.push(v);
-                self.write(var, v);
-            }
-            if sp.mode == loom_syntax::ast::ParamMode::Mut {
-                self.f.outs.extend(vars);
-            }
-        }
-        let ret_tys = if matches!(f.ret, FnRet::Unit) { Vec::new() } else { self.flat(sig.ret, span)? };
-        let mut results = ret_tys.clone();
-        results.extend(self.f.outs.iter().map(|v| self.f.var_ty[v.0 as usize]));
-        self.f.span = Some(span);
         let body = f.body.as_ref().expect("checked by the caller");
-        let vals = self.expr(body);
-        if self.f.cur.is_some() {
-            let mut vals = if ret_tys.is_empty() { Vec::new() } else { vals? };
-            vals.extend(self.read_outs());
-            self.terminate(Term::Ret(vals));
+        let abi = self.body_abi(id, span)?;
+        self.f.scan = self.scan(id, body);
+        let (sret, _, params) = self.entry_params(&abi);
+        self.f.ret = Some(sig.ret);
+        self.f.sret = sret;
+        let depth = self.open_scope();
+        for (((param, sp), pabi), vals) in f.params.iter().zip(&sig.params).zip(&abi.params).zip(params) {
+            self.bind_param(param.local, sp.mode, pabi, vals, param.span)?;
         }
-        Some(results)
+        let val = self.expr(body);
+        if self.live() {
+            let val = match val {
+                Some(v) => v,
+                None if self.live() => return None,
+                None => Val::Regs(Vec::new()),
+            };
+            self.ret_val(val, span)?;
+        }
+        self.close_scope(depth);
+        Some(abi.results)
     }
 
-    fn read_outs(&mut self) -> Vals {
-        let outs = self.f.outs.clone();
-        outs.into_iter().map(|v| self.read(v)).collect()
+    /// Returns `val` from the function: into its result's memory, or in
+    /// registers, after every cleanup of the function runs.
+    fn ret_val(&mut self, val: Val, span: Span) -> Option<()> {
+        let ty = self.f.ret.unwrap_or(self.tcx().unit);
+        let vals = match self.f.sret {
+            Some(sret) => {
+                self.move_to(sret, 0, val, ty, span)?;
+                Vec::new()
+            }
+            None => self.regs(val, ty, span)?,
+        };
+        self.run_cleanups(0);
+        if self.live() {
+            self.terminate(Term::Ret(vals));
+        }
+        Some(())
     }
 
     // ------------------------------------------------------------ types
@@ -281,40 +504,11 @@ impl<'a> Builder<'a> {
         }
     }
 
-    /// The machine types of the parts of a value of type `ty`, or `None`
-    /// (reported) for types Treadle can't hold yet.
-    fn flat(&mut self, ty: Ty, span: Span) -> Option<Vec<VTy>> {
-        let mut out = Vec::new();
-        self.flat_into(ty, span, &mut out)?;
-        Some(out)
-    }
-
-    fn flat_into(&mut self, ty: Ty, span: Span, out: &mut Vec<VTy>) -> Option<()> {
-        let tcx = self.tcx();
-        match tcx.kind(tcx.degauge(ty)) {
-            TyKind::Int(_) | TyKind::Bool | TyKind::Char => out.push(VTy::Int),
-            TyKind::Float(FloatTy::F32) => out.push(VTy::F32),
-            TyKind::Float(FloatTy::F64) => out.push(VTy::F64),
-            TyKind::Str => out.extend([VTy::Ptr, VTy::Int]),
-            TyKind::Unit | TyKind::Never => {}
-            TyKind::Tuple(items) => {
-                for &item in items {
-                    self.flat_into(item, span, out)?;
-                }
-            }
-            _ => {
-                let shown = tcx.display(self.p, ty);
-                return self.unsupported(span, &format!("values of type `{shown}`"));
-            }
-        }
-        Some(())
-    }
-
     /// How many parts each item of tuple type `ty` has.
     fn tuple_parts(&mut self, ty: Ty, span: Span) -> Option<Vec<(Ty, usize)>> {
         let TyKind::Tuple(items) = self.tcx().kind(ty) else { return None };
         let items = items.clone();
-        items.into_iter().map(|t| Some((t, self.flat(t, span)?.len()))).collect()
+        items.into_iter().map(|t| Some((t, self.repr_of(t, span)?.parts().len()))).collect()
     }
 
     // ------------------------------------------------------------ blocks and values
@@ -355,11 +549,14 @@ impl<'a> Builder<'a> {
         self.f.cur.is_some()
     }
 
+    /// Adds an instruction to the current block; its results. One that can
+    /// unravel gets the landing pad for the cleanups live here.
     fn emit(&mut self, kind: InstKind, tys: &[VTy]) -> Vals {
+        let unwind = if kind.can_unwind() { self.pad() } else { None };
         let b = self.cur_block();
         let results: Vals = tys.iter().map(|&t| self.new_value(t)).collect();
         let span = self.f.span;
-        self.f.blocks[b.0 as usize].insts.push(Inst { kind, results: results.clone(), span, unwind: None });
+        self.f.blocks[b.0 as usize].insts.push(Inst { kind, results: results.clone(), span, unwind });
         results
     }
 
@@ -374,6 +571,7 @@ impl<'a> Builder<'a> {
     /// Ends the current block. Control has left it; code built next is dead
     /// until [`switch_to`](Self::switch_to).
     fn terminate(&mut self, term: Term) {
+        let unwind = if matches!(term, Term::Unravel { .. } | Term::UnravelMsg) { self.pad() } else { None };
         let b = self.cur_block();
         for e in term.edges() {
             self.f.preds[e.block.0 as usize].push(b);
@@ -381,6 +579,7 @@ impl<'a> Builder<'a> {
         let block = &mut self.f.blocks[b.0 as usize];
         block.term = Some(term);
         block.term_span = self.f.span;
+        block.term_unwind = unwind;
         self.f.cur = None;
     }
 
@@ -428,18 +627,6 @@ impl<'a> Builder<'a> {
 
     fn new_vars(&mut self, tys: &[VTy]) -> Vec<Var> {
         tys.iter().map(|&t| self.new_var(t)).collect()
-    }
-
-    /// The variables of local `l`, made on first use.
-    fn local_vars(&mut self, l: LocalId, span: Span) -> Option<Vec<Var>> {
-        if let Some(vars) = self.f.locals.get(&l) {
-            return Some(vars.clone());
-        }
-        let ty = self.tables().local_ty.get(&l).copied().unwrap_or(self.tcx().error);
-        let tys = self.flat(ty, span)?;
-        let vars = self.new_vars(&tys);
-        self.f.locals.insert(l, vars.clone());
-        Some(vars)
     }
 
     fn write(&mut self, var: Var, v: Value) {
@@ -568,7 +755,7 @@ fn parse_spec(s: &str) -> Option<Spec> {
 /// A function once its body is built: dead blocks dropped, parameters
 /// every edge passes the same value to replaced by that value. `false`
 /// when a block that can run has no terminator.
-fn finish(name: String, state: FnState, results: Vec<VTy>) -> (Func, bool) {
+fn finish(name: String, state: FnState<'_>, results: Vec<VTy>) -> (Func, bool) {
     let FnState { blocks, types, slots, .. } = state;
     let mut blocks = reachable(blocks);
     let complete = blocks.iter().all(|b| b.term.is_some());
@@ -748,7 +935,7 @@ fn rewrite(k: &mut InstKind, f: impl Fn(Value) -> Value) {
         | K::IntToChar { a, .. } => *a = f(*a),
         K::Call { args, .. } | K::Native { args, .. } => args.iter_mut().for_each(|v| *v = f(*v)),
         K::Slot(_) | K::Global(_) | K::FuncRef(_) => {}
-        K::Load { ptr, .. } => *ptr = f(*ptr),
+        K::Load { ptr, .. } | K::Offset { ptr, .. } => *ptr = f(*ptr),
         K::Store { ptr, val, .. } => {
             *ptr = f(*ptr);
             *val = f(*val);

@@ -188,6 +188,7 @@ fn kind(module: &Module, f: &Func, k: &InstKind, results: &[Value]) -> String {
         InstKind::Store { mem: m, ptr, off, val } => {
             format!("store.{} {}{}, {}", mem(*m), v(*ptr), offset(*off), v(*val))
         }
+        InstKind::Offset { ptr, off } => format!("offset {}{}", v(*ptr), offset(*off as i32)),
         InstKind::Copy { dst, src, size } => format!("copy {}, {}, {size}", v(*dst), v(*src)),
         InstKind::Zero { dst, size } => format!("zero {}, {size}", v(*dst)),
         InstKind::Index { base, index, scale } => format!("index {}, {} * {scale}", v(*base), v(*index)),

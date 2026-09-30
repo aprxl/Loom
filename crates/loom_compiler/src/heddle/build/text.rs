@@ -10,6 +10,7 @@
 use loom_isa::FmtItem;
 use loom_syntax::source::Span;
 
+use super::value::Val;
 use super::{Builder, Vals, parse_spec, value_kind};
 use crate::heddle::{InstKind, Term};
 use crate::hir::{self, DefId, ExprKind, TemplatePart};
@@ -46,14 +47,14 @@ enum Piece<'a> {
 
 impl<'a> Builder<'a> {
     /// A call of an `extern "lua"` function of std.
-    pub(super) fn extern_call(&mut self, def: DefId, info: &Call, args: &'a [hir::Arg], span: Span) -> Option<Vals> {
+    pub(super) fn extern_call(&mut self, def: DefId, info: &Call, args: &'a [hir::Arg], span: Span) -> Option<Val> {
         let path = self.p.def_path(def);
         match path.as_str() {
             "std.io.print" => {
                 let pieces = self.param_pieces(def, info, args, 0, span)?;
                 self.write_pieces(Sink::Out, pieces)?;
                 self.write_text(Sink::Out, "\n");
-                Some(Vec::new())
+                Some(Val::Regs(Vec::new()))
             }
             "std.error.unravel" => {
                 let pieces = self.param_pieces(def, info, args, 0, span)?;
@@ -62,7 +63,7 @@ impl<'a> Builder<'a> {
             }
             "std.error.assert" => {
                 let cond = match info.args.first() {
-                    Some(ArgSource::Arg(i)) => self.expr(&args[*i].value)?[0],
+                    Some(ArgSource::Arg(i)) => self.value(&args[*i].value)?[0],
                     _ => return self.unsupported(span, "this `assert`"),
                 };
                 // The message is worked out whether or not it's needed.
@@ -72,7 +73,7 @@ impl<'a> Builder<'a> {
                 self.enter(fail);
                 self.unravel_with(pieces)?;
                 self.enter(ok);
-                Some(Vec::new())
+                Some(Val::Regs(Vec::new()))
             }
             _ => self.unsupported(span, &format!("`{path}` on Treadle")),
         }
@@ -112,8 +113,9 @@ impl<'a> Builder<'a> {
                     match part {
                         TemplatePart::Text(text) => out.push(Piece::Text(text)),
                         TemplatePart::Interp { expr, spec } => {
-                            let vals = self.expr(expr)?;
-                            let ty = self.ty_of(expr);
+                            let ty = self.coerced_ty(expr);
+                            let v = self.expr(expr)?;
+                            let vals = self.shown_regs(v, ty, expr.span)?;
                             out.push(Piece::Value { vals, ty, spec: spec.as_deref(), span: expr.span });
                         }
                     }
@@ -123,10 +125,21 @@ impl<'a> Builder<'a> {
             // The value as it is: the conversion to `any Show` (or from
             // `String` to `str`) is what writing it does.
             _ => {
-                let vals = self.expr_raw(e)?;
-                Some(vec![Piece::Value { vals, ty: self.ty_of(e), spec: None, span: e.span }])
+                let ty = self.ty_of(e);
+                let v = self.expr_raw(e)?;
+                let vals = self.shown_regs(v, ty, e.span)?;
+                Some(vec![Piece::Value { vals, ty, spec: None, span: e.span }])
             }
         }
+    }
+
+    /// The parts of a value to show, which must live in registers for now.
+    fn shown_regs(&mut self, v: Val, ty: Ty, span: Span) -> Option<Vals> {
+        if !self.in_regs(ty) {
+            let shown = self.tcx().display(self.p, ty);
+            return self.unsupported(span, &format!("printing values of type `{shown}`"));
+        }
+        self.regs(v, ty, span)
     }
 
     fn write_pieces(&mut self, sink: Sink, pieces: Vec<Piece<'a>>) -> Option<()> {

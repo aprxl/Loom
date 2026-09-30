@@ -1,34 +1,156 @@
 //! Expressions, statements and control flow.
+//!
+//! A value that comes out of a branch or a block goes through a *join*:
+//! variables for a value in registers, or a variable holding the address
+//! of a value in memory. A value in memory that the branch owns (a
+//! temporary, or one of its locals) would be dropped with the branch's
+//! scope, so it moves into the join's own slot first; that slot is zeroed
+//! and registered for cleanup before any branch runs, since cleanups are
+//! decided while building and branches while running.
 
-use loom_syntax::ast::{AssignOp, BinaryOp, CastKind, Lit, ParamMode, UnaryOp};
+use loom_syntax::ast::{AssignOp, BinaryOp, CastKind, Lit, UnaryOp};
 use loom_syntax::source::Span;
 
-use super::{Builder, LoopCtx, Vals};
+use super::value::{Place, Val};
+use super::{Builder, LoopCtx, LoopResult, Vals, Var};
 use crate::heddle::{BitOp, Cmp, FOp, InstKind, IntOp, Policy, Term, VTy, Value};
-use crate::hir::{self, Block, DefKind, ExprKind, LocalId, StmtKind};
+use crate::hir::{self, Block, DefKind, ExprKind, StmtKind};
 use crate::ty::{ConstVal, FloatTy, IntTy, Ty, TyKind};
-use crate::typeck::{ArgSource, Coercion, Key, Receiver};
+use crate::typeck::Coercion;
 
-/// A place a value can be written to: some of a local's parts.
+/// Where the branches of an `if`, a `match`, a loop or a block put their
+/// value.
 #[derive(Clone, Debug)]
-pub(super) struct Place {
-    pub local: LocalId,
-    pub start: usize,
-    pub len: usize,
+pub(super) struct Join {
+    pub ty: Ty,
+    pub kind: JoinKind,
+}
+
+#[derive(Clone, Debug)]
+pub(super) enum JoinKind {
+    Regs(Vec<Var>),
+    /// The value's address; `slot`, zeroed, holds the values branches own.
+    Mem {
+        addr: Var,
+        slot: Option<Value>,
+    },
 }
 
 impl<'a> Builder<'a> {
+    // ------------------------------------------------------------ joins
+
+    /// A join for values of `ty`.
+    pub(super) fn join(&mut self, ty: Ty, span: Span) -> Option<Join> {
+        let kind = match self.repr_of(ty, span)? {
+            super::Repr::Regs(parts) => {
+                let tys: Vec<VTy> = parts.iter().map(|p| p.vty).collect();
+                JoinKind::Regs(self.new_vars(&tys))
+            }
+            super::Repr::Mem { size, .. } => {
+                let slot = if self.needs_drop(ty) {
+                    let ptr = self.temp(ty, span)?;
+                    self.emit(InstKind::Zero { dst: ptr, size }, &[]);
+                    self.own_temp(ptr, ty);
+                    // Branches move into it; its cleanup stays until the end
+                    // of the statement.
+                    self.f.temps.remove(&ptr);
+                    Some(ptr)
+                } else {
+                    None
+                };
+                JoinKind::Mem { addr: self.new_var(VTy::Ptr), slot }
+            }
+        };
+        Some(Join { ty, kind })
+    }
+
+    /// Puts `val` in `join`, leaving the scopes from stack index `from` up:
+    /// what they own moves into the join's slot.
+    pub(super) fn join_put(&mut self, join: &Join, val: Val, from: usize, span: Span) -> Option<()> {
+        match &join.kind {
+            JoinKind::Regs(vars) => {
+                let vals = self.regs(val, join.ty, span)?;
+                self.write_all(vars, &vals);
+            }
+            JoinKind::Mem { addr, slot } => {
+                let Val::Mem(ptr) = val else {
+                    return self.internal(span, "a value in registers for a join in memory");
+                };
+                let at = match slot {
+                    Some(slot) if self.owned_since(ptr, from) => {
+                        self.move_to(*slot, 0, Val::Mem(ptr), join.ty, span)?;
+                        *slot
+                    }
+                    _ => ptr,
+                };
+                self.write(*addr, at);
+            }
+        }
+        Some(())
+    }
+
+    /// The value in `join`, once every branch has put one.
+    pub(super) fn join_get(&mut self, join: &Join) -> Val {
+        match &join.kind {
+            JoinKind::Regs(vars) => Val::Regs(self.read_all(vars)),
+            JoinKind::Mem { addr, .. } => Val::Mem(self.read(*addr)),
+        }
+    }
+
+    /// Whether the value at `ptr` belongs to the scopes from stack index
+    /// `from` up: a temporary made there, or a local declared there.
+    fn owned_since(&self, ptr: Value, from: usize) -> bool {
+        if let Some(&id) = self.f.temps.get(&ptr) {
+            return self.f.cleanups.iter().position(|c| c.id == id).is_some_and(|i| i >= from);
+        }
+        let Some(&slot) = self.f.slot_of.get(&ptr) else { return false };
+        self.f.cleanups[from.min(self.f.cleanups.len())..].iter().any(|c| {
+            c.live && matches!(c.kind, super::cleanup::CleanupKind::Drop { at: super::cleanup::Stable::Slot(s), .. } if s == slot)
+        })
+    }
+
+    // ------------------------------------------------------------ expressions
+
     /// The value of `e`, with its coercion applied. `None` when control
-    /// leaves (`return`, `break`, an unravel) or `e` can't be built yet.
-    pub(super) fn expr(&mut self, e: &'a hir::Expr) -> Option<Vals> {
+    /// leaves (`return`, `break`, an unravel) or `e` can't be built yet
+    /// (reported).
+    pub(super) fn expr(&mut self, e: &'a hir::Expr) -> Option<Val> {
         let v = self.expr_raw(e)?;
+        self.coerce(e, v)
+    }
+
+    /// The value of `e`, which lives in registers, as its parts.
+    pub(super) fn value(&mut self, e: &'a hir::Expr) -> Option<Vals> {
+        let v = self.expr(e)?;
+        let ty = self.coerced_ty(e);
+        self.regs(v, ty, e.span)
+    }
+
+    /// The type of `e`'s value once it's converted where it's used.
+    pub(super) fn coerced_ty(&self, e: &hir::Expr) -> Ty {
         match self.tables().coercions.get(&e.id) {
-            None | Some(Coercion::Widen) => Some(v),
-            Some(Coercion::Discard) => Some(Vec::new()),
-            Some(other) => {
+            None | Some(Coercion::Widen) => self.ty_of(e),
+            Some(Coercion::Discard) => self.tcx().unit,
+            Some(_) => {
+                let ty = self.tables().coerced.get(&e.id).copied().unwrap_or(self.tcx().error);
+                self.tcx().degauge(ty)
+            }
+        }
+    }
+
+    fn coerce(&mut self, e: &'a hir::Expr, v: Val) -> Option<Val> {
+        let Some(coercion) = self.tables().coercions.get(&e.id) else { return Some(v) };
+        match coercion {
+            Coercion::Widen => Some(v),
+            Coercion::Discard => Some(Val::Regs(Vec::new())),
+            Coercion::ToOptional => {
+                let target = self.coerced_ty(e);
+                let inner = self.ty_of(e);
+                self.some(target, inner, v, e.span)
+            }
+            other => {
                 let what = match other {
                     Coercion::StrToString | Coercion::StringToStr => "`String`",
-                    Coercion::ToOptional => "optionals",
                     Coercion::ToResult => "results",
                     Coercion::ToAny(_) => "`any` values",
                     Coercion::ToUnion => "unions",
@@ -41,30 +163,36 @@ impl<'a> Builder<'a> {
         }
     }
 
-    pub(super) fn expr_raw(&mut self, e: &'a hir::Expr) -> Option<Vals> {
+    pub(super) fn expr_raw(&mut self, e: &'a hir::Expr) -> Option<Val> {
         let span = e.span;
         let ty = self.ty_of(e);
         if let Some(&v) = self.tables().const_values.get(&e.id) {
-            return self.const_val(v, ty, span);
+            return self.const_val(v, ty, span).map(Val::Regs);
+        }
+        if let Some(c) = self.tables().constructs.get(&e.id).cloned() {
+            let args: &'a [hir::Arg] = match &e.kind {
+                ExprKind::Call { args, .. } => args,
+                _ => &[],
+            };
+            return self.construct(e, &c, args);
         }
         match &e.kind {
-            ExprKind::Lit(lit) => self.lit(lit, false, ty, span),
+            ExprKind::Lit(lit) => self.lit(lit, false, ty, span).map(Val::Regs),
             ExprKind::Local(l) => {
-                let vars = self.local_vars(*l, span)?;
-                Some(self.read_all(&vars))
+                let place = self.local_place(*l, span)?;
+                let lty = self.local_ty(*l);
+                self.read_place(&place, lty, span)
             }
             ExprKind::Def { def, .. } => match &self.p.def(*def).kind {
-                DefKind::Const(_) => self.const_def(*def, ty, span),
+                DefKind::Const(_) => self.const_def(*def, ty, span).map(Val::Regs),
                 _ => self.unsupported(span, "this kind of value"),
             },
-            ExprKind::Tuple(items) => {
-                let mut out = Vec::new();
-                for item in items {
-                    out.extend(self.expr(item)?);
-                }
-                Some(out)
+            ExprKind::Tuple(items) => self.tuple(e, items, ty),
+            ExprKind::Block(block) => {
+                let join = self.join(ty, span)?;
+                self.block_into(block, &join)?;
+                Some(self.join_get(&join))
             }
-            ExprKind::Block(block) => self.block(block),
             ExprKind::If { cond, then, else_, deferred } => {
                 self.if_expr(e, cond, then, else_.as_deref(), deferred.is_some(), ty)
             }
@@ -72,75 +200,112 @@ impl<'a> Builder<'a> {
             ExprKind::Loop { body } => self.loop_expr(e, body, ty),
             ExprKind::While { cond, body } => {
                 self.while_expr(e, cond, body);
-                self.live().then(Vec::new)
+                self.live().then(|| Val::Regs(Vec::new()))
             }
             ExprKind::For { is_const: true, body, .. } => {
                 for id in self.tables().unrolled.get(&e.id).cloned().unwrap_or_default() {
                     let saved = std::mem::replace(&mut self.f.body, id);
-                    let done = self.block(body);
+                    let join = self.join(self.tcx().unit, span);
+                    let done = join.and_then(|j| self.block_into(body, &j));
                     self.f.body = saved;
                     done?;
                 }
-                Some(Vec::new())
+                Some(Val::Regs(Vec::new()))
             }
             ExprKind::For { pat, iter, body, is_loom: false, .. } => {
                 self.for_expr(e, pat, iter, body)?;
-                self.live().then(Vec::new)
+                self.live().then(|| Val::Regs(Vec::new()))
             }
             ExprKind::Break { target, value } => {
                 self.f.span = Some(span);
-                let loop_ = self.f.loops.iter().rposition(|l| l.id == *target)?;
-                if let Some(value) = value {
-                    let vals = self.expr(value)?;
-                    let vars = self.f.loops[loop_].result.clone();
-                    self.write_all(&vars, &vals);
-                }
-                let to = self.f.loops[loop_].brk;
-                self.jump(to);
-                None
+                self.break_to(*target, value.as_deref())
             }
             ExprKind::Continue { target } => {
                 self.f.span = Some(span);
-                let to = self.f.loops.iter().rev().find(|l| l.id == *target)?.cont;
-                self.jump(to);
+                let i = self.f.loops.iter().rposition(|l| l.id == *target)?;
+                let (to, scopes) = (self.f.loops[i].cont, self.f.loops[i].scopes);
+                self.leave_scopes(scopes);
+                if self.live() {
+                    self.jump(to);
+                }
                 None
             }
             ExprKind::Return(value) => {
                 self.f.span = Some(span);
-                let mut vals = match value {
+                let val = match value {
                     Some(v) => self.expr(v)?,
-                    None => Vec::new(),
+                    None => Val::Regs(Vec::new()),
                 };
-                vals.extend(self.read_outs());
-                self.terminate(Term::Ret(vals));
+                self.ret_val(val, span)?;
                 None
             }
             ExprKind::Assign { target, op, value } => {
                 self.f.span = Some(span);
                 self.assign(target, *op, value)?;
-                Some(Vec::new())
+                Some(Val::Regs(Vec::new()))
             }
             ExprKind::Call { callee, args } => self.call(e, callee, args, ty),
-            ExprKind::Unary { op, operand } => self.unary(*op, operand, ty, span),
-            ExprKind::Binary { op: BinaryOp::And | BinaryOp::Or, .. } => self.bool_value(e),
-            ExprKind::Binary { op, lhs, rhs } => self.binary(*op, lhs, rhs, ty, span),
-            ExprKind::Chain { .. } | ExprKind::Is { .. } => self.bool_value(e),
-            ExprKind::Cast { expr, kind, .. } => self.cast(e, expr, *kind, ty),
-            ExprKind::Field { base, .. } => self.field(e, base),
+            ExprKind::Unary { op, operand } => self.unary(*op, operand, ty, span).map(Val::Regs),
+            ExprKind::Binary { op: BinaryOp::And | BinaryOp::Or, .. } => self.bool_value(e).map(Val::Regs),
+            ExprKind::Binary { op, lhs, rhs } => self.binary(*op, lhs, rhs, ty, span).map(Val::Regs),
+            ExprKind::Chain { .. } | ExprKind::Is { .. } => self.bool_value(e).map(Val::Regs),
+            ExprKind::Cast { expr, kind, .. } => self.cast(e, expr, *kind, ty).map(Val::Regs),
+            ExprKind::Field { .. } | ExprKind::LeadingDot(_) | ExprKind::ConstField { .. } => self.field(e),
             ExprKind::Assoc { .. } => match self.tables().assoc_values.get(&e.id).copied() {
-                Some(crate::typeck::AssocValue::Int(v)) => self.int_value(v, ty, span),
-                Some(crate::typeck::AssocValue::Const(def)) => self.const_def(def, ty, span),
+                Some(crate::typeck::AssocValue::Int(v)) => self.int_value(v, ty, span).map(Val::Regs),
+                Some(crate::typeck::AssocValue::Const(def)) => self.const_def(def, ty, span).map(Val::Regs),
                 None => self.unsupported(span, "this kind of value"),
             },
-            ExprKind::LeadingDot(_) => match self.tables().leading_consts.get(&e.id).copied() {
-                Some(def) => self.const_def(def, ty, span),
-                None => self.unsupported(span, "methods and fields of warps"),
-            },
+            ExprKind::DotBlock { subject, body } => self.dot_block(e, subject, body),
             // Checked while compiling: nothing is left to run.
-            ExprKind::Const(inner) if crate::typeck::assert_args(self.p, inner).is_some() => Some(Vec::new()),
+            ExprKind::Const(inner) if crate::typeck::assert_args(self.p, inner).is_some() => {
+                Some(Val::Regs(Vec::new()))
+            }
             ExprKind::Const(_) => self.unsupported(span, "`const` expressions computed while compiling"),
             ExprKind::Template(_) => self.unsupported(span, "`String`"),
             _ => self.unsupported(span, "this expression"),
+        }
+    }
+
+    /// `(a, b, …)`.
+    fn tuple(&mut self, e: &'a hir::Expr, items: &'a [hir::Expr], ty: Ty) -> Option<Val> {
+        let span = e.span;
+        let mut vals = Vec::with_capacity(items.len());
+        for item in items {
+            vals.push(self.expr(item)?);
+        }
+        let item_tys: Vec<Ty> = items.iter().map(|i| self.coerced_ty(i)).collect();
+        self.aggregate(ty, &item_tys, vals, span)
+    }
+
+    /// A value of `ty` (a tuple or a record) made of `vals`, one per field
+    /// of types `tys` in declaration order, each owned from here.
+    pub(super) fn aggregate(&mut self, ty: Ty, tys: &[Ty], vals: Vec<Val>, span: Span) -> Option<Val> {
+        match self.repr_of(ty, span)? {
+            super::Repr::Regs(_) => {
+                let mut out = Vec::new();
+                for (v, &t) in vals.into_iter().zip(tys) {
+                    out.extend(self.regs(v, t, span)?);
+                }
+                Some(Val::Regs(out))
+            }
+            super::Repr::Mem { .. } => {
+                let offsets = self.field_offsets(ty, span)?;
+                let ptr = self.temp(ty, span)?;
+                for ((v, &t), off) in vals.into_iter().zip(tys).zip(offsets) {
+                    self.move_to(ptr, off as i64, v, t, span)?;
+                }
+                self.own_temp(ptr, ty);
+                Some(Val::Mem(ptr))
+            }
+        }
+    }
+
+    /// The offset of each field of a tuple or a record, in declaration order.
+    pub(super) fn field_offsets(&mut self, ty: Ty, span: Span) -> Option<Vec<u64>> {
+        match self.layout(ty).map(|l| l.shape) {
+            Some(crate::ty::layout::Shape::Fields(offsets)) => Some(offsets),
+            _ => self.internal(span, "the fields of something without fields"),
         }
     }
 
@@ -152,8 +317,14 @@ impl<'a> Builder<'a> {
         if let Some(f) = self.float_of(ty) {
             return Some(vec![self.fconst(v as f64, f)]);
         }
-        match self.tcx().kind(ty) {
+        match self.tcx().kind(self.tcx().degauge(ty)) {
             TyKind::Int(_) | TyKind::Bool | TyKind::Char => Some(vec![self.iconst(v as u64)]),
+            TyKind::Optional(inner) => {
+                let (inner, opt) = (*inner, ty);
+                let vals = self.int_value(v, inner, span)?;
+                let v = self.some(opt, inner, Val::Regs(vals), span)?;
+                self.regs(v, opt, span)
+            }
             _ => {
                 let shown = self.tcx().display(self.p, ty);
                 self.unsupported(span, &format!("values of type `{shown}`"))
@@ -184,7 +355,10 @@ impl<'a> Builder<'a> {
             Lit::Str(s) if matches!(self.tcx().kind(ty), TyKind::Str) => Some(self.str_lit(s.as_bytes())),
             Lit::Str(_) => self.unsupported(span, "`String`"),
             Lit::Bytes(_) => self.unsupported(span, "byte strings"),
-            Lit::None => self.unsupported(span, "optionals"),
+            Lit::None => {
+                let v = self.none(ty, span)?;
+                self.regs(v, ty, span)
+            }
         }
     }
 
@@ -196,7 +370,14 @@ impl<'a> Builder<'a> {
                 let text = self.tcx().sym_str(s).as_bytes().to_vec();
                 Some(self.str_lit(&text))
             }
-            ConstVal::Unit(_) => self.unsupported(span, "cases"),
+            ConstVal::Unit(case) => {
+                // A unit case of a sum with no payloads: its tag.
+                let info = self.warp_info(ty);
+                match info.and_then(|i| i.cases.iter().position(|c| c.def == case)) {
+                    Some(tag) if self.in_regs(ty) => Some(vec![self.iconst(tag as u64)]),
+                    _ => self.unsupported(span, "cases"),
+                }
+            }
             ConstVal::Field { .. } | ConstVal::Case { .. } => {
                 let code = loom_syntax::diag::codes::K0111;
                 if !self.diags.iter().any(|d| d.code == code && d.labels.first().is_some_and(|l| l.span == span)) {
@@ -227,39 +408,86 @@ impl<'a> Builder<'a> {
 
     // ------------------------------------------------------------ statements and blocks
 
-    pub(super) fn block(&mut self, block: &'a Block) -> Option<Vals> {
-        let Some((last, rest)) = block.stmts.split_last() else { return Some(Vec::new()) };
+    /// A block's statements, its value into `join`.
+    pub(super) fn block_into(&mut self, block: &'a Block, join: &Join) -> Option<()> {
+        let depth = self.open_scope();
+        let start = self.scope_start(depth);
+        let done = self.block_stmts(block, join, start);
+        self.close_scope(depth);
+        done
+    }
+
+    fn block_stmts(&mut self, block: &'a Block, join: &Join, start: usize) -> Option<()> {
+        let Some((last, rest)) = block.stmts.split_last() else {
+            return self.join_put(join, Val::Regs(Vec::new()), start, self.here());
+        };
         for stmt in rest {
             self.stmt(stmt)?;
             if !self.live() {
                 return None;
             }
         }
-        match &last.kind {
+        let val = match &last.kind {
             StmtKind::Expr(tail) if !matches!(tail.kind, ExprKind::Assign { .. }) => {
                 self.f.span = Some(last.span);
-                self.expr(tail)
+                self.expr(tail)?
             }
             _ => {
                 self.stmt(last)?;
-                self.live().then(Vec::new)
+                if !self.live() {
+                    return None;
+                }
+                Val::Regs(Vec::new())
             }
+        };
+        if !self.live() {
+            return None;
         }
+        self.join_put(join, val, start, last.span)
     }
 
+    /// A statement, with its temporaries dropped at its end.
     fn stmt(&mut self, stmt: &'a hir::Stmt) -> Option<()> {
         self.f.span = Some(stmt.span);
+        let depth = self.open_scope();
+        let saved = self.f.stmt_start.replace(depth);
+        let done = self.stmt_inner(stmt);
+        self.f.stmt_start = saved;
+        self.close_scope(depth);
+        done
+    }
+
+    fn stmt_inner(&mut self, stmt: &'a hir::Stmt) -> Option<()> {
         match &stmt.kind {
             StmtKind::Let { pat, init, .. } => {
-                let vals = self.expr(init)?;
-                let ty = self.tables().pat_ty.get(&pat.id).copied().unwrap_or_else(|| self.ty_of(init));
-                self.bind_irrefutable(pat, &vals, self.tcx().degauge(ty))
+                let val = self.expr(init)?;
+                let ty = self.tables().pat_ty.get(&pat.id).copied().unwrap_or_else(|| self.coerced_ty(init));
+                self.bind_irrefutable(pat, val, self.tcx().degauge(ty))
             }
             StmtKind::Expr(e) => self.expr(e).map(drop),
             StmtKind::Item(_) => Some(()),
-            StmtKind::Defer { .. } => self.unsupported(stmt.span, "`defer`"),
+            StmtKind::Defer { binding, body } => self.defer(*binding, body, stmt.span),
             StmtKind::Given { .. } | StmtKind::Spool { .. } => self.unsupported(stmt.span, "`given` and spools"),
         }
+    }
+
+    /// `defer body`, or `defer x => body`: a cleanup of the enclosing
+    /// block, from here on.
+    fn defer(&mut self, binding: Option<crate::hir::LocalId>, body: &'a hir::Expr, span: Span) -> Option<()> {
+        let flag = match binding {
+            Some(l) => {
+                let slot = self.raw_slot(1, 1);
+                let ptr = self.slot_addr(slot);
+                let one = self.iconst(1);
+                self.store(crate::heddle::Mem::U8, ptr, 0, one);
+                self.f.defer_flags.entry(l).or_default().push(slot);
+                Some(slot)
+            }
+            None => None,
+        };
+        let tables = self.f.body;
+        self.add_scope_cleanup(super::cleanup::CleanupKind::Defer { body, tables, flag, span });
+        Some(())
     }
 
     // ------------------------------------------------------------ if and match
@@ -272,50 +500,63 @@ impl<'a> Builder<'a> {
         else_: Option<&'a hir::Expr>,
         is_const: bool,
         ty: Ty,
-    ) -> Option<Vals> {
+    ) -> Option<Val> {
+        let join = self.join(ty, e.span)?;
         if is_const {
             // `const if`: only the branch taken.
-            return match (self.tables().const_ifs.get(&e.id).copied(), else_) {
-                (Some(true), _) => self.block(then),
-                (Some(false), Some(else_)) => self.expr(else_),
-                _ => Some(Vec::new()),
-            };
+            match (self.tables().const_ifs.get(&e.id).copied(), else_) {
+                (Some(true), _) => self.block_into(then, &join)?,
+                (Some(false), Some(else_)) => self.expr_into(else_, &join)?,
+                _ => {
+                    let from = self.f.cleanups.len();
+                    self.join_put(&join, Val::Regs(Vec::new()), from, e.span)?;
+                }
+            }
+            return self.live().then(|| self.join_get(&join));
         }
-        let tys = self.flat(ty, e.span)?;
-        let vars = self.new_vars(&tys);
-        let (t, f, join) = (self.new_block(), self.new_block(), self.new_block());
+        let (t, f, done) = (self.new_block(), self.new_block(), self.new_block());
         self.branch(cond, t, f)?;
         self.enter(t);
-        if self.live()
-            && let Some(vals) = self.block(then)
-        {
-            self.write_all(&vars, &vals);
-            self.jump(join);
+        if self.live() && self.block_into(then, &join).is_some() && self.live() {
+            self.jump(done);
         }
         self.enter(f);
         if self.live() {
-            let vals = match else_ {
-                Some(else_) => self.expr(else_),
-                None => Some(Vec::new()),
+            let put = match else_ {
+                Some(else_) => self.expr_into(else_, &join),
+                None => {
+                    let from = self.f.cleanups.len();
+                    self.join_put(&join, Val::Regs(Vec::new()), from, e.span)
+                }
             };
-            if let Some(vals) = vals.filter(|_| self.live()) {
-                self.write_all(&vars, &vals);
-                self.jump(join);
+            if put.is_some() && self.live() {
+                self.jump(done);
             }
         }
-        self.enter(join);
+        self.enter(done);
+        self.live().then(|| self.join_get(&join))
+    }
+
+    /// `e`'s value into `join`.
+    pub(super) fn expr_into(&mut self, e: &'a hir::Expr, join: &Join) -> Option<()> {
+        if let ExprKind::Block(b) = &e.kind
+            && !self.tables().coercions.contains_key(&e.id)
+        {
+            return self.block_into(b, join);
+        }
+        let from = self.f.cleanups.len();
+        let v = self.expr(e)?;
         if !self.live() {
             return None;
         }
-        Some(self.read_all(&vars))
+        self.join_put(join, v, from, e.span)
     }
 
-    fn match_expr(&mut self, scrutinee: &'a hir::Expr, arms: &'a [hir::Arm], ty: Ty, span: Span) -> Option<Vals> {
+    fn match_expr(&mut self, scrutinee: &'a hir::Expr, arms: &'a [hir::Arm], ty: Ty, span: Span) -> Option<Val> {
         let s = self.expr(scrutinee)?;
-        let sty = self.ty_of(scrutinee);
-        let tys = self.flat(ty, span)?;
-        let vars = self.new_vars(&tys);
-        let join = self.new_block();
+        let sty = self.coerced_ty(scrutinee);
+        let join = self.join(ty, span)?;
+        let done = self.new_block();
         for arm in arms {
             // An or-pattern with bindings is one arm per alternative, since
             // each alternative finds its bindings in different places.
@@ -332,19 +573,38 @@ impl<'a> Builder<'a> {
                 self.test_pat(pat, &s, sty, matched, next)?;
                 self.enter(matched);
                 if self.live() {
-                    self.bind_pat(pat, &s, sty)?;
-                    if let Some(guard) = &arm.guard {
+                    let depth = self.open_scope();
+                    let start = self.scope_start(depth);
+                    let mut ok = self.bind_pat(pat, &s, sty).is_some();
+                    if ok && let Some(guard) = &arm.guard {
                         let body = self.new_block();
-                        self.branch(guard, body, next)?;
+                        // The guard failing leaves the arm's scope too.
+                        let fail = self.new_block();
+                        ok = self.branch(guard, body, fail).is_some();
+                        self.enter(fail);
+                        if self.live() {
+                            self.run_cleanups(start);
+                            if self.live() {
+                                self.jump(next);
+                            }
+                        }
                         self.enter(body);
                     }
-                    if self.live()
-                        && let Some(vals) = self.expr(&arm.body)
-                        && self.live()
-                    {
-                        self.write_all(&vars, &vals);
-                        self.jump(join);
+                    if ok && self.live() {
+                        let from = self.f.cleanups.len();
+                        if let Some(v) = self.expr(&arm.body)
+                            && self.live()
+                            && self.join_put(&join, v, from.min(start), arm.body.span).is_some()
+                        {
+                            self.run_cleanups(start);
+                            if self.live() {
+                                self.jump(done);
+                            }
+                        }
                     }
+                    // Control has left the arm by now.
+                    self.f.cur = None;
+                    self.close_scope(depth);
                 }
                 self.enter(next);
             }
@@ -353,11 +613,8 @@ impl<'a> Builder<'a> {
             // Exhaustiveness is checked: this can't happen.
             self.terminate(Term::Crash(0));
         }
-        self.enter(join);
-        if !self.live() {
-            return None;
-        }
-        Some(self.read_all(&vars))
+        self.enter(done);
+        self.live().then(|| self.join_get(&join))
     }
 
     // ------------------------------------------------------------ conditions
@@ -386,13 +643,13 @@ impl<'a> Builder<'a> {
             }
             ExprKind::Unary { op: UnaryOp::Not, operand } => self.branch(operand, f, t),
             ExprKind::Is { expr, pat } => {
-                let vals = self.expr(expr)?;
-                let ty = self.ty_of(expr);
+                let v = self.expr(expr)?;
+                let ty = self.coerced_ty(expr);
                 let matched = self.new_block();
-                self.test_pat(pat, &vals, ty, matched, f)?;
+                self.test_pat(pat, &v, ty, matched, f)?;
                 self.enter(matched);
                 if self.live() {
-                    self.bind_pat(pat, &vals, ty)?;
+                    self.bind_pat(pat, &v, ty)?;
                     self.jump(t);
                 }
                 Some(())
@@ -401,9 +658,9 @@ impl<'a> Builder<'a> {
                 let operands: Vec<&hir::Expr> =
                     std::iter::once(first.as_ref()).chain(rest.iter().map(|(_, e)| e)).collect();
                 let ty = self.common_ty(&operands);
-                let mut prev = self.expr(first)?;
+                let mut prev = self.value(first)?;
                 for (op, e) in rest {
-                    let next = self.expr(e)?;
+                    let next = self.value(e)?;
                     let c = self.compare(*op, &prev, &next, ty, e.span)?;
                     let cont = self.new_block();
                     self.br(c, cont, f);
@@ -421,7 +678,7 @@ impl<'a> Builder<'a> {
                 Some(())
             }
             _ => {
-                let v = self.expr(cond)?;
+                let v = self.value(cond)?;
                 self.br(v[0], t, f);
                 Some(())
             }
@@ -450,14 +707,65 @@ impl<'a> Builder<'a> {
 
     // ------------------------------------------------------------ loops
 
-    fn loop_expr(&mut self, e: &'a hir::Expr, body: &'a Block, ty: Ty) -> Option<Vals> {
-        let tys = self.flat(ty, e.span)?;
-        let result = self.new_vars(&tys);
+    /// Leaves the scopes opened after the first `scopes`, running their
+    /// cleanups (control goes on elsewhere).
+    fn leave_scopes(&mut self, scopes: usize) {
+        let from = self.f.scopes.get(scopes).copied().unwrap_or(self.f.cleanups.len());
+        self.run_cleanups(from);
+    }
+
+    fn break_to(&mut self, target: hir::HirId, value: Option<&'a hir::Expr>) -> Option<Val> {
+        let i = self.f.loops.iter().rposition(|l| l.id == target)?;
+        let (brk, scopes) = (self.f.loops[i].brk, self.f.loops[i].scopes);
+        if let Some(value) = value {
+            let from = self.f.scopes.get(scopes).copied().unwrap_or(self.f.cleanups.len());
+            let v = self.expr(value)?;
+            let ty = self.coerced_ty(value);
+            match self.f.loops[i].result.clone() {
+                LoopResult::Vars(vars) => {
+                    let vals = self.regs(v, ty, value.span)?;
+                    self.write_all(&vars, &vals);
+                }
+                LoopResult::Slot(slot) => {
+                    let join = super::expr::Join {
+                        ty,
+                        kind: JoinKind::Mem { addr: self.new_var(VTy::Ptr), slot: Some(slot) },
+                    };
+                    // Everything a loop's value goes through is owned: it moves.
+                    let _ = from;
+                    self.move_to(slot, 0, v, join.ty, value.span)?;
+                }
+                LoopResult::None => {}
+            }
+        }
+        self.leave_scopes(scopes);
+        if self.live() {
+            self.jump(brk);
+        }
+        None
+    }
+
+    fn loop_expr(&mut self, e: &'a hir::Expr, body: &'a Block, ty: Ty) -> Option<Val> {
+        let result = match self.repr_of(ty, e.span)? {
+            super::Repr::Regs(parts) => {
+                let tys: Vec<VTy> = parts.iter().map(|p| p.vty).collect();
+                LoopResult::Vars(self.new_vars(&tys))
+            }
+            super::Repr::Mem { size, .. } => {
+                let ptr = self.temp(ty, e.span)?;
+                self.emit(InstKind::Zero { dst: ptr, size }, &[]);
+                self.own_temp(ptr, ty);
+                self.f.temps.remove(&ptr);
+                LoopResult::Slot(ptr)
+            }
+        };
         let (head, exit) = (self.new_block(), self.new_block());
         self.jump(head);
         self.switch_to(head);
-        self.f.loops.push(LoopCtx { id: e.id, brk: exit, cont: head, result: result.clone() });
-        let done = self.block(body);
+        let scopes = self.f.scopes.len();
+        self.f.loops.push(LoopCtx { id: e.id, brk: exit, cont: head, result: result.clone(), scopes });
+        let join = self.join(self.tcx().unit, e.span)?;
+        let done = self.block_into(body, &join);
         if self.live() && done.is_some() {
             self.jump(head);
         }
@@ -467,17 +775,31 @@ impl<'a> Builder<'a> {
         if !self.live() {
             return None;
         }
-        Some(self.read_all(&result))
+        Some(match result {
+            LoopResult::Vars(vars) => Val::Regs(self.read_all(&vars)),
+            LoopResult::Slot(ptr) => Val::Mem(ptr),
+            LoopResult::None => Val::Regs(Vec::new()),
+        })
     }
 
     fn while_expr(&mut self, e: &'a hir::Expr, cond: &'a hir::Expr, body: &'a Block) {
         let (head, body_b, exit) = (self.new_block(), self.new_block(), self.new_block());
         self.jump(head);
         self.switch_to(head);
-        if self.branch(cond, body_b, exit).is_some() {
+        // The condition's temporaries are dropped before either way on.
+        let depth = self.open_scope();
+        let ok = self.branch(cond, body_b, exit).is_some();
+        self.f.cur = None;
+        self.close_scope(depth);
+        if ok {
             self.enter(body_b);
-            self.f.loops.push(LoopCtx { id: e.id, brk: exit, cont: head, result: Vec::new() });
-            if self.live() && self.block(body).is_some() && self.live() {
+            let scopes = self.f.scopes.len();
+            self.f.loops.push(LoopCtx { id: e.id, brk: exit, cont: head, result: LoopResult::None, scopes });
+            if self.live()
+                && let Some(join) = self.join(self.tcx().unit, e.span)
+                && self.block_into(body, &join).is_some()
+                && self.live()
+            {
                 self.jump(head);
             }
             self.f.loops.pop();
@@ -497,9 +819,9 @@ impl<'a> Builder<'a> {
             return self.unsupported(iter.span, "`for` loops over ranges that aren't integers");
         };
         // The bounds, evaluated once, before the loop.
-        let lo = self.expr(lo)?[0];
+        let lo = self.value(lo)?[0];
         let hi = match hi {
-            Some(hi) => Some(self.expr(hi)?[0]),
+            Some(hi) => Some(self.value(hi)?[0]),
             None => None,
         };
         let i = self.new_var(VTy::Int);
@@ -517,9 +839,16 @@ impl<'a> Builder<'a> {
             None => self.jump(body_b),
         }
         self.enter(body_b);
-        self.f.loops.push(LoopCtx { id: e.id, brk: exit, cont: step, result: Vec::new() });
+        let scopes = self.f.scopes.len();
+        self.f.loops.push(LoopCtx { id: e.id, brk: exit, cont: step, result: LoopResult::None, scopes });
         let item = self.read(i);
-        let done = self.bind_irrefutable(pat, &[item], elem).and_then(|()| self.block(body));
+        let depth = self.open_scope();
+        let mut done = self.bind_irrefutable(pat, Val::Regs(vec![item]), elem);
+        if done.is_some() {
+            let join = self.join(self.tcx().unit, e.span)?;
+            done = self.block_into(body, &join);
+        }
+        self.close_scope(depth);
         if self.live() && done.is_some() {
             self.jump(step);
         }
@@ -567,36 +896,17 @@ impl<'a> Builder<'a> {
 
     // ------------------------------------------------------------ assignment
 
-    /// The place `e` names: a local, or part of a tuple held in one.
-    pub(super) fn place(&mut self, e: &'a hir::Expr) -> Option<Place> {
+    /// The place `e` names, and its type.
+    pub(super) fn place(&mut self, e: &'a hir::Expr) -> Option<(Place, Ty)> {
+        let span = e.span;
         match &e.kind {
             ExprKind::Local(l) => {
-                let len = self.local_vars(*l, e.span)?.len();
-                Some(Place { local: *l, start: 0, len })
+                let place = self.local_place(*l, span)?;
+                Some((place, self.local_ty(*l)))
             }
-            ExprKind::Field { base, .. } => {
-                let key = self.tables().fields.get(&e.id).map(|f| f.key.clone());
-                let (Some(Key::Pos(i)), TyKind::Tuple(_)) = (key, self.tcx().kind(self.ty_of(base))) else {
-                    return self.unsupported(e.span, "assigning to fields of warps");
-                };
-                let base_place = self.place(base)?;
-                let parts = self.tuple_parts(self.ty_of(base), e.span)?;
-                let start: usize = parts[..i as usize - 1].iter().map(|(_, n)| n).sum();
-                Some(Place { local: base_place.local, start: base_place.start + start, len: parts[i as usize - 1].1 })
-            }
-            _ => self.unsupported(e.span, "assigning to this"),
+            ExprKind::Field { .. } | ExprKind::LeadingDot(_) | ExprKind::ConstField { .. } => self.field_place(e),
+            _ => self.unsupported(span, "assigning to this"),
         }
-    }
-
-    pub(super) fn write_place(&mut self, place: &Place, vals: &[Value]) -> Option<()> {
-        let vars = self.f.locals.get(&place.local)?.clone();
-        self.write_all(&vars[place.start..place.start + place.len], vals);
-        Some(())
-    }
-
-    fn read_place(&mut self, place: &Place) -> Option<Vals> {
-        let vars = self.f.locals.get(&place.local)?.clone();
-        Some(self.read_all(&vars[place.start..place.start + place.len]))
     }
 
     fn assign(&mut self, target: &'a hir::Expr, op: AssignOp, value: &'a hir::Expr) -> Option<()> {
@@ -604,35 +914,97 @@ impl<'a> Builder<'a> {
             AssignOp::Assign => {
                 // Every value is worked out before anything is assigned, so
                 // `(a, b) = (b, a)` swaps.
-                let vals = self.expr(value)?;
-                self.assign_parts(target, &vals)
+                let v = self.expr(value)?;
+                let ty = self.coerced_ty(value);
+                self.assign_parts(target, v, ty)
             }
             AssignOp::Compound(bin) => {
                 let ty = self.ty_of(target);
-                let rhs = self.expr(value)?;
-                let place = self.place(target)?;
-                let cur = self.read_place(&place)?;
+                let rhs = self.value(value)?;
+                let (place, pty) = self.place(target)?;
+                let cur = self.read_place(&place, pty, target.span)?;
+                let cur = self.regs(cur, pty, target.span)?;
                 let result = self.apply(bin, &cur, &rhs, ty, target.span)?;
-                self.write_place(&place, &result)
+                self.write_place(&place, pty, Val::Regs(result), target.span)
             }
         }
     }
 
-    fn assign_parts(&mut self, target: &'a hir::Expr, vals: &[Value]) -> Option<()> {
+    fn assign_parts(&mut self, target: &'a hir::Expr, v: Val, ty: Ty) -> Option<()> {
         match &target.kind {
             ExprKind::Tuple(items) => {
-                let mut at = 0;
-                for item in items {
-                    let n = self.flat(self.ty_of(item), item.span)?.len();
-                    self.assign_parts(item, &vals[at..at + n])?;
-                    at += n;
+                // Each part, from the whole value, which was worked out first.
+                let span = target.span;
+                let whole = self.repr_of(ty, span)?;
+                let item_tys: Vec<Ty> = match self.tcx().kind(ty) {
+                    TyKind::Tuple(items) => items.clone(),
+                    _ => return self.internal(span, "a tuple assigned from something else"),
+                };
+                let parts: Vec<Val> = match (&whole, v) {
+                    (super::Repr::Regs(_), v) => {
+                        let vals = self.regs(v, ty, span)?;
+                        let counts = self.tuple_parts(ty, span)?;
+                        let mut at = 0;
+                        counts
+                            .iter()
+                            .map(|(_, n)| {
+                                let part = Val::Regs(vals[at..at + n].to_vec());
+                                at += n;
+                                part
+                            })
+                            .collect()
+                    }
+                    (super::Repr::Mem { .. }, v) => {
+                        let ptr = self.addr_of(v, ty, span)?;
+                        let offsets = self.field_offsets(ty, span)?;
+                        let mut out = Vec::new();
+                        for (&t, off) in item_tys.iter().zip(offsets) {
+                            out.push(self.load_val(ptr, off as i64, t, span)?);
+                        }
+                        out
+                    }
+                };
+                for ((item, part), &t) in items.iter().zip(parts).zip(&item_tys) {
+                    self.assign_parts(item, part, t)?;
                 }
                 Some(())
             }
             _ => {
-                let place = self.place(target)?;
-                self.write_place(&place, vals)
+                let (place, pty) = self.place(target)?;
+                // The old value goes first.
+                if self.needs_drop(pty)
+                    && let Place::At { ptr, off } = &place
+                {
+                    let at = self.offset(*ptr, *off);
+                    self.drop_at(at, pty);
+                }
+                self.write_place(&place, pty, v, target.span)?;
+                self.rearm(target);
+                Some(())
             }
+        }
+    }
+
+    /// A local given a new value has a new value for its fallback `defer`s
+    /// to clean up.
+    fn rearm(&mut self, target: &hir::Expr) {
+        if let ExprKind::Local(l) = &target.kind {
+            for slot in self.f.defer_flags.get(l).cloned().unwrap_or_default() {
+                let ptr = self.slot_addr(slot);
+                let one = self.iconst(1);
+                self.store(crate::heddle::Mem::U8, ptr, 0, one);
+            }
+        }
+    }
+
+    /// If `e` moves a local's value away, its fallback `defer`s have nothing
+    /// to clean up any more.
+    pub(super) fn moved_away(&mut self, e: &hir::Expr) {
+        let Some(&l) = self.tables().moves.get(&e.id) else { return };
+        for slot in self.f.defer_flags.get(&l).cloned().unwrap_or_default() {
+            let ptr = self.slot_addr(slot);
+            let zero = self.iconst(0);
+            self.store(crate::heddle::Mem::U8, ptr, 0, zero);
         }
     }
 
@@ -646,7 +1018,7 @@ impl<'a> Builder<'a> {
             // `-128i8` is one constant.
             return self.lit(lit, true, ty, span);
         }
-        let a = self.expr(operand)?[0];
+        let a = self.value(operand)?[0];
         let kind = match op {
             UnaryOp::Not => InstKind::Not(a),
             UnaryOp::Neg => match (self.float_of(ty), self.int_of(ty)) {
@@ -671,12 +1043,19 @@ impl<'a> Builder<'a> {
     }
 
     fn binary(&mut self, op: BinaryOp, lhs: &'a hir::Expr, rhs: &'a hir::Expr, ty: Ty, span: Span) -> Option<Vals> {
-        let a = self.expr(lhs)?;
-        let b = self.expr(rhs)?;
         if op.is_comparison() {
             let operand_ty = self.common_ty(&[lhs, rhs]);
+            let a = self.expr(lhs)?;
+            let b = self.expr(rhs)?;
+            let (a, b) = if self.in_regs(operand_ty) {
+                (self.regs(a, operand_ty, span)?, self.regs(b, operand_ty, span)?)
+            } else {
+                return self.unsupported(span, "comparing values in memory");
+            };
             return Some(vec![self.compare(op, &a, &b, operand_ty, span)?]);
         }
+        let a = self.value(lhs)?;
+        let b = self.value(rhs)?;
         self.apply(op, &a, &b, ty, span)
     }
 
@@ -724,9 +1103,9 @@ impl<'a> Builder<'a> {
     /// The type several operands are compared at: the widest of their
     /// types, which the narrower ones were widened to.
     fn common_ty(&self, es: &[&hir::Expr]) -> Ty {
-        let mut best = self.ty_of(es[0]);
+        let mut best = self.coerced_ty(es[0]);
         for e in &es[1..] {
-            let ty = self.ty_of(e);
+            let ty = self.coerced_ty(e);
             if let (Some(a), Some(b)) = (self.int_of(best), self.int_of(ty))
                 && a.widens_to(b)
             {
@@ -758,7 +1137,7 @@ impl<'a> Builder<'a> {
                 let mut at = 0;
                 let mut all: Option<Value> = None;
                 for item in items {
-                    let n = self.flat(item, span)?.len();
+                    let n = self.repr_of(item, span)?.parts().len();
                     let eq = self.compare(BinaryOp::Eq, &a[at..at + n], &b[at..at + n], item, span)?;
                     at += n;
                     all = Some(match all {
@@ -788,8 +1167,8 @@ impl<'a> Builder<'a> {
         if matches!(self.tcx().kind(raw), TyKind::Gauge(..)) {
             return self.unsupported(span, "casts into gauges");
         }
-        let source = self.ty_of(inner);
-        let v = self.expr(inner)?[0];
+        let source = self.coerced_ty(inner);
+        let v = self.value(inner)?[0];
         let policy = match kind {
             CastKind::Wrap => Policy::Wrap,
             CastKind::Sat => Policy::Sat,
@@ -824,132 +1203,9 @@ impl<'a> Builder<'a> {
         };
         Some(vec![self.emit1(k, vty)])
     }
-
-    /// `t.0`: an item of a tuple.
-    fn field(&mut self, e: &'a hir::Expr, base: &'a hir::Expr) -> Option<Vals> {
-        let access = self.tables().fields.get(&e.id).cloned();
-        let base_ty = self.ty_of(base);
-        match (access, self.tcx().kind(base_ty)) {
-            (Some(access), TyKind::Tuple(_)) if access.base == Receiver::Expr => {
-                let Key::Pos(i) = access.key else { return self.unsupported(e.span, "this field") };
-                let vals = self.expr(base)?;
-                let parts = self.tuple_parts(base_ty, e.span)?;
-                let start: usize = parts[..i as usize - 1].iter().map(|(_, n)| n).sum();
-                Some(vals[start..start + parts[i as usize - 1].1].to_vec())
-            }
-            _ => self.unsupported(e.span, "methods and fields of warps"),
-        }
-    }
-
-    // ------------------------------------------------------------ calls
-
-    fn call(&mut self, e: &'a hir::Expr, callee: &'a hir::Expr, args: &'a [hir::Arg], ty: Ty) -> Option<Vals> {
-        let span = e.span;
-        let tables = self.tables();
-        if tables.closure_calls.contains(&e.id) {
-            return self.unsupported(span, "calling function values");
-        }
-        if tables.new_lists.contains(&e.id) || tables.constructs.contains_key(&e.id) {
-            return self.unsupported(span, "values of warps");
-        }
-        if matches!(callee.kind, ExprKind::BuiltinCase(_)) {
-            return self.unsupported(span, "optionals and results");
-        }
-        let Some(info) = tables.calls.get(&e.id).cloned() else {
-            return self.unsupported(span, "this call");
-        };
-        if info.dynamic.is_some() {
-            return self.unsupported(span, "`any` values");
-        }
-        if tables.streams.contains_key(&e.id) {
-            return self.unsupported(span, "streams");
-        }
-        if !info.through.is_empty() {
-            return self.unsupported(span, "`through`");
-        }
-        let p = self.p;
-        let def = self.typed.results.instance(info.callee).def;
-        let DefKind::Fn(f) = &p.def(def).kind else { return self.unsupported(span, "this call") };
-        if f.abi.is_some() {
-            return self.extern_call(def, &info, args, span);
-        }
-        if f.body.is_none() {
-            return self.unsupported(span, &format!("`{}` on Treadle", p.def_path(def)));
-        }
-        let sig = self.typed.results.sigs.get(&info.callee)?.clone();
-        // The receiver, then the arguments in source order.
-        let method = match &callee.kind {
-            ExprKind::Index { base, .. } => base.as_ref(),
-            _ => callee,
-        };
-        let receiver_base = match (&info.receiver, &method.kind) {
-            (Some(Receiver::Expr), ExprKind::Field { base, .. }) => Some(base.as_ref()),
-            (Some(_), _) => return self.unsupported(span, "methods of warps"),
-            (None, _) => None,
-        };
-        let receiver = match receiver_base {
-            Some(base) => Some(self.expr(base)?),
-            None => None,
-        };
-        let mut vals: Vec<Vals> = Vec::with_capacity(args.len());
-        for arg in args {
-            vals.push(self.expr(&arg.value)?);
-        }
-        let mut flat_args = Vec::new();
-        let mut places = Vec::new();
-        for (k, source) in info.args.iter().enumerate() {
-            let param = sig.params.get(k)?;
-            let arg_expr = match source {
-                ArgSource::Arg(i) => {
-                    flat_args.extend(vals[*i].iter().copied());
-                    Some(&args[*i].value)
-                }
-                ArgSource::Receiver => {
-                    flat_args.extend(receiver.iter().flatten().copied());
-                    receiver_base
-                }
-                ArgSource::Default => {
-                    let default = f.params.get(k).and_then(|p| p.default.as_ref())?;
-                    if mentions_locals(default) {
-                        return self.unsupported(default.span, "default values that use other parameters");
-                    }
-                    // The default was checked with the function's body.
-                    let saved = std::mem::replace(&mut self.f.body, info.callee);
-                    let v = self.expr(default);
-                    self.f.body = saved;
-                    flat_args.extend(v?);
-                    None
-                }
-            };
-            if param.mode == ParamMode::Mut {
-                let Some(place) = arg_expr.and_then(|a| self.place(a)) else {
-                    return self.unsupported(span, "this `mut` argument");
-                };
-                places.push(place);
-            }
-        }
-        let ret = if matches!(f.ret, crate::hir::FnRet::Unit) { Vec::new() } else { self.flat(sig.ret, span)? };
-        let mut tys = ret.clone();
-        for param in sig.params.iter().filter(|p| p.mode == ParamMode::Mut) {
-            tys.extend(self.flat(param.ty, span)?);
-        }
-        let func = self.func_id(info.callee);
-        let results = self.emit(InstKind::Call { func, args: flat_args }, &tys);
-        // `mut` arguments come back after the result.
-        let mut at = ret.len();
-        for place in &places {
-            self.write_place(place, &results[at..at + place.len])?;
-            at += place.len;
-        }
-        if matches!(self.tcx().kind(ty), TyKind::Never) {
-            self.terminate(Term::Crash(1));
-            return None;
-        }
-        Some(results[..ret.len()].to_vec())
-    }
 }
 
-fn float_vty(f: FloatTy) -> VTy {
+pub(super) fn float_vty(f: FloatTy) -> VTy {
     match f {
         FloatTy::F32 => VTy::F32,
         FloatTy::F64 => VTy::F64,
@@ -957,7 +1213,7 @@ fn float_vty(f: FloatTy) -> VTy {
 }
 
 /// Whether an expression reads any local (so it can't be moved to a call site).
-fn mentions_locals(e: &hir::Expr) -> bool {
+pub(super) fn mentions_locals(e: &hir::Expr) -> bool {
     match &e.kind {
         ExprKind::Local(_) => true,
         ExprKind::Lit(_) | ExprKind::Def { .. } | ExprKind::Const(_) => false,
