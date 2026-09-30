@@ -43,6 +43,16 @@ impl Stack {
         Ok(())
     }
 
+    /// Whether the first segment holds `need` slots.
+    pub fn first_holds(&self, need: usize) -> bool {
+        self.segments[0].len() >= need
+    }
+
+    /// Back to the first segment, for a new call from outside.
+    pub fn reset(&mut self) {
+        self.current = 0;
+    }
+
     /// The first and one-past-the-last slot of the segment in use.
     pub fn bounds(&mut self) -> (*mut u64, *mut u64) {
         let range = self.segments[self.current].as_mut_ptr_range();

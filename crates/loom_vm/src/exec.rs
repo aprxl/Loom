@@ -45,6 +45,7 @@ struct Callee {
     entry: *const u64,
     frame: usize,
     params: usize,
+    results: usize,
 }
 
 #[derive(Debug)]
@@ -55,6 +56,8 @@ pub(crate) struct Machine<'i> {
     pub ctx: Ctx<'i>,
     stack_limit: usize,
     interrupt: Option<Arc<AtomicBool>>,
+    /// Kept between calls from outside.
+    stack: Option<Stack>,
 }
 
 impl<'i> Machine<'i> {
@@ -72,6 +75,7 @@ impl<'i> Machine<'i> {
                 entry: image.code[f.entry as usize..].as_ptr(),
                 frame: usize::from(f.frame),
                 params: usize::from(f.params),
+                results: usize::from(f.results),
             })
             .collect();
         Ok(Machine {
@@ -81,25 +85,49 @@ impl<'i> Machine<'i> {
             ctx: Ctx::new(image, host.output),
             stack_limit: config.stack_limit,
             interrupt: config.interrupt.clone(),
+            stack: None,
         })
     }
 
-    /// Runs function `entry`, which takes nothing and gives nothing back.
-    pub fn run(&mut self, entry: usize) -> Result<(), Fault> {
+    /// Calls function `entry` with `args` (one per parameter register) and
+    /// gives its results.
+    pub fn call(&mut self, entry: usize, args: &[u64]) -> Result<Vec<u64>, Fault> {
+        let Some(start) = self.funcs.get(entry) else {
+            return Err(Fault { trap: Trap::Crash(format!("there's no function {entry}")), pc: 0 });
+        };
+        if args.len() != start.params {
+            let trap = Trap::Crash(format!("{} arguments for {} parameters", args.len(), start.params));
+            return Err(Fault { trap, pc: (start.entry as usize - self.code.as_ptr() as usize) / 8 });
+        }
+        let need = LINK_SLOTS + start.frame;
+        let mut stack = match self.stack.take() {
+            Some(mut stack) if stack.first_holds(need) => {
+                stack.reset();
+                stack
+            }
+            _ => Stack::new(self.stack_limit, need).map_err(|trap| Fault { trap, pc: 0 })?,
+        };
+        let result = self.execute(&mut stack, entry, args);
+        self.stack = Some(stack);
+        result
+    }
+
+    fn execute(&mut self, stack: &mut Stack, entry: usize, args: &[u64]) -> Result<Vec<u64>, Fault> {
         let code_base = self.code.as_ptr();
         let at_index = |at: *const u64| (at as usize - code_base as usize) / 8;
         let start = &self.funcs[entry];
-        let mut stack = Stack::new(self.stack_limit, LINK_SLOTS + start.frame)
-            .map_err(|trap| Fault { trap, pc: at_index(start.entry) })?;
         let (base, mut seg_end) = stack.bounds();
-        // SAFETY: the first segment holds the entry's linkage and frame.
+        // SAFETY: the first segment holds the entry's linkage and frame,
+        // whose parameters are its first registers.
         let mut fp = unsafe { base.add(LINK_SLOTS) };
         // SAFETY: as above.
         unsafe {
             *base = 0; // no return address: back to the host
             *base.add(1) = 0;
             *base.add(2) = fp as u64;
+            std::ptr::copy_nonoverlapping(args.as_ptr(), fp, args.len());
         }
+        let entry_results = start.results;
         let mut pc = start.entry;
         let mut ticks = TICKS;
         let funcs = self.funcs.as_ptr();
@@ -652,7 +680,9 @@ impl<'i> Machine<'i> {
                             seg_end = stack.shrink();
                         }
                         if back.is_null() {
-                            return Ok(());
+                            // Back to the host: the entry's results are in
+                            // its first registers.
+                            return Ok(std::slice::from_raw_parts(fp, entry_results).to_vec());
                         }
                         pc = back;
                         fp = caller;

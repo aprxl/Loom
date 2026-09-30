@@ -85,22 +85,45 @@ pub(crate) struct Fault {
 
 /// Runs `image`'s entry function, with `host` for its output.
 pub fn run(image: &Image, host: Host, config: &Config) -> Outcome {
-    if let Err(e) = loom_isa::verify(image) {
-        return Outcome::Crash { message: format!("invalid bytecode: {e}"), location: None };
-    }
     let Some(entry) = image.entry else {
         return Outcome::Crash { message: "the image has no entry function".into(), location: None };
     };
-    let mut machine = match exec::Machine::load(image, host, config) {
-        Ok(m) => m,
-        Err(message) => return Outcome::Crash { message, location: None },
+    let mut vm = match Vm::new(image, host, config) {
+        Ok(vm) => vm,
+        Err(outcome) => return outcome,
     };
-    let result = machine.run(entry as usize);
-    machine.ctx.flush();
-    match result {
-        Ok(()) => Outcome::Finished,
-        Err(fault) => {
-            let location = image.line_at(fault.pc as u32).map(|(file, line, column)| Location {
+    match vm.call(entry, &[]) {
+        Ok(_) => Outcome::Finished,
+        Err(outcome) => outcome,
+    }
+}
+
+/// A loaded image, whose functions can be called one after another.
+#[derive(Debug)]
+pub struct Vm<'i> {
+    image: &'i Image,
+    machine: exec::Machine<'i>,
+}
+
+impl<'i> Vm<'i> {
+    /// Verifies and loads `image`.
+    pub fn new(image: &'i Image, host: Host, config: &Config) -> Result<Vm<'i>, Outcome> {
+        if let Err(e) = loom_isa::verify(image) {
+            return Err(Outcome::Crash { message: format!("invalid bytecode: {e}"), location: None });
+        }
+        let machine =
+            exec::Machine::load(image, host, config).map_err(|message| Outcome::Crash { message, location: None })?;
+        Ok(Vm { image, machine })
+    }
+
+    /// Calls function `func` with `args`, one register each, and gives its
+    /// results; or how it ended when it didn't return. Output is flushed
+    /// before this returns.
+    pub fn call(&mut self, func: u32, args: &[u64]) -> Result<Vec<u64>, Outcome> {
+        let result = self.machine.call(func as usize, args);
+        self.machine.ctx.flush();
+        result.map_err(|fault| {
+            let location = self.image.line_at(fault.pc as u32).map(|(file, line, column)| Location {
                 file: file.to_string(),
                 line,
                 column,
@@ -109,7 +132,7 @@ pub fn run(image: &Image, host: Host, config: &Config) -> Outcome {
                 Trap::Crash(message) => Outcome::Crash { message, location },
                 trap => Outcome::Unravel { message: trap.message(), location },
             }
-        }
+        })
     }
 }
 
