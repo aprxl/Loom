@@ -2,6 +2,7 @@
 //! compare and hash cheaply.
 
 pub mod int;
+pub mod layout;
 
 use std::collections::HashMap;
 
