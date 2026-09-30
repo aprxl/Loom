@@ -35,11 +35,13 @@ pub enum Form {
     J,
     /// `a`: a register; `b:c`: an `i32` offset to jump by.
     AJ,
-    /// `a`: where the callee's frame starts; `b:c`: the function's index.
+    /// `a`: where the callee's frame starts, at least
+    /// [`LINK_SLOTS`](crate::LINK_SLOTS) registers in; `b:c`: the function's
+    /// index.
     Call,
     /// `a`: where the arguments are; `b`: the native's index; `c`: its immediate.
     Native,
-    /// `a`: the first result; `b`: how many; `c`: the function's frame size.
+    /// `a`: the first result; `b`: how many.
     Ret,
     /// `a`: a 16-bit constant.
     K,

@@ -1,0 +1,18 @@
+[package]
+name = "loom_vm"
+description = "Treadle, Loom's own VM: the interpreter, its stack, natives and formatting."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[features]
+# Run-time checks where the compiler is trusted: text reads, opcodes.
+checked = []
+
+[dependencies]
+loom_isa.workspace = true
+loom_sys.workspace = true
+
+[lints]
+workspace = true

@@ -27,6 +27,7 @@ pub use op::{Form, Op};
 pub use verify::{VerifyError, verify};
 pub use word::IntSpec;
 
-/// How many registers past a frame hold what a call needs to return: the
-/// return address, the caller's frame, and where the results go.
+/// How many slots just below a frame hold what a call needs to return: the
+/// return address, the caller's frame, and where the results go. They're
+/// the caller's, just before the call's window, which must leave room.
 pub const LINK_SLOTS: usize = 3;

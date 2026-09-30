@@ -13,6 +13,7 @@ publish = false
 # default features, so exactly one Lua version is enabled per build.
 loom_syntax = { path = "crates/loom_syntax" }
 loom_isa = { path = "crates/loom_isa" }
+loom_vm = { path = "crates/loom_vm" }
 loom_sys = { path = "crates/loom_sys" }
 loom_host = { path = "crates/loom_host", default-features = false }
 loom_compiler = { path = "crates/loom_compiler", default-features = false }
@@ -25,7 +26,9 @@ mlua = { version = "0.11", features = ["vendored"] }
 unicode-ident = "1"
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+# `unsafe` is used where it makes sense, each use a deliberate
+# `#[allow(unsafe_code)]` with a `// SAFETY:` comment (see AGENTS.md).
+unsafe_code = "warn"
 missing_debug_implementations = "warn"
 
 [workspace.lints.clippy]
@@ -35,3 +38,7 @@ unwrap_used = "warn"
 
 [profile.dev.package."*"]
 opt-level = 1
+
+# The interpreter runs every fixture: keep it fast in debug builds too.
+[profile.dev.package.loom_vm]
+opt-level = 3

@@ -8,7 +8,8 @@
 //! - control can't run off the end of a function;
 //! - every function, native, string and format item named exists, and each
 //!   call's window fits what it passes and gets back;
-//! - `ret` returns as many values as the function says, from its own frame.
+//! - `ret` returns as many values as the function says, from its own frame;
+//! - a call's window leaves room below it for the linkage.
 //!
 //! What a register *means* isn't checked: that's the compiler's job, and the
 //! checked build's.
@@ -18,7 +19,7 @@ use std::fmt;
 
 use crate::natives::{NativeImm, native};
 use crate::word::{a, b, bc_i32, bc_u32, c, c_i16, opcode, unpack_cast};
-use crate::{CRASHES, Form, Image, IntSpec, Op};
+use crate::{CRASHES, Form, Image, IntSpec, LINK_SLOTS, Op};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VerifyError {
@@ -152,6 +153,9 @@ fn verify_func(image: &Image, index: usize) -> Result<(), VerifyError> {
             Form::Call => {
                 let callee = image.funcs.get(bc_u32(w) as usize).ok_or_else(|| err(pc, "no such function".into()))?;
                 let base = a(w);
+                if base < LINK_SLOTS {
+                    return Err(err(pc, "the call's window leaves no room for its linkage".into()));
+                }
                 if base + usize::from(callee.params.max(callee.results)) > frame {
                     return Err(err(
                         pc,
@@ -173,7 +177,7 @@ fn verify_func(image: &Image, index: usize) -> Result<(), VerifyError> {
                 }
             }
             Form::Ret => {
-                if a(w) + b(w) > frame || b(w) != usize::from(f.results) || c(w) != frame {
+                if a(w) + b(w) > frame || b(w) != usize::from(f.results) || c(w) != 0 {
                     return Err(err(pc, "`ret` doesn't match the function".into()));
                 }
             }
@@ -211,7 +215,7 @@ mod tests {
     }
 
     fn ret() -> u64 {
-        word(Op::Ret, 0, 1, 4)
+        word(Op::Ret, 0, 1, 0)
     }
 
     fn rejects(code: Vec<u64>, what: &str) {
@@ -228,7 +232,7 @@ mod tests {
             word(Op::CallN, 2, 0, 0),
             word(Op::Ldk, 3, 0, 0),
             42,
-            word(Op::Call, 2, 0, 0),
+            word(Op::Call, 3, 0, 0),
             ret(),
         ];
         verify(&image(code)).expect("valid");
@@ -243,14 +247,17 @@ mod tests {
         rejects(vec![word(Op::Mov, 0, 0, 0), word_i32(Op::Jz, 0, -1)], "runs off the end");
         rejects(vec![word_i32(Op::Jmp, 0, 5), ret()], "isn't an instruction");
         rejects(vec![word(Op::Ldk, 0, 0, 0), 7, word_i32(Op::Jmp, 0, -1), ret()], "isn't an instruction");
-        rejects(vec![word(Op::Ret, 0, 1, 4), word(Op::Ldk, 0, 0, 0)], "past the end");
+        rejects(vec![word(Op::Ret, 0, 1, 0), word(Op::Ldk, 0, 0, 0)], "past the end");
         rejects(vec![word(Op::Call, 0, 9, 0), ret()], "no such function");
         rejects(vec![word(Op::Call, 4, 0, 0), ret()], "window");
+        rejects(vec![word(Op::Call, 2, 0, 0), ret()], "no room for its linkage");
+        rejects(vec![word(Op::Call, 2, 0, 0), ret()], "no room for its linkage");
         rejects(vec![word(Op::CallN, 0, 3, 0), ret()], "no such native");
         rejects(vec![word(Op::CallN, 0, 0, 5), ret()], "no such format item");
         rejects(vec![word_i32(Op::Ldstr, 0, 1), ret()], "no such string");
-        rejects(vec![word(Op::Ret, 0, 0, 4)], "`ret` doesn't match");
+        rejects(vec![word(Op::Ret, 0, 0, 0)], "`ret` doesn't match");
         rejects(vec![word(Op::Ret, 0, 1, 3)], "`ret` doesn't match");
+        rejects(vec![word(Op::Ret, 3, 2, 0)], "`ret` doesn't match");
         rejects(vec![word(Op::AddTG, 0, 0, 0), 99, ret()], "bad integer type");
         rejects(vec![word(Op::CastT, 0, 0, 0), 0, ret()], "bad cast");
         rejects(vec![word(Op::Crash, 7, 0, 0)], "no such internal error");

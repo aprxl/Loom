@@ -60,7 +60,7 @@ fn operands(image: &Image, op: Op, w: u64, ext: u64, pc: usize) -> String {
             let name = image.natives.get(b(w)).map_or("?", String::as_str);
             format!("{name} at r{}, #{}", a(w), c(w))
         }
-        Form::Ret => format!("r{}, {} (frame {})", a(w), b(w), c(w)),
+        Form::Ret => format!("r{}, {}", a(w), b(w)),
         Form::K => format!("{}", a(w)),
     }
 }

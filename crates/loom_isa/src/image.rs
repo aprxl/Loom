@@ -20,8 +20,8 @@ pub struct Func {
     /// Where its code starts in [`Image::code`], and how many words it has.
     pub entry: u32,
     pub len: u32,
-    /// How many registers it uses, its call windows included. Its caller's
-    /// return address is kept just past them.
+    /// How many registers it uses, its call windows included (and the
+    /// [`LINK_SLOTS`](crate::LINK_SLOTS) before each window).
     pub frame: u16,
     /// Its arguments arrive in `r0..params`; its results leave in
     /// `r0..results`.

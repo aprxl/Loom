@@ -12,6 +12,7 @@ cargo fmt --all
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo test -p loom --no-default-features --features lua55   # keeps emitted Lua inside the 5.4 ∩ 5.5 subset
+cargo test -p loom_vm --all-features                          # Treadle with its run-time checks on
 ```
 
 Read your own diff before committing. One logical change per commit.
@@ -30,6 +31,8 @@ Read your own diff before committing. One logical change per commit.
 | `crates/loom_syntax` | source files, spans, diagnostics, tokens, lexer, parser, AST, AST printer (no C deps) |
 | `crates/loom_sys` | what a running program gets from its host, for both backends: output, arguments, outcomes |
 | `crates/loom_host` | the only owner of the Lua VM (mlua, vendored) |
+| `crates/loom_isa` | Treadle's instruction set: the op table, images, the verifier, listings |
+| `crates/loom_vm` | Treadle, Loom's own VM (design/vm.md): the interpreter, its stack, natives |
 | `crates/loom_compiler` | everything semantic: resolve (`hir`, `modules`), then typeck, analyses, lowering, Lua emission |
 | `crates/loom` | the `loom` binary (build, run, check, test, hidden lua-host) |
 | `runtime/rt` | `loomrt` Lua sources, embedded into the binary |
@@ -45,9 +48,8 @@ Read your own diff before committing. One logical change per commit.
 - `unsafe` Rust is welcome wherever it makes sense: for speed, when an
   invariant (the bytecode verifier, a checked bound) already guarantees what
   a check would, or for what safe Rust can't express. Every block gets a
-  `// SAFETY:` comment saying why it's sound. The workspace lint moves from
-  `unsafe_code = "forbid"` to `"warn"` with the first use, so each use is a
-  deliberate `#[allow(unsafe_code)]`.
+  `// SAFETY:` comment saying why it's sound. The workspace lint is
+  `unsafe_code = "warn"`, so each use is a deliberate `#[allow(unsafe_code)]`.
 - Anything whose iteration order can reach output uses `IndexMap`/`BTreeMap`,
   so builds are byte-for-byte reproducible.
 - Keep the design docs in sync when behavior changes. If an example stops being
