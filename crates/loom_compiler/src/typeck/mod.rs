@@ -205,6 +205,8 @@ pub struct Body {
     pub local_ty: HashMap<LocalId, Ty>,
     /// Conversions applied to an expression's value where it's used.
     pub coercions: HashMap<HirId, Coercion>,
+    /// The type each converted expression's value is converted to.
+    pub coerced: HashMap<HirId, Ty>,
     /// For each call: which argument (or default) feeds each parameter.
     pub calls: HashMap<HirId, Call>,
     /// Expressions that build a warp value: constructor calls, `Shape.Dot`,
@@ -1488,6 +1490,7 @@ impl<'p> Checker<'p> {
             && (self.has_vars(actual) || self.has_vars(inner))
             && self.unify(actual, inner)
         {
+            self.b.coerced.insert(e.id, target);
             self.b.coercions.insert(e.id, Coercion::ToOptional);
             return true;
         }
@@ -1495,6 +1498,7 @@ impl<'p> Checker<'p> {
         if let (Some(Seq::Array(t, _) | Seq::List(t)), Some(Seq::Slice(u))) = (self.seq(actual), self.seq(target))
             && (t == u || self.unify(t, u))
         {
+            self.b.coerced.insert(e.id, target);
             self.b.coercions.insert(e.id, Coercion::ToSlice);
             return true;
         }
@@ -1504,12 +1508,14 @@ impl<'p> Checker<'p> {
             && let Some((source, item)) = self.iter_source(actual)
             && (item == want || self.unify(item, want))
         {
+            self.b.coerced.insert(e.id, target);
             self.b.coercions.insert(e.id, Coercion::ToStream(source));
             return true;
         }
         if let TyKind::Result(ok, _) = *self.tcx.kind(target)
             && (ok == actual || (self.has_vars(actual) && self.unify(actual, ok)))
         {
+            self.b.coerced.insert(e.id, target);
             self.b.coercions.insert(e.id, Coercion::ToResult);
             return true;
         }
@@ -1530,6 +1536,7 @@ impl<'p> Checker<'p> {
             if let Some(member) = pick
                 && self.unify(actual, member)
             {
+                self.b.coerced.insert(e.id, target);
                 self.b.coercions.insert(e.id, Coercion::ToUnion);
                 return true;
             }
@@ -1577,6 +1584,7 @@ impl<'p> Checker<'p> {
         };
         match coercion {
             Some(coercion) => {
+                self.b.coerced.insert(e.id, target);
                 self.b.coercions.insert(e.id, coercion);
                 true
             }

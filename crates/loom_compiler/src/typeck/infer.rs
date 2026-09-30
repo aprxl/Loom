@@ -300,6 +300,11 @@ impl Checker<'_> {
             let ty = self.deep_resolve(ty);
             self.b.pat_ty.insert(id, ty);
         }
+        let coerced: Vec<_> = self.b.coerced.iter().map(|(&k, &v)| (k, v)).collect();
+        for (id, ty) in coerced {
+            let ty = self.deep_resolve(ty);
+            self.b.coerced.insert(id, ty);
+        }
         let locals: Vec<_> = self.b.local_ty.iter().map(|(&k, &v)| (k, v)).collect();
         for (id, ty) in locals {
             let ty = self.deep_resolve(ty);
