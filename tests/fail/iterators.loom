@@ -30,4 +30,14 @@ fn main() {
     let has = pts.contains(Point(1, 2))          //~ T0108
     let s = "ab".chars()
     let c = s.next()                             //~ T0107
+    // A stream is read once: each method uses it up.
+    let pairs = [1, 2, 3].indexed()
+    let firsts = pairs.map(p => p.0)
+    let n = pairs.count()                        //~ M0101
+    let big = (1..4).filter(_ > 1)
+    let a = big.count()
+    let b = big.count()                          //~ M0101
+    let lines = "a\nb".lines()
+    for line in lines { }
+    let again = lines.count()                    //~ M0101
 }

@@ -446,7 +446,7 @@ The passes, in order:
 | 5. GVN | shares pure computations, and loads nothing could have changed | a local or a `mut` parameter can only change through its own name, so alias analysis is mostly syntactic |
 | 6. LICM | hoists invariant loads and computations out of loops: a list's pointer and length, a bounds check against a length that doesn't change | a loop's body can't change what the loop goes over |
 | 7. ranges | interval analysis over SSA (widening at loop heads), seeded by types, gauges, `for` ranges and conditions. Removes the overflow traps, bounds checks and gauge checks that can't fire | a `u16` counter under `i < limit` can't overflow, and `for i in 0..xs.len()` can't index past the end |
-| 8. streams | a stream built and used up in one place (`xs.filter(p).map(f).sum()`, `for x in (1..n).filter(p)`) becomes one loop | a stream is read once and can't be shared (the review's V10 makes reusing one an error) |
+| 8. streams | a stream built and used up in one place (`xs.filter(p).map(f).sum()`, `for x in (1..n).filter(p)`) becomes one loop | a stream is read once and can't be shared (reusing one is a move error) |
 | 9. projections and generators | a projection used by one statement (`counts.entry(k, default: 0) += 1`) is inlined around the place's use. A generator a `for` goes over directly may be inlined into the loop | projections last one statement, and the generator's frame belongs to the loop |
 | 10. copy → move | a value's last use moves it where it would have been copied | the move facts come from the same analysis as the drops |
 | 11. drops | elaboration, then removing drops of values moved on every path, and merging frees | |

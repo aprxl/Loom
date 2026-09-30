@@ -25,7 +25,7 @@ Two maps are equal when they hold the same pairs in any order. See [std.map](std
 
 ## Streams
 
-A `Stream[T]` is a lazy sequence: nothing runs until something asks for the next item. Methods that make a new stream use up the old one, so a stream is read once. `chars()`, `bytes()`, `lines()`, `words()`, `indexed()`, `chunks(n)` and `windows(n)` make streams. Ranges, arrays, lists, slices and maps have every stream method, and so does any type that weaves `Iter`. `for` loops over any of them.
+A `Stream[T]` is a lazy sequence: nothing runs until something asks for the next item. Every stream method takes the stream, so a stream is read once: using it again after `s.map(f)` or `s.count()` is a move error (M0101). `chars()`, `bytes()`, `lines()`, `words()`, `indexed()`, `chunks(n)` and `windows(n)` make streams. Ranges, arrays, lists, slices and maps have every stream method, and so does any type that weaves `Iter`. `for` loops over any of them.
 
 To make your own, weave `Iter`: give the type an `Item` and a `next` that returns `?Item`.
 

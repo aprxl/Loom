@@ -539,8 +539,12 @@ impl Checker<'_> {
             }
             return;
         };
-        let modes: Vec<ParamMode> =
-            self.r.sigs.get(&info.callee).map(|s| s.params.iter().map(|p| p.mode).collect()).unwrap_or_default();
+        // Worked out here if nothing asked for it yet: a generic method's
+        // instance is only known once the body is finished (and never, when
+        // its arguments couldn't be worked out, which was reported).
+        let known = info.callee != super::generic::UNKNOWN;
+        let sig = if known { self.fn_sig(info.callee) } else { None };
+        let modes: Vec<ParamMode> = sig.map(|s| s.params.iter().map(|p| p.mode).collect()).unwrap_or_default();
         let method = match &callee.kind {
             ExprKind::Index { base, .. } => base.as_ref(),
             _ => callee,
@@ -755,11 +759,22 @@ impl Checker<'_> {
             .map(|(_, _, at)| *at);
         let Some(at) = hit else { return };
         let name = self.p.local(local).name.clone();
+        // A stream is read once: its methods use it up, and there's no copy.
+        let stream = self.b.local_ty.get(&local).copied().is_some_and(|t| {
+            let t = self.deep_resolve(t);
+            self.stream_item(t).is_some()
+        });
         // The same spot, gone through again: a loop.
         let diag = if at == span {
             Diagnostic::error(codes::M0101, format!("`{name}` is moved again in the next iteration of a loop"))
                 .primary(span, "moved here on the first iteration")
                 .help("move it only once (then `break`), or give it a new value before the next iteration")
+        } else if stream {
+            Diagnostic::error(codes::M0101, format!("`{name}` is used after it was moved"))
+                .primary(span, "used here")
+                .secondary(at, "moved here: this used up the stream")
+                .note("a stream is read once: each of its methods takes it")
+                .help("make a new stream for each use (`xs.indexed()` again), or collect it into a list first")
         } else {
             Diagnostic::error(codes::M0101, format!("`{name}` is used after it was moved"))
                 .primary(span, "used here")

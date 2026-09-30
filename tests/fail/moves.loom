@@ -39,6 +39,19 @@ fn loop_item(xs: List[String]) {
     for x in xs { out.push(x) }                    //~ M0102
 }
 
+fn pushed(take s: String) -> usize {
+    var xs: List[String] = List()
+    xs.push(s)
+    s.len()                                        //~ M0101
+}
+
+fn same[T](take x: T) -> T = x
+
+fn inferred(take s: String) -> usize {
+    let t = same(s)
+    s.len()                                        //~ M0101
+}
+
 fn part(take n: Named) -> List[str] {
     let s = n.name
     let again = n.name                             //~ M0101

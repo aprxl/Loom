@@ -135,7 +135,7 @@ new: 2
 </div>
 <p>Two maps are equal when they hold the same pairs in any order. See <a href="../std/modules/map.html#Map">std.map</a> and <a href="../std/modules/set.html#Set">std.set</a>.</p>
 <h2 id="streams">Streams</h2>
-<p>A <code>Stream[T]</code> is a lazy sequence: nothing runs until something asks for the next item. Methods that make a new stream use up the old one, so a stream is read once. <code>chars()</code>, <code>bytes()</code>, <code>lines()</code>, <code>words()</code>, <code>indexed()</code>, <code>chunks(n)</code> and <code>windows(n)</code> make streams. Ranges, arrays, lists, slices and maps have every stream method, and so does any type that weaves <code>Iter</code>. <code>for</code> loops over any of them.</p>
+<p>A <code>Stream[T]</code> is a lazy sequence: nothing runs until something asks for the next item. Every stream method takes the stream, so a stream is read once: using it again after <code>s.map(f)</code> or <code>s.count()</code> is a move error (M0101). <code>chars()</code>, <code>bytes()</code>, <code>lines()</code>, <code>words()</code>, <code>indexed()</code>, <code>chunks(n)</code> and <code>windows(n)</code> make streams. Ranges, arrays, lists, slices and maps have every stream method, and so does any type that weaves <code>Iter</code>. <code>for</code> loops over any of them.</p>
 <p>To make your own, weave <code>Iter</code>: give the type an <code>Item</code> and a <code>next</code> that returns <code>?Item</code>.</p>
 <div class="sample" id="sample-coll_streams">
 <div class="sample-head"><span class="file">samples/coll_streams.loom</span><span class="tag ok">runs</span></div>
