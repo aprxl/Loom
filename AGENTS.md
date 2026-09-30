@@ -13,6 +13,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo test -p loom --no-default-features --features lua55   # keeps emitted Lua inside the 5.4 ∩ 5.5 subset
 cargo test -p loom_vm --all-features                          # Treadle with its run-time checks on
+cargo test -p loom --features vm-checked,vm-stats             # the fixtures on a checked Treadle, and bench/counts.txt
 ```
 
 Read your own diff before committing. One logical change per commit.
@@ -136,11 +137,24 @@ language through every layer (type checking, lowering to Lua, the runtime,
     `tests/run/derive_json`). `examples/compile_time.loom` fails only for
     `std.sys`.
 
-Next: Loom's own VM, Treadle, next to the Lua backend. `design/vm.md` is the
-design (its decisions D1–D11 are settled) and its milestones
-V0–V9 say what each step builds and how it passes: V0 the skeleton, V1 the
-sequential language, V2 shuttles, V3 the optimizer, V4 compile-time code on
-Treadle, V5 threads, V6 spools, V7 Lua interop, V8 speed, V9 the default.
+Treadle, Loom's own VM (`design/vm.md`, milestones V0–V9), runs next to the
+Lua backend: `loom run --backend vm`. The typed program becomes Heddle
+(`loom_compiler::heddle`, a typed SSA IR), Heddle becomes bytecode
+(`loom_compiler::codegen`, into `loom_isa`'s images), and `loom_vm` runs it.
+
+22. Treadle V0: integers of every width and overflow policy, floats, `bool`,
+    `char`, `str` literals, tuples, control flow, `match` on literals,
+    ranges, tuples and twill, functions (named and default arguments, `mut`
+    scalars), and `print`, `assert` and `unravel` with templates. Every
+    `tests/run` fixture also runs on Treadle; `tests/vm_skip.txt` lists the
+    ones that can't yet, with the milestone that fixes each.
+    `bench/RESULTS.md` has the numbers.
+
+Next: Treadle V1, the sequential language (design/vm.md §17): warps,
+optionals and results, `any`, lists, strings, maps, `defer`, lambdas,
+generics, with memory laid out for real and freed by ownership. Then V2
+shuttles, V3 the optimizer, V4 compile-time code on Treadle, V5 threads, V6
+spools, V7 Lua interop, V8 speed, V9 Treadle by default.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and
@@ -151,5 +165,7 @@ Keep these green:
   reject an example only with U0102 until it covers what the example uses.
   Code v1 deliberately rejects must use a `U` code.
 - `tests/run` and `tests/fail` (`crates/loom/tests/fixtures.rs`): every new
-  feature gets fixtures there. `crates/loom_compiler/tests/rt_int.rs` checks
+  feature gets fixtures there. A `tests/run` fixture also runs on Treadle,
+  unless `tests/vm_skip.txt` lists it; one it lists that passes is a
+  failure, so take it out. `crates/loom_compiler/tests/rt_int.rs` checks
   the runtime's integer operations against the Rust oracle in `ty::int`.

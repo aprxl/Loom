@@ -277,6 +277,7 @@ crates/
   loom_host/               the bundled Lua VM (mlua, vendored, built with clang-cl)
   loom_isa/                Treadle's instruction set: op table, images, verifier
   loom_vm/                 Treadle, Loom's own VM: the interpreter
+bench/                     benchmarks, their Lua versions, and results
   loom_compiler/           name resolution, type checking, lowering to Lua
   loom/                    the `loom` command-line tool
 runtime/
@@ -315,13 +316,18 @@ built in `crates/`, following the plan in `design/lua-backend.md`:
   tests; `loom build <file>` writes the Lua; `--emit tokens|ast|hir|lua`
   dumps a stage; `loom docs` opens the documentation in your browser. The other examples use more than this; the compiler says
   so rather than guessing.
-- **Next:** Treadle, Loom's own VM, next to the Lua backend: a typed,
+- **Treadle**, Loom's own VM, runs next to the Lua backend: a typed,
   optimizing pipeline and a register interpreter, meant to outrun the
-  interpreters of other languages. `design/vm.md` has the design and the
-  milestones, including threads and spools on it.
+  interpreters of other languages (`design/vm.md`). Its first milestone
+  runs numbers, text literals, tuples, control flow and functions:
+  `loom run --backend vm`, 10–15× faster than the Lua backend on
+  `bench/`.
+- **Next:** Treadle's second milestone, the rest of the sequential language;
+  then threads and spools on it.
 
 ```bash
 cargo run -p loom -- run tests/run/fizzbuzz.loom
+cargo run -p loom -- run --backend vm tests/run/scalars.loom
 cargo run -p loom -- build tests/run/fizzbuzz.loom --emit lua
 cargo run -p loom -- docs
 ```

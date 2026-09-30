@@ -1,8 +1,9 @@
 # Treadle: Loom's own VM
 
-> **Status: designed, not built.** The decisions in
-> [section 3](#3-decisions) were settled on 2026-09-29; development starts
-> with V0 when it's given the go.
+> **Status: V0 is built** (2026-09-29): numbers, text literals, tuples,
+> control flow and calls run on Treadle, `loom run --backend vm file.loom`,
+> as fast as §16's V0 row asks and then some. V1 is next. The decisions in
+> [section 3](#3-decisions) were settled on 2026-09-29.
 
 Loom runs today by compiling to Lua 5.4 (see [lua-backend](lua-backend.md)).
 That backend exists to get the whole language running with the right
@@ -355,7 +356,9 @@ The second is trust in our own compiler, and the compiler has known gaps
 - One Heddle function per instance, as on Lua.
 - A control-flow graph of blocks. Blocks take parameters instead of having
   phi nodes, as in Cranelift. Values are in SSA form, with machine types:
-  `i8`, `i16`, `i32`, `i64`, `f32`, `f64` and `ptr`. A `bool` is an `i8`.
+  `int` (an integer of any width, a `bool` or a `char`, normalized in 64
+  bits, so widening one is free), `f32`, `f64` and `ptr`. A Loom value of a
+  small compound type (a tuple, a `str`) is several values, one per part.
 - Integer instructions carry the Loom integer type (`u12`, `i64`) and the
   overflow policy, so checks are exact and passes know the ranges.
 - Aggregates are memory: a `slot` (size, alignment) in the frame, `load` and
@@ -486,14 +489,16 @@ Families, specialized along the dimensions that matter:
 
 - **integer arithmetic**: add, sub and mul × policy (trap, wrap, sat) × 8,
   16, 32 or 64 bits, signed or not; a generic form that takes the width as an
-  operand (`u12`, `i24`); and immediate forms (`addk r, r, imm16`). The
-  `checked` policy writes two registers.
+  operand (`u12`, `i24`); and immediate forms for the common widths
+  (`addk.i64 r, r, imm16`, `subk`, `add%k`). The `checked` policy writes two
+  registers.
 - **division and remainder** (the trapping forms), shifts (trapping on the
   amount), bitwise operations.
 - **floats**, `f32` and `f64` separately.
-- **compare-and-branch**: `jlt.i64 a, b, off`, `jnle.f64k a, k, off`. The
-  negated forms are how NaN goes the right way. A plain compare that writes a
-  `bool` is for when the result is stored.
+- **compare-and-branch**: `jlt.s a, b, off`, `jnle.f64 a, b, off`, and
+  against a 16-bit constant, `jltk.s a, k, off`. The negated float forms are
+  how NaN goes the right way. A plain compare that writes a `bool` is for
+  when the result is stored.
 - **conversions**: narrowing with a policy, integer ↔ float. Widening is a
   `mov`, and usually not even that.
 - **memory**: loads and stores of 1, 2, 4 or 8 bytes (sign- or
@@ -517,19 +522,21 @@ jump table.
 
 ### 8.3 One op table
 
-Every op is declared once, in `loom_isa`, with its name, its operands, whether
-it can trap, and its body:
+Every op is declared once, in `loom_isa/src/op.rs`, with its mnemonic and
+its operands' form:
 
 ```
-op AddI32Trap "add.i32"  (dst: Reg, a: Reg, b: Reg)  traps {
-    dst = a.checked_add(b) else Overflow
-}
+AddTI32 = "add.i32", ABC;      // a, b, c: registers
+AddTKI32 = "addk.i32", ABK;    // a, b: registers; c: a 16-bit constant
+JLtSK = "jltk.s", AKJ;         // a: a register; b: a constant; c: an offset
 ```
 
-Everything else is generated from that table: the `Op` enum, encoding and
-decoding, the disassembler, the verifier's operand rules, the interpreter's
-`match` arms, the names the stats build counts, and, if D2 goes that way, the
-C handlers. Adding an op is one entry, and nothing gets out of step.
+From that table come the `Op` enum, the verifier's operand rules and the
+disassembler. The interpreter matches on `Op`, so Rust checks that every op
+has an arm; the arms of the width-specialized families are written by a
+generator once and stay one line each, calling the integer semantics in
+`loom_vm::ints` with a constant width, which folds away. If D2 goes to a C
+interpreter, its handlers are generated from the same table.
 
 ### 8.4 Selection and superinstructions
 
@@ -544,12 +551,19 @@ ops. An op is kept only if it wins on the suite.
 
 ### 8.5 Registers and frames
 
-- Linear-scan allocation over SSA live ranges, coalescing the moves block
-  parameters would need.
+- Linear-scan allocation over SSA live ranges, with hints: a value only
+  passed to a call is made in the call's window, a call's result stays where
+  the call left it (when no other call comes before its last use), a value
+  `ret` gives back is made in its result register, and a block parameter
+  shares a register with the values its edges pass.
 - **Calls use a window**, as in Lua. The caller puts the arguments in
   consecutive registers at the top of its frame, and the callee's frame
   starts there, so its parameters are already in `r0, r1, …`. Results come
   back the same way. No arguments are copied.
+- **The linkage** (the return address, the caller's frame, and where the
+  results go) is in the three registers just below the window, which the
+  caller leaves free; the verifier checks that it does. So nothing is kept
+  past a frame, where the frames of the calls it makes are laid.
 - **Aggregates returned by value** are written straight into the caller's
   destination, whose address the caller passes. `let p = make_point()` builds
   `p` in place.
@@ -561,8 +575,10 @@ ops. An op is kept only if it wins on the suite.
   - a `mut` parameter goes by address. The callee keeps a scalar one in a
     register and writes it back on every way out, unwinding included. That's
     as fast as copy-in/copy-out and means the same as by reference (D6).
-- **A frame** is its registers, then its aggregate area, then its drop flags.
-  Its size is in the function's header, so a call checks for room once.
+- **A frame** is its values' registers, a temporary (for swapping values on
+  an edge), scratch (natives' arguments; calls' linkage), then the window;
+  from V1, its aggregate area and drop flags. Its size is in the function's
+  header, so a call checks for room once.
 
 ### 8.6 The verifier
 
@@ -649,19 +665,20 @@ but not perfectly (D2). What V8 measures:
 ### 9.2 Calls and the stack
 
 - A **task** (the main program, or a thread from V5) has a **value stack** of
-  8-byte slots and a **control stack** of frame records: the function, the
-  return pc, and the caller's frame pointer. Keeping them apart keeps the
-  argument windows contiguous.
+  8-byte slots. Frames and their linkage (§8.5) are all in it: there's no
+  separate control stack, and a function is found from its return address
+  when an unravel needs it.
 - **The value stack is segmented.** When a frame doesn't fit in the current
   segment, the call moves to a new one, copying the arguments, and the return
   copies the results back. Segments never move, so a pointer into a frame (a
   `mut` argument, a lambda's environment, a thread's borrowed capture) stays
   valid. A freed segment is kept for next time, so a call right at the edge
   in a loop doesn't allocate every time.
-- **A call** checks for room (one compare against the segment's end), pushes
-  the record, moves `fp` up to the window and jumps. **A return** pops and
-  restores. The target is under 10 ns for a call and its return: `fib(32)`
-  makes about 7 million calls, so under 70 ms for those.
+- **A call** checks for room (one compare against the segment's end), writes
+  the linkage below the window, moves `fp` up to it and jumps. **A return**
+  reads the linkage back. The target is under 10 ns for a call and its
+  return: `fib(32)` makes about 7 million calls, so under 70 ms for those
+  (V0 runs the whole program in about 30 ms).
 - **Stack overflow**: past the limit (1 GiB of value stack for the main task
   by default), a call unravels with `stack overflow`. Loom code never
   recurses on the Rust stack, so only memory limits the depth.
@@ -787,7 +804,9 @@ cases that both backends pass (§14, P5).
   the image.
 - A template writes piece by piece into its destination. `print("{a} {b}")`
   writes into standard output's buffer; a template stored in a `String` sizes
-  the buffer once.
+  the buffer once. Its operands are all worked out first, left to right, and
+  only then is anything written, so an operand that prints does so before
+  the template, as on Lua.
 - `for c in s.chars()` decodes UTF-8 in the loop, with a fused op and no
   stream object.
 - String methods are natives over bytes. Keeping short strings inline (SSO) is
@@ -1150,9 +1169,9 @@ Wall-clock time is too noisy to gate `cargo test` on, so there are two kinds
 of gate:
 
 - **A deterministic one**: the stats build counts the instructions each
-  benchmark dispatches (at a small size). `bench/counts.json` holds the
-  numbers, and a test fails when one rises by more than 2%. A commit that
-  means to change them updates the file.
+  benchmark dispatches (at a small size). `bench/counts.txt` holds the
+  numbers, and a test fails when one moves by more than 2%. A commit that
+  means to change them updates the file (`LOOM_BLESS=1`).
 - **Milestone gates**, as wall-time ratios, measured and recorded in
   RESULTS.md when each milestone ends:
 
@@ -1177,9 +1196,16 @@ Every milestone ends with the gates green, the docs updated (this file's
 status, AGENTS.md, the README, the docs site), and RESULTS.md updated. Sizes
 are rough, in lines of Rust (or Loom).
 
-### V0: the skeleton, end to end (about 6k lines)
+### V0: the skeleton, end to end (about 6k lines) — done
 
 **Goal:** prove the whole pipeline on the simplest programs, and measure it.
+
+**Result** (2026-09-29): every condition below holds. 14 fixtures of
+`tests/run` run on Treadle with the Lua backend's output (`scalars` was
+written for this); the other 60 are in `tests/vm_skip.txt`, 57 waiting for
+V1 and 3 for V2. `fib(32)` runs 15× faster than the Lua backend's output
+and 2.2× faster than idiomatic Lua 5.4; the mandelbrot loop, 10× and 1.6×
+(`bench/RESULTS.md`).
 
 In:
 
@@ -1192,14 +1218,16 @@ In:
   recursion), tuples, templates passed to `print`, `unravel` and `assert`.
 - Code generation: selection with compare-and-branch and immediates,
   linear-scan register allocation, the call window.
-- `loom_isa`: the op table (about 100 ops), encoding, the disassembler, the
-  verifier, images in memory.
+- `loom_isa`: the op table (about 240 ops, since the width-specialized
+  families and the immediate forms came in V0), encoding, the disassembler,
+  the verifier, images in memory.
 - `loom_vm`: the loop, calls, segmented stacks, traps, reporting an unravel
-  (no landing pads yet), the natives `print` and the clock, and the checked
-  build.
+  (no landing pads yet), the natives `print` needs, and the checked build.
+  (A clock waits for V1: `std.time` has none yet, and `sleep` takes a
+  `Duration` warp.)
 - The CLI: `loom run --backend vm`, `--emit heddle|bytecode`. The fixture
   harness's backend axis, with `tests/vm_skip.txt`. `bench/` with `fib` and
-  the mandelbrot inner loop, and `bench/counts.json`.
+  the mandelbrot inner loop, and `bench/counts.txt`.
 
 Passing:
 
