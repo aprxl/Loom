@@ -18,7 +18,6 @@ defer_mut_params     V1  `defer`, `String`
 derive_json          V1  warps, reflection
 element_copies       V1  lists
 exhaustive           V1  optionals and results
-fizzbuzz             V1  `String`
 gauges               V1  gauges, optionals
 generic_weaves       V1  warps, weaves
 generics             V1  warps, comparing text
@@ -31,7 +30,6 @@ loop_changes_map     V1  maps, lambdas
 main_fails           V1  `main ! E`
 many_locals          V1  lambdas
 maps                 V1  maps
-match                V1  `String`
 methods              V1  warps
 moves                V1  `String`
 mut_optional         V1  optionals
@@ -41,11 +39,9 @@ option_take          V1  optionals and results
 optionals            V1  optionals
 out_of_memory        V1  text methods
 overflow_policies    V1  `+?` and optionals
-reflection           V1  warps, reflection
 repeat_list          V1  lists
 results              V1  results
 rng_rotate           V1  methods of integers
-shadowing            V1  `String`
 strings              V1  text methods
 through              V1  warps, `through`
 through_scalars      V1  warps, `through`
@@ -57,8 +53,6 @@ unravel_index        V1  arrays
 unravel_open_range   V1  streams
 unravel_sum          V1  arrays
 untyped_consts       V1  arrays
-value_semantics      V1  warps
-warps                V1  warps
 weaves               V1  warps, weaves
 
 shuttles             V2  shuttles, streams

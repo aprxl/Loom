@@ -1,59 +1,57 @@
-//! Text: `print`, and the messages of `assert` and `unravel`.
+//! Text: `print`, templates, the messages of `assert` and `unravel`, and
+//! showing values (design/vm.md §10.3).
 //!
-//! A template passed to one of them is never a string of its own. Its
-//! operands are all worked out first, left to right, and then its pieces
-//! are written one after another: to the output, or to the message an
-//! unravel is built in. Working out every operand first keeps effects in
-//! the order the Lua backend has them (an operand that prints does so
-//! before any of the template is written).
+//! Text goes to a *sink*, named by a handle: 0 is the program's output, 1
+//! the message of an unravel being built, and others are buffers a
+//! template is building a `String` in (see `loom_isa::natives`). A
+//! template's operands are all worked out first, left to right, and then
+//! its pieces are written one after another, so an operand that prints does
+//! so before any of the template is written, as on Lua.
+//!
+//! Numbers, `bool`, `char` and text are written by natives; anything else
+//! by its type's show glue (see `glue.rs`), which writes its pieces the
+//! same way. A spec that pads (`{p:>12}`) shows the value into a buffer
+//! first, and pads that.
 
-use loom_isa::FmtItem;
+use loom_isa::{FmtItem, ValueKind};
 use loom_syntax::source::Span;
 
 use super::value::Val;
-use super::{Builder, Vals, parse_spec, value_kind};
-use crate::heddle::{InstKind, Term};
+use super::{Builder, Glue, parse_spec, value_kind};
+use crate::heddle::{InstKind, Mem, Term, VTy, Value};
 use crate::hir::{self, DefId, ExprKind, TemplatePart};
 use crate::ty::{Ty, TyKind};
 use crate::typeck::{ArgSource, Call};
 
-/// Where text goes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Sink {
-    /// The program's output.
-    Out,
-    /// The message of an unravel being built.
-    Msg,
-}
+/// The program's output.
+pub(super) const OUT: u64 = 0;
+/// The message of an unravel being built.
+pub(super) const MSG: u64 = 1;
 
-impl Sink {
-    fn native(self, what: &str) -> &'static str {
-        match (self, what) {
-            (Sink::Out, "str") => "out.str",
-            (Sink::Out, "fmt") => "out.fmt",
-            (Sink::Out, _) => "out.fmt2",
-            (Sink::Msg, "str") => "msg.str",
-            (Sink::Msg, "fmt") => "msg.fmt",
-            (Sink::Msg, _) => "msg.fmt2",
-        }
-    }
-}
+/// Where text goes: a sink's handle.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Sink(pub Value);
 
 /// A piece of text to write: literal text, or a value with its spec.
 enum Piece<'a> {
     Text(&'a str),
-    Value { vals: Vals, ty: Ty, spec: Option<&'a str>, span: Span },
+    Value { val: Val, ty: Ty, spec: Option<&'a str>, span: Span },
 }
 
 impl<'a> Builder<'a> {
+    pub(super) fn sink(&mut self, handle: u64) -> Sink {
+        Sink(self.iconst(handle))
+    }
+
     /// A call of an `extern "lua"` function of std.
     pub(super) fn extern_call(&mut self, def: DefId, info: &Call, args: &'a [hir::Arg], span: Span) -> Option<Val> {
         let path = self.p.def_path(def);
         match path.as_str() {
             "std.io.print" => {
                 let pieces = self.param_pieces(def, info, args, 0, span)?;
-                self.write_pieces(Sink::Out, pieces)?;
-                self.write_text(Sink::Out, "\n");
+                let out = self.sink(OUT);
+                self.write_pieces(out, pieces)?;
+                self.write_text(out, "\n");
                 Some(Val::Regs(Vec::new()))
             }
             "std.error.unravel" => {
@@ -107,125 +105,166 @@ impl<'a> Builder<'a> {
     /// is worked out here, before anything is written.
     fn pieces(&mut self, e: &'a hir::Expr) -> Option<Vec<Piece<'a>>> {
         match &e.kind {
-            ExprKind::Template(parts) => {
-                let mut out = Vec::with_capacity(parts.len());
-                for part in parts {
-                    match part {
-                        TemplatePart::Text(text) => out.push(Piece::Text(text)),
-                        TemplatePart::Interp { expr, spec } => {
-                            let ty = self.coerced_ty(expr);
-                            let v = self.expr(expr)?;
-                            let vals = self.shown_regs(v, ty, expr.span)?;
-                            out.push(Piece::Value { vals, ty, spec: spec.as_deref(), span: expr.span });
-                        }
-                    }
-                }
-                Some(out)
-            }
+            ExprKind::Template(parts) => self.template_pieces(parts),
             // The value as it is: the conversion to `any Show` (or from
             // `String` to `str`) is what writing it does.
             _ => {
                 let ty = self.ty_of(e);
-                let v = self.expr_raw(e)?;
-                let vals = self.shown_regs(v, ty, e.span)?;
-                Some(vec![Piece::Value { vals, ty, spec: None, span: e.span }])
+                let val = self.expr_raw(e)?;
+                Some(vec![Piece::Value { val, ty, spec: None, span: e.span }])
             }
         }
     }
 
-    /// The parts of a value to show, which must live in registers for now.
-    fn shown_regs(&mut self, v: Val, ty: Ty, span: Span) -> Option<Vals> {
-        if !self.in_regs(ty) {
-            let shown = self.tcx().display(self.p, ty);
-            return self.unsupported(span, &format!("printing values of type `{shown}`"));
+    fn template_pieces(&mut self, parts: &'a [TemplatePart]) -> Option<Vec<Piece<'a>>> {
+        let mut out = Vec::with_capacity(parts.len());
+        for part in parts {
+            match part {
+                TemplatePart::Text(text) => out.push(Piece::Text(text)),
+                TemplatePart::Interp { expr, spec } => {
+                    let ty = self.ty_of(expr);
+                    let val = self.expr_raw(expr)?;
+                    out.push(Piece::Value { val, ty, spec: spec.as_deref(), span: expr.span });
+                }
+            }
         }
-        self.regs(v, ty, span)
+        Some(out)
+    }
+
+    /// A template as a value: a new `String`.
+    pub(super) fn template_string(&mut self, e: &'a hir::Expr, parts: &'a [TemplatePart]) -> Option<Val> {
+        let pieces = self.template_pieces(parts)?;
+        let buf = self.new_sink();
+        self.write_pieces(buf, pieces)?;
+        let ty = self.ty_of(e);
+        let dst = self.temp(ty, e.span)?;
+        self.emit(InstKind::Native { name: "sink.string", imm: 0, args: vec![buf.0, dst] }, &[]);
+        self.own_temp(dst, ty);
+        Some(Val::Mem(dst))
+    }
+
+    /// A new buffer to write into.
+    fn new_sink(&mut self) -> Sink {
+        Sink(self.emit1(InstKind::Native { name: "sink.push", imm: 0, args: Vec::new() }, VTy::Int))
     }
 
     fn write_pieces(&mut self, sink: Sink, pieces: Vec<Piece<'a>>) -> Option<()> {
         for piece in pieces {
             match piece {
                 Piece::Text(text) => self.write_text(sink, text),
-                Piece::Value { vals, ty, spec, span } => self.write_value(sink, &vals, ty, spec, false, span)?,
+                Piece::Value { val, ty, spec, span } => self.write_value(sink, val, ty, spec, false, span)?,
             }
         }
         Some(())
     }
 
-    fn write_text(&mut self, sink: Sink, text: &str) {
+    pub(super) fn write_text(&mut self, sink: Sink, text: &str) {
         if text.is_empty() {
             return;
         }
-        let args = self.str_lit(text.as_bytes());
-        self.emit(InstKind::Native { name: sink.native("str"), imm: 0, args }, &[]);
+        let t = self.str_lit(text.as_bytes());
+        self.emit(InstKind::Native { name: "sink.str", imm: 0, args: vec![sink.0, t[0], t[1]] }, &[]);
     }
 
-    /// Writes `vals`, a value of type `ty`, as `{x}` (or `{x:?}` with
+    /// Whether `ty` is `std.string.String`.
+    pub(super) fn is_string(&self, ty: Ty) -> bool {
+        matches!(self.tcx().kind(ty), TyKind::Adt(def, _) if self.p.def_path(*def) == "std.string.String")
+    }
+
+    /// The text of `val`, a `str` or a `String`: its address and length.
+    pub(super) fn text_of(&mut self, val: Val, ty: Ty, span: Span) -> Option<(Value, Value)> {
+        if self.is_string(ty) {
+            let Val::Mem(ptr) = val else { return self.internal(span, "a `String` in registers") };
+            let p = self.load(Mem::W64, ptr, 0, VTy::Ptr);
+            let n = self.load(Mem::W64, ptr, 8, VTy::Int);
+            return Some((p, n));
+        }
+        let vals = self.regs(val, ty, span)?;
+        Some((vals[0], vals[1]))
+    }
+
+    /// Writes `val`, a value of type `ty`, as `{x}` (or `{x:?}` with
     /// `debug`) would, with `spec`.
-    fn write_value(
+    pub(super) fn write_value(
         &mut self,
         sink: Sink,
-        vals: &[crate::heddle::Value],
+        val: Val,
         ty: Ty,
         spec: Option<&str>,
         debug: bool,
         span: Span,
     ) -> Option<()> {
-        let tcx = self.tcx();
-        if let TyKind::Tuple(items) = tcx.kind(tcx.degauge(ty)) {
-            let debug = match spec {
-                None => debug,
-                Some("?") => true,
-                Some(_) => return self.unsupported(span, "format specs on tuples"),
-            };
-            let items = items.clone();
-            let parts = self.tuple_parts(ty, span)?;
-            self.write_text(sink, "(");
-            let mut at = 0;
-            for (i, (item, n)) in items.iter().zip(parts.iter().map(|(_, n)| *n)).enumerate() {
-                if i > 0 {
-                    self.write_text(sink, ", ");
-                }
-                self.write_value(sink, &vals[at..at + n], *item, None, debug, span)?;
-                at += n;
+        let ty = self.tcx().degauge(ty);
+        let (debug, spec) = match spec {
+            Some("?") => (true, None),
+            Some(s) => (debug, Some(parse_spec(s)?)),
+            None => (debug, None),
+        };
+        // Text: a `String` writes like a `str`.
+        if self.is_string(ty) || matches!(self.tcx().kind(ty), TyKind::Str) {
+            let (p, n) = self.text_of(val, ty, span)?;
+            if spec.is_none() && !debug {
+                self.emit(InstKind::Native { name: "sink.str", imm: 0, args: vec![sink.0, p, n] }, &[]);
+            } else {
+                let imm = self.fmt_item(FmtItem { kind: ValueKind::Str, debug, spec });
+                self.emit(InstKind::Native { name: "sink.fmt2", imm, args: vec![sink.0, p, n] }, &[]);
             }
-            self.write_text(sink, if items.len() == 1 { ",)" } else { ")" });
             return Some(());
         }
-        let Some(kind) = value_kind(tcx, ty) else {
-            let shown = tcx.display(self.p, ty);
-            return self.unsupported(span, &format!("printing values of type `{shown}`"));
-        };
-        let spec = match spec {
-            Some(s) => Some(parse_spec(s)?),
-            None => None,
-        };
-        match kind {
-            loom_isa::ValueKind::Unit if spec.is_none() => self.write_text(sink, "()"),
-            loom_isa::ValueKind::Unit => return self.unsupported(span, "format specs on `()`"),
-            loom_isa::ValueKind::Str if spec.is_none() && !debug => {
-                self.emit(InstKind::Native { name: sink.native("str"), imm: 0, args: vals.to_vec() }, &[]);
-            }
-            _ => {
-                let imm = self.fmt_item(FmtItem { kind, debug, spec });
-                let name = sink.native(if kind == loom_isa::ValueKind::Str { "fmt2" } else { "fmt" });
-                self.emit(InstKind::Native { name, imm, args: vals.to_vec() }, &[]);
-            }
+        if let Some(kind) = value_kind(self.tcx(), ty)
+            && kind != ValueKind::Unit
+        {
+            let vals = self.regs(val, ty, span)?;
+            let imm = self.fmt_item(FmtItem { kind, debug, spec });
+            self.emit(InstKind::Native { name: "sink.fmt", imm, args: vec![sink.0, vals[0]] }, &[]);
+            return Some(());
         }
+        match spec {
+            // Shown into a buffer, then padded into the sink.
+            Some(spec) => {
+                let buf = self.new_sink();
+                self.show(buf, val, ty, debug, span)?;
+                let imm = self.fmt_item(FmtItem { kind: ValueKind::Str, debug: false, spec: Some(spec) });
+                self.emit(InstKind::Native { name: "sink.pad", imm, args: vec![buf.0, sink.0] }, &[]);
+                Some(())
+            }
+            None => self.show(sink, val, ty, debug, span),
+        }
+    }
+
+    /// Writes `val` by its type's show glue.
+    pub(super) fn show(&mut self, sink: Sink, val: Val, ty: Ty, debug: bool, span: Span) -> Option<()> {
+        let func = self.glue(Glue::Show { debug }, ty);
+        let mut args = match self.repr_of(ty, span)? {
+            super::Repr::Regs(_) => self.regs(val, ty, span)?,
+            super::Repr::Mem { .. } => vec![self.addr_of(val, ty, span)?],
+        };
+        args.push(sink.0);
+        self.emit(InstKind::Call { func, args }, &[]);
         Some(())
+    }
+
+    /// `f.put(x)`: writes `x` to `f`'s sink, as `{x}` would.
+    pub(super) fn fmt_put(&mut self, f: Value, x: &'a hir::Expr) -> Option<Val> {
+        let h = self.load(Mem::W64, f, 0, VTy::Int);
+        let ty = self.ty_of(x);
+        let val = self.expr_raw(x)?;
+        self.write_value(Sink(h), val, ty, None, false, x.span)?;
+        Some(Val::Regs(Vec::new()))
     }
 
     /// Unravels with `pieces` as the message.
     fn unravel_with(&mut self, pieces: Vec<Piece<'a>>) -> Option<()> {
         // A plain `str` is the message as it is.
-        if let [Piece::Value { vals, ty, spec: None, .. }] = pieces.as_slice()
+        if let [Piece::Value { val, ty, spec: None, span }] = pieces.as_slice()
             && matches!(self.tcx().kind(*ty), TyKind::Str)
         {
-            let (ptr, len) = (vals[0], vals[1]);
+            let (ptr, len) = self.text_of(val.clone(), *ty, *span)?;
             self.terminate(Term::Unravel { ptr, len });
             return Some(());
         }
-        self.write_pieces(Sink::Msg, pieces)?;
+        let msg = self.sink(MSG);
+        self.write_pieces(msg, pieces)?;
         self.terminate(Term::UnravelMsg);
         Some(())
     }

@@ -148,9 +148,23 @@ impl<'a> Builder<'a> {
                 let inner = self.ty_of(e);
                 self.some(target, inner, v, e.span)
             }
+            // A literal's text, copied into a `String` of its own.
+            Coercion::StrToString => {
+                let target = self.coerced_ty(e);
+                let vals = self.regs(v, self.tcx().str, e.span)?;
+                let dst = self.temp(target, e.span)?;
+                self.emit(InstKind::Native { name: "str.new", imm: 0, args: vec![vals[0], vals[1], dst] }, &[]);
+                self.own_temp(dst, target);
+                Some(Val::Mem(dst))
+            }
+            // A view of a `String`'s text.
+            Coercion::StringToStr => {
+                let ty = self.ty_of(e);
+                let (p, n) = self.text_of(v, ty, e.span)?;
+                Some(Val::Regs(vec![p, n]))
+            }
             other => {
                 let what = match other {
-                    Coercion::StrToString | Coercion::StringToStr => "`String`",
                     Coercion::ToResult => "results",
                     Coercion::ToAny(_) => "`any` values",
                     Coercion::ToUnion => "unions",
@@ -262,7 +276,7 @@ impl<'a> Builder<'a> {
                 Some(Val::Regs(Vec::new()))
             }
             ExprKind::Const(_) => self.unsupported(span, "`const` expressions computed while compiling"),
-            ExprKind::Template(_) => self.unsupported(span, "`String`"),
+            ExprKind::Template(parts) => self.template_string(e, parts),
             _ => self.unsupported(span, "this expression"),
         }
     }
@@ -353,7 +367,7 @@ impl<'a> Builder<'a> {
             Lit::Char(c) => Some(vec![self.iconst(*c as u64)]),
             Lit::Bool(b) => Some(vec![self.iconst(u64::from(*b))]),
             Lit::Str(s) if matches!(self.tcx().kind(ty), TyKind::Str) => Some(self.str_lit(s.as_bytes())),
-            Lit::Str(_) => self.unsupported(span, "`String`"),
+            Lit::Str(_) => self.unsupported(span, "text literals of this type"),
             Lit::Bytes(_) => self.unsupported(span, "byte strings"),
             Lit::None => {
                 let v = self.none(ty, span)?;

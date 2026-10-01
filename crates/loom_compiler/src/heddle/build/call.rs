@@ -57,8 +57,8 @@ impl<'a> Builder<'a> {
         if f.abi.is_some() {
             return self.extern_call(def, &info, args, span);
         }
-        if f.body.is_none() {
-            return self.unsupported(span, &format!("`{}` on Treadle", p.def_path(def)));
+        if f.body.is_none() && self.typed.results.instance(info.callee).self_ty.is_none() {
+            return self.builtin_call(e, callee, args, &info, def);
         }
         let sig = self.typed.results.sigs.get(&info.callee)?.clone();
         let abi = self.body_abi(info.callee, span)?;
@@ -221,6 +221,47 @@ impl<'a> Builder<'a> {
         match kw {
             loom_syntax::token::Keyword::Some => self.some(ty, inner, v, span),
             _ => self.unsupported(span, "results"),
+        }
+    }
+}
+
+impl<'a> Builder<'a> {
+    /// A call of a method of a warp std leaves to the runtime (`#builtin`).
+    fn builtin_call(
+        &mut self,
+        e: &'a hir::Expr,
+        callee: &'a hir::Expr,
+        args: &'a [hir::Arg],
+        info: &Call,
+        def: crate::hir::DefId,
+    ) -> Option<Val> {
+        let span = e.span;
+        let path = self.p.def_path(def);
+        match path.as_str() {
+            "std.fmt.Fmt.put" => {
+                let Some(receiver) = info.receiver else {
+                    return self.unsupported(span, "`Fmt.put` called this way");
+                };
+                let method = match &callee.kind {
+                    ExprKind::Index { base, .. } => base.as_ref(),
+                    _ => callee,
+                };
+                let base = match (info.receiver, &method.kind) {
+                    (Some(Receiver::Expr), ExprKind::Field { base, .. }) => Some(base.as_ref()),
+                    _ => None,
+                };
+                let Some(Arg::Place(place)) = self.receiver_arg(receiver, base, &info.through, ParamMode::Mut, span)
+                else {
+                    return None;
+                };
+                let f = self.place_addr(&place, span)?;
+                let x = match info.args.get(1) {
+                    Some(ArgSource::Arg(i)) => &args[*i].value,
+                    _ => return self.unsupported(span, "`Fmt.put` called this way"),
+                };
+                self.fmt_put(f, x)
+            }
+            _ => self.unsupported(span, &format!("`{path}` on Treadle")),
         }
     }
 }

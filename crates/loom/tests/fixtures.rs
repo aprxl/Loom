@@ -137,7 +137,9 @@ fn run_on_vm(path: &Path) -> Result<Option<String>, String> {
     let expected =
         std::fs::read_to_string(if vm_out.exists() { vm_out } else { path.with_extension("out") }).unwrap_or_default();
     if out != expected {
-        return Ok(Some(format!("output differs on Treadle\n--- expected\n{expected}--- got\n{out}")));
+        return Ok(Some(format!(
+            "output differs on Treadle (it ended with {outcome:?})\n--- expected\n{expected}--- got\n{out}"
+        )));
     }
     Ok(check_outcome(path, outcome).map(|p| format!("on Treadle: {p}")))
 }

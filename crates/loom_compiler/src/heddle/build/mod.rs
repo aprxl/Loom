@@ -72,6 +72,9 @@ enum FnKey {
 enum Glue {
     /// Frees what a value owns: `drop(value's address)`.
     Drop,
+    /// Writes `{x}` (or `{x:?}`) to a sink: `show(x, sink)`, `x` as a
+    /// read parameter is passed.
+    Show { debug: bool },
 }
 
 /// How a function takes its parameters and gives its result (its ABI).
@@ -298,6 +301,8 @@ impl<'a> Builder<'a> {
             FnKey::Glue(g, ty) => {
                 let what = match g {
                     Glue::Drop => "drop",
+                    Glue::Show { debug: false } => "show",
+                    Glue::Show { debug: true } => "debug",
                 };
                 format!("{what}[{}]", self.tcx().display(self.p, ty))
             }
@@ -383,8 +388,34 @@ impl<'a> Builder<'a> {
         let def = p.def(inst.def);
         match &def.kind {
             DefKind::Fn(f) if f.abi.is_none() && f.body.is_some() && !inst.forward => self.fn_body(id, f, def.span),
+            // A weft method std leaves to the compiler, for a type that
+            // doesn't write its own: derived.
+            DefKind::Fn(f) if f.body.is_none() && inst.self_ty.is_some() => self.derived_method(id, def.span),
             _ => self.unsupported(def.span, &format!("calling `{}`", p.def_path(inst.def))),
         }
+    }
+
+    /// A derived weft method (`Show.show`), for its instance's `Self`.
+    fn derived_method(&mut self, id: BodyId, span: Span) -> Option<Vec<VTy>> {
+        let inst = self.typed.results.instance(id);
+        let path = self.p.def_path(inst.def);
+        let self_ty = self.tcx().degauge(inst.self_ty?);
+        let abi = self.body_abi(id, span)?;
+        let (_, _, params) = self.entry_params(&abi);
+        let this = match &abi.params[0] {
+            ParamAbi::Regs(_) => Val::Regs(params[0].clone()),
+            ParamAbi::Addr => Val::Mem(params[0][0]),
+        };
+        match path.as_str() {
+            "std.fmt.Show.show" => {
+                let f = params[1][0];
+                let h = self.load(super::Mem::W64, f, 0, VTy::Int);
+                self.show(text::Sink(h), this, self_ty, false, span)?;
+                self.terminate(Term::Ret(Vec::new()));
+            }
+            _ => return self.unsupported(span, &format!("deriving `{path}`")),
+        }
+        Some(abi.results)
     }
 
     /// Makes the entry block's parameters for `abi`: the result's address,
