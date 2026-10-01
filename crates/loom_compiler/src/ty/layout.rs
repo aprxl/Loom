@@ -130,6 +130,7 @@ fn builtin(path: &str) -> Option<Builtin> {
         "std.map.Map" | "std.set.Set" => Builtin::Header(5),
         "std.iter.Stream" | "std.iter.Shuttle" => Builtin::Header(2),
         "std.sync.Atomic" => Builtin::Atomic,
+        "std.fmt.Fmt" => Builtin::Handle,
         _ => return None,
     })
 }
@@ -137,6 +138,8 @@ fn builtin(path: &str) -> Option<Builtin> {
 enum Builtin {
     Header(u64),
     Atomic,
+    /// A number the runtime gives out: any 8 bytes, 0 included.
+    Handle,
 }
 
 /// Works out layouts, remembering each.
@@ -233,6 +236,7 @@ impl<'a> Layouts<'a> {
                 match builtin(&self.p.def_path(def)) {
                     Some(Builtin::Header(words)) => Layout::header(words),
                     Some(Builtin::Atomic) => self.of(*args.first()?)?.clone(),
+                    Some(Builtin::Handle) => Layout::scalar(8, None),
                     None => {
                         let info = self.info(ty, def)?;
                         self.warp(&info)?
