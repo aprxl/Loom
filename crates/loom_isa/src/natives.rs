@@ -22,15 +22,36 @@ pub struct NativeSig {
     /// How many it writes, from the call's base.
     pub results: u16,
     pub imm: NativeImm,
+    /// For a formatting native: how many registers come before the value
+    /// it formats (a sink's handle).
+    pub lead: u16,
 }
 
 const fn sig(name: &'static str, args: u16, results: u16, imm: NativeImm) -> NativeSig {
-    NativeSig { name, args, results, imm }
+    NativeSig { name, args, results, imm, lead: 0 }
+}
+
+/// A formatting native that writes to the sink whose handle comes first.
+const fn sink_fmt(name: &'static str, args: u16) -> NativeSig {
+    NativeSig { name, args, results: 0, imm: NativeImm::Fmt, lead: 1 }
 }
 
 /// Every native. `out.*` write to the program's output; `msg.*` build the
 /// message of an unravel, which `msg.unravel` raises; `mem.*` allocate.
+///
+/// `sink.*` write text to a *sink*, named by a handle: 0 is the program's
+/// output, 1 the message of an unravel being built, and `sink.push` makes a
+/// buffer, which `sink.string` makes a `String` of and `sink.pad` pads
+/// into another sink (both take the buffer made last). `str.new` makes a
+/// `String` of text.
 pub const NATIVES: &[NativeSig] = &[
+    sig("sink.str", 3, 0, NativeImm::None),
+    sink_fmt("sink.fmt", 2),
+    sink_fmt("sink.fmt2", 3),
+    sig("sink.push", 0, 1, NativeImm::None),
+    sig("sink.string", 2, 0, NativeImm::None),
+    NativeSig { name: "sink.pad", args: 2, results: 0, imm: NativeImm::Fmt, lead: 2 },
+    sig("str.new", 3, 0, NativeImm::None),
     sig("mem.alloc", 2, 1, NativeImm::None),
     sig("mem.free", 3, 0, NativeImm::None),
     sig("mem.grow", 4, 0, NativeImm::None),

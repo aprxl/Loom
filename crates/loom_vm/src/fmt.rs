@@ -173,6 +173,13 @@ fn with_spec(out: &mut Vec<u8>, kind: ValueKind, value: Value, spec: &Spec) {
     }
 }
 
+/// `text`, already written, padded as `spec` says (as text: aligned left
+/// unless it says otherwise).
+pub fn pad(out: &mut Vec<u8>, text: &[u8], spec: &Spec) {
+    let plain = Spec { ty: None, precision: None, plus: false, alt: false, zero: false, ..*spec };
+    with_spec(out, ValueKind::Str, Value::Text(text), &plain);
+}
+
 /// The bits of `r` (two's complement, within the type's width) in radix
 /// `ty`, and the prefix `#` adds.
 fn radix(r: u64, int: IntSpec, ty: char) -> (String, &'static str) {

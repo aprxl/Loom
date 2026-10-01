@@ -26,8 +26,10 @@ pub(crate) struct Ctx<'i> {
     sink: Output,
     /// Flush at each newline: the output is a terminal.
     line_buffered: bool,
-    /// The message of an unravel being built (`msg.*`).
+    /// The message of an unravel being built (`msg.*`, sink 1).
     msg: Vec<u8>,
+    /// Sinks 2 and up: text being built (`sink.push`).
+    bufs: Vec<Vec<u8>>,
     pub heap: Heap,
     /// How many instructions have been dispatched (with `stats`).
     pub dispatched: u64,
@@ -53,6 +55,7 @@ impl<'i> Ctx<'i> {
             sink,
             line_buffered,
             msg: Vec::new(),
+            bufs: Vec::new(),
             heap: Heap::default(),
             dispatched: 0,
         }
@@ -77,10 +80,11 @@ impl<'i> Ctx<'i> {
     /// `ptr` and `len` must be a text value the compiler built: the address
     /// and length of text that lives at least as long as `self`.
     pub unsafe fn text(&self, ptr: u64, len: u64) -> Result<&[u8], Trap> {
-        if cfg!(feature = "checked") {
+        if cfg!(feature = "checked") && len > 0 {
             let range = self.rodata.as_ptr_range();
             let (start, end) = (range.start as u64, range.end as u64);
-            if ptr < start || ptr.checked_add(len).is_none_or(|e| e > end) {
+            let literal = ptr >= start && ptr.checked_add(len).is_some_and(|e| e <= end);
+            if !literal && !self.heap.holds(ptr, len) {
                 return Err(Trap::Crash(format!("text at {ptr:#x} ({len} bytes) isn't a live string")));
             }
         }
@@ -111,6 +115,46 @@ impl<'i> Ctx<'i> {
         self.out.clear();
     }
 
+    /// Appends `bytes` to sink `h`.
+    fn put(&mut self, h: u64, bytes: &[u8]) -> Result<(), Trap> {
+        match h {
+            0 => self.write(bytes),
+            1 => self.msg.extend_from_slice(bytes),
+            _ => match self.bufs.get_mut(h as usize - 2) {
+                Some(buf) => buf.extend_from_slice(bytes),
+                None => return Err(Trap::Crash(format!("loom internal: no sink {h}"))),
+            },
+        }
+        Ok(())
+    }
+
+    /// Takes the buffer made last, which must be sink `h`.
+    fn pop(&mut self, h: u64) -> Result<Vec<u8>, Trap> {
+        if h < 2 || h as usize - 2 != self.bufs.len().wrapping_sub(1) {
+            return Err(Trap::Crash(format!("loom internal: sink {h} isn't the last one made")));
+        }
+        Ok(self.bufs.pop().unwrap_or_default())
+    }
+
+    /// Writes a `String` holding `text` at `dst`.
+    fn new_string(&mut self, text: &[u8], dst: u64) -> Result<(), Trap> {
+        let len = text.len() as u64;
+        let ptr = self.heap.alloc(len, 1)?;
+        // SAFETY: `ptr` is a new object of `len` bytes (or, for none, never
+        // read), and `dst` is where the compiler wants the string: three
+        // words of memory it owns.
+        unsafe {
+            if len > 0 {
+                std::ptr::copy_nonoverlapping(text.as_ptr(), ptr as *mut u8, text.len());
+            }
+            let d = dst as *mut u64;
+            d.write(ptr);
+            d.add(1).write(len);
+            d.add(2).write(len);
+        }
+        Ok(())
+    }
+
     fn format(&self, into: &mut Vec<u8>, item: u16, args: &[u64]) -> Result<(), Trap> {
         let item = &self.fmts[usize::from(item)];
         let value = match args {
@@ -136,6 +180,12 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
         "msg.str" => msg_str,
         "msg.fmt" | "msg.fmt2" => msg_fmt,
         "msg.unravel" => msg_unravel,
+        "sink.str" => sink_str,
+        "sink.fmt" | "sink.fmt2" => sink_fmt,
+        "sink.push" => sink_push,
+        "sink.string" => sink_string,
+        "sink.pad" => sink_pad,
+        "str.new" => str_new,
         "mem.alloc" => mem_alloc,
         "mem.free" => mem_free,
         "mem.grow" => mem_grow,
@@ -216,4 +266,51 @@ fn mem_grow(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
         h.add(2).write(if size == 0 { u64::MAX } else { new_cap });
     }
     Ok(())
+}
+
+/// `sink.str(sink, text address, length)`.
+fn sink_str(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    // SAFETY: `sink.str` is passed a text value.
+    let text = unsafe { ctx.text(args[1], args[2])? }.to_vec();
+    ctx.put(args[0], &text)
+}
+
+/// `sink.fmt(sink, value)` and `sink.fmt2(sink, text address, length)`.
+fn sink_fmt(ctx: &mut Ctx, args: &mut [u64], item: u16) -> Result<(), Trap> {
+    let mut buf = Vec::new();
+    ctx.format(&mut buf, item, &args[1..])?;
+    ctx.put(args[0], &buf)
+}
+
+/// `sink.push() -> sink`: a new buffer.
+fn sink_push(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.bufs.push(Vec::new());
+    args[0] = ctx.bufs.len() as u64 + 1;
+    Ok(())
+}
+
+/// `sink.string(sink, destination)`: the buffer's text as a `String`.
+fn sink_string(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let text = ctx.pop(args[0])?;
+    ctx.new_string(&text, args[1])
+}
+
+/// `sink.pad(sink, into)`: the buffer's text, padded as the format item's
+/// spec says, into another sink.
+fn sink_pad(ctx: &mut Ctx, args: &mut [u64], item: u16) -> Result<(), Trap> {
+    let text = ctx.pop(args[0])?;
+    let spec = ctx.fmts[usize::from(item)].spec;
+    let mut out = Vec::new();
+    match spec {
+        Some(spec) => fmt::pad(&mut out, &text, &spec),
+        None => out.extend_from_slice(&text),
+    }
+    ctx.put(args[1], &out)
+}
+
+/// `str.new(text address, length, destination)`: a `String` of the text.
+fn str_new(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    // SAFETY: `str.new` is passed a text value.
+    let text = unsafe { ctx.text(args[0], args[1])? }.to_vec();
+    ctx.new_string(&text, args[2])
 }

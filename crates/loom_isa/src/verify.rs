@@ -183,7 +183,8 @@ fn verify_func(image: &Image, index: usize) -> Result<(), VerifyError> {
                 }
                 if sig.imm == NativeImm::Fmt {
                     let item = image.fmts.get(c(w)).ok_or_else(|| err(pc, "no such format item".into()))?;
-                    if item.kind.regs() != sig.args {
+                    // `sink.pad` pads text that's already written: any kind.
+                    if name != "sink.pad" && item.kind.regs() + sig.lead != sig.args {
                         return Err(err(pc, format!("`{name}` can't format this kind of value")));
                     }
                 }
