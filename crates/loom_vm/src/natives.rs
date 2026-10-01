@@ -186,6 +186,13 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
         "sink.string" => sink_string,
         "sink.pad" => sink_pad,
         "str.new" => str_new,
+        "int.add_chk" => |_, a, _| checked(a, crate::ints::add_t),
+        "int.sub_chk" => |_, a, _| checked(a, crate::ints::sub_t),
+        "int.mul_chk" => |_, a, _| checked(a, crate::ints::mul_t),
+        "int.cast_chk" => int_cast_chk,
+        "float.to_int_chk" => float_to_int_chk,
+        "int.to_char_chk" => int_to_char_chk,
+        "exit.fail" => exit_fail,
         "mem.alloc" => mem_alloc,
         "mem.free" => mem_free,
         "mem.grow" => mem_grow,
@@ -313,4 +320,50 @@ fn str_new(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     // SAFETY: `str.new` is passed a text value.
     let text = unsafe { ctx.text(args[0], args[1])? }.to_vec();
     ctx.new_string(&text, args[2])
+}
+
+/// Puts `r`'s value and whether there is one in the first two registers.
+fn result_pair(args: &mut [u64], r: Result<u64, crate::ints::IntErr>) -> Result<(), Trap> {
+    let (v, ok) = match r {
+        Ok(v) => (v, 1),
+        Err(_) => (0, 0),
+    };
+    args[0] = v;
+    args[1] = ok;
+    Ok(())
+}
+
+/// `int.add_chk(a, b, type)` and friends: `a op b`, if it fits.
+fn checked(
+    args: &mut [u64],
+    op: fn(u64, u64, loom_isa::IntSpec) -> Result<u64, crate::ints::IntErr>,
+) -> Result<(), Trap> {
+    let r = op(args[0], args[1], crate::ints::spec(args[2]));
+    result_pair(args, r)
+}
+
+/// `int.cast_chk(v, cast)`: `v` as the cast's target type, if it fits.
+fn int_cast_chk(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let (to, from) =
+        loom_isa::word::unpack_cast(args[1]).ok_or_else(|| Trap::Crash("loom internal: a bad cast".into()))?;
+    let r = crate::ints::cast_t(args[0], to, from);
+    result_pair(args, r)
+}
+
+/// `float.to_int_chk(f64 bits, type)`: the float truncated, if it fits.
+fn float_to_int_chk(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let r = crate::ints::ftoi_t(f64::from_bits(args[0]), crate::ints::spec(args[1]));
+    result_pair(args, r)
+}
+
+/// `int.to_char_chk(v, type)`: the `char` `v` is the code point of, if it's one.
+fn int_to_char_chk(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let r = crate::ints::to_char(args[0], crate::ints::spec(args[1]));
+    result_pair(args, r)
+}
+
+/// `exit.fail()`: `main` returned an error, whose text is in sink 1.
+fn exit_fail(ctx: &mut Ctx, _: &mut [u64], _: u16) -> Result<(), Trap> {
+    let msg = std::mem::take(&mut ctx.msg);
+    Err(Trap::Failed(String::from_utf8_lossy(&msg).into_owned()))
 }

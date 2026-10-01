@@ -52,6 +52,16 @@ pub const NATIVES: &[NativeSig] = &[
     sig("sink.string", 2, 0, NativeImm::None),
     NativeSig { name: "sink.pad", args: 2, results: 0, imm: NativeImm::Fmt, lead: 2 },
     sig("str.new", 3, 0, NativeImm::None),
+    // Checked operations: (value, whether it fits) from two operands and a
+    // packed integer type (or a cast's two).
+    sig("int.add_chk", 3, 2, NativeImm::None),
+    sig("int.sub_chk", 3, 2, NativeImm::None),
+    sig("int.mul_chk", 3, 2, NativeImm::None),
+    sig("int.cast_chk", 2, 2, NativeImm::None),
+    sig("float.to_int_chk", 2, 2, NativeImm::None),
+    sig("int.to_char_chk", 2, 2, NativeImm::None),
+    // Ends the run as `main` returning the error in sink 1 does.
+    sig("exit.fail", 0, 0, NativeImm::None),
     sig("mem.alloc", 2, 1, NativeImm::None),
     sig("mem.free", 3, 0, NativeImm::None),
     sig("mem.grow", 4, 0, NativeImm::None),

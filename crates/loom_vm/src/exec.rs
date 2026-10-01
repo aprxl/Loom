@@ -237,7 +237,7 @@ impl<'i> Machine<'i> {
             macro_rules! throw {
                 ($trap:expr) => {{
                     let trap = $trap;
-                    if matches!(trap, Trap::Crash(_)) {
+                    if matches!(trap, Trap::Crash(_) | Trap::Failed(_)) {
                         return Err(fault(trap, at));
                     }
                     in_flight = Some(fault(trap, at));

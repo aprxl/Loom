@@ -64,6 +64,8 @@ pub(crate) enum Trap {
     StackOverflow,
     Interrupt,
     Unravel(String),
+    /// `main` returned this error.
+    Failed(String),
     /// A bug in Loom.
     Crash(String),
 }
@@ -81,7 +83,7 @@ impl Trap {
             Trap::OutOfMemory => "out of memory".into(),
             Trap::StackOverflow => "stack overflow: too many calls inside each other".into(),
             Trap::Interrupt => "interrupted (Ctrl-C)".into(),
-            Trap::Unravel(message) | Trap::Crash(message) => message.clone(),
+            Trap::Unravel(message) | Trap::Failed(message) | Trap::Crash(message) => message.clone(),
         }
     }
 }
@@ -104,6 +106,8 @@ pub fn run(image: &Image, host: Host, config: &Config) -> Outcome {
     };
     match vm.call(entry, &[]) {
         Ok(_) => vm.leaks().unwrap_or(Outcome::Finished),
+        // `main` returned an error: the run ended normally all the same.
+        Err(failed @ Outcome::Failed { .. }) => vm.leaks().unwrap_or(failed),
         Err(outcome) => outcome,
     }
 }
@@ -157,6 +161,7 @@ impl<'i> Vm<'i> {
             });
             match fault.trap {
                 Trap::Crash(message) => Outcome::Crash { message, location },
+                Trap::Failed(message) => Outcome::Failed { message },
                 trap => Outcome::Unravel { message: trap.message(), location },
             }
         })
