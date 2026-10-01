@@ -304,6 +304,9 @@ pub enum Coercion {
     ToSlice,
     /// A value that's thrown away, where `()` is expected.
     Discard,
+    /// A union where a union of more types is expected: the same value,
+    /// with its tag renumbered (on Treadle; on Lua, nothing changes).
+    WidenUnion,
     /// An array, list, slice, range or `Iter` where a `Stream` of its
     /// items is expected.
     ToStream(IterSource),
@@ -1550,8 +1553,11 @@ impl<'p> Checker<'p> {
                 Some(Coercion::StringToStr)
             }
             (_, TyKind::Optional(inner)) if inner == actual => Some(Coercion::ToOptional),
-            // A union of fewer types is already boxed the same way.
-            (TyKind::Union(have), TyKind::Union(want)) if have.iter().all(|t| want.contains(t)) => return true,
+            // A union of fewer types: the same on Lua, where each is boxed
+            // with its own type; on Treadle, its tag is renumbered.
+            (TyKind::Union(have), TyKind::Union(want)) if have.iter().all(|t| want.contains(t)) => {
+                Some(Coercion::WidenUnion)
+            }
             (_, TyKind::Union(members)) if members.contains(&actual) => Some(Coercion::ToUnion),
             // An `any` is already an `any` of fewer wefts: it carries the
             // same vtable.

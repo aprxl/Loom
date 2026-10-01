@@ -97,7 +97,11 @@ impl Lowerer<'_> {
     pub(super) fn coerce(&mut self, e: &hir::Expr, v: Expr) -> Expr {
         let Some(coercion) = self.tables().coercions.get(&e.id) else { return v };
         match coercion {
-            Coercion::Widen | Coercion::StrToString | Coercion::StringToStr | Coercion::Discard => v,
+            Coercion::Widen
+            | Coercion::StrToString
+            | Coercion::StringToStr
+            | Coercion::Discard
+            | Coercion::WidenUnion => v,
             Coercion::ToOptional => {
                 let ty = self.ty_of(e);
                 if self.opt_boxed(ty) { Expr::Table(vec![v]) } else { v }
@@ -944,11 +948,9 @@ impl Lowerer<'_> {
 
     /// Lowers `e` so its value reaches `dest`.
     pub(super) fn lower_into(&mut self, e: &hir::Expr, dest: &Dest) {
-        let has_coercion = self
-            .tables()
-            .coercions
-            .get(&e.id)
-            .is_some_and(|c| !matches!(c, Coercion::Widen | Coercion::StrToString | Coercion::StringToStr));
+        let has_coercion = self.tables().coercions.get(&e.id).is_some_and(|c| {
+            !matches!(c, Coercion::Widen | Coercion::StrToString | Coercion::StringToStr | Coercion::WidenUnion)
+        });
         let control = matches!(
             e.kind,
             ExprKind::Block(_)
