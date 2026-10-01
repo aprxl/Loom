@@ -144,7 +144,7 @@ impl<'a> Builder<'a> {
     }
 
     /// A new buffer to write into.
-    fn new_sink(&mut self) -> Sink {
+    pub(super) fn new_sink(&mut self) -> Sink {
         Sink(self.emit1(InstKind::Native { name: "sink.push", imm: 0, args: Vec::new() }, VTy::Int))
     }
 

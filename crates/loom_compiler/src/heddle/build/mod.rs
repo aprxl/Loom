@@ -23,6 +23,7 @@
 
 mod call;
 mod cleanup;
+mod compare;
 mod expr;
 mod fallible;
 mod glue;
@@ -77,6 +78,11 @@ enum Glue {
     /// Writes `{x}` (or `{x:?}`) to a sink: `show(x, sink)`, `x` as a
     /// read parameter is passed.
     Show { debug: bool },
+    /// Whether two values are equal: `eq(a, b) -> bool`, each as a read
+    /// parameter is passed.
+    Eq,
+    /// How two values order: `cmp(a, b)` is -1, 0 or 1.
+    Cmp,
 }
 
 /// How a function takes its parameters and gives its result (its ABI).
@@ -360,6 +366,8 @@ impl<'a> Builder<'a> {
                     Glue::Drop => "drop",
                     Glue::Show { debug: false } => "show",
                     Glue::Show { debug: true } => "debug",
+                    Glue::Eq => "eq",
+                    Glue::Cmp => "cmp",
                 };
                 format!("{what}[{}]", self.tcx().display(self.p, ty))
             }
@@ -460,12 +468,29 @@ impl<'a> Builder<'a> {
         let path = self.p.def_path(inst.def);
         let self_ty = self.tcx().degauge(inst.self_ty?);
         let abi = self.body_abi(id, span)?;
-        let (_, _, params) = self.entry_params(&abi);
-        let this = match &abi.params[0] {
-            ParamAbi::Regs(_) => Val::Regs(params[0].clone()),
-            ParamAbi::Addr => Val::Mem(params[0][0]),
+        let (sret, _, params) = self.entry_params(&abi);
+        let arg = |i: usize| match &abi.params[i] {
+            ParamAbi::Regs(_) => Val::Regs(params[i].clone()),
+            ParamAbi::Addr => Val::Mem(params[i][0]),
         };
+        let this = arg(0);
         match path.as_str() {
+            "std.ops.Eq.eq" => {
+                let eq = self.eq_vals(this, arg(1), self_ty, span)?;
+                self.terminate(Term::Ret(vec![eq]));
+            }
+            "std.ops.Ord.lt" => {
+                let lt = self.compare_vals(loom_syntax::ast::BinaryOp::Lt, this, arg(1), self_ty, span)?;
+                self.terminate(Term::Ret(vec![lt]));
+            }
+            // What `{x}` writes.
+            "std.error.Error.message" => {
+                let buf = self.new_sink();
+                self.show(buf, this, self_ty, false, span)?;
+                let dst = sret?;
+                self.emit(InstKind::Native { name: "sink.string", imm: 0, args: vec![buf.0, dst] }, &[]);
+                self.terminate(Term::Ret(Vec::new()));
+            }
             "std.fmt.Show.show" => {
                 let f = params[1][0];
                 let h = self.load(super::Mem::W64, f, 0, VTy::Int);

@@ -1082,12 +1082,7 @@ impl<'a> Builder<'a> {
             let operand_ty = self.common_ty(&[lhs, rhs]);
             let a = self.expr(lhs)?;
             let b = self.expr(rhs)?;
-            let (a, b) = if self.in_regs(operand_ty) {
-                (self.regs(a, operand_ty, span)?, self.regs(b, operand_ty, span)?)
-            } else {
-                return self.unsupported(span, "comparing values in memory");
-            };
-            return Some(vec![self.compare(op, &a, &b, operand_ty, span)?]);
+            return Some(vec![self.compare_vals(op, a, b, operand_ty, span)?]);
         }
         let a = self.value(lhs)?;
         let b = self.value(rhs)?;
@@ -1162,47 +1157,9 @@ impl<'a> Builder<'a> {
         best
     }
 
-    /// `a op b` for a comparison, as a `bool`.
+    /// `a op b` for a comparison, as a `bool`, of values in registers.
     pub(super) fn compare(&mut self, op: BinaryOp, a: &[Value], b: &[Value], ty: Ty, span: Span) -> Option<Value> {
-        let cmp = match op {
-            BinaryOp::Eq => Cmp::Eq,
-            BinaryOp::Ne => Cmp::Ne,
-            BinaryOp::Lt => Cmp::Lt,
-            BinaryOp::Le => Cmp::Le,
-            BinaryOp::Gt => Cmp::Gt,
-            _ => Cmp::Ge,
-        };
-        let tcx = self.tcx();
-        match tcx.kind(tcx.degauge(ty)).clone() {
-            TyKind::Int(i) => Some(self.emit1(InstKind::ICmp { cmp, unsigned: !i.signed, a: a[0], b: b[0] }, VTy::Int)),
-            TyKind::Bool | TyKind::Char => {
-                Some(self.emit1(InstKind::ICmp { cmp, unsigned: true, a: a[0], b: b[0] }, VTy::Int))
-            }
-            TyKind::Float(f) => Some(self.emit1(InstKind::FCmp { cmp, ty: f, a: a[0], b: b[0] }, VTy::Int)),
-            TyKind::Tuple(items) if matches!(cmp, Cmp::Eq | Cmp::Ne) => {
-                // Equal when every item is.
-                let mut at = 0;
-                let mut all: Option<Value> = None;
-                for item in items {
-                    let n = self.repr_of(item, span)?.parts().len();
-                    let eq = self.compare(BinaryOp::Eq, &a[at..at + n], &b[at..at + n], item, span)?;
-                    at += n;
-                    all = Some(match all {
-                        None => eq,
-                        Some(prev) => self.emit1(InstKind::Bit { op: BitOp::And, a: prev, b: eq }, VTy::Int),
-                    });
-                }
-                let all = match all {
-                    Some(all) => all,
-                    None => self.iconst(1),
-                };
-                Some(if cmp == Cmp::Ne { self.emit1(InstKind::Not(all), VTy::Int) } else { all })
-            }
-            _ => {
-                let shown = tcx.display(self.p, ty);
-                self.unsupported(span, &format!("comparing values of type `{shown}`"))
-            }
-        }
+        self.compare_vals(op, Val::Regs(a.to_vec()), Val::Regs(b.to_vec()), ty, span)
     }
 
     fn cast(&mut self, e: &'a hir::Expr, inner: &'a hir::Expr, kind: CastKind, ty: Ty) -> Option<Vals> {

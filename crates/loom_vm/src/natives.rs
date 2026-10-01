@@ -186,6 +186,8 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
         "sink.string" => sink_string,
         "sink.pad" => sink_pad,
         "str.new" => str_new,
+        "str.eq" => str_eq,
+        "str.cmp" => str_cmp,
         "int.add_chk" => |_, a, _| checked(a, crate::ints::add_t),
         "int.sub_chk" => |_, a, _| checked(a, crate::ints::sub_t),
         "int.mul_chk" => |_, a, _| checked(a, crate::ints::mul_t),
@@ -320,6 +322,23 @@ fn str_new(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     // SAFETY: `str.new` is passed a text value.
     let text = unsafe { ctx.text(args[0], args[1])? }.to_vec();
     ctx.new_string(&text, args[2])
+}
+
+/// `str.eq(a, a length, b, b length)`: whether the texts are the same.
+fn str_eq(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    // SAFETY: `str.eq` is passed two text values.
+    let same = unsafe { ctx.text(args[0], args[1])? == ctx.text(args[2], args[3])? };
+    args[0] = u64::from(same);
+    Ok(())
+}
+
+/// `str.cmp(a, a length, b, b length)`: -1, 0 or 1 as `a` comes before,
+/// with or after `b`, byte by byte.
+fn str_cmp(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    // SAFETY: `str.cmp` is passed two text values.
+    let order = unsafe { ctx.text(args[0], args[1])?.cmp(ctx.text(args[2], args[3])?) };
+    args[0] = order as i64 as u64;
+    Ok(())
 }
 
 /// Puts `r`'s value and whether there is one in the first two registers.

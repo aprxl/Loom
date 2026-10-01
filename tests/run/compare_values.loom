@@ -1,0 +1,65 @@
+// `==` and `<` on every kind of value: text byte by byte, structures
+// field by field (the first that differs decides), sums by case first,
+// and a warp's own `eq` or `lt` when it writes one.
+use std.io.print
+
+warp Pt: Copy, Show, Eq, Ord { x: i32, y: i32 }
+warp Shape: Show, Eq, Ord {
+    case Dot
+    case Circle(r: f64)
+    case Rect(w: i32, h: i32)
+    label: str
+}
+warp Name: Show, Eq, Ord { first: String, last: String }
+warp Loose { v: i32 }
+weave Eq into Loose {
+    // Equal when they're close.
+    fn eq(self, other: Loose) -> bool = -1 <= self.v - other.v <= 1
+}
+warp Rev { v: i32 }
+weave Eq into Rev {}
+weave Ord into Rev {
+    fn lt(self, other: Rev) -> bool = self.v > other.v
+}
+warp Oops: Show, Error { code: i32 }
+
+fn main() {
+    // Text.
+    print("{"abc" == "abc"} {"abc" == "abd"} {"ab" < "abc"} {"b" > "abc"} {"" < "a"}")
+    let s: String = "hello"
+    let t: String = "help"
+    print("{s == t} {s < t} {s != t} {s >= s}")
+    // Tuples, with text inside.
+    print("{(1, "a") == (1, "a")} {(1, "a") < (1, "b")} {(2, "a") < (1, "z")}")
+    // Optionals.
+    let n: ?i32 = none
+    let a: ?i32 = some(3)
+    let b: ?i32 = some(4)
+    print("{n == n} {n == a} {a == some(3)} {a == b} {a != n}")
+    let nn: ?str = some("x")
+    print("{nn == some("x")} {nn == none}")
+    // Records and sums.
+    print("{Pt(1, 2) == Pt(1, 2)} {Pt(1, 2) < Pt(1, 3)} {Pt(2, 0) < Pt(1, 9)}")
+    print("{Pt(1, 2).eq(Pt(1, 2))} {Pt(1, 2).lt(Pt(0, 2))}")
+    let d = Shape.Dot(label: "d")
+    let c = Shape.Circle(r: 1.5, label: "c")
+    let r = Shape.Rect(w: 2, h: 3, label: "r")
+    print("{d < c} {c < r} {r < d} {c == Shape.Circle(r: 1.5, label: "c")}")
+    print("{c == Shape.Circle(r: 1.5, label: "other")} {r < Shape.Rect(w: 2, h: 4, label: "r")}")
+    let x = Name(first: "Ada", last: "Lovelace")
+    let y = Name(first: "Ada", last: "Byron")
+    print("{x == y} {y < x} {x.lt(y)}")
+    // Hand-written `eq` and `lt`.
+    print("{Loose(v: 3) == Loose(v: 4)} {Loose(v: 3) == Loose(v: 5)} {Loose(v: 3) != Loose(v: 5)}")
+    print("{Rev(v: 1) < Rev(v: 2)} {Rev(v: 2) < Rev(v: 1)} {Rev(v: 2) <= Rev(v: 2)}")
+    let pairs = (Rev(v: 1), 0)
+    print("{pairs < (Rev(v: 0), 5)}")
+    // Chains.
+    let (lo, mid, hi) = ("a", "m", "z")
+    print("{lo < mid < hi} {lo < hi < mid}")
+    // A NaN inside a structure compares as neither smaller nor bigger.
+    let nan = 0.0 / 0.0
+    print("{(nan, 1) < (1.0, 2)} {nan < 1.0} {(1.0, 1) < (1.0, 2)}")
+    // A derived `message` is what `{x}` writes.
+    print(Oops(code: 7).message())
+}

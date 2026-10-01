@@ -18,8 +18,6 @@ defer_mut_params     V1  `defer`, `String`
 derive_json          V1  warps, reflection
 element_copies       V1  lists
 gauges               V1  gauges, optionals
-generic_weaves       V1  warps, weaves
-generics             V1  warps, comparing text
 int_to_float         V1  lists
 iterators            V1  warps, streams
 lambdas              V1  lambdas
@@ -34,7 +32,6 @@ mut_optional         V1  optionals
 mut_places           V1  lists
 mut_scalars          V1  methods of warps
 option_take          V1  optionals and results
-optionals            V1  optionals
 out_of_memory        V1  text methods
 repeat_list          V1  lists
 results              V1  results
@@ -44,13 +41,11 @@ through              V1  warps, `through`
 through_scalars      V1  warps, `through`
 tuple_assign         V1  warps
 union_values         V1  unions
-unions               V1  unions
 unravel_chunks       V1  lists, slices
 unravel_index        V1  arrays
 unravel_open_range   V1  streams
 unravel_sum          V1  arrays
 untyped_consts       V1  arrays
-weaves               V1  warps, weaves
 
 shuttles             V2  shuttles, streams
 unravel_closed       V2  shuttles

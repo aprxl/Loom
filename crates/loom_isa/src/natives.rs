@@ -52,6 +52,10 @@ pub const NATIVES: &[NativeSig] = &[
     sig("sink.string", 2, 0, NativeImm::None),
     NativeSig { name: "sink.pad", args: 2, results: 0, imm: NativeImm::Fmt, lead: 2 },
     sig("str.new", 3, 0, NativeImm::None),
+    // Text compared byte by byte: (a address, a length, b address, b
+    // length) to whether they're equal, or to -1, 0 or 1.
+    sig("str.eq", 4, 1, NativeImm::None),
+    sig("str.cmp", 4, 1, NativeImm::None),
     // Checked operations: (value, whether it fits) from two operands and a
     // packed integer type (or a cast's two).
     sig("int.add_chk", 3, 2, NativeImm::None),

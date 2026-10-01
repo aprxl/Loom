@@ -33,6 +33,17 @@ impl<'a> Builder<'a> {
                 }
                 Some(Vec::new())
             }
+            Glue::Eq | Glue::Cmp => {
+                let a = self.glue_value_param(ty, span)?;
+                let b = self.glue_value_param(ty, span)?;
+                let r = if g == Glue::Eq {
+                    self.eq_structure(a, b, ty, span)?
+                } else {
+                    self.cmp_structure(a, b, ty, span)?
+                };
+                self.terminate(Term::Ret(vec![r]));
+                Some(vec![VTy::Int])
+            }
             Glue::Show { debug } => {
                 let v = self.glue_value_param(ty, span)?;
                 let h = self.new_value(VTy::Int);
