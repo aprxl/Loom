@@ -46,10 +46,10 @@ impl<'a> Builder<'a> {
                 let tys: Vec<VTy> = parts.iter().map(|p| p.vty).collect();
                 JoinKind::Regs(self.new_vars(&tys))
             }
-            super::Repr::Mem { size, .. } => {
+            super::Repr::Mem { .. } => {
+                // Zero until a branch moves a value in (see `cleanup.rs`).
                 let slot = if self.needs_drop(ty) {
                     let ptr = self.temp(ty, span)?;
-                    self.emit(InstKind::Zero { dst: ptr, size }, &[]);
                     self.own_temp(ptr, ty);
                     // Branches move into it; its cleanup stays until the end
                     // of the statement.
@@ -163,11 +163,18 @@ impl<'a> Builder<'a> {
                 let (p, n) = self.text_of(v, ty, e.span)?;
                 Some(Val::Regs(vec![p, n]))
             }
+            Coercion::ToResult => {
+                let target = self.coerced_ty(e);
+                self.result(target, true, v, e.span)
+            }
+            Coercion::ToUnion | Coercion::WidenUnion => {
+                let target = self.coerced_ty(e);
+                let from = self.ty_of(e);
+                self.union_of(target, from, v, e.span)
+            }
             other => {
                 let what = match other {
-                    Coercion::ToResult => "results",
                     Coercion::ToAny(_) => "`any` values",
-                    Coercion::ToUnion => "unions",
                     Coercion::ToSlice => "slices",
                     Coercion::ToStream(_) => "streams",
                     _ => "this conversion",
@@ -191,6 +198,7 @@ impl<'a> Builder<'a> {
             return self.construct(e, &c, args);
         }
         match &e.kind {
+            ExprKind::Lit(Lit::None) => self.none(ty, span),
             ExprKind::Lit(lit) => self.lit(lit, false, ty, span).map(Val::Regs),
             ExprKind::Local(l) => {
                 let place = self.local_place(*l, span)?;
@@ -271,12 +279,26 @@ impl<'a> Builder<'a> {
                 None => self.unsupported(span, "this kind of value"),
             },
             ExprKind::DotBlock { subject, body } => self.dot_block(e, subject, body),
+            ExprKind::Try(inner) => self.try_expr(e, inner),
+            ExprKind::Fail(value) => {
+                self.f.span = Some(span);
+                self.fail_expr(e, value)
+            }
+            ExprKind::Mend { expr, handler, .. } => self.mend_expr(e, expr, handler, ty),
             // Checked while compiling: nothing is left to run.
             ExprKind::Const(inner) if crate::typeck::assert_args(self.p, inner).is_some() => {
                 Some(Val::Regs(Vec::new()))
             }
             ExprKind::Const(_) => self.unsupported(span, "`const` expressions computed while compiling"),
             ExprKind::Template(parts) => self.template_string(e, parts),
+            ExprKind::Array(_) | ExprKind::ArrayRepeat { .. } => self.unsupported(span, "arrays and lists"),
+            ExprKind::Index { .. } => self.unsupported(span, "indexing"),
+            ExprKind::Map(_) => self.unsupported(span, "maps"),
+            ExprKind::Lambda { .. } => self.unsupported(span, "lambdas"),
+            ExprKind::Range { .. } => self.unsupported(span, "ranges as values"),
+            ExprKind::Intrinsic(_) => self.unsupported(span, "`target`"),
+            ExprKind::Yield { .. } | ExprKind::Pull => self.unsupported(span, "shuttles"),
+            ExprKind::Loom { .. } | ExprKind::Thread(_) => self.unsupported(span, "threads"),
             _ => self.unsupported(span, "this expression"),
         }
     }
@@ -723,7 +745,7 @@ impl<'a> Builder<'a> {
 
     /// Leaves the scopes opened after the first `scopes`, running their
     /// cleanups (control goes on elsewhere).
-    fn leave_scopes(&mut self, scopes: usize) {
+    pub(super) fn leave_scopes(&mut self, scopes: usize) {
         let from = self.f.scopes.get(scopes).copied().unwrap_or(self.f.cleanups.len());
         self.run_cleanups(from);
     }
@@ -765,9 +787,8 @@ impl<'a> Builder<'a> {
                 let tys: Vec<VTy> = parts.iter().map(|p| p.vty).collect();
                 LoopResult::Vars(self.new_vars(&tys))
             }
-            super::Repr::Mem { size, .. } => {
+            super::Repr::Mem { .. } => {
                 let ptr = self.temp(ty, e.span)?;
-                self.emit(InstKind::Zero { dst: ptr, size }, &[]);
                 self.own_temp(ptr, ty);
                 self.f.temps.remove(&ptr);
                 LoopResult::Slot(ptr)
@@ -1089,7 +1110,11 @@ impl<'a> Builder<'a> {
             let vty = if f == FloatTy::F32 { VTy::F32 } else { VTy::F64 };
             return Some(vec![self.emit1(InstKind::FArith { op: fop, ty: f, a, b }, vty)]);
         }
-        let Some(t) = self.int_of(ty) else { return self.unsupported(span, "this operator") };
+        let int_ty = match (op, self.tcx().kind(ty)) {
+            (B::AddChecked | B::SubChecked | B::MulChecked, TyKind::Optional(inner)) => *inner,
+            _ => ty,
+        };
+        let Some(t) = self.int_of(int_ty) else { return self.unsupported(span, "this operator") };
         let arith = |op, policy| InstKind::Arith { op, policy, ty: t, a, b };
         let kind = match op {
             B::Add => arith(IntOp::Add, Policy::Trap),
@@ -1108,7 +1133,15 @@ impl<'a> Builder<'a> {
             B::BitAnd => InstKind::Bit { op: BitOp::And, a, b },
             B::BitOr => InstKind::Bit { op: BitOp::Or, a, b },
             B::BitXor => InstKind::Bit { op: BitOp::Xor, a, b },
-            B::AddChecked | B::SubChecked | B::MulChecked => return self.unsupported(span, "optionals"),
+            B::AddChecked | B::SubChecked | B::MulChecked => {
+                let TyKind::Optional(inner) = *self.tcx().kind(ty) else { return None };
+                let name = match op {
+                    B::AddChecked => "int.add_chk",
+                    B::SubChecked => "int.sub_chk",
+                    _ => "int.mul_chk",
+                };
+                return self.checked_arith(name, a, b, ty, inner, span);
+            }
             _ => return self.unsupported(span, "this operator"),
         };
         Some(vec![self.emit1(kind, VTy::Int)])
@@ -1175,11 +1208,15 @@ impl<'a> Builder<'a> {
     fn cast(&mut self, e: &'a hir::Expr, inner: &'a hir::Expr, kind: CastKind, ty: Ty) -> Option<Vals> {
         let span = e.span;
         let raw = self.tables().expr_ty.get(&e.id).copied().unwrap_or(ty);
-        if kind == CastKind::Opt {
-            return self.unsupported(span, "optionals");
-        }
-        if matches!(self.tcx().kind(raw), TyKind::Gauge(..)) {
+        let target = match (kind, self.tcx().kind(raw)) {
+            (CastKind::Opt, TyKind::Optional(t)) => *t,
+            _ => raw,
+        };
+        if matches!(self.tcx().kind(target), TyKind::Gauge(..)) {
             return self.unsupported(span, "casts into gauges");
+        }
+        if kind == CastKind::Opt {
+            return self.cast_opt(inner, ty, target, span);
         }
         let source = self.coerced_ty(inner);
         let v = self.value(inner)?[0];
@@ -1216,6 +1253,37 @@ impl<'a> Builder<'a> {
             _ => return self.unsupported(span, "this conversion"),
         };
         Some(vec![self.emit1(k, vty)])
+    }
+}
+
+impl<'a> Builder<'a> {
+    /// `x as? T`: `some` of the value when it fits `T`, `none` otherwise.
+    fn cast_opt(&mut self, inner: &'a hir::Expr, opt: Ty, target: Ty, span: Span) -> Option<Vals> {
+        let source = self.coerced_ty(inner);
+        let v = self.value(inner)?[0];
+        let tcx = self.tcx();
+        let (name, v, spec) = match (tcx.kind(source).clone(), tcx.kind(target).clone()) {
+            (TyKind::Int(s), TyKind::Int(t)) => {
+                ("int.cast_chk", v, loom_isa::word::cast_spec(super::int_spec(t), super::int_spec(s)))
+            }
+            (TyKind::Char, TyKind::Int(t)) => {
+                let u21 = IntTy { signed: false, bits: 21, size: false };
+                ("int.cast_chk", v, loom_isa::word::cast_spec(super::int_spec(t), super::int_spec(u21)))
+            }
+            (TyKind::Float(f), TyKind::Int(t)) => {
+                let v = if f == FloatTy::F32 {
+                    self.emit1(InstKind::FloatCast { to: FloatTy::F64, a: v }, VTy::F64)
+                } else {
+                    v
+                };
+                ("float.to_int_chk", v, super::int_spec(t).pack())
+            }
+            (TyKind::Int(s), TyKind::Char) => ("int.to_char_chk", v, super::int_spec(s).pack()),
+            _ => return self.unsupported(span, "this `as?`"),
+        };
+        let spec = self.iconst(spec);
+        let out = self.emit(InstKind::Native { name, imm: 0, args: vec![v, spec] }, &[VTy::Int, VTy::Int]);
+        self.opt_from(out[0], out[1], opt, target, span)
     }
 }
 

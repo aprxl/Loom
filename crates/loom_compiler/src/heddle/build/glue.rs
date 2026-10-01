@@ -61,6 +61,32 @@ impl<'a> Builder<'a> {
                 let count = self.iconst(n);
                 self.drop_elems(ptr, count, elem, size);
             }
+            // A result or a union: the payload its tag says it holds.
+            TyKind::Result(..) | TyKind::Union(_) => {
+                let members = match self.tcx().kind(ty).clone() {
+                    TyKind::Result(t, e) => vec![t, e],
+                    TyKind::Union(ms) => ms,
+                    _ => Vec::new(),
+                };
+                let Shape::Tagged { tag, payload } = self.layout(ty)?.shape else { return None };
+                let t = self.load(super::warp::tag_mem(tag.bytes), ptr, tag.offset as i64, VTy::Int);
+                let done = self.new_block();
+                for (i, m) in members.into_iter().enumerate() {
+                    if !self.needs_drop(m) {
+                        continue;
+                    }
+                    let (yes, next) = (self.new_block(), self.new_block());
+                    let k = self.iconst(i as u64);
+                    let c = self.emit1(InstKind::ICmp { cmp: Cmp::Eq, unsigned: true, a: t, b: k }, VTy::Int);
+                    self.br(c, yes, next);
+                    self.enter(yes);
+                    self.drop_field(ptr, payload, m);
+                    self.jump(done);
+                    self.enter(next);
+                }
+                self.jump(done);
+                self.enter(done);
+            }
             TyKind::Optional(inner) => {
                 let v = super::value::Val::Mem(ptr);
                 let present = self.is_some(&v, ty, span)?;
@@ -262,6 +288,24 @@ impl<'a> Builder<'a> {
                     self.write_text(sink, ")");
                     self.jump(done);
                 }
+                self.enter(done);
+            }
+            // The member it holds, as that member shows.
+            TyKind::Union(members) => {
+                let tag = self.tag_value(&v, ty, span)?;
+                let done = self.new_block();
+                for (i, &m) in members.iter().enumerate() {
+                    let (yes, no) = (self.new_block(), self.new_block());
+                    let k = self.iconst(i as u64);
+                    let hit = self.emit1(InstKind::ICmp { cmp: Cmp::Eq, unsigned: true, a: tag, b: k }, VTy::Int);
+                    self.br(hit, yes, no);
+                    self.enter(yes);
+                    let x = self.payload(&v, ty, m, span)?;
+                    self.write_value(sink, x, m, None, debug, span)?;
+                    self.jump(done);
+                    self.enter(no);
+                }
+                self.jump(done);
                 self.enter(done);
             }
             TyKind::Array(elem, n) => {

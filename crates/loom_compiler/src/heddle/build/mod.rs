@@ -63,6 +63,8 @@ struct Var(u32);
 enum FnKey {
     /// A function instance of the program.
     Body(BodyId),
+    /// What runs `main ! E` (see `main_entry`).
+    Main(BodyId),
     /// Code for the values of a type.
     Glue(Glue, Ty),
 }
@@ -113,6 +115,24 @@ struct LoopCtx {
     scopes: usize,
 }
 
+/// A `mend` being built: where its `?`s go.
+#[derive(Debug)]
+struct MendCtx {
+    id: HirId,
+    /// Its handler.
+    fail: BlockId,
+    /// The error `mend e =>` binds: its type, and where it's put.
+    err: Option<(Ty, ErrStore)>,
+    /// How many scopes were open outside it.
+    scopes: usize,
+}
+
+#[derive(Clone, Debug)]
+enum ErrStore {
+    Vars(Vec<Var>),
+    Slot(Value),
+}
+
 #[derive(Clone, Debug)]
 enum LoopResult {
     None,
@@ -138,6 +158,7 @@ struct FnState<'a> {
     var_ty: Vec<VTy>,
     locals: HashMap<LocalId, Storage>,
     loops: Vec<LoopCtx>,
+    mends: Vec<MendCtx>,
     /// The Loom statement being built, for instructions' locations.
     span: Option<Span>,
     /// Frame slots: memory for values that live in memory.
@@ -163,6 +184,9 @@ struct FnState<'a> {
     temps: HashMap<Value, u32>,
     /// While a landing pad is built.
     in_pad: u32,
+    /// The slots drops are registered for, with their types: zeroed when
+    /// the function starts.
+    owned_slots: Vec<(u32, Ty)>,
     /// Each fallback `defer`'s flag, for the local it cleans up: slots
     /// holding a byte.
     defer_flags: HashMap<LocalId, Vec<u32>>,
@@ -210,7 +234,8 @@ pub fn build(p: &Program, typed: &Typed) -> Result<Module, Vec<Diagnostic>> {
     };
     let Some(main) = b.find_main() else { return Err(b.diags) };
     b.main_span = Some(p.def(typed.results.instance(main).def).span);
-    let entry = b.func_id(FnKey::Body(main));
+    let fails = typed.results.sigs.get(&main).is_some_and(|s| matches!(typed.tcx.kind(s.ret), TyKind::Result(..)));
+    let entry = b.func_id(if fails { FnKey::Main(main) } else { FnKey::Body(main) });
     while let Some(key) = b.queue.pop_front() {
         b.build_func(key);
     }
@@ -263,10 +288,41 @@ impl<'a> Builder<'a> {
         };
         let DefKind::Fn(f) = &p.def(def).kind else { return None };
         let span = p.def(def).span;
-        if !f.params.is_empty() || !matches!(f.ret, FnRet::Unit) {
-            return self.unsupported(span, "`main` with parameters or a result");
+        let id = self.typed.results.find(&Instance::of(def))?;
+        let ret = self.typed.results.sigs.get(&id).map(|s| s.ret);
+        let fails = ret.is_some_and(|r| matches!(self.tcx().kind(r), TyKind::Result(ok, _) if *ok == self.tcx().unit));
+        if !f.params.is_empty() || (!matches!(f.ret, FnRet::Unit) && !fails) {
+            return self.unsupported(span, "`main` with parameters, or a return type other than `! E`");
         }
-        self.typed.results.find(&Instance::of(def))
+        Some(id)
+    }
+
+    /// What runs `main ! E`: calls it, and when it fails, shows the error
+    /// and ends the run with it (`exit.fail`), the way the Lua host does.
+    fn main_entry(&mut self, main: BodyId) -> Option<Vec<VTy>> {
+        let span = self.here();
+        let ret = self.typed.results.sigs.get(&main)?.ret;
+        let TyKind::Result(_, err) = *self.tcx().kind(ret) else { return self.internal(span, "`main` without `! E`") };
+        let func = self.func_id(FnKey::Body(main));
+        let r = self.temp(ret, span)?;
+        self.emit(InstKind::Call { func, args: vec![r] }, &[]);
+        let v = Val::Mem(r);
+        let tag = self.tag_value(&v, ret, span)?;
+        let zero = self.iconst(0);
+        let ok = self.emit1(InstKind::ICmp { cmp: super::Cmp::Eq, unsigned: true, a: tag, b: zero }, VTy::Int);
+        let (yes, no) = (self.new_block(), self.new_block());
+        self.br(ok, yes, no);
+        self.enter(no);
+        let e = self.payload(&v, ret, err, span)?;
+        let msg = self.sink(text::MSG);
+        self.write_value(msg, e, err, None, false, span)?;
+        self.drop_at(r, ret);
+        self.emit(InstKind::Native { name: "exit.fail", imm: 0, args: Vec::new() }, &[]);
+        self.terminate(Term::Crash(1));
+        self.enter(yes);
+        self.drop_at(r, ret);
+        self.terminate(Term::Ret(Vec::new()));
+        Some(Vec::new())
     }
 
     // ------------------------------------------------------------ functions
@@ -298,6 +354,7 @@ impl<'a> Builder<'a> {
     fn key_name(&self, key: FnKey) -> String {
         match key {
             FnKey::Body(id) => self.body_name(id),
+            FnKey::Main(id) => format!("{}.entry", self.body_name(id)),
             FnKey::Glue(g, ty) => {
                 let what = match g {
                     Glue::Drop => "drop",
@@ -319,7 +376,7 @@ impl<'a> Builder<'a> {
         let fid = self.ids[&key];
         let name = self.key_name(key);
         let body = match key {
-            FnKey::Body(id) => id,
+            FnKey::Body(id) | FnKey::Main(id) => id,
             FnKey::Glue(..) => BodyId(0),
         };
         self.f = FnState { body, ..FnState::default() };
@@ -331,8 +388,10 @@ impl<'a> Builder<'a> {
         self.f.span = Some(span);
         let results = match key {
             FnKey::Body(id) => self.body_func(id),
+            FnKey::Main(id) => self.main_entry(id),
             FnKey::Glue(g, ty) => self.glue_func(g, ty),
         };
+        self.zero_owned_slots();
         let state = std::mem::take(&mut self.f);
         let (func, complete) = finish(name, state, results.unwrap_or_default());
         // Code that can run but doesn't end is a builder bug, unless
@@ -349,7 +408,7 @@ impl<'a> Builder<'a> {
 
     fn key_span(&self, key: FnKey) -> Span {
         match key {
-            FnKey::Body(id) => self.p.def(self.typed.results.instance(id).def).span,
+            FnKey::Body(id) | FnKey::Main(id) => self.p.def(self.typed.results.instance(id).def).span,
             FnKey::Glue(..) => self.main_span.expect("set before anything is built"),
         }
     }

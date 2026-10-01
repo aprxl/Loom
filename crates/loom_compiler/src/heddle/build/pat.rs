@@ -30,8 +30,10 @@ pub(super) enum Binding {
 impl<'a> Builder<'a> {
     /// The items of a tuple value: each item's value and type.
     pub(super) fn tuple_items(&mut self, v: &Val, ty: Ty, span: Span) -> Option<Vec<(Val, Ty)>> {
-        let TyKind::Tuple(items) = self.tcx().kind(ty).clone() else {
-            return self.internal(span, "the items of something that isn't a tuple");
+        let items = match self.tcx().kind(ty).clone() {
+            TyKind::Tuple(items) => items,
+            TyKind::Unit => return Some(Vec::new()),
+            _ => return self.internal(span, "the items of something that isn't a tuple"),
         };
         let items: Vec<Ty> = items.iter().map(|&t| self.tcx().degauge(t)).collect();
         match v {
@@ -114,6 +116,47 @@ impl<'a> Builder<'a> {
                 }
                 self.test_pat(last, v, ty, yes, no)?;
             }
+            PatKind::Some(_) | PatKind::None => {
+                let present = self.is_some(v, ty, span)?;
+                let Some(inner) = inner_pat(&pat.kind) else {
+                    self.br(present, no, yes);
+                    return Some(());
+                };
+                let next = self.new_block();
+                self.br(present, next, no);
+                self.enter(next);
+                let TyKind::Optional(t) = *self.tcx().kind(ty) else { return None };
+                let x = self.unwrap_some(v, ty, span)?;
+                self.test_pat(inner, &x, t, yes, no)?;
+            }
+            PatKind::Ok(inner) | PatKind::Err(inner) => {
+                let TyKind::Result(t, e) = *self.tcx().kind(ty) else { return None };
+                let is_ok = matches!(pat.kind, PatKind::Ok(_));
+                let tag = self.tag_value(v, ty, span)?;
+                let want = self.iconst(u64::from(!is_ok));
+                let c = self
+                    .emit1(InstKind::ICmp { cmp: crate::heddle::Cmp::Eq, unsigned: true, a: tag, b: want }, VTy::Int);
+                let next = self.new_block();
+                self.br(c, next, no);
+                self.enter(next);
+                let inner_ty = if is_ok { t } else { e };
+                let x = self.payload(v, ty, inner_ty, span)?;
+                self.test_pat(inner, &x, inner_ty, yes, no)?;
+            }
+            PatKind::TypeTest { .. } => {
+                let Some(tested) = self.tables().type_tests.get(&pat.id).copied() else {
+                    return self.unsupported(span, "this type test");
+                };
+                if !matches!(self.tcx().kind(ty), TyKind::Union(_)) {
+                    return self.unsupported(span, "type tests on `any` values");
+                }
+                let tag = self.tag_value(v, ty, span)?;
+                let k = self.member_index(ty, tested, span)?;
+                let want = self.iconst(k);
+                let c = self
+                    .emit1(InstKind::ICmp { cmp: crate::heddle::Cmp::Eq, unsigned: true, a: tag, b: want }, VTy::Int);
+                self.br(c, yes, no);
+            }
             PatKind::Twill { pattern, .. } => {
                 if pattern.mask == 0 {
                     self.jump(yes);
@@ -166,9 +209,36 @@ impl<'a> Builder<'a> {
                     self.bind_with(first, v, ty, how)?;
                 }
             }
+            PatKind::Some(inner) => {
+                let TyKind::Optional(t) = *self.tcx().kind(ty) else { return None };
+                let x = self.unwrap_some(v, ty, span)?;
+                self.bind_with(inner, &x, t, how)?;
+            }
+            PatKind::Ok(inner) | PatKind::Err(inner) => {
+                let TyKind::Result(t, e) = *self.tcx().kind(ty) else { return None };
+                let inner_ty = if matches!(pat.kind, PatKind::Ok(_)) { t } else { e };
+                let x = self.payload(v, ty, inner_ty, span)?;
+                self.bind_with(inner, &x, inner_ty, how)?;
+            }
+            PatKind::TypeTest { local, .. } => {
+                let tested = self.tables().type_tests.get(&pat.id).copied()?;
+                let x = self.payload(v, ty, tested, span)?;
+                self.bind_local(*local, x, how, span)?;
+            }
             _ => {}
         }
         Some(())
+    }
+
+    /// The tag of member `member` of union `ty`.
+    pub(super) fn member_index(&mut self, ty: Ty, member: Ty, span: Span) -> Option<u64> {
+        match self.tcx().kind(ty) {
+            TyKind::Union(members) => match members.iter().position(|&m| m == member) {
+                Some(i) => Some(i as u64),
+                None => self.internal(span, "a type test for a type the union doesn't have"),
+            },
+            _ => self.internal(span, "a type test on something that isn't a union"),
+        }
     }
 
     /// Binds local `l` to `v`: a value of its own for plain data, or a view
@@ -240,11 +310,24 @@ impl<'a> Builder<'a> {
                 // the end of the statement, and a place keeps it.
                 Some(())
             }
-            PatKind::Bind(_) | PatKind::Tuple(_) | PatKind::Twill { .. } | PatKind::Error | PatKind::Case { .. } => {
-                self.bind_with(pat, &v, ty, Binding::Owned)
-            }
+            PatKind::Bind(_)
+            | PatKind::Tuple(_)
+            | PatKind::Twill { .. }
+            | PatKind::Error
+            | PatKind::Case { .. }
+            | PatKind::Some(_)
+            | PatKind::Ok(_)
+            | PatKind::Err(_) => self.bind_with(pat, &v, ty, Binding::Owned),
             _ => self.unsupported(pat.span, "this pattern in a `let`"),
         }
+    }
+}
+
+/// The pattern inside `some(p)`; `None` for `none`.
+fn inner_pat(kind: &PatKind) -> Option<&hir::Pat> {
+    match kind {
+        PatKind::Some(p) => Some(p),
+        _ => None,
     }
 }
 

@@ -349,6 +349,10 @@ impl<'a> Builder<'a> {
 
     /// Reports a bug in the builder.
     pub(super) fn internal<T>(&mut self, span: Span, what: &str) -> Option<T> {
+        // For finding where, with RUST_BACKTRACE=1.
+        if std::env::var_os("LOOM_INTERNAL_PANIC").is_some() {
+            panic!("internal error: {what}");
+        }
         self.diags.push(
             loom_syntax::Diagnostic::error(loom_syntax::diag::codes::U0102, format!("internal error: {what}"))
                 .primary(span, "while building this for Treadle")

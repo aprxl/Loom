@@ -220,7 +220,8 @@ impl<'a> Builder<'a> {
         let ty = self.ty_of(e);
         match kw {
             loom_syntax::token::Keyword::Some => self.some(ty, inner, v, span),
-            _ => self.unsupported(span, "results"),
+            loom_syntax::token::Keyword::Ok => self.result(ty, true, v, span),
+            _ => self.result(ty, false, v, span),
         }
     }
 }

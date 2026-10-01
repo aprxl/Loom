@@ -14,6 +14,14 @@
 //!
 //! A cleanup made dead (a temporary that was moved away) is left out of
 //! pads made from then on, and isn't emitted when its scope ends.
+//!
+//! Cleanups are decided while building, and code runs conditionally: the
+//! right side of an `and`, a `mend`'s left side before a `?` jumps out. So
+//! every slot a drop is registered for is zero whenever it holds nothing:
+//! it's zeroed when the function starts, a cleanup zeroes it after
+//! dropping, and taking a value from it zeroes it. Dropping zero does
+//! nothing, so a cleanup that runs for a value that was never made (or is
+//! gone) is harmless.
 
 use loom_syntax::source::Span;
 
@@ -50,6 +58,7 @@ pub(super) struct Cleanup<'a> {
 impl<'a> Builder<'a> {
     /// Adds a cleanup at the top of the stack; its id.
     pub(super) fn add_cleanup(&mut self, kind: CleanupKind<'a>) -> u32 {
+        self.note_owned_slot(&kind);
         let id = self.f.next_cleanup;
         self.f.next_cleanup += 1;
         self.f.cleanups.push(super::cleanup::Cleanup { id, kind, live: true });
@@ -59,6 +68,7 @@ impl<'a> Builder<'a> {
     /// Adds a cleanup at the end of the innermost block scope, under the
     /// current statement's temporaries: a local declared by the statement.
     pub(super) fn add_scope_cleanup(&mut self, kind: CleanupKind<'a>) -> u32 {
+        self.note_owned_slot(&kind);
         let id = self.f.next_cleanup;
         self.f.next_cleanup += 1;
         // Just under the statement's scope, which then starts after it.
@@ -71,6 +81,34 @@ impl<'a> Builder<'a> {
             None => self.f.cleanups.push(Cleanup { id, kind, live: true }),
         }
         id
+    }
+
+    /// A slot a drop is registered for is zeroed when the function starts.
+    fn note_owned_slot(&mut self, kind: &CleanupKind<'a>) {
+        if let CleanupKind::Drop { at: Stable::Slot(n), ty } = *kind
+            && !self.f.owned_slots.iter().any(|&(s, _)| s == n)
+        {
+            self.f.owned_slots.push((n, ty));
+        }
+    }
+
+    /// Zeroes, at the start of the function, every slot a drop was
+    /// registered for (see the module's documentation).
+    pub(super) fn zero_owned_slots(&mut self) {
+        let mut insts = Vec::new();
+        for (n, ty) in std::mem::take(&mut self.f.owned_slots) {
+            let Some((size, _)) = self.size_align(ty) else { continue };
+            let ptr = self.new_value(VTy::Ptr);
+            insts.push(crate::heddle::Inst { kind: InstKind::Slot(n), results: vec![ptr], span: None, unwind: None });
+            insts.push(crate::heddle::Inst {
+                kind: InstKind::Zero { dst: ptr, size },
+                results: Vec::new(),
+                span: None,
+                unwind: None,
+            });
+        }
+        let entry = &mut self.f.blocks[0].insts;
+        entry.splice(0..0, insts);
     }
 
     /// Takes cleanup `id` out: what it would clean up belongs elsewhere now.
@@ -189,6 +227,12 @@ impl<'a> Builder<'a> {
             CleanupKind::Drop { at, ty } => {
                 let ptr = self.stable_addr(*at);
                 self.drop_at(ptr, *ty);
+                // Back to holding nothing.
+                if let Stable::Slot(_) = at
+                    && let Some((size, _)) = self.size_align(*ty)
+                {
+                    self.emit(InstKind::Zero { dst: ptr, size }, &[]);
+                }
             }
             CleanupKind::Defer { body, tables, flag, span } => {
                 let saved_body = std::mem::replace(&mut self.f.body, *tables);
