@@ -140,6 +140,7 @@ impl<'a> Builder<'a> {
                 self.tables().fields.contains_key(&e.id) && self.is_place(base)
             }
             ExprKind::LeadingDot(_) => self.tables().fields.contains_key(&e.id),
+            ExprKind::Index { .. } => self.is_index_place(e),
             _ => false,
         }
     }

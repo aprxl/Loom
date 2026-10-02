@@ -1,0 +1,30 @@
+// Arrays, lists and slices: literals, `[x; n]`, indexing and assigning,
+// slicing, `for` and `for mut`, and `List()`.
+use std.io.print
+fn total(xs: [i32]) -> i32 {
+    var t = 0
+    for x in xs { t += x }
+    t
+}
+fn main() {
+    var a = [1, 2, 3]
+    a[1] = 20
+    print("{a} {a[0]} {total(a)}")
+    var xs: List[String] = ["x", "yy", "zzz"]
+    xs[0] = "changed"
+    for s in xs { print(s) }
+    print("{xs}")
+    let zs = [7; 4]
+    print("{zs:?}")
+    let ws: List[String] = ["w"; 3]
+    print("{ws:?}")
+    let part = a[1..]
+    print("{part} {a[..2]} {a[1..=2]}")
+    for mut x in a { x *= 2 }
+    print("{a}")
+    let e: List[i32] = List()
+    print("{e}")
+    var grid = [[0; 3]; 2]
+    grid[1][2] = 5
+    print("{grid}")
+}

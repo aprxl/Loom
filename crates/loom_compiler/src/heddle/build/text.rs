@@ -33,6 +33,13 @@ pub(super) const MSG: u64 = 1;
 pub(super) struct Sink(pub Value);
 
 /// A piece of text to write: literal text, or a value with its spec.
+/// A piece of a message [`unravel_msg`](Builder::unravel_msg) writes.
+#[derive(Clone, Copy, Debug)]
+pub(super) enum Msg {
+    Text(&'static str),
+    Int(Value),
+}
+
 enum Piece<'a> {
     Text(&'a str),
     Value { val: Val, ty: Ty, spec: Option<&'a str>, span: Span },
@@ -118,17 +125,45 @@ impl<'a> Builder<'a> {
 
     fn template_pieces(&mut self, parts: &'a [TemplatePart]) -> Option<Vec<Piece<'a>>> {
         let mut out = Vec::with_capacity(parts.len());
-        for part in parts {
+        for (k, part) in parts.iter().enumerate() {
             match part {
                 TemplatePart::Text(text) => out.push(Piece::Text(text)),
                 TemplatePart::Interp { expr, spec } => {
                     let ty = self.ty_of(expr);
                     let val = self.expr_raw(expr)?;
-                    out.push(Piece::Value { val, ty, spec: spec.as_deref(), span: expr.span });
+                    let spec = spec.as_deref();
+                    // A view of a place a later operand could change (by
+                    // calling something) is shown now, as on Lua, where
+                    // each operand becomes text as it's worked out.
+                    let later_calls = parts[k + 1..].iter().any(|p| match p {
+                        TemplatePart::Interp { expr, .. } => super::seq::calls(expr),
+                        TemplatePart::Text(_) => false,
+                    });
+                    if let Val::Mem(ptr) = val
+                        && later_calls
+                        && !self.f.temps.contains_key(&ptr)
+                        && let Some(string) = self.string_ty()
+                    {
+                        let buf = self.new_sink();
+                        self.write_value(buf, val, ty, spec, false, expr.span)?;
+                        let dst = self.temp(string, expr.span)?;
+                        self.emit(InstKind::Native { name: "sink.string", imm: 0, args: vec![buf.0, dst] }, &[]);
+                        self.own_temp(dst, string);
+                        out.push(Piece::Value { val: Val::Mem(dst), ty: string, spec: None, span: expr.span });
+                        continue;
+                    }
+                    out.push(Piece::Value { val, ty, spec, span: expr.span });
                 }
             }
         }
         Some(out)
+    }
+
+    /// `String`'s type.
+    fn string_ty(&self) -> Option<Ty> {
+        let m = self.p.modules.iter().find(|m| m.path == "std.string")?;
+        let def = *m.items.get("String")?;
+        self.tcx().find(&TyKind::Adt(def, Vec::new()))
     }
 
     /// A template as a value: a new `String`.
@@ -251,6 +286,21 @@ impl<'a> Builder<'a> {
         let val = self.expr_raw(x)?;
         self.write_value(Sink(h), val, ty, None, false, x.span)?;
         Some(Val::Regs(Vec::new()))
+    }
+
+    /// Unravels with a message the runtime would write: text, and `usize`
+    /// values.
+    pub(super) fn unravel_msg(&mut self, pieces: &[Msg], span: Span) -> Option<()> {
+        let msg = self.sink(MSG);
+        let usize = self.tcx().usize;
+        for piece in pieces {
+            match *piece {
+                Msg::Text(text) => self.write_text(msg, text),
+                Msg::Int(v) => self.write_value(msg, Val::Regs(vec![v]), usize, None, false, span)?,
+            }
+        }
+        self.terminate(Term::UnravelMsg);
+        Some(())
     }
 
     /// Unravels with `pieces` as the message.

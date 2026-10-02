@@ -21,6 +21,7 @@
 //! What Treadle can't run yet is reported as U0102, like the Lua backend
 //! does.
 
+mod builtin;
 mod call;
 mod cleanup;
 mod compare;
@@ -30,6 +31,7 @@ mod glue;
 mod pat;
 mod repr;
 mod scan;
+mod seq;
 mod text;
 mod value;
 mod warp;
@@ -75,6 +77,8 @@ enum FnKey {
 enum Glue {
     /// Frees what a value owns: `drop(value's address)`.
     Drop,
+    /// A deep copy: `copy(destination, source)`, both addresses.
+    Copy,
     /// Writes `{x}` (or `{x:?}`) to a sink: `show(x, sink)`, `x` as a
     /// read parameter is passed.
     Show { debug: bool },
@@ -364,6 +368,7 @@ impl<'a> Builder<'a> {
             FnKey::Glue(g, ty) => {
                 let what = match g {
                     Glue::Drop => "drop",
+                    Glue::Copy => "copy",
                     Glue::Show { debug: false } => "show",
                     Glue::Show { debug: true } => "debug",
                     Glue::Eq => "eq",
@@ -394,6 +399,11 @@ impl<'a> Builder<'a> {
         let reported = self.diags.len();
         let span = self.key_span(key);
         self.f.span = Some(span);
+        if let FnKey::Glue(..) = key {
+            // Glue has no locations: what goes wrong in it is reported
+            // where it was called from.
+            self.f.span = None;
+        }
         let results = match key {
             FnKey::Body(id) => self.body_func(id),
             FnKey::Main(id) => self.main_entry(id),
@@ -458,6 +468,9 @@ impl<'a> Builder<'a> {
             // A weft method std leaves to the compiler, for a type that
             // doesn't write its own: derived.
             DefKind::Fn(f) if f.body.is_none() && inst.self_ty.is_some() => self.derived_method(id, def.span),
+            DefKind::Fn(f) if f.body.is_none() && builtin::writes_body(&p.def_path(inst.def)) => {
+                self.builtin_body(id, def.span)
+            }
             _ => self.unsupported(def.span, &format!("calling `{}`", p.def_path(inst.def))),
         }
     }

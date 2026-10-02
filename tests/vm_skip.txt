@@ -4,15 +4,12 @@
 # passes, so take it out when it does: this list only gets shorter.
 
 any                  V1  `any` values, warps
-arrays               V1  arrays and lists
 borrows              V1  lists, slices
 calls                V1  `String`
 const_eval           V1  constants computed while compiling, byte strings
 const_fold_width     V1  constants with a type
-const_generics_more  V1  warps
 const_if             V1  lists
 const_params         V1  arrays
-copy_unwrap_bind     V1  optionals and results
 defer                V1  `defer`, results
 defer_mut_params     V1  `defer`, `String`
 derive_json          V1  warps, reflection
@@ -29,8 +26,6 @@ maps                 V1  maps
 methods              V1  warps
 moves                V1  `String`
 mut_optional         V1  optionals
-mut_places           V1  lists
-mut_scalars          V1  methods of warps
 option_take          V1  optionals and results
 out_of_memory        V1  text methods
 repeat_list          V1  lists
@@ -42,10 +37,8 @@ through_scalars      V1  warps, `through`
 tuple_assign         V1  warps
 union_values         V1  unions
 unravel_chunks       V1  lists, slices
-unravel_index        V1  arrays
 unravel_open_range   V1  streams
 unravel_sum          V1  arrays
-untyped_consts       V1  arrays
 
 shuttles             V2  shuttles, streams
 unravel_closed       V2  shuttles

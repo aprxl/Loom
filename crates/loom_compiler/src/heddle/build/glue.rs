@@ -33,6 +33,16 @@ impl<'a> Builder<'a> {
                 }
                 Some(Vec::new())
             }
+            Glue::Copy => {
+                let dst = self.new_value(VTy::Ptr);
+                let src = self.new_value(VTy::Ptr);
+                self.f.blocks[0].params.extend([dst, src]);
+                self.copy_glue_body(dst, src, ty, span)?;
+                if self.live() {
+                    self.terminate(Term::Ret(Vec::new()));
+                }
+                Some(Vec::new())
+            }
             Glue::Eq | Glue::Cmp => {
                 let a = self.glue_value_param(ty, span)?;
                 let b = self.glue_value_param(ty, span)?;
@@ -180,7 +190,7 @@ impl<'a> Builder<'a> {
     }
 
     /// Drops `count` elements of `elem`, `size` bytes apart, from `buf`.
-    fn drop_elems(&mut self, buf: Value, count: Value, elem: Ty, size: u64) {
+    pub(super) fn drop_elems(&mut self, buf: Value, count: Value, elem: Ty, size: u64) {
         if !self.needs_drop(elem) {
             return;
         }
@@ -226,6 +236,175 @@ impl<'a> Builder<'a> {
         }
         self.jump(done);
         self.enter(done);
+    }
+
+    // ------------------------------------------------------------ copy glue
+
+    /// A value of its own that's a copy of `v`, a value of `ty`: a deep
+    /// copy, for a type that owns memory.
+    pub(super) fn copy_val(&mut self, v: &Val, ty: Ty, span: Span) -> Option<Val> {
+        match v {
+            Val::Regs(_) => Some(v.clone()),
+            Val::Mem(_) => {
+                let dst = self.temp(ty, span)?;
+                self.copy_into(dst, v, ty, span)?;
+                self.own_temp(dst, ty);
+                Some(Val::Mem(dst))
+            }
+        }
+    }
+
+    /// Writes a copy of `v`, a value of `ty`, at `dst`, which holds
+    /// nothing.
+    pub(super) fn copy_into(&mut self, dst: Value, v: &Val, ty: Ty, span: Span) -> Option<()> {
+        if !self.needs_drop(ty) {
+            return self.store_val(dst, 0, ty, v, span);
+        }
+        let src = self.addr_of(v.clone(), ty, span)?;
+        let func = self.glue(Glue::Copy, ty);
+        self.emit(InstKind::Call { func, args: vec![dst, src] }, &[]);
+        Some(())
+    }
+
+    /// Copies the value of `ty` at `src` to `dst`, in the glue being
+    /// built: its bytes, and then a copy of what each part owns.
+    fn copy_glue_body(&mut self, dst: Value, src: Value, ty: Ty, span: Span) -> Option<()> {
+        let ty = self.tcx().degauge(ty);
+        let (size, _) = self.size_align(ty)?;
+        if size > 0 {
+            self.emit(InstKind::Copy { dst, src, size }, &[]);
+        }
+        match self.tcx().kind(ty).clone() {
+            TyKind::Tuple(items) => {
+                let offsets = self.field_offsets(ty, span)?;
+                for (t, off) in items.into_iter().zip(offsets) {
+                    self.copy_field(dst, src, off, t);
+                }
+            }
+            TyKind::Array(elem, n) => {
+                let zero = self.iconst(0);
+                let n = self.iconst(n);
+                self.count_loop(zero, n, |this, i| {
+                    let (d, s) = (this.elem_at(dst, i, elem)?, this.elem_at(src, i, elem)?);
+                    this.copy_field(d, s, 0, elem);
+                    Some(())
+                })?;
+            }
+            TyKind::Optional(inner) => {
+                let present = self.is_some(&Val::Mem(src), ty, span)?;
+                let (yes, done) = (self.new_block(), self.new_block());
+                self.br(present, yes, done);
+                self.enter(yes);
+                self.copy_field(dst, src, 0, inner);
+                self.jump(done);
+                self.enter(done);
+            }
+            TyKind::Result(..) | TyKind::Union(_) => {
+                let members = match self.tcx().kind(ty).clone() {
+                    TyKind::Result(t, e) => vec![t, e],
+                    TyKind::Union(ms) => ms,
+                    _ => Vec::new(),
+                };
+                let Shape::Tagged { tag, payload } = self.layout(ty)?.shape else { return None };
+                let t = self.load(super::warp::tag_mem(tag.bytes), src, tag.offset as i64, VTy::Int);
+                self.by_case(t, members.len(), |this, i| {
+                    this.copy_field(dst, src, payload, members[i]);
+                    Some(())
+                })?;
+            }
+            TyKind::Adt(def, args) => match self.p.def_path(def).as_str() {
+                "std.string.String" => {
+                    let (p, n) = self.list_view(src);
+                    self.emit(InstKind::Native { name: "str.new", imm: 0, args: vec![p, n, dst] }, &[]);
+                }
+                "std.list.List" => {
+                    let elem = args[0];
+                    let (buf, len) = self.list_view(src);
+                    let new = self.alloc_elems(len, elem)?;
+                    if self.needs_drop(elem) {
+                        let zero = self.iconst(0);
+                        self.count_loop(zero, len, |this, i| {
+                            let (d, s) = (this.elem_at(new, i, elem)?, this.elem_at(buf, i, elem)?);
+                            this.copy_field(d, s, 0, elem);
+                            Some(())
+                        })?;
+                    } else {
+                        let (size, _) = self.size_align(elem)?;
+                        let scale = self.iconst(size);
+                        let bytes = self.uarith(IntOp::Mul, len, scale);
+                        self.emit(InstKind::Native { name: "mem.move", imm: 0, args: vec![new, buf, bytes] }, &[]);
+                    }
+                    let cap = self.cap_for(len, elem)?;
+                    self.set_header(dst, new, len, cap);
+                }
+                path if self.is_builtin(def) => {
+                    return self.unsupported(span, &format!("copying a `{path}`"));
+                }
+                _ => {
+                    let info = self.warp_info(ty)?;
+                    match self.layout(ty)?.shape {
+                        Shape::Fields(offsets) => {
+                            for (f, off) in info.fields.iter().zip(offsets) {
+                                self.copy_field(dst, src, off, f.ty);
+                            }
+                        }
+                        Shape::Sum { tag, shared, cases, .. } => {
+                            for (f, off) in info.fields.iter().zip(shared) {
+                                self.copy_field(dst, src, off, f.ty);
+                            }
+                            let t = self.load(super::warp::tag_mem(tag.bytes), src, tag.offset as i64, VTy::Int);
+                            self.by_case(t, info.cases.len(), |this, ci| {
+                                let tys: Vec<Ty> = info.cases[ci].fields.iter().flatten().map(|f| f.ty).collect();
+                                for (fty, &off) in tys.iter().zip(&cases[ci]) {
+                                    this.copy_field(dst, src, off, *fty);
+                                }
+                                Some(())
+                            })?;
+                        }
+                        _ => return self.internal(span, "copying a warp laid out as something else"),
+                    }
+                }
+            },
+            _ => {
+                let shown = self.tcx().display(self.p, ty);
+                return self.unsupported(span, &format!("copying a `{shown}`"));
+            }
+        }
+        Some(())
+    }
+
+    /// Copies what the field of `ty` at `off` owns, if anything: its bytes
+    /// are copied already, and its glue copies them again and then the rest.
+    fn copy_field(&mut self, dst: Value, src: Value, off: u64, ty: Ty) {
+        if !self.needs_drop(ty) {
+            return;
+        }
+        let (d, s) = (self.offset(dst, off as i64), self.offset(src, off as i64));
+        let func = self.glue(Glue::Copy, ty);
+        self.emit(InstKind::Call { func, args: vec![d, s] }, &[]);
+    }
+
+    /// Builds `each(i)` for the case `tag` says, of `count`.
+    fn by_case(
+        &mut self,
+        tag: Value,
+        count: usize,
+        mut each: impl FnMut(&mut Self, usize) -> Option<()>,
+    ) -> Option<()> {
+        let done = self.new_block();
+        for i in 0..count {
+            let (yes, next) = (self.new_block(), self.new_block());
+            let k = self.iconst(i as u64);
+            let c = self.emit1(InstKind::ICmp { cmp: Cmp::Eq, unsigned: true, a: tag, b: k }, VTy::Int);
+            self.br(c, yes, next);
+            self.enter(yes);
+            each(self, i)?;
+            self.jump(done);
+            self.enter(next);
+        }
+        self.jump(done);
+        self.enter(done);
+        Some(())
     }
 
     // ------------------------------------------------------------ show glue

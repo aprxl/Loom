@@ -37,7 +37,7 @@ impl<'a> Builder<'a> {
             return self.unsupported(span, "calling function values");
         }
         if tables.new_lists.contains(&e.id) {
-            return self.unsupported(span, "`List()`, `Map()`, `Set()` and `String()`");
+            return self.new_empty(e);
         }
         if let ExprKind::BuiltinCase(kw) = callee.kind {
             return self.builtin_case(e, kw, args);
@@ -57,13 +57,18 @@ impl<'a> Builder<'a> {
         if f.abi.is_some() {
             return self.extern_call(def, &info, args, span);
         }
-        if f.body.is_none() && self.typed.results.instance(info.callee).self_ty.is_none() {
+        if f.body.is_none()
+            && self.typed.results.instance(info.callee).self_ty.is_none()
+            && !super::builtin::writes_body(&p.def_path(def))
+        {
             return self.builtin_call(e, callee, args, &info, def);
         }
         let sig = self.typed.results.sigs.get(&info.callee)?.clone();
         let abi = self.body_abi(info.callee, span)?;
         let modes: Vec<ParamMode> = sig.params.iter().map(|p| p.mode).collect();
-        let worked = self.call_args(callee, args, &info, &modes)?;
+        let recv_ty =
+            info.args.iter().position(|&s| s == ArgSource::Receiver).map(|k| self.tcx().degauge(sig.params[k].ty));
+        let worked = self.call_args(callee, args, &info, &modes, recv_ty)?;
         // Defaults, in parameter order, with the callee's tables.
         let mut by_param: Vec<Option<Arg>> = Vec::with_capacity(info.args.len());
         let mut worked = worked.into_iter().map(Some).collect::<Vec<_>>();
@@ -102,6 +107,7 @@ impl<'a> Builder<'a> {
         args: &'a [hir::Arg],
         info: &Call,
         modes: &[ParamMode],
+        recv_ty: Option<Ty>,
     ) -> Option<Vec<Arg>> {
         let mode_of = |source: ArgSource| {
             info.args.iter().position(|&s| s == source).and_then(|k| modes.get(k)).copied().unwrap_or(ParamMode::Read)
@@ -117,11 +123,13 @@ impl<'a> Builder<'a> {
                 (Receiver::Expr, ExprKind::Field { base, .. }) => Some(base.as_ref()),
                 _ => None,
             };
-            out.push(self.receiver_arg(r, base, &info.through, mode_of(ArgSource::Receiver), callee.span)?);
+            let mode = mode_of(ArgSource::Receiver);
+            out.push(self.receiver_arg(r, base, &info.through, mode, recv_ty, callee.span)?);
         }
         for (i, arg) in args.iter().enumerate() {
             let a = if mode_of(ArgSource::Arg(i)) == ParamMode::Mut {
-                Arg::Place(self.place_or_temp(&arg.value)?.0)
+                let (place, ty) = self.place_or_temp(&arg.value)?;
+                Arg::Place(self.addressable(place, ty, arg.value.span)?)
             } else {
                 let v = self.expr(&arg.value)?;
                 self.moved_away(&arg.value);
@@ -141,6 +149,7 @@ impl<'a> Builder<'a> {
         base: Option<&'a hir::Expr>,
         through: &[crate::typeck::Key],
         mode: ParamMode,
+        want: Option<Ty>,
         span: Span,
     ) -> Option<Arg> {
         let (mut place, mut ty) = match r {
@@ -149,7 +158,8 @@ impl<'a> Builder<'a> {
                 if mode != ParamMode::Mut && through.is_empty() {
                     let v = self.expr(base)?;
                     self.moved_away(base);
-                    return Some(Arg::Val(v, self.coerced_ty(base)));
+                    let ty = self.coerced_ty(base);
+                    return self.receiver_view(Arg::Val(v, ty), ty, want, span);
                 }
                 self.place_or_temp(base)?
             }
@@ -162,10 +172,45 @@ impl<'a> Builder<'a> {
             ty = pos.ty;
         }
         if mode == ParamMode::Mut {
-            return Some(Arg::Place(place));
+            let place = self.addressable(place, ty, span)?;
+            return self.receiver_view(Arg::Place(place), ty, want, span);
         }
         let v = self.read_place(&place, ty, span)?;
-        Some(Arg::Val(v, ty))
+        self.receiver_view(Arg::Val(v, ty), ty, want, span)
+    }
+
+    /// A place a `mut` argument can be given by address: a temporary in
+    /// registers is put in memory of its own. (A local a callee writes to
+    /// lives in memory already: see `scan.rs`.)
+    fn addressable(&mut self, place: Place, ty: Ty, span: Span) -> Option<Place> {
+        let Place::Vars(vars) = place else { return Some(place) };
+        let vals = self.read_all(&vars);
+        let ptr = self.addr_of(Val::Regs(vals), ty, span)?;
+        Some(Place::At { ptr, off: 0 })
+    }
+
+    /// A receiver of type `ty` passed to a method of a slice (`want`), when
+    /// it's an array or a list: a view of all of it. For a `mut` receiver,
+    /// the view is in memory of its own; the elements are still its.
+    fn receiver_view(&mut self, arg: Arg, ty: Ty, want: Option<Ty>, span: Span) -> Option<Arg> {
+        let Some(want) = want else { return Some(arg) };
+        let to_slice = matches!(self.seq_of(want), Some(crate::typeck::Seq::Slice(_)))
+            && matches!(self.seq_of(ty), Some(crate::typeck::Seq::Array(..) | crate::typeck::Seq::List(_)));
+        if !to_slice {
+            return Some(arg);
+        }
+        Some(match arg {
+            Arg::Val(v, _) => Arg::Val(self.slice_of(v, ty, span)?, want),
+            Arg::Place(place) => {
+                let v = self.read_place(&place, ty, span)?;
+                let (buf, len) = self.view_of(&v, ty, span)?;
+                let slot = self.raw_slot(16, 8);
+                let ptr = self.slot_addr(slot);
+                self.store(crate::heddle::Mem::W64, ptr, 0, buf);
+                self.store(crate::heddle::Mem::W64, ptr, 8, len);
+                Arg::Place(Place::At { ptr, off: 0 })
+            }
+        })
     }
 
     /// Emits a call of `func` with `args` (by parameter) as `abi` says; its
@@ -251,7 +296,8 @@ impl<'a> Builder<'a> {
                     (Some(Receiver::Expr), ExprKind::Field { base, .. }) => Some(base.as_ref()),
                     _ => None,
                 };
-                let Some(Arg::Place(place)) = self.receiver_arg(receiver, base, &info.through, ParamMode::Mut, span)
+                let Some(Arg::Place(place)) =
+                    self.receiver_arg(receiver, base, &info.through, ParamMode::Mut, None, span)
                 else {
                     return None;
                 };

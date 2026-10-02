@@ -133,7 +133,7 @@ narrowed as below.
 | D6 | A `mut` argument when the callee unravels | Its writes are visible, as if it were passed by reference: a `defer` in the caller sees what the callee left. The Lua backend only copies back on return, and that's documented as a deviation | V1 |
 | D7 | Dropping a suspended shuttle | Runs its pending `defer`s, the same as closing it: only the ones whose `defer` statement the shuttle has already run, in scopes it's still inside (§10.14). The Lua backend leaves them to the garbage collector | V2 |
 | D8 | `x.hash()` values | Deterministic, but each backend's own. Nothing may depend on them matching | V1 |
-| D9 | Where `#builtin` bodies come from | Loom code in `runtime/vm/*.loom` for anything that calls back into Loom (`map`, `sort`, `fold`, showing a list), and Rust natives for leaves (UTF-8, number formatting, I/O). A native never calls Loom code | V1 |
+| D9 | Where `#builtin` bodies come from | Heddle the builder writes, one function per instance, for anything that calls back into Loom or is generic (`push`, `sort`, `map`, showing a list); Rust natives for leaves (UTF-8, number formatting, I/O, moving bytes). A native never calls Loom code. Builtin bodies and glue have no source locations, so an unravel in one is reported at its caller, as Lua's `error(msg, level)` does | V1 |
 | D10 | Where programs run | Inside `loom`'s own process: no child process, no temp file. Ctrl-C is a flag the VM checks (§9.5) | V1 |
 | D11 | Names | Heddle for the IR, Treadle for the VM, `.treadle` for image files | now |
 
@@ -1273,7 +1273,7 @@ In:
   machines (not fused yet).
 - Constants computed on first read, as on Lua. The run-time parts of
   reflection.
-- `runtime/vm/*.loom` and the natives (D9); `loom_sys`, shared with the Lua
+- the builder's `#builtin` bodies and the natives (D9); `loom_sys`, shared with the Lua
   host; `loom test --backend vm`; buffered output, backtraces, Ctrl-C (130),
   `process.exit`.
 

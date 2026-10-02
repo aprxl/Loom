@@ -167,6 +167,10 @@ impl<'a> Builder<'a> {
                 let target = self.coerced_ty(e);
                 self.result(target, true, v, e.span)
             }
+            Coercion::ToSlice => {
+                let from = self.ty_of(e);
+                self.slice_of(v, from, e.span)
+            }
             Coercion::ToUnion | Coercion::WidenUnion => {
                 let target = self.coerced_ty(e);
                 let from = self.ty_of(e);
@@ -175,7 +179,6 @@ impl<'a> Builder<'a> {
             other => {
                 let what = match other {
                     Coercion::ToAny(_) => "`any` values",
-                    Coercion::ToSlice => "slices",
                     Coercion::ToStream(_) => "streams",
                     _ => "this conversion",
                 };
@@ -291,8 +294,9 @@ impl<'a> Builder<'a> {
             }
             ExprKind::Const(_) => self.unsupported(span, "`const` expressions computed while compiling"),
             ExprKind::Template(parts) => self.template_string(e, parts),
-            ExprKind::Array(_) | ExprKind::ArrayRepeat { .. } => self.unsupported(span, "arrays and lists"),
-            ExprKind::Index { .. } => self.unsupported(span, "indexing"),
+            ExprKind::Array(items) => self.array_lit(e, items),
+            ExprKind::ArrayRepeat { value, count } => self.array_repeat(e, value, count),
+            ExprKind::Index { base, args } => self.index(e, base, args),
             ExprKind::Map(_) => self.unsupported(span, "maps"),
             ExprKind::Lambda { .. } => self.unsupported(span, "lambdas"),
             ExprKind::Range { .. } => self.unsupported(span, "ranges as values"),
@@ -844,6 +848,9 @@ impl<'a> Builder<'a> {
     }
 
     fn for_expr(&mut self, e: &'a hir::Expr, pat: &'a hir::Pat, iter: &'a hir::Expr, body: &'a Block) -> Option<()> {
+        if let Some(seq) = self.seq_of(self.ty_of(iter)) {
+            return self.for_seq(e, pat, iter, body, seq);
+        }
         let ExprKind::Range { lo: Some(lo), hi, inclusive } = &iter.kind else {
             return self.unsupported(iter.span, "`for` loops over anything but a range");
         };
@@ -940,6 +947,7 @@ impl<'a> Builder<'a> {
                 Some((place, self.local_ty(*l)))
             }
             ExprKind::Field { .. } | ExprKind::LeadingDot(_) | ExprKind::ConstField { .. } => self.field_place(e),
+            ExprKind::Index { .. } => self.index_place(e),
             _ => self.unsupported(span, "assigning to this"),
         }
     }

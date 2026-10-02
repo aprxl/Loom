@@ -1,0 +1,8 @@
+use std.io.print
+
+fn main() {
+    var xs: List[i32] = [1, 2]
+    xs.push(3)
+    print(xs)
+    xs.insert(9, 4)
+}

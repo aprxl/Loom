@@ -1,0 +1,42 @@
+// Every method of lists and slices, on lists, arrays and slices, with
+// elements that own memory and ones that don't.
+use std.io.print
+warp P: Show, Eq, Ord { name: String, n: i32 }
+fn main() {
+    var xs: List[i32] = [5, 3, 9, 1]
+    xs.push(7)
+    print("{xs} {xs.len()} {xs.is_empty()}")
+    print("{xs.pop()} {xs.get(1)} {xs.get(10)} {xs.first()} {xs.last()}")
+    xs.insert(0, 42)
+    print("{xs.remove(2)} {xs}")
+    xs.sort()
+    print("{xs} {xs.contains(9)} {xs.index_of(9)} {xs.index_of(100)}")
+    xs.reverse()
+    xs.swap(0, 1)
+    print("{xs}")
+    var ss: List[String] = ["pear", "apple", "fig", "apple"]
+    ss.sort()
+    print("{ss} {ss.contains("fig")}")
+    let c = ss.copy()
+    ss.clear()
+    print("{c} {ss}")
+    var t = c.to_list()
+    t.truncate(2)
+    t.extend(c)
+    print("{t}")
+    var arr = [4, 2, 8]
+    arr.sort()
+    arr.fill(1)
+    print("{arr}")
+    var dst: List[String] = ["a", "b", "c"]
+    dst.copy_from(["x", "y"])
+    print("{dst}")
+    let z: String = "z"
+    let f = List.filled(z, 3)
+    print("{f}")
+    var ps: List[P] = [P(name: "b", n: 2), P(name: "a", n: 9), P(name: "b", n: 1)]
+    ps.sort()
+    print("{ps}")
+    let empty: List[i32] = List()
+    print("{empty.first()} {empty.last()}")
+}
