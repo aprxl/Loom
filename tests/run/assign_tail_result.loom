@@ -1,0 +1,16 @@
+// An `if` whose branches end in assignments, where `() ! E` is expected:
+// it's a `()`, which the function's result takes as `ok(())`.
+use std.io.print
+warp Fault: Show { case Bad }
+warp M { pc: u16, keys: u16 }
+fn step(mut m: M, op: u16) ! Fault {
+    match op {
+        0 => if m.keys == 0 { m.pc = 5 } else { m.pc = 6 }
+        1 => fail .Bad
+        _ => m.pc = 9
+    }
+}
+fn main() {
+    var m = M(pc: 0, keys: 0)
+    print("{step(mut m, 0) is ok(_)} {m.pc} {step(mut m, 1) is ok(_)} {step(mut m, 2) is ok(_)} {m.pc}")
+}

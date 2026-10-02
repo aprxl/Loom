@@ -620,7 +620,13 @@ impl Checker<'_> {
             return self.tcx.unit;
         };
         if let Some(t) = expected {
-            self.with_narrowed(narrowed, |this| this.check_block(then, Some(t)));
+            let then_ty = self.with_narrowed(narrowed, |this| this.check_block(then, Some(t)));
+            // `if c { x = 1 } else { … }` where `() ! E` is expected: a `()`,
+            // which what's around it converts.
+            if then_ty == self.tcx.unit && self.resolve(t) != self.tcx.unit {
+                self.check_coerce(else_, self.tcx.unit);
+                return self.tcx.unit;
+            }
             self.check_coerce(else_, t);
             return t;
         }
