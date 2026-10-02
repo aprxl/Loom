@@ -587,6 +587,22 @@ fn immediates(f: &Func) -> (HashMap<(usize, usize), Fold>, HashSet<Value>) {
     let consts = constants(f);
     let small = |v: Value| consts.get(&v).and_then(|&k| i16::try_from(k).ok());
     let mask = |v: Value| consts.get(&v).and_then(|&k| u16::try_from(k).ok());
+    // Values below a constant: an unsigned `x % k`, or `x & m`.
+    let mut below: HashMap<Value, u64> = HashMap::new();
+    for b in &f.blocks {
+        for inst in &b.insts {
+            let bound = match &inst.kind {
+                InstKind::Rem { ty, b, .. } if !ty.signed => consts.get(b).map(|&k| k as u64),
+                InstKind::Bit { op: BitOp::And, a, b } => {
+                    consts.get(b).or_else(|| consts.get(a)).and_then(|&m| (m as u64).checked_add(1))
+                }
+                _ => None,
+            };
+            if let (Some(k), [r]) = (bound, inst.results.as_slice()) {
+                below.insert(*r, k);
+            }
+        }
+    }
     let mut folds = HashMap::new();
     let mut folded: HashMap<Value, usize> = HashMap::new();
     for (bi, b) in f.blocks.iter().enumerate() {
@@ -631,6 +647,8 @@ fn immediates(f: &Func) -> (HashMap<(usize, usize), Fold>, HashSet<Value>) {
                         *folded.entry(*index).or_default() += 1;
                         Some((Fold::Gone, *len))
                     }
+                    // `x % k` (or `x & m`, unsigned) is below `k` (`m + 1`).
+                    (_, Some(&n)) if below.get(index).is_some_and(|&k| k <= n as u64) => Some((Fold::Gone, *len)),
                     (_, Some(&n)) => u32::try_from(n as u64).ok().map(|n| (Fold::Len(n), *len)),
                     _ => None,
                 },
