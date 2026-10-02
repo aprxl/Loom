@@ -44,8 +44,9 @@ impl<'a> Builder<'a> {
         if align > 8 {
             return self.unsupported(span, "constants aligned past 8 bytes");
         }
-        let off = self.data_bytes as u32;
-        self.data_bytes += 8 + size.div_ceil(8) * 8;
+        let off = (self.data.len() * 8) as u32;
+        let words = 1 + size.div_ceil(8) as usize;
+        self.data.extend(std::iter::repeat_n(0, words));
         self.globals.insert(def, (off, ty));
         Some((off, ty))
     }

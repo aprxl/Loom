@@ -147,8 +147,11 @@ impl<'a> Builder<'a> {
                 let Some(tested) = self.tables().type_tests.get(&pat.id).copied() else {
                     return self.unsupported(span, "this type test");
                 };
-                if !matches!(self.tcx().kind(ty), TyKind::Union(_)) {
-                    return self.unsupported(span, "type tests on `any` values");
+                if let TyKind::Any(_) = self.tcx().kind(ty) {
+                    let Val::Mem(at) = *v else { return self.internal(span, "an `any` in registers") };
+                    let c = self.any_is(at, tested);
+                    self.br(c, yes, no);
+                    return Some(());
                 }
                 let tag = self.tag_value(v, ty, span)?;
                 let k = self.member_index(ty, tested, span)?;
@@ -222,7 +225,10 @@ impl<'a> Builder<'a> {
             }
             PatKind::TypeTest { local, .. } => {
                 let tested = self.tables().type_tests.get(&pat.id).copied()?;
-                let x = self.payload(v, ty, tested, span)?;
+                let x = match (self.tcx().kind(ty), v) {
+                    (TyKind::Any(_), &Val::Mem(at)) => self.any_value(at, tested, span)?,
+                    _ => self.payload(v, ty, tested, span)?,
+                };
                 self.bind_local(*local, x, how, span)?;
             }
             _ => {}

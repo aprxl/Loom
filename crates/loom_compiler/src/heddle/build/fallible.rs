@@ -261,7 +261,7 @@ impl<'a> Builder<'a> {
         match conv {
             ErrConv::Same => Some(v),
             ErrConv::ToUnion => self.union_of(to, from, v, span),
-            ErrConv::ToAny(_) => self.unsupported(span, "`any` errors"),
+            ErrConv::ToAny(wefts) => self.any_of(v, from, to, wefts, span),
             ErrConv::Absorb { case, key, .. } => {
                 // The warp's case that holds it: a value of `to`.
                 let info = self.warp_info(to)?;
@@ -457,13 +457,22 @@ impl<'a> Builder<'a> {
         if self.live() {
             let depth = self.open_scope();
             let mut ok = true;
-            if let (Some(l), Some((to, store))) = (info.binding, err) {
-                let ev = match store {
-                    ErrStore::Vars(vars) => Val::Regs(self.read_all(&vars)),
-                    ErrStore::Slot(ptr) => Val::Mem(ptr),
-                };
-                let _ = to;
-                ok = self.bind_owned(l, ev, span).is_some();
+            if let (Some(l), Some((_, store))) = (info.binding, err) {
+                match store {
+                    ErrStore::Vars(vars) => {
+                        let ev = Val::Regs(self.read_all(&vars));
+                        ok = self.bind_owned(l, ev, span).is_some();
+                    }
+                    // The error's slot is the local's: it has a cleanup
+                    // already, for the whole statement (and is zero on the
+                    // ways that never reach here).
+                    ErrStore::Slot(ptr) => match self.f.slot_of.get(&ptr).copied() {
+                        Some(slot) => {
+                            self.f.locals.insert(l, super::value::Storage::Slot(slot));
+                        }
+                        None => ok = self.internal::<()>(span, "a `mend`'s error outside a slot").is_some(),
+                    },
+                }
             }
             if ok && self.expr_into(handler, &join).is_some() {
                 let start = self.scope_start(depth);

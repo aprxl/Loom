@@ -1,0 +1,32 @@
+// `any` values that own memory, in lists, changed through `mut self`,
+// shown, taken out, and tested for their type.
+use std.io.print
+weft Named: Show {
+    fn name(self) -> String
+    fn rename(mut self, to: str)
+}
+warp Pet: Named, Show {
+    nick: String
+    tags: List[String]
+    fn name(self) -> String = "pet {.nick}"
+    fn rename(mut self, to: str) { .nick = to.to_string() }
+}
+warp Bot: Named, Show {
+    id: u32
+    fn name(self) -> String = "bot {.id}"
+    fn rename(mut self, to: str) { .id = to.len() as u32 }
+}
+fn main() {
+    var all: List[any Named] = [Pet(nick: "rex", tags: ["good"]), Bot(id: 7)]
+    all.push(Pet(nick: "tom", tags: []))
+    for mut x in all { x.rename("renamed") }
+    for x in all { print("{x.name()} {x}") }
+    let first = all.remove(0)
+    print("{first} {all.len()}")
+    let shown: List[any Show] = [1, "two", 3.5, Bot(id: 1)]
+    print(shown)
+    match first {
+        p: Pet => print("a pet called {p.nick} with {p.tags}")
+        _ => print("not a pet")
+    }
+}

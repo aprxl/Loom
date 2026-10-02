@@ -21,6 +21,7 @@
 //! What Treadle can't run yet is reported as U0102, like the Lua backend
 //! does.
 
+mod any;
 mod builtin;
 mod call;
 mod cleanup;
@@ -84,6 +85,10 @@ enum FnKey {
     ConstInit(crate::hir::DefId),
     /// Drops what the constants own, when `main` is done.
     ConstExit,
+    /// Shows a value of a type in an `any`, given its address.
+    AnyShow(Ty, bool),
+    /// A weft method instance as an `any`'s vtable calls it.
+    Dyn(BodyId),
     /// Code for the values of a type.
     Glue(Glue, Ty),
 }
@@ -243,8 +248,15 @@ pub(super) struct Builder<'a> {
     main_span: Option<Span>,
     /// Each constant read, by where it is in the data and its type.
     globals: IndexMap<crate::hir::DefId, (u32, Ty)>,
-    /// How many bytes of data the constants take.
-    data_bytes: u64,
+    /// The program's data as it starts: constants (zero until computed)
+    /// and vtables.
+    data: Vec<u64>,
+    /// Each weft method called through `any`: its slot in every vtable.
+    dyn_slots: IndexMap<crate::hir::DefId, u32>,
+    /// The number of each type made into an `any`.
+    type_ids: IndexMap<Ty, u64>,
+    /// Each vtable made, by its type and wefts: where it is in the data.
+    vtable_at: HashMap<(Ty, Vec<crate::hir::DefId>), u32>,
     /// The lambdas made so far, by the body that made them.
     lambdas: HashMap<(BodyId, crate::hir::HirId), lambda::LambdaInfo<'a>>,
     f: FnState<'a>,
@@ -269,7 +281,10 @@ pub fn build(p: &Program, typed: &Typed) -> Result<Module, Vec<Diagnostic>> {
         main_span: None,
         lambdas: HashMap::new(),
         globals: IndexMap::new(),
-        data_bytes: 0,
+        data: Vec::new(),
+        dyn_slots: IndexMap::new(),
+        type_ids: IndexMap::new(),
+        vtable_at: HashMap::new(),
         f: FnState::default(),
     };
     let Some(main) = b.find_main() else { return Err(b.diags) };
@@ -298,7 +313,7 @@ pub fn build(p: &Program, typed: &Typed) -> Result<Module, Vec<Diagnostic>> {
         funcs,
         strings: b.strings.into_keys().collect(),
         fmts: b.fmts.into_keys().collect(),
-        data: vec![0; (b.data_bytes / 8) as usize],
+        data: b.data,
         entry,
     };
     if let Err(e) = super::verify(&module) {
@@ -439,6 +454,10 @@ impl<'a> Builder<'a> {
             FnKey::Step(step) => format!("stream.{}", self.step_name(step)),
             FnKey::ConstInit(def) => format!("{}.init", self.p.def_path(def)),
             FnKey::ConstExit => "consts.drop".to_string(),
+            FnKey::AnyShow(ty, debug) => {
+                format!("{}[{}].any", if debug { "debug" } else { "show" }, self.tcx().display(self.p, ty))
+            }
+            FnKey::Dyn(id) => format!("{}.dyn", self.body_name(id)),
             FnKey::Glue(g, ty) => {
                 let what = match g {
                     Glue::Drop => "drop",
@@ -465,7 +484,8 @@ impl<'a> Builder<'a> {
         let name = self.key_name(key);
         let body = match key {
             FnKey::Body(id) | FnKey::Main(id) | FnKey::Lambda(id, _) | FnKey::Thunk(id) => id,
-            FnKey::Glue(..) | FnKey::Step(_) | FnKey::ConstInit(_) | FnKey::ConstExit => BodyId(0),
+            FnKey::Glue(..) | FnKey::Step(_) | FnKey::ConstInit(_) | FnKey::ConstExit | FnKey::AnyShow(..) => BodyId(0),
+            FnKey::Dyn(id) => id,
         };
         self.f = FnState { body, ..FnState::default() };
         let entry = self.new_block();
@@ -487,6 +507,8 @@ impl<'a> Builder<'a> {
             FnKey::Step(step) => self.step_func(step),
             FnKey::ConstInit(def) => self.const_init(def),
             FnKey::ConstExit => self.const_exit(),
+            FnKey::AnyShow(ty, debug) => self.any_show_func(ty, debug),
+            FnKey::Dyn(id) => self.dyn_func(id, span),
             FnKey::Glue(g, ty) => self.glue_func(g, ty),
         };
         self.zero_owned_slots();
@@ -506,14 +528,14 @@ impl<'a> Builder<'a> {
 
     fn key_span(&self, key: FnKey) -> Span {
         match key {
-            FnKey::Body(id) | FnKey::Main(id) | FnKey::Thunk(id) => {
+            FnKey::Body(id) | FnKey::Main(id) | FnKey::Thunk(id) | FnKey::Dyn(id) => {
                 self.p.def(self.typed.results.instance(id).def).span
             }
             FnKey::Lambda(id, e) => match self.lambdas.get(&(id, e)) {
                 Some(info) => info.expr.span,
                 None => self.p.def(self.typed.results.instance(id).def).span,
             },
-            FnKey::Glue(..) | FnKey::Step(_) | FnKey::ConstExit => {
+            FnKey::Glue(..) | FnKey::Step(_) | FnKey::ConstExit | FnKey::AnyShow(..) => {
                 self.main_span.expect("set before anything is built")
             }
             FnKey::ConstInit(def) => self.p.def(def).span,

@@ -1,0 +1,6 @@
+pet renamed Pet(nick: "renamed", tags: ["good"])
+bot 7 Bot(id: 7)
+pet renamed Pet(nick: "renamed", tags: [])
+Pet(nick: "renamed", tags: ["good"]) 2
+[1, two, 3.5, Bot(id: 1)]
+a pet called renamed with [good]

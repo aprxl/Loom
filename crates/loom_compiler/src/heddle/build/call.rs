@@ -45,8 +45,8 @@ impl<'a> Builder<'a> {
         let Some(info) = tables.calls.get(&e.id).cloned() else {
             return self.unsupported(span, "this call");
         };
-        if info.dynamic.is_some() {
-            return self.unsupported(span, "`any` values");
+        if let Some(method) = info.dynamic {
+            return self.dyn_call(e, callee, args, &info, method);
         }
         let p = self.p;
         let def = self.typed.results.instance(info.callee).def;

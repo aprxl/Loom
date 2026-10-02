@@ -167,6 +167,11 @@ impl<'a> Builder<'a> {
                 let target = self.coerced_ty(e);
                 self.result(target, true, v, e.span)
             }
+            Coercion::ToAny(wefts) => {
+                let wefts = wefts.clone();
+                let (from, to) = (self.ty_of(e), self.coerced_ty(e));
+                self.any_of(v, from, to, &wefts, e.span)
+            }
             Coercion::ToSlice => {
                 let from = self.ty_of(e);
                 self.slice_of(v, from, e.span)
@@ -180,13 +185,6 @@ impl<'a> Builder<'a> {
                 let target = self.coerced_ty(e);
                 let from = self.ty_of(e);
                 self.union_of(target, from, v, e.span)
-            }
-            other => {
-                let what = match other {
-                    Coercion::ToAny(_) => "`any` values",
-                    _ => "this conversion",
-                };
-                self.unsupported(e.span, what)
             }
         }
     }
