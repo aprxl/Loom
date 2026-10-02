@@ -40,4 +40,8 @@ fn main() {
     let lines = "a\nb".lines()
     for line in lines { }
     let again = lines.count()                    //~ M0101
+    // Given to another stream's method, too.
+    let tail = (5..7).map(_ * 2)
+    let both = (1..3).chain(tail).count()
+    let left = tail.count()                      //~ M0101
 }

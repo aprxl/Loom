@@ -577,7 +577,8 @@ impl Checker<'_> {
         }
         let Some(info) = self.b.calls.get(&call.id).cloned() else {
             for arg in args {
-                self.mv(cx, &arg.value, false);
+                let stream = self.is_stream_expr(&arg.value);
+                self.mv(cx, &arg.value, stream);
             }
             return;
         };
@@ -620,8 +621,11 @@ impl Checker<'_> {
             self.move_local(cx, callee.id, l, &[], callee.span);
         }
         for (i, arg) in args.iter().enumerate() {
+            // A stream given to a call is used up, whatever the parameter:
+            // `a.chain(b)` reads `b` to its end.
             let take = mode_of(super::ArgSource::Arg(i)) == ParamMode::Take;
-            self.mv(cx, &arg.value, take);
+            let stream = self.is_stream_expr(&arg.value);
+            self.mv(cx, &arg.value, take || stream);
             // Taken, it's the callee's to keep: `fs.push(x => x * k)`.
             if take {
                 self.check_escape(cx, &arg.value, Escape::Stored);
@@ -688,6 +692,11 @@ impl Checker<'_> {
     }
 
     /// Reads or moves the place `e`.
+    /// Whether `e` is a stream (and not something made into one).
+    fn is_stream_expr(&self, e: &Expr) -> bool {
+        self.b.expr_ty.get(&e.id).is_some_and(|&t| self.stream_item(t).is_some())
+    }
+
     fn mv_place(&mut self, cx: &mut MoveCx, e: &Expr, owning: bool) {
         let Some((root, path)) = self.place_of(cx, e) else { return };
         // An index's base is read, and so is the index.
