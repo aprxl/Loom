@@ -27,8 +27,9 @@ pub(super) enum Step {
         elem: Ty,
         owned: Option<Ty>,
     },
-    /// A range's values: `[0]` the next, `[8]` the high end, `[16]` flags
-    /// (1: there's a high end, 2: it's included, 4: started, 8: done).
+    /// A range's values: `[0]` the next, `[8]` the high end, `[16]` the
+    /// mode: `RANGE_TO`, `RANGE_THROUGH`, `RANGE_FROM` (`RANGE_FROM_ON`
+    /// once started), or `RANGE_DONE`.
     Range(Ty),
     /// A type that weaves `Iter`, at `[0]`: its `next` gives the items.
     Woven {
@@ -137,6 +138,13 @@ pub(super) fn writes_body(path: &str) -> bool {
                 | "std.slice.Slice.windows"
         )
 }
+
+/// A range stream's modes.
+const RANGE_TO: u64 = 0;
+const RANGE_FROM: u64 = 1;
+const RANGE_THROUGH: u64 = 2;
+const RANGE_DONE: u64 = 3;
+const RANGE_FROM_ON: u64 = 4;
 
 impl<'a> Builder<'a> {
     // ------------------------------------------------------------ boxes and steps
@@ -681,7 +689,8 @@ impl<'a> Builder<'a> {
         vec![self.load(Mem::W64, b, off, VTy::Int), self.load(Mem::W64, b, off + 8, VTy::Ptr)]
     }
 
-    /// The next value of a range (`rt.range_stream`).
+    /// The next value of a range (`rt.range_stream`), by its mode (see
+    /// [`Step::Range`]).
     fn range_next(&mut self, elem: Ty, b: Value, out: Value, span: Span) -> Option<()> {
         // A `char` steps as its code point.
         let int = match (self.int_of(elem), self.tcx().kind(elem)) {
@@ -689,84 +698,90 @@ impl<'a> Builder<'a> {
             (None, TyKind::Char) => crate::ty::IntTy { signed: false, bits: 32, size: false },
             _ => return self.unsupported(span, "streams of this range"),
         };
-        let flags = self.word(b, 16);
-        let bit = |this: &mut Self, k: u64| {
-            let m = this.iconst(k);
-            let x = this.emit1(InstKind::Bit { op: BitOp::And, a: flags, b: m }, VTy::Int);
-            let zero = this.iconst(0);
-            this.ucmp(Cmp::Ne, x, zero)
-        };
-        let done = bit(self, 8);
-        self.none_if(done);
-        let started = bit(self, 4);
-        let has_hi = bit(self, 1);
-        let x = self.new_var(VTy::Int);
-        let cur = self.word(b, 0);
-        self.write(x, cur);
-        let (step, check) = (self.new_block(), self.new_block());
-        self.br(started, step, check);
-        self.enter(step);
-        // Past the type's maximum, an open range unravels; a closed one
-        // stops before stepping past its end.
-        let one = self.iconst(1);
-        let (open, closed) = (self.new_block(), self.new_block());
-        self.br(has_hi, closed, open);
-        self.enter(open);
-        let next =
-            self.emit1(InstKind::Arith { op: IntOp::Add, policy: Policy::Trap, ty: int, a: cur, b: one }, VTy::Int);
-        self.write(x, next);
-        self.jump(check);
-        self.enter(closed);
-        let next =
-            self.emit1(InstKind::Arith { op: IntOp::Add, policy: Policy::Wrap, ty: int, a: cur, b: one }, VTy::Int);
-        self.write(x, next);
-        self.jump(check);
-        self.enter(check);
-        let v = self.read(x);
-        let four = self.iconst(4);
-        let flags = self.emit1(InstKind::Bit { op: BitOp::Or, a: flags, b: four }, VTy::Int);
-        self.set_word(b, 16, flags);
-        self.set_word(b, 0, v);
-        let (bounded, emit) = (self.new_block(), self.new_block());
-        self.br(has_hi, bounded, emit);
-        self.enter(bounded);
-        let hi = self.word(b, 8);
-        let incl = bit(self, 2);
-        let (inc_b, exc_b) = (self.new_block(), self.new_block());
-        self.br(incl, inc_b, exc_b);
-        self.enter(exc_b);
-        let inside = self.emit1(InstKind::ICmp { cmp: Cmp::Lt, unsigned: !int.signed, a: v, b: hi }, VTy::Int);
-        let (yes, stop) = (self.new_block(), self.new_block());
-        self.br(inside, yes, stop);
-        self.enter(yes);
-        self.jump(emit);
-        self.enter(inc_b);
-        let inside = self.emit1(InstKind::ICmp { cmp: Cmp::Le, unsigned: !int.signed, a: v, b: hi }, VTy::Int);
-        let (yes2, stop2) = (self.new_block(), self.new_block());
-        self.br(inside, yes2, stop2);
-        self.enter(yes2);
-        // The last value of an inclusive range: done after it.
-        let last = self.ucmp(Cmp::Eq, v, hi);
-        let (mark, go) = (self.new_block(), self.new_block());
-        self.br(last, mark, go);
-        self.enter(mark);
-        let eight = self.iconst(8);
-        let f = self.word(b, 16);
-        let f = self.emit1(InstKind::Bit { op: BitOp::Or, a: f, b: eight }, VTy::Int);
-        self.set_word(b, 16, f);
-        self.jump(go);
-        self.enter(go);
-        self.jump(emit);
-        for s in [stop, stop2] {
-            self.enter(s);
-            let eight = self.iconst(8);
-            let f = self.word(b, 16);
-            let f = self.emit1(InstKind::Bit { op: BitOp::Or, a: f, b: eight }, VTy::Int);
-            self.set_word(b, 16, f);
-            self.ret_int(0);
-        }
-        self.enter(emit);
+        let mode = self.word(b, 16);
         let v = self.word(b, 0);
+        let x = self.new_var(VTy::Int);
+        self.write(x, v);
+        let one = self.iconst(1);
+        let emit = self.new_block();
+        let add = |this: &mut Self, policy: Policy| {
+            this.emit1(InstKind::Arith { op: IntOp::Add, policy, ty: int, a: v, b: one }, VTy::Int)
+        };
+        let below = |this: &mut Self, cmp: Cmp, hi: Value| {
+            this.emit1(InstKind::ICmp { cmp, unsigned: !int.signed, a: v, b: hi }, VTy::Int)
+        };
+        let is = |this: &mut Self, k: u64| {
+            let k = this.iconst(k);
+            this.ucmp(Cmp::Eq, mode, k)
+        };
+        let set_mode = |this: &mut Self, k: u64| {
+            let k = this.iconst(k);
+            this.set_word(b, 16, k);
+        };
+
+        // `lo..hi`: below the end, the next is one more (which can't wrap).
+        let (excl, other) = (self.new_block(), self.new_block());
+        let c = is(self, RANGE_TO);
+        self.br(c, excl, other);
+        self.enter(excl);
+        let hi = self.word(b, 8);
+        let inside = below(self, Cmp::Lt, hi);
+        let (go, stop) = (self.new_block(), self.new_block());
+        self.br(inside, go, stop);
+        self.enter(go);
+        let next = add(self, Policy::Wrap);
+        self.set_word(b, 0, next);
+        self.jump(emit);
+        self.enter(stop);
+        self.ret_int(0);
+
+        // `lo..=hi`: at the end, done after it.
+        self.enter(other);
+        let (incl, other) = (self.new_block(), self.new_block());
+        let c = is(self, RANGE_THROUGH);
+        self.br(c, incl, other);
+        self.enter(incl);
+        let hi = self.word(b, 8);
+        let inside = below(self, Cmp::Le, hi);
+        let (go, stop) = (self.new_block(), self.new_block());
+        self.br(inside, go, stop);
+        self.enter(stop);
+        self.ret_int(0);
+        self.enter(go);
+        let last = self.ucmp(Cmp::Eq, v, hi);
+        let (mark, step) = (self.new_block(), self.new_block());
+        self.br(last, mark, step);
+        self.enter(mark);
+        set_mode(self, RANGE_DONE);
+        self.jump(emit);
+        self.enter(step);
+        let next = add(self, Policy::Wrap);
+        self.set_word(b, 0, next);
+        self.jump(emit);
+
+        // `lo..`: the first value as it is, then each one more, which
+        // unravels past the type's maximum (only when it's asked for).
+        self.enter(other);
+        let (fresh, other) = (self.new_block(), self.new_block());
+        let c = is(self, RANGE_FROM);
+        self.br(c, fresh, other);
+        self.enter(fresh);
+        set_mode(self, RANGE_FROM_ON);
+        self.jump(emit);
+        self.enter(other);
+        let (on, done) = (self.new_block(), self.new_block());
+        let c = is(self, RANGE_FROM_ON);
+        self.br(c, on, done);
+        self.enter(done);
+        self.ret_int(0);
+        self.enter(on);
+        let next = add(self, Policy::Trap);
+        self.set_word(b, 0, next);
+        self.write(x, next);
+        self.jump(emit);
+
+        self.enter(emit);
+        let v = self.read(x);
         self.store_val(out, 0, elem, &Val::Regs(vec![v]), span)?;
         self.ret_int(1);
         Some(())
@@ -869,7 +884,16 @@ impl<'a> Builder<'a> {
                 let b = self.new_box(step)?;
                 self.set_word(b, 0, r[0]);
                 self.set_word(b, 8, r[1]);
-                self.set_word(b, 16, r[2]);
+                // The range's flags (1: there's a high end, 2: it's
+                // included) as a mode: `flags & 2`, or `RANGE_FROM` without
+                // a high end.
+                let flags = r[2];
+                let (one, two) = (self.iconst(1), self.iconst(2));
+                let has_hi = self.emit1(InstKind::Bit { op: BitOp::And, a: flags, b: one }, VTy::Int);
+                let open = self.emit1(InstKind::Bit { op: BitOp::Xor, a: has_hi, b: one }, VTy::Int);
+                let incl = self.emit1(InstKind::Bit { op: BitOp::And, a: flags, b: two }, VTy::Int);
+                let mode = self.emit1(InstKind::Bit { op: BitOp::Or, a: open, b: incl }, VTy::Int);
+                self.set_word(b, 16, mode);
                 self.stream_val(step, b, ty, span)
             }
             IterSource::Woven { next, item } => {
