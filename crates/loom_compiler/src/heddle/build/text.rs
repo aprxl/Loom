@@ -80,7 +80,10 @@ impl<'a> Builder<'a> {
                 self.enter(ok);
                 Some(Val::Regs(Vec::new()))
             }
-            _ => self.unsupported(span, &format!("`{path}` on Treadle")),
+            _ => match self.host_call(&path, def, info, args, span) {
+                Some(v) => v,
+                None => self.unsupported(span, &format!("`{path}` on Treadle")),
+            },
         }
     }
 
@@ -160,7 +163,7 @@ impl<'a> Builder<'a> {
     }
 
     /// `String`'s type.
-    fn string_ty(&self) -> Option<Ty> {
+    pub(super) fn string_ty(&self) -> Option<Ty> {
         let m = self.p.modules.iter().find(|m| m.path == "std.string")?;
         let def = *m.items.get("String")?;
         self.tcx().find(&TyKind::Adt(def, Vec::new()))

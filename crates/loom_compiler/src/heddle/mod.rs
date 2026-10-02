@@ -23,7 +23,7 @@ mod build;
 mod print;
 mod verify;
 
-pub use build::build;
+pub use build::{build, build_tests};
 pub use print::print;
 pub(crate) use verify::uses as inst_uses;
 pub use verify::verify;

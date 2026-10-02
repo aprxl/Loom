@@ -126,7 +126,8 @@ fn round_up(n: u64, align: u64) -> u64 {
 fn builtin(path: &str) -> Option<Builtin> {
     Some(match path {
         "std.slice.Slice" => Builtin::Header(2),
-        "std.string.String" | "std.list.List" => Builtin::Header(3),
+        // A `File` is its path.
+        "std.string.String" | "std.list.List" | "std.fs.File" => Builtin::Header(3),
         "std.map.Map" | "std.set.Set" => Builtin::Header(5),
         "std.iter.Stream" | "std.iter.Shuttle" => Builtin::Header(2),
         "std.sync.Atomic" => Builtin::Atomic,

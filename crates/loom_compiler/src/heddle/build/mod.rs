@@ -32,6 +32,7 @@ mod fallible;
 mod gauge;
 mod glue;
 mod hash;
+mod host;
 mod lambda;
 mod map;
 mod methods;
@@ -270,29 +271,7 @@ pub(super) struct Builder<'a> {
 /// Builds the Heddle of the program that starts at `main`. `typed` must be
 /// checked for Treadle's target and have no errors.
 pub fn build(p: &Program, typed: &Typed) -> Result<Module, Vec<Diagnostic>> {
-    let mut b = Builder {
-        p,
-        typed,
-        diags: Vec::new(),
-        reported: HashSet::new(),
-        funcs: Vec::new(),
-        ids: IndexMap::new(),
-        queue: VecDeque::new(),
-        strings: IndexMap::new(),
-        fmts: IndexMap::new(),
-        layouts: Layouts::new(&typed.tcx, p, &typed.results),
-        reprs: HashMap::new(),
-        drops: HashMap::new(),
-        main_span: None,
-        lambdas: HashMap::new(),
-        globals: IndexMap::new(),
-        const_exprs: HashMap::new(),
-        data: Vec::new(),
-        dyn_slots: IndexMap::new(),
-        type_ids: IndexMap::new(),
-        vtable_at: HashMap::new(),
-        f: FnState::default(),
-    };
+    let mut b = Builder::new(p, typed);
     let Some(main) = b.find_main() else { return Err(b.diags) };
     b.main_span = Some(p.def(typed.results.instance(main).def).span);
     let fails = typed.results.sigs.get(&main).is_some_and(|s| matches!(typed.tcx.kind(s.ret), TyKind::Result(..)));
@@ -305,28 +284,85 @@ pub fn build(p: &Program, typed: &Typed) -> Result<Module, Vec<Diagnostic>> {
         entry = b.func_id(FnKey::Main(main));
         b.drain();
     }
-    if let Some(&exit) = b.ids.get(&FnKey::ConstExit)
-        && b.funcs[exit.0 as usize].is_none()
-    {
-        b.build_func(FnKey::ConstExit);
-        b.drain();
+    b.finish(entry)
+}
+
+/// Builds the Heddle of the tests of the program's root file (`test name()
+/// { … }`): a module with an entry for each, which runs it as `main` runs,
+/// and the tests' names with their entries, in order.
+#[allow(clippy::type_complexity)]
+pub fn build_tests(p: &Program, typed: &Typed) -> Result<(Module, Vec<(String, FuncId)>), Vec<Diagnostic>> {
+    let mut b = Builder::new(p, typed);
+    let tests = p.root.map(|root| p.module(root).tests.clone()).unwrap_or_default();
+    let mut entries = Vec::new();
+    for def in tests {
+        let Some(id) = typed.results.find(&Instance::of(def)) else { continue };
+        b.main_span.get_or_insert(p.def(def).span);
+        entries.push((p.def(def).name.clone(), b.func_id(FnKey::Main(id))));
     }
-    if !b.diags.is_empty() {
-        return Err(b.diags);
-    }
-    let funcs = b.funcs.into_iter().map(|f| f.expect("every function queued is built")).collect();
-    let module = Module {
-        funcs,
-        strings: b.strings.into_keys().collect(),
-        fmts: b.fmts.into_keys().collect(),
-        data: b.data,
-        entry,
+    b.drain();
+    let Some(&(_, entry)) = entries.first() else {
+        return Ok((
+            Module { funcs: Vec::new(), strings: Vec::new(), fmts: Vec::new(), data: Vec::new(), entry: FuncId(0) },
+            entries,
+        ));
     };
-    if let Err(e) = super::verify(&module) {
-        let diag = Diagnostic::error(codes::U0102, format!("internal error: invalid Heddle: {e}"));
-        return Err(vec![diag]);
+    Ok((b.finish(entry)?, entries))
+}
+
+impl<'a> Builder<'a> {
+    fn new(p: &'a Program, typed: &'a Typed) -> Self {
+        Builder {
+            p,
+            typed,
+            diags: Vec::new(),
+            reported: HashSet::new(),
+            funcs: Vec::new(),
+            ids: IndexMap::new(),
+            queue: VecDeque::new(),
+            strings: IndexMap::new(),
+            fmts: IndexMap::new(),
+            layouts: Layouts::new(&typed.tcx, p, &typed.results),
+            reprs: HashMap::new(),
+            drops: HashMap::new(),
+            main_span: None,
+            lambdas: HashMap::new(),
+            globals: IndexMap::new(),
+            const_exprs: HashMap::new(),
+            data: Vec::new(),
+            dyn_slots: IndexMap::new(),
+            type_ids: IndexMap::new(),
+            vtable_at: HashMap::new(),
+            f: FnState::default(),
+        }
     }
-    Ok(module)
+
+    /// Builds what's left (the constants' drops, built once every
+    /// constant is known) and puts the module together.
+    fn finish(mut self, entry: FuncId) -> Result<Module, Vec<Diagnostic>> {
+        if let Some(&exit) = self.ids.get(&FnKey::ConstExit)
+            && self.funcs[exit.0 as usize].is_none()
+        {
+            self.build_func(FnKey::ConstExit);
+            self.drain();
+        }
+        if !self.diags.is_empty() {
+            return Err(self.diags);
+        }
+        let funcs = self.funcs.into_iter().map(|f| f.expect("every function queued is built")).collect();
+        let module = Module {
+            funcs,
+            strings: self.strings.into_keys().collect(),
+            fmts: self.fmts.into_keys().collect(),
+            data: self.data,
+            entry,
+        };
+        if let Err(e) = super::verify(&module) {
+            let diag = Diagnostic::error(codes::U0102, format!("internal error: invalid Heddle: {e}"));
+            return Err(vec![diag]);
+        }
+        Ok(module)
+    }
 }
 
 impl<'a> Builder<'a> {

@@ -49,6 +49,7 @@ pub(super) fn writes_body(path: &str) -> bool {
         || super::stream::writes_body(path)
         || path.starts_with("std.map.Map.")
         || path.starts_with("std.set.Set.")
+        || matches!(path, "std.fs.File.append" | "std.fs.File.write_line")
 }
 
 impl<'a> Builder<'a> {
@@ -58,6 +59,9 @@ impl<'a> Builder<'a> {
         let path = self.p.def_path(self.typed.results.instance(id).def);
         if super::methods::writes_body(&path) {
             return self.method_body(id, &path, span);
+        }
+        if let Some(name) = path.strip_prefix("std.fs.File.") {
+            return self.file_method(id, name, span);
         }
         let sig = self.typed.results.sigs.get(&id)?.clone();
         let tys: Vec<Ty> = sig.params.iter().map(|p| self.plain_ty(p.ty)).collect();

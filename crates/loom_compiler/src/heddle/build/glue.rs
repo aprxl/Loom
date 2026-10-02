@@ -121,7 +121,7 @@ impl<'a> Builder<'a> {
                 self.enter(done);
             }
             TyKind::Adt(def, args) => match self.p.def_path(def).as_str() {
-                "std.string.String" => self.free_buffer(ptr, 1, 1),
+                "std.string.String" | "std.fs.File" => self.free_buffer(ptr, 1, 1),
                 "std.iter.Stream" => self.drop_stream(ptr),
                 "std.map.Map" | "std.set.Set" => {
                     let c = self.coll_of(ty)?;

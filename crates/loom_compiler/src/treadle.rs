@@ -17,6 +17,27 @@ pub struct Compiled {
     pub image: Image,
 }
 
+/// Compiles the tests of a program type-checked for Treadle: the image,
+/// and each test's name and function.
+#[allow(clippy::type_complexity)]
+pub fn compile_tests(
+    db: &SourceDb,
+    p: &Program,
+    typed: &Typed,
+) -> Result<(Compiled, Vec<(String, u32)>), Vec<Diagnostic>> {
+    lower::compile_time(db, p, typed, true)?;
+    let (heddle, tests) = heddle::build_tests(p, typed)?;
+    let tests = tests.into_iter().map(|(name, f)| (name, f.0)).collect();
+    if heddle.funcs.is_empty() {
+        let image = Image::default();
+        return Ok((Compiled { heddle, image }, tests));
+    }
+    let image = codegen::generate(db, &heddle).map_err(|e| {
+        vec![Diagnostic::error(codes::U0102, format!("not implemented yet: {e}")).note("Treadle can't run this yet")]
+    })?;
+    Ok((Compiled { heddle, image }, tests))
+}
+
 /// Compiles a program type-checked for [`Target::VM`](crate::target::Target::VM)
 /// with no errors, after running its compile-time code.
 pub fn compile(db: &SourceDb, p: &Program, typed: &Typed) -> Result<Compiled, Vec<Diagnostic>> {

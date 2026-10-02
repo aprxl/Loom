@@ -74,7 +74,8 @@ impl<'a> Builder<'a> {
             }
             JoinKind::Mem { addr, slot } => {
                 let Val::Mem(ptr) = val else {
-                    return self.internal(span, "a value in registers for a join in memory");
+                    let shown = self.tcx().display(self.p, join.ty);
+                    return self.internal(span, &format!("a value in registers for a join in memory ({shown})"));
                 };
                 let at = match slot {
                     Some(slot) if self.owned_since(ptr, from) => {
@@ -213,7 +214,15 @@ impl<'a> Builder<'a> {
             ExprKind::Local(l) => {
                 let place = self.local_place(*l, span)?;
                 let lty = self.local_ty(*l);
-                self.read_place(&place, lty, span)
+                let v = self.read_place(&place, lty, span)?;
+                // Narrowed (`x is Percent`) to a gauge of a narrower float.
+                match (self.float_of(lty), self.float_of(ty)) {
+                    (Some(from), Some(to)) if from != to => {
+                        let x = self.regs(v, lty, span)?[0];
+                        Some(Val::Regs(vec![self.emit1(InstKind::FloatCast { to, a: x }, float_vty(to))]))
+                    }
+                    _ => Some(v),
+                }
             }
             ExprKind::Def { def, .. } => match &self.p.def(*def).kind {
                 DefKind::Const(_) => self.const_def(*def, ty, span),
@@ -521,7 +530,12 @@ impl<'a> Builder<'a> {
                 if !self.live() {
                     return None;
                 }
-                Val::Regs(Vec::new())
+                // An assignment's `()`, converted as the block's value is
+                // (into `() ! E`, say).
+                match &last.kind {
+                    StmtKind::Expr(tail) => self.coerce(tail, Val::Regs(Vec::new()))?,
+                    _ => Val::Regs(Vec::new()),
+                }
             }
         };
         if !self.live() {

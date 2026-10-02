@@ -76,7 +76,12 @@ enum Command {
     /// Check a Loom file for errors without writing anything.
     Check { file: PathBuf },
     /// Run a file's tests (`test name() { … }`).
-    Test { file: PathBuf },
+    Test {
+        file: PathBuf,
+        /// What runs the tests: Lua, or Treadle, Loom's own VM.
+        #[arg(long, value_enum, default_value_t = Backend::Lua)]
+        backend: Backend,
+    },
     /// Open the documentation (the language and std) in your browser. It's built in, so it works offline.
     Docs {
         /// Only print where the docs are; don't open a browser.
@@ -165,7 +170,8 @@ fn run(cli: Cli) -> ExitCode {
         Command::Check { file } => check(&file, color),
         Command::Run { file, backend: Backend::Lua, args } => run_file(&file, &args, color),
         Command::Run { file, backend: Backend::Vm, args } => run_vm(&file, &args, color),
-        Command::Test { file } => test_file(&file, color),
+        Command::Test { file, backend: Backend::Lua } => test_file(&file, color),
+        Command::Test { file, backend: Backend::Vm } => test_vm(&file, color),
         Command::Docs { no_open } => docs::docs(!no_open),
         Command::LuaHost { bundle, test: true, .. } => lua_host_tests(&bundle),
         Command::LuaHost { bundle, test: false, program, args } => lua_host(&bundle, program, args),
@@ -449,9 +455,46 @@ fn lua_host_tests(bundle: &Path) -> ExitCode {
             return exit_code(&outcome);
         }
     };
+    test_report(&runs)
+}
+
+/// `loom test --backend vm`: compile the tests for Treadle, and run each
+/// here, on a machine of its own, its output kept for the report.
+fn test_vm(path: &Path, color: ColorMode) -> ExitCode {
+    let run = || -> Result<ExitCode, ExitCode> {
+        let (db, resolved, typed) = typecheck_for(path, color, Target::VM)?;
+        let (compiled, tests) = match treadle::compile_tests(&db, &resolved.program, &typed) {
+            Ok(done) => done,
+            Err(diagnostics) => {
+                report(&db, path, &diagnostics, "compile", color)?;
+                return Err(ExitCode::from(EXIT_COMPILE_ERROR));
+            }
+        };
+        let mut runs = Vec::with_capacity(tests.len());
+        for (name, func) in tests {
+            let buffer = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+            let host = Host::captured(buffer.clone());
+            let outcome = match loom_vm::Vm::new(&compiled.image, host, &loom_vm::Config::default()) {
+                Ok(mut vm) => match vm.call(func, &[]) {
+                    Ok(_) => vm.leaks().unwrap_or(Outcome::Finished),
+                    Err(failed @ Outcome::Failed { .. }) => vm.leaks().unwrap_or(failed),
+                    Err(outcome) => outcome,
+                },
+                Err(outcome) => outcome,
+            };
+            let output = String::from_utf8_lossy(&buffer.borrow()).into_owned();
+            runs.push(loom_host::TestRun { name, outcome, output });
+        }
+        Ok(test_report(&runs))
+    };
+    run().unwrap_or_else(|code| code)
+}
+
+/// Prints what each test did, and how it went overall.
+fn test_report(runs: &[loom_host::TestRun]) -> ExitCode {
     let plural = |n: usize| if n == 1 { "" } else { "s" };
     println!("running {} test{}", runs.len(), plural(runs.len()));
-    for run in &runs {
+    for run in runs {
         let verdict = if run.outcome == Outcome::Finished { "ok" } else { "FAILED" };
         println!("test {} ... {verdict}", run.name);
     }

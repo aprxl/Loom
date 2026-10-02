@@ -90,6 +90,12 @@ impl<'a> Builder<'a> {
     pub(super) fn gauge_test(&mut self, def: DefId, v: Value, source: Ty) -> Option<Value> {
         let base = self.tcx().degauge(self.typed.results.gauges.get(&def)?.base);
         let source = self.tcx().degauge(source);
+        if let (Some(s), Some(b)) = (self.float_of(source), self.float_of(base))
+            && s != b
+        {
+            let x = self.emit1(InstKind::FloatCast { to: b, a: v }, super::expr::float_vty(b));
+            return Some(self.gauge_check(def, x));
+        }
         if let (Some(s), Some(b)) = (self.int_of(source), self.int_of(base))
             && !s.widens_to(b)
         {
