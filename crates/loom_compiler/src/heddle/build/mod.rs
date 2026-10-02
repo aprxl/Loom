@@ -25,6 +25,7 @@ mod builtin;
 mod call;
 mod cleanup;
 mod compare;
+mod consts;
 mod expr;
 mod fallible;
 mod glue;
@@ -77,6 +78,10 @@ enum FnKey {
     Thunk(BodyId),
     /// The step function of a kind of stream (see `stream.rs`).
     Step(stream::Step),
+    /// Computes a constant with a type (see `consts.rs`).
+    ConstInit(crate::hir::DefId),
+    /// Drops what the constants own, when `main` is done.
+    ConstExit,
     /// Code for the values of a type.
     Glue(Glue, Ty),
 }
@@ -211,6 +216,9 @@ struct FnState<'a> {
     defer_flags: HashMap<LocalId, Vec<u32>>,
     /// Dot-blocks being built: their subjects' places.
     subjects: HashMap<HirId, (value::Place, Ty)>,
+    /// Variables a `mut` argument was given in memory of their own for:
+    /// written back after the call.
+    writebacks: Vec<(Vec<Var>, Ty, Value)>,
 }
 
 pub(super) struct Builder<'a> {
@@ -229,6 +237,10 @@ pub(super) struct Builder<'a> {
     /// Where `main` is: glue, which no one line of the program made, is
     /// said to be there.
     main_span: Option<Span>,
+    /// Each constant read, by where it is in the data and its type.
+    globals: IndexMap<crate::hir::DefId, (u32, Ty)>,
+    /// How many bytes of data the constants take.
+    data_bytes: u64,
     /// The lambdas made so far, by the body that made them.
     lambdas: HashMap<(BodyId, crate::hir::HirId), lambda::LambdaInfo<'a>>,
     f: FnState<'a>,
@@ -252,14 +264,27 @@ pub fn build(p: &Program, typed: &Typed) -> Result<Module, Vec<Diagnostic>> {
         drops: HashMap::new(),
         main_span: None,
         lambdas: HashMap::new(),
+        globals: IndexMap::new(),
+        data_bytes: 0,
         f: FnState::default(),
     };
     let Some(main) = b.find_main() else { return Err(b.diags) };
     b.main_span = Some(p.def(typed.results.instance(main).def).span);
     let fails = typed.results.sigs.get(&main).is_some_and(|s| matches!(typed.tcx.kind(s.ret), TyKind::Result(..)));
-    let entry = b.func_id(if fails { FnKey::Main(main) } else { FnKey::Body(main) });
-    while let Some(key) = b.queue.pop_front() {
-        b.build_func(key);
+    let mut entry = b.func_id(if fails { FnKey::Main(main) } else { FnKey::Body(main) });
+    b.drain();
+    // Constants that own memory: dropped once `main` is done, by an entry
+    // that calls it and then them.
+    let owning = b.globals.values().any(|&(_, t)| b.drops.get(&t).copied().unwrap_or(false));
+    if owning && !fails {
+        entry = b.func_id(FnKey::Main(main));
+        b.drain();
+    }
+    if let Some(&exit) = b.ids.get(&FnKey::ConstExit)
+        && b.funcs[exit.0 as usize].is_none()
+    {
+        b.build_func(FnKey::ConstExit);
+        b.drain();
     }
     if !b.diags.is_empty() {
         return Err(b.diags);
@@ -269,7 +294,7 @@ pub fn build(p: &Program, typed: &Typed) -> Result<Module, Vec<Diagnostic>> {
         funcs,
         strings: b.strings.into_keys().collect(),
         fmts: b.fmts.into_keys().collect(),
-        data: Vec::new(),
+        data: vec![0; (b.data_bytes / 8) as usize],
         entry,
     };
     if let Err(e) = super::verify(&module) {
@@ -290,6 +315,25 @@ impl<'a> Builder<'a> {
             );
         }
         None
+    }
+
+    /// Builds every function queued, and those they queue.
+    fn drain(&mut self) {
+        while let Some(key) = self.queue.pop_front() {
+            self.build_func(key);
+        }
+    }
+
+    /// The function that drops the constants: built last, once every
+    /// constant is known, so not queued.
+    fn const_exit_id(&mut self) -> FuncId {
+        if let Some(&f) = self.ids.get(&FnKey::ConstExit) {
+            return f;
+        }
+        let f = FuncId(self.funcs.len() as u32);
+        self.funcs.push(None);
+        self.ids.insert(FnKey::ConstExit, f);
+        f
     }
 
     fn find_main(&mut self) -> Option<BodyId> {
@@ -324,8 +368,15 @@ impl<'a> Builder<'a> {
     fn main_entry(&mut self, main: BodyId) -> Option<Vec<VTy>> {
         let span = self.here();
         let ret = self.typed.results.sigs.get(&main)?.ret;
-        let TyKind::Result(_, err) = *self.tcx().kind(ret) else { return self.internal(span, "`main` without `! E`") };
         let func = self.func_id(FnKey::Body(main));
+        let exit = self.const_exit_id();
+        let TyKind::Result(_, err) = *self.tcx().kind(ret) else {
+            // `main` with no result: then the constants' drops.
+            self.emit(InstKind::Call { func, args: Vec::new() }, &[]);
+            self.emit(InstKind::Call { func: exit, args: Vec::new() }, &[]);
+            self.terminate(Term::Ret(Vec::new()));
+            return Some(Vec::new());
+        };
         let r = self.temp(ret, span)?;
         self.emit(InstKind::Call { func, args: vec![r] }, &[]);
         let v = Val::Mem(r);
@@ -339,10 +390,12 @@ impl<'a> Builder<'a> {
         let msg = self.sink(text::MSG);
         self.write_value(msg, e, err, None, false, span)?;
         self.drop_at(r, ret);
+        self.emit(InstKind::Call { func: exit, args: Vec::new() }, &[]);
         self.emit(InstKind::Native { name: "exit.fail", imm: 0, args: Vec::new() }, &[]);
         self.terminate(Term::Crash(1));
         self.enter(yes);
         self.drop_at(r, ret);
+        self.emit(InstKind::Call { func: exit, args: Vec::new() }, &[]);
         self.terminate(Term::Ret(Vec::new()));
         Some(Vec::new())
     }
@@ -380,6 +433,8 @@ impl<'a> Builder<'a> {
             FnKey::Lambda(id, e) => format!("{}.lambda{}", self.body_name(id), e.0),
             FnKey::Thunk(id) => format!("{}.value", self.body_name(id)),
             FnKey::Step(step) => format!("stream.{}", self.step_name(step)),
+            FnKey::ConstInit(def) => format!("{}.init", self.p.def_path(def)),
+            FnKey::ConstExit => "consts.drop".to_string(),
             FnKey::Glue(g, ty) => {
                 let what = match g {
                     Glue::Drop => "drop",
@@ -405,7 +460,7 @@ impl<'a> Builder<'a> {
         let name = self.key_name(key);
         let body = match key {
             FnKey::Body(id) | FnKey::Main(id) | FnKey::Lambda(id, _) | FnKey::Thunk(id) => id,
-            FnKey::Glue(..) | FnKey::Step(_) => BodyId(0),
+            FnKey::Glue(..) | FnKey::Step(_) | FnKey::ConstInit(_) | FnKey::ConstExit => BodyId(0),
         };
         self.f = FnState { body, ..FnState::default() };
         let entry = self.new_block();
@@ -425,6 +480,8 @@ impl<'a> Builder<'a> {
             FnKey::Lambda(id, e) => self.lambda_func(id, e),
             FnKey::Thunk(id) => self.thunk_func(id, span),
             FnKey::Step(step) => self.step_func(step),
+            FnKey::ConstInit(def) => self.const_init(def),
+            FnKey::ConstExit => self.const_exit(),
             FnKey::Glue(g, ty) => self.glue_func(g, ty),
         };
         self.zero_owned_slots();
@@ -451,7 +508,10 @@ impl<'a> Builder<'a> {
                 Some(info) => info.expr.span,
                 None => self.p.def(self.typed.results.instance(id).def).span,
             },
-            FnKey::Glue(..) | FnKey::Step(_) => self.main_span.expect("set before anything is built"),
+            FnKey::Glue(..) | FnKey::Step(_) | FnKey::ConstExit => {
+                self.main_span.expect("set before anything is built")
+            }
+            FnKey::ConstInit(def) => self.p.def(def).span,
         }
     }
 
@@ -490,6 +550,7 @@ impl<'a> Builder<'a> {
         let def = p.def(inst.def);
         match &def.kind {
             DefKind::Fn(f) if f.abi.is_none() && f.body.is_some() && !inst.forward => self.fn_body(id, f, def.span),
+            DefKind::Fn(_) if inst.forward => self.forward_body(id, def.span),
             // A weft method std leaves to the compiler, for a type that
             // doesn't write its own: derived.
             DefKind::Fn(f) if f.body.is_none() && inst.self_ty.is_some() => self.derived_method(id, def.span),
@@ -498,6 +559,55 @@ impl<'a> Builder<'a> {
             }
             _ => self.unsupported(def.span, &format!("calling `{}`", p.def_path(inst.def))),
         }
+    }
+
+    /// A weft method a `through` field gives its warp: calls the field's,
+    /// with the rest of the arguments as they came.
+    fn forward_body(&mut self, id: BodyId, span: Span) -> Option<Vec<VTy>> {
+        self.f.span = None;
+        let fwd = self.typed.results.forwards.get(&id)?.clone();
+        let sig = self.typed.results.sigs.get(&id)?.clone();
+        let abi = self.body_abi(id, span)?;
+        let target = self.body_abi(fwd.target, span)?;
+        let (sret, _, params) = self.entry_params(&abi);
+        let mut ty = self.plain_ty(sig.params.first()?.ty);
+        let mut args: Vec<Value> = sret.into_iter().collect();
+        match &abi.params[0] {
+            ParamAbi::Addr => {
+                let mut place = value::Place::At { ptr: params[0][0], off: 0 };
+                for key in &fwd.path {
+                    let pos = self.field_pos(ty, None, key, span)?;
+                    place = self.field_place_of(&place, &pos, span)?;
+                    ty = pos.ty;
+                }
+                match &target.params[0] {
+                    ParamAbi::Addr => args.push(self.place_addr(&place, span)?),
+                    ParamAbi::Regs(_) => {
+                        let v = self.read_place(&place, ty, span)?;
+                        args.extend(self.regs(v, ty, span)?);
+                    }
+                }
+            }
+            ParamAbi::Regs(_) => {
+                let mut v = Val::Regs(params[0].clone());
+                for key in &fwd.path {
+                    let pos = self.field_pos(ty, None, key, span)?;
+                    v = self.field_of(&v, &pos, span)?;
+                    ty = pos.ty;
+                }
+                match &target.params[0] {
+                    ParamAbi::Addr => args.push(self.addr_of(v, ty, span)?),
+                    ParamAbi::Regs(_) => args.extend(self.regs(v, ty, span)?),
+                }
+            }
+        }
+        for vals in params.into_iter().skip(1) {
+            args.extend(vals);
+        }
+        let func = self.func_id(FnKey::Body(fwd.target));
+        let results = self.emit(InstKind::Call { func, args }, &target.results);
+        self.terminate(Term::Ret(results));
+        Some(abi.results)
     }
 
     /// A derived weft method (`Show.show`), for its instance's `Self`.

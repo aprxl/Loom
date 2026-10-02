@@ -273,6 +273,11 @@ impl<'a> Builder<'a> {
         let span = e.span;
         let [GenericArg::Expr(index)] = args else { return self.unsupported(span, "this kind of indexing") };
         let bty = self.coerced_ty(base);
+        if let ExprKind::Range { lo, hi, inclusive } = &index.kind
+            && (matches!(self.tcx().kind(bty), TyKind::Str) || self.is_string(bty))
+        {
+            return self.substr(base, lo.as_deref(), hi.as_deref(), *inclusive, span);
+        }
         let Some(seq) = self.seq_of(bty) else {
             return self.unsupported(span, "indexing this");
         };
@@ -349,6 +354,50 @@ impl<'a> Builder<'a> {
         let at = self.elem_at(buf, start, seq.elem())?;
         let n = self.uarith(IntOp::Sub, end, start);
         Some(Val::Regs(vec![at, n]))
+    }
+
+    /// `s[lo..hi]`: the text between two byte positions, each of which must
+    /// fall between characters.
+    fn substr(
+        &mut self,
+        base: &'a hir::Expr,
+        lo: Option<&'a hir::Expr>,
+        hi: Option<&'a hir::Expr>,
+        inclusive: bool,
+        span: Span,
+    ) -> Option<Val> {
+        let v = self.expr(base)?;
+        let ty = self.coerced_ty(base);
+        let start = match lo {
+            Some(lo) => self.value(lo)?[0],
+            None => self.iconst(0),
+        };
+        let end = match hi {
+            Some(hi) => Some(self.value(hi)?[0]),
+            None => None,
+        };
+        let (p, len) = self.text_of(v, ty, span)?;
+        let (start, end) = self.range_in(start, end, inclusive, len, span)?;
+        for at in [start, end] {
+            let inside = self.ucmp(Cmp::Lt, at, len);
+            let (check, ok) = (self.new_block(), self.new_block());
+            self.br(inside, check, ok);
+            self.enter(check);
+            let at_p = self.emit1(InstKind::Index { base: p, index: at, scale: 1 }, VTy::Ptr);
+            let b = self.load(Mem::U8, at_p, 0, VTy::Int);
+            let mask = self.iconst(0xC0);
+            let top = self.emit1(InstKind::Bit { op: BitOp::And, a: b, b: mask }, VTy::Int);
+            let cont = self.iconst(0x80);
+            let mid = self.ucmp(Cmp::Eq, top, cont);
+            let fail = self.new_block();
+            self.br(mid, fail, ok);
+            self.enter(fail);
+            self.unravel_msg(&[Msg::Text("byte "), Msg::Int(at), Msg::Text(" is inside a character")], span)?;
+            self.enter(ok);
+        }
+        let from = self.emit1(InstKind::Index { base: p, index: start, scale: 1 }, VTy::Ptr);
+        let n = self.uarith(IntOp::Sub, end, start);
+        Some(Val::Regs(vec![from, n]))
     }
 
     /// The bounds `start..end` (or `..=end`, or `start..` for no `end`) of

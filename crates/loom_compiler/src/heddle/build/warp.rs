@@ -239,11 +239,7 @@ impl<'a> Builder<'a> {
 
     /// A leading `.MAX`: a constant of the expected type.
     fn leading_const(&mut self, def: DefId, ty: Ty, span: Span) -> Option<Val> {
-        let results = &self.typed.results;
-        if let Some(&v) = results.untyped_consts.get(&def) {
-            return self.int_value(v, ty, span).map(Val::Regs);
-        }
-        self.unsupported(span, "constants with a type")
+        self.const_def(def, ty, span)
     }
 
     // ------------------------------------------------------------ building values

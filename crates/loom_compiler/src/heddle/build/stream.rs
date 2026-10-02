@@ -570,7 +570,12 @@ impl<'a> Builder<'a> {
 
     /// The next value of a range (`rt.range_stream`).
     fn range_next(&mut self, elem: Ty, b: Value, out: Value, span: Span) -> Option<()> {
-        let Some(int) = self.int_of(elem) else { return self.unsupported(span, "streams of this range") };
+        // A `char` steps as its code point.
+        let int = match (self.int_of(elem), self.tcx().kind(elem)) {
+            (Some(int), _) => int,
+            (None, TyKind::Char) => crate::ty::IntTy { signed: false, bits: 32, size: false },
+            _ => return self.unsupported(span, "streams of this range"),
+        };
         let flags = self.word(b, 16);
         let bit = |this: &mut Self, k: u64| {
             let m = this.iconst(k);

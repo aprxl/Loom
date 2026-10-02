@@ -194,6 +194,10 @@ impl<'a> Builder<'a> {
     pub(super) fn expr_raw(&mut self, e: &'a hir::Expr) -> Option<Val> {
         let span = e.span;
         let ty = self.ty_of(e);
+        // A function used as a value: `String.of`, `is_prime`.
+        if let Some(&id) = self.tables().fn_values.get(&e.id) {
+            return self.fn_value(id);
+        }
         if let Some(&v) = self.tables().const_values.get(&e.id) {
             return self.const_val(v, ty, span).map(Val::Regs);
         }
@@ -213,8 +217,7 @@ impl<'a> Builder<'a> {
                 self.read_place(&place, lty, span)
             }
             ExprKind::Def { def, .. } => match &self.p.def(*def).kind {
-                DefKind::Const(_) => self.const_def(*def, ty, span).map(Val::Regs),
-                _ if let Some(&id) = self.tables().fn_values.get(&e.id) => self.fn_value(id),
+                DefKind::Const(_) => self.const_def(*def, ty, span),
                 _ => self.unsupported(span, "this kind of value"),
             },
             ExprKind::Tuple(items) => self.tuple(e, items, ty),
@@ -283,7 +286,7 @@ impl<'a> Builder<'a> {
             ExprKind::Field { .. } | ExprKind::LeadingDot(_) | ExprKind::ConstField { .. } => self.field(e),
             ExprKind::Assoc { .. } => match self.tables().assoc_values.get(&e.id).copied() {
                 Some(crate::typeck::AssocValue::Int(v)) => self.int_value(v, ty, span).map(Val::Regs),
-                Some(crate::typeck::AssocValue::Const(def)) => self.const_def(def, ty, span).map(Val::Regs),
+                Some(crate::typeck::AssocValue::Const(def)) => self.const_def(def, ty, span),
                 None => self.unsupported(span, "this kind of value"),
             },
             ExprKind::DotBlock { subject, body } => self.dot_block(e, subject, body),
@@ -439,16 +442,16 @@ impl<'a> Builder<'a> {
 
     /// A constant's value: untyped ones are literals; typed ones are
     /// computed while compiling, which Treadle doesn't read yet.
-    fn const_def(&mut self, def: crate::hir::DefId, ty: Ty, span: Span) -> Option<Vals> {
+    pub(super) fn const_def(&mut self, def: crate::hir::DefId, ty: Ty, span: Span) -> Option<Val> {
         let results = &self.typed.results;
         if let Some(&v) = results.untyped_consts.get(&def) {
-            return self.int_value(v, ty, span);
+            return self.int_value(v, ty, span).map(Val::Regs);
         }
         if let Some(&v) = results.untyped_floats.get(&def) {
             let Some(ft) = self.float_of(ty) else { return self.unsupported(span, "this constant") };
-            return Some(vec![self.fconst(v, ft)]);
+            return Some(Val::Regs(vec![self.fconst(v, ft)]));
         }
-        self.unsupported(span, "constants with a type")
+        self.read_const(def, span)
     }
 
     // ------------------------------------------------------------ statements and blocks

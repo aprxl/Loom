@@ -64,6 +64,7 @@ impl<'a> Builder<'a> {
         let abi = self.body_abi(info.callee, span)?;
         let modes: Vec<ParamMode> = sig.params.iter().map(|p| p.mode).collect();
         let recv_ty = info.args.iter().position(|&s| s == ArgSource::Receiver).map(|k| self.plain_ty(sig.params[k].ty));
+        let writebacks = self.f.writebacks.len();
         let mut worked = self.call_args(callee, args, &info, &modes, recv_ty)?;
         // A `Stream` method called on something else with items: on a
         // stream of them.
@@ -104,7 +105,9 @@ impl<'a> Builder<'a> {
             by_param.push(arg);
         }
         let func = self.func_id(super::FnKey::Body(info.callee));
-        self.emit_call(func, &abi, by_param, sig.ret, &modes, span, ty)
+        let v = self.emit_call(func, &abi, by_param, sig.ret, &modes, span, ty);
+        self.write_back(writebacks, span)?;
+        v
     }
 
     /// Works out a call's receiver and arguments, in source order: a place
@@ -195,7 +198,23 @@ impl<'a> Builder<'a> {
         let Place::Vars(vars) = place else { return Some(place) };
         let vals = self.read_all(&vars);
         let ptr = self.addr_of(Val::Regs(vals), ty, span)?;
+        // What the callee writes goes back to the variables after the call.
+        self.f.writebacks.push((vars, ty, ptr));
         Some(Place::At { ptr, off: 0 })
+    }
+
+    /// After a call: the variables given in memory of their own take back
+    /// what the callee left there.
+    fn write_back(&mut self, from: usize, span: Span) -> Option<()> {
+        for (vars, ty, ptr) in self.f.writebacks.split_off(from) {
+            if !self.live() {
+                break;
+            }
+            let v = self.load_val(ptr, 0, ty, span)?;
+            let vals = self.regs(v, ty, span)?;
+            self.write_all(&vars, &vals);
+        }
+        Some(())
     }
 
     /// A receiver of type `ty` passed to a method of a slice (`want`), when

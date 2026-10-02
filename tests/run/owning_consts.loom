@@ -1,0 +1,14 @@
+// Constants with a type that own memory: each read is a copy of its own,
+// and the constant itself is made once.
+use std.io.print
+const NAMES: List[String] = ["ada", "grace"]
+const GREETING: String = "hi {NAMES[0]}"
+const LIMIT: u32 = 10 * 1000
+warp Cfg { name: String, level: u8 }
+const DEFAULT: Cfg = Cfg(name: "base", level: 3)
+fn main() {
+    var mine = NAMES
+    mine.push("linus")
+    print("{mine} {NAMES} {LIMIT} {GREETING}")
+    print("{DEFAULT.name} {DEFAULT.level}")
+}

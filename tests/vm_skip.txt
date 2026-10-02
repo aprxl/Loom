@@ -4,22 +4,13 @@
 # passes, so take it out when it does: this list only gets shorter.
 
 any                  V1  `any` values, warps
-calls                V1  `String`
 const_eval           V1  constants computed while compiling, byte strings
-const_fold_width     V1  constants with a type
 const_if             V1  lists
 element_copies       V1  lists
 gauges               V1  gauges, optionals
-iterators            V1  warps, streams
-lambdas              V1  lambdas
-long_expressions     V1  constants with a type
 loop_changes_map     V1  maps, lambdas
 maps                 V1  maps
-methods              V1  warps
 results              V1  results
-strings              V1  text methods
-through              V1  warps, `through`
-through_scalars      V1  warps, `through`
 union_values         V1  unions
 
 shuttles             V2  shuttles, streams
