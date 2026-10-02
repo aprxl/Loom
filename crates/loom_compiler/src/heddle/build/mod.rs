@@ -1249,7 +1249,7 @@ fn thread_jumps(blocks: &mut [Block]) {
 }
 
 /// Replaces every value `k` reads with `f` of it.
-fn rewrite(k: &mut InstKind, f: impl Fn(Value) -> Value) {
+pub(crate) fn rewrite(k: &mut InstKind, f: impl Fn(Value) -> Value) {
     use InstKind as K;
     match k {
         K::Undef | K::Iconst(_) | K::Fconst(_) | K::Str(_) => {}

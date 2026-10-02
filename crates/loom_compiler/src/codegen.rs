@@ -38,6 +38,7 @@ use crate::ty::{FloatTy, IntTy};
 
 /// Generates the bytecode of `module`.
 pub fn generate(db: &SourceDb, module: &Module) -> Result<Image, String> {
+    let module = &crate::heddle::inline(module);
     let mut natives: IndexMap<&'static str, u16> = IndexMap::new();
     let mut files: IndexMap<String, u32> = IndexMap::new();
     let mut image = Image {

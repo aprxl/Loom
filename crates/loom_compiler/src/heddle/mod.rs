@@ -20,10 +20,13 @@
 //! Treadle bytecode. [`verify`] checks the SSA properties both rely on.
 
 mod build;
+mod inline;
 mod print;
 mod verify;
 
+pub(crate) use build::rewrite;
 pub use build::{build, build_tests};
+pub use inline::inline;
 pub use print::print;
 pub(crate) use verify::uses as inst_uses;
 pub use verify::verify;
