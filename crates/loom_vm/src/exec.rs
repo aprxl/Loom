@@ -61,6 +61,26 @@ struct Callee {
     results: usize,
 }
 
+/// What the dispatch loop needs now and then (see `execute`).
+struct Env<'e, 'i> {
+    image: &'i Image,
+    code_base: *const u64,
+    funcs: *const Callee,
+    nfuncs: usize,
+    natives: &'e [(NativeFn, usize)],
+    ctx: &'e mut Ctx<'i>,
+    stack: &'e mut Stack,
+    interrupt: Option<Arc<AtomicBool>>,
+    data_range: (u64, u64),
+    entry_results: usize,
+    /// The end of the stack segment in use.
+    seg_end: *mut u64,
+    /// Instructions until the next check for an interrupt.
+    ticks: i32,
+    /// What's unwinding the stack, while landing pads run.
+    in_flight: Option<Fault>,
+}
+
 #[derive(Debug)]
 pub(crate) struct Machine<'i> {
     image: &'i Image,
@@ -136,10 +156,8 @@ impl<'i> Machine<'i> {
     }
 
     fn execute(&mut self, stack: &mut Stack, entry: usize, args: &[u64]) -> Result<Vec<u64>, Fault> {
-        let code_base = self.code.as_ptr();
-        let at_index = |at: *const u64| (at as usize - code_base as usize) / 8;
         let start = &self.funcs[entry];
-        let (base, mut seg_end) = stack.bounds();
+        let (base, seg_end) = stack.bounds();
         // SAFETY: the first segment holds the entry's linkage and frame,
         // whose parameters are its first registers.
         let mut fp = unsafe { base.add(LINK_SLOTS) };
@@ -150,32 +168,50 @@ impl<'i> Machine<'i> {
             *base.add(2) = fp as u64;
             std::ptr::copy_nonoverlapping(args.as_ptr(), fp, args.len());
         }
-        let entry_results = start.results;
         let mut pc = start.entry;
-        let mut ticks = TICKS;
-        let funcs = self.funcs.as_ptr();
-        let nfuncs = self.funcs.len();
-        let natives = &self.natives;
-        let ctx = &mut self.ctx;
-        let interrupt = self.interrupt.clone();
-        let image = self.image;
         let data_range = {
             let r = self.data.as_mut_ptr_range();
             (r.start as u64, r.end as u64)
         };
-        let fault = |trap: Trap, at: *const u64| Fault { trap, pc: at_index(at), trace: Vec::new() };
-        // What's unwinding the stack, while landing pads run.
-        let mut in_flight: Option<Fault> = None;
+        let mut env = Env {
+            image: self.image,
+            code_base: self.code.as_ptr(),
+            funcs: self.funcs.as_ptr(),
+            nfuncs: self.funcs.len(),
+            natives: &self.natives,
+            ctx: &mut self.ctx,
+            stack,
+            interrupt: self.interrupt.clone(),
+            data_range,
+            entry_results: start.results,
+            seg_end,
+            ticks: TICKS,
+            in_flight: None,
+        };
+        // Only `pc` and `fp` (and each instruction's word) stay in registers
+        // through the loop; the rest is read from `env` where it's needed.
+        // Kept as locals, they took the registers `pc` or `fp` needed, which
+        // then went to memory and back for every instruction.
+        let env = std::hint::black_box(&mut env);
 
+        macro_rules! at_index {
+            ($at:expr) => {
+                ($at as usize - env.code_base as usize) / 8
+            };
+        }
+        macro_rules! fault {
+            ($trap:expr, $at:expr $(,)?) => {
+                Fault { trap: $trap, pc: at_index!($at), trace: Vec::new() }
+            };
+        }
         'run: loop {
             // SAFETY: `pc` is always at an instruction of a verified
             // function: every jump, call and return lands on one, and no
             // function runs off its end.
             let w = unsafe { *pc };
-            let at = pc;
             pc = unsafe { pc.add(1) };
             if cfg!(feature = "stats") {
-                ctx.dispatched += 1;
+                env.ctx.dispatched += 1;
             }
             let op = if cfg!(feature = "checked") {
                 Op::from_u16(w as u16).expect("the verifier checked every opcode")
@@ -184,6 +220,15 @@ impl<'i> Machine<'i> {
                 // discriminant, and `Op` is `repr(u16)`.
                 unsafe { std::mem::transmute::<u16, Op>(w as u16) }
             };
+            // Where this instruction starts, worked out only to report a
+            // trap (kept in a register, it cost every instruction): the one
+            // the word before `pc` is part of, which every instruction is
+            // until it moves `pc` itself, after anything that can trap.
+            macro_rules! here {
+                () => {
+                    instruction_at(env.image, env.code_base, pc)
+                };
+            }
 
             // An instruction either goes on to the next one (`continue`) or
             // ends this block with a trap, which one place, out of the way
@@ -197,7 +242,7 @@ impl<'i> Machine<'i> {
                     ($i:expr) => {{
                         let i = $i;
                         // SAFETY: see above.
-                        debug_assert!(unsafe { fp.add(i) } < seg_end);
+                        debug_assert!(unsafe { fp.add(i) } < env.seg_end);
                         // SAFETY: see above.
                         unsafe { *fp.add(i) }
                     }};
@@ -206,7 +251,7 @@ impl<'i> Machine<'i> {
                     ($i:expr, $v:expr) => {{
                         let (i, v) = ($i, $v);
                         // SAFETY: see above.
-                        debug_assert!(unsafe { fp.add(i) } < seg_end);
+                        debug_assert!(unsafe { fp.add(i) } < env.seg_end);
                         // SAFETY: see above.
                         unsafe { *fp.add(i) = v }
                     }};
@@ -226,18 +271,51 @@ impl<'i> Machine<'i> {
                     ($off:expr) => {{
                         // SAFETY: the verifier checked that every jump lands on
                         // an instruction of the same function.
-                        pc = unsafe { at.offset($off) };
+                        pc = unsafe { pc.offset($off - 1) };
                     }};
                 }
                 macro_rules! tick {
                     () => {{
-                        ticks -= 1;
-                        if ticks < 0 {
-                            ticks = TICKS;
-                            if interrupt.as_ref().is_some_and(|i| i.load(Ordering::Relaxed)) {
+                        env.ticks -= 1;
+                        if env.ticks < 0 {
+                            env.ticks = TICKS;
+                            if interrupted(&env.interrupt) {
                                 throw!(Trap::Interrupt);
                             }
                         }
+                    }};
+                }
+                // Enters `callee` with the window at register `a`: its frame
+                // starts there, unless the segment is too short for it (its
+                // linkage goes in this frame, just below the window).
+                macro_rules! enter {
+                    ($callee:expr) => {{
+                        let callee: &Callee = $callee;
+                        tick!();
+                        // SAFETY: the window is inside this frame (verified).
+                        let window = unsafe { fp.add(a(w)) };
+                        let mut new_fp = window;
+                        if (env.seg_end as usize - window as usize) / 8 < callee.frame {
+                            // SAFETY: the window holds the callee's arguments.
+                            match unsafe { enter_segment(env.stack, window, callee) } {
+                                Ok((start, end)) => {
+                                    new_fp = start;
+                                    env.seg_end = end;
+                                }
+                                Err(trap) => throw!(trap),
+                            }
+                        }
+                        // SAFETY: the linkage is just below the callee's frame:
+                        // in this frame (the verifier left room below the
+                        // window), or at the start of a new segment.
+                        unsafe {
+                            let link = new_fp.sub(LINK_SLOTS);
+                            *link = pc as u64;
+                            *link.add(1) = fp as u64;
+                            *link.add(2) = window as u64;
+                        }
+                        fp = new_fp;
+                        pc = callee.entry;
                     }};
                 }
                 // Unwinds with `trap` (see below).
@@ -261,12 +339,12 @@ impl<'i> Machine<'i> {
                     ($addr:expr, $len:expr) => {{
                         if cfg!(feature = "checked") {
                             let (addr, len) = ($addr, $len as u64);
-                            if !valid(&ctx.heap, stack, ctx.rodata_range(), data_range, addr, len) {
-                                return Err(fault(
+                            if !valid(&env.ctx.heap, env.stack, env.ctx.rodata_range(), env.data_range, addr, len) {
+                                return Err(fault!(
                                     Trap::Crash(format!(
                                         "loom internal: a bad memory access: {len} bytes at {addr:#x}"
                                     )),
-                                    at,
+                                    here!(),
                                 ));
                             }
                         }
@@ -446,7 +524,7 @@ impl<'i> Machine<'i> {
                         let k = ext!();
                         set!(a(w), k)
                     }
-                    Op::Ldstr => set!(a(w), ctx.string_ptr(bc_u32(w) as usize)),
+                    Op::Ldstr => set!(a(w), env.ctx.string_ptr(bc_u32(w) as usize)),
                     Op::AddTI8 => bin_t!(|x, y| ints::add_t(x, y, ints::I8)),
                     Op::AddTI16 => bin_t!(|x, y| ints::add_t(x, y, ints::I16)),
                     Op::AddTI32 => bin_t!(|x, y| ints::add_t(x, y, ints::I32)),
@@ -722,8 +800,8 @@ impl<'i> Machine<'i> {
 
                     Op::Jmp => jump!(bc_i32(w) as isize),
                     Op::Loop => {
-                        jump!(bc_i32(w) as isize);
                         tick!();
+                        jump!(bc_i32(w) as isize);
                     }
                     Op::Jz => {
                         if r!(a(w)) == 0 {
@@ -795,49 +873,18 @@ impl<'i> Machine<'i> {
 
                     Op::Call => {
                         // SAFETY: the verifier checked the function index.
-                        let callee = unsafe { &*funcs.add(bc_u32(w) as usize) };
-                        // SAFETY: the window is inside this frame (verified).
-                        let window = unsafe { fp.add(a(w)) };
-                        let mut new_fp = window;
-                        // The callee's registers must fit the segment. (Its
-                        // linkage goes in this frame, just below the window.)
-                        if (seg_end as usize - window as usize) / 8 < callee.frame {
-                            match stack.grow(LINK_SLOTS + callee.frame) {
-                                Ok((start, end)) => {
-                                    // SAFETY: the new segment holds the linkage
-                                    // and the frame; the arguments are in this
-                                    // frame, in another allocation.
-                                    unsafe {
-                                        new_fp = start.add(LINK_SLOTS);
-                                        std::ptr::copy_nonoverlapping(window, new_fp, callee.params);
-                                    }
-                                    seg_end = end;
-                                }
-                                Err(trap) => throw!(trap),
-                            }
-                        }
-                        // SAFETY: the linkage is just below the callee's frame:
-                        // in this frame (the verifier left room below the
-                        // window), or at the start of a new segment.
-                        unsafe {
-                            let link = new_fp.sub(LINK_SLOTS);
-                            *link = pc as u64;
-                            *link.add(1) = fp as u64;
-                            *link.add(2) = window as u64;
-                        }
-                        fp = new_fp;
-                        pc = callee.entry;
-                        tick!();
+                        let callee = unsafe { &*env.funcs.add(bc_u32(w) as usize) };
+                        enter!(callee);
                     }
                     Op::CallN => {
-                        let (native, regs) = natives[b(w)];
+                        let (native, regs) = env.natives[b(w)];
                         // SAFETY: the verifier checked that the native's
                         // registers are inside the frame.
                         let args = unsafe { std::slice::from_raw_parts_mut(fp.add(a(w)), regs) };
                         if cfg!(feature = "checked") {
-                            ctx.stack = &*stack;
+                            env.ctx.stack = &*env.stack;
                         }
-                        if let Err(trap) = native(ctx, args, c(w) as u16) {
+                        if let Err(trap) = native(env.ctx, args, c(w) as u16) {
                             throw!(trap);
                         }
                     }
@@ -849,8 +896,12 @@ impl<'i> Machine<'i> {
                         // results (verified at the call).
                         unsafe {
                             if src != 0 {
-                                for i in 0..n {
-                                    *fp.add(i) = *fp.add(src + i);
+                                if n == 1 {
+                                    *fp = *fp.add(src);
+                                } else {
+                                    for i in 0..n {
+                                        *fp.add(i) = *fp.add(src + i);
+                                    }
                                 }
                             }
                             let link = fp.sub(LINK_SLOTS);
@@ -860,13 +911,12 @@ impl<'i> Machine<'i> {
                             if dst != fp {
                                 // This frame started a segment: the results go
                                 // back to the caller's window in the one before.
-                                std::ptr::copy_nonoverlapping(fp, dst, n);
-                                seg_end = stack.shrink();
+                                env.seg_end = leave_segment(env.stack, fp, dst, n);
                             }
                             if back.is_null() {
                                 // Back to the host: the entry's results are in
                                 // its first registers.
-                                return Ok(std::slice::from_raw_parts(fp, entry_results).to_vec());
+                                return Ok(std::slice::from_raw_parts(fp, env.entry_results).to_vec());
                             }
                             pc = back;
                             fp = caller;
@@ -876,13 +926,13 @@ impl<'i> Machine<'i> {
                     Op::Unravel => {
                         let (ptr, len) = (r!(a(w)), r!(b(w)));
                         // SAFETY: `unravel` is given a text value.
-                        let text = match unsafe { ctx.text(ptr, len) } {
+                        let text = match unsafe { env.ctx.text(ptr, len) } {
                             Ok(t) => String::from_utf8_lossy(t).into_owned(),
                             Err(trap) => throw!(trap),
                         };
                         throw!(Trap::Unravel(text));
                     }
-                    Op::Crash => return Err(fault(Trap::Crash(crash_message(a(w))), at)),
+                    Op::Crash => return Err(fault!(Trap::Crash(crash_message(a(w))), here!())),
 
                     Op::Ld8S => load!(i8, |v: i8| v as i64 as u64),
                     Op::Ld8U => load!(u8, u64::from),
@@ -907,7 +957,7 @@ impl<'i> Machine<'i> {
                     Op::StF32 => store_f!(u32),
                     Op::StF64 => store_f!(u64),
                     Op::Lea => set!(a(w), (fp as u64).wrapping_add(u64::from(bc_u32(w)))),
-                    Op::Gaddr => set!(a(w), data_range.0 + u64::from(bc_u32(w))),
+                    Op::Gaddr => set!(a(w), env.data_range.0 + u64::from(bc_u32(w))),
                     Op::Idx => {
                         let scale = ext!();
                         let v = r!(b(w)).wrapping_add(r!(c(w)).wrapping_mul(scale));
@@ -976,53 +1026,31 @@ impl<'i> Machine<'i> {
                     Op::Ldfn => set!(a(w), u64::from(bc_u32(w))),
                     Op::CallR => {
                         let index = r!(b(w)) as usize;
-                        if index >= nfuncs {
-                            return Err(fault(Trap::Crash(format!("loom internal: no function {index}")), at));
+                        if index >= env.nfuncs {
+                            return Err(fault!(no_function(index), here!()));
                         }
                         // SAFETY: just checked.
-                        let callee = unsafe { &*funcs.add(index) };
+                        let callee = unsafe { &*env.funcs.add(index) };
                         if callee.params != c(w) >> 8 || callee.results != c(w) & 0xFF {
-                            return Err(fault(Trap::Crash(crash_message(2)), at));
+                            return Err(fault!(Trap::Crash(crash_message(2)), here!()));
                         }
-                        // SAFETY: the window is inside this frame (verified).
-                        let window = unsafe { fp.add(a(w)) };
-                        let mut new_fp = window;
-                        if (seg_end as usize - window as usize) / 8 < callee.frame {
-                            match stack.grow(LINK_SLOTS + callee.frame) {
-                                Ok((start, end)) => {
-                                    // SAFETY: as for `call`.
-                                    unsafe {
-                                        new_fp = start.add(LINK_SLOTS);
-                                        std::ptr::copy_nonoverlapping(window, new_fp, callee.params);
-                                    }
-                                    seg_end = end;
-                                }
-                                Err(trap) => throw!(trap),
-                            }
-                        }
-                        // SAFETY: as for `call`.
-                        unsafe {
-                            let link = new_fp.sub(LINK_SLOTS);
-                            *link = pc as u64;
-                            *link.add(1) = fp as u64;
-                            *link.add(2) = window as u64;
-                        }
-                        fp = new_fp;
-                        pc = callee.entry;
-                        tick!();
+                        enter!(callee);
                     }
                     Op::Resume => {
                         // This frame's pads are done: on to the caller's.
-                        match unwind(image, code_base, stack, fp, at, true) {
+                        match unwind(env.image, env.code_base, env.stack, fp, here!(), true) {
                             Some((to, frame, end)) => {
                                 pc = to;
                                 fp = frame;
-                                seg_end = end;
+                                env.seg_end = end;
                             }
                             None => {
-                                let f = in_flight.take();
+                                let f = env.in_flight.take();
                                 return Err(f.unwrap_or_else(|| {
-                                    fault(Trap::Crash("loom internal: `resume` with nothing unwinding".into()), at)
+                                    fault!(
+                                        Trap::Crash("loom internal: `resume` with nothing unwinding".into()),
+                                        here!()
+                                    )
                                 }));
                             }
                         }
@@ -1034,21 +1062,88 @@ impl<'i> Machine<'i> {
             // Unwinds with `trap`: to this function's landing pad for this
             // instruction, or out through its callers'. An internal error
             // doesn't unwind: nothing about the state can be trusted.
+            let at = here!();
             if matches!(trap, Trap::Crash(_) | Trap::Failed(_)) {
-                return Err(fault(trap, at));
+                return Err(fault!(trap, at));
             }
-            let trace = trace_at(image, code_base, fp, at);
-            in_flight = Some(Fault { trap, pc: trace.first().copied().unwrap_or(at_index(at)), trace });
-            match unwind(image, code_base, stack, fp, at, false) {
+            let trace = trace_at(env.image, env.code_base, fp, at);
+            env.in_flight = Some(Fault { trap, pc: trace.first().copied().unwrap_or(at_index!(at)), trace });
+            match unwind(env.image, env.code_base, env.stack, fp, at, false) {
                 Some((to, frame, end)) => {
                     pc = to;
                     fp = frame;
-                    seg_end = end;
+                    env.seg_end = end;
                 }
-                None => return Err(in_flight.take().expect("set just above")),
+                None => return Err(env.in_flight.take().expect("set just above")),
             }
         }
     }
+}
+
+/// The start of the instruction the word before `pc` is part of: its
+/// opcode word, or its extension word. Decoded from the start of its
+/// function (verified, so every word there is where an instruction or its
+/// extension is).
+#[cold]
+#[inline(never)]
+fn instruction_at(image: &Image, code_base: *const u64, pc: *const u64) -> *const u64 {
+    let word = (pc as usize - code_base as usize) / 8 - 1;
+    let Some(f) = image.func_at(word as u32).map(|f| &image.funcs[f]) else { return pc };
+    let mut i = f.entry as usize;
+    loop {
+        let words = Op::from_u16(image.code[i] as u16).map_or(1, |op| op.form().words());
+        if word < i + words {
+            // SAFETY: inside the code, at an instruction.
+            return unsafe { code_base.add(i) };
+        }
+        i += words;
+    }
+}
+
+/// A new segment for `callee`'s frame, the arguments in `window` copied to
+/// its start: its frame pointer and end. Out of the dispatch loop's way.
+///
+/// # Safety
+///
+/// `window` holds `callee.params` registers.
+#[cold]
+#[inline(never)]
+unsafe fn enter_segment(stack: &mut Stack, window: *mut u64, callee: &Callee) -> Result<(*mut u64, *mut u64), Trap> {
+    let (start, end) = stack.grow(LINK_SLOTS + callee.frame)?;
+    // SAFETY: the new segment holds the linkage and the frame; the arguments
+    // are in the caller's frame, in another allocation.
+    unsafe {
+        let fp = start.add(LINK_SLOTS);
+        std::ptr::copy_nonoverlapping(window, fp, callee.params);
+        Ok((fp, end))
+    }
+}
+
+/// Returns from a frame that started a segment: its `n` results go to the
+/// caller's window at `dst`, in the segment before. The end of that one.
+///
+/// # Safety
+///
+/// `fp` and `dst` each hold `n` registers.
+#[cold]
+#[inline(never)]
+unsafe fn leave_segment(stack: &mut Stack, fp: *mut u64, dst: *mut u64, n: usize) -> *mut u64 {
+    // SAFETY: as the caller promises; they're in different segments.
+    unsafe { std::ptr::copy_nonoverlapping(fp, dst, n) };
+    stack.shrink()
+}
+
+/// Whether the host asked the program to stop.
+#[cold]
+#[inline(never)]
+fn interrupted(interrupt: &Option<Arc<AtomicBool>>) -> bool {
+    interrupt.as_ref().is_some_and(|i| i.load(Ordering::Relaxed))
+}
+
+#[cold]
+#[inline(never)]
+fn no_function(index: usize) -> Trap {
+    Trap::Crash(format!("loom internal: no function {index}"))
 }
 
 /// Where an unwind at `at` in the frame at `fp` goes: the landing pad for
