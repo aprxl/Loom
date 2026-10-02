@@ -112,6 +112,8 @@ impl<'a> Builder<'a> {
     /// with no two parts sharing bytes.
     fn parts_of(&mut self, ty: Ty, layout: &Layout) -> Option<Vec<Part>> {
         let tcx = self.tcx();
+        // A gauge is its base (inside an optional, a tuple, …).
+        let ty = tcx.degauge(ty);
         let scalar = |vty, mem| Some(vec![Part { vty, mem, off: 0 }]);
         match tcx.kind(ty).clone() {
             TyKind::Int(int) => scalar(VTy::Int, int_mem(int)),

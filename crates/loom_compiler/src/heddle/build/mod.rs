@@ -29,6 +29,7 @@ mod compare;
 mod consts;
 mod expr;
 mod fallible;
+mod gauge;
 mod glue;
 mod hash;
 mod lambda;
@@ -82,13 +83,15 @@ enum FnKey {
     /// The step function of a kind of stream (see `stream.rs`).
     Step(stream::Step),
     /// Computes a constant with a type (see `consts.rs`).
-    ConstInit(crate::hir::DefId),
+    ConstInit(consts::ConstKey),
     /// Drops what the constants own, when `main` is done.
     ConstExit,
     /// Shows a value of a type in an `any`, given its address.
     AnyShow(Ty, bool),
     /// A weft method instance as an `any`'s vtable calls it.
     Dyn(BodyId),
+    /// Whether a value is in a gauge.
+    GaugeCheck(crate::hir::DefId),
     /// Code for the values of a type.
     Glue(Glue, Ty),
 }
@@ -247,7 +250,9 @@ pub(super) struct Builder<'a> {
     /// said to be there.
     main_span: Option<Span>,
     /// Each constant read, by where it is in the data and its type.
-    globals: IndexMap<crate::hir::DefId, (u32, Ty)>,
+    globals: IndexMap<consts::ConstKey, (u32, Ty)>,
+    /// The `const` expressions read, by their body and id.
+    const_exprs: HashMap<(BodyId, HirId), &'a crate::hir::Expr>,
     /// The program's data as it starts: constants (zero until computed)
     /// and vtables.
     data: Vec<u64>,
@@ -281,6 +286,7 @@ pub fn build(p: &Program, typed: &Typed) -> Result<Module, Vec<Diagnostic>> {
         main_span: None,
         lambdas: HashMap::new(),
         globals: IndexMap::new(),
+        const_exprs: HashMap::new(),
         data: Vec::new(),
         dyn_slots: IndexMap::new(),
         type_ids: IndexMap::new(),
@@ -452,12 +458,14 @@ impl<'a> Builder<'a> {
             FnKey::Lambda(id, e) => format!("{}.lambda{}", self.body_name(id), e.0),
             FnKey::Thunk(id) => format!("{}.value", self.body_name(id)),
             FnKey::Step(step) => format!("stream.{}", self.step_name(step)),
-            FnKey::ConstInit(def) => format!("{}.init", self.p.def_path(def)),
+            FnKey::ConstInit(consts::ConstKey::Def(def)) => format!("{}.init", self.p.def_path(def)),
+            FnKey::ConstInit(consts::ConstKey::Expr(body, e)) => format!("{}.const{}", self.body_name(body), e.0),
             FnKey::ConstExit => "consts.drop".to_string(),
             FnKey::AnyShow(ty, debug) => {
                 format!("{}[{}].any", if debug { "debug" } else { "show" }, self.tcx().display(self.p, ty))
             }
             FnKey::Dyn(id) => format!("{}.dyn", self.body_name(id)),
+            FnKey::GaugeCheck(def) => format!("{}.check", self.p.def_path(def)),
             FnKey::Glue(g, ty) => {
                 let what = match g {
                     Glue::Drop => "drop",
@@ -486,6 +494,7 @@ impl<'a> Builder<'a> {
             FnKey::Body(id) | FnKey::Main(id) | FnKey::Lambda(id, _) | FnKey::Thunk(id) => id,
             FnKey::Glue(..) | FnKey::Step(_) | FnKey::ConstInit(_) | FnKey::ConstExit | FnKey::AnyShow(..) => BodyId(0),
             FnKey::Dyn(id) => id,
+            FnKey::GaugeCheck(_) => BodyId(0),
         };
         self.f = FnState { body, ..FnState::default() };
         let entry = self.new_block();
@@ -509,6 +518,7 @@ impl<'a> Builder<'a> {
             FnKey::ConstExit => self.const_exit(),
             FnKey::AnyShow(ty, debug) => self.any_show_func(ty, debug),
             FnKey::Dyn(id) => self.dyn_func(id, span),
+            FnKey::GaugeCheck(def) => self.gauge_check_func(def),
             FnKey::Glue(g, ty) => self.glue_func(g, ty),
         };
         self.zero_owned_slots();
@@ -538,7 +548,8 @@ impl<'a> Builder<'a> {
             FnKey::Glue(..) | FnKey::Step(_) | FnKey::ConstExit | FnKey::AnyShow(..) => {
                 self.main_span.expect("set before anything is built")
             }
-            FnKey::ConstInit(def) => self.p.def(def).span,
+            FnKey::ConstInit(consts::ConstKey::Def(def)) | FnKey::GaugeCheck(def) => self.p.def(def).span,
+            FnKey::ConstInit(consts::ConstKey::Expr(..)) => self.main_span.expect("set before anything is built"),
         }
     }
 

@@ -16,27 +16,40 @@ use crate::hir::{DefId, DefKind};
 use crate::ty::Ty;
 use crate::typeck::{BodyId, Instance};
 
+/// A constant: a typed one, or a `const` expression in a body.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(super) enum ConstKey {
+    Def(DefId),
+    Expr(BodyId, crate::hir::HirId),
+}
+
 impl<'a> Builder<'a> {
-    /// The body constant `def` was checked in.
-    fn const_body(&self, def: DefId) -> Option<BodyId> {
-        self.typed.results.find(&Instance::of(def))
+    /// The body constant `key` was checked in, and its expression.
+    fn const_source(&self, key: ConstKey) -> Option<(BodyId, &'a crate::hir::Expr)> {
+        match key {
+            ConstKey::Def(def) => {
+                let DefKind::Const(c) = &self.p.def(def).kind else { return None };
+                Some((self.typed.results.find(&Instance::of(def))?, &c.value))
+            }
+            ConstKey::Expr(body, id) => Some((body, *self.const_exprs.get(&(body, id))?)),
+        }
     }
 
-    /// The type constant `def`'s value has.
-    fn const_ty(&self, def: DefId) -> Option<Ty> {
-        let DefKind::Const(c) = &self.p.def(def).kind else { return None };
-        let body = self.typed.results.body(self.const_body(def)?);
-        let ty = body.coerced.get(&c.value.id).or_else(|| body.expr_ty.get(&c.value.id)).copied()?;
+    /// The type constant `key`'s value has.
+    fn const_ty(&self, key: ConstKey) -> Option<Ty> {
+        let (body, value) = self.const_source(key)?;
+        let body = self.typed.results.body(body);
+        let ty = body.coerced.get(&value.id).or_else(|| body.expr_ty.get(&value.id)).copied()?;
         Some(self.tcx().degauge(ty))
     }
 
-    /// Where constant `def` is in the data: the offset of its flag word,
+    /// Where constant `key` is in the data: the offset of its flag word,
     /// with its value 8 bytes on.
-    fn const_global(&mut self, def: DefId, span: Span) -> Option<(u32, Ty)> {
-        if let Some(&g) = self.globals.get(&def) {
+    fn const_global(&mut self, key: ConstKey, span: Span) -> Option<(u32, Ty)> {
+        if let Some(&g) = self.globals.get(&key) {
             return Some(g);
         }
-        let ty = self.const_ty(def)?;
+        let ty = self.const_ty(key)?;
         let Some((size, align)) = self.size_align(ty) else {
             let shown = self.tcx().display(self.p, ty);
             return self.unsupported(span, &format!("constants of type `{shown}`"));
@@ -47,13 +60,20 @@ impl<'a> Builder<'a> {
         let off = (self.data.len() * 8) as u32;
         let words = 1 + size.div_ceil(8) as usize;
         self.data.extend(std::iter::repeat_n(0, words));
-        self.globals.insert(def, (off, ty));
+        self.globals.insert(key, (off, ty));
         Some((off, ty))
     }
 
-    /// Reads constant `def`: computed the first time.
-    pub(super) fn read_const(&mut self, def: DefId, span: Span) -> Option<Val> {
-        let (off, ty) = self.const_global(def, span)?;
+    /// `const inner` in a body (the expression `e`): computed the first
+    /// time it's reached, as on Lua.
+    pub(super) fn const_expr(&mut self, e: &'a crate::hir::Expr, inner: &'a crate::hir::Expr) -> Option<Val> {
+        self.const_exprs.insert((self.f.body, e.id), inner);
+        self.read_const(ConstKey::Expr(self.f.body, e.id), e.span)
+    }
+
+    /// Reads constant `key`: computed the first time.
+    pub(super) fn read_const(&mut self, key: ConstKey, span: Span) -> Option<Val> {
+        let (off, ty) = self.const_global(key, span)?;
         let at = self.emit1(InstKind::Global(off), VTy::Ptr);
         let flag = self.load(Mem::W64, at, 0, VTy::Int);
         let zero = self.iconst(0);
@@ -61,7 +81,7 @@ impl<'a> Builder<'a> {
         let (init, ready) = (self.new_block(), self.new_block());
         self.br(fresh, init, ready);
         self.enter(init);
-        let func = self.func_id(FnKey::ConstInit(def));
+        let func = self.func_id(FnKey::ConstInit(key));
         let value = self.offset(at, 8);
         self.emit(InstKind::Call { func, args: vec![value] }, &[]);
         self.jump(ready);
@@ -70,19 +90,18 @@ impl<'a> Builder<'a> {
         if self.needs_drop(ty) { self.copy_val(&v, ty, span) } else { Some(v) }
     }
 
-    /// The init function of constant `def`: computes its value at the
+    /// The init function of constant `key`: computes its value at the
     /// address it's given, and marks it computed.
-    pub(super) fn const_init(&mut self, def: DefId) -> Option<Vec<VTy>> {
-        let span = self.p.def(def).span;
-        let DefKind::Const(c) = &self.p.def(def).kind else { return self.internal(span, "a constant that isn't one") };
-        let body = self.const_body(def)?;
-        let ty = self.const_ty(def)?;
+    pub(super) fn const_init(&mut self, key: ConstKey) -> Option<Vec<VTy>> {
+        let (body, value) = self.const_source(key)?;
+        let span = value.span;
+        let ty = self.const_ty(key)?;
         self.f.body = body;
-        self.f.scan = self.scan(body, &c.value);
+        self.f.scan = self.scan(body, value);
         let dst = self.new_value(VTy::Ptr);
         self.f.blocks[0].params.push(dst);
         let depth = self.open_scope();
-        let v = self.expr(&c.value)?;
+        let v = self.expr(value)?;
         self.move_to(dst, 0, v, ty, span)?;
         let flag = self.offset(dst, -8);
         let one = self.iconst(1);

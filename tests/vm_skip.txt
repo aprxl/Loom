@@ -3,9 +3,7 @@
 # first thing it stops on. The fixture harness fails when one of these
 # passes, so take it out when it does: this list only gets shorter.
 
-const_eval           V1  constants computed while compiling, byte strings
-const_if             V1  lists
-gauges               V1  gauges, optionals
+const_eval           V2  shuttles
 
 shuttles             V2  shuttles, streams
 unravel_closed       V2  shuttles

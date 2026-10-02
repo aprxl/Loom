@@ -208,6 +208,7 @@ impl<'a> Builder<'a> {
         }
         match &e.kind {
             ExprKind::Lit(Lit::None) => self.none(ty, span),
+            ExprKind::Lit(Lit::Bytes(bytes)) => self.bytes_value(bytes, ty, span),
             ExprKind::Lit(lit) => self.lit(lit, false, ty, span).map(Val::Regs),
             ExprKind::Local(l) => {
                 let place = self.local_place(*l, span)?;
@@ -298,7 +299,7 @@ impl<'a> Builder<'a> {
             ExprKind::Const(inner) if crate::typeck::assert_args(self.p, inner).is_some() => {
                 Some(Val::Regs(Vec::new()))
             }
-            ExprKind::Const(_) => self.unsupported(span, "`const` expressions computed while compiling"),
+            ExprKind::Const(inner) => self.const_expr(e, inner),
             ExprKind::Template(parts) => self.template_string(e, parts),
             ExprKind::Array(items) => self.array_lit(e, items),
             ExprKind::ArrayRepeat { value, count } => self.array_repeat(e, value, count),
@@ -306,11 +307,48 @@ impl<'a> Builder<'a> {
             ExprKind::Map(pairs) => self.map_lit(e, pairs),
             ExprKind::Lambda { .. } => self.lambda(e),
             ExprKind::Range { lo, hi, inclusive } => self.range_value(lo.as_deref(), hi.as_deref(), *inclusive),
-            ExprKind::Intrinsic(_) => self.unsupported(span, "`target`"),
+            ExprKind::Intrinsic(hir::Intrinsic::Target) => self.target_value(ty, span),
+            ExprKind::Intrinsic(_) => self.unsupported(span, "`heap`"),
             ExprKind::Yield { .. } | ExprKind::Pull => self.unsupported(span, "shuttles"),
             ExprKind::Loom { .. } | ExprKind::Thread(_) => self.unsupported(span, "threads"),
             _ => self.unsupported(span, "this expression"),
         }
+    }
+
+    /// `target`: the facts about what the program is built for.
+    fn target_value(&mut self, ty: Ty, span: Span) -> Option<Val> {
+        use crate::target::Target;
+        let info = self.warp_info(ty)?;
+        let mut vals = Vec::new();
+        let mut tys = Vec::new();
+        for f in &info.fields {
+            let v = match f.name.as_str() {
+                "pointer_bits" => self.iconst(u64::from(self.tcx().target.pointer_bits)),
+                name => {
+                    // A unit case: its tag, the case's place in the warp.
+                    let case = match name {
+                        "os" => Target::OS,
+                        "arch" => Target::ARCH,
+                        _ => Target::ENDIAN,
+                    };
+                    let tag = self.warp_info(f.ty).and_then(|w| w.cases.iter().position(|c| c.name == case));
+                    self.iconst(tag.unwrap_or(0) as u64)
+                }
+            };
+            vals.push(Val::Regs(vec![v]));
+            tys.push(f.ty);
+        }
+        self.aggregate(ty, &tys, vals, span)
+    }
+
+    /// `b"GET"`: an array of the bytes.
+    fn bytes_value(&mut self, bytes: &[u8], ty: Ty, span: Span) -> Option<Val> {
+        let dst = self.temp(ty, span)?;
+        if !bytes.is_empty() {
+            let text = self.str_lit(bytes);
+            self.emit(InstKind::Copy { dst, src: text[0], size: bytes.len() as u64 }, &[]);
+        }
+        Some(Val::Mem(dst))
     }
 
     /// `(a, b, …)`.
@@ -449,7 +487,7 @@ impl<'a> Builder<'a> {
             let Some(ft) = self.float_of(ty) else { return self.unsupported(span, "this constant") };
             return Some(Val::Regs(vec![self.fconst(v, ft)]));
         }
-        self.read_const(def, span)
+        self.read_const(super::consts::ConstKey::Def(def), span)
     }
 
     // ------------------------------------------------------------ statements and blocks
@@ -1215,14 +1253,20 @@ impl<'a> Builder<'a> {
             (CastKind::Opt, TyKind::Optional(t)) => *t,
             _ => raw,
         };
-        if matches!(self.tcx().kind(target), TyKind::Gauge(..)) {
-            return self.unsupported(span, "casts into gauges");
+        if let TyKind::Gauge(def, base) = *self.tcx().kind(target) {
+            return self.gauge_cast(inner, kind, def, base, target, ty, span);
         }
         if kind == CastKind::Opt {
             return self.cast_opt(inner, ty, target, span);
         }
         let source = self.coerced_ty(inner);
         let v = self.value(inner)?[0];
+        self.convert(v, source, ty, kind, span)
+    }
+
+    /// `v`, a value of `source`, converted to `ty` by `as` (or `as%`,
+    /// `as|`).
+    pub(super) fn convert(&mut self, v: Value, source: Ty, ty: Ty, kind: CastKind, span: Span) -> Option<Vals> {
         let policy = match kind {
             CastKind::Wrap => Policy::Wrap,
             CastKind::Sat => Policy::Sat,
@@ -1261,7 +1305,7 @@ impl<'a> Builder<'a> {
 
 impl<'a> Builder<'a> {
     /// `x as? T`: `some` of the value when it fits `T`, `none` otherwise.
-    fn cast_opt(&mut self, inner: &'a hir::Expr, opt: Ty, target: Ty, span: Span) -> Option<Vals> {
+    pub(super) fn cast_opt(&mut self, inner: &'a hir::Expr, opt: Ty, target: Ty, span: Span) -> Option<Vals> {
         let source = self.coerced_ty(inner);
         let v = self.value(inner)?[0];
         let tcx = self.tcx();
@@ -1282,6 +1326,12 @@ impl<'a> Builder<'a> {
                 ("float.to_int_chk", v, super::int_spec(t).pack())
             }
             (TyKind::Int(s), TyKind::Char) => ("int.to_char_chk", v, super::int_spec(s).pack()),
+            // Every float converts (to infinity, past `f32`'s range).
+            (TyKind::Float(_), TyKind::Float(_)) => {
+                let v = self.convert(v, source, target, CastKind::Checked, span)?[0];
+                let one = self.iconst(1);
+                return self.opt_from(v, one, opt, target, span);
+            }
             _ => return self.unsupported(span, "this `as?`"),
         };
         let spec = self.iconst(spec);

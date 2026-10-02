@@ -62,6 +62,15 @@ impl<'a> Builder<'a> {
     /// `no` if it doesn't.
     pub(super) fn test_pat(&mut self, pat: &'a hir::Pat, v: &Val, ty: Ty, yes: BlockId, no: BlockId) -> Option<()> {
         let span = pat.span;
+        // `x is Cents`, `c: Cents =>`: the gauge's check.
+        if let Some(&gauge) = self.tables().gauge_tests.get(&pat.id)
+            && let TyKind::Gauge(def, _) = *self.tcx().kind(gauge)
+        {
+            let x = self.regs(v.clone(), ty, span)?[0];
+            let ok = self.gauge_test(def, x, ty)?;
+            self.br(ok, yes, no);
+            return Some(());
+        }
         if let Some(done) = self.test_warp_pat(pat, v, ty, yes, no) {
             return done;
         }
@@ -188,6 +197,12 @@ impl<'a> Builder<'a> {
     /// Binds the names of `pat`, which matched `v`, a value of `ty`.
     pub(super) fn bind_with(&mut self, pat: &'a hir::Pat, v: &Val, ty: Ty, how: Binding) -> Option<()> {
         let span = pat.span;
+        if self.tables().gauge_tests.contains_key(&pat.id) {
+            if let PatKind::TypeTest { local, .. } = &pat.kind {
+                self.bind_local(*local, v.clone(), how, span)?;
+            }
+            return Some(());
+        }
         if let Some(done) = self.bind_warp_pat(pat, v, ty, how) {
             return done;
         }
