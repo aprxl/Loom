@@ -161,6 +161,14 @@ impl<'a> Builder<'a> {
                     let (x, y) = (self.regs(a, ty, span)?, self.regs(b, ty, span)?);
                     self.elems_eq((x[0], x[1]), (y[0], y[1]), args[0], span)
                 }
+                "std.map.Map" | "std.set.Set" => {
+                    let (Val::Mem(pa), Val::Mem(pb)) = (&a, &b) else {
+                        return self.internal(span, "a map in registers");
+                    };
+                    let (pa, pb) = (*pa, *pb);
+                    let c = self.coll_of(ty)?;
+                    self.eq_colls(&c, pa, pb, span)
+                }
                 path if self.is_builtin(def) => self.unsupported(span, &format!("comparing values of `{path}`")),
                 _ => {
                     let (shared, cases) = self.warp_pairs(&a, &b, ty, span)?;

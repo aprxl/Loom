@@ -196,6 +196,11 @@ impl TyCtx {
         ty
     }
 
+    /// Some type of warp `def`, if one has been interned (the first).
+    pub fn any_of(&self, def: crate::hir::DefId) -> Option<Ty> {
+        self.kinds.iter().position(|k| matches!(k, TyKind::Adt(d, _) if *d == def)).map(|i| Ty(i as u32))
+    }
+
     /// The type `kind` describes, if it's been interned.
     pub fn find(&self, kind: &TyKind) -> Option<Ty> {
         self.ids.get(kind).copied()

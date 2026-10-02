@@ -6,12 +6,8 @@
 any                  V1  `any` values, warps
 const_eval           V1  constants computed while compiling, byte strings
 const_if             V1  lists
-element_copies       V1  lists
 gauges               V1  gauges, optionals
-loop_changes_map     V1  maps, lambdas
-maps                 V1  maps
 results              V1  results
-union_values         V1  unions
 
 shuttles             V2  shuttles, streams
 unravel_closed       V2  shuttles

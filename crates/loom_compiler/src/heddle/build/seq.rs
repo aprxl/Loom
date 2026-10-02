@@ -250,11 +250,13 @@ impl<'a> Builder<'a> {
         let span = e.span;
         let ty = self.ty_of(e);
         let is_list = matches!(self.seq_of(ty), Some(Seq::List(_)));
-        if !is_list && !self.is_string(ty) {
-            return self.unsupported(span, "`Map()` and `Set()`");
+        let is_coll = self.coll_of_ty(ty);
+        if !is_list && !is_coll && !self.is_string(ty) {
+            return self.unsupported(span, "this kind of `T()`");
         }
         let header = self.temp(ty, span)?;
-        self.emit(InstKind::Zero { dst: header, size: 24 }, &[]);
+        let size = if is_coll { 40 } else { 24 };
+        self.emit(InstKind::Zero { dst: header, size }, &[]);
         self.own_temp(header, ty);
         Some(Val::Mem(header))
     }
@@ -273,6 +275,10 @@ impl<'a> Builder<'a> {
         let span = e.span;
         let [GenericArg::Expr(index)] = args else { return self.unsupported(span, "this kind of indexing") };
         let bty = self.coerced_ty(base);
+        if self.coll_of(bty).is_some() {
+            let (place, vt) = self.map_index_place(base, index, span)?;
+            return self.read_place(&place, vt, span);
+        }
         if let ExprKind::Range { lo, hi, inclusive } = &index.kind
             && (matches!(self.tcx().kind(bty), TyKind::Str) || self.is_string(bty))
         {
@@ -298,6 +304,9 @@ impl<'a> Builder<'a> {
         let [GenericArg::Expr(index)] = args.as_slice() else {
             return self.unsupported(span, "this kind of indexing");
         };
+        if self.coll_of(self.ty_of(base)).is_some() {
+            return self.map_index_place(base, index, span);
+        }
         let (place, bty) = self.place_or_temp(base)?;
         let Some(seq) = self.seq_of(bty) else { return self.unsupported(span, "assigning to this") };
         let i = self.value(index)?[0];
@@ -310,7 +319,9 @@ impl<'a> Builder<'a> {
     pub(super) fn is_index_place(&self, e: &hir::Expr) -> bool {
         let ExprKind::Index { base, args } = &e.kind else { return false };
         let [GenericArg::Expr(index)] = args.as_slice() else { return false };
-        !matches!(index.kind, ExprKind::Range { .. }) && self.seq_of(self.ty_of(base)).is_some() && self.is_place(base)
+        !matches!(index.kind, ExprKind::Range { .. })
+            && (self.seq_of(self.ty_of(base)).is_some() || self.coll_of_ty(self.ty_of(base)))
+            && self.is_place(base)
     }
 
     /// The address of element `i` of the sequence in `place`, checked

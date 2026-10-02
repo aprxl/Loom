@@ -305,7 +305,7 @@ impl<'a> Builder<'a> {
             ExprKind::Array(items) => self.array_lit(e, items),
             ExprKind::ArrayRepeat { value, count } => self.array_repeat(e, value, count),
             ExprKind::Index { base, args } => self.index(e, base, args),
-            ExprKind::Map(_) => self.unsupported(span, "maps"),
+            ExprKind::Map(pairs) => self.map_lit(e, pairs),
             ExprKind::Lambda { .. } => self.lambda(e),
             ExprKind::Range { lo, hi, inclusive } => self.range_value(lo.as_deref(), hi.as_deref(), *inclusive),
             ExprKind::Intrinsic(_) => self.unsupported(span, "`target`"),
@@ -1049,6 +1049,10 @@ impl<'a> Builder<'a> {
                 Some(())
             }
             _ => {
+                // `m[k] = v` adds `k` when it's missing.
+                if self.map_assign(target, v.clone())?.is_some() {
+                    return Some(());
+                }
                 let (place, pty) = self.place(target)?;
                 // The old value goes first.
                 if self.needs_drop(pty)

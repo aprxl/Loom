@@ -1,0 +1,32 @@
+// Maps and sets at scale: keys and values that own memory, replacing,
+// removing, clearing, copies, growing the index, and keys of every kind.
+use std.io.print
+fn main() {
+    var m: Map[String, List[String]] = Map()
+    for i in 0..20 {
+        let k = "k{i % 7}"
+        m[k] = ["v{i}"]
+    }
+    print("{m.len()} {m["k3"]} {m.get("k9")}")
+    m["k3"] = ["new"]
+    print("{m.remove("k0")} {m.remove("k0")} {m.len()}")
+    print("{m.insert("k1", ["x"])} {m.insert("zz", ["y"])}")
+    let c = m.copy()
+    m.clear()
+    print("{m} {c.len()} {c == c.copy()} {m.is_empty()}")
+    var s: Set[String] = Set()
+    for w in "a b a c b d".words() { s.insert(w.to_string()) }
+    print("{s} {s.has("c")} {s.remove("a")} {s.remove("a")} {s.sorted()}")
+    var counts: Map[char, u32] = Map()
+    for ch in "hello world".chars() {
+        if counts.has(ch) { counts[ch] += 1 } else { counts[ch] = 1 }
+    }
+    print("{counts} {counts.sorted()}")
+    var big: Map[u32, u32] = Map()
+    for i in 0..1000u32 { big[i * 7919 % 1000] = i }
+    var total = 0u64
+    for (k, v) in big { total += (k as u64) * 3 + (v as u64) }
+    print("{big.len()} {total} {big[500]}")
+    let keys: Set[(i32, bool)] = Set.of([(1, true), (2, false), (1, true)])
+    print(keys)
+}

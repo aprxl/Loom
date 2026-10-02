@@ -43,6 +43,7 @@ impl<'a> Builder<'a> {
                 }
                 Some(Vec::new())
             }
+            Glue::Hash => self.hash_glue(ty, span),
             Glue::Eq | Glue::Cmp => {
                 let a = self.glue_value_param(ty, span)?;
                 let b = self.glue_value_param(ty, span)?;
@@ -121,6 +122,10 @@ impl<'a> Builder<'a> {
             TyKind::Adt(def, args) => match self.p.def_path(def).as_str() {
                 "std.string.String" => self.free_buffer(ptr, 1, 1),
                 "std.iter.Stream" => self.drop_stream(ptr),
+                "std.map.Map" | "std.set.Set" => {
+                    let c = self.coll_of(ty)?;
+                    self.drop_coll(&c, ptr);
+                }
                 "std.list.List" => {
                     let elem = args[0];
                     let (size, align) = self.size_align(elem)?;
@@ -338,6 +343,10 @@ impl<'a> Builder<'a> {
                     let cap = self.cap_for(len, elem)?;
                     self.set_header(dst, new, len, cap);
                 }
+                "std.map.Map" | "std.set.Set" => {
+                    let c = self.coll_of(ty)?;
+                    self.copy_coll(&c, dst, src, span)?;
+                }
                 path if self.is_builtin(def) => {
                     return self.unsupported(span, &format!("copying a `{path}`"));
                 }
@@ -514,6 +523,11 @@ impl<'a> Builder<'a> {
                 "std.slice.Slice" => {
                     let vals = self.regs(v, ty, span)?;
                     self.show_elems(sink, vals[0], vals[1], args[0], debug, span)?;
+                }
+                "std.map.Map" | "std.set.Set" => {
+                    let Val::Mem(ptr) = v else { return self.internal(span, "a map in registers") };
+                    let c = self.coll_of(ty)?;
+                    self.show_coll(sink, &c, ptr, debug, span)?;
                 }
                 path if self.is_builtin(def) => return self.unsupported(span, &format!("showing a `{path}`")),
                 _ => self.show_warp(sink, v, ty, debug, span)?,

@@ -29,7 +29,9 @@ mod consts;
 mod expr;
 mod fallible;
 mod glue;
+mod hash;
 mod lambda;
+mod map;
 mod methods;
 mod pat;
 mod repr;
@@ -101,6 +103,8 @@ enum Glue {
     Eq,
     /// How two values order: `cmp(a, b)` is -1, 0 or 1.
     Cmp,
+    /// A value's hash: `hash(value's address)`.
+    Hash,
 }
 
 /// How a function takes its parameters and gives its result (its ABI).
@@ -443,6 +447,7 @@ impl<'a> Builder<'a> {
                     Glue::Show { debug: true } => "debug",
                     Glue::Eq => "eq",
                     Glue::Cmp => "cmp",
+                    Glue::Hash => "hash",
                 };
                 format!("{what}[{}]", self.tcx().display(self.p, ty))
             }
@@ -626,6 +631,10 @@ impl<'a> Builder<'a> {
             "std.ops.Eq.eq" => {
                 let eq = self.eq_vals(this, arg(1), self_ty, span)?;
                 self.terminate(Term::Ret(vec![eq]));
+            }
+            "std.ops.Hash.hash" => {
+                let h = self.hash_val(this, self_ty, span)?;
+                self.terminate(Term::Ret(vec![h]));
             }
             "std.ops.Ord.lt" => {
                 let lt = self.compare_vals(loom_syntax::ast::BinaryOp::Lt, this, arg(1), self_ty, span)?;

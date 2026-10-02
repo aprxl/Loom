@@ -44,7 +44,11 @@ const BODIES: &[&str] = &[
 
 /// Whether the builder writes the body of the `#builtin` method `path`.
 pub(super) fn writes_body(path: &str) -> bool {
-    BODIES.contains(&path) || super::methods::writes_body(path) || super::stream::writes_body(path)
+    BODIES.contains(&path)
+        || super::methods::writes_body(path)
+        || super::stream::writes_body(path)
+        || path.starts_with("std.map.Map.")
+        || path.starts_with("std.set.Set.")
 }
 
 impl<'a> Builder<'a> {
@@ -73,6 +77,11 @@ impl<'a> Builder<'a> {
             .collect();
         if super::stream::writes_body(&path) {
             self.stream_method(&path, &args, &tys, ret, sret, span)?;
+            return Some(abi.results);
+        }
+        if path.starts_with("std.map.Map.") || path.starts_with("std.set.Set.") {
+            let name = path.rsplit('.').next().unwrap_or_default();
+            self.coll_method(name, &args, &tys, ret, span)?;
             return Some(abi.results);
         }
         // The element type: of `self`, or of the list `filled` makes.
@@ -319,6 +328,14 @@ impl<'a> Builder<'a> {
             _ => return self.internal(span, &format!("no body for `{path}`")),
         }
         Some(abi.results)
+    }
+
+    /// Sorts the `n` elements of `elem` from `buf`, keeping equal ones in
+    /// order.
+    pub(super) fn sort_list(&mut self, buf: Value, n: Value, elem: Ty, span: Span) -> Option<()> {
+        let (size, align) = self.size_align(elem)?;
+        let m = Method { elem, size, align, ret: self.tcx().unit, span };
+        self.merge_sort(&m, buf, n)
     }
 
     /// Returns `vals`.

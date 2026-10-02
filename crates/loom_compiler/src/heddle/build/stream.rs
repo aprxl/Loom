@@ -76,6 +76,16 @@ pub(super) enum Step {
         pair: Ty,
     },
     Chain(Ty),
+    /// Copies of a map's keys, values or pairs, or a set's items: `[0]`
+    /// the map's header, `[8]` its length and `[16]` its entries' buffer
+    /// when the stream started, `[24]` the next entry, then the map, if
+    /// the stream owns it.
+    Coll {
+        coll: Ty,
+        what: super::map::CollItems,
+        item: Ty,
+        owned: bool,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -137,6 +147,7 @@ impl<'a> Builder<'a> {
             Step::Seq { owned, .. } => 32 + owned.map_or(Some(0), |t| self.size_align(t).map(|s| s.0))?,
             Step::Woven { iter, .. } => self.size_align(iter)?.0.max(8),
             Step::Range(_) | Step::Text(_) => 24,
+            Step::Coll { owned, .. } => 32 + if owned { 40 } else { 0 },
             Step::Chunks { .. } => 32,
             _ => 56,
         })
@@ -208,7 +219,7 @@ impl<'a> Builder<'a> {
 
     /// Returns, once the result is written (or there's none), after the
     /// function's cleanups.
-    fn ret_written(&mut self) -> Option<()> {
+    pub(super) fn ret_written(&mut self) -> Option<()> {
         self.run_cleanups(0);
         if self.live() {
             self.terminate(Term::Ret(Vec::new()));
@@ -264,6 +275,10 @@ impl<'a> Builder<'a> {
                 self.drop_at(at, t);
             }
             Step::Woven { iter, .. } => self.drop_at(b, iter),
+            Step::Coll { coll, owned: true, .. } => {
+                let at = self.offset(b, 32);
+                self.drop_at(at, coll);
+            }
             Step::Map { .. }
             | Step::Filter { .. }
             | Step::TakeWhile { .. }
@@ -325,6 +340,7 @@ impl<'a> Builder<'a> {
                 self.ret_int(1);
             }
             Step::Range(elem) => self.range_next(elem, b, out, span)?,
+            Step::Coll { coll, what, item, .. } => self.coll_next(coll, what, item, b, out, span)?,
             Step::Woven { next, iter, item } => {
                 let opt = self.typed.results.sigs.get(&next)?.ret;
                 let opt = self.plain_ty(opt);
@@ -560,7 +576,104 @@ impl<'a> Builder<'a> {
             Step::Indexed { item, .. } => format!("indexed[{}]", show(item)),
             Step::Zip { pair, .. } => format!("zip[{}]", show(pair)),
             Step::Chain(t) => format!("chain[{}]", show(t)),
+            Step::Coll { coll, what, .. } => format!("{what:?}[{}]", show(coll)).to_lowercase(),
         }
+    }
+
+    /// The item type of the stream type `ty`.
+    fn stream_item_ty(&self, ty: Ty) -> Option<Ty> {
+        match self.tcx().kind(ty) {
+            TyKind::Adt(_, args) => args.first().map(|&t| self.tcx().degauge(t)),
+            _ => None,
+        }
+    }
+
+    /// Fills a box of `Step::Coll` for the map at `header`.
+    fn coll_box(&mut self, b: Value, header: Value) {
+        self.set_word(b, 0, header);
+        let len = self.word(header, 8);
+        self.set_word(b, 8, len);
+        let buf = self.word(header, 0);
+        self.set_word(b, 16, buf);
+        let zero = self.iconst(0);
+        self.set_word(b, 24, zero);
+    }
+
+    /// A stream of the map (or set) at `header`, of type `coll`, written at
+    /// the function's result: it borrows the map.
+    pub(super) fn coll_stream_at(
+        &mut self,
+        header: Value,
+        coll: Ty,
+        what: super::map::CollItems,
+        sty: Ty,
+        span: Span,
+    ) -> Option<()> {
+        let item = self.stream_item_ty(sty)?;
+        let step = Step::Coll { coll, what, item, owned: false };
+        let b = self.new_box(step)?;
+        self.coll_box(b, header);
+        let _ = span;
+        self.stream_at(self.f.sret?, step, b);
+        Some(())
+    }
+
+    /// The next of a map's keys, values or pairs, or a set's items.
+    fn coll_next(
+        &mut self,
+        coll: Ty,
+        what: super::map::CollItems,
+        item: Ty,
+        b: Value,
+        out: Value,
+        span: Span,
+    ) -> Option<()> {
+        let c = self.coll_of(coll)?;
+        let header = self.load(Mem::W64, b, 0, VTy::Ptr);
+        let (len, buf, i) = (self.word(b, 8), self.word(b, 16), self.word(b, 24));
+        let (now_len, now_buf) = (self.word(header, 8), self.word(header, 0));
+        let resized = self.ucmp(Cmp::Ne, now_len, len);
+        let moved = self.ucmp(Cmp::Ne, now_buf, buf);
+        let changed = self.emit1(InstKind::Bit { op: BitOp::Or, a: resized, b: moved }, VTy::Int);
+        let (fail, ok) = (self.new_block(), self.new_block());
+        self.br(changed, fail, ok);
+        self.enter(fail);
+        let what_text: &'static str = if c.val.is_some() {
+            "the map changed while a loop went over it (len "
+        } else {
+            "the set changed while a loop went over it (len "
+        };
+        self.unravel_msg(
+            &[Msg::Text(what_text), Msg::Int(len), Msg::Text(", now "), Msg::Int(now_len), Msg::Text(")")],
+            span,
+        )?;
+        self.enter(ok);
+        let done = self.ucmp(Cmp::Ge, i, len);
+        self.none_if(done);
+        let ebuf = self.load(Mem::W64, header, 0, VTy::Ptr);
+        let ent = self.emit1(InstKind::Index { base: ebuf, index: i, scale: c.esize }, VTy::Ptr);
+        let k = self.load_val(ent, c.koff as i64, c.key, span)?;
+        match (what, c.val) {
+            (super::map::CollItems::Keys, _) => self.copy_into(out, &k, c.key, span)?,
+            (super::map::CollItems::Values, Some(vt)) => {
+                let v = self.load_val(ent, c.voff as i64, vt, span)?;
+                self.copy_into(out, &v, vt, span)?;
+            }
+            (_, Some(vt)) => {
+                let offs = self.field_offsets(item, span)?;
+                let at = self.offset(out, offs[0] as i64);
+                self.copy_into(at, &k, c.key, span)?;
+                let v = self.load_val(ent, c.voff as i64, vt, span)?;
+                let at = self.offset(out, offs[1] as i64);
+                self.copy_into(at, &v, vt, span)?;
+            }
+            _ => return self.internal(span, "values of a set"),
+        }
+        let one = self.iconst(1);
+        let next = self.uarith(IntOp::Add, i, one);
+        self.set_word(b, 24, next);
+        self.ret_int(1);
+        Some(())
     }
 
     /// The function value at `b + off`.
@@ -769,7 +882,34 @@ impl<'a> Builder<'a> {
                 self.move_to(b, 0, v, iter, span)?;
                 self.stream_val(step, b, ty, span)
             }
-            IterSource::MapPairs(..) | IterSource::SetItems(_) => self.unsupported(span, "streams of maps and sets"),
+            IterSource::MapPairs(..) | IterSource::SetItems(_) => {
+                let what = match source {
+                    IterSource::MapPairs(..) => super::map::CollItems::Pairs,
+                    _ => super::map::CollItems::Keys,
+                };
+                let Val::Mem(p) = v else { return self.internal(span, "a map in registers") };
+                let item = match *source {
+                    IterSource::MapPairs(k, v) => {
+                        let (k, v) = (self.tcx().degauge(k), self.tcx().degauge(v));
+                        self.tcx().find(&TyKind::Tuple(vec![k, v]))?
+                    }
+                    IterSource::SetItems(t) => self.tcx().degauge(t),
+                    _ => return None,
+                };
+                // A temporary map: the stream owns it.
+                if self.f.temps.contains_key(&p) {
+                    let step = Step::Coll { coll: from, what, item, owned: true };
+                    let b = self.new_box(step)?;
+                    let at = self.offset(b, 32);
+                    self.move_to(at, 0, Val::Mem(p), from, span)?;
+                    self.coll_box(b, at);
+                    return self.stream_val(step, b, ty, span);
+                }
+                let step = Step::Coll { coll: from, what, item, owned: false };
+                let b = self.new_box(step)?;
+                self.coll_box(b, p);
+                self.stream_val(step, b, ty, span)
+            }
             IterSource::Shuttle(_) | IterSource::Burst(_) => self.unsupported(span, "shuttles"),
         }
     }
@@ -791,11 +931,17 @@ impl<'a> Builder<'a> {
         let (v, sty, item) = match &source {
             Some(src) => {
                 let item = match src {
-                    IterSource::Seq(t) | IterSource::Range(t) => *t,
-                    IterSource::Woven { item, .. } => *item,
+                    IterSource::Seq(t) | IterSource::Range(t) | IterSource::SetItems(t) => self.plain_ty(*t),
+                    IterSource::Woven { item, .. } => self.plain_ty(*item),
+                    IterSource::MapPairs(k, v) => {
+                        let (k, v) = (self.tcx().degauge(*k), self.tcx().degauge(*v));
+                        match self.tcx().find(&TyKind::Tuple(vec![k, v])) {
+                            Some(t) => t,
+                            None => return self.internal(span, "the pairs of a map with no type"),
+                        }
+                    }
                     _ => return self.unsupported(span, "this kind of `for` loop"),
                 };
-                let item = self.plain_ty(item);
                 let sty = self.stream_ty(item).or_else(|| self.internal(span, "a stream with no type"))?;
                 (self.stream_of(src, v, from, sty, span)?, sty, item)
             }
@@ -849,11 +995,12 @@ impl<'a> Builder<'a> {
         Some(())
     }
 
-    /// `Stream[item]`, if the program has that type.
+    /// `Stream[item]`; or, if the program has no such type, another
+    /// stream's type: every stream is held and dropped the same way.
     fn stream_ty(&self, item: Ty) -> Option<Ty> {
         let m = self.p.modules.iter().find(|m| m.path == "std.iter")?;
         let def = *m.items.get("Stream")?;
-        self.tcx().find(&TyKind::Adt(def, vec![item]))
+        self.tcx().find(&TyKind::Adt(def, vec![item])).or_else(|| self.tcx().any_of(def))
     }
 
     // ------------------------------------------------------------ the methods

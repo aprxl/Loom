@@ -896,8 +896,9 @@ promised gauges would let an optimizer do.
 
 ### 10.13 Maps, sets and streams
 
-- **Maps** keep insertion order, like on Lua: a list of entries, plus an index
-  table with open addressing and control bytes. Removing shifts the later
+- **Maps** keep insertion order, like on Lua: a list of entries (a key's
+  hash, the key, the value), plus an index table with open addressing whose
+  slots hold entry numbers, kept at most half full. Removing shifts the later
   entries down, keeping the order. Keys hash and compare through their `Hash`
   and `Eq` (monomorphized), with native fast paths for strings and integers.
   A hand-written `eq` or `hash` is used (on Lua, keys are still compared
