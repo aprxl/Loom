@@ -87,6 +87,11 @@ pub const NATIVES: &[NativeSig] = &[
     sig("string.push_str", 3, 0, NativeImm::None),
     sig("string.pop", 1, 2, NativeImm::None),
     sig("char.digit", 1, 1, NativeImm::None),
+    // Streams of text: from byte `at`, the next item and where the rest
+    // starts (and for `next_word`, whether there's one).
+    sig("str.next_char", 3, 2, NativeImm::None),
+    sig("str.next_line", 3, 3, NativeImm::None),
+    sig("str.next_word", 3, 4, NativeImm::None),
     sig("int.bits", 2, 1, NativeImm::None),
     sig("int.rotate", 3, 1, NativeImm::None),
     sig("float.math", 2, 1, NativeImm::None),

@@ -31,6 +31,9 @@ pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
         "string.push_str" => push_str,
         "string.pop" => pop,
         "char.digit" => digit,
+        "str.next_char" => next_char,
+        "str.next_line" => next_line,
+        "str.next_word" => next_word,
         "int.bits" => int_bits,
         "int.rotate" => int_rotate,
         "float.math" => float_math,
@@ -364,6 +367,65 @@ fn pop(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     write_header(args[0], buf, start as u64, cap);
     args[0] = u64::from(c);
     args[1] = 1;
+    Ok(())
+}
+
+/// `str.next_char(s, at)`: the `char` at byte `at`, and where the next
+/// starts.
+fn next_char(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let s = text(ctx, args[0], args[1])?;
+    let at = args[2] as usize;
+    let rest = &s[at.min(s.len())..];
+    let width = match rest.first() {
+        Some(&b) if b < 0x80 => 1,
+        Some(&b) if b >= 0xF0 => 4,
+        Some(&b) if b >= 0xE0 => 3,
+        Some(_) => 2,
+        None => 0,
+    }
+    .min(rest.len());
+    let c = std::str::from_utf8(&rest[..width]).ok().and_then(|t| t.chars().next()).unwrap_or('\u{FFFD}');
+    args[0] = u64::from(c);
+    args[1] = (at + width.max(1)) as u64;
+    Ok(())
+}
+
+/// `str.next_line(s, at)`: the line from byte `at` (its start and length,
+/// less a `\r` before its `\n`), and where the next starts.
+fn next_line(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let s = text(ctx, args[0], args[1])?;
+    let at = args[2] as usize;
+    let rest = &s[at.min(s.len())..];
+    let (mut len, next) = match rest.iter().position(|&b| b == b'\n') {
+        Some(nl) => (nl, at + nl + 1),
+        None => (rest.len(), s.len() + 1),
+    };
+    if len > 0 && rest[len - 1] == b'\r' {
+        len -= 1;
+    }
+    args[0] += at as u64;
+    args[1] = len as u64;
+    args[2] = next as u64;
+    Ok(())
+}
+
+/// `str.next_word(s, at)`: the next run of characters that aren't ASCII
+/// whitespace from byte `at` (start, length), where the search goes on,
+/// and whether there was one.
+fn next_word(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let s = text(ctx, args[0], args[1])?;
+    let mut i = (args[2] as usize).min(s.len());
+    while i < s.len() && is_space(s[i]) {
+        i += 1;
+    }
+    let start = i;
+    while i < s.len() && !is_space(s[i]) {
+        i += 1;
+    }
+    args[3] = u64::from(i > start);
+    args[0] += start as u64;
+    args[1] = (i - start) as u64;
+    args[2] = i as u64;
     Ok(())
 }
 
