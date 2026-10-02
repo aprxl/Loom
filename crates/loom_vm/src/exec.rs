@@ -1001,15 +1001,48 @@ impl<'i> Machine<'i> {
                         mem_check!(dst, n);
                         mem_check!(src, n);
                         // SAFETY: both are memory the program owns, `n` bytes
-                        // each (checked in the checked build); they may overlap.
-                        unsafe { std::ptr::copy(src as *const u8, dst as *mut u8, n as usize) }
+                        // each (checked in the checked build); they may overlap,
+                        // so the words are all read before any is written.
+                        unsafe {
+                            let (d, s) = (dst as *mut u64, src as *const u64);
+                            match n {
+                                8 => d.write_unaligned(s.read_unaligned()),
+                                16 => {
+                                    let v = (s.read_unaligned(), s.add(1).read_unaligned());
+                                    d.write_unaligned(v.0);
+                                    d.add(1).write_unaligned(v.1);
+                                }
+                                24 => {
+                                    let v = (s.read_unaligned(), s.add(1).read_unaligned(), s.add(2).read_unaligned());
+                                    d.write_unaligned(v.0);
+                                    d.add(1).write_unaligned(v.1);
+                                    d.add(2).write_unaligned(v.2);
+                                }
+                                _ => std::ptr::copy(src as *const u8, dst as *mut u8, n as usize),
+                            }
+                        }
                     }
                     Op::Zero => {
                         let n = ext!();
                         let dst = r!(a(w));
                         mem_check!(dst, n);
                         // SAFETY: as for `copy`.
-                        unsafe { std::ptr::write_bytes(dst as *mut u8, 0, n as usize) }
+                        unsafe {
+                            let d = dst as *mut u64;
+                            match n {
+                                8 => d.write_unaligned(0),
+                                16 => {
+                                    d.write_unaligned(0);
+                                    d.add(1).write_unaligned(0);
+                                }
+                                24 => {
+                                    d.write_unaligned(0);
+                                    d.add(1).write_unaligned(0);
+                                    d.add(2).write_unaligned(0);
+                                }
+                                _ => std::ptr::write_bytes(dst as *mut u8, 0, n as usize),
+                            }
+                        }
                     }
                     Op::Bounds => {
                         let (i, n) = (r!(a(w)), r!(b(w)));
