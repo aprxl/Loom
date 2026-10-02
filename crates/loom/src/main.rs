@@ -374,9 +374,26 @@ fn run_vm(path: &Path, args: &[String], color: ColorMode) -> ExitCode {
         let compiled = compile_vm(path, color)?;
         let args = std::iter::once(path.display().to_string()).chain(args.iter().cloned()).collect();
         let host = Host { output: Output::Stdout, sandbox: false, args };
-        let outcome = loom_vm::run(&compiled.image, host, &loom_vm::Config::default());
+        let mut trace = Vec::new();
+        let outcome = match (compiled.image.entry, loom_vm::Vm::new(&compiled.image, host, &loom_vm::Config::default()))
+        {
+            (Some(entry), Ok(mut vm)) => {
+                let outcome = match vm.call(entry, &[]) {
+                    Ok(_) => vm.leaks().unwrap_or(Outcome::Finished),
+                    Err(failed @ Outcome::Failed { .. }) => vm.leaks().unwrap_or(failed),
+                    Err(outcome) => outcome,
+                };
+                trace = vm.backtrace().to_vec();
+                outcome
+            }
+            (None, _) => Outcome::Crash { message: "the image has no entry function".into(), location: None },
+            (_, Err(outcome)) => outcome,
+        };
         if let Some(text) = describe(&outcome) {
             eprint!("{text}");
+        }
+        if matches!(outcome, Outcome::Unravel { .. }) && std::env::var_os("LOOM_BACKTRACE").is_some_and(|v| v == "1") {
+            eprint!("{}", backtrace_text(&trace));
         }
         Ok(exit_code(&outcome))
     };
@@ -544,6 +561,19 @@ fn describe(outcome: &Outcome) -> Option<String> {
 }
 
 /// `  --> file:line:col` and the source line, with a caret under the column.
+/// Every frame an unravel happened in (`LOOM_BACKTRACE=1`, on Treadle),
+/// innermost first.
+fn backtrace_text(trace: &[(String, Option<loom_host::Location>)]) -> String {
+    let mut out = String::from("backtrace:\n");
+    for (i, (name, at)) in trace.iter().enumerate() {
+        match at {
+            Some(at) => out.push_str(&format!("  {i}: {name} at {}:{}:{}\n", at.file, at.line, at.column)),
+            None => out.push_str(&format!("  {i}: {name}\n")),
+        }
+    }
+    out
+}
+
 fn location_text(location: Option<&loom_host::Location>) -> String {
     let Some(at) = location else { return String::new() };
     let mut out = format!("  --> {}:{}:{}\n", at.file, at.line, at.column);

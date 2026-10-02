@@ -95,6 +95,8 @@ impl Trap {
 pub(crate) struct Fault {
     pub trap: Trap,
     pub pc: usize,
+    /// Every frame it happened in, innermost first (see `exec::trace_at`).
+    pub trace: Vec<usize>,
 }
 
 /// Runs `image`'s entry function, with `host` for its output.
@@ -119,6 +121,8 @@ pub fn run(image: &Image, host: Host, config: &Config) -> Outcome {
 pub struct Vm<'i> {
     image: &'i Image,
     machine: exec::Machine<'i>,
+    /// The frames of the last unravel: each function, and where in it.
+    trace: Vec<(String, Option<Location>)>,
 }
 
 impl<'i> Vm<'i> {
@@ -129,7 +133,13 @@ impl<'i> Vm<'i> {
         }
         let machine =
             exec::Machine::load(image, host, config).map_err(|message| Outcome::Crash { message, location: None })?;
-        Ok(Vm { image, machine })
+        Ok(Vm { image, machine, trace: Vec::new() })
+    }
+
+    /// The frames the last unravel happened in, innermost first: each
+    /// function's name, and where in it (`LOOM_BACKTRACE=1`).
+    pub fn backtrace(&self) -> &[(String, Option<Location>)] {
+        &self.trace
     }
 
     /// With `checked`: an internal error if anything the program allocated
@@ -158,6 +168,20 @@ impl<'i> Vm<'i> {
         // Raw mode left on (an unravel on the way out) is turned off.
         self.machine.ctx.term.restore();
         result.map_err(|fault| {
+            let image = self.image;
+            self.trace = fault
+                .trace
+                .iter()
+                .map(|&pc| {
+                    let name = image.func_at(pc as u32).map(|f| image.funcs[f].name.clone()).unwrap_or_default();
+                    let at = image.line_at(pc as u32).map(|(file, line, column)| Location {
+                        file: file.to_string(),
+                        line,
+                        column,
+                    });
+                    (name, at)
+                })
+                .collect();
             let location = self.image.line_at(fault.pc as u32).map(|(file, line, column)| Location {
                 file: file.to_string(),
                 line,

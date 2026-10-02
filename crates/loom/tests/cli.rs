@@ -310,3 +310,33 @@ fn emit_heddle_and_bytecode_show_treadle_s_code() {
     assert!(bytecode.status.success(), "{}", text(&bytecode.stderr));
     assert!(text(&bytecode.stdout).contains("(entry)"), "{}", text(&bytecode.stdout));
 }
+
+#[test]
+fn backtraces_list_every_frame_on_treadle() {
+    // A lambda and a builtin method in between: frames with no locations
+    // (std's methods, glue) are left out, the program's are all there.
+    let path = temp_source(
+        "backtrace",
+        "use std.io.print\n\
+         fn inner(xs: [i32], i: usize) -> i32 = xs[i]\n\
+         fn middle(xs: List[i32]) -> i32 = inner(xs, 5) + 1\n\
+         fn main() {\n\
+         \x20   let xs: List[i32] = [1, 2, 3]\n\
+         \x20   xs.each(x => print(middle(xs)))\n\
+         }\n",
+    );
+    let out = Command::new(env!("CARGO_BIN_EXE_loom"))
+        .args(["--color", "never", "run", "--backend", "vm"])
+        .arg(&path)
+        .env("LOOM_BACKTRACE", "1")
+        .output()
+        .expect("the loom binary runs");
+    let _ = std::fs::remove_file(&path);
+    let err = text(&out.stderr);
+    assert_eq!(out.status.code(), Some(101), "{err}");
+    let frames: Vec<&str> = err.lines().skip_while(|l| *l != "backtrace:").skip(1).collect();
+    let names: Vec<&str> = frames.iter().filter_map(|l| l.split_whitespace().nth(1)).collect();
+    assert_eq!(names, ["inner", "middle", "main.{lambda}", "main"], "{err}");
+    assert!(frames[0].ends_with(":2:4"), "{err}");
+    assert!(frames[1].ends_with(":3:4"), "{err}");
+}

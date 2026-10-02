@@ -112,11 +112,15 @@ impl<'i> Machine<'i> {
     /// gives its results.
     pub fn call(&mut self, entry: usize, args: &[u64]) -> Result<Vec<u64>, Fault> {
         let Some(start) = self.funcs.get(entry) else {
-            return Err(Fault { trap: Trap::Crash(format!("there's no function {entry}")), pc: 0 });
+            return Err(Fault { trap: Trap::Crash(format!("there's no function {entry}")), pc: 0, trace: Vec::new() });
         };
         if args.len() != start.params {
             let trap = Trap::Crash(format!("{} arguments for {} parameters", args.len(), start.params));
-            return Err(Fault { trap, pc: (start.entry as usize - self.code.as_ptr() as usize) / 8 });
+            return Err(Fault {
+                trap,
+                pc: (start.entry as usize - self.code.as_ptr() as usize) / 8,
+                trace: Vec::new(),
+            });
         }
         let need = LINK_SLOTS + start.frame;
         let mut stack = match self.stack.take() {
@@ -124,7 +128,7 @@ impl<'i> Machine<'i> {
                 stack.reset();
                 stack
             }
-            _ => Stack::new(self.stack_limit, need).map_err(|trap| Fault { trap, pc: 0 })?,
+            _ => Stack::new(self.stack_limit, need).map_err(|trap| Fault { trap, pc: 0, trace: Vec::new() })?,
         };
         let result = self.execute(&mut stack, entry, args);
         self.stack = Some(stack);
@@ -159,7 +163,7 @@ impl<'i> Machine<'i> {
             let r = self.data.as_mut_ptr_range();
             (r.start as u64, r.end as u64)
         };
-        let fault = |trap: Trap, at: *const u64| Fault { trap, pc: at_index(at) };
+        let fault = |trap: Trap, at: *const u64| Fault { trap, pc: at_index(at), trace: Vec::new() };
         // What's unwinding the stack, while landing pads run.
         let mut in_flight: Option<Fault> = None;
 
@@ -240,7 +244,8 @@ impl<'i> Machine<'i> {
                     if matches!(trap, Trap::Crash(_) | Trap::Failed(_)) {
                         return Err(fault(trap, at));
                     }
-                    in_flight = Some(Fault { trap, pc: report_at(image, code_base, fp, at) });
+                    let trace = trace_at(image, code_base, fp, at);
+                    in_flight = Some(Fault { trap, pc: trace.first().copied().unwrap_or(at_index(at)), trace });
                     match unwind(image, code_base, stack, fp, at, false) {
                         Some((to, frame, end)) => {
                             pc = to;
@@ -955,26 +960,30 @@ fn unwind(
     }
 }
 
-/// Where a trap at `at`, in the frame at `fp`, is reported: there, or for
-/// code with no locations (std's methods the compiler writes, glue), at the
-/// call into it, as Lua's `error(message, level)` reports at a caller.
-fn report_at(image: &Image, code_base: *const u64, mut fp: *mut u64, at: *const u64) -> usize {
-    let first = (at as usize - code_base as usize) / 8;
-    let mut index = first;
-    while image.line_at(index as u32).is_none() {
+/// Where a trap at `at`, in the frame at `fp`, happened, frame by frame,
+/// innermost first: the instruction, then each call it's inside. Code with
+/// no locations (std's methods the compiler writes, glue) is left out, so a
+/// trap there is reported at the call into it, as Lua's `error(message,
+/// level)` reports at a caller. (Empty when nothing has a location.)
+fn trace_at(image: &Image, code_base: *const u64, mut fp: *mut u64, at: *const u64) -> Vec<usize> {
+    let mut index = (at as usize - code_base as usize) / 8;
+    let mut out = Vec::new();
+    loop {
+        if image.line_at(index as u32).is_some() {
+            out.push(index);
+        }
         // SAFETY: every frame has its linkage just below it (see `call`).
         let (back, caller) = unsafe {
             let link = fp.sub(LINK_SLOTS);
             (*link as *const u64, *link.add(1) as *mut u64)
         };
         if back.is_null() {
-            return first;
+            return out;
         }
         // The call is the word before where it returns to.
         index = (back as usize - code_base as usize) / 8 - 1;
         fp = caller;
     }
-    index
 }
 
 /// Whether `len` bytes at `addr` are all memory the program may touch: a

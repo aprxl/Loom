@@ -491,7 +491,7 @@ impl<'a> Builder<'a> {
         match key {
             FnKey::Body(id) => self.body_name(id),
             FnKey::Main(id) => format!("{}.entry", self.body_name(id)),
-            FnKey::Lambda(id, e) => format!("{}.lambda{}", self.body_name(id), e.0),
+            FnKey::Lambda(id, _) => format!("{}.{{lambda}}", self.body_name(id)),
             FnKey::Thunk(id) => format!("{}.value", self.body_name(id)),
             FnKey::Step(step) => format!("stream.{}", self.step_name(step)),
             FnKey::ConstInit(consts::ConstKey::Def(def)) => format!("{}.init", self.p.def_path(def)),
