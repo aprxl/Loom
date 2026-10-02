@@ -30,6 +30,8 @@ pub(crate) struct Ctx<'i> {
     msg: Vec<u8>,
     /// Sinks 2 and up: text being built (`sink.push`).
     bufs: Vec<Vec<u8>>,
+    /// Buffers of sinks gone, emptied, for the next ones.
+    spare: Vec<Vec<u8>>,
     pub heap: Heap,
     /// A run that doesn't see the machine (see `host`).
     pub sandbox: bool,
@@ -67,6 +69,7 @@ impl<'i> Ctx<'i> {
             line_buffered,
             msg: Vec::new(),
             bufs: Vec::new(),
+            spare: Vec::new(),
             heap: Heap::default(),
             sandbox: host.sandbox,
             args: host.args,
@@ -158,6 +161,14 @@ impl<'i> Ctx<'i> {
             return Err(Trap::Crash(format!("loom internal: sink {h} isn't the last one made")));
         }
         Ok(self.bufs.pop().unwrap_or_default())
+    }
+
+    /// Keeps a sink's buffer for the next sink.
+    fn recycle(&mut self, mut buf: Vec<u8>) {
+        if self.spare.len() < 8 && buf.capacity() <= 64 * 1024 {
+            buf.clear();
+            self.spare.push(buf);
+        }
     }
 
     /// Writes a `String` holding `text` at `dst`.
@@ -347,24 +358,17 @@ fn sink_fmt(ctx: &mut Ctx, args: &mut [u64], item: u16) -> Result<(), Trap> {
 
 /// `sink.push() -> sink`: a new buffer.
 fn sink_push(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    ctx.bufs.push(Vec::new());
+    let buf = ctx.spare.pop().unwrap_or_default();
+    ctx.bufs.push(buf);
     args[0] = ctx.bufs.len() as u64 + 1;
     Ok(())
 }
 
 /// `sink.string(sink, destination)`: the buffer's text as a `String`.
 fn sink_string(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    // The buffer becomes the string's: nothing is copied.
     let text = ctx.pop(args[0])?;
-    let len = text.len() as u64;
-    let (ptr, cap) = ctx.heap.adopt(text)?;
-    // SAFETY: `dst` is where the compiler wants the string: three words.
-    unsafe {
-        let d = args[1] as *mut u64;
-        d.write(ptr);
-        d.add(1).write(len);
-        d.add(2).write(cap);
-    }
+    ctx.new_string(&text, args[1])?;
+    ctx.recycle(text);
     Ok(())
 }
 
@@ -378,14 +382,16 @@ fn sink_pad(ctx: &mut Ctx, args: &mut [u64], item: u16) -> Result<(), Trap> {
         Some(spec) => fmt::pad(&mut out, &text, &spec),
         None => out.extend_from_slice(&text),
     }
+    ctx.recycle(text);
     ctx.put(args[1], &out)
 }
 
 /// `str.new(text address, length, destination)`: a `String` of the text.
 fn str_new(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    // SAFETY: `str.new` is passed a text value.
-    let text = unsafe { ctx.text(args[0], args[1])? }.to_vec();
-    ctx.new_string(&text, args[2])
+    // SAFETY: `str.new` is passed a text value, which allocating doesn't
+    // move or free.
+    let text: *const [u8] = unsafe { ctx.text(args[0], args[1])? };
+    ctx.new_string(unsafe { &*text }, args[2])
 }
 
 /// `str.eq(a, a length, b, b length)`: whether the texts are the same.
