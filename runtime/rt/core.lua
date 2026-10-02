@@ -360,7 +360,7 @@ rt.anyd = { kind = "any" }
 --- the same for equal values.
 function rt.hash(d, v)
   local h = -3750763034362895579 -- 0xcbf29ce484222325
-  local s = show(d, v, true)
+  local s = rt.show(d, v, true)
   for i = 1, #s do
     h = (h ~ sbyte(s, i)) * 1099511628211
   end
