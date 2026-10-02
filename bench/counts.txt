@@ -1,5 +1,14 @@
 # How many instructions Treadle dispatches for each benchmark at a small
 # size: name, size, count. crates/loom/tests/bench_counts.rs checks them
 # (with `--features vm-stats`); LOOM_BLESS=1 writes them anew.
-fib          20     109462
-mandelbrot   40     1124794
+fib          20     109463
+mandelbrot   40     993961
+sieve        100000 2213389
+spectral_norm 40     1424221
+fannkuch     7      1248482
+binary_trees 8      2185532
+richards     10000  712632
+word_freq    40000  3098080
+sort         20000  7716975
+streams      30000  10151022
+chip8        30000  1179345
