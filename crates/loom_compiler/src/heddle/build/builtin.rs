@@ -200,7 +200,7 @@ impl<'a> Builder<'a> {
                 let dst = sret?;
                 let fty = tys[1];
                 let f = self.regs(args[1].clone(), fty, span)?;
-                self.emit(InstKind::Zero { dst, size: 24 }, &[]);
+                self.empty_header(dst, ret)?;
                 let zero = self.iconst(0);
                 self.count_loop(zero, len, |this, i| {
                     let at = this.elem_at(buf, i, elem)?;

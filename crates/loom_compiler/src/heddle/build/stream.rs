@@ -1187,7 +1187,7 @@ impl<'a> Builder<'a> {
             }
             "collect" => {
                 let dst = self.f.sret?;
-                self.emit(InstKind::Zero { dst, size: 24 }, &[]);
+                self.empty_header(dst, ret)?;
                 let (size, align) = self.size_align(item)?;
                 run(self, &mut |this, _| {
                     let (_, n) = this.list_view(dst);

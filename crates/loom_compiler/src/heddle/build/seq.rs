@@ -109,8 +109,10 @@ impl<'a> Builder<'a> {
     pub(super) fn alloc_elems(&mut self, n: Value, elem: Ty) -> Option<Value> {
         let (size, align) = self.size_align(elem)?;
         let ptr = self.new_var(VTy::Ptr);
-        let null = self.emit1(InstKind::Iconst(0), VTy::Ptr);
-        self.write(ptr, null);
+        // None: an address that's never read, but isn't null (null is
+        // `none` of an optional list).
+        let dangling = self.emit1(InstKind::Iconst(align.max(1)), VTy::Ptr);
+        self.write(ptr, dangling);
         let zero = self.iconst(0);
         let (yes, done) = (self.new_block(), self.new_block());
         let some = self.ucmp(Cmp::Ne, n, zero);
@@ -255,10 +257,24 @@ impl<'a> Builder<'a> {
             return self.unsupported(span, "this kind of `T()`");
         }
         let header = self.temp(ty, span)?;
-        let size = if is_coll { 40 } else { 24 };
-        self.emit(InstKind::Zero { dst: header, size }, &[]);
+        self.empty_header(header, ty)?;
         self.own_temp(header, ty);
         Some(Val::Mem(header))
+    }
+
+    /// Writes an empty list, string, map or set of type `ty` at `dst`: no
+    /// length, no room, and a buffer address that isn't null (null is
+    /// `none` of an optional one) but is never read.
+    pub(super) fn empty_header(&mut self, dst: Value, ty: Ty) -> Option<()> {
+        let (size, align) = match (self.seq_of(ty), self.coll_of(ty)) {
+            (Some(Seq::List(elem)), _) => (24, self.size_align(elem)?.1),
+            (_, Some(c)) => (40, c.ealign),
+            _ => (24, 1),
+        };
+        self.emit(InstKind::Zero { dst, size }, &[]);
+        let dangling = self.emit1(InstKind::Iconst(align.max(1)), VTy::Ptr);
+        self.store(Mem::W64, dst, 0, dangling);
+        Some(())
     }
 
     /// A view of all of `v`, an array or a list of type `from`.

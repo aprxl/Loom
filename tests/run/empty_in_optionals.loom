@@ -1,0 +1,11 @@
+// An empty list, string or map inside an optional is still `some`: on
+// Treadle, `none` is a null buffer, and an empty one's isn't null.
+use std.io.print
+fn main() {
+    let a: ?List[i32] = some(List())
+    let b: ?String = some(String())
+    let c: ?Map[i32, i32] = some(Map())
+    let d: ?List[i32] = some([])
+    let e: ?String = some("")
+    print("{a} {b:?} {c} {d} {e:?}")
+}

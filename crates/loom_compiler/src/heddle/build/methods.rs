@@ -129,7 +129,7 @@ impl<'a> Builder<'a> {
         let out: Option<Vec<Value>> = match (warp, name) {
             // ---------------------------------------------------------- String
             ("std.string.String", "with_capacity") => {
-                self.emit(InstKind::Zero { dst: sret?, size: 24 }, &[]);
+                self.empty_header(sret?, ret)?;
                 Some(Vec::new())
             }
             ("std.string.String", "of") => {

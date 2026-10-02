@@ -486,7 +486,7 @@ impl<'a> Builder<'a> {
             vals.push((kv, vv));
         }
         let header = self.temp(ty, span)?;
-        self.emit(InstKind::Zero { dst: header, size: 40 }, &[]);
+        self.empty_header(header, ty)?;
         self.own_temp(header, ty);
         for (k, v) in vals {
             self.map_put(&c, header, k, v, span)?;
@@ -585,7 +585,7 @@ impl<'a> Builder<'a> {
             // `Set.of(xs)`: each element, once.
             let c = self.coll_of(ret)?;
             let dst = self.f.sret?;
-            self.emit(InstKind::Zero { dst, size: 40 }, &[]);
+            self.empty_header(dst, ret)?;
             let (buf, len) = self.view_of(&args[0], tys[0], span)?;
             let zero = self.iconst(0);
             self.count_loop(zero, len, |this, i| {
