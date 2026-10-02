@@ -301,6 +301,15 @@ pub enum InstKind {
         index: Value,
         scale: u64,
     },
+    /// Frees the buffer of the list (or `String`) whose header (buffer,
+    /// length, capacity) is at `header + off`, of `size`-byte elements
+    /// aligned to `align`, unless its capacity is zero.
+    FreeBuf {
+        header: Value,
+        off: i32,
+        size: u64,
+        align: u64,
+    },
     /// A function as a value: its number.
     FuncRef(FuncId),
     /// Calls the function whose number `callee` holds, which takes as many

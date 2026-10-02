@@ -1286,6 +1286,7 @@ pub(crate) fn rewrite(k: &mut InstKind, f: impl Fn(Value) -> Value) {
             *src = f(*src);
         }
         K::Zero { dst, .. } => *dst = f(*dst),
+        K::FreeBuf { header, .. } => *header = f(*header),
         K::Elem { header, index, .. } => {
             *header = f(*header);
             *index = f(*index);

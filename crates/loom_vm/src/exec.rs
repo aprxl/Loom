@@ -509,6 +509,25 @@ impl<'i> Machine<'i> {
                         unsafe { (p as *mut $t).write_unaligned(v) }
                     }};
                 }
+                // Frees the buffer of the list whose header is at `header`, of
+                // `size`-byte elements, unless its capacity is zero.
+                macro_rules! free_buf {
+                    ($header:expr, $size:expr, $align:expr) => {{
+                        let header = $header;
+                        mem_check!(header, 24);
+                        // SAFETY: the compiler passes the address of a list's
+                        // header: its buffer, length and capacity.
+                        let (buf, cap) = unsafe {
+                            let h = header as *const u64;
+                            (h.read(), h.add(2).read())
+                        };
+                        if cap != 0
+                            && let Err(trap) = env.ctx.heap.free(buf, cap.wrapping_mul($size), $align)
+                        {
+                            throw!(trap);
+                        }
+                    }};
+                }
                 macro_rules! branch {
                     ($f:expr) => {{
                         if $f(r!(a(w)), r!(b(w))) {
@@ -995,6 +1014,14 @@ impl<'i> Machine<'i> {
                     Op::StEl16 => st_el!(reg, u16),
                     Op::StEl32 => st_el!(reg, u32),
                     Op::StEl64 => st_el!(reg, u64),
+                    Op::FreeBufF => {
+                        let ext = ext!();
+                        free_buf!((fp as u64).wrapping_add(ext >> 32), ext & 0xFFFF_FFFF, 1u64 << a(w))
+                    }
+                    Op::FreeBuf => {
+                        let ext = ext!();
+                        free_buf!(r!(a(w)), ext, 1u64 << b(w))
+                    }
                     Op::Copy => {
                         let n = ext!();
                         let (dst, src) = (r!(a(w)), r!(b(w)));

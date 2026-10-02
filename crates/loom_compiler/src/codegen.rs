@@ -363,6 +363,7 @@ fn slot_uses(f: &Func) -> (HashMap<Value, usize>, HashSet<Value>) {
             let folded = match &inst.kind {
                 InstKind::Load { ptr, off, .. } if *off >= 0 => Some(*ptr),
                 InstKind::Elem { header, off, .. } if *off >= 0 => Some(*header),
+                InstKind::FreeBuf { header, off, .. } if *off >= 0 => Some(*header),
                 InstKind::Store { ptr, off, .. } if *off >= 0 => Some(*ptr),
                 InstKind::Offset { ptr, off } if u32::try_from(*off).is_ok() => Some(*ptr),
                 _ => None,
@@ -1628,6 +1629,24 @@ impl Emitter<'_> {
                 self.put_ext(span, word(Op::Idx, dst, self.r(*base), self.r(*index)), Some(*scale));
             }
             K::Bounds { index, len } => self.put(span, word(Op::Bounds, self.r(*index), self.r(*len), 0)),
+            K::FreeBuf { header, off, size, align } => {
+                let log = align.max(&1).trailing_zeros() as u16;
+                match self.address(span, *header, *off) {
+                    Err(at) => {
+                        let ext = (u64::from(at) << 32) | *size;
+                        self.put_ext(span, word(Op::FreeBufF, log, 0, 0), Some(ext));
+                    }
+                    Ok((reg, k)) => {
+                        let reg = if k == 0 {
+                            reg
+                        } else {
+                            self.put(span, word(Op::AddWKU64, self.tmp2, reg, k as u16));
+                            self.tmp2
+                        };
+                        self.put_ext(span, word(Op::FreeBuf, reg, log, 0), Some(*size));
+                    }
+                }
+            }
             K::Elem { header, off, index, scale } => match self.address(span, *header, *off) {
                 // In the frame: one `elemf`.
                 Err(at) => {

@@ -12,7 +12,7 @@ use loom_syntax::source::Span;
 use super::text::Sink;
 use super::value::Val;
 use super::{Builder, Glue};
-use crate::heddle::{BlockId, Cmp, InstKind, IntOp, Mem, Policy, Term, VTy, Value};
+use crate::heddle::{Cmp, InstKind, IntOp, Mem, Policy, Term, VTy, Value};
 use crate::ty::layout::Shape;
 use crate::ty::{IntTy, Ty, TyKind};
 use crate::typeck::BodyId;
@@ -227,28 +227,9 @@ impl<'a> Builder<'a> {
     /// of elements of `size` bytes aligned to `align`, unless it has no
     /// capacity (empty, or moved away).
     pub(super) fn free_buffer(&mut self, ptr: Value, size: u64, align: u64) {
-        let cap = self.load(Mem::W64, ptr, 16, VTy::Int);
-        let zero = self.iconst(0);
-        let has = self.emit1(InstKind::ICmp { cmp: Cmp::Ne, unsigned: true, a: cap, b: zero }, VTy::Int);
-        let (yes, done): (BlockId, BlockId) = (self.new_block(), self.new_block());
-        self.br(has, yes, done);
-        self.enter(yes);
         if size > 0 {
-            let buf = self.load(Mem::W64, ptr, 0, VTy::Ptr);
-            let bytes = if size == 1 {
-                cap
-            } else {
-                let scale = self.iconst(size);
-                self.emit1(
-                    InstKind::Arith { op: IntOp::Mul, policy: Policy::Wrap, ty: U64, a: cap, b: scale },
-                    VTy::Int,
-                )
-            };
-            let a = self.iconst(align);
-            self.emit(InstKind::Native { name: "mem.free", imm: 0, args: vec![buf, bytes, a] }, &[]);
+            self.emit(InstKind::FreeBuf { header: ptr, off: 0, size, align }, &[]);
         }
-        self.jump(done);
-        self.enter(done);
     }
 
     // ------------------------------------------------------------ copy glue

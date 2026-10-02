@@ -232,6 +232,21 @@ fn verify_func(image: &Image, index: usize) -> Result<(), VerifyError> {
                 reg(b(w))?;
                 reg(c(w))?;
             }
+            Form::FB => {
+                // The list's header: three words, inside the frame.
+                if (ext >> 32) + 24 > frame as u64 * 8 {
+                    return Err(err(pc, format!("fp+{} is outside the frame", ext >> 32)));
+                }
+                if a(w) > 12 {
+                    return Err(err(pc, "an alignment past 4096".into()));
+                }
+            }
+            Form::RB => {
+                reg(a(w))?;
+                if b(w) > 12 {
+                    return Err(err(pc, "an alignment past 4096".into()));
+                }
+            }
             Form::FE | Form::ABFZ => {
                 reg(a(w))?;
                 reg(b(w))?;

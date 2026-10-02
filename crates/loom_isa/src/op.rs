@@ -81,6 +81,13 @@ pub enum Form {
     /// word: a byte offset into the element (high half) and the scale (low
     /// half).
     RE,
+    /// `a`: the log2 of an alignment; an extension word: the byte offset
+    /// of a list's header from the frame pointer (high half) and an element
+    /// size (low half).
+    FB,
+    /// `a`: the register holding the address of a list's header; `b`: the
+    /// log2 of an alignment; an extension word: an element size.
+    RB,
     /// `a`: a register; `b:c`: a function's index.
     AFn,
     /// `a`: where the callee's frame starts, as for [`Form::Call`]; `b`: the
@@ -103,7 +110,9 @@ impl Form {
             | Form::ABCZ
             | Form::ABFZ
             | Form::FE
-            | Form::RE => 2,
+            | Form::RE
+            | Form::FB
+            | Form::RB => 2,
             _ => 1,
         }
     }
@@ -503,6 +512,10 @@ ops! {
     StEl16 = "stel.16", RE;
     StEl32 = "stel.32", RE;
     StEl64 = "stel.64", RE;
+    // free the buffer of a list (or a `String`) unless its capacity is 0:
+    // its header in the frame, or at a register's address
+    FreeBufF = "freebuf.f", FB;
+    FreeBuf = "freebuf", RB;
     // blocks of memory: copy `ext` bytes from b's address to a's; zero them
     Copy = "copy", ABZ;
     Zero = "zero", AZ;
