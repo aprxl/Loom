@@ -6,3 +6,8 @@ AR_x86_64_pc_windows_msvc = "llvm-lib"
 
 [target.x86_64-pc-windows-msvc]
 linker = "lld-link"
+# Treadle's dispatch loop is one `match` over every op. LLVM gives each op
+# its own copy of the dispatch (tail duplication: what computed goto does
+# in C) only when these caps allow that many successors; with one shared
+# dispatch, its speed swung by 30% with unrelated changes.
+rustflags = ["-C", "llvm-args=-tail-dup-pred-size=1000", "-C", "llvm-args=-tail-dup-succ-size=1000"]
