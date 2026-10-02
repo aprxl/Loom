@@ -1,0 +1,21 @@
+// `String`, `Map[String, u32]` and templates: counting words.
+use std.io.print
+
+const SIZE = 4_000_000
+
+const SYLLABLES: [str; 8] = ["ka", "lo", "mi", "ne", "su", "ta", "ro", "vi"]
+
+fn main() {
+    var counts: Map[String, u32] = Map()
+    var seed = 42u64
+    for _ in 0..SIZE {
+        seed = seed *% 6364136223846793005 +% 1442695040888963407
+        let a = SYLLABLES[(seed >> 40) as usize % 8]
+        let b = SYLLABLES[(seed >> 50) as usize % 8]
+        let word = if (seed >> 60) % 2 == 0 { "{a}{b}" } else { "{a}{b}{a}" }
+        if counts.has(word) { counts[word] += 1 } else { counts[word] = 1 }
+    }
+    var top = counts.pairs().collect()
+    top.sort()
+    print("{counts.len()} words, first {top[0]}, last {top[top.len() - 1]}")
+}

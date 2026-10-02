@@ -1,0 +1,46 @@
+// Small functions called in float loops: the spectral norm of a matrix.
+use std.io.print
+
+const SIZE = 400
+
+fn a(i: usize, j: usize) -> f64 = 1.0 / (((i + j) * (i + j + 1) / 2 + i + 1) as f64)
+
+fn times(v: [f64], mut out: List[f64]) {
+    let n = v.len()
+    for i in 0..n {
+        var sum = 0.0
+        for j in 0..n { sum += a(i, j) * v[j] }
+        out[i] = sum
+    }
+}
+
+fn times_transposed(v: [f64], mut out: List[f64]) {
+    let n = v.len()
+    for i in 0..n {
+        var sum = 0.0
+        for j in 0..n { sum += a(j, i) * v[j] }
+        out[i] = sum
+    }
+}
+
+fn times_both(v: [f64], mut out: List[f64], mut tmp: List[f64]) {
+    times(v, mut tmp)
+    times_transposed(tmp, mut out)
+}
+
+fn main() {
+    var u = List.filled(1.0, SIZE)
+    var v = List.filled(0.0, SIZE)
+    var tmp = List.filled(0.0, SIZE)
+    for _ in 0..10 {
+        times_both(u, mut v, mut tmp)
+        times_both(v, mut u, mut tmp)
+    }
+    var vbv = 0.0
+    var vv = 0.0
+    for i in 0..SIZE {
+        vbv += u[i] * v[i]
+        vv += v[i] * v[i]
+    }
+    print("{(vbv / vv).sqrt():.9}")
+}

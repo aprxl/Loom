@@ -1,0 +1,55 @@
+// Small-integer arrays and permutations: fannkuch-redux.
+use std.io.print
+
+const SIZE = 10
+
+fn main() {
+    let n = SIZE
+    var perm1: List[i32] = List()
+    for i in 0..n { perm1.push(i as i32) }
+    var perm = List.filled(0, n)
+    var count = List.filled(0, n)
+    var max_flips = 0
+    var checksum = 0
+    var perm_count = 0
+    var r = n
+    loop {
+        while r != 1 {
+            count[r - 1] = r as i32
+            r -= 1
+        }
+        for i in 0..n { perm[i] = perm1[i] }
+        var flips = 0
+        var k = perm[0]
+        while k != 0 {
+            var i = 0
+            var j = k as usize
+            while i < j {
+                let t = perm[i]
+                perm[i] = perm[j]
+                perm[j] = t
+                i += 1
+                j -= 1
+            }
+            flips += 1
+            k = perm[0]
+        }
+        if flips > max_flips { max_flips = flips }
+        checksum += if perm_count % 2 == 0 { flips } else { -flips }
+        // The next permutation.
+        loop {
+            if r == n {
+                print(checksum)
+                print("Pfannkuchen({n}) = {max_flips}")
+                return
+            }
+            let first = perm1[0]
+            for i in 0..r { perm1[i] = perm1[i + 1] }
+            perm1[r] = first
+            count[r] -= 1
+            if count[r] > 0 { break }
+            r += 1
+        }
+        perm_count += 1
+    }
+}

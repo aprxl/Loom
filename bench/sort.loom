@@ -1,0 +1,17 @@
+// `List.sort` on records, comparing through a derived `Ord`.
+use std.io.print
+
+const SIZE = 300_000
+
+warp Person: Eq, Ord, Show { age: u32, id: u64 }
+
+fn main() {
+    var people: List[Person] = List()
+    var seed = 12345u64
+    for i in 0..SIZE {
+        seed = seed *% 6364136223846793005 +% 1442695040888963407
+        people.push(Person(age: (seed >> 33) as u32 % 100, id: i as u64))
+    }
+    people.sort()
+    print("{people[0]} {people[SIZE / 2]} {people[SIZE - 1]}")
+}

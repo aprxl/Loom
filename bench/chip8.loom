@@ -1,0 +1,55 @@
+// Twill `match`, `u8` and `u12` wrapping arithmetic, an interpreter loop:
+// a CHIP-8 core running a small program that never ends.
+use std.io.print
+
+const SIZE = 3_000_000
+
+const PROGRAM: [u16; 9] = [
+    0x6000, // V0 = 0
+    0x6101, // V1 = 1
+    0x8014, // V0 += V1, VF = carry       (0x204)
+    0x7105, // V1 += 5
+    0xF01E, // I += V0
+    0x3000, // skip if V0 == 0
+    0x1204, // jump 0x204
+    0x7201, // V2 += 1
+    0x1204, // jump 0x204
+]
+
+warp Cpu {
+    mem: [u8; 4096] = [0; 4096]
+    v: [u8; 16] = [0; 16]
+    i: u12 = 0
+    pc: u12 = 0x200
+
+    fn exec(mut self, op: u16) {
+        match op {
+            0x1nnn => .pc = n
+            0x3xkk => if .v[x] == k { .pc +%= 2 }
+            0x6xkk => .v[x] = k
+            0x7xkk => .v[x] +%= k
+            0x8xy4 => {
+                let sum = .v[x] as u16 + .v[y] as u16
+                .v[x] = sum as% u8
+                .v[0xF] = (sum >> 8) as u8
+            }
+            0xFx1E => .i +%= .v[x]
+            _ => {}
+        }
+    }
+}
+
+fn main() {
+    var cpu = Cpu()
+    for (k, op) in PROGRAM.indexed() {
+        let at = 0x200 + 2 * k
+        cpu.mem[at] = (op >> 8) as u8
+        cpu.mem[at + 1] = op as% u8
+    }
+    for _ in 0..SIZE {
+        let op: u16 = cpu.mem[cpu.pc] << 8 | cpu.mem[cpu.pc +% 1]
+        cpu.pc +%= 2
+        cpu.exec(op)
+    }
+    print("{cpu.v[0]} {cpu.v[1]} {cpu.v[2]} {cpu.v[0xF]} {cpu.i} {cpu.pc}")
+}

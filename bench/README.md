@@ -9,15 +9,26 @@ and an idiomatic Lua 5.4 version of it in `lua/`:
 | Benchmark | What it stresses |
 |---|---|
 | `fib` | calls and returns |
+| `sieve` | arrays, bounds checks, integer loops |
 | `mandelbrot` | float arithmetic in tight loops |
+| `nbody` | records of floats, a list of them |
+| `spectral_norm` | small functions called in float loops |
+| `fannkuch` | small-integer arrays, permutations |
+| `binary_trees` | allocating and freeing |
+| `richards` | sums, `match`, records, `any` dispatch |
+| `word_freq` | `String`, `Map[String, u32]`, templates |
+| `sort` | `List.sort` on records, comparing through `Ord` |
+| `streams` | iterator chains: `filter`, `map`, `take_while`, `sum` |
+| `chip8` | twill `match`, `u8` and `u12` wrapping arithmetic, an interpreter loop |
 
-The rest of the suite (sieve, nbody, binary trees, …) comes as Treadle runs
-what they need.
+The lexer benchmark comes with shuttles (V2).
 
 ## Running them
 
-Build `loom` in release mode, then time each way of running a benchmark (the
-best of five runs, wall clock, compilation and start-up included):
+Build `loom` in release mode, then `python bench/run.py` times each on
+Treadle and on PUC Lua 5.4 (the best of five runs, wall clock, compilation
+and start-up included), checks their outputs agree, and prints the table
+with the geometric mean. By hand:
 
 ```bash
 cargo build --release -p loom

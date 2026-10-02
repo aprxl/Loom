@@ -1,0 +1,74 @@
+// Sums, `match`, records and `any` dispatch: a task scheduler in the
+// spirit of Richards. Packets go round a queue; each is handed to the task
+// its kind names, through `any Task`, which may send another on.
+use std.io.print
+
+const SIZE = 1_000_000
+
+warp Kind: Copy {
+    case Work(n: u32)
+    case Device(id: u32)
+    case Idle
+}
+
+warp Packet: Copy { kind: Kind, hops: u32 }
+
+weft Task {
+    fn run(mut self, p: Packet) -> ?Packet
+    fn done(self) -> u32
+}
+
+warp Worker { count: u32, seed: u32 }
+weave Task into Worker {
+    fn run(mut self, p: Packet) -> ?Packet {
+        .count += 1
+        .seed = .seed *% 1103515245 +% 12345
+        match p.kind {
+            .Work(n) if n > 0 => some(Packet(kind: .Work(n - 1), hops: p.hops + 1))
+            .Work(_) => some(Packet(kind: .Device(.seed % 4), hops: p.hops + 1))
+            _ => none
+        }
+    }
+    fn done(self) -> u32 = .count
+}
+
+warp Device { id: u32, handled: u32 }
+weave Task into Device {
+    fn run(mut self, p: Packet) -> ?Packet {
+        .handled += 1
+        if p.hops % 7 == 0 { some(Packet(kind: .Idle, hops: 0)) } else { some(Packet(kind: .Work(3), hops: p.hops + 1)) }
+    }
+    fn done(self) -> u32 = .handled * 10 + .id
+}
+
+warp Idler { ticks: u32 }
+weave Task into Idler {
+    fn run(mut self, p: Packet) -> ?Packet {
+        .ticks += 1
+        some(Packet(kind: .Work(.ticks % 5), hops: p.hops))
+    }
+    fn done(self) -> u32 = .ticks
+}
+
+fn main() {
+    var tasks: List[any Task] = [Worker(count: 0, seed: 7), Idler(ticks: 0)]
+    for id in 0..4u32 { tasks.push(Device(id: id, handled: 0)) }
+    var queue: List[Packet] = List()
+    for i in 0..8u32 { queue.push(Packet(kind: .Work(i), hops: 0)) }
+    var head = 0
+    for _ in 0..SIZE {
+        let p = queue[head]
+        head = (head + 1) % queue.len()
+        let target = match p.kind {
+            .Work(_) => 0
+            .Idle => 1
+            .Device(id) => 2 + id as usize
+        }
+        if tasks[target].run(p) is some(next) {
+            queue[(head + queue.len() - 1) % queue.len()] = next
+        }
+    }
+    var total = 0u32
+    for t in tasks { total +%= t.done() }
+    print(total)
+}
