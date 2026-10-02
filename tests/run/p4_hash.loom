@@ -1,0 +1,13 @@
+// design/vm.md §14 P4: `x.hash()`. Equal values hash the same on both
+// backends, but the numbers differ: Lua hashes the debug text (FNV-1a),
+// Treadle the value's parts. (p4_hash.vm.out is Treadle's.)
+use std.io.print
+
+warp P: Eq, Hash, Show { x: i32, name: String }
+
+fn main() {
+    let a = P(x: 1, name: "a")
+    let b = P(x: 1, name: "a")
+    print("{a.hash() == b.hash()} {a.hash() == P(x: 2, name: "a").hash()}")
+    print(a.hash())
+}

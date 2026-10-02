@@ -1,0 +1,16 @@
+// design/vm.md §14 P1: what a callee wrote to a `mut` argument before it
+// unravelled. Treadle passes the place itself, so the `defer` sees 99;
+// Lua copies a scalar back only when the call returns, so it sees 1.
+// (p1_mut_on_unwind.vm.out is Treadle's.)
+use std.io.print
+
+fn bump(mut n: i32) {
+    n = 99
+    unravel("stop")
+}
+
+fn main() {
+    var n = 1
+    defer print("n is {n}")
+    bump(mut n)
+}

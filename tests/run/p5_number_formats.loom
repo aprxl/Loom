@@ -1,0 +1,12 @@
+// design/vm.md §14 P5: formatting numbers. One table of cases, Rust's
+// formatting where the spec is silent, and both backends agree.
+use std.io.print
+
+fn main() {
+    let fs = [0.0, -0.0, 1.0, 0.1, 1.5e300, 1e-7, 123456789.125, -2.5, 1.0 / 3.0]
+    for f in fs { print("{f} {f:?} {f:.2} {f:>12.3}") }
+    let tiny: f32 = 0.1
+    print("{tiny} {tiny * 3.0} {(1.0 / 0.0)} {(-1.0 / 0.0)} {(0.0 / 0.0)}")
+    print("{255:x} {255:X} {255:b} {255:o} {255:#x} {255:08b} {-42:>6} {42:<6}| {42:^6}|")
+    print("{18446744073709551615u64} {-9223372036854775808i64} {7u4:04}")
+}
