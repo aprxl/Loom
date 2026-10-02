@@ -155,7 +155,7 @@ fn emit_func(
         rank[b] = i;
     }
     let fused = if fuse { fusions(f) } else { HashSet::new() };
-    let (folds, mut dead) = immediates(f, &fused);
+    let (folds, mut dead) = immediates(f);
     // Slot addresses only loads and stores use need no register.
     let (slot_of, folded_slots) = slot_uses(f);
     dead.extend(folded_slots);
@@ -401,7 +401,7 @@ fn fusions(f: &Func) -> HashSet<Value> {
     for b in &f.blocks {
         let (Some(Term::Br { cond, .. }), Some(last)) = (&b.term, b.insts.last()) else { continue };
         if last.results == [*cond]
-            && matches!(last.kind, InstKind::ICmp { .. } | InstKind::FCmp { .. })
+            && matches!(last.kind, InstKind::ICmp { .. } | InstKind::FCmp { .. } | InstKind::Not(_))
             && uses.get(cond) == Some(&1)
         {
             out.insert(*cond);
@@ -418,6 +418,21 @@ enum Fold {
     /// The first is, and the operation is flipped (`k + x` is `x + k`, and
     /// `k < x` is `x > k`).
     A(i16),
+    /// A bounds check's length is this constant.
+    Len(u32),
+    /// A bounds check of a constant index below a constant length: nothing.
+    Gone,
+}
+
+impl Fold {
+    /// The operand that isn't the constant, and the constant.
+    fn split(self, a: Value, b: Value) -> (Value, i16) {
+        match self {
+            Fold::B(k) => (a, k),
+            Fold::A(k) => (b, k),
+            Fold::Len(_) | Fold::Gone => unreachable!("only bounds checks fold these"),
+        }
+    }
 }
 
 /// The value of each integer constant.
@@ -437,9 +452,10 @@ fn constants(f: &Func) -> HashMap<Value, i64> {
 /// constants nothing else reads. An immediate is 16 bits, sign-extended to
 /// the 64-bit pattern of the register, so a constant fits when its pattern
 /// is a sign-extended `i16` (for any integer type).
-fn immediates(f: &Func, fused: &HashSet<Value>) -> (HashMap<(usize, usize), Fold>, HashSet<Value>) {
+fn immediates(f: &Func) -> (HashMap<(usize, usize), Fold>, HashSet<Value>) {
     let consts = constants(f);
     let small = |v: Value| consts.get(&v).and_then(|&k| i16::try_from(k).ok());
+    let mask = |v: Value| consts.get(&v).and_then(|&k| u16::try_from(k).ok());
     let mut folds = HashMap::new();
     let mut folded: HashMap<Value, usize> = HashMap::new();
     for (bi, b) in f.blocks.iter().enumerate() {
@@ -459,13 +475,34 @@ fn immediates(f: &Func, fused: &HashSet<Value>) -> (HashMap<(usize, usize), Fold
                 InstKind::Arith { op: IntOp::Sub, policy: Policy::Wrap, b, .. } => {
                     small(*b).and_then(|k| k.checked_neg()).map(|k| (Fold::B(k), *b))
                 }
-                InstKind::ICmp { a, b, .. } if inst.results.first().is_some_and(|r| fused.contains(r)) => {
-                    match (small(*b), small(*a)) {
-                        (Some(k), _) => Some((Fold::B(k), *b)),
-                        (None, Some(k)) => Some((Fold::A(k), *a)),
-                        _ => None,
-                    }
+                InstKind::ICmp { a, b, .. } => match (small(*b), small(*a)) {
+                    (Some(k), _) => Some((Fold::B(k), *b)),
+                    (None, Some(k)) => Some((Fold::A(k), *a)),
+                    _ => None,
+                },
+                // A mask: zero-extended.
+                InstKind::Bit { a, b, .. } => match (mask(*b), mask(*a)) {
+                    (Some(k), _) => Some((Fold::B(k as i16), *b)),
+                    (None, Some(k)) => Some((Fold::A(k as i16), *a)),
+                    _ => None,
+                },
+                InstKind::Shl { ty, b, .. } if int_width(*ty).is_some() => {
+                    small(*b).filter(|&k| k >= 0 && (k as u32) < u32::from(ty.bits)).map(|k| (Fold::B(k), *b))
                 }
+                InstKind::Shr { ty, b, .. } => {
+                    small(*b).filter(|&k| k >= 0 && (k as u32) < u32::from(ty.bits)).map(|k| (Fold::B(k), *b))
+                }
+                InstKind::Div { b, .. } | InstKind::Rem { b, .. } => {
+                    small(*b).filter(|&k| k > 0).map(|k| (Fold::B(k), *b))
+                }
+                InstKind::Bounds { index, len } => match (consts.get(index), consts.get(len)) {
+                    (Some(&i), Some(&n)) if (i as u64) < (n as u64) => {
+                        *folded.entry(*index).or_default() += 1;
+                        Some((Fold::Gone, *len))
+                    }
+                    (_, Some(&n)) => u32::try_from(n as u64).ok().map(|n| (Fold::Len(n), *len)),
+                    _ => None,
+                },
                 _ => None,
             };
             if let Some((fold, v)) = fold {
@@ -485,7 +522,9 @@ fn immediates(f: &Func, fused: &HashSet<Value>) -> (HashMap<(usize, usize), Fold
             *uses.entry(u).or_default() += 1;
         }
     }
-    let dead = folded.into_iter().filter(|(v, n)| uses.get(v) == Some(n)).map(|(v, _)| v).collect();
+    let mut dead: HashSet<Value> = folded.into_iter().filter(|(v, n)| uses.get(v) == Some(n)).map(|(v, _)| v).collect();
+    // And constants nothing reads at all.
+    dead.extend(consts.keys().filter(|v| !uses.contains_key(v)));
     (folds, dead)
 }
 
@@ -916,6 +955,12 @@ impl Emitter<'_> {
                 let at = self.code.len();
                 let fold = self.folds.get(&(b, block.insts.len().wrapping_sub(1))).copied();
                 match fused_cmp.map(|i| &i.kind) {
+                    // `not x`: a branch on `x` the other way.
+                    Some(InstKind::Not(x)) => {
+                        let op = if holds { Op::Jz } else { Op::Jnz };
+                        self.put(span, word_i32(op, self.r(*x), 0));
+                        self.fixups.push(Fixup { at, to: label, short: false });
+                    }
                     Some(k) => {
                         let w = branch_word(k, holds, fold, self);
                         self.put(span, w);
@@ -950,6 +995,77 @@ impl Emitter<'_> {
             self.unwinds.push((term_start, self.code.len(), pad.0 as usize));
         }
         Ok(())
+    }
+
+    /// `inst` with a constant operand as its immediate (see [`immediates`]),
+    /// if it's one of the instructions that take one here.
+    fn inst_k(&mut self, inst: &crate::heddle::Inst, fold: Fold) -> Result<bool, String> {
+        use InstKind as K;
+        use Op as O;
+        let span = inst.span;
+        let dst = inst.results.first().map(|&v| self.r(v)).unwrap_or(0);
+        let w = match &inst.kind {
+            K::Bit { op, a, b } => {
+                let (x, k) = fold.split(*a, *b);
+                let op = match op {
+                    BitOp::And => O::AndK,
+                    BitOp::Or => O::OrK,
+                    BitOp::Xor => O::XorK,
+                };
+                word(op, dst, self.r(x), k as u16)
+            }
+            K::Shl { ty, a, b } => {
+                let (x, k) = fold.split(*a, *b);
+                let family =
+                    [O::ShlKI8, O::ShlKI16, O::ShlKI32, O::ShlKI64, O::ShlKU8, O::ShlKU16, O::ShlKU32, O::ShlKU64];
+                let w = int_width(*ty).ok_or("a shift by a constant of an odd width")?;
+                word(family[w + if ty.signed { 0 } else { 4 }], dst, self.r(x), k as u16)
+            }
+            K::Shr { ty, a, b } => {
+                let (x, k) = fold.split(*a, *b);
+                word(if ty.signed { O::ShrKS } else { O::ShrKU }, dst, self.r(x), k as u16)
+            }
+            K::Div { ty, a, b } => {
+                let (x, k) = fold.split(*a, *b);
+                word(if ty.signed { O::DivKS } else { O::DivKU }, dst, self.r(x), k as u16)
+            }
+            K::Rem { ty, a, b } => {
+                let (x, k) = fold.split(*a, *b);
+                word(if ty.signed { O::RemKS } else { O::RemKU }, dst, self.r(x), k as u16)
+            }
+            K::ICmp { cmp, unsigned, a, b } => {
+                let (x, k) = fold.split(*a, *b);
+                // `k < x` is `x > k`.
+                let cmp = match (fold, cmp) {
+                    (Fold::A(_), Cmp::Lt) => Cmp::Gt,
+                    (Fold::A(_), Cmp::Le) => Cmp::Ge,
+                    (Fold::A(_), Cmp::Gt) => Cmp::Lt,
+                    (Fold::A(_), Cmp::Ge) => Cmp::Le,
+                    (_, other) => *other,
+                };
+                let op = match (cmp, unsigned) {
+                    (Cmp::Eq, _) => O::EqK,
+                    (Cmp::Ne, _) => O::NeK,
+                    (Cmp::Lt, false) => O::LtSK,
+                    (Cmp::Le, false) => O::LeSK,
+                    (Cmp::Gt, false) => O::GtSK,
+                    (Cmp::Ge, false) => O::GeSK,
+                    (Cmp::Lt, true) => O::LtUK,
+                    (Cmp::Le, true) => O::LeUK,
+                    (Cmp::Gt, true) => O::GtUK,
+                    (Cmp::Ge, true) => O::GeUK,
+                };
+                word(op, dst, self.r(x), k as u16)
+            }
+            K::Bounds { index, .. } => match fold {
+                Fold::Gone => return Ok(true),
+                Fold::Len(n) => word_i32(O::BoundsK, self.r(*index), n as i32),
+                _ => return Ok(false),
+            },
+            _ => return Ok(false),
+        };
+        self.put(span, w);
+        Ok(true)
     }
 
     /// The load or store op for `mem`, with a register address or at an
@@ -1008,10 +1124,7 @@ impl Emitter<'_> {
         let abc = |this: &Self, op: Op, a: Value, b: Value| word(op, dst, this.r(a), this.r(b));
         if let (K::Arith { op, policy, ty, a, b }, Some(fold)) = (&inst.kind, fold) {
             // `x + k`, `k + x`, `x - k`, `x -% k` (as `x +% -k`).
-            let (x, k) = match fold {
-                Fold::B(k) => (*a, k),
-                Fold::A(k) => (*b, k),
-            };
+            let (x, k) = fold.split(*a, *b);
             use Op as O;
             let family = match (op, policy) {
                 (IntOp::Add, Policy::Trap) => [
@@ -1051,6 +1164,11 @@ impl Emitter<'_> {
                 return Ok(());
             }
             return Err(format!("an immediate for a `{}`-bit integer", ty.bits));
+        }
+        if let Some(fold) = fold
+            && self.inst_k(inst, fold)?
+        {
+            return Ok(());
         }
         match &inst.kind {
             K::Undef => {}
@@ -1343,19 +1461,13 @@ fn float_compare(cmp: Cmp, ty: FloatTy, a: Value, b: Value) -> (Op, Value, Value
 fn branch_word(k: &InstKind, holds: bool, fold: Option<Fold>, e: &Emitter) -> u64 {
     if let (InstKind::ICmp { cmp, unsigned, a, b }, Some(fold)) = (k, fold) {
         // `x cmp k`, with `k cmp x` flipped around.
-        let (x, k, cmp) = match fold {
-            Fold::B(k) => (*a, k, *cmp),
-            Fold::A(k) => (
-                *b,
-                k,
-                match cmp {
-                    Cmp::Lt => Cmp::Gt,
-                    Cmp::Le => Cmp::Ge,
-                    Cmp::Gt => Cmp::Lt,
-                    Cmp::Ge => Cmp::Le,
-                    other => *other,
-                },
-            ),
+        let (x, k) = fold.split(*a, *b);
+        let cmp = match (fold, cmp) {
+            (Fold::A(_), Cmp::Lt) => Cmp::Gt,
+            (Fold::A(_), Cmp::Le) => Cmp::Ge,
+            (Fold::A(_), Cmp::Gt) => Cmp::Lt,
+            (Fold::A(_), Cmp::Ge) => Cmp::Le,
+            (_, other) => *other,
         };
         let cmp = if holds {
             cmp

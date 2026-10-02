@@ -54,6 +54,7 @@ fn operands(image: &Image, op: Op, w: u64, ext: u64, pc: usize) -> String {
         Form::ABCX => format!("r{}, r{}, r{} ({})", a(w), b(w), c(w), int(ext)),
         Form::ABJ => format!("r{}, r{}, →{}", a(w), b(w), at(c_i16(w))),
         Form::ABK => format!("r{}, r{}, {}", a(w), b(w), c(w) as u16 as i16),
+        Form::ABU => format!("r{}, r{}, {:#x}", a(w), b(w), c(w)),
         Form::AKJ => format!("r{}, {}, →{}", a(w), b(w) as u16 as i16, at(c_i16(w))),
         Form::J => format!("→{}", at(bc_i32(w) as isize)),
         Form::AJ => format!("r{}, →{}", a(w), at(bc_i32(w) as isize)),

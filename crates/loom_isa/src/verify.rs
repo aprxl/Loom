@@ -152,6 +152,24 @@ fn verify_func(image: &Image, index: usize) -> Result<(), VerifyError> {
             Form::ABK => {
                 reg(a(w))?;
                 reg(b(w))?;
+                let k = c_i16(w);
+                let bits = match op {
+                    Op::ShlKI8 | Op::ShlKU8 => 8,
+                    Op::ShlKI16 | Op::ShlKU16 => 16,
+                    Op::ShlKI32 | Op::ShlKU32 => 32,
+                    Op::ShlKI64 | Op::ShlKU64 | Op::ShrKS | Op::ShrKU => 64,
+                    _ => 0,
+                };
+                if bits > 0 && !(0..bits).contains(&k) {
+                    return Err(err(pc, "a shift by a constant past the width".into()));
+                }
+                if matches!(op, Op::DivKS | Op::DivKU | Op::RemKS | Op::RemKU) && k <= 0 {
+                    return Err(err(pc, "a division by a constant that isn't above zero".into()));
+                }
+            }
+            Form::ABU => {
+                reg(a(w))?;
+                reg(b(w))?;
             }
             Form::AKJ => {
                 reg(a(w))?;

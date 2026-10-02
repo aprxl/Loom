@@ -584,6 +584,35 @@ impl<'i> Machine<'i> {
                     Op::AddWKU16 => imm!(|x, k| ints::add_w(x, k, ints::U16)),
                     Op::AddWKU32 => imm!(|x, k| ints::add_w(x, k, ints::U32)),
                     Op::AddWKU64 => imm!(|x, k| ints::add_w(x, k, ints::U64)),
+                    Op::AndK => set!(a(w), r!(b(w)) & c(w) as u64),
+                    Op::OrK => set!(a(w), r!(b(w)) | c(w) as u64),
+                    Op::XorK => set!(a(w), r!(b(w)) ^ c(w) as u64),
+                    // The verifier checked that the constant is below the
+                    // width, and above zero for a division.
+                    Op::ShlKI8 => imm!(|x: u64, k| ints::wrap(x << k, ints::I8)),
+                    Op::ShlKI16 => imm!(|x: u64, k| ints::wrap(x << k, ints::I16)),
+                    Op::ShlKI32 => imm!(|x: u64, k| ints::wrap(x << k, ints::I32)),
+                    Op::ShlKI64 => imm!(|x: u64, k| x << k),
+                    Op::ShlKU8 => imm!(|x: u64, k| ints::wrap(x << k, ints::U8)),
+                    Op::ShlKU16 => imm!(|x: u64, k| ints::wrap(x << k, ints::U16)),
+                    Op::ShlKU32 => imm!(|x: u64, k| ints::wrap(x << k, ints::U32)),
+                    Op::ShlKU64 => imm!(|x: u64, k| x << k),
+                    Op::ShrKS => imm!(|x: u64, k| ((x as i64) >> k) as u64),
+                    Op::ShrKU => imm!(|x: u64, k| x >> k),
+                    Op::DivKS => imm!(|x: u64, k: u64| ((x as i64) / (k as i64)) as u64),
+                    Op::DivKU => imm!(|x: u64, k: u64| x / k),
+                    Op::RemKS => imm!(|x: u64, k: u64| ((x as i64) % (k as i64)) as u64),
+                    Op::RemKU => imm!(|x: u64, k: u64| x % k),
+                    Op::EqK => imm!(|x, k| u64::from(x == k)),
+                    Op::NeK => imm!(|x, k| u64::from(x != k)),
+                    Op::LtSK => imm!(|x, k| u64::from((x as i64) < (k as i64))),
+                    Op::LeSK => imm!(|x, k| u64::from((x as i64) <= (k as i64))),
+                    Op::GtSK => imm!(|x, k| u64::from((x as i64) > (k as i64))),
+                    Op::GeSK => imm!(|x, k| u64::from((x as i64) >= (k as i64))),
+                    Op::LtUK => imm!(|x: u64, k: u64| u64::from(x < k)),
+                    Op::LeUK => imm!(|x: u64, k: u64| u64::from(x <= k)),
+                    Op::GtUK => imm!(|x: u64, k: u64| u64::from(x > k)),
+                    Op::GeUK => imm!(|x: u64, k: u64| u64::from(x >= k)),
                     Op::And => bin!(|x, y| x & y),
                     Op::Or => bin!(|x, y| x | y),
                     Op::Xor => bin!(|x, y| x ^ y),
@@ -871,6 +900,12 @@ impl<'i> Machine<'i> {
                     }
                     Op::Bounds => {
                         let (i, n) = (r!(a(w)), r!(b(w)));
+                        if i >= n {
+                            throw!(Trap::Index { index: i, len: n });
+                        }
+                    }
+                    Op::BoundsK => {
+                        let (i, n) = (r!(a(w)), u64::from(bc_i32(w) as u32));
                         if i >= n {
                             throw!(Trap::Index { index: i, len: n });
                         }

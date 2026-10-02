@@ -34,6 +34,8 @@ pub enum Form {
     ABJ,
     /// `a`, `b`: registers; `c`: an `i16` constant.
     ABK,
+    /// `a`, `b`: registers; `c`: a `u16` constant (zero-extended).
+    ABU,
     /// `a`: a register; `b`: an `i16` constant; `c`: an `i16` offset to jump
     /// by.
     AKJ,
@@ -262,6 +264,38 @@ ops! {
     AddWKU16 = "add%k.u16", ABK;
     AddWKU32 = "add%k.u32", ABK;
     AddWKU64 = "add%k.u64", ABK;
+    // bitwise ops with a mask: a 16-bit constant, zero-extended
+    AndK = "andk", ABU;
+    OrK = "ork", ABU;
+    XorK = "xork", ABU;
+    // shifts by a constant below the width (the verifier checks it)
+    ShlKI8 = "shlk.i8", ABK;
+    ShlKI16 = "shlk.i16", ABK;
+    ShlKI32 = "shlk.i32", ABK;
+    ShlKI64 = "shlk.i64", ABK;
+    ShlKU8 = "shlk.u8", ABK;
+    ShlKU16 = "shlk.u16", ABK;
+    ShlKU32 = "shlk.u32", ABK;
+    ShlKU64 = "shlk.u64", ABK;
+    ShrKS = "shrk.s", ABK;
+    ShrKU = "shrk.u", ABK;
+    // division and remainder by a constant above zero (checked too), which
+    // can't trap
+    DivKS = "divk.s", ABK;
+    DivKU = "divk.u", ABK;
+    RemKS = "remk.s", ABK;
+    RemKU = "remk.u", ABK;
+    // comparisons with a 16-bit constant that give a `bool`
+    EqK = "eqk", ABK;
+    NeK = "nek", ABK;
+    LtSK = "ltk.s", ABK;
+    LeSK = "lek.s", ABK;
+    GtSK = "gtk.s", ABK;
+    GeSK = "gek.s", ABK;
+    LtUK = "ltk.u", ABK;
+    LeUK = "lek.u", ABK;
+    GtUK = "gtk.u", ABK;
+    GeUK = "gek.u", ABK;
     // division, remainder, negation, bitwise not, shifts
     DivI8 = "div.i8", ABC;
     DivI16 = "div.i16", ABC;
@@ -429,8 +463,10 @@ ops! {
     // blocks of memory: copy `ext` bytes from b's address to a's; zero them
     Copy = "copy", ABZ;
     Zero = "zero", AZ;
-    // unravel unless a < b (unsigned): an index and a length
+    // unravel unless a < b (unsigned): an index and a length; or a < the
+    // constant in b:c
     Bounds = "bounds", AB;
+    BoundsK = "boundsk", AI;
     // function values and calling them
     Ldfn = "ldfn", AFn;
     CallR = "callr", CallR;

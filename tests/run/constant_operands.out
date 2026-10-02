@@ -1,0 +1,15 @@
+(40960, 44031, 21554)
+(32767, -1)
+(168, 1, 56, -25)
+(9223372036854775808, 16777215, -4611686018427387904, -1)
+(127, -125)
+(-14, -2, 1234, 5)
+(14, 2, 0, 9)
+[false, true, true, true, false, false, false, true]
+[false, true, false, true, false, false, false, true]
+[true, false, false, false, false, false, false, true]
+[false, true, false, false, false, true, false, true]
+[false, true, false, false, true, true, false, true]
+5
+12
+[1, 2, 3]
