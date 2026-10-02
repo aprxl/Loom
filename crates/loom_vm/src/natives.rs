@@ -149,7 +149,7 @@ impl<'i> Ctx<'i> {
     }
 
     /// Writes a `String` holding `text` at `dst`.
-    fn new_string(&mut self, text: &[u8], dst: u64) -> Result<(), Trap> {
+    pub(crate) fn new_string(&mut self, text: &[u8], dst: u64) -> Result<(), Trap> {
         let len = text.len() as u64;
         let ptr = self.heap.alloc(len, 1)?;
         // SAFETY: `ptr` is a new object of `len` bytes (or, for none, never
@@ -211,7 +211,7 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
         "mem.free" => mem_free,
         "mem.grow" => mem_grow,
         "mem.move" => mem_move,
-        _ => return None,
+        _ => crate::methods::resolve(name)?,
     };
     let sig = native(name)?;
     Some((f, usize::from(sig.args.max(sig.results))))

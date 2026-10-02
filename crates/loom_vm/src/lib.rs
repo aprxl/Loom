@@ -18,6 +18,7 @@ mod exec;
 mod fmt;
 mod heap;
 mod ints;
+mod methods;
 mod natives;
 mod stack;
 
