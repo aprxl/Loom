@@ -227,7 +227,12 @@ fn verify_func(image: &Image, index: usize) -> Result<(), VerifyError> {
                 reg(b(w))?;
                 reg(c(w))?;
             }
-            Form::ABFZ => {
+            Form::RE => {
+                reg(a(w))?;
+                reg(b(w))?;
+                reg(c(w))?;
+            }
+            Form::FE | Form::ABFZ => {
                 reg(a(w))?;
                 reg(b(w))?;
                 // The list's header: two words, inside the frame.

@@ -381,6 +381,56 @@ impl<'i> Machine<'i> {
                         bin!(|x: u64, y: u64| u64::from($f(x, y)))
                     };
                 }
+                // The address of element `index` (each `scale` bytes) of the
+                // list whose header (buffer, length) is at `header`, plus `off`:
+                // unravels unless the index is below the length. `$n` bytes are
+                // read or written there.
+                macro_rules! elem {
+                    ($header:expr, $index:expr, $scale:expr, $off:expr, $n:expr) => {{
+                        let (header, index, scale, off) = ($header, $index, $scale, $off);
+                        mem_check!(header, 16);
+                        // SAFETY: the compiler passes the address of a list's
+                        // (or a slice's) header: its buffer, then its length.
+                        let (buf, len) = unsafe {
+                            let h = header as *const u64;
+                            (h.read(), h.add(1).read())
+                        };
+                        if index >= len {
+                            throw!(Trap::Index { index, len });
+                        }
+                        let p = buf.wrapping_add(index.wrapping_mul(scale)).wrapping_add(off);
+                        mem_check!(p, $n);
+                        p
+                    }};
+                }
+                // The operands of a load or a store at an element: the header
+                // in the frame, or at a register's address.
+                macro_rules! el_at {
+                    (frame, $n:expr) => {{
+                        let ext = ext!();
+                        elem!((fp as u64).wrapping_add(ext >> 32), r!(b(w)), ext & 0xFFFF_FFFF, c(w) as u64, $n)
+                    }};
+                    (reg, $n:expr) => {{
+                        let ext = ext!();
+                        elem!(r!(b(w)), r!(c(w)), ext & 0xFFFF_FFFF, ext >> 32, $n)
+                    }};
+                }
+                macro_rules! ld_el {
+                    ($at:tt, $t:ty, $ext:expr) => {{
+                        let p = el_at!($at, std::mem::size_of::<$t>());
+                        // SAFETY: inside the list's buffer (checked above).
+                        let v = unsafe { (p as *const $t).read_unaligned() };
+                        set!(a(w), $ext(v))
+                    }};
+                }
+                macro_rules! st_el {
+                    ($at:tt, $t:ty) => {{
+                        let p = el_at!($at, std::mem::size_of::<$t>());
+                        let v = r!(a(w)) as $t;
+                        // SAFETY: as for `ld_el`.
+                        unsafe { (p as *mut $t).write_unaligned(v) }
+                    }};
+                }
                 macro_rules! branch {
                     ($f:expr) => {{
                         if $f(r!(a(w)), r!(b(w))) {
@@ -863,25 +913,38 @@ impl<'i> Machine<'i> {
                         let v = r!(b(w)).wrapping_add(r!(c(w)).wrapping_mul(scale));
                         set!(a(w), v)
                     }
-                    Op::Elem | Op::ElemF => {
+                    Op::Elem => {
                         let ext = ext!();
-                        let (header, index, scale) = if op == Op::Elem {
-                            (r!(b(w)), r!(c(w)), ext)
-                        } else {
-                            ((fp as u64).wrapping_add(ext >> 32), r!(b(w)), ext & 0xFFFF_FFFF)
-                        };
-                        mem_check!(header, 16);
-                        // SAFETY: the compiler passes the address of a list's
-                        // (or a slice's) header: its buffer, then its length.
-                        let (buf, len) = unsafe {
-                            let h = header as *const u64;
-                            (h.read(), h.add(1).read())
-                        };
-                        if index >= len {
-                            throw!(Trap::Index { index, len });
-                        }
-                        set!(a(w), buf.wrapping_add(index.wrapping_mul(scale)))
+                        let p = elem!(r!(b(w)), r!(c(w)), ext, 0, 0);
+                        set!(a(w), p)
                     }
+                    Op::ElemF => {
+                        let ext = ext!();
+                        let p = elem!((fp as u64).wrapping_add(ext >> 32), r!(b(w)), ext & 0xFFFF_FFFF, 0, 0);
+                        set!(a(w), p)
+                    }
+                    Op::LdElF8S => ld_el!(frame, i8, |v: i8| v as i64 as u64),
+                    Op::LdElF8U => ld_el!(frame, u8, u64::from),
+                    Op::LdElF16S => ld_el!(frame, i16, |v: i16| v as i64 as u64),
+                    Op::LdElF16U => ld_el!(frame, u16, u64::from),
+                    Op::LdElF32S => ld_el!(frame, i32, |v: i32| v as i64 as u64),
+                    Op::LdElF32U => ld_el!(frame, u32, u64::from),
+                    Op::LdElF64 => ld_el!(frame, u64, |v: u64| v),
+                    Op::StElF8 => st_el!(frame, u8),
+                    Op::StElF16 => st_el!(frame, u16),
+                    Op::StElF32 => st_el!(frame, u32),
+                    Op::StElF64 => st_el!(frame, u64),
+                    Op::LdEl8S => ld_el!(reg, i8, |v: i8| v as i64 as u64),
+                    Op::LdEl8U => ld_el!(reg, u8, u64::from),
+                    Op::LdEl16S => ld_el!(reg, i16, |v: i16| v as i64 as u64),
+                    Op::LdEl16U => ld_el!(reg, u16, u64::from),
+                    Op::LdEl32S => ld_el!(reg, i32, |v: i32| v as i64 as u64),
+                    Op::LdEl32U => ld_el!(reg, u32, u64::from),
+                    Op::LdEl64 => ld_el!(reg, u64, |v: u64| v),
+                    Op::StEl8 => st_el!(reg, u8),
+                    Op::StEl16 => st_el!(reg, u16),
+                    Op::StEl32 => st_el!(reg, u32),
+                    Op::StEl64 => st_el!(reg, u64),
                     Op::Copy => {
                         let n = ext!();
                         let (dst, src) = (r!(a(w)), r!(b(w)));

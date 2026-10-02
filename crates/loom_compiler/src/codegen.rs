@@ -128,6 +128,9 @@ struct Emitter<'m> {
     folds: HashMap<(usize, usize), Fold>,
     /// Constants whose every use is folded: never emitted.
     dead: HashSet<Value>,
+    /// Elements' addresses only the next instruction, a load or a store,
+    /// uses: made by that one.
+    elems: HashSet<Value>,
     /// Values nothing reads: a call's results that aren't, say. Their
     /// registers may be another result's, so they aren't written.
     unused: HashSet<Value>,
@@ -161,7 +164,8 @@ fn emit_func(
     // Slot addresses only loads and stores use need no register.
     let (slot_of, folded_slots) = slot_uses(f);
     dead.extend(folded_slots);
-    let skip: HashSet<Value> = fused.union(&dead).copied().collect();
+    let elems = elem_accesses(f);
+    let skip: HashSet<Value> = fused.union(&dead).chain(&elems).copied().collect();
     // The window's place comes from how many registers values need; a
     // second pass then lets values sit in it, which only frees registers.
     let (_, first) = allocate(f, &order, &skip, None);
@@ -235,6 +239,7 @@ fn emit_func(
         fixups: Vec::new(),
         folds,
         dead,
+        elems,
         unused,
         tramps: Vec::new(),
         tramp_at: Vec::new(),
@@ -493,6 +498,37 @@ fn fusions(f: &Func) -> HashSet<Value> {
             && uses.get(cond) == Some(&1)
         {
             out.insert(*cond);
+        }
+    }
+    out
+}
+
+/// Elements' addresses (`elem`) whose only use is as the address of the
+/// load or store right after, which the access then works out itself.
+fn elem_accesses(f: &Func) -> HashSet<Value> {
+    let mut uses: HashMap<Value, usize> = HashMap::new();
+    for b in &f.blocks {
+        for inst in &b.insts {
+            for u in inst_uses(&inst.kind) {
+                *uses.entry(u).or_default() += 1;
+            }
+        }
+        for u in b.term.iter().flat_map(term_uses) {
+            *uses.entry(u).or_default() += 1;
+        }
+    }
+    let mut out = HashSet::new();
+    for b in &f.blocks {
+        for pair in b.insts.windows(2) {
+            let (InstKind::Elem { scale, .. }, [r]) = (&pair[0].kind, pair[0].results.as_slice()) else { continue };
+            let next = match &pair[1].kind {
+                InstKind::Load { ptr, off, .. } => *ptr == *r && (0..=0xFFFF).contains(off),
+                InstKind::Store { ptr, off, val, .. } => *ptr == *r && *val != *r && (0..=0xFFFF).contains(off),
+                _ => false,
+            };
+            if next && uses.get(r) == Some(&1) && u32::try_from(*scale).is_ok() {
+                out.insert(*r);
+            }
         }
     }
     out
@@ -1027,13 +1063,33 @@ impl Emitter<'_> {
         let f = self.f;
         let block = &f.blocks[b];
         for (i, inst) in block.insts.iter().enumerate() {
-            if inst.results.first().is_some_and(|r| fused.contains(r) || self.dead.contains(r)) {
+            if inst
+                .results
+                .first()
+                .is_some_and(|r| fused.contains(r) || self.dead.contains(r) || self.elems.contains(r))
+            {
                 continue;
             }
             let fold = self.folds.get(&(b, i)).copied();
             let start = self.code.len();
-            self.inst(inst, fold)?;
-            if let Some(pad) = inst.unwind {
+            // A load or a store at an element the instruction before gave.
+            let elem = match &inst.kind {
+                InstKind::Load { ptr, .. } | InstKind::Store { ptr, .. } if self.elems.contains(ptr) => {
+                    Some(&block.insts[i - 1])
+                }
+                _ => None,
+            };
+            let unwind = match elem {
+                Some(e) => {
+                    self.elem_access(e, inst)?;
+                    e.unwind.or(inst.unwind)
+                }
+                None => {
+                    self.inst(inst, fold)?;
+                    inst.unwind
+                }
+            };
+            if let Some(pad) = unwind {
                 self.unwinds.push((start, self.code.len(), pad.0 as usize));
             }
         }
@@ -1096,6 +1152,52 @@ impl Emitter<'_> {
         }
         if let Some(pad) = block.term_unwind {
             self.unwinds.push((term_start, self.code.len(), pad.0 as usize));
+        }
+        Ok(())
+    }
+
+    /// The load or store `access` at the element `elem` gives, in one
+    /// instruction, reported where `elem` is (it's what can unravel).
+    fn elem_access(&mut self, elem: &crate::heddle::Inst, access: &crate::heddle::Inst) -> Result<(), String> {
+        use Op as O;
+        let InstKind::Elem { header, off: hoff, index, scale } = &elem.kind else {
+            return Err("an element access without its element".into());
+        };
+        let span = elem.span.or(access.span);
+        let (mem, off, reg, store) = match &access.kind {
+            InstKind::Load { mem, off, .. } => (*mem, *off, self.r(access.results[0]), false),
+            InstKind::Store { mem, off, val, .. } => (*mem, *off, self.r(*val), true),
+            _ => return Err("an element access that isn't a load or a store".into()),
+        };
+        let ops = match (mem, store) {
+            (Mem::I8, false) => (O::LdElF8S, O::LdEl8S),
+            (Mem::U8, false) => (O::LdElF8U, O::LdEl8U),
+            (Mem::I16, false) => (O::LdElF16S, O::LdEl16S),
+            (Mem::U16, false) => (O::LdElF16U, O::LdEl16U),
+            (Mem::I32, false) => (O::LdElF32S, O::LdEl32S),
+            (Mem::U32, false) => (O::LdElF32U, O::LdEl32U),
+            (Mem::W64, false) => (O::LdElF64, O::LdEl64),
+            (Mem::I8 | Mem::U8, true) => (O::StElF8, O::StEl8),
+            (Mem::I16 | Mem::U16, true) => (O::StElF16, O::StEl16),
+            (Mem::I32 | Mem::U32, true) => (O::StElF32, O::StEl32),
+            (Mem::W64, true) => (O::StElF64, O::StEl64),
+        };
+        let index = self.r(*index);
+        match self.address(span, *header, *hoff) {
+            Err(at) => {
+                let ext = (u64::from(at) << 32) | *scale;
+                self.put_ext(span, word(ops.0, reg, index, off as u16), Some(ext));
+            }
+            Ok((base, k)) => {
+                let base = if k == 0 {
+                    base
+                } else {
+                    self.put(span, word(O::AddWKU64, self.tmp2, base, k as u16));
+                    self.tmp2
+                };
+                let ext = ((off as u64) << 32) | *scale;
+                self.put_ext(span, word(ops.1, reg, base, index), Some(ext));
+            }
         }
         Ok(())
     }

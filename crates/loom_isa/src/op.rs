@@ -71,6 +71,16 @@ pub enum Form {
     /// `a`, `b`: registers; an extension word: a byte offset from the frame
     /// pointer (high half) and a scale (low half).
     ABFZ,
+    /// `a`: the register loaded or stored; `b`: an index register; `c`: a
+    /// byte offset into the element; an extension word: the byte offset of
+    /// a list's header from the frame pointer (high half) and the scale
+    /// (low half).
+    FE,
+    /// `a`: the register loaded or stored; `b`: the register holding the
+    /// address of a list's header; `c`: an index register; an extension
+    /// word: a byte offset into the element (high half) and the scale (low
+    /// half).
+    RE,
     /// `a`: a register; `b:c`: a function's index.
     AFn,
     /// `a`: where the callee's frame starts, as for [`Form::Call`]; `b`: the
@@ -85,7 +95,15 @@ impl Form {
     /// How many words an instruction of this form takes.
     pub fn words(self) -> usize {
         match self {
-            Form::AK | Form::ABX | Form::ABCX | Form::ABZ | Form::AZ | Form::ABCZ | Form::ABFZ => 2,
+            Form::AK
+            | Form::ABX
+            | Form::ABCX
+            | Form::ABZ
+            | Form::AZ
+            | Form::ABCZ
+            | Form::ABFZ
+            | Form::FE
+            | Form::RE => 2,
             _ => 1,
         }
     }
@@ -460,6 +478,31 @@ ops! {
     // unravels unless c < the length
     Elem = "elem", ABCZ;
     ElemF = "elemf", ABFZ;
+    // a load from or a store to a list's element (checked as `elem` does),
+    // at a byte offset into it, with the header in the frame (`f`) or at a
+    // register's address
+    LdElF8S = "ldelf.i8", FE;
+    LdElF8U = "ldelf.u8", FE;
+    LdElF16S = "ldelf.i16", FE;
+    LdElF16U = "ldelf.u16", FE;
+    LdElF32S = "ldelf.i32", FE;
+    LdElF32U = "ldelf.u32", FE;
+    LdElF64 = "ldelf.64", FE;
+    StElF8 = "stelf.8", FE;
+    StElF16 = "stelf.16", FE;
+    StElF32 = "stelf.32", FE;
+    StElF64 = "stelf.64", FE;
+    LdEl8S = "ldel.i8", RE;
+    LdEl8U = "ldel.u8", RE;
+    LdEl16S = "ldel.i16", RE;
+    LdEl16U = "ldel.u16", RE;
+    LdEl32S = "ldel.i32", RE;
+    LdEl32U = "ldel.u32", RE;
+    LdEl64 = "ldel.64", RE;
+    StEl8 = "stel.8", RE;
+    StEl16 = "stel.16", RE;
+    StEl32 = "stel.32", RE;
+    StEl64 = "stel.64", RE;
     // blocks of memory: copy `ext` bytes from b's address to a's; zero them
     Copy = "copy", ABZ;
     Zero = "zero", AZ;
