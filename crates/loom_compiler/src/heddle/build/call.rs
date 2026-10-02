@@ -79,6 +79,22 @@ impl<'a> Builder<'a> {
             let s = self.stream_of(&source, v, vty, want, span)?;
             worked[0] = Arg::Val(s, want);
         }
+        // `s.len()`, `xs.is_empty()` and the like: the view's length, here.
+        if let (Some(name), Some(Arg::Val(Val::Regs(view), _))) = (
+            ["std.string.Str.", "std.slice.Slice."]
+                .iter()
+                .find_map(|w| p.def_path(def).strip_prefix(w).map(str::to_owned)),
+            worked.first(),
+        ) && view.len() == 2
+            && matches!(name.as_str(), "len" | "is_empty")
+        {
+            let n = view[1];
+            if name == "len" {
+                return Some(Val::Regs(vec![n]));
+            }
+            let zero = self.iconst(0);
+            return Some(Val::Regs(vec![self.ucmp(crate::heddle::Cmp::Eq, n, zero)]));
+        }
         // Defaults, in parameter order, with the callee's tables.
         let mut by_param: Vec<Option<Arg>> = Vec::with_capacity(info.args.len());
         let mut worked = worked.into_iter().map(Some).collect::<Vec<_>>();

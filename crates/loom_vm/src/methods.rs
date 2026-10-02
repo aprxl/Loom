@@ -33,6 +33,9 @@ pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
         "char.digit" => digit,
         "str.next_char" => next_char,
         "str.hash" => str_hash,
+        "str.concat2" | "str.concat3" | "str.concat4" => concat,
+        "map.find_str" => map_find_str,
+        "map.find_int" => map_find_int,
         "str.next_line" => next_line,
         "str.next_word" => next_word,
         "int.bits" => int_bits,
@@ -368,6 +371,108 @@ fn pop(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     write_header(args[0], buf, start as u64, cap);
     args[0] = u64::from(c);
     args[1] = 1;
+    Ok(())
+}
+
+const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+const FNV_PRIME: u64 = 0x0100_0000_01b3;
+
+/// FNV-1a (64-bit) of `bytes`.
+fn fnv(bytes: &[u8]) -> u64 {
+    let mut h = FNV_OFFSET;
+    for &b in bytes {
+        h = (h ^ u64::from(b)).wrapping_mul(FNV_PRIME);
+    }
+    h
+}
+
+/// A one-word key's hash, as the compiler's `key_hash` makes it: the word
+/// mixed into FNV's offset, then the high half folded into the low.
+fn key_hash(word: u64) -> u64 {
+    let h = (FNV_OFFSET ^ word).wrapping_mul(FNV_PRIME);
+    h ^ (h >> 32)
+}
+
+/// Looks for the entry whose key `same` says is it, with hash `h`, in the
+/// map whose header is at `header`: its number, or `u64::MAX`.
+fn probe(header: u64, h: u64, esize: u64, same: impl Fn(u64) -> bool) -> u64 {
+    // SAFETY: the compiler passes a map's header: five words.
+    let (ebuf, ibuf, slots) = unsafe {
+        let p = header as *const u64;
+        (p.read(), p.add(3).read(), p.add(4).read())
+    };
+    if slots == 0 {
+        return u64::MAX;
+    }
+    let mask = slots - 1;
+    let mut i = h & mask;
+    loop {
+        // SAFETY: the index has `slots` words, each 0 or an entry's number
+        // plus one, and the entries `esize` bytes each.
+        let s = unsafe { (ibuf as *const u64).add(i as usize).read() };
+        if s == 0 {
+            return u64::MAX;
+        }
+        let entry = ebuf + (s - 1) * esize;
+        if unsafe { (entry as *const u64).read() } == h && same(entry) {
+            return s - 1;
+        }
+        i = (i + 1) & mask;
+    }
+}
+
+/// `map.find_str(header, text, layout)`: (entry or `u64::MAX`, hash).
+fn map_find_str(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let key = text(ctx, args[1], args[2])?;
+    let (koff, esize) = (args[3] & 0xFFFF, args[3] >> 32);
+    let h = key_hash(fnv(key));
+    let e = probe(args[0], h, esize, |entry| {
+        // SAFETY: an entry's key is text: its address and length first.
+        let (p, n) = unsafe {
+            let k = (entry + koff) as *const u64;
+            (k.read(), k.add(1).read())
+        };
+        n as usize == key.len() && unsafe { std::slice::from_raw_parts(p as *const u8, n as usize) } == key
+    });
+    args[0] = e;
+    args[1] = h;
+    Ok(())
+}
+
+/// `map.find_int(header, word, layout)`: (entry or `u64::MAX`, hash).
+fn map_find_int(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let word = args[1];
+    let (koff, bytes, esize) = (args[2] & 0xFFFF, (args[2] >> 16) & 0xFFFF, args[2] >> 32);
+    let mask = if bytes >= 8 { u64::MAX } else { (1u64 << (bytes * 8)) - 1 };
+    let h = key_hash(word);
+    let e = probe(args[0], h, esize, |entry| {
+        // SAFETY: an entry's key is `bytes` bytes at its offset.
+        let mut v = [0u8; 8];
+        unsafe { std::ptr::copy_nonoverlapping((entry + koff) as *const u8, v.as_mut_ptr(), bytes as usize) };
+        u64::from_le_bytes(v) == word & mask
+    });
+    args[0] = e;
+    args[1] = h;
+    Ok(())
+}
+
+/// `str.concatN(text, …, dst)`: a `String` of the texts.
+fn concat(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let n = (args.len() - 1) / 2;
+    let mut len = 0;
+    for k in 0..n {
+        len += text(ctx, args[2 * k], args[2 * k + 1])?.len() as u64;
+    }
+    let buf = ctx.heap.alloc(len, 1)?;
+    let mut at = buf;
+    for k in 0..n {
+        let piece = text(ctx, args[2 * k], args[2 * k + 1])?;
+        // SAFETY: `buf` is a new object of `len` bytes, the pieces' total,
+        // and no piece is in it.
+        unsafe { std::ptr::copy_nonoverlapping(piece.as_ptr(), at as *mut u8, piece.len()) };
+        at += piece.len() as u64;
+    }
+    write_header(args[2 * n], buf, len, len);
     Ok(())
 }
 

@@ -172,6 +172,35 @@ impl<'a> Builder<'a> {
     /// A template as a value: a new `String`.
     pub(super) fn template_string(&mut self, e: &'a hir::Expr, parts: &'a [TemplatePart]) -> Option<Val> {
         let pieces = self.template_pieces(parts)?;
+        // Only text, in a few pieces: one native makes the string.
+        let texts = pieces.iter().all(|p| match p {
+            Piece::Text(_) => true,
+            Piece::Value { ty, spec: None, .. } => matches!(self.tcx().kind(*ty), TyKind::Str) || self.is_string(*ty),
+            Piece::Value { .. } => false,
+        });
+        if texts && (2..=4).contains(&pieces.len()) {
+            let mut args = Vec::with_capacity(2 * pieces.len() + 1);
+            for piece in pieces {
+                match piece {
+                    Piece::Text(t) => args.extend(self.str_lit(t.as_bytes())),
+                    Piece::Value { val, ty, span, .. } => {
+                        let (p, n) = self.text_of(val, ty, span)?;
+                        args.extend([p, n]);
+                    }
+                }
+            }
+            let ty = self.ty_of(e);
+            let dst = self.temp(ty, e.span)?;
+            args.push(dst);
+            let name = match args.len() {
+                5 => "str.concat2",
+                7 => "str.concat3",
+                _ => "str.concat4",
+            };
+            self.emit(InstKind::Native { name, imm: 0, args }, &[]);
+            self.own_temp(dst, ty);
+            return Some(Val::Mem(dst));
+        }
         let buf = self.new_sink();
         self.write_pieces(buf, pieces)?;
         let ty = self.ty_of(e);

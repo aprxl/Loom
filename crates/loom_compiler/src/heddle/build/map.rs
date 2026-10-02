@@ -92,6 +92,33 @@ impl<'a> Builder<'a> {
         Some(self.emit1(InstKind::Bit { op: BitOp::Xor, a: h, b: hi }, VTy::Int))
     }
 
+    /// The number of the entry with `key` in the map at `header` (or
+    /// `NONE`), and the key's hash. Text and integer keys (and others
+    /// compared as one word) are looked up by a native; it hashes them as
+    /// `key_hash` does.
+    fn lookup(&mut self, c: &Coll, header: Value, key: &Val, span: Span) -> Option<(Value, Value)> {
+        let key_ty = self.tcx().degauge(c.key);
+        let text = matches!(self.tcx().kind(key_ty), TyKind::Str) || self.is_string(key_ty);
+        let word = matches!(self.tcx().kind(key_ty), TyKind::Int(_) | TyKind::Char | TyKind::Bool)
+            || self.warp_info(key_ty).is_some_and(|i| i.unit_only());
+        if text || word {
+            let (key_bytes, _) = self.size_align(key_ty)?;
+            let layout = self.iconst(c.koff | (key_bytes << 16) | (c.esize << 32));
+            let (name, mut args): (&'static str, Vec<Value>) = if text {
+                let (p, n) = self.text_of(key.clone(), key_ty, span)?;
+                ("map.find_str", vec![header, p, n])
+            } else {
+                ("map.find_int", vec![header, self.regs(key.clone(), key_ty, span)?[0]])
+            };
+            args.push(layout);
+            let r = self.emit(InstKind::Native { name, imm: 0, args }, &[VTy::Int, VTy::Int]);
+            return Some((r[0], r[1]));
+        }
+        let h = self.key_hash(c, key, span)?;
+        let e = self.find_key(c, header, key, h, span)?;
+        Some((e, h))
+    }
+
     /// The number of the entry with `key` (hash `h`) in the map at
     /// `header`, or `NONE`.
     fn find_key(&mut self, c: &Coll, header: Value, key: &Val, h: Value, span: Span) -> Option<Value> {
@@ -498,8 +525,7 @@ impl<'a> Builder<'a> {
     /// in (a key that's there already is dropped).
     fn map_put(&mut self, c: &Coll, header: Value, key: Val, val: Val, span: Span) -> Option<()> {
         let Some(vt) = c.val else { return self.internal(span, "a value for a set") };
-        let h = self.key_hash(c, &key, span)?;
-        let e = self.find_key(c, header, &key, h, span)?;
+        let (e, h) = self.lookup(c, header, &key, span)?;
         let none = self.iconst(NONE);
         let missing = self.ucmp(Cmp::Eq, e, none);
         let (add, replace, done) = (self.new_block(), self.new_block(), self.new_block());
@@ -532,8 +558,7 @@ impl<'a> Builder<'a> {
     /// The value for `key` in the map at `header`, or an unravel.
     fn map_at(&mut self, c: &Coll, header: Value, key: Val, span: Span) -> Option<Value> {
         let vt = c.val?;
-        let h = self.key_hash(c, &key, span)?;
-        let e = self.find_key(c, header, &key, h, span)?;
+        let (e, _) = self.lookup(c, header, &key, span)?;
         let none = self.iconst(NONE);
         let missing = self.ucmp(Cmp::Eq, e, none);
         let (fail, ok) = (self.new_block(), self.new_block());
@@ -610,16 +635,14 @@ impl<'a> Builder<'a> {
                 self.ret_val(Val::Regs(vec![e]), span)
             }
             "has" => {
-                let h = self.key_hash(&c, &args[1], span)?;
-                let e = self.find_key(&c, header, &args[1], h, span)?;
+                let (e, _) = self.lookup(&c, header, &args[1], span)?;
                 let none = self.iconst(NONE);
                 let has = self.ucmp(Cmp::Ne, e, none);
                 self.ret_val(Val::Regs(vec![has]), span)
             }
             "get" => {
                 let vt = c.val?;
-                let h = self.key_hash(&c, &args[1], span)?;
-                let e = self.find_key(&c, header, &args[1], h, span)?;
+                let (e, _) = self.lookup(&c, header, &args[1], span)?;
                 let none = self.iconst(NONE);
                 let missing = self.ucmp(Cmp::Eq, e, none);
                 let (no, yes) = (self.new_block(), self.new_block());
@@ -639,8 +662,7 @@ impl<'a> Builder<'a> {
                 // The old value, if the key was there.
                 let vt = c.val?;
                 let (key, val) = (args[1].clone(), args[2].clone());
-                let h = self.key_hash(&c, &key, span)?;
-                let e = self.find_key(&c, header, &key, h, span)?;
+                let (e, h) = self.lookup(&c, header, &key, span)?;
                 let none = self.iconst(NONE);
                 let missing = self.ucmp(Cmp::Eq, e, none);
                 let (add, replace) = (self.new_block(), self.new_block());
@@ -682,8 +704,7 @@ impl<'a> Builder<'a> {
                 self.ret_val(Val::Regs(vec![added]), span)
             }
             "remove" => {
-                let h = self.key_hash(&c, &args[1], span)?;
-                let e = self.find_key(&c, header, &args[1], h, span)?;
+                let (e, _) = self.lookup(&c, header, &args[1], span)?;
                 let none = self.iconst(NONE);
                 let missing = self.ucmp(Cmp::Eq, e, none);
                 let (no, yes) = (self.new_block(), self.new_block());
@@ -797,8 +818,7 @@ impl<'a> Builder<'a> {
     /// Adds `x` (a copy of it, with `copy`) to the set at `header` unless
     /// it's there: whether it was added (then it's moved in).
     fn set_add(&mut self, c: &Coll, header: Value, x: Val, copy: bool, span: Span) -> Option<Value> {
-        let h = self.key_hash(c, &x, span)?;
-        let e = self.find_key(c, header, &x, h, span)?;
+        let (e, h) = self.lookup(c, header, &x, span)?;
         let none = self.iconst(NONE);
         let missing = self.ucmp(Cmp::Eq, e, none);
         let (add, done) = (self.new_block(), self.new_block());

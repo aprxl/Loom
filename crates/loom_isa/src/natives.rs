@@ -52,6 +52,11 @@ pub const NATIVES: &[NativeSig] = &[
     sig("sink.string", 2, 0, NativeImm::None),
     NativeSig { name: "sink.pad", args: 2, results: 0, imm: NativeImm::Fmt, lead: 2 },
     sig("str.new", 3, 0, NativeImm::None),
+    // A `String` of two, three or four texts, one after another: each an
+    // address and a length, then where the string goes.
+    sig("str.concat2", 5, 0, NativeImm::None),
+    sig("str.concat3", 7, 0, NativeImm::None),
+    sig("str.concat4", 9, 0, NativeImm::None),
     // Text compared byte by byte: (a address, a length, b address, b
     // length) to whether they're equal, or to -1, 0 or 1.
     sig("str.eq", 4, 1, NativeImm::None),
@@ -106,6 +111,11 @@ pub const NATIVES: &[NativeSig] = &[
     sig("fs.append", 3, 1, NativeImm::None),
     sig("fs.write_line", 5, 1, NativeImm::None),
     sig("fs.read", 3, 1, NativeImm::None),
+    // Maps' fast paths: the entry with a key (text, or one word) in the
+    // map at a header, and the key's hash, from a packed layout (the key's
+    // offset and size, and the entry's size).
+    sig("map.find_str", 4, 2, NativeImm::None),
+    sig("map.find_int", 3, 2, NativeImm::None),
     // `mem.calloc(size, align) -> address`: zeroed.
     sig("mem.calloc", 2, 1, NativeImm::None),
     // `str.hash(text) -> u64`: FNV-1a of its bytes.

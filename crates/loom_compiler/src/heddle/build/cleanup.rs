@@ -270,6 +270,19 @@ impl<'a> Builder<'a> {
         if !self.needs_drop(ty) {
             return;
         }
+        // Text, and a list of plain data: freeing the buffer, here.
+        let ty = self.tcx().degauge(ty);
+        if self.is_string(ty) {
+            self.free_buffer(ptr, 1, 1);
+            return;
+        }
+        if let Some(crate::typeck::Seq::List(elem)) = self.seq_of(ty)
+            && !self.needs_drop(elem)
+            && let Some((size, align)) = self.size_align(elem)
+        {
+            self.free_buffer(ptr, size, align);
+            return;
+        }
         let func = self.glue(super::Glue::Drop, ty);
         let pad = self.pad();
         let span = self.f.span;
