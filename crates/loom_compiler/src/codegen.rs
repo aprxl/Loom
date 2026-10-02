@@ -621,6 +621,8 @@ fn immediates(f: &Func) -> (HashMap<(usize, usize), Fold>, HashSet<Value>) {
 enum Use {
     /// Argument `k` of the call at this position.
     CallArg(usize, u16),
+    /// Argument `k` of the native called at this position.
+    NativeArg(usize, u16),
     /// Result `i` of a `ret`.
     Ret(u16),
     Other,
@@ -707,6 +709,7 @@ fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16
     let mut calls = Vec::new();
     let mut natives = Vec::new();
     let mut result_of: HashMap<Value, (usize, u16)> = HashMap::new();
+    let mut native_result_of: HashMap<Value, (usize, u16)> = HashMap::new();
     let mut uses: HashMap<Value, Vec<Use>> = HashMap::new();
     let mut partners: HashMap<Value, Vec<Value>> = HashMap::new();
     for &b in order {
@@ -741,10 +744,16 @@ fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16
                         uses.entry(*callee).or_default().push(Use::Other);
                     }
                 }
-                other => {
-                    if matches!(other, InstKind::Native { .. }) {
-                        natives.push(at);
+                InstKind::Native { args, .. } => {
+                    natives.push(at);
+                    for (k, &a) in args.iter().enumerate() {
+                        uses.entry(a).or_default().push(Use::NativeArg(at, k as u16));
                     }
+                    for (j, &r) in inst.results.iter().enumerate() {
+                        native_result_of.insert(r, (at, j as u16));
+                    }
+                }
+                other => {
                     for u in inst_uses(other) {
                         uses.entry(u).or_default().push(Use::Other);
                     }
@@ -813,8 +822,9 @@ fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16
         // results come out after).
         active.retain(|&(end, r)| {
             if end <= s {
-                // Window registers aren't the pool's.
-                if window.is_none_or(|w| r < w) {
+                // Window registers aren't the pool's, nor the natives'
+                // scratch ones below them.
+                if window.is_none_or(|w| r < w - LINK_SLOTS as u16) {
                     free.insert(r);
                 }
                 false
@@ -830,17 +840,22 @@ fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16
         {
             let at_call_end =
                 |k: u16| matches!(uses.get(&v).map(Vec::as_slice), Some([Use::CallArg(at, j)]) if *at == e && *j == k);
-            let slot = match result_of.get(&v) {
-                Some(&(at, j)) if at == s => Some(j),
+            let at_native_end = |k: u16| matches!(uses.get(&v).map(Vec::as_slice), Some([Use::NativeArg(at, j)]) if *at == e && *j == k);
+            // The natives' window is the call window's linkage and on.
+            let scratch = w - LINK_SLOTS as u16;
+            let slot = match (result_of.get(&v), native_result_of.get(&v)) {
+                (Some(&(at, j)), _) if at == s => Some(w + j),
+                (_, Some(&(at, j))) if at == s => Some(scratch + j),
                 _ => match uses.get(&v).map(Vec::as_slice) {
-                    Some([Use::CallArg(_, k)]) if at_call_end(*k) => Some(*k),
+                    Some([Use::CallArg(_, k)]) if at_call_end(*k) => Some(w + *k),
+                    Some([Use::NativeArg(_, k)]) if at_native_end(*k) => Some(scratch + *k),
                     _ => None,
                 },
             };
-            if let Some(k) = slot
-                && !busy(w + k, &active)
+            if let Some(r) = slot
+                && !busy(r, &active)
             {
-                choice = Some(w + k);
+                choice = Some(r);
             }
         }
         if choice.is_none() {
@@ -1429,9 +1444,9 @@ impl Emitter<'_> {
                 }
             }
             K::Native { name, imm, args } => {
-                for (i, &a) in args.iter().enumerate() {
-                    self.mov(span, self.scratch + i as u16, self.r(a));
-                }
+                // At once: an argument may sit where another goes.
+                let moves = args.iter().enumerate().map(|(i, &a)| (self.scratch + i as u16, self.r(a))).collect();
+                self.parallel(span, moves);
                 let n = self.native(name);
                 self.put(span, word(Op::CallN, self.scratch, n, *imm));
                 for (i, &r) in inst.results.iter().enumerate() {
