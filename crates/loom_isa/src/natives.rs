@@ -95,6 +95,17 @@ pub const NATIVES: &[NativeSig] = &[
     sig("int.bits", 2, 1, NativeImm::None),
     sig("int.rotate", 3, 1, NativeImm::None),
     sig("float.math", 2, 1, NativeImm::None),
+    // The host (loom_vm's `host`): the environment, files, time and the
+    // terminal. The file ones give 3 when they work, or the case of
+    // `IoError` they failed with.
+    sig("env.get", 3, 0, NativeImm::None),
+    sig("env.args", 1, 0, NativeImm::None),
+    sig("time.sleep", 1, 0, NativeImm::None),
+    sig("term.raw_mode", 1, 0, NativeImm::None),
+    sig("term.poll_keys", 2, 1, NativeImm::None),
+    sig("fs.append", 3, 1, NativeImm::None),
+    sig("fs.write_line", 5, 1, NativeImm::None),
+    sig("fs.read", 3, 1, NativeImm::None),
     // `mem.calloc(size, align) -> address`: zeroed.
     sig("mem.calloc", 2, 1, NativeImm::None),
     // `str.hash(text) -> u64`: FNV-1a of its bytes.

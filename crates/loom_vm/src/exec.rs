@@ -101,7 +101,7 @@ impl<'i> Machine<'i> {
             funcs,
             data: image.data.clone().into_boxed_slice(),
             natives,
-            ctx: Ctx::new(image, host.output),
+            ctx: Ctx::new(image, host),
             stack_limit: config.stack_limit,
             interrupt: config.interrupt.clone(),
             stack: None,

@@ -31,6 +31,13 @@ pub(crate) struct Ctx<'i> {
     /// Sinks 2 and up: text being built (`sink.push`).
     bufs: Vec<Vec<u8>>,
     pub heap: Heap,
+    /// A run that doesn't see the machine (see `host`).
+    pub sandbox: bool,
+    /// `env.args()`.
+    pub args: Vec<String>,
+    pub term: loom_sys::term::Term,
+    /// A sandboxed run's files, by path.
+    pub files: std::collections::HashMap<String, Vec<u8>>,
     /// With `checked`: the value stack, set before each native runs, so a
     /// native can check memory on it.
     pub stack: *const crate::stack::Stack,
@@ -42,7 +49,8 @@ pub(crate) struct Ctx<'i> {
 const OUT_BUFFER: usize = 32 * 1024;
 
 impl<'i> Ctx<'i> {
-    pub fn new(image: &'i Image, sink: Output) -> Ctx<'i> {
+    pub fn new(image: &'i Image, host: loom_sys::Host) -> Ctx<'i> {
+        let sink = host.output;
         let mut rodata = Vec::new();
         let mut strings = Vec::with_capacity(image.strings.len());
         for s in &image.strings {
@@ -60,6 +68,10 @@ impl<'i> Ctx<'i> {
             msg: Vec::new(),
             bufs: Vec::new(),
             heap: Heap::default(),
+            sandbox: host.sandbox,
+            args: host.args,
+            term: loom_sys::term::Term::default(),
+            files: std::collections::HashMap::new(),
             stack: std::ptr::null(),
             dispatched: 0,
         }
@@ -212,7 +224,7 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
         "mem.grow" => mem_grow,
         "mem.move" => mem_move,
         "mem.calloc" => mem_calloc,
-        _ => crate::methods::resolve(name)?,
+        _ => crate::methods::resolve(name).or_else(|| crate::host::resolve(name))?,
     };
     let sig = native(name)?;
     Some((f, usize::from(sig.args.max(sig.results))))

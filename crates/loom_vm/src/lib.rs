@@ -17,6 +17,7 @@
 mod exec;
 mod fmt;
 mod heap;
+mod host;
 mod ints;
 mod methods;
 mod natives;
@@ -154,6 +155,8 @@ impl<'i> Vm<'i> {
     pub fn call(&mut self, func: u32, args: &[u64]) -> Result<Vec<u64>, Outcome> {
         let result = self.machine.call(func as usize, args);
         self.machine.ctx.flush();
+        // Raw mode left on (an unravel on the way out) is turned off.
+        self.machine.ctx.term.restore();
         result.map_err(|fault| {
             let location = self.image.line_at(fault.pc as u32).map(|(file, line, column)| Location {
                 file: file.to_string(),
