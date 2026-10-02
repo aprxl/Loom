@@ -34,6 +34,7 @@ mod pat;
 mod repr;
 mod scan;
 mod seq;
+mod stream;
 mod text;
 mod value;
 mod warp;
@@ -74,6 +75,8 @@ enum FnKey {
     Lambda(BodyId, crate::hir::HirId),
     /// A function instance as a value: takes an environment it ignores.
     Thunk(BodyId),
+    /// The step function of a kind of stream (see `stream.rs`).
+    Step(stream::Step),
     /// Code for the values of a type.
     Glue(Glue, Ty),
 }
@@ -376,6 +379,7 @@ impl<'a> Builder<'a> {
             FnKey::Main(id) => format!("{}.entry", self.body_name(id)),
             FnKey::Lambda(id, e) => format!("{}.lambda{}", self.body_name(id), e.0),
             FnKey::Thunk(id) => format!("{}.value", self.body_name(id)),
+            FnKey::Step(step) => format!("stream.{}", self.step_name(step)),
             FnKey::Glue(g, ty) => {
                 let what = match g {
                     Glue::Drop => "drop",
@@ -401,7 +405,7 @@ impl<'a> Builder<'a> {
         let name = self.key_name(key);
         let body = match key {
             FnKey::Body(id) | FnKey::Main(id) | FnKey::Lambda(id, _) | FnKey::Thunk(id) => id,
-            FnKey::Glue(..) => BodyId(0),
+            FnKey::Glue(..) | FnKey::Step(_) => BodyId(0),
         };
         self.f = FnState { body, ..FnState::default() };
         let entry = self.new_block();
@@ -420,6 +424,7 @@ impl<'a> Builder<'a> {
             FnKey::Main(id) => self.main_entry(id),
             FnKey::Lambda(id, e) => self.lambda_func(id, e),
             FnKey::Thunk(id) => self.thunk_func(id, span),
+            FnKey::Step(step) => self.step_func(step),
             FnKey::Glue(g, ty) => self.glue_func(g, ty),
         };
         self.zero_owned_slots();
@@ -446,7 +451,7 @@ impl<'a> Builder<'a> {
                 Some(info) => info.expr.span,
                 None => self.p.def(self.typed.results.instance(id).def).span,
             },
-            FnKey::Glue(..) => self.main_span.expect("set before anything is built"),
+            FnKey::Glue(..) | FnKey::Step(_) => self.main_span.expect("set before anything is built"),
         }
     }
 

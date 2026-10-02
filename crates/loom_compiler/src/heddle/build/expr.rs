@@ -171,6 +171,11 @@ impl<'a> Builder<'a> {
                 let from = self.ty_of(e);
                 self.slice_of(v, from, e.span)
             }
+            Coercion::ToStream(source) => {
+                let source = source.clone();
+                let (from, to) = (self.ty_of(e), self.coerced_ty(e));
+                self.stream_of(&source, v, from, to, e.span)
+            }
             Coercion::ToUnion | Coercion::WidenUnion => {
                 let target = self.coerced_ty(e);
                 let from = self.ty_of(e);
@@ -179,7 +184,6 @@ impl<'a> Builder<'a> {
             other => {
                 let what = match other {
                     Coercion::ToAny(_) => "`any` values",
-                    Coercion::ToStream(_) => "streams",
                     _ => "this conversion",
                 };
                 self.unsupported(e.span, what)
@@ -300,7 +304,7 @@ impl<'a> Builder<'a> {
             ExprKind::Index { base, args } => self.index(e, base, args),
             ExprKind::Map(_) => self.unsupported(span, "maps"),
             ExprKind::Lambda { .. } => self.lambda(e),
-            ExprKind::Range { .. } => self.unsupported(span, "ranges as values"),
+            ExprKind::Range { lo, hi, inclusive } => self.range_value(lo.as_deref(), hi.as_deref(), *inclusive),
             ExprKind::Intrinsic(_) => self.unsupported(span, "`target`"),
             ExprKind::Yield { .. } | ExprKind::Pull => self.unsupported(span, "shuttles"),
             ExprKind::Loom { .. } | ExprKind::Thread(_) => self.unsupported(span, "threads"),
@@ -848,9 +852,37 @@ impl<'a> Builder<'a> {
         self.enter(exit);
     }
 
+    /// `a..b` as a value: its ends, and flags saying it has a high end
+    /// (1) and includes it (2).
+    fn range_value(&mut self, lo: Option<&'a hir::Expr>, hi: Option<&'a hir::Expr>, inclusive: bool) -> Option<Val> {
+        let lo = match lo {
+            Some(lo) => self.value(lo)?[0],
+            None => self.iconst(0),
+        };
+        let hi_v = match hi {
+            Some(hi) => self.value(hi)?[0],
+            None => self.iconst(0),
+        };
+        let flags = u64::from(hi.is_some()) | (u64::from(inclusive && hi.is_some()) << 1);
+        let flags = self.iconst(flags);
+        Some(Val::Regs(vec![lo, hi_v, flags]))
+    }
+
     fn for_expr(&mut self, e: &'a hir::Expr, pat: &'a hir::Pat, iter: &'a hir::Expr, body: &'a Block) -> Option<()> {
-        if let Some(seq) = self.seq_of(self.ty_of(iter)) {
+        let ity = self.ty_of(iter);
+        if let Some(seq) = self.seq_of(ity) {
             return self.for_seq(e, pat, iter, body, seq);
+        }
+        if let Some(source) = self.tables().streams.get(&e.id).cloned() {
+            return self.for_stream(e, pat, iter, body, Some(source));
+        }
+        if let TyKind::Range(elem) = *self.tcx().kind(ity)
+            && !matches!(iter.kind, ExprKind::Range { lo: Some(_), .. })
+        {
+            return self.for_stream(e, pat, iter, body, Some(crate::typeck::IterSource::Range(elem)));
+        }
+        if !matches!(self.tcx().kind(ity), TyKind::Range(_)) {
+            return self.for_stream(e, pat, iter, body, None);
         }
         let ExprKind::Range { lo: Some(lo), hi, inclusive } = &iter.kind else {
             return self.unsupported(iter.span, "`for` loops over anything but a range");

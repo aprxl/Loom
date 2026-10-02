@@ -44,7 +44,7 @@ const BODIES: &[&str] = &[
 
 /// Whether the builder writes the body of the `#builtin` method `path`.
 pub(super) fn writes_body(path: &str) -> bool {
-    BODIES.contains(&path) || super::methods::writes_body(path)
+    BODIES.contains(&path) || super::methods::writes_body(path) || super::stream::writes_body(path)
 }
 
 impl<'a> Builder<'a> {
@@ -56,8 +56,8 @@ impl<'a> Builder<'a> {
             return self.method_body(id, &path, span);
         }
         let sig = self.typed.results.sigs.get(&id)?.clone();
-        let tys: Vec<Ty> = sig.params.iter().map(|p| self.tcx().degauge(p.ty)).collect();
-        let ret = self.tcx().degauge(sig.ret);
+        let tys: Vec<Ty> = sig.params.iter().map(|p| self.plain_ty(p.ty)).collect();
+        let ret = self.plain_ty(sig.ret);
         let abi = self.body_abi(id, span)?;
         let (sret, _, params) = self.entry_params(&abi);
         self.f.ret = Some(ret);
@@ -71,6 +71,10 @@ impl<'a> Builder<'a> {
                 ParamAbi::Addr => Val::Mem(vals[0]),
             })
             .collect();
+        if super::stream::writes_body(&path) {
+            self.stream_method(&path, &args, &tys, ret, sret, span)?;
+            return Some(abi.results);
+        }
         // The element type: of `self`, or of the list `filled` makes.
         let seq_ty = if path == "std.list.List.filled" { ret } else { tys[0] };
         let Some(seq) = self.seq_of(seq_ty) else {
@@ -495,7 +499,7 @@ impl<'a> Builder<'a> {
     }
 
     /// `min(a, b)` of two `u64`s.
-    fn umin(&mut self, a: Value, b: Value) -> Value {
+    pub(super) fn umin(&mut self, a: Value, b: Value) -> Value {
         let r = self.new_var(VTy::Int);
         self.write(r, a);
         let less = self.ucmp(Cmp::Lt, b, a);

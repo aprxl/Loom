@@ -120,6 +120,7 @@ impl<'a> Builder<'a> {
             }
             TyKind::Adt(def, args) => match self.p.def_path(def).as_str() {
                 "std.string.String" => self.free_buffer(ptr, 1, 1),
+                "std.iter.Stream" => self.drop_stream(ptr),
                 "std.list.List" => {
                     let elem = args[0];
                     let (size, align) = self.size_align(elem)?;

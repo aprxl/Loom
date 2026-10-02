@@ -1,0 +1,41 @@
+// Streams on Treadle: sources (sequences, ranges, `Iter`, text), every
+// adaptor, and every way to run one.
+use std.io.print
+warp Counter { n: i32 }
+weave Iter into Counter {
+    type Item = i32
+    fn next(mut self) -> ?i32 {
+        if .n >= 3 { return none }
+        .n += 1
+        some(.n)
+    }
+}
+fn main() {
+    let xs = [1, 2, 3, 4, 5]
+    print(xs.map(_ * 2).collect())
+    print(xs.filter(_ % 2 == 1).count())
+    print((0..5).map(_ + 1).collect())
+    print(xs.sum())
+    print(xs.take(2).collect())
+    print(xs.skip(3).collect())
+    print(xs.indexed().map(p => p.0 * 10 + p.1).collect())
+    print(xs.fold(0, (a, x) => a + x))
+    print("{xs.min()} {xs.max()} {xs.last()} {xs.find(_ > 3)} {xs.position(_ == 4)}")
+    print("{xs.all(_ > 0)} {xs.exists(_ > 9)} {xs.reduce((a, b) => a * b)}")
+    print(xs.zip(["a", "b"]).collect())
+    print(xs.take_while(_ < 3).chain(xs.skip_while(_ < 4)).collect())
+    let words: List[String] = ["one", "two", "three"]
+    print(words.map(w => "{w}!").join(", "))
+    for c in "héllo".chars() { print(c) }
+    print("a\nb\r\nc".lines().collect())
+    print("  hi  there ".words().collect())
+    print("ab".bytes().collect())
+    for w in [1, 2, 3, 4, 5].chunks(2) { print(w) }
+    print([1, 2, 3].windows(2).count())
+    for x in Counter(n: 0) { print(x) }
+    let r = 2..=4
+    for i in r { print(i) }
+    var total = 0
+    xs.each(x => total += x)
+    print(total)
+}

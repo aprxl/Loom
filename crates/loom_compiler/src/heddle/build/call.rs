@@ -48,9 +48,6 @@ impl<'a> Builder<'a> {
         if info.dynamic.is_some() {
             return self.unsupported(span, "`any` values");
         }
-        if tables.streams.contains_key(&e.id) {
-            return self.unsupported(span, "streams");
-        }
         let p = self.p;
         let def = self.typed.results.instance(info.callee).def;
         let DefKind::Fn(f) = &p.def(def).kind else { return self.unsupported(span, "this call") };
@@ -67,7 +64,20 @@ impl<'a> Builder<'a> {
         let abi = self.body_abi(info.callee, span)?;
         let modes: Vec<ParamMode> = sig.params.iter().map(|p| p.mode).collect();
         let recv_ty = info.args.iter().position(|&s| s == ArgSource::Receiver).map(|k| self.plain_ty(sig.params[k].ty));
-        let worked = self.call_args(callee, args, &info, &modes, recv_ty)?;
+        let mut worked = self.call_args(callee, args, &info, &modes, recv_ty)?;
+        // A `Stream` method called on something else with items: on a
+        // stream of them.
+        if let Some(source) = self.tables().streams.get(&e.id).cloned()
+            && info.receiver.is_some()
+            && let Some(Arg::Val(v, vty)) = worked.first().map(|a| match a {
+                Arg::Val(v, t) => Arg::Val(v.clone(), *t),
+                Arg::Place(p) => Arg::Place(p.clone()),
+            })
+            && let Some(want) = recv_ty
+        {
+            let s = self.stream_of(&source, v, vty, want, span)?;
+            worked[0] = Arg::Val(s, want);
+        }
         // Defaults, in parameter order, with the callee's tables.
         let mut by_param: Vec<Option<Arg>> = Vec::with_capacity(info.args.len());
         let mut worked = worked.into_iter().map(Some).collect::<Vec<_>>();

@@ -4,32 +4,23 @@
 # passes, so take it out when it does: this list only gets shorter.
 
 any                  V1  `any` values, warps
-borrows              V1  lists, slices
 calls                V1  `String`
 const_eval           V1  constants computed while compiling, byte strings
 const_fold_width     V1  constants with a type
 const_if             V1  lists
-defer                V1  `defer`, results
-derive_json          V1  warps, reflection
 element_copies       V1  lists
 gauges               V1  gauges, optionals
-int_to_float         V1  lists
 iterators            V1  warps, streams
 lambdas              V1  lambdas
 long_expressions     V1  constants with a type
 loop_changes_map     V1  maps, lambdas
 maps                 V1  maps
 methods              V1  warps
-repeat_list          V1  lists
 results              V1  results
-rng_rotate           V1  methods of integers
 strings              V1  text methods
 through              V1  warps, `through`
 through_scalars      V1  warps, `through`
 union_values         V1  unions
-unravel_chunks       V1  lists, slices
-unravel_open_range   V1  streams
-unravel_sum          V1  arrays
 
 shuttles             V2  shuttles, streams
 unravel_closed       V2  shuttles
