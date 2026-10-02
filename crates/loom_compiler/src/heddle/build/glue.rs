@@ -235,9 +235,15 @@ impl<'a> Builder<'a> {
         self.enter(yes);
         if size > 0 {
             let buf = self.load(Mem::W64, ptr, 0, VTy::Ptr);
-            let scale = self.iconst(size);
-            let bytes = self
-                .emit1(InstKind::Arith { op: IntOp::Mul, policy: Policy::Wrap, ty: U64, a: cap, b: scale }, VTy::Int);
+            let bytes = if size == 1 {
+                cap
+            } else {
+                let scale = self.iconst(size);
+                self.emit1(
+                    InstKind::Arith { op: IntOp::Mul, policy: Policy::Wrap, ty: U64, a: cap, b: scale },
+                    VTy::Int,
+                )
+            };
             let a = self.iconst(align);
             self.emit(InstKind::Native { name: "mem.free", imm: 0, args: vec![buf, bytes, a] }, &[]);
         }
