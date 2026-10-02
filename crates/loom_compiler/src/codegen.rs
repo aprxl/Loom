@@ -126,6 +126,9 @@ struct Emitter<'m> {
     folds: HashMap<(usize, usize), Fold>,
     /// Constants whose every use is folded: never emitted.
     dead: HashSet<Value>,
+    /// Values nothing reads: a call's results that aren't, say. Their
+    /// registers may be another result's, so they aren't written.
+    unused: HashSet<Value>,
     /// Trampolines: an edge's moves and jump, placed after every block,
     /// with the layout place of the block the edge leaves.
     tramps: Vec<(usize, Edge)>,
@@ -202,6 +205,19 @@ fn emit_func(
     let Ok(frame) = u16::try_from(frame) else {
         return Ok(Err(format!("`{}` needs more than 65535 registers", f.name)));
     };
+    let mut read: HashSet<Value> = HashSet::new();
+    for b in &f.blocks {
+        for inst in &b.insts {
+            read.extend(inst_uses(&inst.kind));
+        }
+        read.extend(b.term.iter().flat_map(term_uses));
+    }
+    let unused = f
+        .blocks
+        .iter()
+        .flat_map(|b| b.insts.iter().flat_map(|i| i.results.iter().copied()))
+        .filter(|r| !read.contains(r))
+        .collect();
     let mut e = Emitter {
         f,
         code: Vec::new(),
@@ -217,6 +233,7 @@ fn emit_func(
         fixups: Vec::new(),
         folds,
         dead,
+        unused,
         tramps: Vec::new(),
         tramp_at: Vec::new(),
         rank,
@@ -1200,7 +1217,9 @@ impl Emitter<'_> {
                 self.parallel(span, moves);
                 self.put(span, word_i32(Op::Call, self.window, func.0 as i32));
                 for (i, &r) in inst.results.iter().enumerate() {
-                    self.mov(span, self.r(r), self.window + i as u16);
+                    if !self.unused.contains(&r) {
+                        self.mov(span, self.r(r), self.window + i as u16);
+                    }
                 }
             }
             K::Native { name, imm, args } => {
@@ -1210,7 +1229,9 @@ impl Emitter<'_> {
                 let n = self.native(name);
                 self.put(span, word(Op::CallN, self.scratch, n, *imm));
                 for (i, &r) in inst.results.iter().enumerate() {
-                    self.mov(span, self.r(r), self.scratch + i as u16);
+                    if !self.unused.contains(&r) {
+                        self.mov(span, self.r(r), self.scratch + i as u16);
+                    }
                 }
             }
             K::Slot(n) => {
@@ -1272,7 +1293,9 @@ impl Emitter<'_> {
                 }
                 self.put(span, word(Op::CallR, self.window, self.tmp2, ((params as u16) << 8) | results as u16));
                 for (i, &r) in inst.results.iter().enumerate() {
-                    self.mov(span, self.r(r), self.window + i as u16);
+                    if !self.unused.contains(&r) {
+                        self.mov(span, self.r(r), self.window + i as u16);
+                    }
                 }
             }
         }
