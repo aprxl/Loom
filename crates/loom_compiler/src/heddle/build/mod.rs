@@ -29,6 +29,7 @@ mod expr;
 mod fallible;
 mod glue;
 mod lambda;
+mod methods;
 mod pat;
 mod repr;
 mod scan;
@@ -472,8 +473,9 @@ impl<'a> Builder<'a> {
     /// The ABI of function instance `id`.
     fn body_abi(&mut self, id: BodyId, span: Span) -> Option<Abi> {
         let sig = self.typed.results.sigs.get(&id)?.clone();
-        let params: Vec<(ParamMode, Ty)> = sig.params.iter().map(|p| (p.mode, self.tcx().degauge(p.ty))).collect();
-        self.abi(&params, sig.ret, false, span)
+        let params: Vec<(ParamMode, Ty)> = sig.params.iter().map(|p| (p.mode, self.plain_ty(p.ty))).collect();
+        let ret = self.plain_ty(sig.ret);
+        self.abi(&params, ret, false, span)
     }
 
     /// A function instance of the program.

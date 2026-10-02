@@ -9,9 +9,7 @@ calls                V1  `String`
 const_eval           V1  constants computed while compiling, byte strings
 const_fold_width     V1  constants with a type
 const_if             V1  lists
-const_params         V1  arrays
 defer                V1  `defer`, results
-defer_mut_params     V1  `defer`, `String`
 derive_json          V1  warps, reflection
 element_copies       V1  lists
 gauges               V1  gauges, optionals
@@ -19,21 +17,15 @@ int_to_float         V1  lists
 iterators            V1  warps, streams
 lambdas              V1  lambdas
 long_expressions     V1  constants with a type
-loop_changes_list    V1  lists, lambdas
 loop_changes_map     V1  maps, lambdas
 maps                 V1  maps
 methods              V1  warps
-moves                V1  `String`
-mut_optional         V1  optionals
-option_take          V1  optionals and results
-out_of_memory        V1  text methods
 repeat_list          V1  lists
 results              V1  results
 rng_rotate           V1  methods of integers
 strings              V1  text methods
 through              V1  warps, `through`
 through_scalars      V1  warps, `through`
-tuple_assign         V1  warps
 union_values         V1  unions
 unravel_chunks       V1  lists, slices
 unravel_open_range   V1  streams

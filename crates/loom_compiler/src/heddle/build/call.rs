@@ -66,8 +66,7 @@ impl<'a> Builder<'a> {
         let sig = self.typed.results.sigs.get(&info.callee)?.clone();
         let abi = self.body_abi(info.callee, span)?;
         let modes: Vec<ParamMode> = sig.params.iter().map(|p| p.mode).collect();
-        let recv_ty =
-            info.args.iter().position(|&s| s == ArgSource::Receiver).map(|k| self.tcx().degauge(sig.params[k].ty));
+        let recv_ty = info.args.iter().position(|&s| s == ArgSource::Receiver).map(|k| self.plain_ty(sig.params[k].ty));
         let worked = self.call_args(callee, args, &info, &modes, recv_ty)?;
         // Defaults, in parameter order, with the callee's tables.
         let mut by_param: Vec<Option<Arg>> = Vec::with_capacity(info.args.len());
@@ -194,6 +193,16 @@ impl<'a> Builder<'a> {
     /// the view is in memory of its own; the elements are still its.
     fn receiver_view(&mut self, arg: Arg, ty: Ty, want: Option<Ty>, span: Span) -> Option<Arg> {
         let Some(want) = want else { return Some(arg) };
+        // A `String` where `str` is wanted: a view of its text.
+        if matches!(self.tcx().kind(want), TyKind::Str) && self.is_string(ty) {
+            return Some(match arg {
+                Arg::Val(v, _) => {
+                    let (p, n) = self.text_of(v, ty, span)?;
+                    Arg::Val(Val::Regs(vec![p, n]), want)
+                }
+                place => place,
+            });
+        }
         let to_slice = matches!(self.seq_of(want), Some(crate::typeck::Seq::Slice(_)))
             && matches!(self.seq_of(ty), Some(crate::typeck::Seq::Array(..) | crate::typeck::Seq::List(_)));
         if !to_slice {

@@ -187,7 +187,9 @@ fn emit_func(
                 InstKind::Call { args, .. } | InstKind::CallInd { args, .. } => {
                     max(u32::from(window) + args.len().max(inst.results.len()) as u32);
                 }
-                InstKind::Native { args, .. } => max(u32::from(scratch) + args.len() as u32),
+                InstKind::Native { args, .. } => {
+                    max(u32::from(scratch) + args.len().max(inst.results.len()) as u32);
+                }
                 _ => {}
             }
         }

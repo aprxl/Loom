@@ -1,0 +1,31 @@
+// The methods of text, characters, integers and floats, and `?T.take()`.
+use std.io.print
+fn main() {
+    let s = "  Hello, World  "
+    print("[{s.trim()}] [{s.trim_start()}] [{s.trim_end()}] {s.len()} {s.is_empty()}")
+    let t: String = "héllo wörld"
+    print("{t.len()} {t.char_count()} {t.contains("wö")} {t.find("l")} {t.find("z")}")
+    print("{t.starts_with("hé")} {t.ends_with("ld")} {t.to_upper()} {"MiXeD".to_lower()}")
+    print("{"a-b-c".replace("-", "+")} {"ab".repeat(3)} {"a,b,,c".split(",")} {"xyz".split("")}")
+    var u: String = String()
+    u.push('a')
+    u.push('é')
+    u.push_str("bc")
+    print("{u} {u.pop()} {u}")
+    u.clear()
+    print("[{u}] {String.of(['o', 'k'])}")
+    print("{"42".parse[i32]():?} {"-7".parse[i8]():?} {"300".parse[u8]():?} {"".parse[i32]():?} {"x1".parse[i32]():?}")
+    print("{"2.5".parse[f64]():?} {"1e3".parse[f32]():?} {"nope".parse[f64]():?}")
+    let c = 'g'
+    print("{c.is_digit()} {c.is_alphabetic()} {c.to_upper()} {'Q'.to_lower()} {'7'.digit()} {'f'.to_digit(16)} {'z'.to_digit(16)} {'é'.len_utf8()}")
+    let n: i32 = -17
+    print("{n.abs()} {n.min(3)} {n.max(3)} {2.pow(10)} {12.trailing_zeros()} {1u32.leading_zeros()} {255.count_ones()}")
+    print("{64.is_power_of_two()} {1000.log2()} {0x81u8.rotate_left(1)} {1u8.rotate_right(1)} {n.to_string()}")
+    let x = -2.5
+    print("{x.abs()} {x.min(1.0)} {x.max(1.0)} {9.0.sqrt()} {x.floor()} {x.ceil()} {x.trunc()} {x.round()} {2.0.pow(0.5)} {x.is_nan()} {x.to_string()}")
+    var o: ?String = some("taken")
+    let got = o.take()
+    print("{got} {o}")
+    let w: String = "  pad  "
+    print("[{w.trim()}]")
+}

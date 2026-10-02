@@ -44,7 +44,7 @@ const BODIES: &[&str] = &[
 
 /// Whether the builder writes the body of the `#builtin` method `path`.
 pub(super) fn writes_body(path: &str) -> bool {
-    BODIES.contains(&path)
+    BODIES.contains(&path) || super::methods::writes_body(path)
 }
 
 impl<'a> Builder<'a> {
@@ -52,6 +52,9 @@ impl<'a> Builder<'a> {
     pub(super) fn builtin_body(&mut self, id: BodyId, span: Span) -> Option<Vec<VTy>> {
         self.f.span = None;
         let path = self.p.def_path(self.typed.results.instance(id).def);
+        if super::methods::writes_body(&path) {
+            return self.method_body(id, &path, span);
+        }
         let sig = self.typed.results.sigs.get(&id)?.clone();
         let tys: Vec<Ty> = sig.params.iter().map(|p| self.tcx().degauge(p.ty)).collect();
         let ret = self.tcx().degauge(sig.ret);
