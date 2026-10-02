@@ -233,8 +233,8 @@ fn examples_corpus() {
 }
 
 /// `tests/test/NAME.out` is what `loom test tests/test/NAME.loom` prints,
-/// run from the repository root. It exits with 0 when every test passed,
-/// and 1 otherwise.
+/// run from the repository root, on Lua and on Treadle. It exits with 0
+/// when every test passed, and 1 otherwise.
 #[test]
 fn test_corpus() {
     let mut failures = Vec::new();
@@ -243,20 +243,24 @@ fn test_corpus() {
     assert!(!paths.is_empty());
     for path in &paths {
         let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("?").to_string();
-        let out = std::process::Command::new(env!("CARGO_BIN_EXE_loom"))
-            .current_dir(&root)
-            .args(["--color", "never", "test", &format!("tests/test/{name}.loom")])
-            .output()
-            .expect("the loom binary runs");
-        let report = String::from_utf8_lossy(&out.stdout).into_owned();
-        let expected = std::fs::read_to_string(path.with_extension("out")).unwrap_or_default();
-        if report != expected {
-            let stderr = String::from_utf8_lossy(&out.stderr);
-            failures.push(format!("{name}: report differs\n--- expected\n{expected}--- got\n{report}{stderr}"));
-        }
-        let want = if expected.contains("\ntest result: ok.") { 0 } else { 1 };
-        if out.status.code() != Some(want) {
-            failures.push(format!("{name}: exited with {:?}, expected {want}", out.status.code()));
+        for backend in ["lua", "vm"] {
+            let out = std::process::Command::new(env!("CARGO_BIN_EXE_loom"))
+                .current_dir(&root)
+                .args(["--color", "never", "test", "--backend", backend, &format!("tests/test/{name}.loom")])
+                .output()
+                .expect("the loom binary runs");
+            let report = String::from_utf8_lossy(&out.stdout).into_owned();
+            let expected = std::fs::read_to_string(path.with_extension("out")).unwrap_or_default();
+            if report != expected {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                failures.push(format!(
+                    "{name} ({backend}): report differs\n--- expected\n{expected}--- got\n{report}{stderr}"
+                ));
+            }
+            let want = if expected.contains("\ntest result: ok.") { 0 } else { 1 };
+            if out.status.code() != Some(want) {
+                failures.push(format!("{name} ({backend}): exited with {:?}, expected {want}", out.status.code()));
+            }
         }
     }
     assert!(failures.is_empty(), "{} test fixtures failed:\n\n{}", failures.len(), failures.join("\n\n"));
