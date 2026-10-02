@@ -5,6 +5,8 @@
 //! with an [`Outcome`], whose unravels and crashes carry the Loom
 //! [`Location`] they happened at.
 
+pub mod term;
+
 use std::cell::RefCell;
 use std::rc::Rc;
 

@@ -332,7 +332,6 @@ dependencies = [
 name = "loom_host"
 version = "0.1.0"
 dependencies = [
- "crossterm",
  "loom_sys",
  "mlua",
 ]
@@ -352,6 +351,9 @@ dependencies = [
 [[package]]
 name = "loom_sys"
 version = "0.1.0"
+dependencies = [
+ "crossterm",
+]
 
 [[package]]
 name = "loom_vm"

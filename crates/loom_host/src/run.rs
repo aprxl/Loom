@@ -17,7 +17,7 @@ use mlua::{Function, Lua, Table};
 pub use loom_sys::{Host, Outcome, Output};
 
 use crate::srcmap::{Location, SourceMap};
-use crate::term::Term;
+use loom_sys::term::Term;
 
 /// The marker at the start of every unravel message (`rt.MARK`).
 pub const UNRAVEL_MARK: &str = "\u{1f}LOOM\u{1f}";

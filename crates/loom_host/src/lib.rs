@@ -12,7 +12,7 @@
 pub mod consteval;
 pub mod run;
 pub mod srcmap;
-pub mod term;
+pub use loom_sys::term;
 
 pub use run::{Host, Outcome, Output, TestRun, run_bundle, run_tests};
 pub use srcmap::{Location, SourceMap};
