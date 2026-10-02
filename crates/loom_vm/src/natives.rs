@@ -31,6 +31,9 @@ pub(crate) struct Ctx<'i> {
     /// Sinks 2 and up: text being built (`sink.push`).
     bufs: Vec<Vec<u8>>,
     pub heap: Heap,
+    /// With `checked`: the value stack, set before each native runs, so a
+    /// native can check memory on it.
+    pub stack: *const crate::stack::Stack,
     /// How many instructions have been dispatched (with `stats`).
     pub dispatched: u64,
 }
@@ -57,6 +60,7 @@ impl<'i> Ctx<'i> {
             msg: Vec::new(),
             bufs: Vec::new(),
             heap: Heap::default(),
+            stack: std::ptr::null(),
             dispatched: 0,
         }
     }
@@ -77,6 +81,14 @@ impl<'i> Ctx<'i> {
     ///
     /// # Safety
     ///
+    /// With `checked`: whether `len` bytes at `addr` are a live object or
+    /// stack in use.
+    fn owns(&self, addr: u64, len: u64) -> bool {
+        // SAFETY: `stack` is set to the live stack before a native runs
+        // (in the checked build, the only one that calls this).
+        self.heap.holds(addr, len) || (!self.stack.is_null() && unsafe { (*self.stack).holds(addr, len) })
+    }
+
     /// `ptr` and `len` must be a text value the compiler built: the address
     /// and length of text that lives at least as long as `self`.
     pub unsafe fn text(&self, ptr: u64, len: u64) -> Result<&[u8], Trap> {
@@ -198,6 +210,7 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
         "mem.alloc" => mem_alloc,
         "mem.free" => mem_free,
         "mem.grow" => mem_grow,
+        "mem.move" => mem_move,
         _ => return None,
     };
     let sig = native(name)?;
@@ -246,6 +259,21 @@ fn mem_alloc(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 /// `mem.free(address, size, align)`.
 fn mem_free(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     ctx.heap.free(args[0], args[1], args[2])
+}
+
+/// `mem.move(dst, src, bytes)`: copies `bytes` bytes, which may overlap.
+fn mem_move(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let (dst, src, n) = (args[0], args[1], args[2]);
+    if n == 0 {
+        return Ok(());
+    }
+    if cfg!(feature = "checked") && !(ctx.owns(dst, n) && ctx.owns(src, n)) {
+        return Err(Trap::Crash(format!("loom internal: moving {n} bytes from {src:#x} to {dst:#x}")));
+    }
+    // SAFETY: the compiler passes two runs of `n` bytes the program owns,
+    // in the buffers of lists (the checked build checks they're live).
+    unsafe { std::ptr::copy(src as *const u8, dst as *mut u8, n as usize) };
+    Ok(())
 }
 
 /// `mem.grow(header, element size, align, at least)`: makes room in the

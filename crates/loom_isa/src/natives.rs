@@ -69,6 +69,8 @@ pub const NATIVES: &[NativeSig] = &[
     sig("mem.alloc", 2, 1, NativeImm::None),
     sig("mem.free", 3, 0, NativeImm::None),
     sig("mem.grow", 4, 0, NativeImm::None),
+    // `mem.move(dst, src, bytes)`: copies bytes that may overlap.
+    sig("mem.move", 3, 0, NativeImm::None),
     sig("out.str", 2, 0, NativeImm::None),
     sig("out.fmt", 1, 0, NativeImm::Fmt),
     sig("out.fmt2", 2, 0, NativeImm::Fmt),

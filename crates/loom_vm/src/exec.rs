@@ -240,7 +240,7 @@ impl<'i> Machine<'i> {
                     if matches!(trap, Trap::Crash(_) | Trap::Failed(_)) {
                         return Err(fault(trap, at));
                     }
-                    in_flight = Some(fault(trap, at));
+                    in_flight = Some(Fault { trap, pc: report_at(image, code_base, fp, at) });
                     match unwind(image, code_base, stack, fp, at, false) {
                         Some((to, frame, end)) => {
                             pc = to;
@@ -754,6 +754,9 @@ impl<'i> Machine<'i> {
                     // SAFETY: the verifier checked that the native's
                     // registers are inside the frame.
                     let args = unsafe { std::slice::from_raw_parts_mut(fp.add(a(w)), regs) };
+                    if cfg!(feature = "checked") {
+                        ctx.stack = &*stack;
+                    }
                     if let Err(trap) = native(ctx, args, c(w) as u16) {
                         throw!(trap);
                     }
@@ -950,6 +953,28 @@ fn unwind(
         index = (back as usize - code_base as usize) / 8 - 1;
         fp = caller;
     }
+}
+
+/// Where a trap at `at`, in the frame at `fp`, is reported: there, or for
+/// code with no locations (std's methods the compiler writes, glue), at the
+/// call into it, as Lua's `error(message, level)` reports at a caller.
+fn report_at(image: &Image, code_base: *const u64, mut fp: *mut u64, at: *const u64) -> usize {
+    let first = (at as usize - code_base as usize) / 8;
+    let mut index = first;
+    while image.line_at(index as u32).is_none() {
+        // SAFETY: every frame has its linkage just below it (see `call`).
+        let (back, caller) = unsafe {
+            let link = fp.sub(LINK_SLOTS);
+            (*link as *const u64, *link.add(1) as *mut u64)
+        };
+        if back.is_null() {
+            return first;
+        }
+        // The call is the word before where it returns to.
+        index = (back as usize - code_base as usize) / 8 - 1;
+        fp = caller;
+    }
+    index
 }
 
 /// Whether `len` bytes at `addr` are all memory the program may touch: a
