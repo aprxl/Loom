@@ -1286,6 +1286,10 @@ fn rewrite(k: &mut InstKind, f: impl Fn(Value) -> Value) {
             *src = f(*src);
         }
         K::Zero { dst, .. } => *dst = f(*dst),
+        K::Elem { header, index, .. } => {
+            *header = f(*header);
+            *index = f(*index);
+        }
         K::Index { base, index, .. } => {
             *base = f(*base);
             *index = f(*index);

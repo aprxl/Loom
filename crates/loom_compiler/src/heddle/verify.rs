@@ -180,6 +180,7 @@ pub(crate) fn uses(k: &super::InstKind) -> Vec<Value> {
         K::Zero { dst, .. } => vec![*dst],
         K::Index { base, index, .. } => vec![*base, *index],
         K::Bounds { index, len } => vec![*index, *len],
+        K::Elem { header, index, .. } => vec![*header, *index],
         K::CallInd { callee, args } => std::iter::once(*callee).chain(args.iter().copied()).collect(),
     }
 }

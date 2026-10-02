@@ -193,6 +193,9 @@ fn kind(module: &Module, f: &Func, k: &InstKind, results: &[Value]) -> String {
         InstKind::Zero { dst, size } => format!("zero {}, {size}", v(*dst)),
         InstKind::Index { base, index, scale } => format!("index {}, {} * {scale}", v(*base), v(*index)),
         InstKind::Bounds { index, len } => format!("bounds {}, {}", v(*index), v(*len)),
+        InstKind::Elem { header, off, index, scale } => {
+            format!("elem {}+{off}[{}] * {scale}", v(*header), v(*index))
+        }
         InstKind::FuncRef(func) => {
             let name = module.funcs.get(func.0 as usize).map_or("?", |f| f.name.as_str());
             format!("fnref {name}")

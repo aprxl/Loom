@@ -838,6 +838,25 @@ impl<'i> Machine<'i> {
                     let v = r!(b(w)).wrapping_add(r!(c(w)).wrapping_mul(scale));
                     set!(a(w), v)
                 }
+                Op::Elem | Op::ElemF => {
+                    let ext = ext!();
+                    let (header, index, scale) = if op == Op::Elem {
+                        (r!(b(w)), r!(c(w)), ext)
+                    } else {
+                        ((fp as u64).wrapping_add(ext >> 32), r!(b(w)), ext & 0xFFFF_FFFF)
+                    };
+                    mem_check!(header, 16);
+                    // SAFETY: the compiler passes the address of a list's
+                    // (or a slice's) header: its buffer, then its length.
+                    let (buf, len) = unsafe {
+                        let h = header as *const u64;
+                        (h.read(), h.add(1).read())
+                    };
+                    if index >= len {
+                        throw!(Trap::Index { index, len });
+                    }
+                    set!(a(w), buf.wrapping_add(index.wrapping_mul(scale)))
+                }
                 Op::Copy => {
                     let n = ext!();
                     let (dst, src) = (r!(a(w)), r!(b(w)));

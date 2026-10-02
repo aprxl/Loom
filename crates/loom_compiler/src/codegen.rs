@@ -330,6 +330,7 @@ fn slot_uses(f: &Func) -> (HashMap<Value, usize>, HashSet<Value>) {
         for inst in &b.insts {
             let folded = match &inst.kind {
                 InstKind::Load { ptr, off, .. } if *off >= 0 => Some(*ptr),
+                InstKind::Elem { header, off, .. } if *off >= 0 => Some(*header),
                 InstKind::Store { ptr, off, .. } if *off >= 0 => Some(*ptr),
                 InstKind::Offset { ptr, off } if u32::try_from(*off).is_ok() => Some(*ptr),
                 _ => None,
@@ -1247,6 +1248,18 @@ impl Emitter<'_> {
                 self.put_ext(span, word(Op::Idx, dst, self.r(*base), self.r(*index)), Some(*scale));
             }
             K::Bounds { index, len } => self.put(span, word(Op::Bounds, self.r(*index), self.r(*len), 0)),
+            K::Elem { header, off, index, scale } => match self.address(span, *header, *off) {
+                // In the frame: one `elemf`.
+                Err(at) => {
+                    let ext = (u64::from(at) << 32) | *scale;
+                    self.put_ext(span, word(Op::ElemF, dst, self.r(*index), 0), Some(ext));
+                }
+                Ok((reg, 0)) => self.put_ext(span, word(Op::Elem, dst, reg, self.r(*index)), Some(*scale)),
+                Ok((reg, k)) => {
+                    self.put(span, word(Op::AddWKU64, self.tmp2, reg, k as u16));
+                    self.put_ext(span, word(Op::Elem, dst, self.tmp2, self.r(*index)), Some(*scale));
+                }
+            },
             K::FuncRef(func) => self.put(span, word_i32(Op::Ldfn, dst, func.0 as i32)),
             K::CallInd { callee, args } => {
                 // The function's number goes out of the window's way first.

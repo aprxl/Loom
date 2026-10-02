@@ -73,6 +73,7 @@ fn operands(image: &Image, op: Op, w: u64, ext: u64, pc: usize) -> String {
         Form::ABZ => format!("r{}, r{}, {ext} bytes", a(w), b(w)),
         Form::AZ => format!("r{}, {ext} bytes", a(w)),
         Form::ABCZ => format!("r{}, r{}, r{} * {ext}", a(w), b(w), c(w)),
+        Form::ABFZ => format!("r{}, fp+{}[r{}] * {}", a(w), ext >> 32, b(w), ext & 0xFFFF_FFFF),
         Form::AFn => {
             let name = image.funcs.get(bc_u32(w) as usize).map_or("?", |f| f.name.as_str());
             format!("r{}, {name}", a(w))

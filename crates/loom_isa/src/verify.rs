@@ -209,6 +209,14 @@ fn verify_func(image: &Image, index: usize) -> Result<(), VerifyError> {
                 reg(b(w))?;
                 reg(c(w))?;
             }
+            Form::ABFZ => {
+                reg(a(w))?;
+                reg(b(w))?;
+                // The list's header: two words, inside the frame.
+                if (ext >> 32) + 16 > frame as u64 * 8 {
+                    return Err(err(pc, format!("fp+{} is outside the frame", ext >> 32)));
+                }
+            }
             Form::AF => {
                 reg(a(w))?;
                 let width = u64::from(op.access_bytes().unwrap_or(0));

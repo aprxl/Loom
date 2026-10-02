@@ -66,6 +66,9 @@ pub enum Form {
     AZ,
     /// `a`, `b`, `c`: registers; an extension word: a scale.
     ABCZ,
+    /// `a`, `b`: registers; an extension word: a byte offset from the frame
+    /// pointer (high half) and a scale (low half).
+    ABFZ,
     /// `a`: a register; `b:c`: a function's index.
     AFn,
     /// `a`: where the callee's frame starts, as for [`Form::Call`]; `b`: the
@@ -80,7 +83,7 @@ impl Form {
     /// How many words an instruction of this form takes.
     pub fn words(self) -> usize {
         match self {
-            Form::AK | Form::ABX | Form::ABCX | Form::ABZ | Form::AZ | Form::ABCZ => 2,
+            Form::AK | Form::ABX | Form::ABCX | Form::ABZ | Form::AZ | Form::ABCZ | Form::ABFZ => 2,
             _ => 1,
         }
     }
@@ -418,6 +421,11 @@ ops! {
     Lea = "lea", AF;
     Gaddr = "gaddr", AG;
     Idx = "idx", ABCZ;
+    // a list's element: the address of element c (scaled) of the list
+    // whose header (buffer, length) is at b's address, or at fp+off;
+    // unravels unless c < the length
+    Elem = "elem", ABCZ;
+    ElemF = "elemf", ABFZ;
     // blocks of memory: copy `ext` bytes from b's address to a's; zero them
     Copy = "copy", ABZ;
     Zero = "zero", AZ;

@@ -289,6 +289,15 @@ pub enum InstKind {
         index: Value,
         len: Value,
     },
+    /// The address of element `index` (each `scale` bytes) of the list
+    /// whose header (buffer, length) is at `header + off`: unravels unless
+    /// `index` is below the length.
+    Elem {
+        header: Value,
+        off: i32,
+        index: Value,
+        scale: u64,
+    },
     /// A function as a value: its number.
     FuncRef(FuncId),
     /// Calls the function whose number `callee` holds, which takes as many
@@ -316,7 +325,8 @@ impl InstKind {
             | K::Call { .. }
             | K::CallInd { .. }
             | K::Native { .. }
-            | K::Bounds { .. } => true,
+            | K::Bounds { .. }
+            | K::Elem { .. } => true,
             _ => false,
         }
     }

@@ -344,6 +344,14 @@ impl<'a> Builder<'a> {
     /// against its length (unless `i`'s type `ity` can't reach past an
     /// array's end).
     fn checked_elem(&mut self, place: &Place, ty: Ty, seq: Seq, i: Value, ity: Ty, span: Span) -> Option<Value> {
+        // A list (or a slice in memory): its header's address, checked and
+        // indexed by one instruction.
+        if let (Seq::List(elem) | Seq::Slice(elem), &Place::At { ptr, off }) = (seq, place)
+            && let Ok(off) = i32::try_from(off)
+        {
+            let (scale, _) = self.size_align(elem)?;
+            return Some(self.emit1(InstKind::Elem { header: ptr, off, index: i, scale }, VTy::Ptr));
+        }
         let v = self.read_place(place, ty, span)?;
         let (buf, len) = self.view_of(&v, ty, span)?;
         let fits = match seq {
