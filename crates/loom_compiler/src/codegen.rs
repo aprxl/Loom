@@ -131,8 +131,9 @@ struct Emitter<'m> {
     /// Elements' addresses only the next instruction, a load or a store,
     /// uses: made by that one.
     elems: HashSet<Value>,
-    /// Values nothing reads: a call's results that aren't, say. Their
-    /// registers may be another result's, so they aren't written.
+    /// Values nothing reads: a call's results that aren't, or a block's
+    /// parameters. Their registers may be another value's, so they aren't
+    /// written.
     unused: HashSet<Value>,
     /// Trampolines: an edge's moves and jump, placed after every block,
     /// with the layout place of the block the edge leaves.
@@ -221,7 +222,13 @@ fn emit_func(
     let unused = f
         .blocks
         .iter()
-        .flat_map(|b| b.insts.iter().flat_map(|i| i.results.iter().copied()))
+        .enumerate()
+        .flat_map(|(i, b)| {
+            b.insts
+                .iter()
+                .flat_map(|i| i.results.iter().copied())
+                .chain(b.params.iter().copied().filter(move |_| i > 0))
+        })
         .filter(|r| !read.contains(r))
         .collect();
     let mut e = Emitter {
@@ -904,7 +911,8 @@ fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16
                 }
             }
             for p in partners.get(&v).into_iter().flatten() {
-                if assigned[p.0 as usize] && window.is_none_or(|w| reg[p.0 as usize] < w) {
+                // Not a register of the windows: a call or a native writes those.
+                if assigned[p.0 as usize] && window.is_none_or(|w| reg[p.0 as usize] < w - LINK_SLOTS as u16) {
                     hinted.push(reg[p.0 as usize]);
                 }
             }
@@ -1029,7 +1037,12 @@ impl Emitter<'_> {
 
     fn edge_moves(&mut self, e: &Edge, span: Option<Span>) {
         let params = &self.f.blocks[e.block.0 as usize].params;
-        let moves = params.iter().zip(&e.args).map(|(&p, &a)| (self.r(p), self.r(a))).collect();
+        let moves = params
+            .iter()
+            .zip(&e.args)
+            .filter(|(p, _)| !self.unused.contains(p))
+            .map(|(&p, &a)| (self.r(p), self.r(a)))
+            .collect();
         self.parallel(span, moves);
     }
 
@@ -1050,7 +1063,8 @@ impl Emitter<'_> {
     fn cond_target(&mut self, from: usize, e: &Edge) -> Label {
         let target = e.block.0 as usize;
         let params = &self.f.blocks[target].params;
-        let moves_nothing = params.iter().zip(&e.args).all(|(&p, &a)| self.r(p) == self.r(a));
+        let moves_nothing =
+            params.iter().zip(&e.args).all(|(&p, &a)| self.unused.contains(&p) || self.r(p) == self.r(a));
         if moves_nothing && self.rank[target] > from {
             Label::Block(target)
         } else {
@@ -1105,8 +1119,11 @@ impl Emitter<'_> {
                 let then_block = then.block.0 as usize;
                 // When `then` comes next, jump away only when the condition
                 // fails, and fall into it.
-                let then_moves =
-                    self.f.blocks[then_block].params.iter().zip(&then.args).any(|(&p, &a)| self.r(p) != self.r(a));
+                let then_moves = self.f.blocks[then_block]
+                    .params
+                    .iter()
+                    .zip(&then.args)
+                    .any(|(&p, &a)| !self.unused.contains(&p) && self.r(p) != self.r(a));
                 let falls_into_then =
                     !then_moves && self.order.get(place + 1) == Some(&then_block) && self.rank[then_block] > place;
                 let (edge, holds) = if falls_into_then { (else_, false) } else { (then, true) };
