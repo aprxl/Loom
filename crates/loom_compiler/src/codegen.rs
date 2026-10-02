@@ -48,6 +48,8 @@ pub fn generate(db: &SourceDb, module: &Module) -> Result<Image, String> {
         ..Image::default()
     };
     for f in &module.funcs {
+        let hoisted = hoist_constants(f);
+        let f = hoisted.as_ref().unwrap_or(f);
         // A function whose conditional branches reach too far for a fused
         // compare-and-branch is emitted again without fusing.
         let out = match emit_func(db, f, true, &mut natives, &mut files) {
@@ -368,6 +370,92 @@ fn slot_uses(f: &Func) -> (HashMap<Value, usize>, HashSet<Value>) {
 
 fn succs(f: &Func, b: usize) -> Vec<usize> {
     f.blocks[b].term.as_ref().map(|t| t.edges().iter().map(|e| e.block.0 as usize).collect()).unwrap_or_default()
+}
+
+/// `f` with the constants made inside loops (numbers, text and data
+/// addresses) made once, at the start, instead of on every iteration; or
+/// `None` when it has none. Each is still used only where it was, which the
+/// entry block comes before. (Not every constant: one a cold path uses would
+/// cost every call.)
+fn hoist_constants(f: &Func) -> Option<Func> {
+    let looped = in_loops(f);
+    let constant =
+        |k: &InstKind| matches!(k, InstKind::Iconst(_) | InstKind::Fconst(_) | InstKind::Str(_) | InstKind::Global(_));
+    if !(1..f.blocks.len()).any(|b| looped[b] && f.blocks[b].insts.iter().any(|i| constant(&i.kind))) {
+        return None;
+    }
+    let mut f = f.clone();
+    let mut lifted = Vec::new();
+    for (block, _) in f.blocks.iter_mut().zip(&looped).skip(1).filter(|(_, l)| **l) {
+        let (out, keep): (Vec<_>, Vec<_>) =
+            std::mem::take(&mut block.insts).into_iter().partition(|i| constant(&i.kind));
+        block.insts = keep;
+        lifted.extend(out);
+    }
+    // The entry block itself may be a loop's; its constants come first too.
+    let entry = std::mem::take(&mut f.blocks[0].insts);
+    let (mut first, rest): (Vec<_>, Vec<_>) = entry.into_iter().partition(|i| constant(&i.kind));
+    first.extend(lifted);
+    first.extend(rest);
+    f.blocks[0].insts = first;
+    Some(f)
+}
+
+/// Whether each block is on a cycle of the control flow graph: strongly
+/// connected components (Kosaraju's), those of more than one block or with
+/// an edge to itself.
+fn in_loops(f: &Func) -> Vec<bool> {
+    let n = f.blocks.len();
+    let next: Vec<Vec<usize>> = (0..n).map(|b| succs(f, b)).collect();
+    let mut prev = vec![Vec::new(); n];
+    for (b, ss) in next.iter().enumerate() {
+        for &s in ss {
+            prev[s].push(b);
+        }
+    }
+    // Finishing order, iteratively.
+    let mut seen = vec![false; n];
+    let mut order = Vec::with_capacity(n);
+    for root in 0..n {
+        if seen[root] {
+            continue;
+        }
+        seen[root] = true;
+        let mut stack = vec![(root, 0)];
+        while let Some(&mut (b, ref mut i)) = stack.last_mut() {
+            if let Some(&s) = next[b].get(*i) {
+                *i += 1;
+                if !seen[s] {
+                    seen[s] = true;
+                    stack.push((s, 0));
+                }
+            } else {
+                order.push(b);
+                stack.pop();
+            }
+        }
+    }
+    let mut comp = vec![usize::MAX; n];
+    let mut size = Vec::new();
+    for &root in order.iter().rev() {
+        if comp[root] != usize::MAX {
+            continue;
+        }
+        let c = size.len();
+        size.push(0);
+        comp[root] = c;
+        let mut stack = vec![root];
+        while let Some(b) = stack.pop() {
+            size[c] += 1;
+            for &p in &prev[b] {
+                if comp[p] == usize::MAX {
+                    comp[p] = c;
+                    stack.push(p);
+                }
+            }
+        }
+    }
+    (0..n).map(|b| size[comp[b]] > 1 || next[b].contains(&b)).collect()
 }
 
 /// The values read by an instruction, a terminator, and its edges.
