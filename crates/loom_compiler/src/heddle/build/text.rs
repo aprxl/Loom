@@ -133,10 +133,10 @@ impl<'a> Builder<'a> {
                     let val = self.expr_raw(expr)?;
                     let spec = spec.as_deref();
                     // A view of a place a later operand could change (by
-                    // calling something) is shown now, as on Lua, where
-                    // each operand becomes text as it's worked out.
+                    // calling something, or moving it) is shown now, as on
+                    // Lua, where each operand becomes text as it's worked out.
                     let later_calls = parts[k + 1..].iter().any(|p| match p {
-                        TemplatePart::Interp { expr, .. } => super::seq::calls(expr),
+                        TemplatePart::Interp { expr, .. } => !plain_read(expr),
                         TemplatePart::Text(_) => false,
                     });
                     if let Val::Mem(ptr) = val
@@ -317,5 +317,15 @@ impl<'a> Builder<'a> {
         self.write_pieces(msg, pieces)?;
         self.terminate(Term::UnravelMsg);
         Some(())
+    }
+}
+
+/// Whether working out `e` only reads: a literal, a local, or a field of
+/// one. Anything else might change a place (or move it away).
+fn plain_read(e: &hir::Expr) -> bool {
+    match &e.kind {
+        ExprKind::Lit(_) | ExprKind::Local(_) | ExprKind::LeadingDot(_) | ExprKind::Def { .. } => true,
+        ExprKind::Field { base, .. } => plain_read(base),
+        _ => false,
     }
 }
