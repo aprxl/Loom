@@ -231,9 +231,10 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
 }
 
 fn out_str(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    // SAFETY: `out.str` is passed a text value.
-    let text = unsafe { ctx.text(args[0], args[1])? }.to_vec();
-    ctx.write(&text);
+    // SAFETY: `out.str` is passed a text value, which writing doesn't
+    // touch: it's a literal or a heap object, not the output buffer.
+    let text: *const [u8] = unsafe { ctx.text(args[0], args[1])? };
+    ctx.write(unsafe { &*text });
     Ok(())
 }
 
@@ -245,9 +246,9 @@ fn out_fmt(ctx: &mut Ctx, args: &mut [u64], item: u16) -> Result<(), Trap> {
 }
 
 fn msg_str(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    // SAFETY: `msg.str` is passed a text value.
-    let text = unsafe { ctx.text(args[0], args[1])? }.to_vec();
-    ctx.msg.extend_from_slice(&text);
+    // SAFETY: as for `out.str`.
+    let text: *const [u8] = unsafe { ctx.text(args[0], args[1])? };
+    ctx.msg.extend_from_slice(unsafe { &*text });
     Ok(())
 }
 
@@ -332,9 +333,9 @@ fn mem_grow(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 
 /// `sink.str(sink, text address, length)`.
 fn sink_str(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    // SAFETY: `sink.str` is passed a text value.
-    let text = unsafe { ctx.text(args[1], args[2])? }.to_vec();
-    ctx.put(args[0], &text)
+    // SAFETY: as for `out.str`: a sink's buffer is never a text value's.
+    let text: *const [u8] = unsafe { ctx.text(args[1], args[2])? };
+    ctx.put(args[0], unsafe { &*text })
 }
 
 /// `sink.fmt(sink, value)` and `sink.fmt2(sink, text address, length)`.
@@ -353,8 +354,18 @@ fn sink_push(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 
 /// `sink.string(sink, destination)`: the buffer's text as a `String`.
 fn sink_string(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    // The buffer becomes the string's: nothing is copied.
     let text = ctx.pop(args[0])?;
-    ctx.new_string(&text, args[1])
+    let len = text.len() as u64;
+    let (ptr, cap) = ctx.heap.adopt(text)?;
+    // SAFETY: `dst` is where the compiler wants the string: three words.
+    unsafe {
+        let d = args[1] as *mut u64;
+        d.write(ptr);
+        d.add(1).write(len);
+        d.add(2).write(cap);
+    }
+    Ok(())
 }
 
 /// `sink.pad(sink, into)`: the buffer's text, padded as the format item's

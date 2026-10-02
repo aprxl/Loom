@@ -56,6 +56,27 @@ impl Heap {
         Ok(ptr)
     }
 
+    /// Takes over `bytes`'s buffer as an object of its capacity (aligned to
+    /// 1): its address and size. With no capacity, nothing is taken.
+    pub fn adopt(&mut self, mut bytes: Vec<u8>) -> Result<(u64, u64), Trap> {
+        let cap = bytes.capacity() as u64;
+        if cap == 0 {
+            return Ok((1, 0));
+        }
+        if cap > LIMIT - self.live {
+            return Err(Trap::OutOfMemory);
+        }
+        let ptr = bytes.as_mut_ptr() as u64;
+        // A `Vec<u8>`'s buffer was allocated with the global allocator for
+        // `cap` bytes aligned to 1: what `free` gives back.
+        std::mem::forget(bytes);
+        self.live += cap;
+        if cfg!(feature = "checked") {
+            self.objects.insert(ptr, cap);
+        }
+        Ok((ptr, cap))
+    }
+
     /// Frees what [`alloc`](Self::alloc) gave for `size` and `align`.
     pub fn free(&mut self, ptr: u64, size: u64, align: u64) -> Result<(), Trap> {
         if size == 0 {
