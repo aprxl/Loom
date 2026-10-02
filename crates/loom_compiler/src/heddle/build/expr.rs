@@ -12,6 +12,9 @@ use loom_syntax::ast::{AssignOp, BinaryOp, CastKind, Lit, UnaryOp};
 use loom_syntax::source::Span;
 
 use super::value::{Place, Val};
+use std::cell::Cell;
+use std::rc::Rc;
+
 use super::{Builder, LoopCtx, LoopResult, Vals, Var};
 use crate::heddle::{BitOp, Cmp, FOp, InstKind, IntOp, Policy, Term, VTy, Value};
 use crate::hir::{self, Block, DefKind, ExprKind, StmtKind};
@@ -33,6 +36,9 @@ pub(super) enum JoinKind {
     Mem {
         addr: Var,
         slot: Option<Value>,
+        /// `slot`'s cleanup, and whether every value put so far moved into
+        /// it: then the join's value is a temporary like any other.
+        owner: Option<(u32, Rc<Cell<bool>>)>,
     },
 }
 
@@ -48,17 +54,17 @@ impl<'a> Builder<'a> {
             }
             super::Repr::Mem { .. } => {
                 // Zero until a branch moves a value in (see `cleanup.rs`).
-                let slot = if self.needs_drop(ty) {
+                let (slot, owner) = if self.needs_drop(ty) {
                     let ptr = self.temp(ty, span)?;
                     self.own_temp(ptr, ty);
                     // Branches move into it; its cleanup stays until the end
                     // of the statement.
-                    self.f.temps.remove(&ptr);
-                    Some(ptr)
+                    let id = self.f.temps.remove(&ptr);
+                    (Some(ptr), id.map(|id| (id, Rc::new(Cell::new(true)))))
                 } else {
-                    None
+                    (None, None)
                 };
-                JoinKind::Mem { addr: self.new_var(VTy::Ptr), slot }
+                JoinKind::Mem { addr: self.new_var(VTy::Ptr), slot, owner }
             }
         };
         Some(Join { ty, kind })
@@ -72,7 +78,7 @@ impl<'a> Builder<'a> {
                 let vals = self.regs(val, join.ty, span)?;
                 self.write_all(vars, &vals);
             }
-            JoinKind::Mem { addr, slot } => {
+            JoinKind::Mem { addr, slot, owner } => {
                 let Val::Mem(ptr) = val else {
                     let shown = self.tcx().display(self.p, join.ty);
                     return self.internal(span, &format!("a value in registers for a join in memory ({shown})"));
@@ -82,7 +88,12 @@ impl<'a> Builder<'a> {
                         self.move_to(*slot, 0, Val::Mem(ptr), join.ty, span)?;
                         *slot
                     }
-                    _ => ptr,
+                    _ => {
+                        if let Some((_, all)) = owner {
+                            all.set(false);
+                        }
+                        ptr
+                    }
                 };
                 self.write(*addr, at);
             }
@@ -94,6 +105,12 @@ impl<'a> Builder<'a> {
     pub(super) fn join_get(&mut self, join: &Join) -> Val {
         match &join.kind {
             JoinKind::Regs(vars) => Val::Regs(self.read_all(vars)),
+            // Every branch moved its value into the slot: the slot is the
+            // value, a temporary (which a `let` makes the local's own).
+            JoinKind::Mem { slot: Some(slot), owner: Some((id, all)), .. } if all.get() => {
+                self.f.temps.insert(*slot, *id);
+                Val::Mem(*slot)
+            }
             JoinKind::Mem { addr, .. } => Val::Mem(self.read(*addr)),
         }
     }
@@ -827,7 +844,7 @@ impl<'a> Builder<'a> {
                 LoopResult::Slot(slot) => {
                     let join = super::expr::Join {
                         ty,
-                        kind: JoinKind::Mem { addr: self.new_var(VTy::Ptr), slot: Some(slot) },
+                        kind: JoinKind::Mem { addr: self.new_var(VTy::Ptr), slot: Some(slot), owner: None },
                     };
                     // Everything a loop's value goes through is owned: it moves.
                     let _ = from;
