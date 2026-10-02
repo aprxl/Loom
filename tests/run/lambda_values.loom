@@ -1,0 +1,53 @@
+// Lambdas that capture (and change) locals, through nested lambdas and
+// loops; named functions as values; generic ones; `map` and `filter`.
+use std.io.print
+fn apply(f: i32 => i32, x: i32) -> i32 = f(x)
+fn twice[T](f: T => T, x: T) -> T = f(f(x))
+fn is_even(n: i32) -> bool = n % 2 == 0
+fn each(xs: [i32], f: i32 => ()) { for x in xs { f(x) } }
+fn find(xs: [i32]) -> i32 {
+    var found = 0
+    each(xs, x => {
+        if x >= 0 { return }
+        if found == 0 { found = x }
+    })
+    found
+}
+fn captures() {
+    let offset = 10
+    print(apply(x => x * 2, 21))
+    print(apply(_ + offset, 5))
+    print(twice(x => x + 1, 5))
+    print(twice[String](s => "<{s}>", "hi"))
+    var total = 0
+    each([1, 2, 3], x => total += x)
+    print(total)
+    var log: List[String] = List()
+    for i in 0..3 { each([i, i + 1], x => log.push("{x * i}")) }
+    print(log)
+    let f = is_even
+    print("{f(3)} {f(4)}")
+    let g: i32 => i32 = x => x * x
+    print("{g(7)} {apply(g, 3)}")
+    print(find([3, -2, 5, -7]))
+    var n = 0
+    let bump = () => { n += 1; each([1], y => n += y) }
+    bump()
+    bump()
+    print(n)
+}
+warp Point { x: i32, y: i32 }
+fn values() {
+    print([1, 2, 3, 4].filter(is_even))
+    let pts = [Point(3, -4), Point(-1, 1)]
+    print(pts.map(_.x))
+    let words: List[String] = ["a", "bb", "ccc"]
+    print(words.map(w => "{w}!"))
+    print(words.filter(w => w != "bb"))
+    let k = 3
+    print([1, 2, 3].map(_ * k))
+}
+fn main() {
+    captures()
+    values()
+}

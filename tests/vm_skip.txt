@@ -21,7 +21,6 @@ lambdas              V1  lambdas
 long_expressions     V1  constants with a type
 loop_changes_list    V1  lists, lambdas
 loop_changes_map     V1  maps, lambdas
-many_locals          V1  lambdas
 maps                 V1  maps
 methods              V1  warps
 moves                V1  `String`

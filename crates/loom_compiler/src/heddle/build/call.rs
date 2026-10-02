@@ -34,7 +34,7 @@ impl<'a> Builder<'a> {
         let span = e.span;
         let tables = self.tables();
         if tables.closure_calls.contains(&e.id) {
-            return self.unsupported(span, "calling function values");
+            return self.call_value(e, callee, args);
         }
         if tables.new_lists.contains(&e.id) {
             return self.new_empty(e);

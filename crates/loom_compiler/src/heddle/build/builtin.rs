@@ -38,6 +38,8 @@ const BODIES: &[&str] = &[
     "std.slice.Slice.reverse",
     "std.slice.Slice.sort",
     "std.slice.Slice.to_list",
+    "std.slice.Slice.map",
+    "std.slice.Slice.filter",
 ];
 
 /// Whether the builder writes the body of the `#builtin` method `path`.
@@ -152,6 +154,58 @@ impl<'a> Builder<'a> {
                 self.copy_elems(&m, new, buf, len)?;
                 let cap = self.cap_for(len, elem)?;
                 self.set_header(dst, new, len, cap);
+                self.ret_regs(Vec::new())
+            }
+            "map" => {
+                let dst = sret?;
+                let fty = tys[1];
+                let f = self.regs(args[1].clone(), fty, span)?;
+                let Some(crate::typeck::Seq::List(out)) = self.seq_of(ret) else { return None };
+                let out = self.tcx().degauge(out);
+                let new = self.alloc_elems(len, out)?;
+                // The new list owns what's made so far, should `f` unravel.
+                let zero = self.iconst(0);
+                let cap = self.cap_for(len, out)?;
+                self.set_header(dst, new, zero, cap);
+                self.count_loop(zero, len, |this, i| {
+                    let at = this.elem_at(buf, i, elem)?;
+                    let x = this.load_val(at, 0, elem, span)?;
+                    let y = this.call_fn(&f, fty, vec![x], span)?;
+                    let to = this.elem_at(new, i, out)?;
+                    this.move_to(to, 0, y, out, span)?;
+                    let one = this.iconst(1);
+                    let n = this.uarith(IntOp::Add, i, one);
+                    this.store(Mem::W64, dst, 8, n);
+                    Some(())
+                })?;
+                self.ret_regs(Vec::new())
+            }
+            "filter" => {
+                let dst = sret?;
+                let fty = tys[1];
+                let f = self.regs(args[1].clone(), fty, span)?;
+                self.emit(InstKind::Zero { dst, size: 24 }, &[]);
+                let zero = self.iconst(0);
+                self.count_loop(zero, len, |this, i| {
+                    let at = this.elem_at(buf, i, elem)?;
+                    let x = this.load_val(at, 0, elem, span)?;
+                    let keep = this.call_fn(&f, fty, vec![x.clone()], span)?;
+                    let keep = this.regs(keep, this.tcx().bool, span)?[0];
+                    let (yes, no) = (this.new_block(), this.new_block());
+                    this.br(keep, yes, no);
+                    this.enter(yes);
+                    let (_, n) = this.list_view(dst);
+                    let one = this.iconst(1);
+                    let want = this.uarith(IntOp::Add, n, one);
+                    this.grow(&m, dst, want);
+                    let (nbuf, _) = this.list_view(dst);
+                    let to = this.elem_at(nbuf, n, elem)?;
+                    this.copy_into(to, &x, elem, span)?;
+                    this.store(Mem::W64, dst, 8, want);
+                    this.jump(no);
+                    this.enter(no);
+                    Some(())
+                })?;
                 self.ret_regs(Vec::new())
             }
             "push" => {

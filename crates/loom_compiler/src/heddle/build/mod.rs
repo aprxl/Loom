@@ -28,6 +28,7 @@ mod compare;
 mod expr;
 mod fallible;
 mod glue;
+mod lambda;
 mod pat;
 mod repr;
 mod scan;
@@ -68,6 +69,10 @@ enum FnKey {
     Body(BodyId),
     /// What runs `main ! E` (see `main_entry`).
     Main(BodyId),
+    /// A lambda, made in that body, by its expression.
+    Lambda(BodyId, crate::hir::HirId),
+    /// A function instance as a value: takes an environment it ignores.
+    Thunk(BodyId),
     /// Code for the values of a type.
     Glue(Glue, Ty),
 }
@@ -220,6 +225,8 @@ pub(super) struct Builder<'a> {
     /// Where `main` is: glue, which no one line of the program made, is
     /// said to be there.
     main_span: Option<Span>,
+    /// The lambdas made so far, by the body that made them.
+    lambdas: HashMap<(BodyId, crate::hir::HirId), lambda::LambdaInfo<'a>>,
     f: FnState<'a>,
 }
 
@@ -240,6 +247,7 @@ pub fn build(p: &Program, typed: &Typed) -> Result<Module, Vec<Diagnostic>> {
         reprs: HashMap::new(),
         drops: HashMap::new(),
         main_span: None,
+        lambdas: HashMap::new(),
         f: FnState::default(),
     };
     let Some(main) = b.find_main() else { return Err(b.diags) };
@@ -365,6 +373,8 @@ impl<'a> Builder<'a> {
         match key {
             FnKey::Body(id) => self.body_name(id),
             FnKey::Main(id) => format!("{}.entry", self.body_name(id)),
+            FnKey::Lambda(id, e) => format!("{}.lambda{}", self.body_name(id), e.0),
+            FnKey::Thunk(id) => format!("{}.value", self.body_name(id)),
             FnKey::Glue(g, ty) => {
                 let what = match g {
                     Glue::Drop => "drop",
@@ -389,7 +399,7 @@ impl<'a> Builder<'a> {
         let fid = self.ids[&key];
         let name = self.key_name(key);
         let body = match key {
-            FnKey::Body(id) | FnKey::Main(id) => id,
+            FnKey::Body(id) | FnKey::Main(id) | FnKey::Lambda(id, _) | FnKey::Thunk(id) => id,
             FnKey::Glue(..) => BodyId(0),
         };
         self.f = FnState { body, ..FnState::default() };
@@ -407,6 +417,8 @@ impl<'a> Builder<'a> {
         let results = match key {
             FnKey::Body(id) => self.body_func(id),
             FnKey::Main(id) => self.main_entry(id),
+            FnKey::Lambda(id, e) => self.lambda_func(id, e),
+            FnKey::Thunk(id) => self.thunk_func(id, span),
             FnKey::Glue(g, ty) => self.glue_func(g, ty),
         };
         self.zero_owned_slots();
@@ -426,7 +438,13 @@ impl<'a> Builder<'a> {
 
     fn key_span(&self, key: FnKey) -> Span {
         match key {
-            FnKey::Body(id) | FnKey::Main(id) => self.p.def(self.typed.results.instance(id).def).span,
+            FnKey::Body(id) | FnKey::Main(id) | FnKey::Thunk(id) => {
+                self.p.def(self.typed.results.instance(id).def).span
+            }
+            FnKey::Lambda(id, e) => match self.lambdas.get(&(id, e)) {
+                Some(info) => info.expr.span,
+                None => self.p.def(self.typed.results.instance(id).def).span,
+            },
             FnKey::Glue(..) => self.main_span.expect("set before anything is built"),
         }
     }

@@ -210,6 +210,7 @@ impl<'a> Builder<'a> {
             }
             ExprKind::Def { def, .. } => match &self.p.def(*def).kind {
                 DefKind::Const(_) => self.const_def(*def, ty, span).map(Val::Regs),
+                _ if let Some(&id) = self.tables().fn_values.get(&e.id) => self.fn_value(id),
                 _ => self.unsupported(span, "this kind of value"),
             },
             ExprKind::Tuple(items) => self.tuple(e, items, ty),
@@ -298,7 +299,7 @@ impl<'a> Builder<'a> {
             ExprKind::ArrayRepeat { value, count } => self.array_repeat(e, value, count),
             ExprKind::Index { base, args } => self.index(e, base, args),
             ExprKind::Map(_) => self.unsupported(span, "maps"),
-            ExprKind::Lambda { .. } => self.unsupported(span, "lambdas"),
+            ExprKind::Lambda { .. } => self.lambda(e),
             ExprKind::Range { .. } => self.unsupported(span, "ranges as values"),
             ExprKind::Intrinsic(_) => self.unsupported(span, "`target`"),
             ExprKind::Yield { .. } | ExprKind::Pull => self.unsupported(span, "shuttles"),
