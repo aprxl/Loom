@@ -32,6 +32,7 @@ pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
         "string.pop" => pop,
         "char.digit" => digit,
         "str.next_char" => next_char,
+        "str.hash" => str_hash,
         "str.next_line" => next_line,
         "str.next_word" => next_word,
         "int.bits" => int_bits,
@@ -367,6 +368,16 @@ fn pop(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     write_header(args[0], buf, start as u64, cap);
     args[0] = u64::from(c);
     args[1] = 1;
+    Ok(())
+}
+
+/// `str.hash(s)`: FNV-1a (64-bit) of the text's bytes.
+fn str_hash(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for &b in text(ctx, args[0], args[1])? {
+        h = (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
+    }
+    args[0] = h;
     Ok(())
 }
 

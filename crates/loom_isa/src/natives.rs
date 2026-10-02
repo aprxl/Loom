@@ -95,6 +95,10 @@ pub const NATIVES: &[NativeSig] = &[
     sig("int.bits", 2, 1, NativeImm::None),
     sig("int.rotate", 3, 1, NativeImm::None),
     sig("float.math", 2, 1, NativeImm::None),
+    // `mem.calloc(size, align) -> address`: zeroed.
+    sig("mem.calloc", 2, 1, NativeImm::None),
+    // `str.hash(text) -> u64`: FNV-1a of its bytes.
+    sig("str.hash", 2, 1, NativeImm::None),
     // `mem.move(dst, src, bytes)`: copies bytes that may overlap.
     sig("mem.move", 3, 0, NativeImm::None),
     sig("out.str", 2, 0, NativeImm::None),

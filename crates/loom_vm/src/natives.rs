@@ -211,6 +211,7 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
         "mem.free" => mem_free,
         "mem.grow" => mem_grow,
         "mem.move" => mem_move,
+        "mem.calloc" => mem_calloc,
         _ => crate::methods::resolve(name)?,
     };
     let sig = native(name)?;
@@ -259,6 +260,18 @@ fn mem_alloc(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 /// `mem.free(address, size, align)`.
 fn mem_free(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     ctx.heap.free(args[0], args[1], args[2])
+}
+
+/// `mem.calloc(size, align) -> address`: zeroed memory.
+fn mem_calloc(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let (size, align) = (args[0], args[1]);
+    let ptr = ctx.heap.alloc(size, align)?;
+    if size > 0 {
+        // SAFETY: `ptr` is a new object of `size` bytes.
+        unsafe { std::ptr::write_bytes(ptr as *mut u8, 0, size as usize) };
+    }
+    args[0] = ptr;
+    Ok(())
 }
 
 /// `mem.move(dst, src, bytes)`: copies `bytes` bytes, which may overlap.
