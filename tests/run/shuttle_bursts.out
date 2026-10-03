@@ -1,0 +1,16 @@
+a got 1
+a 1
+pushing 2
+a got 2
+[a 2, a 2 again]
+a got 3
+closing
+a got 4
+a ended
+[a closed]
+b ended
+[b closed]
+c got 1
+c ended
+[c closed]
+[]

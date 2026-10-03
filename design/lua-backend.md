@@ -230,15 +230,19 @@ Both are `Stream` sources (`IterSource::Shuttle`, `IterSource::Burst`), so
 their items go through `for` and every `Stream` method.
 
 - A new `push` runs what's left of the previous burst first, throwing its
-  items away. Pushing into a closed shuttle unravels.
+  items away, and so does `close`, before it marks the shuttle closed: that
+  burst's `pull`s still wait for input. Pushing into a closed shuttle
+  unravels.
 - An unravel inside a shuttle closes its coroutine (running its pending
   `defer`s) and is raised again, unchanged, where it was driven, so it keeps
   the shuttle's Loom location.
 - A `for` loop directly over a generator (`for x in fib()`) passes Lua a
   closing value: leaving the loop early closes the coroutine, which runs
-  the generator's `defer`s. A shuttle dropped part-way through any other way
-  (after `.take(3)`, say) is left to the garbage collector, and its `defer`s
-  don't run.
+  the generator's `defer`s; one of those that unravels unravels there, in
+  the loop, unless the loop is already unwinding from another (design/vm.md
+  §14, P3). A shuttle dropped part-way through any other way (after
+  `.take(3)`, say) is left to the garbage collector, and its `defer`s don't
+  run (P2: Treadle runs them).
 - A shuttle keeps its parameters as long as it lives. Until the region
   checker can follow a borrow that long, it only takes ones it owns:
   `take` parameters, and `Copy` ones, which it copies when it's made (U0102

@@ -1456,7 +1456,10 @@ ext["std.iter.Shuttle.push"] = function(_, _, sh, input)
   return new_burst(sh, input, false)
 end
 
+-- What's left of the burst before runs first, as for a push: its `pull`s
+-- still wait for input.
 ext["std.iter.Shuttle.close"] = function(_, _, sh)
+  if sh.burst then drain(sh.burst) end
   sh.closed = true
   return new_burst(sh, nil, true)
 end
@@ -1475,7 +1478,16 @@ function rt.shuttle_stream(sh)
   return function() return burst_next(b) end
 end
 
-local closes_shuttle = { __close = function(c) if not c.sh.done then finish(c.sh) co_close(c.sh.co) end end }
+-- Closing a generator runs its pending `defer`s: one that unravels
+-- unravels here, in whoever closed it, unless something already is.
+local closes_shuttle = {
+  __close = function(c, err)
+    if c.sh.done then return end
+    finish(c.sh)
+    local ok, e = co_close(c.sh.co)
+    if not ok and err == nil then error(e, 0) end
+  end,
+}
 
 --- `for x in generator`: the stream, and a value that closes the generator
 --- when the loop ends (early, its `defer`s run).

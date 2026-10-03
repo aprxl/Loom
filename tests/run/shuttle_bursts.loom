@@ -1,0 +1,44 @@
+// Bursts: what a push or a close hands back. One that isn't gone through
+// runs when the shuttle is next pushed or closed, its items thrown away.
+
+use std.io.print
+
+fn echo(tag: str) ~> String <~ i32 {
+    defer print("{tag} ended")
+    while pull is some(x) {
+        print("{tag} got {x}")
+        yield "{tag} {x}"
+        yield "{tag} {x} again"
+    }
+    yield "{tag} closed"
+}
+
+fn main() {
+    var e = echo("a")
+    // Half gone through: the rest runs at the next push.
+    for s in e.push(1) {
+        print(s)
+        break
+    }
+    print("pushing 2")
+    print(e.push(2).collect())
+
+    // Never gone through: it runs at the close, before the close hands
+    // `none` over.
+    e.push(3).drain()
+    var b = e.push(4)
+    print("closing")
+    print(e.close().collect())
+    b.drain()
+
+    // Closed before it's pushed: it starts, and its first `pull` gives
+    // `none`.
+    var f = echo("b")
+    print(f.close().collect())
+
+    // Closing twice hands back nothing more.
+    var g = echo("c")
+    g.push(1).drain()
+    print(g.close().collect())
+    print(g.close().collect())
+}
