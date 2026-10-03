@@ -258,9 +258,11 @@ not be used up yet, and reports one still there when its scope ends or a
 ties it off. A warp holding a `once` value is `once` itself, and never
 `Copy`.
 
-A `File` is `{path}`: each write opens the file, appends and closes it, so
-none is left open however the program ends. Sandboxed runs get an in-memory
-file system from the host.
+A `File` is `{path}`: a write appends to the file, which stays open (at most
+64 at a time) until the state ends, however the program ends; Lua's are line
+buffered and Treadle's unbuffered, so every line is written at once and a
+killed run keeps them. Reading a path flushes it first. Sandboxed runs get an
+in-memory file system from the host.
 
 ## Maps and sets
 

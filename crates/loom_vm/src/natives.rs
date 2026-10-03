@@ -40,6 +40,9 @@ pub(crate) struct Ctx<'i> {
     pub term: loom_sys::term::Term,
     /// A sandboxed run's files, by path.
     pub files: std::collections::HashMap<String, Vec<u8>>,
+    /// The files `File.append` and `write_line` write to, kept open (a few,
+    /// by path) and closed when the run ends, however it ends.
+    pub open_files: std::collections::HashMap<String, std::fs::File>,
     /// With `checked`: the value stack, set before each native runs, so a
     /// native can check memory on it.
     pub stack: *const crate::stack::Stack,
@@ -75,6 +78,7 @@ impl<'i> Ctx<'i> {
             args: host.args,
             term: loom_sys::term::Term::default(),
             files: std::collections::HashMap::new(),
+            open_files: std::collections::HashMap::new(),
             stack: std::ptr::null(),
             dispatched: 0,
         }

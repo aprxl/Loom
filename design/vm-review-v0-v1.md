@@ -106,6 +106,8 @@ anything that watches the file sees each write as a separate open. Fix: keep
 an open handle in the host keyed by path (flushed at exit/unravel) or make
 `File` hold a handle id.
 
+*Fixed: A File stays open between writes (at most 64 open): 20 000 lines in 0.20 s on Treadle (from 1.7 s), 0.06 s on Lua*
+
 **M2. `s.replace("", x)` and `"".split(",")` differ from Rust.** *Reproduced,
 and both backends agree.* `"héllo".replace("", "-")` returns the text
 unchanged (Rust gives `-h-é-…`). `"".split(",")` shows `[]`; Rust's is

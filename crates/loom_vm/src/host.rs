@@ -118,15 +118,31 @@ fn failure(ctx: &mut Ctx, e: &std::io::Error, dst: u64) -> Result<u64, Trap> {
     })
 }
 
-/// Adds `bytes` to the end of the file at `path` (made if it isn't there).
+/// Adds `bytes` to the end of the file at `path` (made if it isn't there),
+/// which stays open for the next write (a write is one system call: nothing
+/// is buffered, so it's all there if the run is killed).
 fn append(ctx: &mut Ctx, path: &str, bytes: &[u8]) -> std::io::Result<()> {
     if ctx.sandbox {
         ctx.files.entry(path.to_string()).or_default().extend_from_slice(bytes);
         return Ok(());
     }
-    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(path)?;
-    f.write_all(bytes)
+    if !ctx.open_files.contains_key(path) {
+        // Not many at once: a program writing to thousands of files would
+        // run out of what the system gives.
+        if ctx.open_files.len() >= MAX_OPEN {
+            ctx.open_files.clear();
+        }
+        let file = std::fs::OpenOptions::new().create(true).append(true).open(path)?;
+        ctx.open_files.insert(path.to_string(), file);
+    }
+    match ctx.open_files.get_mut(path) {
+        Some(file) => file.write_all(bytes),
+        None => Ok(()),
+    }
 }
+
+/// How many files `append` keeps open.
+const MAX_OPEN: usize = 64;
 
 /// `fs.append(path, dst)`: opens (makes) the file to add to: how it went;
 /// for `Other`, the message is at `dst`.

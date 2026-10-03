@@ -1988,10 +1988,11 @@ function rt.copy_coll(d, v)
   return copy_set(d.key, v)
 end
 
--- Files. A `File` is `{path}`; each write opens, appends and closes, so
--- nothing is left open when the program ends however it ends. A captured
--- run (the tests) gets a file system in memory from the host instead of the
--- disk, starting empty.
+-- Files. A `File` is `{path}`; a write appends to the file, which stays open
+-- (line buffered, so each line is written at once; a few at a time, and all
+-- closed when the state is, however the program ends). A captured run (the
+-- tests) gets a file system in memory from the host instead of the disk,
+-- starting empty.
 
 local memory = host and host.memory_fs and {} or nil
 
@@ -2002,15 +2003,32 @@ local function io_error(path, message, errno)
   return { false, { tag = 3, message = message or "i/o error" } }
 end
 
+local open_files, open_count, MAX_OPEN = {}, 0, 64
+
 local function append(path, text)
   if memory then
     memory[path] = (memory[path] or "") .. text
     return true
   end
-  local f, message, errno = io.open(path, "ab")
-  if not f then return false, message, errno end
+  local f = open_files[path]
+  if not f then
+    -- Not many at once: a program writing to thousands of files would run
+    -- out of what the system gives.
+    if open_count >= MAX_OPEN then
+      for p, h in pairs(open_files) do
+        h:close()
+        open_files[p] = nil
+      end
+      open_count = 0
+    end
+    local message, errno
+    f, message, errno = io.open(path, "ab")
+    if not f then return false, message, errno end
+    f:setvbuf("line")
+    open_files[path] = f
+    open_count = open_count + 1
+  end
   local ok, werr, wno = f:write(text)
-  f:close()
   if not ok then return false, werr, wno end
   return true
 end
@@ -2021,6 +2039,8 @@ local function read_all(path)
     if text == nil then return nil, path .. ": No such file or directory", 2 end
     return text
   end
+  local h = open_files[path]
+  if h then h:flush() end
   local f, message, errno = io.open(path, "rb")
   if not f then return nil, message, errno end
   local text = f:read("a")

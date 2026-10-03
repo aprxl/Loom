@@ -509,3 +509,46 @@ fn main() {
     assert_eq!(text(&out.stderr), "interrupted (Ctrl-C)\n");
     assert!(started.elapsed().as_secs() < 30, "{:?}", started.elapsed());
 }
+
+#[test]
+fn written_lines_are_in_the_file_when_it_is_read_back_on_both_backends() {
+    // A `File` stays open between writes; reading the path sees them all.
+    let out_path = std::env::temp_dir().join(format!("loom_cli_lines_{}.txt", std::process::id()));
+    let _ = std::fs::remove_file(&out_path);
+    let shown = out_path.to_str().expect("utf-8 path").replace('\\', "/");
+    let path = temp_source(
+        "file_lines",
+        &format!(
+            "use std.io.print
+use std.fs.{{File, IoError, read_text}}
+
+fn run() -> () ! IoError {{
+    var f = File.append(\"{shown}\")?
+    f.write_line(\"one\")?
+    f.write_line(\"two\")?
+    var g = File.append(\"{shown}\")?
+    g.write_line(\"three\")?
+    let text = read_text(\"{shown}\")?
+    print(text.lines().count())
+}}
+
+fn main() {{
+    run() mend e => print(\"failed\")
+}}
+"
+        ),
+    );
+    let file = path.to_str().expect("utf-8 path");
+    for backend in ["lua", "vm"] {
+        let _ = std::fs::remove_file(&out_path);
+        let out = Command::new(env!("CARGO_BIN_EXE_loom"))
+            .args(["--color", "never", "run", "--backend", backend, file])
+            .output()
+            .expect("the loom binary runs");
+        assert_eq!(text(&out.stdout), "3\n", "{backend}: {}", text(&out.stderr));
+        let on_disk = std::fs::read_to_string(&out_path).expect("the file is written");
+        assert_eq!(on_disk.replace("\r\n", "\n"), "one\ntwo\nthree\n", "{backend}");
+    }
+    let _ = std::fs::remove_file(&out_path);
+    let _ = std::fs::remove_file(&path);
+}
