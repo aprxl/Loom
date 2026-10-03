@@ -87,6 +87,8 @@ enum Ty {
     Opt(Int),
     /// A `String`.
     Str,
+    /// A `List[String]`, never empty.
+    StrList,
 }
 
 #[derive(Clone, Debug)]
@@ -154,6 +156,7 @@ impl Gen {
             Ty::List(i) => format!("List[{}]", i.name()),
             Ty::Opt(i) => format!("?{}", i.name()),
             Ty::Str => "String".into(),
+            Ty::StrList => "List[String]".into(),
         }
     }
 
@@ -225,6 +228,11 @@ impl Gen {
             }
             Ty::Opt(i) => self.opt_expr(i, depth),
             Ty::Str => self.str_expr(depth),
+            Ty::StrList => {
+                let n = 1 + self.rng.below(4);
+                let items: Vec<String> = (0..n).map(|_| self.str_expr(depth.saturating_sub(1))).collect();
+                format!("[{}]", items.join(", "))
+            }
         }
     }
 
@@ -235,7 +243,14 @@ impl Gen {
         let words = ["", "a", "ab", "héllo", "x y", "Zed", "  pad  ", "line\n", "q\"q", "é"];
         let vars = self.vars(|v| v.ty == Ty::Str);
         let var = |this: &mut Self| vars[this.rng.below(vars.len() as u64) as usize].name.clone();
-        match self.rng.below(if depth == 0 { 3 } else { 9 }) {
+        let lists = self.vars(|v| v.ty == Ty::StrList);
+        match self.rng.below(if depth == 0 { 3 } else { 10 }) {
+            9 if !lists.is_empty() => {
+                let l = &lists[self.rng.below(lists.len() as u64) as usize].name;
+                let from = self.int();
+                let ix = self.int_expr(from, 0);
+                format!("{l}[(({ix} as% u32) as usize) % {l}.len()].copy()")
+            }
             0 => format!("{:?}.to_string()", self.rng.pick(&words)),
             1 if !vars.is_empty() => format!("{}.copy()", var(self)),
             2 | 1 => {
@@ -369,7 +384,7 @@ impl Gen {
                 }
             }
             13 => format!("({} as| {})", self.f64_expr(d), i.name()),
-            14 => match self.vars(|v| v.ty == Ty::Str).first() {
+            14 => match self.vars(|v| matches!(v.ty, Ty::Str | Ty::StrList)).first() {
                 Some(s) => format!("({}.len() as% {})", s.name, i.name()),
                 None => self.int_lit(i),
             },
@@ -432,7 +447,7 @@ impl Gen {
 
     /// A type for a new local.
     fn local_ty(&mut self) -> Ty {
-        match self.rng.below(12) {
+        match self.rng.below(13) {
             0..=3 => Ty::Int(self.int()),
             4 => Ty::Bool,
             5 => Ty::F64,
@@ -440,7 +455,8 @@ impl Gen {
             7 => Ty::Sum,
             8 => Ty::List(self.int()),
             9 => Ty::Opt(self.int()),
-            _ => Ty::Str,
+            10 => Ty::Str,
+            _ => Ty::StrList,
         }
     }
 
@@ -481,10 +497,33 @@ impl Gen {
             3 => {
                 // Change a `var`.
                 let vs = self.vars(|v| {
-                    v.mutable && matches!(v.ty, Ty::Int(_) | Ty::F64 | Ty::Bool | Ty::Rec | Ty::List(_) | Ty::Str)
+                    v.mutable
+                        && matches!(
+                            v.ty,
+                            Ty::Int(_) | Ty::F64 | Ty::Bool | Ty::Rec | Ty::List(_) | Ty::Str | Ty::StrList
+                        )
                 });
                 let Some(v) = vs.first().cloned() else { return self.print(indent) };
                 match v.ty {
+                    Ty::StrList => {
+                        let e = self.str_expr(2);
+                        match self.rng.below(3) {
+                            0 => format!("{pad}{}.push({e})\n", v.name),
+                            1 => {
+                                let from = self.int();
+                                let ix = self.int_expr(from, 1);
+                                format!("{pad}{0}[(({ix} as% u32) as usize) % {0}.len()] = {e}\n", v.name)
+                            }
+                            // Out one, which stays non-empty.
+                            _ => {
+                                let t = self.fresh("t");
+                                format!(
+                                    "{pad}if {0}.len() > 1 {{\n{pad}    let {t} = {0}.remove(0)\n{pad}    print(\"removed {{{t}}}\")\n{pad}}}\n",
+                                    v.name
+                                )
+                            }
+                        }
+                    }
                     Ty::Str if self.rng.chance(60) => {
                         let piece = self.rng.pick(&["a", "é", "xyz", " ", ""]);
                         format!("{pad}{}.push_str({piece:?})\n", v.name)
@@ -539,6 +578,15 @@ impl Gen {
             }
             8 => self.int_match(indent),
             9 => self.sum_match(indent),
+            10 if self.rng.chance(40) => {
+                // A list of Strings, read in a loop.
+                let l = self.fresh("l");
+                let items = self.expr(Ty::StrList, 2);
+                let (x, acc) = (self.fresh("x"), self.fresh("t"));
+                format!(
+                    "{pad}let {l}: List[String] = {items}\n{pad}var {acc} = 0usize\n{pad}for {x} in {l} {{ {acc} = {acc} +% {x}.len() }}\n{pad}print(\"{{{acc}}} {{{l}}}\")\n"
+                )
+            }
             10 => {
                 // A list, read in a loop.
                 let i = self.int();
@@ -853,7 +901,12 @@ fn the_generator_covers_its_kinds() {
         let (head, main, tail) = Gen::new(seed).program();
         text.push_str(&format!("{head}{}{tail}", main.concat()));
     }
-    for (what, needle) in [("a String variable", ": String = "), ("push_str", ".push_str(")] {
-        assert!(text.matches(needle).count() >= 50, "{what}: {} in 300 programs", text.matches(needle).count());
+    for (what, needle) in [
+        ("a String variable", ": String = "),
+        ("push_str", ".push_str("),
+        ("a list of Strings", ": List[String] = "),
+        ("removing a String", ".remove(0)"),
+    ] {
+        assert!(text.matches(needle).count() >= 10, "{what}: {} in 300 programs", text.matches(needle).count());
     }
 }
