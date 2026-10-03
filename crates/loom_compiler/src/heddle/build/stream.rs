@@ -1035,6 +1035,7 @@ impl<'a> Builder<'a> {
             cont: head,
             result: super::LoopResult::None,
             scopes: scopes - 1,
+            brk_scopes: scopes - 1,
         });
         // What the pattern binds lives for one iteration: not under the
         // `for` statement's temporaries, which last until the loop ends.

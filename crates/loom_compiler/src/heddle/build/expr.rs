@@ -854,7 +854,7 @@ impl<'a> Builder<'a> {
 
     fn break_to(&mut self, target: hir::HirId, value: Option<&'a hir::Expr>) -> Option<Val> {
         let i = self.f.loops.iter().rposition(|l| l.id == target)?;
-        let (brk, scopes) = (self.f.loops[i].brk, self.f.loops[i].scopes);
+        let (brk, scopes) = (self.f.loops[i].brk, self.f.loops[i].brk_scopes);
         if let Some(value) = value {
             let from = self.f.scopes.get(scopes).copied().unwrap_or(self.f.cleanups.len());
             let v = self.expr(value)?;
@@ -900,7 +900,14 @@ impl<'a> Builder<'a> {
         self.jump(head);
         self.switch_to(head);
         let scopes = self.f.scopes.len();
-        self.f.loops.push(LoopCtx { id: e.id, brk: exit, cont: head, result: result.clone(), scopes });
+        self.f.loops.push(LoopCtx {
+            id: e.id,
+            brk: exit,
+            cont: head,
+            result: result.clone(),
+            scopes,
+            brk_scopes: scopes,
+        });
         let join = self.join(self.tcx().unit, e.span)?;
         let done = self.block_into(body, &join);
         if self.live() && done.is_some() {
@@ -931,7 +938,14 @@ impl<'a> Builder<'a> {
         if ok {
             self.enter(body_b);
             let scopes = self.f.scopes.len();
-            self.f.loops.push(LoopCtx { id: e.id, brk: exit, cont: head, result: LoopResult::None, scopes });
+            self.f.loops.push(LoopCtx {
+                id: e.id,
+                brk: exit,
+                cont: head,
+                result: LoopResult::None,
+                scopes,
+                brk_scopes: scopes,
+            });
             if self.live()
                 && let Some(join) = self.join(self.tcx().unit, e.span)
                 && self.block_into(body, &join).is_some()
@@ -962,6 +976,9 @@ impl<'a> Builder<'a> {
     }
 
     fn for_expr(&mut self, e: &'a hir::Expr, pat: &'a hir::Pat, iter: &'a hir::Expr, body: &'a Block) -> Option<()> {
+        if let Some(g) = self.inlinable_generator(e, iter) {
+            return self.for_generator(e, pat, iter, body, g);
+        }
         let ity = self.ty_of(iter);
         if let Some(seq) = self.seq_of(ity) {
             return self.for_seq(e, pat, iter, body, seq);
@@ -1008,7 +1025,14 @@ impl<'a> Builder<'a> {
         }
         self.enter(body_b);
         let scopes = self.f.scopes.len();
-        self.f.loops.push(LoopCtx { id: e.id, brk: exit, cont: step, result: LoopResult::None, scopes });
+        self.f.loops.push(LoopCtx {
+            id: e.id,
+            brk: exit,
+            cont: step,
+            result: LoopResult::None,
+            scopes,
+            brk_scopes: scopes,
+        });
         let item = self.read(i);
         let depth = self.open_scope();
         let mut done = self.bind_irrefutable(pat, Val::Regs(vec![item]), elem);

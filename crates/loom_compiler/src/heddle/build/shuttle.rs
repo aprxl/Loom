@@ -24,6 +24,7 @@
 //! Dropping the last value that holds a shuttle closes it (its pending
 //! `defer`s run) and frees the box.
 
+use loom_syntax::ast::ParamMode;
 use loom_syntax::source::Span;
 
 use super::cleanup::{CleanupKind, Stable};
@@ -32,7 +33,7 @@ use super::text::Msg;
 use super::value::{Storage, Val};
 use super::{Builder, FnKey};
 use crate::heddle::frame::{self, FrameInput, FrameLayout};
-use crate::heddle::{Cmp, Edge, InstKind, Mem, Term, VTy, Value};
+use crate::heddle::{BlockId, Cmp, Edge, InstKind, Mem, Term, VTy, Value};
 use crate::hir::{self, DefKind};
 use crate::ty::{Ty, TyKind};
 use crate::typeck::BodyId;
@@ -66,6 +67,26 @@ pub(super) struct ShuttleBuild {
     pub lives: std::collections::HashMap<u32, u32>,
     /// The addresses of temporaries, while they hold a value.
     pub temps: std::collections::HashSet<Value>,
+}
+
+/// A generator being built in place, in the loop over it.
+#[derive(Debug)]
+pub(super) struct InlineGen<'a> {
+    pub callee: BodyId,
+    /// Whether the code being built is the generator's (not the loop's
+    /// body, which a `yield` runs).
+    pub active: bool,
+    pub pat: &'a hir::Pat,
+    pub body: &'a hir::Block,
+    pub loop_id: crate::hir::HirId,
+    /// The tables the loop is built with.
+    pub loop_tables: BodyId,
+    /// Where the loop ends.
+    pub exit: BlockId,
+    /// How many scopes are open outside the generator's.
+    pub outer: usize,
+    /// What it yields.
+    pub item: Ty,
 }
 
 /// The `Shuttle` and `Burst` methods whose bodies the builder writes.
@@ -180,6 +201,9 @@ impl<'a> Builder<'a> {
     /// `yield v`: moved to where the driver wants it, then suspended.
     pub(super) fn yield_expr(&mut self, value: &'a hir::Expr, span: Span) -> Option<Val> {
         self.f.span = Some(span);
+        if self.inline_gen().is_some() {
+            return self.inline_yield(value, span);
+        }
         let sb = self.f.shuttle.as_ref()?;
         let (out, t) = (sb.out?, sb.yields?);
         let from = self.f.cleanups.len();
@@ -273,6 +297,186 @@ impl<'a> Builder<'a> {
             self.emit(InstKind::Zero { dst: input, size }, &[]);
         }
         Some(v)
+    }
+
+    // ------------------------------------------------------------ in place
+
+    /// The generator whose body is being built in place, when the code
+    /// being built is its own (not the body of the loop over it).
+    fn inline_gen(&self) -> Option<usize> {
+        self.f.inline_gens.iter().rposition(|g| g.active)
+    }
+
+    /// For `for x in g(…)`: the instance of `g`, when it's a generator the
+    /// program writes, called right there, so its body can be built in
+    /// place (see [`for_generator`](Self::for_generator)).
+    pub(super) fn inlinable_generator(&self, e: &'a hir::Expr, iter: &'a hir::Expr) -> Option<BodyId> {
+        let crate::hir::ExprKind::Call { .. } = &iter.kind else { return None };
+        let tables = self.tables();
+        if !matches!(tables.streams.get(&e.id), Some(crate::typeck::IterSource::Shuttle(_)))
+            || tables.closure_calls.contains(&iter.id)
+        {
+            return None;
+        }
+        let info = tables.calls.get(&iter.id)?;
+        if info.dynamic.is_some() || info.receiver.is_some() {
+            return None;
+        }
+        let def = self.typed.results.instance(info.callee).def;
+        let DefKind::Fn(f) = &self.p.def(def).kind else { return None };
+        let simple = f.body.is_some()
+            && f.abi.is_none()
+            && matches!(f.ret, hir::FnRet::Shuttle { yields: Some((None, _)), pulls: None })
+            && f.params.iter().all(|p| p.default.as_ref().is_none_or(|d| !super::expr::mentions_locals(d)));
+        // Each in place only once on the way in: one that loops over
+        // another doesn't nest without end, and code doesn't grow without
+        // bound.
+        let nested = self.f.inline_gens.iter().any(|g| g.callee == info.callee) || self.f.inline_gens.len() >= 4;
+        (simple && !nested).then_some(info.callee)
+    }
+
+    /// `for pat in g(…) { body }`, where `g` is generator instance `callee`
+    /// (see [`inlinable_generator`](Self::inlinable_generator)): `g`'s body is
+    /// built right here, each `yield` running the loop's body with the
+    /// item, so an item costs what an iteration of a `while` loop does.
+    /// Leaving the loop early (`break`, `return`, an unravel) runs the
+    /// generator's pending `defer`s on the way out, as closing it would;
+    /// `continue` goes on after the `yield`.
+    pub(super) fn for_generator(
+        &mut self,
+        e: &'a hir::Expr,
+        pat: &'a hir::Pat,
+        iter: &'a hir::Expr,
+        body: &'a hir::Block,
+        callee: BodyId,
+    ) -> Option<()> {
+        let span = iter.span;
+        let crate::hir::ExprKind::Call { callee: callee_e, args } = &iter.kind else { return None };
+        let info = self.tables().calls.get(&iter.id)?.clone();
+        let def = self.typed.results.instance(callee).def;
+        let DefKind::Fn(f) = &self.p.def(def).kind else { return None };
+        let gbody = f.body.as_ref()?;
+        let sig = self.typed.results.sigs.get(&callee)?.clone();
+        let (t, _) = self.shuttle_parts(sig.ret)?;
+        // The arguments, as for a call, then the defaults, with the
+        // generator's tables.
+        let modes: Vec<ParamMode> = sig.params.iter().map(|p| p.mode).collect();
+        let worked = self.call_args(callee_e, args, &info, &modes, None)?;
+        let mut worked: Vec<Option<super::call::Arg>> = worked.into_iter().map(Some).collect();
+        let mut by_param = Vec::with_capacity(info.args.len());
+        for (k, source) in info.args.iter().enumerate() {
+            let v = match source {
+                crate::typeck::ArgSource::Arg(i) => match worked[*i].take()? {
+                    super::call::Arg::Val(v, _) => v,
+                    super::call::Arg::Place(_) => return self.internal(span, "a generator's `mut` parameter"),
+                },
+                crate::typeck::ArgSource::Default => {
+                    let default = f.params.get(k).and_then(|p| p.default.as_ref())?;
+                    let saved = std::mem::replace(&mut self.f.body, callee);
+                    let v = self.expr(default);
+                    self.f.body = saved;
+                    v?
+                }
+                crate::typeck::ArgSource::Receiver => return self.internal(span, "a generator with a receiver"),
+            };
+            by_param.push(v);
+        }
+        // Its body: with its own tables and its own scope, which its
+        // parameters live in.
+        let outer = self.f.scopes.len();
+        let depth = self.open_scope();
+        let loop_tables = std::mem::replace(&mut self.f.body, callee);
+        let scan = self.scan(callee, gbody);
+        self.f.scan.in_memory.extend(scan.in_memory);
+        self.f.scan.captures.extend(scan.captures);
+        self.f.scan.deferred.extend(scan.deferred);
+        let saved_stmt = self.f.stmt_start.take();
+        for (param, v) in f.params.iter().zip(by_param) {
+            let ty = self.local_ty(param.local);
+            let v = self.owned(v, ty, param.span)?;
+            self.bind_owned(param.local, v, param.span)?;
+        }
+        let exit = self.new_block();
+        self.f.inline_gens.push(InlineGen {
+            callee,
+            active: true,
+            pat,
+            body,
+            loop_id: e.id,
+            loop_tables,
+            exit,
+            outer,
+            item: t,
+        });
+        let done = self.expr(gbody);
+        let g = self.f.inline_gens.pop()?;
+        self.f.body = g.loop_tables;
+        self.f.stmt_start = saved_stmt;
+        let _ = done;
+        // It ran to its end: its scope's cleanups, and the loop is over.
+        self.close_scope(depth);
+        if self.live() {
+            self.jump(exit);
+        }
+        self.enter(exit);
+        Some(())
+    }
+
+    /// `yield v` in a generator built in place: the loop's body, with `v`.
+    fn inline_yield(&mut self, value: &'a hir::Expr, span: Span) -> Option<Val> {
+        let k = self.inline_gen()?;
+        let (t, pat, body, loop_id, loop_tables, exit, outer) = {
+            let g = &self.f.inline_gens[k];
+            (g.item, g.pat, g.body, g.loop_id, g.loop_tables, g.exit, g.outer)
+        };
+        let v = self.expr(value)?;
+        self.moved_away(value);
+        let v = self.owned(v, t, span)?;
+        // The loop's body is the loop's code: its tables, its `return`.
+        self.f.inline_gens[k].active = false;
+        let gen_tables = std::mem::replace(&mut self.f.body, loop_tables);
+        let cont = self.new_block();
+        let inner = self.open_scope();
+        if let Val::Mem(p) = v {
+            self.own_temp(p, t);
+        }
+        self.f.loops.push(super::LoopCtx {
+            id: loop_id,
+            brk: exit,
+            cont,
+            result: super::LoopResult::None,
+            scopes: inner - 1,
+            brk_scopes: outer,
+        });
+        let saved_stmt = self.f.stmt_start.take();
+        let mut done = self.bind_irrefutable(pat, v, t);
+        self.f.stmt_start = saved_stmt;
+        if done.is_some() {
+            let join = self.join(self.tcx().unit, span)?;
+            done = self.block_into(body, &join);
+        }
+        self.f.loops.pop();
+        self.close_scope(inner);
+        if self.live() && done.is_some() {
+            self.jump(cont);
+        }
+        self.enter(cont);
+        self.f.body = gen_tables;
+        self.f.inline_gens[k].active = true;
+        Some(Val::Regs(Vec::new()))
+    }
+
+    /// `return` (or the end of the body) in a generator built in place: its
+    /// cleanups, and the loop is over. `false` when the code being built
+    /// isn't one.
+    pub(super) fn inline_return(&mut self) -> Option<bool> {
+        let Some(k) = self.inline_gen() else { return Some(false) };
+        let (outer, exit) = (self.f.inline_gens[k].outer, self.f.inline_gens[k].exit);
+        self.leave_scopes(outer);
+        if self.live() {
+            self.jump(exit);
+        }
+        Some(true)
     }
 
     // ------------------------------------------------------------ making one

@@ -158,6 +158,9 @@ struct LoopCtx {
     /// How many scopes were open outside the loop: `break` and `continue`
     /// clean up the ones inside it.
     scopes: usize,
+    /// The same for `break`, when it leaves more than `continue` does: a
+    /// loop over a generator built in place (see `shuttle.rs`) closes it.
+    brk_scopes: usize,
 }
 
 /// A `mend` being built: where its `?`s go.
@@ -242,6 +245,9 @@ struct FnState<'a> {
     writebacks: Vec<(Vec<Var>, Ty, Value)>,
     /// A shuttle's step being built.
     shuttle: Option<shuttle::ShuttleBuild>,
+    /// Generators being built in place, in the loops over them (see
+    /// `shuttle.rs`), innermost last.
+    inline_gens: Vec<shuttle::InlineGen<'a>>,
 }
 
 pub(super) struct Builder<'a> {
@@ -899,6 +905,9 @@ impl<'a> Builder<'a> {
     /// registers, after every cleanup of the function runs.
     fn ret_val(&mut self, val: Val, span: Span) -> Option<()> {
         let ty = self.f.ret.unwrap_or(self.tcx().unit);
+        if self.inline_return()? {
+            return Some(());
+        }
         if self.f.shuttle.is_some() {
             // A shuttle's step: finished.
             self.run_cleanups(0);

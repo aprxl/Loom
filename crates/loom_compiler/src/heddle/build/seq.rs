@@ -516,7 +516,14 @@ impl<'a> Builder<'a> {
             self.same_list(header, buf, len, span)?;
         }
         let scopes = self.f.scopes.len();
-        self.f.loops.push(LoopCtx { id: e.id, brk: exit, cont: step, result: LoopResult::None, scopes });
+        self.f.loops.push(LoopCtx {
+            id: e.id,
+            brk: exit,
+            cont: step,
+            result: LoopResult::None,
+            scopes,
+            brk_scopes: scopes,
+        });
         let cur = self.read(i);
         let at = self.elem_at(buf, cur, elem)?;
         let depth = self.open_scope();

@@ -129,7 +129,7 @@ impl<'a> Builder<'a> {
     /// Works out a call's receiver and arguments, in source order: a place
     /// for each `mut` one, a value for the rest. The receiver, if any, is
     /// first, then the arguments by their position in the call.
-    fn call_args(
+    pub(super) fn call_args(
         &mut self,
         callee: &'a hir::Expr,
         args: &'a [hir::Arg],
