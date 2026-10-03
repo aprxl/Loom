@@ -1,0 +1,800 @@
+//! The program generator (design/vm.md §15): random, well-typed programs
+//! from a seed, run on Lua and on Treadle (the checked Treadle with
+//! `--features vm-checked`), which must print the same and end the same
+//! way, unravels included.
+//!
+//! A program has a record, a sum and an error type, a few functions (some
+//! fallible), and a `main`, using integers of odd widths under every
+//! overflow policy, casts, floats, `match`, loops, lists, optionals, `?`,
+//! `mend` and `defer`. `cargo test` runs 300 seeds; `cargo test -p loom
+//! --test gen -- --ignored` runs 20 000. A failing seed is shrunk (the
+//! statements of `main` it doesn't need are left out) and printed, to keep
+//! as a `tests/run` fixture.
+
+use std::cell::RefCell;
+use std::fmt::Write as _;
+use std::path::Path;
+use std::rc::Rc;
+
+use loom_compiler::hir::resolve;
+use loom_compiler::modules::FsLoader;
+use loom_compiler::target::Target;
+use loom_compiler::{lower, treadle, typeck};
+use loom_host::{Host, Outcome, run_bundle};
+use loom_syntax::SourceDb;
+use loom_syntax::diag::render_plain;
+
+// ---------------------------------------------------------------- randomness
+
+/// SplitMix64: small, and the same everywhere.
+struct Rng(u64);
+
+impl Rng {
+    fn next(&mut self) -> u64 {
+        self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^ (z >> 31)
+    }
+
+    fn below(&mut self, n: u64) -> u64 {
+        self.next() % n.max(1)
+    }
+
+    /// True `percent` times in 100.
+    fn chance(&mut self, percent: u64) -> bool {
+        self.below(100) < percent
+    }
+
+    fn pick<T: Copy>(&mut self, xs: &[T]) -> T {
+        xs[self.below(xs.len() as u64) as usize]
+    }
+}
+
+// ---------------------------------------------------------------- types
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Int {
+    signed: bool,
+    bits: u32,
+}
+
+impl Int {
+    fn name(self) -> String {
+        format!("{}{}", if self.signed { "i" } else { "u" }, self.bits)
+    }
+
+    fn min(self) -> i128 {
+        if self.signed { -(1i128 << (self.bits - 1)) } else { 0 }
+    }
+
+    fn max(self) -> i128 {
+        if self.signed { (1i128 << (self.bits - 1)) - 1 } else { (1i128 << self.bits) - 1 }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Ty {
+    Int(Int),
+    Bool,
+    F64,
+    /// The record `R { a: A, b: B, f: f64 }`.
+    Rec,
+    /// The sum `S { case P(x: A), case Q, case W(y: B, z: bool) }`.
+    Sum,
+    List(Int),
+    Opt(Int),
+}
+
+#[derive(Clone, Debug)]
+struct Func {
+    name: String,
+    params: Vec<Ty>,
+    ret: Ty,
+    fallible: bool,
+}
+
+#[derive(Clone, Debug)]
+struct Var {
+    name: String,
+    ty: Ty,
+    mutable: bool,
+}
+
+// ---------------------------------------------------------------- the generator
+
+struct Gen {
+    rng: Rng,
+    /// The record's `a` and `b`, the sum's `x` and `y`.
+    a: Int,
+    b: Int,
+    funcs: Vec<Func>,
+    scopes: Vec<Vec<Var>>,
+    next: u32,
+    /// Whether the function being made can `fail`, and use `?`.
+    fallible: bool,
+}
+
+const WIDTHS: [u32; 14] = [8, 16, 32, 64, 1, 3, 5, 7, 12, 13, 24, 31, 48, 63];
+
+impl Gen {
+    fn new(seed: u64) -> Gen {
+        let mut rng = Rng(seed);
+        let a = Self::int_of(&mut rng);
+        let b = Self::int_of(&mut rng);
+        Gen { rng, a, b, funcs: Vec::new(), scopes: vec![Vec::new()], next: 0, fallible: false }
+    }
+
+    fn int_of(rng: &mut Rng) -> Int {
+        let bits = rng.pick(&WIDTHS);
+        // A signed type needs two bits.
+        let signed = bits > 1 && rng.chance(50);
+        Int { signed, bits }
+    }
+
+    fn int(&mut self) -> Int {
+        Self::int_of(&mut self.rng)
+    }
+
+    fn fresh(&mut self, stem: &str) -> String {
+        self.next += 1;
+        format!("{stem}_{}", self.next)
+    }
+
+    fn ty_name(&self, t: Ty) -> String {
+        match t {
+            Ty::Int(i) => i.name(),
+            Ty::Bool => "bool".into(),
+            Ty::F64 => "f64".into(),
+            Ty::Rec => "R".into(),
+            Ty::Sum => "S".into(),
+            Ty::List(i) => format!("List[{}]", i.name()),
+            Ty::Opt(i) => format!("?{}", i.name()),
+        }
+    }
+
+    fn vars(&self, want: impl Fn(&Var) -> bool) -> Vec<Var> {
+        self.scopes.iter().flatten().filter(|v| want(v)).cloned().collect()
+    }
+
+    fn bind(&mut self, name: &str, ty: Ty, mutable: bool) {
+        self.scopes.last_mut().expect("a scope").push(Var { name: name.into(), ty, mutable });
+    }
+
+    // ------------------------------------------------------------ literals
+
+    fn int_lit(&mut self, i: Int) -> String {
+        let v: i128 = match self.rng.below(8) {
+            0 => 0,
+            1 => 1.min(i.max()),
+            2 => i.max(),
+            // The least i64 can't be written as a literal: one more.
+            3 => i.min() + i128::from(i.bits == 64 && i.signed),
+            4 if i.signed => -1,
+            _ => {
+                let span = (i.max() - i.min()) as u128;
+                let small = (self.rng.below(20) as i128).min(i.max());
+                if self.rng.chance(50) { small } else { i.min() + (u128::from(self.rng.next()) % (span + 1)) as i128 }
+            }
+        };
+        let v = v.clamp(i.min() + i128::from(i.bits == 64 && i.signed), i.max());
+        if v < 0 { format!("({v}{})", i.name()) } else { format!("{v}{}", i.name()) }
+    }
+
+    fn f64_lit(&mut self) -> String {
+        let s = self.rng.pick(&["0.0", "1.0", "1.5", "0.1", "2.25", "1000000.0", "0.333", "1e300", "7.0", "123.456"]);
+        if self.rng.chance(30) { format!("(-{s})") } else { s.to_string() }
+    }
+
+    // ------------------------------------------------------------ expressions
+
+    fn expr(&mut self, t: Ty, depth: u32) -> String {
+        match t {
+            Ty::Int(i) => self.int_expr(i, depth),
+            Ty::Bool => self.bool_expr(depth),
+            Ty::F64 => self.f64_expr(depth),
+            Ty::Rec => {
+                let (a, b) = (self.a, self.b);
+                let (ea, eb, ef) = (
+                    self.int_expr(a, depth.saturating_sub(1)),
+                    self.int_expr(b, depth.saturating_sub(1)),
+                    self.f64_expr(depth.saturating_sub(1)),
+                );
+                format!("R(a: {ea}, b: {eb}, f: {ef})")
+            }
+            Ty::Sum => match self.rng.below(3) {
+                0 => {
+                    let a = self.a;
+                    format!("S.P(x: {})", self.int_expr(a, depth.saturating_sub(1)))
+                }
+                1 => "S.Q".into(),
+                _ => {
+                    let b = self.b;
+                    let y = self.int_expr(b, depth.saturating_sub(1));
+                    format!("S.W(y: {y}, z: {})", self.bool_expr(depth.saturating_sub(1)))
+                }
+            },
+            Ty::List(i) => {
+                let n = 1 + self.rng.below(4);
+                let items: Vec<String> = (0..n).map(|_| self.int_expr(i, depth.saturating_sub(1))).collect();
+                format!("[{}]", items.join(", "))
+            }
+            Ty::Opt(i) => self.opt_expr(i, depth),
+        }
+    }
+
+    fn opt_expr(&mut self, i: Int, depth: u32) -> String {
+        let d = depth.saturating_sub(1);
+        match self.rng.below(3) {
+            0 => {
+                let op = self.rng.pick(&["+?", "-?", "*?"]);
+                format!("({} {op} {})", self.int_expr(i, d), self.int_expr(i, d))
+            }
+            1 => {
+                let from = self.int();
+                format!("({} as? {})", self.int_expr(from, d), i.name())
+            }
+            _ => match self.vars(|v| v.ty == Ty::Opt(i)).first() {
+                Some(v) => v.name.clone(),
+                None => format!("({} +? {})", self.int_expr(i, d), self.int_lit(i)),
+            },
+        }
+    }
+
+    fn int_expr(&mut self, i: Int, depth: u32) -> String {
+        let d = depth.saturating_sub(1);
+        let choice = if depth == 0 { self.rng.below(2) } else { self.rng.below(15) };
+        match choice {
+            0 => self.int_lit(i),
+            1 => {
+                let vs = self.vars(|v| v.ty == Ty::Int(i));
+                if vs.is_empty() { self.int_lit(i) } else { vs[self.rng.below(vs.len() as u64) as usize].name.clone() }
+            }
+            2 | 3 => {
+                let op = self.rng.pick(&["+", "-", "*"]);
+                let policy = match self.rng.below(10) {
+                    0 => "",
+                    1..=5 => "%",
+                    _ => "|",
+                };
+                format!("({} {op}{policy} {})", self.int_expr(i, d), self.int_expr(i, d))
+            }
+            4 => {
+                // A divisor that isn't zero.
+                let op = self.rng.pick(&["/", "%"]);
+                format!("({} {op} ({} | 1{}))", self.int_expr(i, d), self.int_expr(i, d), i.name())
+            }
+            5 => {
+                let op = self.rng.pick(&["&", "|", "~"]);
+                format!("({} {op} {})", self.int_expr(i, d), self.int_expr(i, d))
+            }
+            6 => {
+                let op = self.rng.pick(&["<<", ">>"]);
+                let k = self.rng.below(u64::from(i.bits));
+                format!("({} {op} {k})", self.int_expr(i, d))
+            }
+            7 | 8 => {
+                let from = self.int();
+                let e = self.int_expr(from, d);
+                match self.rng.below(10) {
+                    0 => format!("({e} as {})", i.name()),
+                    1..=4 => format!("({e} as% {})", i.name()),
+                    5..=7 => format!("({e} as| {})", i.name()),
+                    _ => format!("(({e} as? {}) mend {})", i.name(), self.int_lit(i)),
+                }
+            }
+            9 => format!("(if {} {{ {} }} else {{ {} }})", self.bool_expr(d), self.int_expr(i, d), self.int_expr(i, d)),
+            10 => {
+                let fs: Vec<Func> = self.funcs.iter().filter(|f| f.ret == Ty::Int(i)).cloned().collect();
+                if fs.is_empty() {
+                    return self.int_lit(i);
+                }
+                let f = fs[self.rng.below(fs.len() as u64) as usize].clone();
+                let args: Vec<String> = f.params.iter().map(|&p| self.expr(p, d.min(1))).collect();
+                let call = format!("{}({})", f.name, args.join(", "));
+                if !f.fallible {
+                    call
+                } else if self.fallible && self.rng.chance(50) {
+                    format!("{call}?")
+                } else {
+                    format!("({call} mend {})", self.int_lit(i))
+                }
+            }
+            11 => {
+                let fields: Vec<String> = self
+                    .vars(|v| v.ty == Ty::Rec)
+                    .into_iter()
+                    .flat_map(|v| {
+                        let mut out = Vec::new();
+                        if self.a == i {
+                            out.push(format!("{}.a", v.name));
+                        }
+                        if self.b == i {
+                            out.push(format!("{}.b", v.name));
+                        }
+                        out
+                    })
+                    .collect();
+                if fields.is_empty() {
+                    self.int_lit(i)
+                } else {
+                    fields[self.rng.below(fields.len() as u64) as usize].clone()
+                }
+            }
+            12 => {
+                let ls = self.vars(|v| v.ty == Ty::List(i));
+                match ls.first() {
+                    Some(l) => {
+                        let from = self.int();
+                        let ix = self.int_expr(from, d);
+                        format!("{}[(({ix} as% u32) as usize) % {}.len()]", l.name, l.name)
+                    }
+                    None => self.int_lit(i),
+                }
+            }
+            13 => format!("({} as| {})", self.f64_expr(d), i.name()),
+            _ => format!("({} mend {})", self.opt_expr(i, d), self.int_lit(i)),
+        }
+    }
+
+    fn bool_expr(&mut self, depth: u32) -> String {
+        let d = depth.saturating_sub(1);
+        let choice = if depth == 0 { self.rng.below(2) } else { self.rng.below(7) };
+        match choice {
+            0 => self.rng.pick(&["true", "false"]).to_string(),
+            1 => {
+                let vs = self.vars(|v| v.ty == Ty::Bool);
+                if vs.is_empty() { "true".into() } else { vs[self.rng.below(vs.len() as u64) as usize].name.clone() }
+            }
+            2 | 3 => {
+                let i = self.int();
+                let op = self.rng.pick(&["==", "!=", "<", "<=", ">", ">="]);
+                format!("({} {op} {})", self.int_expr(i, d), self.int_expr(i, d))
+            }
+            4 => {
+                let op = self.rng.pick(&["==", "<", ">="]);
+                format!("({} {op} {})", self.f64_expr(d), self.f64_expr(d))
+            }
+            5 => {
+                let op = self.rng.pick(&["and", "or"]);
+                format!("({} {op} {})", self.bool_expr(d), self.bool_expr(d))
+            }
+            _ => format!("(not {})", self.bool_expr(d)),
+        }
+    }
+
+    fn f64_expr(&mut self, depth: u32) -> String {
+        let d = depth.saturating_sub(1);
+        let choice = if depth == 0 { self.rng.below(2) } else { self.rng.below(7) };
+        match choice {
+            0 => self.f64_lit(),
+            1 => {
+                let vs = self.vars(|v| v.ty == Ty::F64);
+                if vs.is_empty() { self.f64_lit() } else { vs[self.rng.below(vs.len() as u64) as usize].name.clone() }
+            }
+            2 | 3 => {
+                let op = self.rng.pick(&["+", "-", "*", "/"]);
+                format!("({} {op} {})", self.f64_expr(d), self.f64_expr(d))
+            }
+            4 => {
+                let i = self.int();
+                format!("({} as f64)", self.int_expr(i, d))
+            }
+            5 => format!("(if {} {{ {} }} else {{ {} }})", self.bool_expr(d), self.f64_expr(d), self.f64_expr(d)),
+            _ => match self.vars(|v| v.ty == Ty::Rec).first() {
+                Some(r) => format!("{}.f", r.name),
+                None => self.f64_lit(),
+            },
+        }
+    }
+
+    // ------------------------------------------------------------ statements
+
+    /// A type for a new local.
+    fn local_ty(&mut self) -> Ty {
+        match self.rng.below(10) {
+            0..=3 => Ty::Int(self.int()),
+            4 => Ty::Bool,
+            5 => Ty::F64,
+            6 => Ty::Rec,
+            7 => Ty::Sum,
+            8 => Ty::List(self.int()),
+            _ => Ty::Opt(self.int()),
+        }
+    }
+
+    /// Statements, each at `indent`, one per string (a statement may span
+    /// lines).
+    fn stmts(&mut self, n: u32, depth: u32, indent: usize) -> Vec<String> {
+        (0..n).map(|_| self.stmt(depth, indent)).collect()
+    }
+
+    fn block(&mut self, n: u32, depth: u32, indent: usize) -> String {
+        self.scopes.push(Vec::new());
+        let body = self.stmts(n, depth, indent + 1);
+        self.scopes.pop();
+        let pad = "    ".repeat(indent);
+        let mut out = String::from("{\n");
+        for s in body {
+            out.push_str(&s);
+        }
+        out.push_str(&pad);
+        out.push('}');
+        out
+    }
+
+    fn stmt(&mut self, depth: u32, indent: usize) -> String {
+        let pad = "    ".repeat(indent);
+        let choice = if depth == 0 { self.rng.below(4) } else { self.rng.below(13) };
+        match choice {
+            0 | 1 => {
+                let t = self.local_ty();
+                let e = self.expr(t, 3);
+                let mutable = self.rng.chance(40);
+                let name = self.fresh("v");
+                let s = format!("{pad}{} {name}: {} = {e}\n", if mutable { "var" } else { "let" }, self.ty_name(t));
+                self.bind(&name, t, mutable);
+                s
+            }
+            2 => self.print(indent),
+            3 => {
+                // Change a `var`.
+                let vs =
+                    self.vars(|v| v.mutable && matches!(v.ty, Ty::Int(_) | Ty::F64 | Ty::Bool | Ty::Rec | Ty::List(_)));
+                let Some(v) = vs.first().cloned() else { return self.print(indent) };
+                match v.ty {
+                    Ty::Rec => {
+                        let a = self.a;
+                        format!("{pad}{}.a = {}\n", v.name, self.int_expr(a, 2))
+                    }
+                    Ty::List(i) => {
+                        if self.rng.chance(50) {
+                            format!("{pad}{}.push({})\n", v.name, self.int_expr(i, 2))
+                        } else {
+                            let from = self.int();
+                            let ix = self.int_expr(from, 1);
+                            let e = self.int_expr(i, 2);
+                            format!("{pad}{}[(({ix} as% u32) as usize) % {}.len()] = {e}\n", v.name, v.name)
+                        }
+                    }
+                    t => format!("{pad}{} = {}\n", v.name, self.expr(t, 2)),
+                }
+            }
+            4 => format!(
+                "{pad}if {} {} else {}\n",
+                self.bool_expr(2),
+                self.block(2, depth - 1, indent),
+                self.block(1, depth - 1, indent)
+            ),
+            5 => {
+                let i = self.fresh("i");
+                let n = self.rng.below(4);
+                self.scopes.push(vec![Var {
+                    name: i.clone(),
+                    ty: Ty::Int(Int { signed: false, bits: 8 }),
+                    mutable: false,
+                }]);
+                let body = self.block(2, depth - 1, indent);
+                self.scopes.pop();
+                format!("{pad}for {i} in 0..{n}u8 {body}\n")
+            }
+            6 => {
+                let w = self.fresh("w");
+                let n = self.rng.below(4);
+                let body = self.block(2, depth - 1, indent + 1);
+                let pad1 = "    ".repeat(indent + 1);
+                format!(
+                    "{pad}{{\n{pad1}var {w} = 0u8\n{pad1}while {w} < {n}u8 {{\n{pad1}    {w} +%= 1\n{pad1}    {body}\n{pad1}}}\n{pad}}}\n"
+                )
+            }
+            7 => {
+                let n = self.fresh("d");
+                format!("{pad}defer print(\"defer {n}\")\n")
+            }
+            8 => self.int_match(indent),
+            9 => self.sum_match(indent),
+            10 => {
+                // A list, read in a loop.
+                let i = self.int();
+                let l = self.fresh("l");
+                let items = self.expr(Ty::List(i), 2);
+                let x = self.fresh("x");
+                let acc = self.fresh("t");
+                format!(
+                    "{pad}var {l}: List[{0}] = {items}\n{pad}var {acc} = 0{0}\n{pad}for {x} in {l} {{ {acc} = {acc} +% {x} }}\n{pad}print(\"{{{acc}}} {{{l}.len()}}\")\n",
+                    i.name()
+                )
+            }
+            11 => {
+                // A fallible call, mended.
+                let fs: Vec<Func> = self.funcs.iter().filter(|f| f.fallible).cloned().collect();
+                let Some(f) = fs.first().cloned() else { return self.print(indent) };
+                let args: Vec<String> = f.params.iter().map(|&p| self.expr(p, 1)).collect();
+                let name = self.fresh("r");
+                let fallback = self.expr(f.ret, 0);
+                let s = format!(
+                    "{pad}let {name}: {} = {}({}) mend e => {{\n{pad}    print(\"failed: {{e}}\")\n{pad}    {fallback}\n{pad}}}\n",
+                    self.ty_name(f.ret),
+                    f.name,
+                    args.join(", ")
+                );
+                self.bind(&name, f.ret, false);
+                s
+            }
+            _ => {
+                if self.fallible && self.rng.chance(50) {
+                    format!(
+                        "{pad}if {} {{ fail .Bad({}) }}\n",
+                        self.bool_expr(2),
+                        self.int_expr(Int { signed: true, bits: 64 }, 1)
+                    )
+                } else {
+                    self.print(indent)
+                }
+            }
+        }
+    }
+
+    fn print(&mut self, indent: usize) -> String {
+        let pad = "    ".repeat(indent);
+        let shown: Vec<Var> = self.vars(|v| !matches!(v.ty, Ty::Sum));
+        if shown.is_empty() {
+            return format!("{pad}print(\"-\")\n");
+        }
+        let n = 1 + self.rng.below(3);
+        let mut parts = Vec::new();
+        for _ in 0..n {
+            let v = &shown[self.rng.below(shown.len() as u64) as usize];
+            match v.ty {
+                Ty::Rec => parts.push(format!("{{{0}.a}} {{{0}.b}} {{{0}.f}}", v.name)),
+                _ => parts.push(format!("{{{}}}", v.name)),
+            }
+        }
+        format!("{pad}print(\"{}\")\n", parts.join(" "))
+    }
+
+    fn int_match(&mut self, indent: usize) -> String {
+        let pad = "    ".repeat(indent);
+        let (on, to) = (self.int(), self.int());
+        let scrutinee = self.int_expr(on, 2);
+        // A literal, a range not holding it, and the rest.
+        let lit: i128 = self.rng.below(4) as i128;
+        let lit = lit.clamp(on.min(), on.max());
+        let lo = (lit + 1).min(on.max());
+        let hi = (lo + self.rng.below(5) as i128).min(on.max());
+        let name = self.fresh("m");
+        let mut s = format!("{pad}let {name}: {} = match {scrutinee} {{\n", to.name());
+        let _ = writeln!(s, "{pad}    {lit} => {}", self.int_expr(to, 1));
+        if lo > lit && lo <= hi {
+            let _ = writeln!(s, "{pad}    {lo}..={hi} => {}", self.int_expr(to, 1));
+        }
+        let _ = writeln!(s, "{pad}    _ => {}", self.int_expr(to, 1));
+        let _ = writeln!(s, "{pad}}}");
+        self.bind(&name, Ty::Int(to), false);
+        s
+    }
+
+    fn sum_match(&mut self, indent: usize) -> String {
+        let pad = "    ".repeat(indent);
+        let sum = self.expr(Ty::Sum, 2);
+        let s_name = self.fresh("s");
+        let to = self.int();
+        let (x, y, z) = (self.fresh("x"), self.fresh("y"), self.fresh("z"));
+        let (a, b) = (self.a, self.b);
+        let mut s = format!("{pad}let {s_name} = {sum}\n");
+        let name = self.fresh("m");
+        let _ = writeln!(s, "{pad}let {name}: {} = match {s_name} {{", to.name());
+        self.scopes.push(vec![Var { name: x.clone(), ty: Ty::Int(a), mutable: false }]);
+        let _ = writeln!(s, "{pad}    .P({x}) => {}", self.int_expr(to, 2));
+        self.scopes.pop();
+        let _ = writeln!(s, "{pad}    .Q => {}", self.int_expr(to, 1));
+        self.scopes.push(vec![
+            Var { name: y.clone(), ty: Ty::Int(b), mutable: false },
+            Var { name: z.clone(), ty: Ty::Bool, mutable: false },
+        ]);
+        let _ = writeln!(s, "{pad}    .W({y}, {z}) => {}", self.int_expr(to, 2));
+        self.scopes.pop();
+        let _ = writeln!(s, "{pad}}}");
+        self.bind(&name, Ty::Int(to), false);
+        s
+    }
+
+    // ------------------------------------------------------------ programs
+
+    fn func(&mut self) -> String {
+        let n = self.rng.below(3) + 1;
+        let params: Vec<Ty> = (0..n)
+            .map(|_| match self.rng.below(4) {
+                0 => Ty::Bool,
+                1 => Ty::F64,
+                _ => Ty::Int(self.int()),
+            })
+            .collect();
+        let ret = if self.rng.chance(80) { Ty::Int(self.int()) } else { Ty::F64 };
+        let fallible = self.rng.chance(35);
+        let name = self.fresh("f");
+        self.scopes = vec![Vec::new()];
+        let mut sig = Vec::new();
+        for &p in &params {
+            let pn = self.fresh("p");
+            sig.push(format!("{pn}: {}", self.ty_name(p)));
+            self.bind(&pn, p, false);
+        }
+        self.fallible = fallible;
+        let n = 1 + self.rng.below(4) as u32;
+        let body = self.stmts(n, 2, 1);
+        let result = self.expr(ret, 3);
+        self.fallible = false;
+        let mut s = format!(
+            "fn {name}({}) -> {}{} {{\n",
+            sig.join(", "),
+            self.ty_name(ret),
+            if fallible { " ! E" } else { "" }
+        );
+        for b in body {
+            s.push_str(&b);
+        }
+        let _ = writeln!(s, "    {result}\n}}\n");
+        self.funcs.push(Func { name, params, ret, fallible });
+        s
+    }
+
+    /// The program: everything before `main`'s statements, `main`'s
+    /// statements, and what closes it.
+    fn program(&mut self) -> (String, Vec<String>, String) {
+        let (a, b) = (self.a.name(), self.b.name());
+        let mut head = format!(
+            "use std.io.print\n\nwarp R {{\n    a: {a}\n    b: {b}\n    f: f64\n}}\n\nwarp S {{\n    case P(x: {a})\n    case Q\n    case W(y: {b}, z: bool)\n}}\n\nwarp E: Error, Show {{\n    case Bad(i64)\n    case Worse\n}}\n\n"
+        );
+        for _ in 0..1 + self.rng.below(4) {
+            head.push_str(&self.func());
+        }
+        head.push_str("fn main() {\n");
+        self.scopes = vec![Vec::new()];
+        let n = 10 + self.rng.below(20) as u32;
+        let main = self.stmts(n, 3, 1);
+        (head, main, "}\n".into())
+    }
+}
+
+// ---------------------------------------------------------------- running
+
+/// How a run on one backend went: its output and how it ended, or why it
+/// didn't compile.
+fn run_lua(text: &str) -> Result<(String, String), String> {
+    let path = Path::new("gen.loom");
+    let mut db = SourceDb::new();
+    let root = db.add("gen.loom".to_string(), text.to_string());
+    let resolved = resolve(&mut db, root, &FsLoader::new(path));
+    if resolved.has_errors() {
+        return Err(rendered(&db, &resolved.diagnostics));
+    }
+    let typed = typeck::check(&resolved.program);
+    if typed.has_errors() {
+        return Err(rendered(&db, &typed.diagnostics));
+    }
+    let bundle = lower::lower(&db, &resolved.program, &typed).map_err(|d| rendered(&db, &d))?;
+    let buffer = Rc::new(RefCell::new(Vec::new()));
+    let outcome = run_bundle(&bundle.lua, Some(&bundle.map), Host::captured(buffer.clone()));
+    let out = String::from_utf8_lossy(&buffer.borrow()).into_owned();
+    Ok((out, ending(outcome)))
+}
+
+fn run_vm(text: &str) -> Result<(String, String), String> {
+    let path = Path::new("gen.loom");
+    let mut db = SourceDb::new();
+    let root = db.add("gen.loom".to_string(), text.to_string());
+    let resolved = resolve(&mut db, root, &FsLoader::new(path));
+    if resolved.has_errors() {
+        return Err(rendered(&db, &resolved.diagnostics));
+    }
+    let typed = typeck::check_for(&resolved.program, Target::VM);
+    if typed.has_errors() {
+        return Err(rendered(&db, &typed.diagnostics));
+    }
+    let compiled = treadle::compile(&db, &resolved.program, &typed).map_err(|d| rendered(&db, &d))?;
+    let buffer = Rc::new(RefCell::new(Vec::new()));
+    let config = loom_vm::Config { stack_limit: 64 << 20, ..loom_vm::Config::default() };
+    let outcome = loom_vm::run(&compiled.image, Host::captured(buffer.clone()), &config);
+    let out = String::from_utf8_lossy(&buffer.borrow()).into_owned();
+    Ok((out, ending(outcome)))
+}
+
+fn rendered(db: &SourceDb, diags: &[loom_syntax::Diagnostic]) -> String {
+    diags.iter().map(|d| render_plain(db, d)).collect()
+}
+
+fn ending(outcome: Outcome) -> String {
+    match outcome {
+        Outcome::Finished => "finished".into(),
+        Outcome::Unravel { message, location } => {
+            format!("unravel {message:?} at {:?}", location.map(|l| (l.line, l.column)))
+        }
+        Outcome::Failed { message } => format!("failed {message:?}"),
+        other => format!("{other:?}"),
+    }
+}
+
+/// What's wrong with `text`: it doesn't compile, or the backends disagree.
+fn problem(text: &str) -> Option<String> {
+    let lua = match run_lua(text) {
+        Ok(r) => r,
+        Err(e) => return Some(format!("doesn't compile (a generator bug):\n{e}")),
+    };
+    let vm = match run_vm(text) {
+        Ok(r) => r,
+        Err(e) => return Some(format!("doesn't compile for Treadle:\n{e}")),
+    };
+    (lua != vm)
+        .then(|| format!("the backends disagree\n--- Lua ({})\n{}--- Treadle ({})\n{}", lua.1, lua.0, vm.1, vm.0))
+}
+
+/// `main`'s statements, as few as still show the problem (and compile).
+fn shrink(head: &str, mut main: Vec<String>, tail: &str) -> Vec<String> {
+    let still = |main: &[String]| {
+        let text = format!("{head}{}{tail}", main.concat());
+        problem(&text).is_some_and(|p| p.starts_with("the backends disagree"))
+    };
+    let mut i = main.len();
+    while i > 0 {
+        i -= 1;
+        let mut fewer = main.clone();
+        fewer.remove(i);
+        if still(&fewer) {
+            main = fewer;
+        }
+    }
+    main
+}
+
+fn check_seeds(seeds: std::ops::Range<u64>) {
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get()).min(16) as u64;
+    let failures: Vec<String> = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..threads)
+            .map(|t| {
+                let seeds = seeds.clone();
+                std::thread::Builder::new()
+                    .stack_size(64 << 20)
+                    .spawn_scoped(scope, move || {
+                        let mut out = Vec::new();
+                        for seed in seeds.filter(|s| s % threads == t) {
+                            let (head, main, tail) = Gen::new(seed).program();
+                            let text = format!("{head}{}{tail}", main.concat());
+                            if let Some(p) = problem(&text) {
+                                let main = if p.starts_with("the backends disagree") {
+                                    shrink(&head, main, &tail)
+                                } else {
+                                    main
+                                };
+                                let text = format!("{head}{}{tail}", main.concat());
+                                let p = problem(&text).unwrap_or(p);
+                                out.push(format!("seed {seed}: {p}\n--- program\n{text}"));
+                            }
+                        }
+                        out
+                    })
+                    .expect("a thread")
+            })
+            .collect();
+        handles.into_iter().flat_map(|h| h.join().expect("no panics")).collect()
+    });
+    assert!(
+        failures.is_empty(),
+        "{} of {} seeds failed:\n\n{}",
+        failures.len(),
+        seeds.end - seeds.start,
+        failures.join("\n\n")
+    );
+}
+
+#[test]
+fn generated_programs_agree() {
+    check_seeds(0..300);
+}
+
+#[test]
+#[ignore = "long: 20 000 seeds"]
+fn many_generated_programs_agree() {
+    check_seeds(300..20_300);
+}
