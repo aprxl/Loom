@@ -399,17 +399,35 @@ fn hoist_constants(f: &Func) -> Option<Func> {
         return None;
     }
     let mut f = f.clone();
-    let mut lifted = Vec::new();
+    // What's made at the start: the constants of the entry block and of
+    // loops, then addresses at an offset from them (a constant's value
+    // after its flag), which a loop would work out again too.
+    let mut made: HashSet<Value> = HashSet::new();
+    for (b, block) in f.blocks.iter().enumerate() {
+        if b == 0 || looped[b] {
+            made.extend(block.insts.iter().filter(|i| constant(&i.kind)).flat_map(|i| i.results.iter().copied()));
+        }
+    }
+    let offset = |k: &InstKind| matches!(k, InstKind::Offset { ptr, .. } if made.contains(ptr));
+    let (mut lifted, mut offsets) = (Vec::new(), Vec::new());
     for (block, _) in f.blocks.iter_mut().zip(&looped).skip(1).filter(|(_, l)| **l) {
-        let (out, keep): (Vec<_>, Vec<_>) =
-            std::mem::take(&mut block.insts).into_iter().partition(|i| constant(&i.kind));
+        let mut keep = Vec::new();
+        for inst in std::mem::take(&mut block.insts) {
+            if constant(&inst.kind) {
+                lifted.push(inst);
+            } else if offset(&inst.kind) {
+                offsets.push(inst);
+            } else {
+                keep.push(inst);
+            }
+        }
         block.insts = keep;
-        lifted.extend(out);
     }
     // The entry block itself may be a loop's; its constants come first too.
     let entry = std::mem::take(&mut f.blocks[0].insts);
     let (mut first, rest): (Vec<_>, Vec<_>) = entry.into_iter().partition(|i| constant(&i.kind));
     first.extend(lifted);
+    first.extend(offsets);
     first.extend(rest);
     f.blocks[0].insts = first;
     Some(f)
