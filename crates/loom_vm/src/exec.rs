@@ -229,6 +229,7 @@ impl<'i> Machine<'i> {
             if cfg!(feature = "stats") {
                 env.ctx.dispatched += 1;
                 env.ctx.op_counts[usize::from(w as u16)] += 1;
+                env.ctx.pc_counts[(pc as usize - env.code_base as usize) / 8 - 1] += 1;
             }
             let op = if cfg!(feature = "checked") {
                 Op::from_u16(w as u16).expect("the verifier checked every opcode")

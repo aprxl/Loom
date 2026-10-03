@@ -8,7 +8,18 @@ use crate::{Form, Image, IntSpec, Op};
 /// Every function of `image`, one instruction per line.
 pub fn disassemble(image: &Image) -> String {
     let mut out = String::new();
-    for (i, f) in image.funcs.iter().enumerate() {
+    for i in 0..image.funcs.len() {
+        out.push_str(&disassemble_func(image, i, None));
+    }
+    out
+}
+
+/// Function `i` of `image`, one instruction per line, each after how many
+/// times it ran when `counts` (by word of the image's code) are given.
+pub fn disassemble_func(image: &Image, i: usize, counts: Option<&[u64]>) -> String {
+    let mut out = String::new();
+    {
+        let f = &image.funcs[i];
         let entry = if image.entry == Some(i as u32) { "  (entry)" } else { "" };
         let _ =
             writeln!(out, "fn {} #{i}: frame {}, params {}, results {}{entry}", f.name, f.frame, f.params, f.results);
@@ -25,6 +36,10 @@ pub fn disassemble(image: &Image) -> String {
                 continue;
             };
             let ext = code.get(pc + 1).copied().unwrap_or(0);
+            if let Some(counts) = counts {
+                let n = counts.get(f.entry as usize + pc).copied().unwrap_or(0);
+                let _ = write!(out, "{n:>12}");
+            }
             let _ = writeln!(out, "  {pc:>4}  {:<12}{}", op.name(), operands(image, op, w, ext, pc));
             pc += op.form().words();
         }

@@ -58,6 +58,9 @@ pub(crate) struct Ctx<'i> {
     pub dispatched: u64,
     /// How many of each op, by opcode (with `stats`; empty otherwise).
     pub op_counts: Vec<u64>,
+    /// How many times each instruction ran, by word of the image's code
+    /// (with `stats`; empty otherwise).
+    pub pc_counts: Vec<u64>,
 }
 
 /// How much output is kept before it's written.
@@ -95,6 +98,7 @@ impl<'i> Ctx<'i> {
             data_range: (0, 0),
             dispatched: 0,
             op_counts: if cfg!(feature = "stats") { vec![0; Op::ALL.len()] } else { Vec::new() },
+            pc_counts: if cfg!(feature = "stats") { vec![0; image.code.len()] } else { Vec::new() },
         }
     }
 

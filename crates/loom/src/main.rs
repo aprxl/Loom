@@ -425,6 +425,24 @@ fn run_vm(path: &Path, args: &[String], color: ColorMode, level: Level) -> ExitC
                         eprintln!("{n:>14}  {:5.1}%  {}", 100.0 * n as f64 / total.max(1) as f64, op.name());
                     }
                 }
+                // `LOOM_STATS=2`: the functions that ran most, each
+                // instruction after how many times it ran.
+                if let Some(pcs) = vm.pc_counts()
+                    && std::env::var_os("LOOM_STATS").is_some_and(|v| v == "2")
+                {
+                    let image = &compiled.image;
+                    let mut funcs: Vec<(u64, usize)> = image
+                        .funcs
+                        .iter()
+                        .enumerate()
+                        .map(|(i, f)| (pcs[f.entry as usize..(f.entry + f.len) as usize].iter().sum(), i))
+                        .collect();
+                    funcs.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+                    for (n, i) in funcs.into_iter().take(6).filter(|(n, _)| *n > 0) {
+                        eprintln!("--- {n} in {}", image.funcs[i].name);
+                        eprint!("{}", loom_isa::disassemble_func(image, i, Some(pcs)));
+                    }
+                }
                 outcome
             }
             (None, _) => Outcome::Crash { message: "the image has no entry function".into(), location: None },

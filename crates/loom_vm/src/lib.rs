@@ -201,6 +201,12 @@ impl<'i> Vm<'i> {
         })
     }
 
+    /// How many times each instruction ran, by word of the image's code;
+    /// `None` unless Treadle is built with the `stats` feature.
+    pub fn pc_counts(&self) -> Option<&[u64]> {
+        cfg!(feature = "stats").then_some(self.machine.ctx.pc_counts.as_slice())
+    }
+
     /// Calls function `func` with `args`, one register each, and gives its
     /// results; or how it ended when it didn't return. Output is flushed
     /// before this returns.

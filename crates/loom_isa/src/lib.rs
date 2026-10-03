@@ -20,7 +20,7 @@ pub mod op;
 pub mod verify;
 pub mod word;
 
-pub use disasm::disassemble;
+pub use disasm::{disassemble, disassemble_func};
 pub use fmt::{Align, FmtItem, Spec, ValueKind};
 pub use image::{CRASHES, Func, Image, Line, NO_SITE, Site};
 pub use op::{Form, Op};
