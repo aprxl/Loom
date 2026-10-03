@@ -1,0 +1,15 @@
+// Display writes the fewest digits that read back as the same float, and
+// when two such decimals are equally close to it (a float that's exactly
+// halfway), the larger, as Rust's does: 93731167244648.125 is ...48.13, where
+// C's printf would take the even ...48.12.
+
+use std.io.print
+
+fn main() {
+    let a: f64 = 93731167244648.125
+    print("{a} {a:?} {-a} {a:.2}")
+    let b: f64 = 0.333 * 281474976710655.0
+    print("{b}")
+    let c: f32 = 16777216.5
+    print("{c} {0.5} {2.5} {1234567890123456.5} {0.125}")
+}

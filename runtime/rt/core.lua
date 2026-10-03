@@ -727,6 +727,38 @@ local function expand(mantissa, exp)
   return sign .. digits:sub(1, point) .. "." .. digits:sub(point + 1)
 end
 
+-- When `v` is exactly halfway between two decimals of `prec` digits (as
+-- 93731167244648.125 is between ...48.12 and ...48.13: `printf` takes the
+-- even one, Rust's Display the larger): the larger, as "d.ddde+XX".
+local function tie_up(v, prec)
+  local sign, first, rest, exp = sformat("%." .. (prec + 20) .. "e", v):match("^(-?)(%d)%.(%d+)e([-+]%d+)$")
+  if not sign then return nil end
+  local digits = first .. rest
+  if digits:sub(prec + 1, prec + 1) ~= "5" or digits:sub(prec + 2):find("[^0]") then return nil end
+  local chars = { digits:byte(1, prec) }
+  local i = prec
+  while i >= 1 do
+    if chars[i] == 57 then
+      chars[i] = 48
+      i = i - 1
+    else
+      chars[i] = chars[i] + 1
+      break
+    end
+  end
+  local e = tonumber(exp)
+  local head
+  if i == 0 then
+    -- 99…9 carried over: 1 followed by zeros, one power of ten up.
+    head = "1" .. srep("0", prec - 1)
+    e = e + 1
+  else
+    head = string.char(table.unpack(chars))
+  end
+  local mantissa = head:sub(1, 1) .. (prec > 1 and ("." .. head:sub(2)) or "")
+  return sign .. mantissa .. "e" .. sformat("%+d", e)
+end
+
 -- Rust-like float Display: "17", "-3", "1.5", "inf", "NaN". Debug adds ".0"
 -- to whole numbers. Never Lua's `tostring`, which differs by platform. An
 -- `f32` (`single`) gets the shortest digits that read back as the same f32.
@@ -743,7 +775,16 @@ local function fmt_float(v, debug, single)
       s = sformat("%." .. prec .. "g", v)
       local back = tonumber(s)
       if single then back = rt.f32(back) end
-      if back == v then break end
+      if back == v then
+        -- Halfway between two such decimals, Rust's takes the larger.
+        local up = tie_up(v, prec)
+        if up then
+          back = tonumber(up)
+          if single then back = rt.f32(back) end
+          if back == v then s = up end
+        end
+        break
+      end
     end
     local mantissa, exp = s:match("^(-?[%d%.]+)e([-+]%d+)$")
     if mantissa then s = expand(mantissa, tonumber(exp)) end
