@@ -407,10 +407,10 @@ location through the map and prints a rustc-style report.
 | 0 | success |
 | 1 | `main` returned an error |
 | 2 | compile or usage error |
-| 70 | internal error (a raw Lua error, meaning a Loom bug) |
+| 70 | internal error (a raw Lua error, or a panic of the compiler or Treadle: a Loom bug) |
 | 101 | unravel |
 | 130 | interrupted (Ctrl-C) |
-| n | `process.exit(n)` |
+| n | `process.exit(n)`, any `n`: `1`, `101` and `130` look like the codes above |
 
 `main ! E` shows its error (`error: …` on stderr) and exits with 1.
 

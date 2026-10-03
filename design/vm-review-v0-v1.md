@@ -166,6 +166,8 @@ the same as "main returned an error"; the plan says internal errors are
 70) with the terminal still raw. Fix: a Drop guard for raw mode, a panic hook
 that restores it and exits 70, and flush on the hard exit.
 
+*Fixed: Term restores raw mode on drop and from a static (a second Ctrl-C and a panic restore it too); a panic exits 70*
+
 **M9. Inlining adds frame slots per call site.** *Read.* `inline_into`
 appends the callee's slots to the caller for every inlined call (no sharing
 between sites that can't be live together). A big `main` with hundreds of

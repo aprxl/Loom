@@ -7,10 +7,22 @@
 //! it fails, and the program unravels: its `defer`s put the terminal back.
 
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::terminal;
+
+/// Whether raw mode is on, for the ways out that have no [`Term`] to ask: a
+/// second Ctrl-C, a panic.
+static RAW: AtomicBool = AtomicBool::new(false);
+
+/// Leaves raw mode if it's on, from anywhere.
+pub fn restore_terminal() {
+    if RAW.swap(false, Ordering::Relaxed) {
+        let _ = terminal::disable_raw_mode();
+    }
+}
 
 /// The terminal as one program run sees it.
 #[derive(Debug, Default)]
@@ -27,6 +39,7 @@ impl Term {
         let switched = if on { terminal::enable_raw_mode() } else { terminal::disable_raw_mode() };
         switched.map_err(|e| format!("can't switch the terminal's raw mode: {e}"))?;
         self.raw = on;
+        RAW.store(on, Ordering::Relaxed);
         Ok(())
     }
 
@@ -68,5 +81,12 @@ impl Term {
         if self.raw {
             let _ = self.raw_mode(false);
         }
+    }
+}
+
+impl Drop for Term {
+    /// However the run ends, the terminal is left as it was found.
+    fn drop(&mut self) {
+        self.restore();
     }
 }

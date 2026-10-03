@@ -152,11 +152,19 @@ impl From<Color> for ColorMode {
 const COMPILER_STACK: usize = 64 * 1024 * 1024;
 
 fn main() -> ExitCode {
+    // A panic is a bug in Loom: the terminal goes back as it was found (the
+    // thread's `Term` isn't dropped by a panic that ends it first), the
+    // message is printed, and the exit code is the internal error's.
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        loom_sys::term::restore_terminal();
+        default_hook(info);
+    }));
     let cli = Cli::parse();
     let spawned = std::thread::Builder::new().name("loom".into()).stack_size(COMPILER_STACK).spawn(move || run(cli));
     match spawned {
         // A panic has already been printed by the panic hook.
-        Ok(handle) => handle.join().unwrap_or(ExitCode::FAILURE),
+        Ok(handle) => handle.join().unwrap_or(ExitCode::from(EXIT_INTERNAL)),
         Err(e) => {
             eprintln!("error: couldn't start the compiler thread: {e}");
             ExitCode::FAILURE

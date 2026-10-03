@@ -41,6 +41,10 @@ pub fn install() -> Arc<AtomicBool> {
         let set = flag.clone();
         let _ = ctrlc::set_handler(move || {
             if !interrupt(&set) {
+                // The second one: out at once, but with the terminal as it
+                // was found. (Output the program hadn't flushed is lost.)
+                crate::term::restore_terminal();
+                let _ = std::io::Write::flush(&mut std::io::stdout());
                 std::process::exit(130);
             }
         });
