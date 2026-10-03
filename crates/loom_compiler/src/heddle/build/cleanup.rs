@@ -72,11 +72,18 @@ impl<'a> Builder<'a> {
         let id = self.f.next_cleanup;
         self.f.next_cleanup += 1;
         // Just under the statement's scope, which then starts after it.
-        match self.f.stmt_start.and_then(|depth| self.f.scopes.get_mut(depth - 1)) {
-            Some(start) => {
-                let at = *start;
-                *start += 1;
+        match self.f.stmt_start.filter(|&depth| depth >= 1 && depth <= self.f.scopes.len()) {
+            Some(depth) => {
+                let at = self.f.scopes[depth - 1];
                 self.f.cleanups.insert(at, Cleanup { id, kind, live: true });
+                // Everything above moved up one: the statement's scope and
+                // the scopes opened inside it (a loop's body, say) start
+                // after the new cleanup.
+                for start in &mut self.f.scopes[depth - 1..] {
+                    if *start >= at {
+                        *start += 1;
+                    }
+                }
             }
             None => self.f.cleanups.push(Cleanup { id, kind, live: true }),
         }

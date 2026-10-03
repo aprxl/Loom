@@ -1,0 +1,31 @@
+// `for` over a stream whose items own memory (Strings, lists): each item is
+// dropped at the end of its iteration, and the stream itself only when the
+// loop ends, `break` and `continue` included.
+
+use std.io.print
+
+fn main() {
+    var m: Map[u32, String] = Map()
+    m[1] = "one"
+    m[2] = "two"
+    m[3] = "three"
+    for v in m.values() { print(v) }
+    for (k, v) in m { print("{k}={v}") }
+    for v in m.values() {
+        if v.len() == 3 { continue }
+        print("long: {v}")
+    }
+    for v in m.values() {
+        if v == "two" { break }
+        print("before two: {v}")
+    }
+    print(m.len())
+
+    // Items made on the way: a stream of Strings from a list's `map`.
+    let words = ["a", "bb", "ccc"]
+    for w in words.map(x => "<{x}>") { print(w) }
+    for (i, w) in words.map(x => "{x}{x}").indexed() { print("{i}: {w}") }
+
+    // A temporary map, owned by the stream.
+    for (k, v) in [10: "ten", 20: "twenty"] { print("{k} {v}") }
+}

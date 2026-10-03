@@ -1002,7 +1002,11 @@ impl<'a> Builder<'a> {
             result: super::LoopResult::None,
             scopes: scopes - 1,
         });
+        // What the pattern binds lives for one iteration: not under the
+        // `for` statement's temporaries, which last until the loop ends.
+        let saved = self.f.stmt_start.take();
         let mut done = self.bind_irrefutable(pat, x, item);
+        self.f.stmt_start = saved;
         if done.is_some() {
             let join = self.join(self.tcx().unit, e.span)?;
             done = self.block_into(body, &join);
