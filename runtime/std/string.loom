@@ -34,9 +34,11 @@ pub warp Str {
     pub fn ends_with(self, suffix: str) -> bool
     /// The byte position of the first `part`, if there is one.
     pub fn find(self, part: str) -> ?usize
-    /// Without whitespace at either end.
+    /// Without whitespace at either end: ASCII whitespace (space, tab, newline, carriage return, vertical tab, form feed). Other characters, a no-break space say, stay.
     pub fn trim(self) -> str
+    /// Without ASCII whitespace at the start.
     pub fn trim_start(self) -> str
+    /// Without ASCII whitespace at the end.
     pub fn trim_end(self) -> str
     /// Upper case, for ASCII letters.
     pub fn to_upper(self) -> String
@@ -70,13 +72,19 @@ pub warp Str {
 pub warp Char {
     /// `0` through `9`.
     pub fn is_digit(self) -> bool
+    /// `a` through `z`, or `A` through `Z`: `'é'` isn't.
     pub fn is_alphabetic(self) -> bool
+    /// ASCII letters and `0` through `9`.
     pub fn is_alphanumeric(self) -> bool
-    /// A space, tab, newline, or carriage return.
+    /// ASCII whitespace: a space, tab, newline, carriage return, vertical tab or form feed.
     pub fn is_whitespace(self) -> bool
+    /// `A` through `Z`: `'É'` isn't.
     pub fn is_upper(self) -> bool
+    /// `a` through `z`: `'é'` isn't.
     pub fn is_lower(self) -> bool
+    /// Upper case for an ASCII letter; any other character stays as it is.
     pub fn to_upper(self) -> char
+    /// Lower case for an ASCII letter; any other character stays as it is.
     pub fn to_lower(self) -> char
     /// Its value as a digit in `radix`: `'f'.to_digit(16)` is `15`.
     pub fn to_digit(self, radix: u32 = 10) -> ?u32

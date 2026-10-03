@@ -122,6 +122,8 @@ it with a fixture (`methods.rs:127,160`).
 docs and the language reference say it too, since the spec reads as if text
 is Unicode (`char_count`, `chars()` and slicing are).
 
+*Fixed: The std docs say each text and char method is ASCII-only (both backends agree; fixture ascii_text)*
+
 **M4. The unravel location is the statement, not the expression.**
 *Reproduced, both backends agree:* an out-of-bounds slice in `let m =
 s[2..4]` reports at the `let`; `return xs[5]` reports at `return`. A call

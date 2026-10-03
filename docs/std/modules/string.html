@@ -161,21 +161,21 @@
 <span class="sig">fn trim(self) -&gt; str</span>
 
 </div>
-<p class="member-doc">Without whitespace at either end.</p>
+<p class="member-doc">Without whitespace at either end: ASCII whitespace (space, tab, newline, carriage return, vertical tab, form feed). Other characters, a no-break space say, stay.</p>
 </div>
 <div class="member" id="Str.trim_start">
 <div class="member-head">
 <span class="sig">fn trim_start(self) -&gt; str</span>
-<span class="badge todo">TODO</span>
+
 </div>
-<p class="member-doc empty">undocumented</p>
+<p class="member-doc">Without ASCII whitespace at the start.</p>
 </div>
 <div class="member" id="Str.trim_end">
 <div class="member-head">
 <span class="sig">fn trim_end(self) -&gt; str</span>
-<span class="badge todo">TODO</span>
+
 </div>
-<p class="member-doc empty">undocumented</p>
+<p class="member-doc">Without ASCII whitespace at the end.</p>
 </div>
 <div class="member" id="Str.to_upper">
 <div class="member-head">
@@ -280,51 +280,51 @@
 <div class="member" id="Char.is_alphabetic">
 <div class="member-head">
 <span class="sig">fn is_alphabetic(self) -&gt; bool</span>
-<span class="badge todo">TODO</span>
+
 </div>
-<p class="member-doc empty">undocumented</p>
+<p class="member-doc"><code>a</code> through <code>z</code>, or <code>A</code> through <code>Z</code>: <code>'é'</code> isn't.</p>
 </div>
 <div class="member" id="Char.is_alphanumeric">
 <div class="member-head">
 <span class="sig">fn is_alphanumeric(self) -&gt; bool</span>
-<span class="badge todo">TODO</span>
+
 </div>
-<p class="member-doc empty">undocumented</p>
+<p class="member-doc">ASCII letters and <code>0</code> through <code>9</code>.</p>
 </div>
 <div class="member" id="Char.is_whitespace">
 <div class="member-head">
 <span class="sig">fn is_whitespace(self) -&gt; bool</span>
 
 </div>
-<p class="member-doc">A space, tab, newline, or carriage return.</p>
+<p class="member-doc">ASCII whitespace: a space, tab, newline, carriage return, vertical tab or form feed.</p>
 </div>
 <div class="member" id="Char.is_upper">
 <div class="member-head">
 <span class="sig">fn is_upper(self) -&gt; bool</span>
-<span class="badge todo">TODO</span>
+
 </div>
-<p class="member-doc empty">undocumented</p>
+<p class="member-doc"><code>A</code> through <code>Z</code>: <code>'É'</code> isn't.</p>
 </div>
 <div class="member" id="Char.is_lower">
 <div class="member-head">
 <span class="sig">fn is_lower(self) -&gt; bool</span>
-<span class="badge todo">TODO</span>
+
 </div>
-<p class="member-doc empty">undocumented</p>
+<p class="member-doc"><code>a</code> through <code>z</code>: <code>'é'</code> isn't.</p>
 </div>
 <div class="member" id="Char.to_upper">
 <div class="member-head">
 <span class="sig">fn to_upper(self) -&gt; char</span>
-<span class="badge todo">TODO</span>
+
 </div>
-<p class="member-doc empty">undocumented</p>
+<p class="member-doc">Upper case for an ASCII letter; any other character stays as it is.</p>
 </div>
 <div class="member" id="Char.to_lower">
 <div class="member-head">
 <span class="sig">fn to_lower(self) -&gt; char</span>
-<span class="badge todo">TODO</span>
+
 </div>
-<p class="member-doc empty">undocumented</p>
+<p class="member-doc">Lower case for an ASCII letter; any other character stays as it is.</p>
 </div>
 <div class="member" id="Char.to_digit">
 <div class="member-head">
