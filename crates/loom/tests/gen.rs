@@ -85,6 +85,8 @@ enum Ty {
     Sum,
     List(Int),
     Opt(Int),
+    /// A `String`.
+    Str,
 }
 
 #[derive(Clone, Debug)]
@@ -151,6 +153,7 @@ impl Gen {
             Ty::Sum => "S".into(),
             Ty::List(i) => format!("List[{}]", i.name()),
             Ty::Opt(i) => format!("?{}", i.name()),
+            Ty::Str => "String".into(),
         }
     }
 
@@ -221,6 +224,38 @@ impl Gen {
                 format!("[{}]", items.join(", "))
             }
             Ty::Opt(i) => self.opt_expr(i, depth),
+            Ty::Str => self.str_expr(depth),
+        }
+    }
+
+    /// A `String`: a literal or a template made into one, or a copy of (or
+    /// something made from) a `String` variable. Variables are only ever
+    /// copied from, so none is moved.
+    fn str_expr(&mut self, depth: u32) -> String {
+        let words = ["", "a", "ab", "héllo", "x y", "Zed", "  pad  ", "line\n", "q\"q", "é"];
+        let vars = self.vars(|v| v.ty == Ty::Str);
+        let var = |this: &mut Self| vars[this.rng.below(vars.len() as u64) as usize].name.clone();
+        match self.rng.below(if depth == 0 { 3 } else { 9 }) {
+            0 => format!("{:?}.to_string()", self.rng.pick(&words)),
+            1 if !vars.is_empty() => format!("{}.copy()", var(self)),
+            2 | 1 => {
+                // A template of variables and literals (no braces inside).
+                let (i, j) = (self.int(), self.int());
+                let (a, b) = (self.int_expr(i, 0), self.int_expr(j, 0));
+                format!("\"<{{{a}}}|{{{b}}}>\"")
+            }
+            3 if !vars.is_empty() => format!("{}.to_upper()", var(self)),
+            4 if !vars.is_empty() => format!("{}.to_lower()", var(self)),
+            5 if !vars.is_empty() => {
+                let n = self.rng.below(3);
+                format!("{}.repeat({n})", var(self))
+            }
+            6 if !vars.is_empty() => {
+                let (from, to) = (self.rng.pick(&["a", "é", "", " "]), self.rng.pick(&["", "xx", "-"]));
+                format!("{}.replace({from:?}, {to:?})", var(self))
+            }
+            7 if !vars.is_empty() => format!("{}.trim().to_string()", var(self)),
+            _ => format!("{:?}.to_string()", self.rng.pick(&words)),
         }
     }
 
@@ -244,7 +279,7 @@ impl Gen {
 
     fn int_expr(&mut self, i: Int, depth: u32) -> String {
         let d = depth.saturating_sub(1);
-        let choice = if depth == 0 { self.rng.below(2) } else { self.rng.below(15) };
+        let choice = if depth == 0 { self.rng.below(2) } else { self.rng.below(16) };
         match choice {
             0 => self.int_lit(i),
             1 => {
@@ -334,6 +369,10 @@ impl Gen {
                 }
             }
             13 => format!("({} as| {})", self.f64_expr(d), i.name()),
+            14 => match self.vars(|v| v.ty == Ty::Str).first() {
+                Some(s) => format!("({}.len() as% {})", s.name, i.name()),
+                None => self.int_lit(i),
+            },
             _ => format!("({} mend {})", self.opt_expr(i, d), self.int_lit(i)),
         }
     }
@@ -393,14 +432,15 @@ impl Gen {
 
     /// A type for a new local.
     fn local_ty(&mut self) -> Ty {
-        match self.rng.below(10) {
+        match self.rng.below(12) {
             0..=3 => Ty::Int(self.int()),
             4 => Ty::Bool,
             5 => Ty::F64,
             6 => Ty::Rec,
             7 => Ty::Sum,
             8 => Ty::List(self.int()),
-            _ => Ty::Opt(self.int()),
+            9 => Ty::Opt(self.int()),
+            _ => Ty::Str,
         }
     }
 
@@ -440,10 +480,15 @@ impl Gen {
             2 => self.print(indent),
             3 => {
                 // Change a `var`.
-                let vs =
-                    self.vars(|v| v.mutable && matches!(v.ty, Ty::Int(_) | Ty::F64 | Ty::Bool | Ty::Rec | Ty::List(_)));
+                let vs = self.vars(|v| {
+                    v.mutable && matches!(v.ty, Ty::Int(_) | Ty::F64 | Ty::Bool | Ty::Rec | Ty::List(_) | Ty::Str)
+                });
                 let Some(v) = vs.first().cloned() else { return self.print(indent) };
                 match v.ty {
+                    Ty::Str if self.rng.chance(60) => {
+                        let piece = self.rng.pick(&["a", "é", "xyz", " ", ""]);
+                        format!("{pad}{}.push_str({piece:?})\n", v.name)
+                    }
                     Ty::Rec => {
                         let a = self.a;
                         format!("{pad}{}.a = {}\n", v.name, self.int_expr(a, 2))
@@ -797,4 +842,18 @@ fn generated_programs_agree() {
 #[ignore = "long: 20 000 seeds"]
 fn many_generated_programs_agree() {
     check_seeds(300..20_300);
+}
+
+/// The generator makes what it's meant to (a kind of value it never made
+/// would test nothing).
+#[test]
+fn the_generator_covers_its_kinds() {
+    let mut text = String::new();
+    for seed in 0..300 {
+        let (head, main, tail) = Gen::new(seed).program();
+        text.push_str(&format!("{head}{}{tail}", main.concat()));
+    }
+    for (what, needle) in [("a String variable", ": String = "), ("push_str", ".push_str(")] {
+        assert!(text.matches(needle).count() >= 50, "{what}: {} in 300 programs", text.matches(needle).count());
+    }
 }
