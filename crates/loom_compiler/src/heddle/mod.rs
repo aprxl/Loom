@@ -22,6 +22,7 @@
 mod build;
 mod inline;
 mod print;
+mod tidy;
 mod verify;
 
 pub(crate) use build::rewrite;

@@ -13,12 +13,14 @@ use super::{Block, BlockId, Edge, Func, InstKind, Module, Term, Value};
 /// The most instructions (constants aside) a function inlined may have.
 const SMALL: usize = 20;
 
-/// `module` with the calls of its small transparent functions inlined.
+/// `module` with the calls of its small transparent functions inlined, and
+/// each function tidied up after (see `tidy`).
 pub fn inline(module: &Module) -> Module {
     let small: Vec<bool> = module.funcs.iter().map(inlinable).collect();
     let mut out = module.clone();
     for (i, f) in out.funcs.iter_mut().enumerate() {
         inline_into(f, i, module, &small);
+        super::tidy::tidy(f);
     }
     out
 }
