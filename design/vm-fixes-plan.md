@@ -1,5 +1,22 @@
 # Fixing the V0/V1 review (design/vm-review-v0-v1.md)
 
+**Status (2026-10-03): all 18 cards are done**, each its own commit, each
+noted under its item in the review. What differed from the plan:
+
+- Card 8 put slots over 64 KiB on the heap in codegen (a cell in the frame,
+  allocated by the prologue, freed at every return and landing pad's end),
+  not in the builder; a frame with its slots after the registers can't work,
+  since a callee's frame overlays what's above the call window.
+- Card 9: the call through a function value with over 255 arguments was
+  already an error (reported as "not implemented yet"); a function with over
+  65 535 values panicked in the register allocator. Limits are U0103 now.
+- Card 12: `"".split(",")` was already one empty part.
+- Found on the way, and fixed in commits of their own: `collect()` leaking its
+  partial list when the stream unravelled (card 5), a `for` over a stream of
+  Strings dropping the stream every iteration and keeping every binding
+  until the block ended (cleanup scopes), and a float exactly halfway
+  between two shortest decimals printing differently on Lua (card 18).
+
 Work through the cards **in order**, one card per commit (a card that says
 "two commits" means two). Each card names its review item (H1, M5, …); read
 that item in `design/vm-review-v0-v1.md` first. When a card is done, add a

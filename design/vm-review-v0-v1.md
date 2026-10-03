@@ -3,7 +3,9 @@
 A read-through of the V0/V1 code (`loom_vm`, `loom_isa`, `codegen.rs`, the
 Heddle passes and builders, the host and interrupt plumbing, the tests and
 the benchmarks), plus probe programs run on both backends. Nothing was
-fixed: this is the list to work through later.
+fixed when it was written; `design/vm-fixes-plan.md` worked through it, and
+each item it fixed says so (*Fixed: …*). What's left is the performance
+list (§2), M4, M6 and the look-aheads (§4).
 
 **Evidence tags.** *Reproduced* means a probe program showed it (numbers
 are release builds, this machine). *Read* means it comes from reading the
