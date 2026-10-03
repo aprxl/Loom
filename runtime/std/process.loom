@@ -1,0 +1,7 @@
+// The running program.
+
+extern "lua" {
+    /// Ends the program with exit code `code`: it unwinds first, as for
+    /// an unravel, so its `defer`s run and what it owns is dropped.
+    pub fn exit(code: u8) -> never
+}

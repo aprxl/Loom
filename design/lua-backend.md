@@ -409,9 +409,12 @@ location through the map and prints a rustc-style report.
 
 `main ! E` shows its error (`error: …` on stderr) and exits with 1.
 
-Implemented so far: 0, 1, 2, 70 and 101. Still to come: Ctrl-C
-(130), `process.exit`, an instruction budget, and `--lua PATH` to run a bundle
-in an external interpreter.
+Implemented so far: all of them. `process.exit(n)` and Ctrl-C unwind the
+program as an unravel does, so its `defer`s run, before it exits; Ctrl-C is
+a flag an instruction hook checks every 10 000 instructions, and a second
+Ctrl-C while the program unwinds exits at once. Still to come: an
+instruction budget, and `--lua PATH` to run a bundle in an external
+interpreter.
 
 The host gives the program `env.args()` (the Loom file's path, then the
 arguments after `--`), `time.sleep`, and the terminal: `term.raw_mode` and

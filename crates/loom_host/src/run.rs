@@ -21,6 +21,10 @@ use loom_sys::term::Term;
 
 /// The marker at the start of every unravel message (`rt.MARK`).
 pub const UNRAVEL_MARK: &str = "\u{1f}LOOM\u{1f}";
+/// After [`UNRAVEL_MARK`]: `process.exit`, and its code follows.
+const EXIT_MARK: &str = "\u{1f}exit ";
+/// After [`UNRAVEL_MARK`]: Ctrl-C.
+const INTERRUPT_MARK: &str = "\u{1f}interrupt";
 
 /// How much memory a program may use. Past it, it unravels; without a
 /// limit, an allocation the system refuses (`s.repeat(1 << 40)`) aborts
@@ -34,6 +38,7 @@ pub fn run_bundle(bundle: &str, map: Option<&SourceMap>, host: Host) -> Outcome 
     let stdout = matches!(host.output, Output::Stdout);
     let term = Rc::new(RefCell::new(Term::default()));
     let result = install_host(&lua, host, term.clone()).and_then(|()| {
+        watch_interrupt(&lua)?;
         let main: Function = lua.load(bundle).set_name("=bundle").eval()?;
         // `main ! E` returns its error's text when it fails.
         main.call::<Option<mlua::String>>(())
@@ -43,6 +48,21 @@ pub fn run_bundle(bundle: &str, map: Option<&SourceMap>, host: Host) -> Outcome 
         let _ = std::io::stdout().flush();
     }
     outcome(result, map)
+}
+
+/// With Ctrl-C's handler installed, checks its flag every 10 000
+/// instructions (coroutines' too), and unwinds the program once it's set:
+/// once, so its `defer`s run to the end.
+fn watch_interrupt(lua: &Lua) -> mlua::Result<()> {
+    let Some(flag) = loom_sys::interrupt::installed() else { return Ok(()) };
+    let raised = std::cell::Cell::new(false);
+    lua.set_global_hook(mlua::HookTriggers::new().every_nth_instruction(10_000), move |_, _| {
+        if !raised.get() && flag.load(std::sync::atomic::Ordering::Relaxed) {
+            raised.set(true);
+            return Err(mlua::Error::runtime(format!("{UNRAVEL_MARK}{INTERRUPT_MARK}")));
+        }
+        Ok(mlua::VmState::Continue)
+    })
 }
 
 /// One test of a test bundle, and how it went.
@@ -197,6 +217,12 @@ fn classify(text: &str, map: Option<&SourceMap>) -> Outcome {
         None => (None, text),
     };
     match rest.strip_prefix(UNRAVEL_MARK) {
+        // `process.exit(code)` and Ctrl-C unwind as unravels do.
+        Some(message) if message.starts_with(EXIT_MARK) => match message[EXIT_MARK.len()..].parse() {
+            Ok(code) => Outcome::Exit(code),
+            Err(_) => Outcome::Crash { message: format!("a bad exit code: {message}"), location },
+        },
+        Some(message) if message == INTERRUPT_MARK => Outcome::Interrupted,
         Some(message) => Outcome::Unravel { message: message.to_string(), location },
         // Recursion that doesn't stop is the program's, not Loom's.
         None if rest.starts_with("stack overflow") || rest.starts_with("C stack overflow") => {

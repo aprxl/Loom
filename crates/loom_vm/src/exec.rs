@@ -79,6 +79,8 @@ struct Env<'e, 'i> {
     ticks: i32,
     /// What's unwinding the stack, while landing pads run.
     in_flight: Option<Fault>,
+    /// The program was interrupted, and is unwinding.
+    stopping: bool,
 }
 
 #[derive(Debug)]
@@ -187,6 +189,7 @@ impl<'i> Machine<'i> {
             seg_end,
             ticks: TICKS,
             in_flight: None,
+            stopping: false,
         };
         // Only `pc` and `fp` (and each instruction's word) stay in registers
         // through the loop; the rest is read from `env` where it's needed.
@@ -279,7 +282,9 @@ impl<'i> Machine<'i> {
                         env.ticks -= 1;
                         if env.ticks < 0 {
                             env.ticks = TICKS;
-                            if interrupted(&env.interrupt) {
+                            // Once: the unwinding runs `defer`s to the end.
+                            if !env.stopping && interrupted(&env.interrupt) {
+                                env.stopping = true;
                                 throw!(Trap::Interrupt);
                             }
                         }

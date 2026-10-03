@@ -26,6 +26,7 @@ loom_compiler.workspace = true
 loom_host.workspace = true
 loom_isa.workspace = true
 loom_vm.workspace = true
+loom_sys.workspace = true
 
 [lints]
 workspace = true

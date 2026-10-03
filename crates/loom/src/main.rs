@@ -35,6 +35,7 @@ const EXIT_FAILED: u8 = 1;
 const EXIT_COMPILE_ERROR: u8 = 2;
 const EXIT_INTERNAL: u8 = 70;
 const EXIT_UNRAVEL: u8 = 101;
+const EXIT_INTERRUPTED: u8 = 130;
 
 /// How many diagnostics one report shows; the rest are counted. Past the
 /// first few, they're mostly the same mistake again.
@@ -375,8 +376,8 @@ fn run_vm(path: &Path, args: &[String], color: ColorMode) -> ExitCode {
         let args = std::iter::once(path.display().to_string()).chain(args.iter().cloned()).collect();
         let host = Host { output: Output::Stdout, sandbox: false, args };
         let mut trace = Vec::new();
-        let outcome = match (compiled.image.entry, loom_vm::Vm::new(&compiled.image, host, &loom_vm::Config::default()))
-        {
+        let config = loom_vm::Config { interrupt: Some(loom_sys::interrupt::install()), ..loom_vm::Config::default() };
+        let outcome = match (compiled.image.entry, loom_vm::Vm::new(&compiled.image, host, &config)) {
             (Some(entry), Ok(mut vm)) => {
                 let outcome = match vm.call(entry, &[]) {
                     Ok(_) => vm.leaks().unwrap_or(Outcome::Finished),
@@ -451,6 +452,7 @@ fn lua_host(bundle: &Path, program: Option<String>, args: Vec<String>) -> ExitCo
     };
     let program = program.unwrap_or_else(|| bundle.display().to_string());
     let host = Host { output: Output::Stdout, sandbox: false, args: std::iter::once(program).chain(args).collect() };
+    loom_sys::interrupt::install();
     let outcome = loom_host::run_bundle(&lua, map.as_ref(), host);
     if let Some(text) = describe(&outcome) {
         eprint!("{text}");
@@ -542,13 +544,16 @@ fn exit_code(outcome: &Outcome) -> ExitCode {
         Outcome::Unravel { .. } => EXIT_UNRAVEL,
         Outcome::Failed { .. } => EXIT_FAILED,
         Outcome::Crash { .. } => EXIT_INTERNAL,
+        Outcome::Exit(code) => *code,
+        Outcome::Interrupted => EXIT_INTERRUPTED,
     })
 }
 
 /// What went wrong, for a run that didn't finish: the message, and where.
 fn describe(outcome: &Outcome) -> Option<String> {
     Some(match outcome {
-        Outcome::Finished => return None,
+        Outcome::Finished | Outcome::Exit(_) => return None,
+        Outcome::Interrupted => "interrupted (Ctrl-C)\n".into(),
         Outcome::Unravel { message, location } => {
             format!("unravel: {message}\n{}", location_text(location.as_ref()))
         }

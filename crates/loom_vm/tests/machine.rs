@@ -150,7 +150,7 @@ fn an_interrupt_stops_a_loop() {
     let code = vec![word_i32(Op::Loop, 0, 0)];
     let config = Config { interrupt: Some(Arc::new(AtomicBool::new(true))), ..Config::default() };
     let (outcome, _) = exec(&image(vec![("main", 1, 0, 0, code)]), &config);
-    assert!(matches!(&outcome, Outcome::Unravel { message, .. } if message == "interrupted (Ctrl-C)"), "{outcome:?}");
+    assert_eq!(outcome, Outcome::Interrupted);
 }
 
 #[test]

@@ -155,6 +155,8 @@ fn internal(span: Span, outcome: &Outcome) -> Diagnostic {
             message.clone()
         }
         Outcome::Finished => "it finished".into(),
+        Outcome::Exit(code) => format!("it called `process.exit({code})`"),
+        Outcome::Interrupted => "it was interrupted".into(),
     };
     Diagnostic::error(codes::K0103, format!("compile-time code failed inside Loom: {message}"))
         .primary(span, "while running this")

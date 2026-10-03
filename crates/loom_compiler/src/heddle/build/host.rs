@@ -1,5 +1,5 @@
-//! What std asks of the machine: `std.env`, `std.fs`, `std.time` and
-//! `std.term`, through `loom_vm`'s host natives.
+//! What std asks of the machine: `std.env`, `std.fs`, `std.process`,
+//! `std.time` and `std.term`, through `loom_vm`'s host natives.
 //!
 //! A `File` is its path (a `String`): each write opens the file, adds to
 //! it and closes it, as on Lua, so nothing is left open however the
@@ -49,6 +49,13 @@ impl<'a> Builder<'a> {
                 self.native("env.args", vec![dst], 0);
                 self.own_temp(dst, ret);
                 Some(Val::Mem(dst))
+            }
+            "std.process.exit" => {
+                let (v, ty) = arg(self, 0)?;
+                let code = self.regs(v, ty, span)?[0];
+                self.native("process.exit", vec![code], 0);
+                self.terminate(crate::heddle::Term::Crash(1));
+                None
             }
             "std.time.sleep" => {
                 // A `Duration` is its nanoseconds.

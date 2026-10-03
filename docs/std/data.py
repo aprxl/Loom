@@ -353,6 +353,15 @@ MODULES = [
 },
 
 {
+  "name": "process",
+  "summary": "The running program.",
+  "functions": [
+    {"name": "exit", "suffix": "(code: u8) -> never", "extern": True,
+     "doc": "Ends the program with exit code `code`: it unwinds first, as for an unravel, so its `defer`s run and what it owns is dropped."},
+  ],
+},
+
+{
   "name": "rand",
   "summary": "Pseudo-random numbers.",
   "types": [

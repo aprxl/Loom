@@ -106,6 +106,8 @@ pub const NATIVES: &[NativeSig] = &[
     sig("env.get", 3, 0, NativeImm::None),
     sig("env.args", 1, 0, NativeImm::None),
     sig("time.sleep", 1, 0, NativeImm::None),
+    // `process.exit(code)`: never returns (it unwinds).
+    sig("process.exit", 1, 0, NativeImm::None),
     sig("term.raw_mode", 1, 0, NativeImm::None),
     sig("term.poll_keys", 2, 1, NativeImm::None),
     sig("fs.append", 3, 1, NativeImm::None),

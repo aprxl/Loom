@@ -66,6 +66,7 @@ const EXTERNS: &[&str] = &[
     "std.env.args",
     "std.fs.read",
     "std.fs.read_text",
+    "std.process.exit",
     "std.time.sleep",
     "std.term.raw_mode",
     "std.term.poll_keys",

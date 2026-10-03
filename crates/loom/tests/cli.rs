@@ -340,3 +340,81 @@ fn backtraces_list_every_frame_on_treadle() {
     assert!(frames[0].ends_with(":2:4"), "{err}");
     assert!(frames[1].ends_with(":3:4"), "{err}");
 }
+
+#[test]
+fn process_exit_unwinds_then_exits_with_its_code_on_both_backends() {
+    let path = temp_source(
+        "exit",
+        "use std.io.print
+use std.process
+
+fn work(n: u32) -> u32 {
+    defer print(\"leaving work\")
+    if n > 2 { process.exit(3) }
+    n + 1
+}
+
+fn main() {
+    defer print(\"main's defer\")
+    let names: List[String] = [\"a\", \"b\"]
+    print(work(1))
+    print(work(5))
+    print(\"not reached {names}\")
+}
+",
+    );
+    let file = path.to_str().expect("utf-8 path");
+    for backend in ["lua", "vm"] {
+        let out = loom(&["run", "--backend", backend, file]);
+        assert_eq!(out.status.code(), Some(3), "{backend}: {}", text(&out.stderr));
+        assert_eq!(
+            text(&out.stdout),
+            "leaving work
+2
+leaving work
+main's defer
+",
+            "{backend}"
+        );
+        assert_eq!(text(&out.stderr), "", "{backend}");
+    }
+}
+
+#[test]
+fn ctrl_c_unwinds_then_exits_130_on_both_backends() {
+    // Through the flag the handler sets: LOOM_INTERRUPT_AFTER_MS sets it.
+    let path = temp_source(
+        "interrupt",
+        "use std.io.print
+
+fn main() {
+    defer print(\"cleaned up\")
+    var n = 0u64
+    print(\"spinning\")
+    while true { n +%= 1 }
+}
+",
+    );
+    let file = path.to_str().expect("utf-8 path");
+    for backend in ["lua", "vm"] {
+        let out = Command::new(env!("CARGO_BIN_EXE_loom"))
+            .args(["--color", "never", "run", "--backend", backend, file])
+            .env("LOOM_INTERRUPT_AFTER_MS", "200")
+            .output()
+            .expect("the loom binary runs");
+        assert_eq!(out.status.code(), Some(130), "{backend}: {}", text(&out.stderr));
+        assert_eq!(
+            text(&out.stdout),
+            "spinning
+cleaned up
+",
+            "{backend}"
+        );
+        assert_eq!(
+            text(&out.stderr),
+            "interrupted (Ctrl-C)
+",
+            "{backend}"
+        );
+    }
+}

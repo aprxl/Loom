@@ -912,7 +912,10 @@ impl<'a> Builder<'a> {
     /// Ends the current block. Control has left it; code built next is dead
     /// until [`switch_to`](Self::switch_to).
     fn terminate(&mut self, term: Term) {
-        let unwind = if matches!(term, Term::Unravel { .. } | Term::UnravelMsg) { self.pad() } else { None };
+        // A jump may be a loop's back edge, where an interrupt is noticed:
+        // it unwinds as an unravel would.
+        let unwind =
+            if matches!(term, Term::Unravel { .. } | Term::UnravelMsg | Term::Jump(_)) { self.pad() } else { None };
         let b = self.cur_block();
         for e in term.edges() {
             self.f.preds[e.block.0 as usize].push(b);

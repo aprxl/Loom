@@ -65,6 +65,8 @@ pub(crate) enum Trap {
     OutOfMemory,
     StackOverflow,
     Interrupt,
+    /// `process.exit(code)`: unwinds as an unravel does, then ends the run.
+    Exit(u8),
     Unravel(String),
     /// `main` returned this error.
     Failed(String),
@@ -85,6 +87,7 @@ impl Trap {
             Trap::OutOfMemory => "out of memory".into(),
             Trap::StackOverflow => "stack overflow: too many calls inside each other".into(),
             Trap::Interrupt => "interrupted (Ctrl-C)".into(),
+            Trap::Exit(code) => format!("exit {code}"),
             Trap::Unravel(message) | Trap::Failed(message) | Trap::Crash(message) => message.clone(),
         }
     }
@@ -190,6 +193,8 @@ impl<'i> Vm<'i> {
             match fault.trap {
                 Trap::Crash(message) => Outcome::Crash { message, location },
                 Trap::Failed(message) => Outcome::Failed { message },
+                Trap::Exit(code) => Outcome::Exit(code),
+                Trap::Interrupt => Outcome::Interrupted,
                 trap => Outcome::Unravel { message: trap.message(), location },
             }
         })

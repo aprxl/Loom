@@ -410,7 +410,8 @@ pub struct Block {
     /// `None` only while building.
     pub term: Option<Term>,
     pub term_span: Option<Span>,
-    /// The landing pad of an unravelling terminator.
+    /// The landing pad of an unravelling terminator, or of a jump (a loop's
+    /// back edge is where Treadle notices an interrupt).
     pub term_unwind: Option<BlockId>,
 }
 

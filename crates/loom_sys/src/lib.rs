@@ -5,6 +5,7 @@
 //! with an [`Outcome`], whose unravels and crashes carry the Loom
 //! [`Location`] they happened at.
 
+pub mod interrupt;
 pub mod term;
 
 use std::cell::RefCell;
@@ -58,6 +59,10 @@ pub enum Outcome {
     Failed {
         message: String,
     },
+    /// `process.exit(code)`, once the program unwound (its `defer`s ran).
+    Exit(u8),
+    /// Ctrl-C, once the program unwound.
+    Interrupted,
     /// Something that isn't the program's fault: a bug in Loom itself.
     Crash {
         message: String,

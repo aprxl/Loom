@@ -18,6 +18,7 @@ pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
         "env.get" => env_get,
         "env.args" => env_args,
         "time.sleep" => sleep,
+        "process.exit" => exit,
         "term.raw_mode" => raw_mode,
         "term.poll_keys" => poll_keys,
         "fs.append" => fs_append,
@@ -65,6 +66,11 @@ fn env_args(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
         d.add(2).write(n);
     }
     Ok(())
+}
+
+/// `process.exit(code)`: unwinds, and the run ends with the code.
+fn exit(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    Err(Trap::Exit(args[0] as u8))
 }
 
 /// `time.sleep(nanos)`.

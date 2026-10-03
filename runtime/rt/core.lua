@@ -955,6 +955,12 @@ local function needs_host(what)
   error(MARK .. what .. " needs `loom run`: this Lua has no Loom host", 3)
 end
 
+-- `process.exit(code)`: unwinds like an unravel (`defer`s run), and the
+-- host ends the run with the code.
+rt.ext["std.process.exit"] = function(code)
+  error(MARK .. "\31exit " .. code, 0)
+end
+
 rt.ext["std.time.sleep"] = function(d)
   if not host then needs_host("time.sleep") end
   host.sleep(d.nanos)
