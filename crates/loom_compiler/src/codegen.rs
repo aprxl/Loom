@@ -52,8 +52,48 @@ const CELL_WORDS: u64 = 3;
 /// function has big slots to free: the code at the end.
 const FREE_PAD: usize = usize::MAX;
 
+/// A frame needs more registers than a 16-bit number can name.
+fn too_big(f: &Func) -> CodegenError {
+    CodegenError::Limit(format!(
+        "`{}` needs more than 65 535 registers in a frame: Treadle's limit (a function with that many values, or calls with that many arguments)",
+        f.name
+    ))
+}
+
+/// Why a module has no bytecode.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CodegenError {
+    /// The program is over one of Treadle's limits (registers in a frame,
+    /// distance of a jump, arguments of a function value…): not a bug.
+    Limit(String),
+    /// Heddle that codegen doesn't know what to do with: a bug in Loom.
+    Bug(String),
+}
+
+impl std::fmt::Display for CodegenError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CodegenError::Limit(m) | CodegenError::Bug(m) => f.write_str(m),
+        }
+    }
+}
+
+impl std::error::Error for CodegenError {}
+
+impl From<String> for CodegenError {
+    fn from(m: String) -> Self {
+        CodegenError::Bug(m)
+    }
+}
+
+impl From<&str> for CodegenError {
+    fn from(m: &str) -> Self {
+        CodegenError::Bug(m.to_string())
+    }
+}
+
 /// Generates the bytecode of `module`.
-pub fn generate(db: &SourceDb, module: &Module) -> Result<Image, String> {
+pub fn generate(db: &SourceDb, module: &Module) -> Result<Image, CodegenError> {
     let module = &crate::heddle::inline(module);
     let mut natives: IndexMap<&'static str, u16> = IndexMap::new();
     let mut files: IndexMap<String, u32> = IndexMap::new();
@@ -71,9 +111,8 @@ pub fn generate(db: &SourceDb, module: &Module) -> Result<Image, String> {
         // compare-and-branch is emitted again without fusing.
         let out = match emit_func(db, f, true, &mut natives, &mut files) {
             Ok(out) => out,
-            Err(Retry) => {
-                emit_func(db, f, false, &mut natives, &mut files).map_err(|_| "a branch too far".to_string())?
-            }
+            Err(Retry) => emit_func(db, f, false, &mut natives, &mut files)
+                .map_err(|_| CodegenError::Bug(format!("`{}` has a branch that reaches too far", f.name)))?,
         };
         let out = out?;
         let entry = image.code.len() as u32;
@@ -174,7 +213,7 @@ fn emit_func(
     fuse: bool,
     natives: &mut IndexMap<&'static str, u16>,
     files: &mut IndexMap<String, u32>,
-) -> Result<Result<Emitted, String>, Retry> {
+) -> Result<Result<Emitted, CodegenError>, Retry> {
     let order = layout(f);
     let mut rank = vec![usize::MAX; f.blocks.len()];
     for (i, &b) in order.iter().enumerate() {
@@ -197,7 +236,7 @@ fn emit_func(
         let skip: HashSet<Value> = fused.union(&dead).chain(&elems).copied().collect();
         // The window's place comes from how many registers values need; a
         // second pass then lets values sit in it, which only frees registers.
-        let (_, first) = allocate(f, &order, &skip, None);
+        let Some((_, first)) = allocate(f, &order, &skip, None) else { break };
         let mut slot_at = Vec::with_capacity(f.slots.len());
         let mut bytes = u64::from(first) * 8;
         for (s, &is_big) in f.slots.iter().zip(&big) {
@@ -213,15 +252,17 @@ fn emit_func(
         }
     }
     let Some((big, slot_at, tmp, slot_of, dead, skip)) = laid else {
-        return Ok(Err(format!("`{}` needs more than 65535 registers", f.name)));
+        return Ok(Err(too_big(f)));
     };
     let Ok(slot_at) = slot_at.into_iter().map(u32::try_from).collect::<Result<Vec<u32>, _>>() else {
-        return Ok(Err(format!("`{}` has too much in its frame", f.name)));
+        return Ok(Err(CodegenError::Limit(format!("`{}` has more than 4 GiB in its frame", f.name))));
     };
     let tmp2 = tmp + 1;
     let scratch = tmp2 + 1;
     let window = scratch + LINK_SLOTS as u16;
-    let (reg, _) = allocate(f, &order, &skip, Some(window));
+    let Some((reg, _)) = allocate(f, &order, &skip, Some(window)) else {
+        return Ok(Err(too_big(f)));
+    };
     let mut frame = u32::from(scratch);
     let mut max = |n: u32| frame = frame.max(n);
     for b in &f.blocks {
@@ -247,7 +288,7 @@ fn emit_func(
         max(u32::from(scratch) + 2);
     }
     let Ok(frame) = u16::try_from(frame) else {
-        return Ok(Err(format!("`{}` needs more than 65535 registers", f.name)));
+        return Ok(Err(too_big(f)));
     };
     let mut read: HashSet<Value> = HashSet::new();
     for b in &f.blocks {
@@ -299,8 +340,8 @@ fn emit_func(
     e.prologue();
     for (i, &b) in order.iter().enumerate() {
         block_at[b] = e.code.len();
-        if let Err(msg) = e.block(b, i, &fused) {
-            return Ok(Err(msg));
+        if let Err(error) = e.block(b, i, &fused) {
+            return Ok(Err(error));
         }
     }
     // Trampolines go after every block, out of the way of fall-through.
@@ -343,7 +384,7 @@ fn emit_func(
             (w & 0x0000_FFFF_FFFF_FFFF) | u64::from(off as u16) << 48
         } else {
             let Ok(off) = i32::try_from(off) else {
-                return Ok(Err(format!("`{}` is too big to jump across", f.name)));
+                return Ok(Err(CodegenError::Limit(format!("`{}` is too big to jump across", f.name))));
             };
             (w & 0x0000_0000_FFFF_FFFF) | u64::from(off as u32) << 32
         };
@@ -774,7 +815,7 @@ enum Use {
 /// 3. the register of a value an edge passes to it, or of the parameter it
 ///    passes itself to, so the edge moves nothing;
 /// 4. otherwise, the lowest free register.
-fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16>) -> (Vec<u16>, u16) {
+fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16>) -> Option<(Vec<u16>, u16)> {
     let n = f.types.len();
     // Positions: each block's parameters at its start, then each
     // instruction, then the terminator.
@@ -1008,7 +1049,7 @@ fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16
                 }
                 if h >= used && !busy(h, &active) {
                     free.extend(used..h);
-                    used = h + 1;
+                    used = h.checked_add(1)?;
                     choice = Some(h);
                     break;
                 }
@@ -1019,7 +1060,7 @@ fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16
             None => match free.pop_first() {
                 Some(r) => r,
                 None => {
-                    used += 1;
+                    used = used.checked_add(1)?;
                     used - 1
                 }
             },
@@ -1028,7 +1069,7 @@ fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16
         assigned[v.0 as usize] = true;
         active.push((e, r));
     }
-    (reg, used)
+    Some((reg, used))
 }
 
 fn int_width(t: IntTy) -> Option<usize> {
@@ -1152,6 +1193,8 @@ impl Emitter<'_> {
     }
 
     fn native(&mut self, name: &'static str) -> u16 {
+        // (A few dozen natives exist, and the verifier names each one.)
+        debug_assert!(self.natives.len() < usize::from(u16::MAX), "more natives than a `calln` can number");
         let next = self.natives.len() as u16;
         *self.natives.entry(name).or_insert(next)
     }
@@ -1194,7 +1237,7 @@ impl Emitter<'_> {
         }
     }
 
-    fn block(&mut self, b: usize, place: usize, fused: &HashSet<Value>) -> Result<(), String> {
+    fn block(&mut self, b: usize, place: usize, fused: &HashSet<Value>) -> Result<(), CodegenError> {
         let f = self.f;
         let block = &f.blocks[b];
         for (i, inst) in block.insts.iter().enumerate() {
@@ -1306,7 +1349,7 @@ impl Emitter<'_> {
 
     /// The load or store `access` at the element `elem` gives, in one
     /// instruction, reported where `elem` is (it's what can unravel).
-    fn elem_access(&mut self, elem: &crate::heddle::Inst, access: &crate::heddle::Inst) -> Result<(), String> {
+    fn elem_access(&mut self, elem: &crate::heddle::Inst, access: &crate::heddle::Inst) -> Result<(), CodegenError> {
         use Op as O;
         let InstKind::Elem { header, off: hoff, index, scale } = &elem.kind else {
             return Err("an element access without its element".into());
@@ -1352,7 +1395,7 @@ impl Emitter<'_> {
 
     /// `inst` with a constant operand as its immediate (see [`immediates`]),
     /// if it's one of the instructions that take one here.
-    fn inst_k(&mut self, inst: &crate::heddle::Inst, fold: Fold) -> Result<bool, String> {
+    fn inst_k(&mut self, inst: &crate::heddle::Inst, fold: Fold) -> Result<bool, CodegenError> {
         use InstKind as K;
         use Op as O;
         let span = inst.span;
@@ -1470,7 +1513,7 @@ impl Emitter<'_> {
         }
     }
 
-    fn inst(&mut self, inst: &crate::heddle::Inst, fold: Option<Fold>) -> Result<(), String> {
+    fn inst(&mut self, inst: &crate::heddle::Inst, fold: Option<Fold>) -> Result<(), CodegenError> {
         use InstKind as K;
         let span = inst.span;
         let dst = inst.results.first().map(|&v| self.r(v)).unwrap_or(0);
@@ -1516,7 +1559,7 @@ impl Emitter<'_> {
                 self.put(span, word(op, dst, self.r(x), k as u16));
                 return Ok(());
             }
-            return Err(format!("an immediate for a `{}`-bit integer", ty.bits));
+            return Err(format!("an immediate for a `{}`-bit integer", ty.bits).into());
         }
         if let Some(fold) = fold
             && self.inst_k(inst, fold)?
@@ -1603,7 +1646,7 @@ impl Emitter<'_> {
             }
             K::Neg { ty, a } => {
                 if !ty.signed {
-                    return Err(format!("negating an unsigned value in `{}`", self.f.name));
+                    return Err(format!("negating an unsigned value in `{}`", self.f.name).into());
                 }
                 let (op, ext) = match int_width(*ty) {
                     Some(w) => ([Op::NegI8, Op::NegI16, Op::NegI32, Op::NegI64][w], None),
@@ -1780,7 +1823,10 @@ impl Emitter<'_> {
                 self.parallel(span, moves);
                 let (params, results) = (args.len(), inst.results.len());
                 if params > 255 || results > 255 {
-                    return Err(format!("a function value called with {params} arguments in `{}`", self.f.name));
+                    return Err(CodegenError::Limit(format!(
+                        "a function value called with {params} arguments and {results} results in `{}`: Treadle's calls through function values take at most 255 of each",
+                        self.f.name
+                    )));
                 }
                 self.put(span, word(Op::CallR, self.window, self.tmp2, ((params as u16) << 8) | results as u16));
                 for (i, &r) in inst.results.iter().enumerate() {

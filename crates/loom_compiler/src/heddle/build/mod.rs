@@ -346,6 +346,12 @@ impl<'a> Builder<'a> {
             self.build_func(FnKey::ConstExit);
             self.drain();
         }
+        if self.fmts.len() > usize::from(u16::MAX) + 1 {
+            self.diags.push(Diagnostic::error(
+                codes::U0103,
+                format!("{} different formats in templates: Treadle's limit is 65 536", self.fmts.len()),
+            ));
+        }
         if !self.diags.is_empty() {
             return Err(self.diags);
         }
@@ -1061,7 +1067,10 @@ impl<'a> Builder<'a> {
 
     fn fmt_item(&mut self, item: FmtItem) -> u16 {
         let next = self.fmts.len() as u32;
-        *self.fmts.entry(item).or_insert(next) as u16
+        let n = *self.fmts.entry(item).or_insert(next);
+        // An instruction's field numbers them in 16 bits: `finish` reports
+        // a program with more.
+        n as u16
     }
 
     /// A text literal's parts: its address and its length.

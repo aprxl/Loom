@@ -41,7 +41,7 @@
 <p>The design in <code>README.md</code> and <code>design/*.md</code> is bigger than what runs. This is the list of what doesn't run, from <code>design/lua-backend.md</code> and from trying it.</p>
 <p>Anything not built stops with a <code>U</code> code, and most stop with <a href="diagnostics.html#U0102">U0102</a>, "not implemented yet". The compiler doesn't guess and doesn't miscompile.</p>
 <h2 id="next-in-line">Next in line</h2>
-<p>These are planned next, in this order: the rest of Loom's own VM, Treadle (designed in <code>design/vm.md</code>), then threads and spools. Treadle already runs programs made of numbers, text literals, tuples, control flow and functions: <code>loom run --backend vm file.loom</code>.</p>
+<p>These are planned next, in this order: the rest of Loom's own VM, Treadle (designed in <code>design/vm.md</code>), then threads and spools. Treadle already runs the sequential language (all but shuttles and compile-time code): <code>loom run --backend vm file.loom</code>. A program over one of its limits (a frame of more than 65 535 registers, say) stops with <a href="diagnostics.html#U0103">U0103</a>.</p>
 <h3 id="threads">Threads</h3>
 <p><code>loom { }</code> blocks, <code>thread</code>, <code>loom for</code>, <code>.join()</code>, and the types for sharing between threads, <code>Atomic[T]</code> and <code>Mutex[T]</code>. The two types are declared in <a href="../std/modules/sync.html">std.sync</a> and can't be built yet.</p>
 <div class="sample" id="sample-nyet_threads">

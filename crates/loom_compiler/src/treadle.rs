@@ -10,6 +10,19 @@ use crate::hir::Program;
 use crate::typeck::Typed;
 use crate::{codegen, heddle, lower};
 
+/// What codegen's failure says: over a limit of Treadle's (U0103), or a
+/// program it can't run yet (U0102).
+fn codegen_diagnostics(error: codegen::CodegenError) -> Vec<Diagnostic> {
+    vec![match error {
+        codegen::CodegenError::Limit(message) => Diagnostic::error(codes::U0103, message)
+            .note("the Lua backend has no such limit: `loom run` without `--backend vm`"),
+        codegen::CodegenError::Bug(message) => {
+            Diagnostic::error(codes::U0102, format!("not implemented yet: {message}"))
+                .note("Treadle can't run this yet")
+        }
+    }]
+}
+
 /// A program compiled for Treadle.
 #[derive(Debug)]
 pub struct Compiled {
@@ -32,9 +45,7 @@ pub fn compile_tests(
         let image = Image::default();
         return Ok((Compiled { heddle, image }, tests));
     }
-    let image = codegen::generate(db, &heddle).map_err(|e| {
-        vec![Diagnostic::error(codes::U0102, format!("not implemented yet: {e}")).note("Treadle can't run this yet")]
-    })?;
+    let image = codegen::generate(db, &heddle).map_err(codegen_diagnostics)?;
     Ok((Compiled { heddle, image }, tests))
 }
 
@@ -43,8 +54,6 @@ pub fn compile_tests(
 pub fn compile(db: &SourceDb, p: &Program, typed: &Typed) -> Result<Compiled, Vec<Diagnostic>> {
     lower::compile_time(db, p, typed, false)?;
     let heddle = heddle::build(p, typed)?;
-    let image = codegen::generate(db, &heddle).map_err(|e| {
-        vec![Diagnostic::error(codes::U0102, format!("not implemented yet: {e}")).note("Treadle can't run this yet")]
-    })?;
+    let image = codegen::generate(db, &heddle).map_err(codegen_diagnostics)?;
     Ok(Compiled { heddle, image })
 }

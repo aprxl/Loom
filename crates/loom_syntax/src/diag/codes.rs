@@ -130,6 +130,7 @@ codes! {
     // U01xx: features the v1 compiler doesn't support (see design/lua-backend.md)
     U0101 = "anonymous warp types aren't supported yet";
     U0102 = "not implemented yet";
+    U0103 = "over one of Treadle's limits";
 }
 
 #[cfg(test)]

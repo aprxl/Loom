@@ -174,6 +174,8 @@ passed to a lambda) corrupt the check and a correct call hits `crash 2`.
 (c) `CallN`'s native index and `Native` windows are `u16`. All should be
 checked and turned into a diagnostic.
 
+*Fixed: a frame over 65 535 registers (allocate used to overflow and panic) and a function value called with over 255 arguments or results are U0103 "over one of Treadle's limits"; more than 65 536 formats too. (b) was already guarded, though reported as "not implemented yet".*
+
 **M11. `loom test --backend vm` shares one `Machine` across tests.** *Read.*
 `Vm::call` reuses the stack, heap, `Ctx.msg`/`bufs` and the lazily computed
 constants in `data`. A test that unravels leaves partial sinks in `bufs`
