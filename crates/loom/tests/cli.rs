@@ -418,3 +418,34 @@ cleaned up
         );
     }
 }
+
+#[test]
+fn an_interrupt_before_the_run_starts_is_not_lost() {
+    // At 0 ms the flag may be set before Lua's watch is registered.
+    let path = temp_source(
+        "interrupt_early",
+        "use std.io.print
+
+fn main() {
+    defer print(\"cleaned up\")
+    var n = 0u64
+    while true { n +%= 1 }
+}
+",
+    );
+    let file = path.to_str().expect("utf-8 path");
+    for backend in ["lua", "vm"] {
+        let out = Command::new(env!("CARGO_BIN_EXE_loom"))
+            .args(["--color", "never", "run", "--backend", backend, file])
+            .env("LOOM_INTERRUPT_AFTER_MS", "0")
+            .output()
+            .expect("the loom binary runs");
+        assert_eq!(out.status.code(), Some(130), "{backend}: {}", text(&out.stderr));
+        assert_eq!(
+            text(&out.stderr),
+            "interrupted (Ctrl-C)
+",
+            "{backend}"
+        );
+    }
+}

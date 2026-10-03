@@ -84,6 +84,8 @@ already set the callback never runs. Treadle polls the flag, so it can't
 lose one. Fix: `watch` fires the callback at once when the flag is set.
 Narrow in practice, but it's a lost wake-up on the kill path.
 
+*Fixed: An interrupt before the Lua watch is registered is no longer lost*
+
 ### M: reproduced
 
 **M1. `File.write_line` reopens the file on every call (both backends).**
