@@ -1,9 +1,11 @@
 //! The interpreter loop (design/vm.md §9.1).
 //!
-//! The state that matters lives in locals so it stays in machine registers:
-//! `pc` (the next instruction), `fp` (the current frame's first register),
-//! `seg_end` (where the current stack segment ends) and `ticks` (loop
-//! iterations and calls until the next check for Ctrl-C). Just below a
+//! Only two things live in locals, so they stay in machine registers: `pc`
+//! (the next instruction) and `fp` (the current frame's first register).
+//! The rest (`Env`: `seg_end`, where the current stack segment ends, and
+//! `ticks`, the loop iterations and calls until the next check for Ctrl-C,
+//! among it) is read from memory where it's needed: kept as locals, it took
+//! the registers `pc` and `fp` needed, and every instruction paid. Just below a
 //! frame's first register, [`LINK_SLOTS`] slots of its caller's frame say
 //! where to return: the return address, the caller's frame, and where the
 //! results go (the frame itself, unless the frame started a new stack

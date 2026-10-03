@@ -156,7 +156,8 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
     lambdas, generics, streams, constants, gauges, the host, `loom test
     --backend vm`, backtraces, Ctrl-C (130) and `process.exit`, with memory
     laid out for real and freed by ownership; the checked build leaks
-    nothing. 1.65× PUC Lua on `bench/` (`bench/RESULTS.md`). The program
+    nothing, whatever way a run ends (a return, an unravel, an exit,
+    Ctrl-C). 1.65× PUC Lua on `bench/` (`bench/RESULTS.md`). The program
     generator (`crates/loom/tests/gen.rs`) runs random programs on both
     backends: 300 seeds in `cargo test`, 20 000 with `--ignored`.
 

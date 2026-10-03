@@ -345,7 +345,7 @@ The second is trust in our own compiler, and the compiler has known gaps
   a list checks that the list's buffer and length haven't changed (what
   `rt.same_len` does on Lua) wherever the body calls something that might
   reach the list, until the escape and region checks make that impossible.
-- **Miri** runs the VM's unit tests when a nightly toolchain is installed.
+- **Miri** would run the VM's unit tests when a nightly toolchain is installed; it hasn't been run yet (the interpreter keeps addresses in `u64` registers, which Miri's permissive provenance mode accepts).
   It isn't a gate.
 
 ---
@@ -651,8 +651,18 @@ loop {
 }
 ```
 
-- The state that matters (`pc`, `fp`, the tick counter) stays in locals, so
-  the compiler keeps it in machine registers.
+- Only `pc` and `fp` stay in locals, so the compiler keeps them in machine
+  registers. The rest (the end of the stack segment, the tick counter, the
+  interrupt state) is in one `Env` behind `black_box`, read from memory where
+  needed: as locals they took `pc` and `fp`'s registers, and every
+  instruction paid (the loop swung by 30% with unrelated changes).
+- An instruction either goes on (`continue 'run`) or leaves its labeled block
+  with a trap, which one place after the `match` unwinds: handled inline at
+  each instruction, the loop got too big to keep `pc` and `fp` in registers.
+- Each op gets its own indirect jump only because LLVM is told to duplicate
+  the dispatch (`-C llvm-args=-tail-dup-pred-size=1000` and `-succ-size`, in
+  `.cargo/config.toml`, for every target); a `RUSTFLAGS` environment variable
+  would replace them, which a test in `loom_vm` checks.
 - Everything rare is `#[cold]` and out of line: traps, the allocator's slow
   path, stack segment switches, unwinding.
 - Handlers never allocate Rust values or format strings on their fast path.
@@ -733,8 +743,8 @@ All four run `defer`s and drops the same way. Only an unravel is an error.
 
 ### 9.5 Safepoints and ticks
 
-Back-edges (`loop`, `forrange`) and calls count down a tick counter kept in a
-local. When it runs out, one cold function checks everything that can
+Back-edges (`loop`, `forrange`) and calls count down a tick counter kept in
+`Env`. When it runs out, one cold function checks everything that can
 interrupt a program:
 
 - Ctrl-C, a flag the signal handler sets;
@@ -743,8 +753,9 @@ interrupt a program:
 - preemption between threads (V5).
 
 Then it resets the counter: every 65 536 ticks in a normal run, so Ctrl-C is
-noticed within about a millisecond. The whole cost is one decrement and one
-predicted branch per loop iteration.
+noticed within about a millisecond. The cost is a read, a decrement and a
+write of the counter in `Env` and one predicted branch per loop iteration.
+Natives that wait (`time.sleep`) check the same flag themselves, in slices.
 
 Cancellation (V5) is *not* checked at ticks. 05-concurrency.md says a thread is
 cancelled at its next `yield`, `pull`, `join`, I/O call or `sched_yield()`,
@@ -1484,7 +1495,7 @@ oracle, and stays the way to run Loom inside a Lua host.
 
 | Risk | What keeps it in check |
 |---|---|
-| a memory bug in `unsafe` code | a `// SAFETY:` comment on every block, the lint that makes each use deliberate, the verifier, the checked build on every fixture, the program generator, Miri when available |
+| a memory bug in `unsafe` code | a `// SAFETY:` comment on every block, the lint that makes each use deliberate, the verifier, the checked build on every fixture, the program generator, Miri (not run yet) |
 | frontend gaps turning into memory bugs (Lua's collector hid them) | V1's frontend prerequisites, dynamic guards until the checkers exist, the leak invariant |
 | a `match` loop in Rust leaves speed on the table | the op table makes the dispatch strategy replaceable (D2), and profile-guided optimization |
 | monomorphization and inlining make code big | the inlining budget, merging identical instances, and RESULTS.md, where cache misses show up as time |
