@@ -52,6 +52,8 @@ pub(crate) struct Ctx<'i> {
     /// With `checked`: the value stack, set before each native runs, so a
     /// native can check memory on it.
     pub stack: *const crate::stack::Stack,
+    /// With `checked`: where the program's data is, which a native may read.
+    pub data_range: (u64, u64),
     /// How many instructions have been dispatched (with `stats`).
     pub dispatched: u64,
 }
@@ -88,6 +90,7 @@ impl<'i> Ctx<'i> {
             interrupt: None,
             stopping: false,
             stack: std::ptr::null(),
+            data_range: (0, 0),
             dispatched: 0,
         }
     }
@@ -129,6 +132,14 @@ impl<'i> Ctx<'i> {
         // SAFETY: `stack` is set to the live stack before a native runs
         // (in the checked build, the only one that calls this).
         self.heap.holds(addr, len) || (!self.stack.is_null() && unsafe { (*self.stack).holds(addr, len) })
+    }
+
+    /// With `checked`: whether `len` bytes at `addr` can be read: what
+    /// [`owns`](Self::owns) says, text literals, or the program's data.
+    fn readable(&self, addr: u64, len: u64) -> bool {
+        let range = self.rodata.as_ptr_range();
+        let inside = |(lo, hi): (u64, u64)| addr >= lo && addr.checked_add(len).is_some_and(|e| e <= hi);
+        inside((range.start as u64, range.end as u64)) || inside(self.data_range) || self.owns(addr, len)
     }
 
     /// The bytes of a text value: a pointer and a length from registers.
@@ -344,11 +355,12 @@ fn mem_move(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     if n == 0 {
         return Ok(());
     }
-    if cfg!(feature = "checked") && !(ctx.owns(dst, n) && ctx.owns(src, n)) {
+    if cfg!(feature = "checked") && !(ctx.owns(dst, n) && ctx.readable(src, n)) {
         return Err(Trap::Crash(format!("loom internal: moving {n} bytes from {src:#x} to {dst:#x}")));
     }
     // SAFETY: the compiler passes two runs of `n` bytes the program owns,
-    // in the buffers of lists (the checked build checks they're live).
+    // in the buffers of lists, or a literal's to copy (the checked build
+    // checks they're live).
     unsafe { std::ptr::copy(src as *const u8, dst as *mut u8, n as usize) };
     Ok(())
 }

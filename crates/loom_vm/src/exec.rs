@@ -188,6 +188,7 @@ impl<'i> Machine<'i> {
             (r.start as u64, r.end as u64)
         };
         self.ctx.stopping = false;
+        self.ctx.data_range = data_range;
         self.ctx.reset_sinks();
         let mut env = Env {
             image: self.image,

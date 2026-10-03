@@ -279,7 +279,8 @@ pub fn build(p: &Program, typed: &Typed) -> Result<Module, Vec<Diagnostic>> {
     b.drain();
     // Constants that own memory: dropped once `main` is done, by an entry
     // that calls it and then them.
-    let owning = b.globals.values().any(|&(_, t)| b.drops.get(&t).copied().unwrap_or(false));
+    let consts: Vec<Ty> = b.globals.values().map(|&(_, t)| t).collect();
+    let owning = consts.into_iter().any(|t| b.const_owns(t));
     if owning && !fails {
         entry = b.func_id(FnKey::Main(main));
         b.drain();
