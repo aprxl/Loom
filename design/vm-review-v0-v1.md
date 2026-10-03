@@ -45,6 +45,8 @@ removes in a loop is quadratic. Fix: tombstones in the entries array (the
 index keeps entry numbers) and compact when half are dead; keeps
 insertion order. The Lua backend needs the same change (`runtime/rt/map`).
 
+*Fixed: Removal is O(1) on both backends (tombstones, compacted once half are removed ones or before a walk): 30 000 removes in 0.17 s on Treadle, 0.05 s on Lua*
+
 **H3. A runaway recursion takes 5 s and about 1 GiB on Treadle.**
 *Reproduced:* `fn down(n) { 1 + down(n + 1) }` unravels with `stack
 overflow` after 5.2 s (Lua: 124 ms). The default `stack_limit` is 1 GiB

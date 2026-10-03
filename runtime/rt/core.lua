@@ -565,6 +565,36 @@ function rt.overwrite(dst, src)
   end
 end
 
+--- What a removed map or set entry's hash is, in `hks`: the entry stays in
+--- `keys`, `vals` and `hks` (so removing is O(1)) until more than half of
+--- the `top` entries made are removed ones, or something walks the entries.
+local DEAD = {}
+
+--- Moves the entries that are left down over the removed ones, in order:
+--- afterwards `top` is `n`.
+local function compact(m)
+  local top, n = m.top, m.n
+  if top == n then return end
+  local keys, vals, hks, idx = m.keys, m.vals, m.hks, m.idx
+  local w = 0
+  for i = 1, top do
+    local h = hks[i]
+    if h ~= DEAD then
+      w = w + 1
+      if w ~= i then
+        keys[w], hks[w] = keys[i], h
+        if vals then vals[w] = vals[i] end
+        idx[h] = w
+      end
+    end
+  end
+  for i = w + 1, top do
+    keys[i], hks[i] = nil, nil
+    if vals then vals[i] = nil end
+  end
+  m.top = w
+end
+
 local eq
 
 --- Whether every field in `fields` is equal in `a` and `b`.
@@ -605,6 +635,8 @@ eq = function(d, a, b)
   elseif kind == "map" or kind == "set" then
     -- The same keys (and values for them), in any order.
     if a.n ~= b.n then return false end
+    compact(a)
+    compact(b)
     for i = 1, a.n do
       local j = b.idx[a.hks[i]]
       if j == nil then return false end
@@ -763,12 +795,14 @@ show = function(d, v, debug)
     return "[" .. concat(out, ", ") .. "]"
   elseif kind == "map" then
     if v.n == 0 then return "[:]" end
+    compact(v)
     local out = {}
     for i = 1, v.n do
       out[i] = show(d.key, v.keys[i], debug) .. ": " .. show(d.val, v.vals[i], debug)
     end
     return "[" .. concat(out, ", ") .. "]"
   elseif kind == "set" then
+    compact(v)
     local out = {}
     for i = 1, v.n do
       out[i] = show(d.key, v.keys[i], debug)
@@ -1697,11 +1731,11 @@ local function hkey(d, k)
 end
 
 function rt.map_new()
-  return { keys = {}, vals = {}, hks = {}, idx = {}, n = 0 }
+  return { keys = {}, vals = {}, hks = {}, idx = {}, n = 0, top = 0 }
 end
 
 function rt.set_new()
-  return { keys = {}, hks = {}, idx = {}, n = 0 }
+  return { keys = {}, hks = {}, idx = {}, n = 0, top = 0 }
 end
 
 --- Adds or replaces the value for `k`; gives back the old value (or nil).
@@ -1713,24 +1747,21 @@ local function map_put(dk, m, k, v)
     m.vals[i] = v
     return true, old
   end
-  local n = m.n + 1
-  m.keys[n], m.hks[n], m.idx[h], m.n = k, h, n, n
+  local n = m.top + 1
+  m.keys[n], m.hks[n], m.idx[h], m.top, m.n = k, h, n, n, m.n + 1
   if m.vals then m.vals[n] = v end
   return false, nil
 end
 
---- Takes out the entry at position `i`, moving the later ones down.
+--- Takes out the entry at position `i`: it stays as a removed one until
+--- there are more of them than entries left.
 local function take_at(m, i)
-  local n = m.n
   m.idx[m.hks[i]] = nil
-  for j = i, n - 1 do
-    m.keys[j], m.hks[j] = m.keys[j + 1], m.hks[j + 1]
-    if m.vals then m.vals[j] = m.vals[j + 1] end
-    m.idx[m.hks[j]] = j
-  end
-  m.keys[n], m.hks[n] = nil, nil
-  if m.vals then m.vals[n] = nil end
-  m.n = n - 1
+  m.hks[i], m.keys[i] = DEAD, false
+  if m.vals then m.vals[i] = false end
+  local n = m.n - 1
+  m.n = n
+  if m.top - n > n and m.top > 8 then compact(m) end
 end
 
 --- `m[k] = v`.
@@ -1790,7 +1821,7 @@ ext["std.map.Map.remove"] = function(dk, dv, m, k)
 end
 
 local function coll_clear(m)
-  m.keys, m.hks, m.idx, m.n = {}, {}, {}, 0
+  m.keys, m.hks, m.idx, m.n, m.top = {}, {}, {}, 0, 0
   if m.vals then m.vals = {} end
 end
 
@@ -1800,6 +1831,7 @@ end
 
 --- Copies of `m`'s entries, one at a time, made by `item(i)`.
 local function coll_stream(m, item)
+  compact(m)
   local i, n = 0, m.n
   return function()
     if i >= n then return nil end
@@ -1837,6 +1869,7 @@ local function sort_by(d, items, n, key)
 end
 
 ext["std.map.Map.sorted"] = function(dk, dv, m)
+  compact(m)
   local out, n = {}, m.n
   for i = 1, n do
     out[i] = { copy(dk, m.keys[i]), copy(dv, m.vals[i]) }
@@ -1847,6 +1880,7 @@ ext["std.map.Map.sorted"] = function(dk, dv, m)
 end
 
 local function copy_map(dk, dv, m)
+  compact(m)
   local out = rt.map_new()
   for i = 1, m.n do
     map_put(dk, out, copy(dk, m.keys[i]), copy(dv, m.vals[i]))
@@ -1896,6 +1930,7 @@ ext["std.set.Set.clear"] = function(_, s)
 end
 
 ext["std.set.Set.sorted"] = function(d, s)
+  compact(s)
   local out, n = {}, s.n
   for i = 1, n do
     out[i] = copy(d, s.keys[i])
@@ -1906,6 +1941,7 @@ ext["std.set.Set.sorted"] = function(d, s)
 end
 
 local function copy_set(d, s)
+  compact(s)
   local out = rt.set_new()
   for i = 1, s.n do
     map_put(d, out, copy(d, s.keys[i]))

@@ -268,8 +268,11 @@ file system from the host.
 key's hash key and `idx[hk]` its position. A key that's a Lua number,
 boolean or string is its own hash key; any other (a tuple, a record) is its
 debug text, the same for equal values. (So a warp that writes its own `eq`
-and `hash` is still keyed structurally, for now.) Removing an entry moves
-the later ones down, keeping the order. `m[k]` is `rt.map_at` (it unravels
+and `hash` is still keyed structurally, for now.) Removing an entry marks
+it (its `hks[i]` becomes a sentinel) and leaves it in place; the later ones
+move down, keeping the order, once more than half the `top` entries made are
+removed ones, and before anything walks the entries (`n` counts the live
+ones). `m[k]` is `rt.map_at` (it unravels
 when the key is missing) and is a place: `m[k].count += 1` changes the value
 in the map, and `m[k] op= v` becomes `rt.map_set`. A scalar value in a map
 can't be lent as `mut`, since there's no Lua place to write it back to.
