@@ -84,6 +84,8 @@ Fix: set the hook on the running coroutine too (the runtime knows it:
 `coroutine.running()`), or have `rt`'s resume wrapper install it. Treadle
 V2 must tick inside shuttle tasks (see §4).
 
+*Fixed: On the Lua backend the interrupt hook goes on every live shuttle's coroutine too; a shuttle that never yields stops in under a second*
+
 **H6. An interrupt that arrives before the Lua watch is registered is lost
 (Lua backend).** *Reproduced:* `LOOM_INTERRUPT_AFTER_MS=0` on a
 `loop {}` hangs (killed at 4 s); 1 ms and 3 ms work. `interrupt::watch`

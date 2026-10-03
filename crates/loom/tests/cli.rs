@@ -472,3 +472,40 @@ fn a_runaway_recursion_unravels_quickly_with_a_short_backtrace() {
     // Debug builds are slower than release (about 0.3 s): a generous bound.
     assert!(started.elapsed().as_secs() < 20, "{:?}", started.elapsed());
 }
+
+#[test]
+fn ctrl_c_reaches_a_shuttle_that_never_yields() {
+    // The Lua backend runs shuttles as coroutines, each with a hook of its
+    // own. (Treadle has no shuttles yet: V2.)
+    let path = temp_source(
+        "interrupt_shuttle",
+        "use std.io.print
+
+fn rare() ~> u64 {
+    defer print(\"generator closed\")
+    var i = 0u64
+    loop {
+        i = i +% 1
+        if i == 0 { yield i }
+    }
+}
+
+fn main() {
+    defer print(\"main cleaned up\")
+    for x in rare() { print(x) }
+}
+",
+    );
+    let file = path.to_str().expect("utf-8 path");
+    let started = std::time::Instant::now();
+    let out = Command::new(env!("CARGO_BIN_EXE_loom"))
+        .args(["--color", "never", "run", file])
+        .env("LOOM_INTERRUPT_AFTER_MS", "300")
+        .output()
+        .expect("the loom binary runs");
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(out.status.code(), Some(130), "{}", text(&out.stderr));
+    assert_eq!(text(&out.stdout), "generator closed\nmain cleaned up\n");
+    assert_eq!(text(&out.stderr), "interrupted (Ctrl-C)\n");
+    assert!(started.elapsed().as_secs() < 30, "{:?}", started.elapsed());
+}

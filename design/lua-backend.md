@@ -413,9 +413,14 @@ location through the map and prints a rustc-style report.
 `main ! E` shows its error (`error: …` on stderr) and exits with 1.
 
 Implemented so far: all of them. `process.exit(n)` and Ctrl-C unwind the
-program as an unravel does, so its `defer`s run, before it exits; Ctrl-C is
-a flag an instruction hook checks every 10 000 instructions, and a second
-Ctrl-C while the program unwinds exits at once. Still to come: an
+program as an unravel does, so its `defer`s run, before it exits; Ctrl-C
+sets a flag and, from the handler's thread, installs an instruction hook
+(none is installed until then, which would slow every instruction down) that
+raises the interrupt and takes itself away, so the unwinding runs `defer`s
+to the end. A hook belongs to one Lua state, so the host also keeps the
+address of each shuttle's coroutine (the runtime tells it, and holds each
+until it's done) and the hook goes on every one: a shuttle that never yields
+is interrupted too. A second Ctrl-C while the program unwinds exits at once. Still to come: an
 instruction budget, and `--lua PATH` to run a bundle in an external
 interpreter.
 

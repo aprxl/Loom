@@ -18,6 +18,8 @@ pub use loom_sys::{Host, Outcome, Output};
 
 use crate::srcmap::{Location, SourceMap};
 use loom_sys::term::Term;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The marker at the start of every unravel message (`rt.MARK`).
 pub const UNRAVEL_MARK: &str = "\u{1f}LOOM\u{1f}";
@@ -51,24 +53,52 @@ pub fn run_bundle(bundle: &str, map: Option<&SourceMap>, host: Host) -> Outcome 
     outcome(result, map)
 }
 
+/// The Lua states a Ctrl-C has to reach: the main one's address, and those
+/// of the program's coroutines (shuttles) that are alive. A hook is a
+/// state's own, so one set on the main state never runs while a coroutine
+/// does. (Only while the watch is installed: one program at a time, in the
+/// `loom` binary.)
+static MAIN_STATE: AtomicUsize = AtomicUsize::new(0);
+static COROUTINES: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+
+/// Every state a hook goes on or comes off.
+fn states() -> Vec<usize> {
+    let mut all = vec![MAIN_STATE.load(Ordering::Relaxed)];
+    if let Ok(coroutines) = COROUTINES.lock() {
+        all.extend(coroutines.iter().copied());
+    }
+    all
+}
+
 /// With Ctrl-C's handler installed, a watch that unwinds the program at
 /// its next instruction once Ctrl-C comes, as the standalone `lua` does: a
-/// hook installed then, which raises the interrupt and takes itself away
-/// (so the unwinding runs `defer`s to the end). A hook installed all along
-/// would send every instruction through Lua's slow path.
+/// hook installed then (in the main state and in every coroutine alive),
+/// which raises the interrupt and takes itself away (so the unwinding runs
+/// `defer`s to the end). A hook installed all along would send every
+/// instruction through Lua's slow path.
 fn watch_interrupt(lua: &Lua) -> Option<loom_sys::interrupt::Watch> {
     loom_sys::interrupt::installed()?;
-    let state = lua.exec_raw_lua(|raw| raw.state()) as usize;
+    MAIN_STATE.store(lua.exec_raw_lua(|raw| raw.state()) as usize, Ordering::Relaxed);
+    if let Ok(mut coroutines) = COROUTINES.lock() {
+        coroutines.clear();
+    }
     Some(loom_sys::interrupt::watch(move || {
-        let state = state as *mut mlua::ffi::lua_State;
         let mask = mlua::ffi::LUA_MASKCALL | mlua::ffi::LUA_MASKRET | mlua::ffi::LUA_MASKCOUNT;
-        // SAFETY: `lua_sethook` may be called while the state runs (the
-        // standalone `lua` calls it from a signal handler): it only sets
-        // the hook's fields, read at the next instruction. The state is
-        // alive: the watch goes before it, and can't while this runs.
-        #[allow(unsafe_code)]
-        unsafe {
-            mlua::ffi::lua_sethook(state, Some(stop), mask, 1)
+        // Held while the hooks go on, so a coroutine can't be forgotten
+        // (and freed) in between.
+        let Ok(coroutines) = COROUTINES.lock() else { return };
+        let all = std::iter::once(MAIN_STATE.load(Ordering::Relaxed)).chain(coroutines.iter().copied());
+        for state in all {
+            // SAFETY: `lua_sethook` may be called while the state runs (the
+            // standalone `lua` calls it from a signal handler): it only sets
+            // the hook's fields, read at the next instruction. The main state
+            // is alive: the watch goes before it, and can't while this runs.
+            // A coroutine is, while it's in the list, which the runtime keeps
+            // it in only until it's finished (and holds it meanwhile).
+            #[allow(unsafe_code)]
+            unsafe {
+                mlua::ffi::lua_sethook(state as *mut mlua::ffi::lua_State, Some(stop), mask, 1)
+            }
         }
     }))
 }
@@ -81,10 +111,17 @@ fn watch_interrupt(lua: &Lua) -> Option<loom_sys::interrupt::Watch> {
 #[allow(unsafe_code)]
 unsafe extern "C-unwind" fn stop(state: *mut mlua::ffi::lua_State, _: *mut mlua::ffi::lua_Debug) {
     let message = format!("{UNRAVEL_MARK}{INTERRUPT_MARK}");
-    // SAFETY: Lua calls the hook with its state; the message is copied in
-    // before it's freed, and `lua_error` doesn't return (nothing of this
-    // frame is left to drop).
+    // Every state's hook goes (the unwinding runs `defer`s, which no hook
+    // may interrupt), the lock released before `lua_error` leaves.
+    let all = states();
+    // SAFETY: as above; the states in `all` are alive (the main one, and the
+    // coroutines the runtime lists until they're finished); Lua calls the
+    // hook with its state; the message is copied in before it's freed, and
+    // `lua_error` doesn't return (nothing of this frame is left to drop).
     unsafe {
+        for other in all {
+            mlua::ffi::lua_sethook(other as *mut mlua::ffi::lua_State, None, 0, 0);
+        }
         mlua::ffi::lua_sethook(state, None, 0, 0);
         mlua::ffi::lua_pushlstring(state, message.as_ptr().cast(), message.len());
         drop(message);
@@ -216,6 +253,25 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
         })
     })?;
     table.set("poll_keys", poll_keys)?;
+    // The runtime tells which coroutines are alive, for Ctrl-C (see
+    // `watch_interrupt`); it holds each one until it says it's done.
+    let watch_thread = lua.create_function(|_, co: mlua::Thread| {
+        if loom_sys::interrupt::installed().is_some()
+            && let Ok(mut coroutines) = COROUTINES.lock()
+        {
+            coroutines.push(co.to_pointer() as usize);
+        }
+        Ok(())
+    })?;
+    table.set("watch_thread", watch_thread)?;
+    let unwatch_thread = lua.create_function(|_, co: mlua::Thread| {
+        if let Ok(mut coroutines) = COROUTINES.lock() {
+            let at = co.to_pointer() as usize;
+            coroutines.retain(|&c| c != at);
+        }
+        Ok(())
+    })?;
+    table.set("unwatch_thread", unwatch_thread)?;
     lua.globals().set("__LOOM_HOST", table)
 }
 

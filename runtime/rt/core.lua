@@ -1319,8 +1319,28 @@ end
 local co_create, co_resume, co_yield = coroutine.create, coroutine.resume, coroutine.yield
 local co_status, co_close = coroutine.status, coroutine.close
 
+-- Ctrl-C reaches a coroutine only through a hook of its own: the host is
+-- told of each shuttle's, and holds it (here) until it's done.
+local watch_thread = host and host.watch_thread
+local unwatch_thread = host and host.unwatch_thread
+local watched = {}
+
 function rt.shuttle(body)
-  return { co = co_create(body), done = false, at_pull = false, closed = false, burst = nil }
+  local co = co_create(body)
+  if watch_thread then
+    watched[co] = true
+    watch_thread(co)
+  end
+  return { co = co, done = false, at_pull = false, closed = false, burst = nil }
+end
+
+--- `sh` is over: it needs no more interrupts.
+local function finish(sh)
+  sh.done = true
+  if watched[sh.co] then
+    watched[sh.co] = nil
+    unwatch_thread(sh.co)
+  end
 end
 
 function rt.out(v)
@@ -1338,12 +1358,12 @@ end
 local function resume(sh, ...)
   local ok, is_out, v = co_resume(sh.co, ...)
   if not ok then
-    sh.done = true
+    finish(sh)
     co_close(sh.co)
     error(is_out, 0)
   end
   if co_status(sh.co) == "dead" then
-    sh.done = true
+    finish(sh)
     return "done"
   end
   if is_out then return "out", v end
@@ -1414,7 +1434,7 @@ function rt.shuttle_stream(sh)
   return function() return burst_next(b) end
 end
 
-local closes_shuttle = { __close = function(c) if not c.sh.done then c.sh.done = true co_close(c.sh.co) end end }
+local closes_shuttle = { __close = function(c) if not c.sh.done then finish(c.sh) co_close(c.sh.co) end end }
 
 --- `for x in generator`: the stream, and a value that closes the generator
 --- when the loop ends (early, its `defer`s run).
