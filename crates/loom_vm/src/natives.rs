@@ -92,10 +92,6 @@ impl<'i> Ctx<'i> {
         self.rodata[start..].as_ptr() as u64
     }
 
-    /// The bytes of a text value: a pointer and a length from registers.
-    ///
-    /// # Safety
-    ///
     /// With `checked`: whether `len` bytes at `addr` are a live object or
     /// stack in use.
     fn owns(&self, addr: u64, len: u64) -> bool {
@@ -104,6 +100,10 @@ impl<'i> Ctx<'i> {
         self.heap.holds(addr, len) || (!self.stack.is_null() && unsafe { (*self.stack).holds(addr, len) })
     }
 
+    /// The bytes of a text value: a pointer and a length from registers.
+    ///
+    /// # Safety
+    ///
     /// `ptr` and `len` must be a text value the compiler built: the address
     /// and length of text that lives at least as long as `self`.
     pub unsafe fn text(&self, ptr: u64, len: u64) -> Result<&[u8], Trap> {

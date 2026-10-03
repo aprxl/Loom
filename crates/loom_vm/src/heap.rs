@@ -174,6 +174,9 @@ impl Heap {
         }
         // Still the same class: it fits where it is.
         if Self::is_small(old, align) && Self::is_small(new, align) && class_of(old).1 == class_of(new).1 {
+            if new > old && new - old > LIMIT - self.live {
+                return Err(Trap::OutOfMemory);
+            }
             self.live = self.live - old + new;
             if cfg!(feature = "checked") {
                 self.objects.insert(ptr, new);
@@ -225,6 +228,36 @@ impl Heap {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn realloc_keeps_the_bytes_across_the_small_and_big_boundary() {
+        let mut heap = Heap::default();
+        let small = 100;
+        let big = SMALL + 1000;
+        let p = heap.alloc(small, 8).expect("allocates");
+        // SAFETY: `p` is a live object of `small` bytes.
+        unsafe { (0..small).for_each(|i| (p as *mut u8).add(i as usize).write(i as u8)) };
+        let q = heap.realloc(p, small, big, 8).expect("grows to a big object");
+        // SAFETY: `q` holds at least `small` bytes.
+        assert!((0..small).all(|i| unsafe { (q as *const u8).add(i as usize).read() } == i as u8));
+        let r = heap.realloc(q, big, small, 8).expect("shrinks to a small object");
+        // SAFETY: `r` holds `small` bytes.
+        assert!((0..small).all(|i| unsafe { (r as *const u8).add(i as usize).read() } == i as u8));
+        heap.free(r, small, 8).expect("frees");
+        assert_eq!(heap.live, 0);
+    }
+
+    #[test]
+    fn realloc_past_the_limit_is_out_of_memory() {
+        let mut heap = Heap::default();
+        let p = heap.alloc(64, 8).expect("allocates");
+        assert_eq!(heap.realloc(p, 64, LIMIT + 1, 8), Err(Trap::OutOfMemory));
+        // The same class: a small growth that would pass the limit.
+        heap.live = LIMIT;
+        assert_eq!(heap.realloc(p, 33, 48, 8), Err(Trap::OutOfMemory));
+        heap.live = 64;
+        heap.free(p, 64, 8).expect("frees");
+    }
 
     #[test]
     fn classes_hold_their_sizes_and_are_numbered_in_order() {

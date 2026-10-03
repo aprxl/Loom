@@ -319,6 +319,7 @@ fn string_of(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     for i in 0..n {
         // SAFETY: the compiler passes the elements of a `[char]`, 4 bytes each.
         let c = unsafe { (args[0] as *const u32).add(i).read() };
+        debug_assert!(char::from_u32(c).is_some(), "a `char` is a valid code point");
         out.push(char::from_u32(c).unwrap_or('\u{FFFD}'));
     }
     ctx.new_string(out.as_bytes(), args[2])
@@ -345,6 +346,7 @@ fn append(ctx: &mut Ctx, header: u64, more: &[u8]) -> Result<(), Trap> {
 
 /// `string.push_char(header, c)`.
 fn push_char(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    debug_assert!(char::from_u32(args[1] as u32).is_some(), "a `char` is a valid code point");
     let c = char::from_u32(args[1] as u32).unwrap_or('\u{FFFD}');
     let mut b = [0; 4];
     append(ctx, args[0], c.encode_utf8(&mut b).as_bytes())
@@ -482,6 +484,7 @@ fn probe(header: u64, h: u64, esize: u64, same: impl Fn(u64) -> bool) -> u64 {
             return u64::MAX;
         }
         let entry = ebuf + (s - 1) * esize;
+        // SAFETY: an entry starts with its hash word.
         if unsafe { (entry as *const u64).read() } == h && same(entry) {
             return s - 1;
         }
@@ -512,6 +515,7 @@ fn map_find_str(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 fn map_find_int(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let word = args[1];
     let (koff, bytes, esize) = (args[2] & 0xFFFF, (args[2] >> 16) & 0xFFFF, args[2] >> 32);
+    debug_assert!(bytes <= 8, "a one-word key is at most 8 bytes");
     let mask = if bytes >= 8 { u64::MAX } else { (1u64 << (bytes * 8)) - 1 };
     let h = key_hash(word);
     let e = probe(args[0], h, esize, |entry| {

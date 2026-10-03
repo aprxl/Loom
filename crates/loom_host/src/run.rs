@@ -74,6 +74,10 @@ fn watch_interrupt(lua: &Lua) -> Option<loom_sys::interrupt::Watch> {
 }
 
 /// The hook `watch_interrupt` installs: raises the interrupt.
+///
+/// # Safety
+///
+/// Only Lua calls it, as a hook, with the state it's running in.
 #[allow(unsafe_code)]
 unsafe extern "C-unwind" fn stop(state: *mut mlua::ffi::lua_State, _: *mut mlua::ffi::lua_Debug) {
     let message = format!("{UNRAVEL_MARK}{INTERRUPT_MARK}");
