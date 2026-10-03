@@ -151,11 +151,18 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
     ones that can't yet, with the milestone that fixes each.
     `bench/RESULTS.md` has the numbers.
 
-Next: Treadle V1, the sequential language (design/vm.md §17): warps,
-optionals and results, `any`, lists, strings, maps, `defer`, lambdas,
-generics, with memory laid out for real and freed by ownership. Then V2
-shuttles, V3 the optimizer, V4 compile-time code on Treadle, V5 threads, V6
-spools, V7 Lua interop, V8 speed, V9 Treadle by default.
+23. Treadle V1: the sequential language (design/vm.md §17): warps,
+    optionals and results, `any`, lists, strings, maps and sets, `defer`,
+    lambdas, generics, streams, constants, gauges, the host, `loom test
+    --backend vm`, backtraces, Ctrl-C (130) and `process.exit`, with memory
+    laid out for real and freed by ownership; the checked build leaks
+    nothing. 1.65× PUC Lua on `bench/` (`bench/RESULTS.md`). The program
+    generator (`crates/loom/tests/gen.rs`) runs random programs on both
+    backends: 300 seeds in `cargo test`, 20 000 with `--ignored`.
+
+Next: Treadle V2, shuttles (design/vm.md §17). Then V3 the optimizer, V4
+compile-time code on Treadle, V5 threads, V6 spools, V7 Lua interop, V8
+speed, V9 Treadle by default.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and

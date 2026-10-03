@@ -1,9 +1,10 @@
 # Treadle: Loom's own VM
 
-> **Status: V0 is built** (2026-09-29): numbers, text literals, tuples,
-> control flow and calls run on Treadle, `loom run --backend vm file.loom`,
-> as fast as §16's V0 row asks and then some. V1 is next. The decisions in
-> [section 3](#3-decisions) were settled on 2026-09-29.
+> **Status: V1 is built** (2026-10-02): the sequential language, everything
+> that runs on Lua but shuttles and compile-time code, runs on Treadle
+> (`loom run --backend vm file.loom`), 1.65× as fast as PUC Lua 5.4 on
+> `bench/` (geomean, nothing below 0.85×). V2, shuttles, is next. The
+> decisions in [section 3](#3-decisions) were settled on 2026-09-29.
 
 Loom runs today by compiling to Lua 5.4 (see [lua-backend](lua-backend.md)).
 That backend exists to get the whole language running with the right
@@ -989,7 +990,8 @@ target that's the layout Treadle would use: a number no Lua code depends on.
 ### 10.17 The rest
 
 `main ! E` shows the error and exits with 1. `env.args` and `process.exit`
-work as on Lua. Raw memory makes `*T`, `#layout(C)` and `#layout(bits)`
+work as on Lua: `process.exit(n)` unwinds as an unravel does, running
+`defer`s, then exits with `n`. Raw memory makes `*T`, `#layout(C)` and `#layout(bits)`
 natural on Treadle later. `extern "C"` needs a foreign function interface,
 which isn't in this plan.
 
@@ -1247,7 +1249,7 @@ Passing:
    `stack overflow` and never crashes the process.
 8. Speed: the V0 row of §16.
 
-### V1: the sequential language (about 12k)
+### V1: the sequential language (about 12k) — done
 
 **Goal:** everything that runs on Lua today, except shuttles and
 compile-time code, runs on Treadle with the same results and nothing leaked.
@@ -1289,11 +1291,24 @@ Passing:
    and noted in RESULTS.md).
 4. The checked build over the whole corpus: no bad access, and nothing leaked
    at a normal exit.
-5. The only `.vm.out` files are for rows P1, P4 and P5, each with its
-   comment.
+5. The only `.vm.out` files are for rows P1, P4 and P6, each with its
+   comment (P5's fixture agrees on both backends).
 6. Unravel reports are identical, and a backtrace fixture shows every frame.
 7. Speed: the V1 row of §16.
 8. The program generator passes 300 seeds (the subset V1 covers).
+
+Met on 2026-10-02. `vm_skip.txt` lists four fixtures, all V2. The speed is
+in `bench/RESULTS.md`; what got it there: the dispatch loop keeps only `pc`
+and `fp` in registers and gives each op its own dispatch, ops with constant
+operands, list elements loaded and stored by one instruction, constants
+hoisted out of loops, natives' arguments made in place, size classes in the
+heap, and small transparent functions (std's and glue) inlined. The program
+generator (`crates/loom/tests/gen.rs`) also passes 20 000 seeds; it found
+unravels reported at stale locations on both backends, and Lua's tail calls
+losing a function's frame (fixtures `unravel_after_block`,
+`unravel_tail_call`). chip8 plays `examples/digits.ch8` the same on both
+backends. `process.exit(n)` and Ctrl-C unwind the program (its `defer`s
+run) before it exits with `n` or 130.
 
 ### V2: shuttles (about 3k)
 

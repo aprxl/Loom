@@ -318,12 +318,13 @@ built in `crates/`, following the plan in `design/lua-backend.md`:
   so rather than guessing.
 - **Treadle**, Loom's own VM, runs next to the Lua backend: a typed,
   optimizing pipeline and a register interpreter, meant to outrun the
-  interpreters of other languages (`design/vm.md`). Its first milestone
-  runs numbers, text literals, tuples, control flow and functions:
-  `loom run --backend vm`, 10–15× faster than the Lua backend on
-  `bench/`.
-- **Next:** Treadle's second milestone, the rest of the sequential language;
-  then threads and spools on it.
+  interpreters of other languages (`design/vm.md`). It runs everything the
+  Lua backend does but shuttles and compile-time code: `loom run --backend
+  vm`, about 1.6× as fast as PUC Lua 5.4 and 10× the Lua backend on
+  `bench/` (`bench/RESULTS.md`). `loom run --backend vm examples/chip8.loom
+  -- examples/digits.ch8` plays a small ROM.
+- **Next:** shuttles on Treadle, then its optimizer, then threads and spools
+  on it.
 
 ```bash
 cargo run -p loom -- run tests/run/fizzbuzz.loom
