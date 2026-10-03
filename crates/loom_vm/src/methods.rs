@@ -456,11 +456,19 @@ unsafe fn same_text(p: *const u8, key: &[u8]) -> bool {
     }
 }
 
+/// splitmix64's mixer: every input bit changes every output bit, so the
+/// low bits the index uses depend on the whole hash. (The compiler's
+/// `finalize_hash` makes the same.)
+fn finalize(h: u64) -> u64 {
+    let z = (h ^ (h >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    let z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    z ^ (z >> 31)
+}
+
 /// A one-word key's hash, as the compiler's `key_hash` makes it: the word
-/// mixed into FNV's offset, then the high half folded into the low.
+/// mixed into FNV's offset, then finalized.
 fn key_hash(word: u64) -> u64 {
-    let h = (FNV_OFFSET ^ word).wrapping_mul(FNV_PRIME);
-    h ^ (h >> 32)
+    finalize((FNV_OFFSET ^ word).wrapping_mul(FNV_PRIME))
 }
 
 /// Looks for the entry whose key `same` says is it, with hash `h`, in the

@@ -17,6 +17,7 @@ and an idiomatic Lua 5.4 version of it in `lua/`:
 | `binary_trees` | allocating and freeing |
 | `richards` | sums, `match`, records, `any` dispatch |
 | `word_freq` | `String`, `Map[String, u32]`, templates |
+| `maps` | `Map` with clustered integer keys and text keys |
 | `sort` | `List.sort` on records, comparing through `Ord` |
 | `streams` | iterator chains: `filter`, `map`, `take_while`, `sum` |
 | `chip8` | twill `match`, `u8` and `u12` wrapping arithmetic, an interpreter loop |

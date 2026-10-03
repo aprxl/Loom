@@ -1,0 +1,19 @@
+// `Map` with keys that cluster (multiples of 4096) and text keys: inserting
+// and looking up.
+use std.io.print
+
+const SIZE = 200_000
+
+fn main() {
+    var m: Map[usize, usize] = Map()
+    for i in 0..SIZE { m[i << 12] = i }
+    var total = 0
+    for i in 0..SIZE { total += m[i << 12] }
+    var s: Map[String, usize] = Map()
+    for i in 0..SIZE { s["k{i}"] = i }
+    var hits = 0
+    for i in 0..SIZE {
+        if s.has("k{i * 2}") { hits += 1 }
+    }
+    print("{m.len()} {total} {s.len()} {hits}")
+}

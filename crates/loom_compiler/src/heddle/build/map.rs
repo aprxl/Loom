@@ -87,9 +87,27 @@ impl<'a> Builder<'a> {
     /// A key's hash, as kept in its entry.
     fn key_hash(&mut self, c: &Coll, key: &Val, span: Span) -> Option<Value> {
         let h = self.hash_val(key.clone(), c.key, span)?;
-        let k = self.iconst(32);
-        let hi = self.emit1(InstKind::Shr { ty: U64, a: h, b: k }, VTy::Int);
-        Some(self.emit1(InstKind::Bit { op: BitOp::Xor, a: h, b: hi }, VTy::Int))
+        Some(self.finalize_hash(h))
+    }
+
+    /// The finalizer of a key's hash, which the native lookups
+    /// (`methods.rs`' `finalize`) do the same: splitmix64's mixer. The
+    /// index is the hash's low bits, and a product's low bits only depend
+    /// on its operands' low bits, so keys that differ in their high bits
+    /// (or are all multiples of a power of two) would start at the same few
+    /// slots without it.
+    fn finalize_hash(&mut self, h: Value) -> Value {
+        let mut z = h;
+        for (shift, mul) in [(30, 0xbf58_476d_1ce4_e5b9u64), (27, 0x94d0_49bb_1331_11eb)] {
+            let k = self.iconst(shift);
+            let hi = self.emit1(InstKind::Shr { ty: U64, a: z, b: k }, VTy::Int);
+            let x = self.emit1(InstKind::Bit { op: BitOp::Xor, a: z, b: hi }, VTy::Int);
+            let m = self.iconst(mul);
+            z = self.emit1(InstKind::Arith { op: IntOp::Mul, policy: Policy::Wrap, ty: U64, a: x, b: m }, VTy::Int);
+        }
+        let k = self.iconst(31);
+        let hi = self.emit1(InstKind::Shr { ty: U64, a: z, b: k }, VTy::Int);
+        self.emit1(InstKind::Bit { op: BitOp::Xor, a: z, b: hi }, VTy::Int)
     }
 
     /// The number of the entry with `key` in the map at `header` (or

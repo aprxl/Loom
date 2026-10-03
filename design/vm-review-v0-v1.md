@@ -35,6 +35,8 @@ index by the high bits. The same shape is in `hash_into` for every part of a
 structural key. `text_hash` (single multiply plus fold) is better but worth
 the same test. Add a map benchmark with aligned and clustered keys.
 
+*Fixed: Map keys go through splitmix64's mixer; i << 12 keys: 1966 ms to about 100 ms (bench/maps)*
+
 **H2. `Map.remove` / `Set.remove` is O(n).** *Reproduced.* 30 000 removes
 from a 30 000-entry map: 4.8 s on Treadle, 14.7 s on the Lua backend.
 `remove_entry` (`heddle/build/map.rs:294`) moves every later entry down and

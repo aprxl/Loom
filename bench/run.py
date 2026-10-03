@@ -16,7 +16,7 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOOM = os.path.join(ROOT, "target", "release", "loom.exe" if os.name == "nt" else "loom")
 BENCHES = ["fib", "sieve", "mandelbrot", "nbody", "spectral_norm", "fannkuch", "binary_trees",
-           "richards", "word_freq", "sort", "streams", "chip8"]
+           "richards", "word_freq", "maps", "sort", "streams", "chip8"]
 
 
 def best(cmd, runs):
