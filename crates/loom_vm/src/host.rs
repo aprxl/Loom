@@ -75,11 +75,23 @@ fn exit(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 
 /// `time.sleep(nanos)`.
 fn sleep(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    if !ctx.sandbox {
-        ctx.flush();
-        std::thread::sleep(std::time::Duration::from_nanos(args[0]));
+    if ctx.sandbox {
+        return Ok(());
     }
-    Ok(())
+    ctx.flush();
+    // In slices, so Ctrl-C ends a long sleep, which then unwinds.
+    let slice = std::time::Duration::from_millis(50);
+    let end = std::time::Instant::now().checked_add(std::time::Duration::from_nanos(args[0]));
+    loop {
+        if ctx.interrupted() {
+            return Err(Trap::Interrupt);
+        }
+        let left = end.map_or(slice, |end| end.saturating_duration_since(std::time::Instant::now()));
+        if left.is_zero() {
+            return Ok(());
+        }
+        std::thread::sleep(left.min(slice));
+    }
 }
 
 /// `term.raw_mode(on)`.

@@ -19,7 +19,7 @@ pub use loom_sys::{Host, Outcome, Output};
 use crate::srcmap::{Location, SourceMap};
 use loom_sys::term::Term;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 /// The marker at the start of every unravel message (`rt.MARK`).
 pub const UNRAVEL_MARK: &str = "\u{1f}LOOM\u{1f}";
@@ -60,6 +60,9 @@ pub fn run_bundle(bundle: &str, map: Option<&SourceMap>, host: Host) -> Outcome 
 /// `loom` binary.)
 static MAIN_STATE: AtomicUsize = AtomicUsize::new(0);
 static COROUTINES: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+/// The program was interrupted, and is unwinding: once, so its `defer`s run
+/// to the end (a `sleep` in one doesn't raise it again).
+static RAISED: AtomicBool = AtomicBool::new(false);
 
 /// Every state a hook goes on or comes off.
 fn states() -> Vec<usize> {
@@ -68,6 +71,21 @@ fn states() -> Vec<usize> {
         all.extend(coroutines.iter().copied());
     }
     all
+}
+
+/// Takes the hook off every state (the unwinding runs `defer`s, which no hook
+/// may interrupt), the lock released before anything raises.
+///
+/// # Safety
+///
+/// As [`stop`]: the states are alive (the main one, and the coroutines the
+/// runtime lists until they're finished).
+#[allow(unsafe_code)]
+unsafe fn clear_hooks() {
+    for state in states() {
+        // SAFETY: as the caller promises.
+        unsafe { mlua::ffi::lua_sethook(state as *mut mlua::ffi::lua_State, None, 0, 0) };
+    }
 }
 
 /// With Ctrl-C's handler installed, a watch that unwinds the program at
@@ -79,6 +97,7 @@ fn states() -> Vec<usize> {
 fn watch_interrupt(lua: &Lua) -> Option<loom_sys::interrupt::Watch> {
     loom_sys::interrupt::installed()?;
     MAIN_STATE.store(lua.exec_raw_lua(|raw| raw.state()) as usize, Ordering::Relaxed);
+    RAISED.store(false, Ordering::Relaxed);
     if let Ok(mut coroutines) = COROUTINES.lock() {
         coroutines.clear();
     }
@@ -111,17 +130,12 @@ fn watch_interrupt(lua: &Lua) -> Option<loom_sys::interrupt::Watch> {
 #[allow(unsafe_code)]
 unsafe extern "C-unwind" fn stop(state: *mut mlua::ffi::lua_State, _: *mut mlua::ffi::lua_Debug) {
     let message = format!("{UNRAVEL_MARK}{INTERRUPT_MARK}");
-    // Every state's hook goes (the unwinding runs `defer`s, which no hook
-    // may interrupt), the lock released before `lua_error` leaves.
-    let all = states();
-    // SAFETY: as above; the states in `all` are alive (the main one, and the
-    // coroutines the runtime lists until they're finished); Lua calls the
-    // hook with its state; the message is copied in before it's freed, and
-    // `lua_error` doesn't return (nothing of this frame is left to drop).
+    RAISED.store(true, Ordering::Relaxed);
+    // SAFETY: as above; Lua calls the hook with its state; the message is
+    // copied in before it's freed, and `lua_error` doesn't return (nothing
+    // of this frame is left to drop).
     unsafe {
-        for other in all {
-            mlua::ffi::lua_sethook(other as *mut mlua::ffi::lua_State, None, 0, 0);
-        }
+        clear_hooks();
         mlua::ffi::lua_sethook(state, None, 0, 0);
         mlua::ffi::lua_pushlstring(state, message.as_ptr().cast(), message.len());
         drop(message);
@@ -230,10 +244,29 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
     table.set("memory_fs", sandbox)?;
     table.set("args", lua.create_sequence_from(host.args)?)?;
     let sleep = lua.create_function(move |_, nanos: i64| {
-        if !sandbox {
-            std::thread::sleep(std::time::Duration::from_nanos(nanos as u64));
+        if sandbox {
+            return Ok(());
         }
-        Ok(())
+        // In slices, so Ctrl-C ends a long sleep, which then unwinds.
+        let slice = std::time::Duration::from_millis(50);
+        let end = std::time::Instant::now().checked_add(std::time::Duration::from_nanos(nanos.max(0) as u64));
+        let flag = loom_sys::interrupt::installed();
+        loop {
+            if flag.as_ref().is_some_and(|f| f.load(Ordering::Relaxed)) && !RAISED.swap(true, Ordering::Relaxed) {
+                // SAFETY: the states `clear_hooks` takes the hook off are
+                // alive: this runs in the program, which holds them.
+                #[allow(unsafe_code)]
+                unsafe {
+                    clear_hooks()
+                };
+                return Err(mlua::Error::runtime(format!("{UNRAVEL_MARK}{INTERRUPT_MARK}")));
+            }
+            let left = end.map_or(slice, |end| end.saturating_duration_since(std::time::Instant::now()));
+            if left.is_zero() {
+                return Ok(());
+            }
+            std::thread::sleep(left.min(slice));
+        }
     })?;
     table.set("sleep", sleep)?;
     // The terminal: each returns an error message when it fails, which the

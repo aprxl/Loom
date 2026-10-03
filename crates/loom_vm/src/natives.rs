@@ -43,6 +43,12 @@ pub(crate) struct Ctx<'i> {
     /// The files `File.append` and `write_line` write to, kept open (a few,
     /// by path) and closed when the run ends, however it ends.
     pub open_files: std::collections::HashMap<String, std::fs::File>,
+    /// Set from outside (Ctrl-C), to stop the program: checked at ticks, and
+    /// by natives that wait.
+    pub interrupt: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    /// The program was interrupted, and is unwinding: once, so its `defer`s
+    /// run to the end.
+    pub stopping: bool,
     /// With `checked`: the value stack, set before each native runs, so a
     /// native can check memory on it.
     pub stack: *const crate::stack::Stack,
@@ -79,9 +85,20 @@ impl<'i> Ctx<'i> {
             term: loom_sys::term::Term::default(),
             files: std::collections::HashMap::new(),
             open_files: std::collections::HashMap::new(),
+            interrupt: None,
+            stopping: false,
             stack: std::ptr::null(),
             dispatched: 0,
         }
+    }
+
+    /// Whether the program should stop now: it was interrupted and isn't
+    /// stopping yet (which this makes it).
+    pub fn interrupted(&mut self) -> bool {
+        let asked =
+            !self.stopping && self.interrupt.as_ref().is_some_and(|i| i.load(std::sync::atomic::Ordering::Relaxed));
+        self.stopping |= asked;
+        asked
     }
 
     /// Where the image's text is.

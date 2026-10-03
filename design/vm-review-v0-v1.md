@@ -157,6 +157,8 @@ an index with no empty slot would spin forever, uninterruptibly) hold the
 loop past Ctrl-C. Sleep should wait on the interrupt (a condvar/event with a
 timeout); `probe` should be bounded by `slots`.
 
+*Fixed: time.sleep waits in 50 ms slices and ends on Ctrl-C (both backends; the interrupt state moved into Ctx); the map probe is bounded*
+
 **M8. Terminal and output state is lost on the hard paths.** *Read.* A
 second Ctrl-C calls `std::process::exit(130)` from the handler thread
 (`interrupt.rs:44`): the 32 KiB `Ctx.out` buffer is lost and raw mode isn't

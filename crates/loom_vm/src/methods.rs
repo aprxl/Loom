@@ -492,7 +492,9 @@ fn probe(header: u64, h: u64, esize: u64, same: impl Fn(u64) -> bool) -> u64 {
     }
     let mask = slots - 1;
     let mut i = h & mask;
-    loop {
+    // At most once around: the index is never full, but a bad one mustn't
+    // spin, where Ctrl-C can't reach.
+    for _ in 0..slots {
         // SAFETY: the index has `slots` words, each 0 or an entry's number
         // plus one, and the entries `esize` bytes each.
         let s = unsafe { (ibuf as *const u64).add(i as usize).read() };
@@ -506,6 +508,7 @@ fn probe(header: u64, h: u64, esize: u64, same: impl Fn(u64) -> bool) -> u64 {
         }
         i = (i + 1) & mask;
     }
+    u64::MAX
 }
 
 /// `map.find_str(header, text, layout)`: (entry or `u64::MAX`, hash).

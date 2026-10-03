@@ -27,9 +27,6 @@
 
 #![allow(unsafe_code)]
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-
 use loom_isa::word::{a, b, bc_i32, bc_u32, c, c_i16, unpack_cast};
 use loom_isa::{Image, LINK_SLOTS, Op};
 
@@ -73,7 +70,6 @@ struct Env<'e, 'i> {
     natives: &'e [(NativeFn, usize)],
     ctx: &'e mut Ctx<'i>,
     stack: &'e mut Stack,
-    interrupt: Option<Arc<AtomicBool>>,
     data_range: (u64, u64),
     entry_results: usize,
     /// The end of the stack segment in use.
@@ -82,8 +78,6 @@ struct Env<'e, 'i> {
     ticks: i32,
     /// What's unwinding the stack, while landing pads run.
     in_flight: Option<Fault>,
-    /// The program was interrupted, and is unwinding.
-    stopping: bool,
 }
 
 #[derive(Debug)]
@@ -97,7 +91,6 @@ pub(crate) struct Machine<'i> {
     natives: Vec<(NativeFn, usize)>,
     pub ctx: Ctx<'i>,
     stack_limit: usize,
-    interrupt: Option<Arc<AtomicBool>>,
     /// Kept between calls from outside.
     stack: Option<Stack>,
 }
@@ -126,9 +119,12 @@ impl<'i> Machine<'i> {
             funcs,
             data: image.data.clone().into_boxed_slice(),
             natives,
-            ctx: Ctx::new(image, host),
+            ctx: {
+                let mut ctx = Ctx::new(image, host);
+                ctx.interrupt = config.interrupt.clone();
+                ctx
+            },
             stack_limit: config.stack_limit,
-            interrupt: config.interrupt.clone(),
             stack: None,
         })
     }
@@ -189,6 +185,7 @@ impl<'i> Machine<'i> {
             let r = self.data.as_mut_ptr_range();
             (r.start as u64, r.end as u64)
         };
+        self.ctx.stopping = false;
         let mut env = Env {
             image: self.image,
             code_base: self.code.as_ptr(),
@@ -197,13 +194,11 @@ impl<'i> Machine<'i> {
             natives: &self.natives,
             ctx: &mut self.ctx,
             stack,
-            interrupt: self.interrupt.clone(),
             data_range,
             entry_results: start.results,
             seg_end,
             ticks: TICKS,
             in_flight: None,
-            stopping: false,
         };
         // Only `pc` and `fp` (and each instruction's word) stay in registers
         // through the loop; the rest is read from `env` where it's needed.
@@ -297,8 +292,7 @@ impl<'i> Machine<'i> {
                         if env.ticks < 0 {
                             env.ticks = TICKS;
                             // Once: the unwinding runs `defer`s to the end.
-                            if !env.stopping && interrupted(&env.interrupt) {
-                                env.stopping = true;
+                            if env.ctx.interrupted() {
                                 throw!(Trap::Interrupt);
                             }
                         }
@@ -1210,13 +1204,6 @@ unsafe fn leave_segment(stack: &mut Stack, fp: *mut u64, dst: *mut u64, n: usize
     // SAFETY: as the caller promises; they're in different segments.
     unsafe { std::ptr::copy_nonoverlapping(fp, dst, n) };
     stack.shrink()
-}
-
-/// Whether the host asked the program to stop.
-#[cold]
-#[inline(never)]
-fn interrupted(interrupt: &Option<Arc<AtomicBool>>) -> bool {
-    interrupt.as_ref().is_some_and(|i| i.load(Ordering::Relaxed))
 }
 
 #[cold]

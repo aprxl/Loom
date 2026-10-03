@@ -552,3 +552,33 @@ fn main() {{
     let _ = std::fs::remove_file(&out_path);
     let _ = std::fs::remove_file(&path);
 }
+
+#[test]
+fn ctrl_c_ends_a_long_sleep_on_both_backends() {
+    let path = temp_source(
+        "interrupt_sleep",
+        "use std.io.print
+use std.time.{secs, sleep}
+
+fn main() {
+    defer print(\"cleaned up\")
+    print(\"sleeping\")
+    sleep(secs(120))
+    print(\"slept\")
+}
+",
+    );
+    let file = path.to_str().expect("utf-8 path");
+    for backend in ["lua", "vm"] {
+        let started = std::time::Instant::now();
+        let out = Command::new(env!("CARGO_BIN_EXE_loom"))
+            .args(["--color", "never", "run", "--backend", backend, file])
+            .env("LOOM_INTERRUPT_AFTER_MS", "300")
+            .output()
+            .expect("the loom binary runs");
+        assert_eq!(out.status.code(), Some(130), "{backend}: {}", text(&out.stderr));
+        assert_eq!(text(&out.stdout), "sleeping\ncleaned up\n", "{backend}");
+        assert!(started.elapsed().as_secs() < 30, "{backend}: {:?}", started.elapsed());
+    }
+    let _ = std::fs::remove_file(&path);
+}
