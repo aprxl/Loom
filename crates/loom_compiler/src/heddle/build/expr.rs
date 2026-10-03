@@ -528,6 +528,14 @@ impl<'a> Builder<'a> {
     }
 
     fn block_stmts(&mut self, block: &'a Block, join: &Join, start: usize) -> Option<()> {
+        // What comes after the block is reported where it was before it.
+        let span = self.f.span;
+        let done = self.block_stmts_in(block, join, start);
+        self.f.span = span;
+        done
+    }
+
+    fn block_stmts_in(&mut self, block: &'a Block, join: &Join, start: usize) -> Option<()> {
         let Some((last, rest)) = block.stmts.split_last() else {
             return self.join_put(join, Val::Regs(Vec::new()), start, self.here());
         };
@@ -668,6 +676,14 @@ impl<'a> Builder<'a> {
     }
 
     fn match_expr(&mut self, scrutinee: &'a hir::Expr, arms: &'a [hir::Arm], ty: Ty, span: Span) -> Option<Val> {
+        // What comes after the arms is reported where it was before them.
+        let saved = self.f.span;
+        let v = self.match_arms(scrutinee, arms, ty, span);
+        self.f.span = saved;
+        v
+    }
+
+    fn match_arms(&mut self, scrutinee: &'a hir::Expr, arms: &'a [hir::Arm], ty: Ty, span: Span) -> Option<Val> {
         let s = self.expr(scrutinee)?;
         let sty = self.coerced_ty(scrutinee);
         let join = self.join(ty, span)?;

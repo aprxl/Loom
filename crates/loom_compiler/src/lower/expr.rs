@@ -1095,7 +1095,10 @@ impl Lowerer<'_> {
         let Some((last, rest)) = block.stmts.split_last() else { return };
         // A fallback defer's flag is a local of this block.
         let flags = self.live_flags.clone();
+        // What comes after the block is reported where it was before it.
+        let span = self.span;
         self.block_stmts_into(last, rest, dest);
+        self.span = span;
         self.live_flags = flags;
     }
 
@@ -1327,6 +1330,13 @@ impl Lowerer<'_> {
     // ------------------------------------------------------------ match
 
     fn match_into(&mut self, scrutinee: &hir::Expr, arms: &[hir::Arm], dest: &Dest) {
+        // What comes after the arms is reported where it was before them.
+        let span = self.span;
+        self.match_arms_into(scrutinee, arms, dest);
+        self.span = span;
+    }
+
+    fn match_arms_into(&mut self, scrutinee: &hir::Expr, arms: &[hir::Arm], dest: &Dest) {
         let v = self.lower_expr(scrutinee);
         let s = self.spill_always(v);
         let ty = self.ty_of(scrutinee);
