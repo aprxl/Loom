@@ -77,6 +77,16 @@ pub(super) enum Step {
         pair: Ty,
     },
     Chain(Ty),
+    /// A generator's items: `[0]` the shuttle (see `shuttle.rs`).
+    Gen {
+        item: Ty,
+        sh: Ty,
+    },
+    /// A burst's items: `[0]` the burst.
+    Burst {
+        item: Ty,
+        burst: Ty,
+    },
     /// Copies of a map's keys, values or pairs, or a set's items: `[0]`
     /// the map's header, `[8]` its length and `[16]` its entries' buffer
     /// when the stream started, `[24]` the next entry, then the map, if
@@ -156,6 +166,7 @@ impl<'a> Builder<'a> {
             Step::Woven { iter, .. } => self.size_align(iter)?.0.max(8),
             Step::Range(_) | Step::Text(_) => 24,
             Step::Coll { owned, .. } => 32 + if owned { 48 } else { 0 },
+            Step::Gen { .. } | Step::Burst { .. } => 16,
             Step::Chunks { .. } => 32,
             _ => 56,
         })
@@ -264,11 +275,13 @@ impl<'a> Builder<'a> {
         let (drop_b, next_b) = (self.new_block(), self.new_block());
         self.br(dropping, drop_b, next_b);
         self.enter(drop_b);
-        self.step_drop(step, b);
+        // The box goes however dropping what it holds ends: closing a
+        // shuttle in it can unravel (design/vm.md §14, P3).
         let size = self.box_size(step)?.div_ceil(8) * 8;
-        let n = self.iconst(size);
-        let a = self.iconst(8);
-        self.emit(InstKind::Native { name: "mem.free", imm: 0, args: vec![b, n, a] }, &[]);
+        self.add_cleanup(CleanupKind::Free { at: b, size });
+        self.step_drop(step, b);
+        self.run_cleanups(0);
+        self.f.cleanups.clear();
         self.ret_int(0);
         self.enter(next_b);
         self.step_next(step, b, out, span)?;
@@ -283,6 +296,7 @@ impl<'a> Builder<'a> {
                 self.drop_at(at, t);
             }
             Step::Woven { iter, .. } => self.drop_at(b, iter),
+            Step::Gen { sh: t, .. } | Step::Burst { burst: t, .. } => self.drop_at(b, t),
             Step::Coll { coll, owned: true, .. } => {
                 let at = self.offset(b, 32);
                 self.drop_at(at, coll);
@@ -306,6 +320,7 @@ impl<'a> Builder<'a> {
     /// Builds `op` 0 of `step`'s step function: the next item.
     fn step_next(&mut self, step: Step, b: Value, out: Value, span: Span) -> Option<()> {
         match step {
+            Step::Gen { .. } | Step::Burst { .. } => self.shuttle_next(step, b, out)?,
             Step::Seq { elem, .. } => {
                 let (buf, len, i) = (self.word(b, 0), self.word(b, 8), self.word(b, 16));
                 let done = self.ucmp(Cmp::Ge, i, len);
@@ -584,6 +599,8 @@ impl<'a> Builder<'a> {
             Step::Indexed { item, .. } => format!("indexed[{}]", show(item)),
             Step::Zip { pair, .. } => format!("zip[{}]", show(pair)),
             Step::Chain(t) => format!("chain[{}]", show(t)),
+            Step::Gen { sh, .. } => format!("gen[{}]", show(sh)),
+            Step::Burst { burst, .. } => format!("burst[{}]", show(burst)),
             Step::Coll { coll, what, .. } => format!("{what:?}[{}]", show(coll)).to_lowercase(),
         }
     }
@@ -938,7 +955,16 @@ impl<'a> Builder<'a> {
                 self.coll_box(b, p, from);
                 self.stream_val(step, b, ty, span)
             }
-            IterSource::Shuttle(_) | IterSource::Burst(_) => self.unsupported(span, "shuttles"),
+            IterSource::Shuttle(item) | IterSource::Burst(item) => {
+                let from = self.tcx().degauge(from);
+                let item = self.plain_ty(item);
+                let step = self.shuttle_stream_step(from, item);
+                let b = self.new_box(step)?;
+                // The stream holds it from here.
+                let v = self.owned(v, from, span)?;
+                self.move_to(b, 0, v, from, span)?;
+                self.stream_val(step, b, ty, span)
+            }
         }
     }
 
@@ -961,6 +987,7 @@ impl<'a> Builder<'a> {
                 let item = match src {
                     IterSource::Seq(t) | IterSource::Range(t) | IterSource::SetItems(t) => self.plain_ty(*t),
                     IterSource::Woven { item, .. } => self.plain_ty(*item),
+                    IterSource::Shuttle(item) | IterSource::Burst(item) => self.plain_ty(*item),
                     IterSource::MapPairs(k, v) => {
                         let (k, v) = (self.tcx().degauge(*k), self.tcx().degauge(*v));
                         match self.tcx().find(&TyKind::Tuple(vec![k, v])) {
@@ -968,7 +995,6 @@ impl<'a> Builder<'a> {
                             None => return self.internal(span, "the pairs of a map with no type"),
                         }
                     }
-                    _ => return self.unsupported(span, "this kind of `for` loop"),
                 };
                 let sty = self.stream_ty(item).or_else(|| self.internal(span, "a stream with no type"))?;
                 (self.stream_of(src, v, from, sty, span)?, sty, item)
@@ -998,6 +1024,10 @@ impl<'a> Builder<'a> {
         self.enter(yes);
         self.own_temp(item_at, item);
         let x = self.load_val(item_at, 0, item, span)?;
+        // In registers now: the slot is done with.
+        if matches!(x, Val::Regs(_)) && !self.needs_drop(item) {
+            self.temp_gone(item_at);
+        }
         let scopes = self.f.scopes.len();
         self.f.loops.push(super::LoopCtx {
             id: e.id,

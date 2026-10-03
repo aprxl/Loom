@@ -40,6 +40,7 @@ mod pat;
 mod repr;
 mod scan;
 mod seq;
+mod shuttle;
 mod stream;
 mod text;
 mod value;
@@ -95,6 +96,13 @@ enum FnKey {
     GaugeCheck(crate::hir::DefId),
     /// Code for the values of a type.
     Glue(Glue, Ty),
+    /// The step function of a shuttle function instance (see
+    /// `heddle::frame`).
+    ShuttleStep(BodyId),
+    /// Runs a burst to its next item (see `shuttle.rs`).
+    ShuttleDrive,
+    /// Lets go of a shuttle's box (see `shuttle.rs`).
+    ShuttleRelease,
 }
 
 /// What glue does for a type's values.
@@ -232,6 +240,8 @@ struct FnState<'a> {
     /// Variables a `mut` argument was given in memory of their own for:
     /// written back after the call.
     writebacks: Vec<(Vec<Var>, Ty, Value)>,
+    /// A shuttle's step being built.
+    shuttle: Option<shuttle::ShuttleBuild>,
 }
 
 pub(super) struct Builder<'a> {
@@ -265,6 +275,8 @@ pub(super) struct Builder<'a> {
     vtable_at: HashMap<(Ty, Vec<crate::hir::DefId>), u32>,
     /// The lambdas made so far, by the body that made them.
     lambdas: HashMap<(BodyId, crate::hir::HirId), lambda::LambdaInfo<'a>>,
+    /// Each shuttle function's frame, once its step is built.
+    frames: HashMap<BodyId, super::frame::FrameLayout>,
     f: FnState<'a>,
 }
 
@@ -334,6 +346,7 @@ impl<'a> Builder<'a> {
             dyn_slots: IndexMap::new(),
             type_ids: IndexMap::new(),
             vtable_at: HashMap::new(),
+            frames: HashMap::new(),
             f: FnState::default(),
         }
     }
@@ -388,6 +401,10 @@ impl<'a> Builder<'a> {
     /// Builds every function queued, and those they queue.
     fn drain(&mut self) {
         while let Some(key) = self.queue.pop_front() {
+            // A shuttle's step can be built early, for its frame.
+            if self.funcs[self.ids[&key].0 as usize].is_some() {
+                continue;
+            }
             self.build_func(key);
         }
     }
@@ -509,6 +526,9 @@ impl<'a> Builder<'a> {
             }
             FnKey::Dyn(id) => format!("{}.dyn", self.body_name(id)),
             FnKey::GaugeCheck(def) => format!("{}.check", self.p.def_path(def)),
+            FnKey::ShuttleStep(id) => format!("{}.step", self.body_name(id)),
+            FnKey::ShuttleDrive => "shuttle.drive".to_string(),
+            FnKey::ShuttleRelease => "shuttle.release".to_string(),
             FnKey::Glue(g, ty) => {
                 let what = match g {
                     Glue::Drop => "drop",
@@ -536,8 +556,8 @@ impl<'a> Builder<'a> {
         let body = match key {
             FnKey::Body(id) | FnKey::Main(id) | FnKey::Lambda(id, _) | FnKey::Thunk(id) => id,
             FnKey::Glue(..) | FnKey::Step(_) | FnKey::ConstInit(_) | FnKey::ConstExit | FnKey::AnyShow(..) => BodyId(0),
-            FnKey::Dyn(id) => id,
-            FnKey::GaugeCheck(_) => BodyId(0),
+            FnKey::Dyn(id) | FnKey::ShuttleStep(id) => id,
+            FnKey::GaugeCheck(_) | FnKey::ShuttleDrive | FnKey::ShuttleRelease => BodyId(0),
         };
         self.f = FnState { body, ..FnState::default() };
         let entry = self.new_block();
@@ -546,7 +566,7 @@ impl<'a> Builder<'a> {
         let reported = self.diags.len();
         let span = self.key_span(key);
         self.f.span = Some(span);
-        if let FnKey::Glue(..) = key {
+        if let FnKey::Glue(..) | FnKey::ShuttleDrive | FnKey::ShuttleRelease = key {
             // Glue has no locations: what goes wrong in it is reported
             // where it was called from.
             self.f.span = None;
@@ -563,10 +583,35 @@ impl<'a> Builder<'a> {
             FnKey::Dyn(id) => self.dyn_func(id, span),
             FnKey::GaugeCheck(def) => self.gauge_check_func(def),
             FnKey::Glue(g, ty) => self.glue_func(g, ty),
+            FnKey::ShuttleStep(id) => self.shuttle_step(id),
+            FnKey::ShuttleDrive => self.shuttle_drive_func(),
+            FnKey::ShuttleRelease => self.shuttle_release_func(),
         };
-        self.zero_owned_slots();
+        // A step's frame starts zeroed, and its slots are zeroed where
+        // their values start (see `heddle::frame`).
+        let frame_input = self.frame_input();
+        if frame_input.is_none() {
+            self.zero_owned_slots();
+        }
         let state = std::mem::take(&mut self.f);
-        let (func, complete) = finish(name, state, results.unwrap_or_default());
+        let (mut func, complete) = finish(name, state, results.unwrap_or_default());
+        if let (FnKey::ShuttleStep(id), Some(input)) = (key, frame_input)
+            && complete
+            && self.diags.len() == reported
+        {
+            match super::frame::lay_out(&mut func, &input) {
+                Ok(layout) => {
+                    self.frames.insert(id, layout);
+                }
+                Err(e) => {
+                    self.diags.push(
+                        Diagnostic::error(codes::U0102, format!("internal error: {e}"))
+                            .primary(span, "while building this shuttle for Treadle")
+                            .note("this is a bug in Loom, not in your program"),
+                    );
+                }
+            }
+        }
         // Code that can run but doesn't end is a builder bug, unless
         // something was reported (and nothing runs).
         if !complete && self.diags.len() == reported {
@@ -588,9 +633,13 @@ impl<'a> Builder<'a> {
                 Some(info) => info.expr.span,
                 None => self.p.def(self.typed.results.instance(id).def).span,
             },
-            FnKey::Glue(..) | FnKey::Step(_) | FnKey::ConstExit | FnKey::AnyShow(..) => {
-                self.main_span.expect("set before anything is built")
-            }
+            FnKey::ShuttleStep(id) => self.p.def(self.typed.results.instance(id).def).span,
+            FnKey::Glue(..)
+            | FnKey::Step(_)
+            | FnKey::ConstExit
+            | FnKey::AnyShow(..)
+            | FnKey::ShuttleDrive
+            | FnKey::ShuttleRelease => self.main_span.expect("set before anything is built"),
             FnKey::ConstInit(consts::ConstKey::Def(def)) | FnKey::GaugeCheck(def) => self.p.def(def).span,
             FnKey::ConstInit(consts::ConstKey::Expr(..)) => self.main_span.expect("set before anything is built"),
         }
@@ -782,7 +831,7 @@ impl<'a> Builder<'a> {
     fn fn_body(&mut self, id: BodyId, f: &'a crate::hir::FnDef, span: Span) -> Option<Vec<VTy>> {
         let sig = self.typed.results.sigs.get(&id)?.clone();
         if matches!(f.ret, FnRet::Shuttle { .. }) {
-            return self.unsupported(span, "shuttles");
+            return self.shuttle_maker(id, f, span);
         }
         let body = f.body.as_ref().expect("checked by the caller");
         let abi = self.body_abi(id, span)?;
@@ -811,6 +860,15 @@ impl<'a> Builder<'a> {
     /// registers, after every cleanup of the function runs.
     fn ret_val(&mut self, val: Val, span: Span) -> Option<()> {
         let ty = self.f.ret.unwrap_or(self.tcx().unit);
+        if self.f.shuttle.is_some() {
+            // A shuttle's step: finished.
+            self.run_cleanups(0);
+            if self.live() {
+                let k = self.iconst(super::frame::FINISHED);
+                self.terminate(Term::Ret(vec![k]));
+            }
+            return Some(());
+        }
         let vals = match self.f.sret {
             Some(sret) => {
                 self.move_to(sret, 0, val, ty, span)?;
@@ -983,6 +1041,7 @@ impl<'a> Builder<'a> {
     fn write(&mut self, var: Var, v: Value) {
         let b = self.cur_block();
         self.f.defs.insert((var, b), v);
+        self.note_width(var, v);
     }
 
     fn write_all(&mut self, vars: &[Var], vals: &[Value]) {
@@ -1010,6 +1069,7 @@ impl<'a> Builder<'a> {
             let param = self.new_value(ty);
             self.f.blocks[i].params.push(param);
             self.f.incomplete.entry(b).or_default().push((var, param));
+            self.note_width(var, param);
             param
         } else {
             let preds = self.f.preds[i].clone();
@@ -1029,6 +1089,7 @@ impl<'a> Builder<'a> {
                     let param = self.new_value(ty);
                     self.f.blocks[i].params.push(param);
                     self.f.defs.insert((var, b), param);
+                    self.note_width(var, param);
                     self.add_args(var, b, param);
                     param
                 }
@@ -1301,7 +1362,7 @@ pub(crate) fn rewrite(k: &mut InstKind, f: impl Fn(Value) -> Value) {
         | K::FloatCast { a, .. }
         | K::IntToChar { a, .. } => *a = f(*a),
         K::Call { args, .. } | K::Native { args, .. } => args.iter_mut().for_each(|v| *v = f(*v)),
-        K::Slot(_) | K::Global(_) | K::FuncRef(_) => {}
+        K::Slot(_) | K::Global(_) | K::FuncRef(_) | K::Life { .. } => {}
         K::Load { ptr, .. } | K::Offset { ptr, .. } => *ptr = f(*ptr),
         K::Store { ptr, val, .. } => {
             *ptr = f(*ptr);

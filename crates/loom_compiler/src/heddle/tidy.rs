@@ -74,7 +74,7 @@ fn rewrite_term(t: &mut Term, f: impl Fn(Value) -> Value) {
             *ptr = f(*ptr);
             *len = f(*len);
         }
-        Term::Jump(_) | Term::UnravelMsg | Term::Crash(_) | Term::Resume => {}
+        Term::Jump(_) | Term::UnravelMsg | Term::Crash(_) | Term::Resume | Term::Suspend { .. } => {}
     }
     for e in t.edges_mut() {
         e.args.iter_mut().for_each(|a| *a = f(*a));

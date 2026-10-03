@@ -66,7 +66,38 @@ impl<'a> Builder<'a> {
     pub(super) fn raw_slot(&mut self, size: u64, align: u64) -> u32 {
         let n = self.f.slots.len() as u32;
         self.f.slots.push(crate::heddle::Slot { size, align });
+        // In a shuttle's step, where its value starts and (at the latest)
+        // stops mattering: the end of the statement (see `heddle::frame`).
+        if self.f.shuttle.is_some() {
+            self.emit(InstKind::Life { slot: n, end: false }, &[]);
+            let id = self.add_cleanup(super::cleanup::CleanupKind::Life(n));
+            if let Some(sb) = self.f.shuttle.as_mut() {
+                sb.lives.insert(n, id);
+            }
+        }
         n
+    }
+
+    /// In a shuttle's step, temporary `ptr`'s value is gone (moved out):
+    /// its slot stops mattering here, not at the end of the statement.
+    pub(super) fn temp_gone(&mut self, ptr: Value) {
+        let Some(slot) = self.slot_of(ptr) else { return };
+        let Some(sb) = self.f.shuttle.as_mut() else { return };
+        if !sb.temps.remove(&ptr) {
+            return;
+        }
+        if let Some(id) = sb.lives.remove(&slot) {
+            self.kill_cleanup(id);
+            self.emit(InstKind::Life { slot, end: true }, &[]);
+        }
+    }
+
+    /// In a shuttle's step, a local's slot `slot` matters until the end of
+    /// its block: its address may be held by something until then.
+    fn local_slot_lives(&mut self, slot: u32) {
+        if self.f.shuttle.is_some() {
+            self.add_scope_cleanup(super::cleanup::CleanupKind::Life(slot));
+        }
     }
 
     /// The address of slot `n`.
@@ -174,7 +205,11 @@ impl<'a> Builder<'a> {
     /// [`own_temp`](Self::own_temp) once it holds a value.
     pub(super) fn temp(&mut self, ty: Ty, span: Span) -> Option<Value> {
         let slot = self.new_slot(ty, span)?;
-        Some(self.slot_addr(slot))
+        let ptr = self.slot_addr(slot);
+        if let Some(sb) = self.f.shuttle.as_mut() {
+            sb.temps.insert(ptr);
+        }
+        Some(ptr)
     }
 
     /// The temporary at `ptr` (a slot's address) now holds a value of `ty`:
@@ -207,6 +242,7 @@ impl<'a> Builder<'a> {
     /// temporary isn't dropped, and a place that owns memory is zeroed.
     pub(super) fn moved_from(&mut self, val: &Val, ty: Ty) {
         let Val::Mem(src) = *val else { return };
+        self.temp_gone(src);
         if let Some(id) = self.f.temps.remove(&src) {
             self.kill_cleanup(id);
         } else if self.needs_drop(ty)
@@ -252,9 +288,19 @@ impl<'a> Builder<'a> {
         let s = match self.repr_of(ty, span)? {
             Repr::Regs(parts) if !self.f.scan.in_memory.contains(&l) => {
                 let tys: Vec<VTy> = parts.iter().map(|p| p.vty).collect();
-                Storage::Ssa(self.new_vars(&tys))
+                let vars = self.new_vars(&tys);
+                if let Some(sb) = self.f.shuttle.as_mut() {
+                    for (&var, part) in vars.iter().zip(parts.iter()) {
+                        sb.var_mem.insert(var, part.mem);
+                    }
+                }
+                Storage::Ssa(vars)
             }
-            _ => Storage::Slot(self.new_slot(ty, span)?),
+            _ => {
+                let slot = self.new_slot(ty, span)?;
+                self.local_slot_lives(slot);
+                Storage::Slot(slot)
+            }
         };
         self.f.locals.insert(l, s.clone());
         Some(s)
@@ -314,6 +360,7 @@ impl<'a> Builder<'a> {
         {
             self.kill_cleanup(id);
             self.f.locals.insert(l, Storage::Slot(slot));
+            self.local_slot_lives(slot);
             self.drop_local_at_scope_end(l, slot, ty);
             return Some(());
         }

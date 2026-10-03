@@ -8,8 +8,13 @@
 //! overflow policy, casts, floats, `match`, loops, lists, optionals, `?`,
 //! `mend` and `defer`; and the values that own memory (`String`s, lists of
 //! them, maps of `String`s to integers and the other way, lambdas capturing
-//! locals), where drops, copies and moves are hardest. `cargo test` runs 300 seeds; `cargo test -p loom
-//! --test gen -- --ignored` runs 20 000. A failing seed is shrunk (the
+//! locals), where drops, copies and moves are hardest; and shuttles:
+//! generators and duplex shuttles whose `yield`s land anywhere in their
+//! bodies, gone through in place, held, by stream methods, and pushed and
+//! closed. A generator with a `defer` is only ever closed (by its loop) or
+//! run to its end: one dropped while suspended runs its `defer`s on
+//! Treadle and not on Lua (design/vm.md §14, P2). `cargo test` runs 300
+//! seeds; `cargo test -p loom --test gen -- --ignored` runs 20 000. A failing seed is shrunk (the
 //! statements of `main` it doesn't need are left out) and printed, to keep
 //! as a `tests/run` fixture.
 
@@ -105,6 +110,17 @@ struct Func {
     fallible: bool,
 }
 
+/// A shuttle the program has: what it takes, yields, and pulls (a
+/// generator pulls nothing), and whether it has `defer`s.
+#[derive(Clone, Debug)]
+struct Shut {
+    name: String,
+    params: Vec<Ty>,
+    item: Ty,
+    pulls: Option<Int>,
+    defers: bool,
+}
+
 #[derive(Clone, Debug)]
 struct Var {
     name: String,
@@ -124,6 +140,11 @@ struct Gen {
     next: u32,
     /// Whether the function being made can `fail`, and use `?`.
     fallible: bool,
+    shuttles: Vec<Shut>,
+    /// In a shuttle's body: what it yields.
+    yields: Option<Ty>,
+    /// Whether the body being made may have `defer`s.
+    defers_ok: bool,
 }
 
 const WIDTHS: [u32; 14] = [8, 16, 32, 64, 1, 3, 5, 7, 12, 13, 24, 31, 48, 63];
@@ -133,7 +154,18 @@ impl Gen {
         let mut rng = Rng(seed);
         let a = Self::int_of(&mut rng);
         let b = Self::int_of(&mut rng);
-        Gen { rng, a, b, funcs: Vec::new(), scopes: vec![Vec::new()], next: 0, fallible: false }
+        Gen {
+            rng,
+            a,
+            b,
+            funcs: Vec::new(),
+            scopes: vec![Vec::new()],
+            next: 0,
+            fallible: false,
+            shuttles: Vec::new(),
+            yields: None,
+            defers_ok: true,
+        }
     }
 
     fn int_of(rng: &mut Rng) -> Int {
@@ -548,6 +580,16 @@ impl Gen {
 
     fn stmt(&mut self, depth: u32, indent: usize) -> String {
         let pad = "    ".repeat(indent);
+        // In a shuttle: a `yield`, wherever a statement goes, and now and
+        // then an early `return`.
+        if let Some(t) = self.yields {
+            if self.rng.chance(15) {
+                return format!("{pad}yield {}\n", self.expr(t, 2));
+            }
+            if self.rng.chance(4) {
+                return format!("{pad}if {} {{ return }}\n", self.bool_expr(1));
+            }
+        }
         let choice = if depth == 0 { self.rng.below(4) } else { self.rng.below(14) };
         match choice {
             0 | 1 => {
@@ -672,10 +714,11 @@ impl Gen {
                     "{pad}{{\n{pad1}var {w} = 0u8\n{pad1}while {w} < {n}u8 {{\n{pad1}    {w} +%= 1\n{pad1}    {body}\n{pad1}}}\n{pad}}}\n"
                 )
             }
-            7 => {
+            7 if self.defers_ok => {
                 let n = self.fresh("d");
                 format!("{pad}defer print(\"defer {n}\")\n")
             }
+            12 if !self.shuttles.is_empty() => self.consume(depth, indent),
             8 => self.int_match(indent),
             9 => self.sum_match(indent),
             10 if self.rng.chance(30) => {
@@ -747,6 +790,101 @@ impl Gen {
                 }
             }
         }
+    }
+
+    /// Goes through a shuttle: a generator in a `for` loop (called there,
+    /// or held in a variable first, and maybe left early), collected, or
+    /// taken from; a duplex shuttle pushed a few inputs, then closed.
+    fn consume(&mut self, depth: u32, indent: usize) -> String {
+        let pad = "    ".repeat(indent);
+        let sh = self.shuttles[self.rng.below(self.shuttles.len() as u64) as usize].clone();
+        let args: Vec<String> = sh.params.iter().map(|&p| self.expr(p, 1)).collect();
+        let call = format!("{}({})", sh.name, args.join(", "));
+        if let Some(k) = sh.pulls {
+            let (d, v) = (self.fresh("d"), self.fresh("v"));
+            let n = 1 + self.rng.below(4);
+            let inputs: Vec<String> = (0..n).map(|_| self.int_lit(k)).collect();
+            return format!(
+                "{pad}var {d} = {call}\n{pad}for {v} in [{}] {{\n{pad}    print(\"pushed: {{{d}.push({v}).collect()}}\")\n{pad}}}\n{pad}print(\"closed: {{{d}.close().collect()}}\")\n",
+                inputs.join(", ")
+            );
+        }
+        match self.rng.below(if sh.defers { 3 } else { 4 }) {
+            0 | 1 => {
+                let x = self.fresh("x");
+                let (before, over) = if self.rng.chance(50) {
+                    let g = self.fresh("g");
+                    (format!("{pad}let {g} = {call}\n"), g)
+                } else {
+                    (String::new(), call)
+                };
+                self.scopes.push(vec![Var { name: x.clone(), ty: sh.item, mutable: false }]);
+                let n = 1 + self.rng.below(2) as u32;
+                let body = self.stmts(n, depth.saturating_sub(1), indent + 1);
+                let leave = if self.rng.chance(40) {
+                    format!("{pad}    if {} {{ break }}\n", self.bool_expr(1))
+                } else {
+                    String::new()
+                };
+                self.scopes.pop();
+                format!(
+                    "{before}{pad}for {x} in {over} {{\n{pad}    print(\"item {{{x}}}\")\n{}{leave}{pad}}}\n",
+                    body.concat()
+                )
+            }
+            2 => format!("{pad}print({call}.collect())\n"),
+            _ => format!("{pad}print({call}.take({}).collect())\n", self.rng.below(4)),
+        }
+    }
+
+    /// A shuttle: a generator, or a duplex shuttle pulling integers, whose
+    /// `yield`s the statements put anywhere.
+    fn shuttle(&mut self) -> String {
+        let duplex = self.rng.chance(35);
+        let item = if self.rng.chance(30) { Ty::Str } else { Ty::Int(self.int()) };
+        let defers = self.rng.chance(50);
+        let name = self.fresh(if duplex { "dup" } else { "gen" });
+        self.scopes = vec![Vec::new()];
+        let mut sig = Vec::new();
+        let params: Vec<Ty> = (0..self.rng.below(3))
+            .map(|_| match self.rng.below(4) {
+                0 => Ty::Bool,
+                1 => Ty::F64,
+                _ => Ty::Int(self.int()),
+            })
+            .collect();
+        for &p in &params {
+            let pn = self.fresh("p");
+            sig.push(format!("{pn}: {}", self.ty_name(p)));
+            self.bind(&pn, p, false);
+        }
+        self.yields = Some(item);
+        self.defers_ok = defers;
+        let n = 1 + self.rng.below(3) as u32;
+        let mut body = self.stmts(n, 2, 1);
+        let pulls = duplex.then(|| self.int());
+        if let Some(k) = pulls {
+            let x = self.fresh("x");
+            self.scopes.push(vec![Var { name: x.clone(), ty: Ty::Int(k), mutable: false }]);
+            let n = 1 + self.rng.below(3) as u32;
+            let inner = self.stmts(n, 1, 2);
+            let last = self.expr(item, 2);
+            self.scopes.pop();
+            body.push(format!("    while pull is some({x}) {{\n{}        yield {last}\n    }}\n", inner.concat()));
+            let n = self.rng.below(2) as u32;
+            body.extend(self.stmts(n, 1, 1));
+        }
+        body.push(format!("    yield {}\n", self.expr(item, 2)));
+        self.yields = None;
+        self.defers_ok = true;
+        let pulled = pulls.map(|k| format!(" <~ {}", k.name())).unwrap_or_default();
+        let mut s = format!("fn {name}({}) ~> {}{pulled} {{\n", sig.join(", "), self.ty_name(item));
+        for b in body {
+            s.push_str(&b);
+        }
+        s.push_str("}\n\n");
+        self.shuttles.push(Shut { name, params, item, pulls, defers });
+        s
     }
 
     /// Lambdas that capture locals, given to `map`, `filter` and `each` of a
@@ -910,6 +1048,9 @@ impl Gen {
         );
         for _ in 0..1 + self.rng.below(4) {
             head.push_str(&self.func());
+        }
+        for _ in 0..self.rng.below(4) {
+            head.push_str(&self.shuttle());
         }
         head.push_str("fn main() {\n");
         self.scopes = vec![Vec::new()];
@@ -1078,6 +1219,13 @@ fn the_generator_covers_its_kinds() {
         ("a map of integers to Strings", "String] = "),
         ("a lambda over Strings", ".to_upper())"),
         ("a lambda changing a captured var", ".each("),
+        ("a shuttle", ") ~> "),
+        ("a duplex shuttle", " <~ "),
+        ("a yield", "    yield "),
+        ("a generator gone through in place", "for x_"),
+        ("a generator held, then gone through", "let g_"),
+        ("a generator taken from", ".take("),
+        ("a push", ".push(v_"),
     ] {
         assert!(text.matches(needle).count() >= 10, "{what}: {} in 300 programs", text.matches(needle).count());
     }

@@ -1,0 +1,37 @@
+// Dropping a suspended generator runs the `defer`s it has reached: not one
+// further down its body, not one in a scope it already left, and one in a
+// loop once, for the iteration it's in. One dropped before it starts runs
+// none. The Lua backend leaves them to the garbage collector, so it prints
+// none of them (design/vm.md §14, P2): `shuttle_drop.vm.out` has Treadle's.
+
+use std.io.print
+
+fn gen(name: str) ~> i32 {
+    defer print("{name}: outer")
+    {
+        defer print("{name}: left behind")
+        yield 1
+    }
+    for i in 0..3 {
+        defer print("{name}: loop {i}")
+        yield 10 + i
+    }
+    defer print("{name}: not reached")
+    yield 99
+}
+
+fn main() {
+    // Never started.
+    {
+        let g = gen("unstarted")
+    }
+    print("-")
+    // Dropped in the second iteration of its loop.
+    {
+        var g = gen("dropped")
+        print(g.take(3).collect())
+    }
+    print("-")
+    // Run to the end: every defer runs, on both backends.
+    print(gen("whole").collect())
+}

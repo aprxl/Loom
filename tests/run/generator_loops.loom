@@ -1,0 +1,135 @@
+// `for x in g(…)` builds a generator's body in place on Treadle; a
+// generator held in a variable is stepped instead. Both must behave the
+// same, as on Lua: `break`, `continue`, `return` and labeled loops in the
+// body, `defer`s in the generator, generators over generators, parameters
+// it owns, defaults, and generic generators.
+
+use std.io.print
+
+fn upto(n: i32, from: i32 = 0) ~> i32 {
+    defer print("  upto({n}) done")
+    var i = from
+    while i < n {
+        defer print("  upto({n}) left {i}")
+        yield i
+        i += 1
+    }
+}
+
+fn evens(n: i32) ~> i32 {
+    defer print("  evens done")
+    for x in upto(n) {
+        if x % 2 == 0 {
+            yield x
+        }
+    }
+}
+
+fn words(take text: String) ~> String {
+    defer print("  words of {text.len()} chars done")
+    for w in text.words() {
+        yield w.to_upper()
+    }
+}
+
+fn pairs[T: Copy + Show](take items: List[T]) ~> (T, T) {
+    var i = 0
+    while i + 1 < items.len() {
+        yield (items[i], items[i + 1])
+        i += 2
+    }
+}
+
+fn first_over(limit: i32) -> i32 {
+    for x in upto(10) {
+        if x > limit {
+            return x
+        }
+    }
+    -1
+}
+
+fn first_over_held(limit: i32) -> i32 {
+    let g = upto(10)
+    for x in g {
+        if x > limit {
+            return x
+        }
+    }
+    -1
+}
+
+fn main() {
+    print("break:")
+    for x in upto(5) {
+        if x == 2 { break }
+        print(x)
+    }
+    print("break, held:")
+    let g = upto(5)
+    for x in g {
+        if x == 2 { break }
+        print(x)
+    }
+
+    print("continue:")
+    for x in upto(3, from: 1) {
+        if x == 1 { continue }
+        print(x)
+    }
+    print("continue, held:")
+    let g = upto(3, from: 1)
+    for x in g {
+        if x == 1 { continue }
+        print(x)
+    }
+
+    print("return: {first_over(2)}")
+    print("return, held: {first_over_held(2)}")
+
+    print("labeled:")
+    outer: for a in [1, 2] {
+        for x in upto(4) {
+            if x == 2 { continue outer }
+            if a == 2 { break outer }
+            print("{a} {x}")
+        }
+    }
+
+    print("nested:")
+    for x in evens(5) {
+        print(x)
+    }
+    print("nested, held:")
+    let e = evens(5)
+    for x in e {
+        print(x)
+    }
+    print("nested, broken out of:")
+    for x in evens(9) {
+        if x == 4 { break }
+        print(x)
+    }
+
+    print("owned:")
+    for w in words("one two three") {
+        print(w)
+        if w == "TWO" { break }
+    }
+
+    print("generic:")
+    for (a, b) in pairs([1, 2, 3, 4, 5]) {
+        print("{a}+{b}={a + b}")
+    }
+    for p in pairs(["x", "y"]) {
+        print(p)
+    }
+
+    print("in a lambda:")
+    let f = (n: i32) => {
+        var total = 0
+        for x in upto(n) { total += x }
+        total
+    }
+    print(f(4))
+}

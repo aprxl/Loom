@@ -4,7 +4,8 @@
 //!   match `NAME.out`. With `NAME.unravel`, the run must unravel with the
 //!   message on that file's first line, at the Loom line its second line
 //!   names (`line 4`); otherwise it must finish.
-//! - `tests/examples/NAME.out` is the exact output of `examples/NAME.loom`.
+//! - `tests/examples/NAME.out` is the exact output of `examples/NAME.loom`,
+//!   on both backends.
 //! - `tests/test/NAME.out` is the report `loom test` prints for `NAME.loom`.
 //! - `tests/fail/NAME.loom` must fail to compile with exactly the
 //!   diagnostics its `//~ CODE …` comments list, on the lines they're on.
@@ -198,7 +199,7 @@ fn run_corpus() {
 }
 
 /// `tests/examples/NAME.out` is the output of `examples/NAME.loom`, which
-/// must run to the end.
+/// must run to the end, on Lua and on Treadle.
 #[test]
 fn examples_corpus() {
     let mut failures = Vec::new();
@@ -213,7 +214,26 @@ fn examples_corpus() {
     assert!(!outs.is_empty());
     for out_path in &outs {
         let name = out_path.file_stem().and_then(|s| s.to_str()).unwrap_or("?").to_string();
-        let (db, diags, bundle) = compile(&root.join("examples").join(format!("{name}.loom")));
+        let path = root.join("examples").join(format!("{name}.loom"));
+        let expected = std::fs::read_to_string(out_path).unwrap_or_default();
+        match compile_vm(&path) {
+            (_, _, Some(image)) => {
+                let buffer = Rc::new(RefCell::new(Vec::new()));
+                let config = loom_vm::Config { stack_limit: 64 << 20, ..loom_vm::Config::default() };
+                let outcome = loom_vm::run(&image, Host::captured(buffer.clone()), &config);
+                let out = String::from_utf8_lossy(&buffer.borrow()).into_owned();
+                if out != expected {
+                    failures.push(format!("{name}: output differs on Treadle\n--- expected\n{expected}--- got\n{out}"));
+                }
+                if !matches!(outcome, Outcome::Finished) {
+                    failures.push(format!("{name}: ended with {outcome:?} on Treadle"));
+                }
+            }
+            (db, diags, None) => {
+                failures.push(format!("{name}: didn't compile for Treadle:\n{}", rendered(&db, &diags)));
+            }
+        }
+        let (db, diags, bundle) = compile(&path);
         let Some(bundle) = bundle else {
             failures.push(format!("{name}: didn't compile:\n{}", rendered(&db, &diags)));
             continue;
@@ -221,7 +241,6 @@ fn examples_corpus() {
         let buffer = Rc::new(RefCell::new(Vec::new()));
         let outcome = run_bundle(&bundle.lua, Some(&bundle.map), Host::captured(buffer.clone()));
         let out = String::from_utf8_lossy(&buffer.borrow()).into_owned();
-        let expected = std::fs::read_to_string(out_path).unwrap_or_default();
         if out != expected {
             failures.push(format!("{name}: output differs\n--- expected\n{expected}--- got\n{out}"));
         }

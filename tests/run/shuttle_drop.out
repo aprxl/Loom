@@ -1,0 +1,12 @@
+-
+dropped: left behind
+dropped: loop 0
+[1, 10, 11]
+-
+whole: left behind
+whole: loop 0
+whole: loop 1
+whole: loop 2
+whole: not reached
+whole: outer
+[1, 10, 11, 12, 99]

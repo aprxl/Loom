@@ -47,6 +47,7 @@ pub(super) fn writes_body(path: &str) -> bool {
     BODIES.contains(&path)
         || super::methods::writes_body(path)
         || super::stream::writes_body(path)
+        || super::shuttle::writes_body(path)
         || path.starts_with("std.map.Map.")
         || path.starts_with("std.set.Set.")
         || matches!(path, "std.fs.File.append" | "std.fs.File.write_line")
@@ -81,6 +82,10 @@ impl<'a> Builder<'a> {
             .collect();
         if super::stream::writes_body(&path) {
             self.stream_method(&path, &args, &tys, ret, sret, span)?;
+            return Some(abi.results);
+        }
+        if super::shuttle::writes_body(&path) {
+            self.shuttle_method(&path, &args, &tys, sret, span)?;
             return Some(abi.results);
         }
         if path.starts_with("std.map.Map.") || path.starts_with("std.set.Set.") {

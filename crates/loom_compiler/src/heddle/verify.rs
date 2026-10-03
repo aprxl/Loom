@@ -173,7 +173,7 @@ pub(crate) fn uses(k: &super::InstKind) -> Vec<Value> {
         | K::FloatCast { a, .. }
         | K::IntToChar { a, .. } => vec![*a],
         K::Call { args, .. } | K::Native { args, .. } => args.clone(),
-        K::Slot(_) | K::Global(_) | K::FuncRef(_) => Vec::new(),
+        K::Slot(_) | K::Global(_) | K::FuncRef(_) | K::Life { .. } => Vec::new(),
         K::Load { ptr, .. } | K::Offset { ptr, .. } => vec![*ptr],
         K::Store { ptr, val, .. } => vec![*ptr, *val],
         K::Copy { dst, src, .. } => vec![*dst, *src],

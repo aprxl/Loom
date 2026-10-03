@@ -335,7 +335,9 @@ impl<'a> Builder<'a> {
             ExprKind::Range { lo, hi, inclusive } => self.range_value(lo.as_deref(), hi.as_deref(), *inclusive),
             ExprKind::Intrinsic(hir::Intrinsic::Target) => self.target_value(ty, span),
             ExprKind::Intrinsic(_) => self.unsupported(span, "`heap`"),
-            ExprKind::Yield { .. } | ExprKind::Pull => self.unsupported(span, "shuttles"),
+            ExprKind::Yield { place: None, value } => self.yield_expr(value, span),
+            ExprKind::Yield { .. } => self.unsupported(span, "projections (`yield mut`, `yield ref`)"),
+            ExprKind::Pull => self.pull_expr(e, span),
             ExprKind::Loom { .. } | ExprKind::Thread(_) => self.unsupported(span, "threads"),
             _ => self.unsupported(span, "this expression"),
         }

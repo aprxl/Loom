@@ -122,7 +122,12 @@ fn inline_into(f: &mut Func, me: usize, module: &Module, small: &[bool]) {
                     *ptr = new(*ptr, f, &mut map);
                     *len = new(*len, f, &mut map);
                 }
-                Term::Ret(_) | Term::Jump(_) | Term::UnravelMsg | Term::Crash(_) | Term::Resume => {}
+                Term::Ret(_)
+                | Term::Jump(_)
+                | Term::UnravelMsg
+                | Term::Crash(_)
+                | Term::Resume
+                | Term::Suspend { .. } => {}
             }
             for e in term.edges_mut() {
                 e.block = BlockId(e.block.0 + base);

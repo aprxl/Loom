@@ -129,7 +129,7 @@ fn builtin(path: &str) -> Option<Builtin> {
         // A `File` is its path.
         "std.string.String" | "std.list.List" | "std.fs.File" => Builtin::Header(3),
         "std.map.Map" | "std.set.Set" => Builtin::Header(6),
-        "std.iter.Stream" | "std.iter.Shuttle" => Builtin::Header(2),
+        "std.iter.Stream" | "std.iter.Shuttle" | "std.iter.Burst" => Builtin::Header(2),
         "std.sync.Atomic" => Builtin::Atomic,
         "std.fmt.Fmt" => Builtin::Handle,
         _ => return None,

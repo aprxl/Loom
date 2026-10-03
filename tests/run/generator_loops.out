@@ -1,0 +1,92 @@
+break:
+0
+  upto(5) left 1
+1
+  upto(5) left 2
+  upto(5) left 2
+  upto(5) done
+break, held:
+0
+  upto(5) left 1
+1
+  upto(5) left 2
+  upto(5) left 2
+  upto(5) done
+continue:
+  upto(3) left 2
+2
+  upto(3) left 3
+  upto(3) done
+continue, held:
+  upto(3) left 2
+2
+  upto(3) left 3
+  upto(3) done
+  upto(10) left 1
+  upto(10) left 2
+  upto(10) left 3
+  upto(10) left 3
+  upto(10) done
+return: 3
+  upto(10) left 1
+  upto(10) left 2
+  upto(10) left 3
+  upto(10) left 3
+  upto(10) done
+return, held: 3
+labeled:
+1 0
+  upto(4) left 1
+1 1
+  upto(4) left 2
+  upto(4) left 2
+  upto(4) done
+  upto(4) left 0
+  upto(4) done
+nested:
+0
+  upto(5) left 1
+  upto(5) left 2
+2
+  upto(5) left 3
+  upto(5) left 4
+4
+  upto(5) left 5
+  upto(5) done
+  evens done
+nested, held:
+0
+  upto(5) left 1
+  upto(5) left 2
+2
+  upto(5) left 3
+  upto(5) left 4
+4
+  upto(5) left 5
+  upto(5) done
+  evens done
+nested, broken out of:
+0
+  upto(9) left 1
+  upto(9) left 2
+2
+  upto(9) left 3
+  upto(9) left 4
+  upto(9) left 4
+  upto(9) done
+  evens done
+owned:
+ONE
+TWO
+  words of 13 chars done
+generic:
+1+2=3
+3+4=7
+(x, y)
+in a lambda:
+  upto(4) left 1
+  upto(4) left 2
+  upto(4) left 3
+  upto(4) left 4
+  upto(4) done
+6

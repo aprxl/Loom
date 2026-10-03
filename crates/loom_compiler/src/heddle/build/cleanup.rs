@@ -46,6 +46,14 @@ pub(super) enum CleanupKind<'a> {
     /// Runs a `defer`'s body, whose tables are `tables`. A fallback
     /// `defer x =>` runs only while the byte in slot `flag` is set.
     Defer { body: &'a hir::Expr, tables: BodyId, flag: Option<u32>, span: Span },
+    /// In a shuttle's step: slot `n`'s value matters until here (see
+    /// `heddle::frame`).
+    Life(u32),
+    /// Frees the box of a shuttle at this address (see `shuttle.rs`).
+    FreeShuttle(Value),
+    /// Frees the `size` bytes, aligned to 8, at this address: a stream's
+    /// box (see `stream.rs`).
+    Free { at: Value, size: u64 },
 }
 
 #[derive(Clone, Debug)]
@@ -268,6 +276,14 @@ impl<'a> Builder<'a> {
                 }
                 self.f.span = saved_span;
                 self.f.body = saved_body;
+            }
+            CleanupKind::Life(n) => {
+                self.emit(InstKind::Life { slot: *n, end: true }, &[]);
+            }
+            CleanupKind::FreeShuttle(b) => self.free_shuttle_box(*b),
+            CleanupKind::Free { at, size } => {
+                let (n, a) = (self.iconst(*size), self.iconst(8));
+                self.emit(InstKind::Native { name: "mem.free", imm: 0, args: vec![*at, n, a] }, &[]);
             }
         }
     }

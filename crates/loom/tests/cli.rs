@@ -507,38 +507,46 @@ fn a_runaway_recursion_unravels_quickly_with_a_short_backtrace() {
 #[test]
 fn ctrl_c_reaches_a_shuttle_that_never_yields() {
     // The Lua backend runs shuttles as coroutines, each with a hook of its
-    // own. (Treadle has no shuttles yet: V2.)
-    let path = temp_source(
-        "interrupt_shuttle",
-        "use std.io.print
+    // own. Treadle builds a generator a `for` loop calls in place, and
+    // steps one held in a variable: both stop, and its `defer` runs.
+    for (name, call) in [("interrupt_shuttle", "for x in rare()"), ("interrupt_held", "let g = rare()\n    for x in g")]
+    {
+        let path = temp_source(
+            name,
+            &format!(
+                "use std.io.print
 
-fn rare() ~> u64 {
+fn rare() ~> u64 {{
     defer print(\"generator closed\")
     var i = 0u64
-    loop {
+    loop {{
         i = i +% 1
-        if i == 0 { yield i }
-    }
-}
+        if i == 0 {{ yield i }}
+    }}
+}}
 
-fn main() {
+fn main() {{
     defer print(\"main cleaned up\")
-    for x in rare() { print(x) }
-}
-",
-    );
-    let file = path.to_str().expect("utf-8 path");
-    let started = std::time::Instant::now();
-    let out = Command::new(env!("CARGO_BIN_EXE_loom"))
-        .args(["--color", "never", "run", file])
-        .env("LOOM_INTERRUPT_AFTER_MS", "300")
-        .output()
-        .expect("the loom binary runs");
-    let _ = std::fs::remove_file(&path);
-    assert_eq!(out.status.code(), Some(130), "{}", text(&out.stderr));
-    assert_eq!(text(&out.stdout), "generator closed\nmain cleaned up\n");
-    assert_eq!(text(&out.stderr), "interrupted (Ctrl-C)\n");
-    assert!(started.elapsed().as_secs() < 30, "{:?}", started.elapsed());
+    {call} {{ print(x) }}
+}}
+"
+            ),
+        );
+        let file = path.to_str().expect("utf-8 path");
+        for backend in ["lua", "vm"] {
+            let started = std::time::Instant::now();
+            let out = Command::new(env!("CARGO_BIN_EXE_loom"))
+                .args(["--color", "never", "run", "--backend", backend, file])
+                .env("LOOM_INTERRUPT_AFTER_MS", "300")
+                .output()
+                .expect("the loom binary runs");
+            assert_eq!(out.status.code(), Some(130), "{name} on {backend}: {}", text(&out.stderr));
+            assert_eq!(text(&out.stdout), "generator closed\nmain cleaned up\n", "{name} on {backend}");
+            assert_eq!(text(&out.stderr), "interrupted (Ctrl-C)\n", "{name} on {backend}");
+            assert!(started.elapsed().as_secs() < 30, "{name} on {backend}: {:?}", started.elapsed());
+        }
+        let _ = std::fs::remove_file(&path);
+    }
 }
 
 #[test]

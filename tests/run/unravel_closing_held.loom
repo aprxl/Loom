@@ -1,0 +1,21 @@
+// A `defer` that unravels while a generator is being closed unravels in
+// whoever closed it: here the `for` loop that left it early, which holds
+// it in a variable first (design/vm.md §14, P3).
+
+use std.io.print
+
+fn gen() ~> i32 {
+    defer unravel("gen's defer")
+    yield 1
+    yield 2
+}
+
+fn main() {
+    defer print("main's defer ran")
+    let g = gen()
+    for x in g {
+        print(x)
+        break
+    }
+    print("not reached")
+}

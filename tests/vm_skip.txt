@@ -2,12 +2,3 @@
 # per line, the milestone of design/vm.md that brings what it needs, and the
 # first thing it stops on. The fixture harness fails when one of these
 # passes, so take it out when it does: this list only gets shorter.
-
-const_eval           V2  shuttles
-
-loop_item_moves      V2  shuttles
-shuttle_bursts       V2  shuttles
-shuttles             V2  shuttles, streams
-unravel_closed       V2  shuttles
-unravel_closing      V2  shuttles
-unravel_shuttle      V2  shuttles

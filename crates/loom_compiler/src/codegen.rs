@@ -1342,6 +1342,9 @@ impl Emitter<'_> {
                 self.free_big(span);
                 self.put(span, word(Op::Resume, 0, 0, 0));
             }
+            Term::Suspend { .. } => {
+                return Err(CodegenError::Bug(format!("a suspension left in `{}`", self.f.name)));
+            }
         }
         match block.term_unwind {
             Some(pad) => self.unwinds.push((term_start, self.code.len(), pad.0 as usize)),
@@ -1822,6 +1825,7 @@ impl Emitter<'_> {
                 }
             },
             K::FuncRef(func) => self.put(span, word_i32(Op::Ldfn, dst, func.0 as i32)),
+            K::Life { .. } => return Err(CodegenError::Bug(format!("a slot's lifetime left in `{}`", self.f.name))),
             K::CallInd { callee, args } => {
                 // The function's number goes out of the window's way first.
                 self.mov(span, self.tmp2, self.r(*callee));

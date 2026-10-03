@@ -1,0 +1,46 @@
+// A suspended shuttle is a value like any other: moved into a list, out
+// of it, into a warp and back out of a function, in the middle of a loop
+// over an array in its frame, it goes on where it was.
+
+use std.io.print
+
+// One running total per push.
+fn walk(start: u32) ~> u32 <~ bool {
+    let grid = [start, start + 1, start + 2, start + 3, start + 4]
+    var total = 0u32
+    for g in grid {
+        let _ = pull
+        total += g
+        yield total
+    }
+}
+
+warp Holder {
+    name: String
+    sh: Shuttle[u32, bool]
+}
+
+fn handed_over(take s: Shuttle[u32, bool]) -> Shuttle[u32, bool] {
+    var t = s
+    print("in a function: {t.push(true).collect()}")
+    t
+}
+
+fn main() {
+    var a = walk(10)
+    var b = walk(100)
+    for _ in 0..2 {
+        print("a {a.push(true).collect()} b {b.push(true).collect()}")
+    }
+    var shuttles = List[Shuttle[u32, bool]]()
+    shuttles.push(a)
+    shuttles.push(b)
+    let h = Holder(name: "kept", sh: handed_over(shuttles.remove(0)))
+    var c = h.sh
+    print("{h.name}: {c.push(true).collect()}")
+    print("{h.name}: {c.close().collect()}")
+    var d = shuttles.remove(0)
+    for _ in 0..4 {
+        print("second: {d.push(false).collect()}")
+    }
+}

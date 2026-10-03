@@ -20,6 +20,7 @@
 //! Treadle bytecode. [`verify`] checks the SSA properties both rely on.
 
 mod build;
+pub mod frame;
 mod inline;
 mod print;
 mod tidy;
@@ -319,6 +320,13 @@ pub enum InstKind {
         callee: Value,
         args: Vec<Value>,
     },
+    /// Where frame slot `slot`'s value starts (`end: false`) or stops
+    /// mattering (`end: true`). Only a shuttle's body has these, for the
+    /// frame pass (`frame.rs`), which takes them out.
+    Life {
+        slot: u32,
+        end: bool,
+    },
 }
 
 impl InstKind {
@@ -383,6 +391,16 @@ pub enum Term {
     Crash(u16),
     /// The end of a landing pad: unwinding goes on in the caller.
     Resume,
+    /// A shuttle's body suspends here (a `yield`, a `pull`, or its start),
+    /// giving its driver `status`. Resumed, it goes on at `resume`; closed,
+    /// at `close`, which cleans up and ends it. Only a shuttle's body has
+    /// these, for the frame pass (`frame.rs`), which turns them into
+    /// returns.
+    Suspend {
+        status: u8,
+        resume: Edge,
+        close: Edge,
+    },
 }
 
 impl Term {
@@ -390,6 +408,7 @@ impl Term {
         match self {
             Term::Jump(e) => vec![e],
             Term::Br { then, else_, .. } => vec![then, else_],
+            Term::Suspend { resume, close, .. } => vec![resume, close],
             _ => Vec::new(),
         }
     }
@@ -398,6 +417,7 @@ impl Term {
         match self {
             Term::Jump(e) => vec![e],
             Term::Br { then, else_, .. } => vec![then, else_],
+            Term::Suspend { resume, close, .. } => vec![resume, close],
             _ => Vec::new(),
         }
     }

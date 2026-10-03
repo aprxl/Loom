@@ -110,6 +110,9 @@ fn func(out: &mut String, module: &Module, f: &Func) {
             Some(Term::UnravelMsg) => "unravel msg".into(),
             Some(Term::Crash(k)) => format!("crash {k}"),
             Some(Term::Resume) => "resume".into(),
+            Some(Term::Suspend { status, resume, close }) => {
+                format!("suspend {status}, {}, close {}", edge(resume), edge(close))
+            }
         };
         let pad = b.term_unwind.map(|p| format!(" unwind b{}", p.0)).unwrap_or_default();
         let _ = writeln!(out, "    {term}{pad}");
@@ -183,6 +186,7 @@ fn kind(module: &Module, f: &Func, k: &InstKind, results: &[Value]) -> String {
         }
         InstKind::Native { name, imm, args } => format!("native {name} #{imm}({})", list(args)),
         InstKind::Slot(n) => format!("slot{n}"),
+        InstKind::Life { slot, end } => format!("life.{} slot{slot}", if *end { "end" } else { "start" }),
         InstKind::Global(n) => format!("global+{n}"),
         InstKind::Load { mem: m, ptr, off } => format!("load.{} {}{}", mem(*m), v(*ptr), offset(*off)),
         InstKind::Store { mem: m, ptr, off, val } => {
