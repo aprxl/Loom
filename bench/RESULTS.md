@@ -40,6 +40,19 @@ digits) on Treadle: `loom run --backend vm examples/chip8.loom --
 examples/digits.ch8`, the same frames as on Lua, and Ctrl-C restores the
 terminal on the way out.
 
+### After the V0/V1 review's fixes (2026-10-03)
+
+Same machine, best of 7 (`python bench/run.py --runs 7`), with `maps` (clustered
+integer keys, text keys, removals) added to the set: geometric mean 1.58×
+over the 13, lowest 0.82× (`word_freq`). Without `maps`, 1.64× over the
+twelve of V1's table. `nbody` and `mandelbrot` read about 5% slower than in
+the table above (1.39× and 1.54×); a run varies by about 5% from one
+invocation to the next, and the interpreter's speed moves with unrelated
+changes (design/vm-review-v0-v1.md, development trap 1), so a fix's cost
+can't be told from that without a longer A/B. The pieces the review found
+slow are fast now: 200 000 clustered keys 1966 ms to 70 ms, 30 000 removes
+4.8 s to 0.17 s, a stack overflow 5.2 s to 0.3 s.
+
 ## V0 (2026-09-29)
 
 AMD Ryzen 7 9800X3D, Windows 11, Rust 1.98.0, release build. PUC Lua 5.4 is
