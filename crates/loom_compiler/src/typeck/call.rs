@@ -613,6 +613,9 @@ impl Checker<'_> {
 
     /// `x.name` or `x.0` as a value.
     pub(super) fn check_field(&mut self, e: &Expr, base: &Expr, field: &FieldName) -> Ty {
+        if let Some(ty) = self.check_frame_query(e, base, field) {
+            return ty;
+        }
         let base_ty = self.check_expr(base, None);
         let base_ty = self.resolve(base_ty);
         if self.tcx.is_error(base_ty) {

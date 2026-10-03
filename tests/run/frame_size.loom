@@ -1,0 +1,81 @@
+// `f.Frame.size`: what a shuttle keeps across its suspension points, laid
+// out by design/vm.md §10.14 (Appendix B works out `fib`'s). The same on
+// both backends: the frame is Treadle's.
+
+use std.io.print
+
+fn fib() ~> u64 {
+    var (a, b): (u64, u64) = (0, 1)
+    loop {
+        yield a
+        (a, b) = (b, a + b)
+    }
+}
+
+// Nothing is live across its suspension points: the state alone.
+fn three() ~> i32 {
+    yield 1
+    yield 2
+    yield 3
+}
+
+// `name` (a `str`, 16 bytes) for the `defer`, and `i`.
+fn counted(name: str) ~> i32 {
+    defer print("{name} closed")
+    var i = 0
+    while i < 3 {
+        yield i
+        i += 1
+    }
+}
+
+// `sum` and `count`, which never meet `x`.
+fn running_mean() ~> f64 <~ f64 {
+    var (sum, count) = (0.0, 0)
+    while pull is some(x) {
+        sum += x
+        count += 1
+        yield sum / count as f64
+    }
+}
+
+// Locals live across different suspension points share space: `a` and
+// `b` are never live at the same one, and `seed` is gone before either.
+fn halves() ~> u64 {
+    var seed: u64 = 3
+    seed *= 2
+    let a = seed + 1
+    yield a
+    yield a + 1
+    let b = a * 3
+    yield b
+    yield b + 1
+}
+
+// Constants aren't kept: they're there anyway.
+fn constants() ~> u64 {
+    let k: u64 = 1000
+    yield k
+    yield k + 1
+}
+
+// An array the loop goes through stays where it is.
+fn rows() ~> u8 {
+    let grid = [1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    for g in grid {
+        yield g
+    }
+}
+
+fn main() {
+    const assert(fib.Frame.size == 24)
+    print("fib {fib.Frame.size} {fib.Frame.align}")
+    print("three {three.Frame.size}")
+    print("counted {counted.Frame.size}")
+    print("running_mean {running_mean.Frame.size}")
+    print("halves {halves.Frame.size}")
+    print("constants {constants.Frame.size}")
+    print("rows {rows.Frame.size}")
+    print(halves().collect())
+    print(rows().take(3).collect())
+}

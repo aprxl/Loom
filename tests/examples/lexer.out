@@ -1,0 +1,15 @@
+  0  Ident("let")
+  4  Ident("greeting")
+ 13  Punct('=')
+ 15  Str("hi")
+ 20  Punct('+')
+ 22  Int(42)
+ 24  Eof
+primes: [2, 3, 5, 7, 11, 13, 17, 19]
+mean so far: 4.00
+mean so far: 6.00
+mean so far: 9.00
+mean so far: 10.75
+mean so far: 13.20
+mean so far: 18.00
+the lexer's frame: 40 bytes

@@ -255,6 +255,17 @@ pub struct Body {
     pub case_views: HashMap<HirId, DefId>,
     /// Each `const for`: the body checked for each item, in order.
     pub unrolled: HashMap<HirId, Vec<BodyId>>,
+    /// Each `f.Frame.size` and `f.Frame.align`: which shuttle's frame.
+    pub frames: HashMap<HirId, FrameQuery>,
+}
+
+/// `f.Frame.size` (or `.align`): about the frame of shuttle function
+/// instance `shuttle`, which is worked out on Treadle's Heddle, so it's
+/// known once the program is built (see `heddle::frame`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FrameQuery {
+    pub shuttle: BodyId,
+    pub align: bool,
 }
 
 /// How a value that isn't a `Stream` gives its items one at a time.

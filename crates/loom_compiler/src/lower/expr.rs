@@ -286,6 +286,10 @@ impl Lowerer<'_> {
         if let Some(&v) = self.tables().const_values.get(&e.id) {
             return self.const_val(v, ty, span);
         }
+        if let Some(&q) = self.tables().frames.get(&e.id) {
+            let n = self.frame_query(q, span);
+            return self.const_val(crate::ty::ConstVal::Int(i128::from(n)), ty, span);
+        }
         match &e.kind {
             ExprKind::Lambda { params, body } => self.lambda(e, params, body),
             ExprKind::Lit(lit) => self.lit(lit, false, ty),

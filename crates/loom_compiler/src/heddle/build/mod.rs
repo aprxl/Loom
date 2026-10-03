@@ -300,6 +300,45 @@ pub fn build(p: &Program, typed: &Typed) -> Result<Module, Vec<Diagnostic>> {
     b.finish(entry)
 }
 
+/// What `f.Frame.size` and `f.Frame.align` say, for each shuttle function
+/// instance of `typed` they're asked about: its frame's size and
+/// alignment. The frame is Treadle's (see `frame.rs`), so it's worked out
+/// on the program checked for Treadle, which `typed` may not be.
+pub fn frames(p: &Program, typed: &Typed) -> Result<HashMap<BodyId, (u64, u64)>, Vec<Diagnostic>> {
+    let mut asked: Vec<BodyId> =
+        typed.results.bodies.iter().flat_map(|b| b.frames.values().map(|q| q.shuttle)).collect();
+    asked.sort();
+    asked.dedup();
+    if asked.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let vm_typed;
+    let vm: &Typed = if typed.tcx.target == crate::target::Target::VM {
+        typed
+    } else {
+        vm_typed = crate::typeck::check_for(p, crate::target::Target::VM);
+        if vm_typed.has_errors() {
+            return Err(vm_typed.diagnostics);
+        }
+        &vm_typed
+    };
+    let mut b = Builder::new(p, vm);
+    let mut out = HashMap::new();
+    for id in asked {
+        let inst = typed.results.instance(id);
+        let span = p.def(inst.def).span;
+        b.main_span.get_or_insert(span);
+        let Some(vm_id) = vm.results.find(inst) else { continue };
+        if let Some(layout) = b.frame_layout(vm_id) {
+            out.insert(id, (layout.size, layout.align));
+        }
+    }
+    if !b.diags.is_empty() {
+        return Err(b.diags);
+    }
+    Ok(out)
+}
+
 /// Builds the Heddle of the tests of the program's root file (`test name()
 /// { … }`): a module with an entry for each, which runs it as `main` runs,
 /// and the tests' names with their entries, in order.

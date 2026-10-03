@@ -15,8 +15,10 @@ use loom_syntax::ast::ParamMode;
 use loom_syntax::diag::codes;
 use loom_syntax::source::Span;
 
-use super::{Checker, FnSig};
-use crate::hir::{self, DefId, Expr, FnRet};
+use super::{Checker, FnSig, FrameQuery, Instance};
+use loom_syntax::ast::FieldName;
+
+use crate::hir::{self, DefId, DefKind, Expr, ExprKind, FnRet};
 use crate::ty::{Ty, TyKind};
 
 /// The shuttle whose body is being checked: what it yields and pulls
@@ -115,6 +117,33 @@ impl Checker<'_> {
                 .note("a shuttle's frame is stored inside the shuttle value, so it has a size known when compiling")
                 .help("allocate the inner one, `^name(…)`, which needs spools (not implemented yet)"),
         );
+    }
+
+    /// `f.Frame.size` or `f.Frame.align`, where `f` is a shuttle function:
+    /// a `usize` known once the program is built, not while checking (see
+    /// `heddle::frame`). `None` for anything else.
+    pub(super) fn check_frame_query(&mut self, e: &Expr, base: &Expr, field: &FieldName) -> Option<Ty> {
+        let FieldName::Named(name) = field else { return None };
+        let align = match name.name.as_str() {
+            "size" => false,
+            "align" => true,
+            _ => return None,
+        };
+        let ExprKind::Field { base: inner, field: FieldName::Named(frame) } = &base.kind else { return None };
+        if frame.name != "Frame" {
+            return None;
+        }
+        let ExprKind::Def { def, args } = &inner.kind else { return None };
+        let DefKind::Fn(f) = &self.p.def(*def).kind else { return None };
+        if !matches!(f.ret, FnRet::Shuttle { .. }) {
+            return None;
+        }
+        if !args.is_empty() || !f.generics.is_empty() || f.has_self() {
+            return Some(self.unsupported(e.span, "the frame of a generic shuttle, or of a method"));
+        }
+        let shuttle = self.instance(Instance::of(*def));
+        self.b.frames.insert(e.id, FrameQuery { shuttle, align });
+        Some(self.tcx.usize)
     }
 
     fn wrong_side(&mut self, span: Span, what: &str, why: &str) {

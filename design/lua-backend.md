@@ -250,8 +250,10 @@ their items go through `for` and every `Stream` method.
 - `yield`/`pull` in a shuttle that doesn't yield/pull is T0120; a shuttle
   calling itself is T0121 (its frame would contain itself); neither can be
   inside a `defer` (T0118). A burst is `once`, so dropping one is L0301.
-- Frames aren't laid out in Lua, so `f.Frame.size` waits for compile-time
-  reflection.
+- `f.Frame.size` and `f.Frame.align` are about Treadle's frame (vm.md
+  §10.14): to answer them, the program is checked for Treadle too and the
+  shuttle built for it. They're never folded while type checking, so a
+  `const assert` on one runs in the sandbox.
 
 ## `once` values and files
 

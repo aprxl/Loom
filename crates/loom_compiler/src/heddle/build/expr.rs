@@ -217,6 +217,11 @@ impl<'a> Builder<'a> {
         if let Some(&v) = self.tables().const_values.get(&e.id) {
             return self.const_val(v, ty, span).map(Val::Regs);
         }
+        if let Some(&q) = self.tables().frames.get(&e.id) {
+            let layout = self.frame_layout(q.shuttle)?;
+            let n = if q.align { layout.align } else { layout.size };
+            return Some(Val::Regs(vec![self.iconst(n)]));
+        }
         if let Some(c) = self.tables().constructs.get(&e.id).cloned() {
             let args: &'a [hir::Arg] = match &e.kind {
                 ExprKind::Call { args, .. } => args,

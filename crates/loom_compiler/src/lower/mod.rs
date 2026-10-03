@@ -216,6 +216,9 @@ struct Lowerer<'a> {
     /// Gauges whose checking functions are needed, in the order first used.
     gauges_used: IndexSet<DefId>,
     reported: HashSet<String>,
+    /// What `f.Frame.size` and `f.Frame.align` say (see `heddle::frames`),
+    /// once one is lowered.
+    frames: Option<HashMap<BodyId, (u64, u64)>>,
 }
 
 impl<'a> Lowerer<'a> {
@@ -246,6 +249,35 @@ impl<'a> Lowerer<'a> {
             defers: 0,
             gauges_used: IndexSet::new(),
             reported: HashSet::new(),
+            frames: None,
+        }
+    }
+
+    /// What `f.Frame.size` (or `.align`) says: the frame is Treadle's, so
+    /// it's worked out by building the shuttle for Treadle.
+    fn frame_query(&mut self, q: crate::typeck::FrameQuery, span: Span) -> u64 {
+        if self.frames.is_none() {
+            let frames = match crate::heddle::frames(self.p, self.typed) {
+                Ok(f) => f,
+                Err(diags) => {
+                    self.diags.extend(diags);
+                    HashMap::new()
+                }
+            };
+            self.frames = Some(frames);
+        }
+        match self.frames.as_ref().and_then(|f| f.get(&q.shuttle)) {
+            Some(&(size, align)) => {
+                if q.align {
+                    align
+                } else {
+                    size
+                }
+            }
+            None => {
+                self.unsupported(span, "this shuttle's frame");
+                0
+            }
         }
     }
 
