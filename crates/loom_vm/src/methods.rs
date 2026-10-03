@@ -130,7 +130,14 @@ fn replace(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let to = text(ctx, args[4], args[5])?;
     let mut out = Vec::with_capacity(s.len());
     if from.is_empty() {
-        out.extend_from_slice(s);
+        // `to` before every character, and at the end, as Rust's does.
+        for &b in s {
+            if b & 0xC0 != 0x80 {
+                out.extend_from_slice(to);
+            }
+            out.push(b);
+        }
+        out.extend_from_slice(to);
     } else {
         let mut rest = s;
         while let Some(at) = position(rest, from) {

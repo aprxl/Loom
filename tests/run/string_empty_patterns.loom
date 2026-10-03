@@ -1,0 +1,16 @@
+// Empty patterns: `replace("", x)` finds one before every character and at
+// the end (as Rust's does); `split("")` gives each character; `"".split(sep)`
+// is one empty part.
+
+use std.io.print
+
+fn main() {
+    print("{"ab".replace("", "-")}")
+    print("{"héllo".replace("", "·")}")
+    print("{"".replace("", "x")}")
+    print("{"abc".replace("", "")}")
+    print("{"a-b".replace("-", "")}")
+    print("{"héllo".split("")} {"héllo".split("").len()}")
+    print("{"".split(",")} {"".split(",").len()} {"".split("").len()}")
+    print("{",".split(",").len()} {"a,b,".split(",")}")
+}

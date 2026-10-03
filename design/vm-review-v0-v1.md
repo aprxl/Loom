@@ -114,6 +114,8 @@ unchanged (Rust gives `-h-é-…`). `"".split(",")` shows `[]`; Rust's is
 `[""]`. Decide what the language means, write it in the std docs, and pin
 it with a fixture (`methods.rs:127,160`).
 
+*Fixed: replace("", x) finds one before every character and at the end, as Rust's does, on both backends; "".split(",") was already one empty part; split("") keeps one part per character (documented)*
+
 **M3. Text methods are ASCII-only.** *Reproduced, both backends agree:*
 `"héllo wörld ß".to_upper()` leaves `é`/`ö`/`ß` (`char` methods like
 `is_alphabetic` weren't run: check them too). `methods.rs`'s header says so; check the std

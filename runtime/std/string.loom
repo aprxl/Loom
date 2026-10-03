@@ -42,11 +42,11 @@ pub warp Str {
     pub fn to_upper(self) -> String
     /// Lower case, for ASCII letters.
     pub fn to_lower(self) -> String
-    /// Every `from` replaced with `to`.
+    /// Every `from` replaced with `to`. An empty `from` is found before every character and at the end: `"ab".replace("", "-")` is `-a-b-`.
     pub fn replace(self, from: str, to: str) -> String
     /// `n` copies, one after another.
     pub fn repeat(self, n: usize) -> String
-    /// The parts between each `sep`.
+    /// The parts between each `sep` (`"".split(",")` is one empty part). An empty `sep` splits into each character, with no empty parts at the ends (unlike Rust's).
     pub fn split(self, sep: str) -> List[String]
     /// The characters, one at a time.
     pub fn chars(self) -> Stream[char]

@@ -196,7 +196,7 @@
 <span class="sig">fn replace(self, from: str, to: str) -&gt; String</span>
 
 </div>
-<p class="member-doc">Every <code>from</code> replaced with <code>to</code>.</p>
+<p class="member-doc">Every <code>from</code> replaced with <code>to</code>. An empty <code>from</code> is found before every character and at the end: <code>"ab".replace("", "-")</code> is <code>-a-b-</code>.</p>
 </div>
 <div class="member" id="Str.repeat">
 <div class="member-head">
@@ -210,7 +210,7 @@
 <span class="sig">fn split(self, sep: str) -&gt; List[String]</span>
 
 </div>
-<p class="member-doc">The parts between each <code>sep</code>.</p>
+<p class="member-doc">The parts between each <code>sep</code> (<code>"".split(",")</code> is one empty part). An empty <code>sep</code> splits into each character, with no empty parts at the ends (unlike Rust's).</p>
 </div>
 <div class="member" id="Str.chars">
 <div class="member-head">

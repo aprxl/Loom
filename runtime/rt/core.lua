@@ -2203,7 +2203,16 @@ ext["std.string.Str.to_lower"] = function(s)
 end
 
 ext["std.string.Str.replace"] = function(s, from, to)
-  if from == "" then return s end
+  if from == "" then
+    -- `to` before every character, and at the end, as Rust's does.
+    local out = {}
+    for c in string.gmatch(s, utf8.charpattern) do
+      out[#out + 1] = to
+      out[#out + 1] = c
+    end
+    out[#out + 1] = to
+    return concat(out)
+  end
   local pattern = from:gsub("%p", "%%%0")
   return (s:gsub(pattern, (to:gsub("%%", "%%%%"))))
 end
