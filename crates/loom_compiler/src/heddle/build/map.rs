@@ -5,8 +5,16 @@
 //! an index's buffer and how many slots it has (a power of two, or 0 for
 //! none yet). An entry is a key's hash, the key and the value. The index is
 //! open addressing: a slot is 0, or an entry's number plus one; it's kept
-//! at most half full. Removing an entry moves the later ones down, keeping
-//! the order, and builds the index again.
+//! at most half full.
+//!
+//! Removing an entry is cheap: its hash becomes 0 (a live entry's never is),
+//! so lookups pass over it, and it stays in the entries (and the index)
+//! until there are more removed than live entries, when the live ones move
+//! down, in order, and the index is built again. The header has two counts:
+//! `len` (word 1), the live entries, and `used` (word 5), the entries made,
+//! removed ones included. Whatever walks the entries (a loop, `show`, `==`,
+//! `copy`) first makes `used` equal `len` by moving them down early
+//! (`compact`); only a drop walks them as they are.
 //!
 //! Keys hash structurally (`hash.rs`) and compare with `==` (a warp's own
 //! `eq` when it writes one: row P9 of §14).
@@ -87,7 +95,25 @@ impl<'a> Builder<'a> {
     /// A key's hash, as kept in its entry.
     fn key_hash(&mut self, c: &Coll, key: &Val, span: Span) -> Option<Value> {
         let h = self.hash_val(key.clone(), c.key, span)?;
-        Some(self.finalize_hash(h))
+        let z = self.finalize_hash(h);
+        Some(self.nonzero(z))
+    }
+
+    /// `h`, or 1 for 0: a removed entry's hash is 0, so a live one's isn't.
+    /// (The natives' `key_hash` does the same.)
+    fn nonzero(&mut self, h: Value) -> Value {
+        let r = self.new_var(VTy::Int);
+        self.write(r, h);
+        let zero = self.iconst(0);
+        let is_zero = self.ucmp(Cmp::Eq, h, zero);
+        let (fix, done) = (self.new_block(), self.new_block());
+        self.br(is_zero, fix, done);
+        self.enter(fix);
+        let one = self.iconst(1);
+        self.write(r, one);
+        self.jump(done);
+        self.enter(done);
+        self.read(r)
     }
 
     /// The finalizer of a key's hash, which the native lookups
@@ -246,13 +272,21 @@ impl<'a> Builder<'a> {
         let ibuf = self.emit1(InstKind::Native { name: "mem.calloc", imm: 0, args: vec![bytes, eight] }, VTy::Ptr);
         self.store(Mem::W64, header, 24, ibuf);
         self.store(Mem::W64, header, 32, slots);
-        let len = self.hdr(header, 8);
+        let used = self.hdr(header, 40);
         let zero = self.iconst(0);
-        let _ = self.count_loop(zero, len, |this, e| {
+        let _ = self.count_loop(zero, used, |this, e| {
             let ebuf = this.hdr_ptr(header, 0);
             let ent = this.entry(c, ebuf, e);
             let h = this.hdr(ent, 0);
+            // Not the removed ones.
+            let zero = this.iconst(0);
+            let live = this.ucmp(Cmp::Ne, h, zero);
+            let (put, next) = (this.new_block(), this.new_block());
+            this.br(live, put, next);
+            this.enter(put);
             this.index_put(header, h, e);
+            this.jump(next);
+            this.enter(next);
             Some(())
         });
     }
@@ -260,19 +294,23 @@ impl<'a> Builder<'a> {
     /// Adds an entry (`key`, hash `h`, and `val` for a map), which isn't
     /// there yet: both are moved in.
     fn push_entry(&mut self, c: &Coll, header: Value, h: Value, key: Val, val: Option<Val>, span: Span) -> Option<()> {
-        let len = self.hdr(header, 8);
+        let used = self.hdr(header, 40);
         let one = self.iconst(1);
-        let want = self.uarith(IntOp::Add, len, one);
+        let want = self.uarith(IntOp::Add, used, one);
         let (size, align) = (self.iconst(c.esize), self.iconst(c.ealign));
         self.emit(InstKind::Native { name: "mem.grow", imm: 0, args: vec![header, size, align, want] }, &[]);
         let ebuf = self.hdr_ptr(header, 0);
-        let ent = self.entry(c, ebuf, len);
+        let ent = self.entry(c, ebuf, used);
         self.store(Mem::W64, ent, 0, h);
         self.move_to(ent, c.koff as i64, key, c.key, span)?;
         if let (Some(v), Some(vt)) = (val, c.val) {
             self.move_to(ent, c.voff as i64, v, vt, span)?;
         }
-        self.store(Mem::W64, header, 8, want);
+        let len = self.hdr(header, 8);
+        let one = self.iconst(1);
+        let more = self.uarith(IntOp::Add, len, one);
+        self.store(Mem::W64, header, 8, more);
+        self.store(Mem::W64, header, 40, want);
         // At most half full: else twice the slots (at least 8).
         let slots = self.hdr(header, 32);
         let two = self.iconst(2);
@@ -287,7 +325,7 @@ impl<'a> Builder<'a> {
         self.reindex(c, header, new);
         self.jump(done);
         self.enter(put);
-        self.index_put(header, h, len);
+        self.index_put(header, h, used);
         self.jump(done);
         self.enter(done);
         Some(())
@@ -307,22 +345,70 @@ impl<'a> Builder<'a> {
         self.read(r)
     }
 
-    /// Takes entry `e` out, its key and value already taken (or dropped):
-    /// the later ones move down, and the index is built again.
+    /// Takes entry `e` out, its key and value already taken (or dropped): its
+    /// hash becomes 0, and when more than half the entries made are removed
+    /// ones, the live ones move down.
     fn remove_entry(&mut self, c: &Coll, header: Value, e: Value) {
-        let len = self.hdr(header, 8);
         let ebuf = self.hdr_ptr(header, 0);
+        let ent = self.entry(c, ebuf, e);
+        let zero = self.iconst(0);
+        self.store(Mem::W64, ent, 0, zero);
+        let len = self.hdr(header, 8);
         let one = self.iconst(1);
-        let next = self.uarith(IntOp::Add, e, one);
-        let (to, from) = (self.entry(c, ebuf, e), self.entry(c, ebuf, next));
-        let rest = self.uarith(IntOp::Sub, len, next);
-        let scale = self.iconst(c.esize);
-        let bytes = self.uarith(IntOp::Mul, rest, scale);
-        self.emit(InstKind::Native { name: "mem.move", imm: 0, args: vec![to, from, bytes] }, &[]);
         let left = self.uarith(IntOp::Sub, len, one);
         self.store(Mem::W64, header, 8, left);
+        let used = self.hdr(header, 40);
+        let dead = self.uarith(IntOp::Sub, used, left);
+        let many = self.ucmp(Cmp::Gt, dead, left);
+        let eight = self.iconst(8);
+        let past = self.ucmp(Cmp::Gt, used, eight);
+        let (check, squeeze, done) = (self.new_block(), self.new_block(), self.new_block());
+        self.br(many, check, done);
+        self.enter(check);
+        self.br(past, squeeze, done);
+        self.enter(squeeze);
+        self.compact(c, header);
+        self.jump(done);
+        self.enter(done);
+    }
+
+    /// Moves the live entries down over the removed ones, in order, and
+    /// builds the index again: afterwards `used` is `len`. Nothing when
+    /// none were removed.
+    pub(super) fn compact(&mut self, c: &Coll, header: Value) {
+        let (len, used) = (self.hdr(header, 8), self.hdr(header, 40));
+        let same = self.ucmp(Cmp::Eq, len, used);
+        let (work, done) = (self.new_block(), self.new_block());
+        self.br(same, done, work);
+        self.enter(work);
+        let w = self.new_var(VTy::Int);
+        let zero = self.iconst(0);
+        self.write(w, zero);
+        let _ = self.count_loop(zero, used, |this, e| {
+            let ebuf = this.hdr_ptr(header, 0);
+            let ent = this.entry(c, ebuf, e);
+            let h = this.hdr(ent, 0);
+            let zero = this.iconst(0);
+            let live = this.ucmp(Cmp::Ne, h, zero);
+            let (keep, next) = (this.new_block(), this.new_block());
+            this.br(live, keep, next);
+            this.enter(keep);
+            let at = this.read(w);
+            let to = this.entry(c, ebuf, at);
+            let size = this.iconst(c.esize);
+            this.emit(InstKind::Native { name: "mem.move", imm: 0, args: vec![to, ent, size] }, &[]);
+            let one = this.iconst(1);
+            let more = this.uarith(IntOp::Add, at, one);
+            this.write(w, more);
+            this.jump(next);
+            this.enter(next);
+            Some(())
+        });
+        self.store(Mem::W64, header, 40, len);
         let slots = self.hdr(header, 32);
         self.reindex(c, header, slots);
+        self.jump(done);
+        self.enter(done);
     }
 
     /// Drops every entry's key and value.
@@ -331,17 +417,26 @@ impl<'a> Builder<'a> {
         if !kd && !vd {
             return;
         }
-        let len = self.hdr(header, 8);
+        // As they are: the removed ones (hash 0) were dropped when removed.
+        let used = self.hdr(header, 40);
         let zero = self.iconst(0);
-        let _ = self.count_loop(zero, len, |this, e| {
+        let _ = self.count_loop(zero, used, |this, e| {
             let ebuf = this.hdr_ptr(header, 0);
             let ent = this.entry(c, ebuf, e);
+            let h = this.hdr(ent, 0);
+            let zero = this.iconst(0);
+            let live = this.ucmp(Cmp::Ne, h, zero);
+            let (go, next) = (this.new_block(), this.new_block());
+            this.br(live, go, next);
+            this.enter(go);
             let k = this.offset(ent, c.koff as i64);
             this.drop_at(k, c.key);
             if let Some(vt) = c.val {
                 let v = this.offset(ent, c.voff as i64);
                 this.drop_at(v, vt);
             }
+            this.jump(next);
+            this.enter(next);
             Some(())
         });
     }
@@ -366,6 +461,7 @@ impl<'a> Builder<'a> {
 
     /// Copy glue for a map or a set: its bytes are at `dst` already.
     pub(super) fn copy_coll(&mut self, c: &Coll, dst: Value, src: Value, span: Span) -> Option<()> {
+        self.compact(c, src);
         let len = self.hdr(src, 8);
         let scale = self.iconst(c.esize);
         let bytes = self.uarith(IntOp::Mul, len, scale);
@@ -392,6 +488,9 @@ impl<'a> Builder<'a> {
             })?;
         }
         self.store(Mem::W64, dst, 0, ebuf);
+        // (Compacting may have changed the source's `used` since its bytes
+        // were copied.)
+        self.store(Mem::W64, dst, 40, len);
         self.store(Mem::W64, dst, 16, len);
         // The index: the same slots, for the same hashes.
         let slots = self.hdr(src, 32);
@@ -413,6 +512,7 @@ impl<'a> Builder<'a> {
         debug: bool,
         span: Span,
     ) -> Option<()> {
+        self.compact(c, header);
         let len = self.hdr(header, 8);
         let (open, close) = if c.val.is_some() { ("[", "]") } else { ("{", "}") };
         if c.val.is_some() {
@@ -473,6 +573,8 @@ impl<'a> Builder<'a> {
     /// `a == b` for maps or sets: the same keys, and values for them, in
     /// any order.
     pub(super) fn eq_colls(&mut self, c: &Coll, a: Value, b: Value, span: Span) -> Option<Value> {
+        self.compact(c, a);
+        self.compact(c, b);
         let r = self.new_var(VTy::Int);
         let done = self.new_block();
         let (la, lb) = (self.hdr(a, 8), self.hdr(b, 8));
@@ -773,6 +875,7 @@ impl<'a> Builder<'a> {
                 self.drop_entries(&c, header);
                 let zero = self.iconst(0);
                 self.store(Mem::W64, header, 8, zero);
+                self.store(Mem::W64, header, 40, zero);
                 let slots = self.hdr(header, 32);
                 let has = self.ucmp(Cmp::Ne, slots, zero);
                 let (re, done) = (self.new_block(), self.new_block());
@@ -785,6 +888,7 @@ impl<'a> Builder<'a> {
             }
             "sorted" => {
                 // Copies of the entries (pairs for a map), sorted by key.
+                self.compact(&c, header);
                 let dst = self.f.sret?;
                 let Some(crate::typeck::Seq::List(item)) = self.seq_of(ret) else { return None };
                 let item = self.tcx().degauge(item);

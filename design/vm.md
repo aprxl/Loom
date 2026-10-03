@@ -228,7 +228,7 @@ Everything else:
 | `[T; N]` | N elements, inline |
 | `[T]`, `str` | pointer and length (16 bytes) |
 | `List[T]`, `String` | pointer, length and capacity (24 bytes). The capacity's top 16 bits are reserved for the spool the buffer lives in (§12) |
-| `Map[K, V]`, `Set[T]` | a list of entries (hash, key, value) in insertion order, and an index table of entry numbers (40 bytes) |
+| `Map[K, V]`, `Set[T]` | a list of entries (hash, key, value) in insertion order, and an index table of entry numbers (48 bytes) |
 | range | low end, high end, and which ends are open |
 | `A => B` | a function number and an environment pointer (16 bytes) |
 | `^T` | a pointer (8 bytes), never null, so `?^T` is 8 bytes too |
@@ -899,8 +899,12 @@ promised gauges would let an optimizer do.
 
 - **Maps** keep insertion order, like on Lua: a list of entries (a key's
   hash, the key, the value), plus an index table with open addressing whose
-  slots hold entry numbers, kept at most half full. Removing shifts the later
-  entries down, keeping the order. Keys hash and compare through their `Hash`
+  slots hold entry numbers, kept at most half full. Removing is O(1): the
+  entry's hash becomes 0 (a live one's never is) and it stays until more than
+  half the entries made are removed ones, when the live ones move down, in
+  order, and the index is built again; a loop, `show`, `==`, `copy` or
+  `sorted` moves them down first. The header has `len` (the live entries) and
+  `used` (the entries made). Keys hash and compare through their `Hash`
   and `Eq` (monomorphized), with native fast paths for strings and integers.
   A hand-written `eq` or `hash` is used (on Lua, keys are still compared
   structurally).

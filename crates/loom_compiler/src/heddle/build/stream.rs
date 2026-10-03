@@ -155,7 +155,7 @@ impl<'a> Builder<'a> {
             Step::Seq { owned, .. } => 32 + owned.map_or(Some(0), |t| self.size_align(t).map(|s| s.0))?,
             Step::Woven { iter, .. } => self.size_align(iter)?.0.max(8),
             Step::Range(_) | Step::Text(_) => 24,
-            Step::Coll { owned, .. } => 32 + if owned { 40 } else { 0 },
+            Step::Coll { owned, .. } => 32 + if owned { 48 } else { 0 },
             Step::Chunks { .. } => 32,
             _ => 56,
         })
@@ -597,7 +597,11 @@ impl<'a> Builder<'a> {
     }
 
     /// Fills a box of `Step::Coll` for the map at `header`.
-    fn coll_box(&mut self, b: Value, header: Value) {
+    fn coll_box(&mut self, b: Value, header: Value, coll: Ty) {
+        // The stream walks the entries: no removed ones left in them.
+        if let Some(c) = self.coll_of(coll) {
+            self.compact(&c, header);
+        }
         self.set_word(b, 0, header);
         let len = self.word(header, 8);
         self.set_word(b, 8, len);
@@ -620,7 +624,7 @@ impl<'a> Builder<'a> {
         let item = self.stream_item_ty(sty)?;
         let step = Step::Coll { coll, what, item, owned: false };
         let b = self.new_box(step)?;
-        self.coll_box(b, header);
+        self.coll_box(b, header, coll);
         let _ = span;
         self.stream_at(self.f.sret?, step, b);
         Some(())
@@ -926,12 +930,12 @@ impl<'a> Builder<'a> {
                     let b = self.new_box(step)?;
                     let at = self.offset(b, 32);
                     self.move_to(at, 0, Val::Mem(p), from, span)?;
-                    self.coll_box(b, at);
+                    self.coll_box(b, at, from);
                     return self.stream_val(step, b, ty, span);
                 }
                 let step = Step::Coll { coll: from, what, item, owned: false };
                 let b = self.new_box(step)?;
-                self.coll_box(b, p);
+                self.coll_box(b, p, from);
                 self.stream_val(step, b, ty, span)
             }
             IterSource::Shuttle(_) | IterSource::Burst(_) => self.unsupported(span, "shuttles"),

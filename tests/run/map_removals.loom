@@ -1,0 +1,71 @@
+// Removing from maps and sets: the order the rest keep, re-adding, removing
+// everything, and what loops, `show`, `==`, `copy` and `sorted` see after
+// removals (design/vm.md §10.13).
+
+use std.io.print
+
+fn main() {
+    var m: Map[u32, String] = Map()
+    for i in 0..20u32 { m[i] = "v{i}" }
+    // The front, the middle and the end.
+    print("{m.remove(0)} {m.remove(10)} {m.remove(19)} {m.remove(10)} {m.len()}")
+    print(m)
+    // Re-adding puts it at the end; replacing keeps the place.
+    m[10] = "again"
+    m[5] = "five"
+    print("{m.len()} {m.keys().collect()}")
+    // Many removals, then loops and the rest see only what's left.
+    for i in 1..15u32 { m.remove(i) }
+    print("{m.len()} {m} {m.has(3)} {m.has(15)} {m.get(10)}")
+    for (k, v) in m { print("{k}={v}") }
+    print("{m.sorted()}")
+    // `==` doesn't care how a map got where it is.
+    var n: Map[u32, String] = Map()
+    n[16] = "v16"
+    n[17] = "v17"
+    n[18] = "v18"
+    n[10] = "again"
+    n[15] = "v15"
+    n.remove(10)
+    print("{m == n} {m == m.copy()} {m.copy()}")
+    n.remove(16)
+    print("{m == n} {n.len()}")
+    // Everything out, then in again.
+    for k in n.keys().collect() { n.remove(k) }
+    print("{n} {n.is_empty()}")
+    n[1] = "x"
+    print(n)
+    // Lots in and out, in order, as a queue does.
+    var q: Map[u64, u64] = Map()
+    var next = 0u64
+    var head = 0u64
+    var total = 0u64
+    for round in 0..2000u64 {
+        q[next] = round
+        next += 1
+        q[next] = round
+        next += 1
+        total += q.remove(head) mend 0
+        head += 1
+    }
+    print("{q.len()} {total} {q.keys().collect().len()} {q.has(head)} {q.has(head - 1)}")
+    q.clear()
+    q[7] = 7
+    print("{q} {q.len()}")
+
+    // Sets, and keys that own memory.
+    var s: Set[String] = Set()
+    for i in 0..30 { s.insert("s{i}") }
+    for i in 0..30 {
+        if i % 3 != 0 { s.remove("s{i}") }
+    }
+    print("{s.len()} {s} {s.sorted()}")
+    s.insert("s1")
+    print("{s.has("s1")} {s.has("s2")} {s.len()}")
+    var lists: Map[String, List[String]] = Map()
+    for i in 0..12 { lists["k{i}"] = ["a{i}", "b{i}"] }
+    for i in 0..12 {
+        if i % 4 != 1 { lists.remove("k{i}") }
+    }
+    print("{lists}")
+}

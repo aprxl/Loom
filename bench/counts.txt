@@ -8,8 +8,8 @@ spectral_norm 40     1422427
 fannkuch     7      954901
 binary_trees 8      1775852
 richards     10000  653850
-word_freq    40000  2215162
+word_freq    40000  2215940
 sort         20000  7636958
 streams      30000  10050916
 chip8        30000  1179337
-maps         20000  4023279
+maps         20000  5595646

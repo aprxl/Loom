@@ -466,9 +466,10 @@ fn finalize(h: u64) -> u64 {
 }
 
 /// A one-word key's hash, as the compiler's `key_hash` makes it: the word
-/// mixed into FNV's offset, then finalized.
+/// mixed into FNV's offset, then finalized, and never zero (a removed
+/// entry's hash is zero).
 fn key_hash(word: u64) -> u64 {
-    finalize((FNV_OFFSET ^ word).wrapping_mul(FNV_PRIME))
+    finalize((FNV_OFFSET ^ word).wrapping_mul(FNV_PRIME)).max(1)
 }
 
 /// Looks for the entry whose key `same` says is it, with hash `h`, in the

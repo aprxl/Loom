@@ -15,5 +15,6 @@ return function()
   for i = 0, size - 1 do
     if s["k" .. (i * 2)] ~= nil then hits = hits + 1 end
   end
+  for i = 0, size - 1 do m[i << 12] = nil; n = n - 1 end
   io.write(string.format("%d %d %d %d\n", n, total, sn, hits))
 end

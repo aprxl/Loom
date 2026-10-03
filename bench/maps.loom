@@ -1,5 +1,5 @@
 // `Map` with keys that cluster (multiples of 4096) and text keys: inserting
-// and looking up.
+// and looking up, and removing.
 use std.io.print
 
 const SIZE = 200_000
@@ -15,5 +15,6 @@ fn main() {
     for i in 0..SIZE {
         if s.has("k{i * 2}") { hits += 1 }
     }
+    for i in 0..SIZE { m.remove(i << 12) }
     print("{m.len()} {total} {s.len()} {hits}")
 }

@@ -268,7 +268,7 @@ impl<'a> Builder<'a> {
     pub(super) fn empty_header(&mut self, dst: Value, ty: Ty) -> Option<()> {
         let (size, align) = match (self.seq_of(ty), self.coll_of(ty)) {
             (Some(Seq::List(elem)), _) => (24, self.size_align(elem)?.1),
-            (_, Some(c)) => (40, c.ealign),
+            (_, Some(c)) => (48, c.ealign),
             _ => (24, 1),
         };
         self.emit(InstKind::Zero { dst, size }, &[]);
