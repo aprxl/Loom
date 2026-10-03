@@ -314,7 +314,9 @@ fn emit_heddle_and_bytecode_show_treadle_s_code() {
 #[test]
 fn backtraces_list_every_frame_on_treadle() {
     // A lambda and a builtin method in between: frames with no locations
-    // (std's methods, glue) are left out, the program's are all there.
+    // (std's methods, glue) are left out, the program's are all there. At
+    // `-O2`, `inner` and `middle` are inlined, and still frames of their
+    // own.
     let path = temp_source(
         "backtrace",
         "use std.io.print\n\
@@ -325,20 +327,28 @@ fn backtraces_list_every_frame_on_treadle() {
          \x20   xs.each(x => print(middle(xs)))\n\
          }\n",
     );
-    let out = Command::new(env!("CARGO_BIN_EXE_loom"))
-        .args(["--color", "never", "run", "--backend", "vm"])
-        .arg(&path)
-        .env("LOOM_BACKTRACE", "1")
-        .output()
-        .expect("the loom binary runs");
+    let file = path.to_str().expect("utf-8 path");
+    let listing = text(&loom(&["-O2", "build", file, "--emit", "bytecode"]).stdout);
+    assert!(!listing.contains("call        inner"), "inlined at -O2:\n{listing}");
+    let mut reports = Vec::new();
+    for level in ["-O0", "-O2"] {
+        let out = Command::new(env!("CARGO_BIN_EXE_loom"))
+            .args(["--color", "never", level, "run", "--backend", "vm"])
+            .arg(&path)
+            .env("LOOM_BACKTRACE", "1")
+            .output()
+            .expect("the loom binary runs");
+        let err = text(&out.stderr);
+        assert_eq!(out.status.code(), Some(101), "{err}");
+        let frames: Vec<&str> = err.lines().skip_while(|l| *l != "backtrace:").skip(1).collect();
+        let names: Vec<&str> = frames.iter().filter_map(|l| l.split_whitespace().nth(1)).collect();
+        assert_eq!(names, ["inner", "middle", "main.{lambda}", "main"], "{level}: {err}");
+        assert!(frames[0].ends_with(":2:4"), "{level}: {err}");
+        assert!(frames[1].ends_with(":3:4"), "{level}: {err}");
+        reports.push(err);
+    }
     let _ = std::fs::remove_file(&path);
-    let err = text(&out.stderr);
-    assert_eq!(out.status.code(), Some(101), "{err}");
-    let frames: Vec<&str> = err.lines().skip_while(|l| *l != "backtrace:").skip(1).collect();
-    let names: Vec<&str> = frames.iter().filter_map(|l| l.split_whitespace().nth(1)).collect();
-    assert_eq!(names, ["inner", "middle", "main.{lambda}", "main"], "{err}");
-    assert!(frames[0].ends_with(":2:4"), "{err}");
-    assert!(frames[1].ends_with(":3:4"), "{err}");
+    assert_eq!(reports[0], reports[1], "the same report at -O0 and -O2");
 }
 
 #[test]

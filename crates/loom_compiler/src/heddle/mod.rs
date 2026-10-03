@@ -360,6 +360,8 @@ pub struct Inst {
     /// Where it goes if it unravels, when there's cleaning up to do: a
     /// landing pad.
     pub unwind: Option<BlockId>,
+    /// The call it was inlined from (`Func::sites`), when it was.
+    pub site: Option<u32>,
 }
 
 /// An edge to a block, with an argument for each of its parameters.
@@ -431,6 +433,8 @@ pub struct Block {
     /// The landing pad of an unravelling terminator, or of a jump (a loop's
     /// back edge is where Treadle notices an interrupt).
     pub term_unwind: Option<BlockId>,
+    /// The call the terminator was inlined from, when it was.
+    pub term_site: Option<u32>,
 }
 
 impl Block {
@@ -443,7 +447,19 @@ impl Block {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+/// A call the optimizer inlined: what a backtrace shows as a frame of its
+/// own for the instructions it gave.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Site {
+    /// The function inlined.
+    pub name: String,
+    /// Where the call was.
+    pub call: Option<Span>,
+    /// The call the call itself was inlined from, when it was.
+    pub parent: Option<u32>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Func {
     pub name: String,
     /// The entry block is `blocks[0]`; its parameters are the function's.
@@ -453,6 +469,8 @@ pub struct Func {
     pub types: Vec<VTy>,
     /// Its frame slots, by [`InstKind::Slot`] number.
     pub slots: Vec<Slot>,
+    /// The calls inlined into it, by [`Inst::site`].
+    pub sites: Vec<Site>,
 }
 
 impl Func {

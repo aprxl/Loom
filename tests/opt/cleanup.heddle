@@ -1,0 +1,18 @@
+fn main() -> () {
+b0:
+    v0 = iconst 3
+    v1 = iconst 2
+    v2 = icmp.gt.s v0, v1
+    br v2, b1, b2(v0)
+b1:
+    v3 = iconst 1
+    v4 = add.i32 v0, v3
+    jump b2(v4)
+b2(v5: int):
+    v6 = iconst 0
+    native sink.fmt #0(v6, v5)
+    v7 = str "\n"
+    v8 = iconst 1
+    native sink.str #0(v6, v7, v8)
+    ret
+}

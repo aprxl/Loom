@@ -1,0 +1,106 @@
+fn main() -> () {
+  slot0: 24 bytes, align 8
+  s0: inlined twice
+  s1: inlined inc in s0
+  s2: inlined inc in s0
+  s3: inlined guarded
+  s4: inlined fact
+b0:
+    v31 = slot0
+    zero v31, 24
+    v0 = iconst 1
+    v1 = iconst 2
+    v2 = iconst 2
+    v3 = iconst 8
+    v4 = iconst 0
+    v5 = icmp.ne.u v2, v4
+    br v5, b1, b2(v3)
+b1:
+    v6 = iconst 8
+    v7 = mul.u64 v2, v6
+    v8 = iconst 8
+    v9 = native mem.alloc #0(v7, v8)
+    jump b2(v9)
+b2(v10: ptr):
+    store.64 v10, v0
+    store.64 v10+8, v1
+    v11 = slot0
+    store.64 v11, v10
+    store.64 v11+8, v2
+    store.64 v11+16, v2
+    v12 = slot0
+    v13 = iconst 0
+    v15 = elem v12+0[v13] * 8 unwind b3
+    v16 = load.64 v15
+    v32 = iconst 1 @s1
+    v33 = add.i64 v16, v32 unwind b3 @s1
+    v34 = iconst 1 @s2
+    v35 = add.i64 v33, v34 unwind b3 @s2
+    v18 = slot0
+    v19 = iconst 1
+    v20 = elem v18+0[v19] * 8 unwind b3
+    v21 = load.64 v20
+    v36 = iconst 2 @s3
+    v37 = mul.i64 v21, v36 unwind b4 @s3
+    v38 = str "left" @s3
+    v39 = iconst 4 @s3
+    v40 = iconst 0 @s3
+    native sink.str #0(v40, v38, v39) unwind b3 @s3
+    v41 = str "\n" @s3
+    v42 = iconst 1 @s3
+    native sink.str #0(v40, v41, v42) unwind b3 @s3
+    v23 = add.i64 v35, v37 unwind b3
+    v24 = iconst 5
+    v48 = iconst 1 @s4
+    v49 = icmp.le.s v24, v48 @s4
+    br v49, b6, b7
+b3:
+    v14 = slot0
+    freebuf v14+0, 8, align 8
+    zero v14, 24
+    resume
+b4:
+    v43 = str "left" @s3
+    v44 = iconst 4 @s3
+    v45 = iconst 0 @s3
+    native sink.str #0(v45, v43, v44) unwind b3 @s3
+    v46 = str "\n" @s3
+    v47 = iconst 1 @s3
+    native sink.str #0(v45, v46, v47) unwind b3 @s3
+    jump b3 @s3
+b5(v25: int):
+    v26 = add.i64 v23, v25 unwind b3
+    v27 = iconst 0
+    native sink.fmt #0(v27, v26) unwind b3
+    v28 = str "\n"
+    v29 = iconst 1
+    native sink.str #0(v27, v28, v29) unwind b3
+    v30 = slot0
+    freebuf v30+0, 8, align 8
+    zero v30, 24
+    ret
+b6:
+    v50 = iconst 1 @s4
+    jump b5(v50) @s4
+b7:
+    v51 = iconst 1 @s4
+    v52 = sub.i64 v24, v51 unwind b3 @s4
+    v53 = call fact(v52) unwind b3 @s4
+    v54 = mul.i64 v24, v53 unwind b3 @s4
+    jump b5(v54) @s4
+}
+fn fact(v0: int) -> (int) {
+b0(v0: int):
+    v1 = iconst 1
+    v2 = icmp.le.s v0, v1
+    br v2, b1, b2
+b1:
+    v3 = iconst 1
+    ret v3
+b2:
+    v4 = iconst 1
+    v5 = sub.i64 v0, v4
+    v6 = call fact(v5)
+    v7 = mul.i64 v0, v6
+    ret v7
+}

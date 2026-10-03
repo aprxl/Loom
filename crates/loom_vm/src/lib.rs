@@ -124,8 +124,9 @@ pub struct Vm<'i> {
     machine: exec::Machine<'i>,
     /// The frames of the last unravel: each function, and where in it.
     trace: Vec<(String, Option<Location>)>,
-    /// How many frames of the trace were left out, after its first 64.
-    skipped: usize,
+    /// Where frames of the trace were left out: how many come before the
+    /// gap, and how many calls it stands for.
+    gap: Option<(usize, usize)>,
 }
 
 impl<'i> Vm<'i> {
@@ -136,7 +137,7 @@ impl<'i> Vm<'i> {
         }
         let machine =
             exec::Machine::load(image, host, config).map_err(|message| Outcome::Crash { message, location: None })?;
-        Ok(Vm { image, machine, trace: Vec::new(), skipped: 0 })
+        Ok(Vm { image, machine, trace: Vec::new(), gap: None })
     }
 
     /// The frames the last unravel happened in, innermost first: each
@@ -147,9 +148,9 @@ impl<'i> Vm<'i> {
 
     /// Where [`backtrace`](Self::backtrace) has frames left out (a stack
     /// overflow is millions deep): the number of frames before the gap, and
-    /// how many are in it.
+    /// how many calls are in it.
     pub fn backtrace_gap(&self) -> Option<(usize, usize)> {
-        (self.skipped > 0).then_some((64, self.skipped))
+        self.gap
     }
 
     /// With `checked`: an internal error if anything the program allocated
@@ -210,20 +211,19 @@ impl<'i> Vm<'i> {
         self.machine.ctx.term.restore();
         result.map_err(|fault| {
             let image = self.image;
-            self.skipped = fault.skipped;
-            self.trace = fault
-                .trace
-                .iter()
-                .map(|&pc| {
-                    let name = image.func_at(pc as u32).map(|f| image.funcs[f].name.clone()).unwrap_or_default();
-                    let at = image.line_at(pc as u32).map(|(file, line, column)| Location {
-                        file: file.to_string(),
-                        line,
-                        column,
-                    });
-                    (name, at)
-                })
-                .collect();
+            // A frame's instruction may be from calls the compiler inlined:
+            // a frame each.
+            self.trace.clear();
+            self.gap = None;
+            for (i, &pc) in fault.trace.iter().enumerate() {
+                if i == exec::TRACE_ENDS && fault.skipped > 0 {
+                    self.gap = Some((self.trace.len(), fault.skipped));
+                }
+                for (name, at) in image.frames_at(pc as u32) {
+                    let at = at.map(|(file, line, column)| Location { file: file.to_string(), line, column });
+                    self.trace.push((name.to_string(), at));
+                }
+            }
             let location = self.image.line_at(fault.pc as u32).map(|(file, line, column)| Location {
                 file: file.to_string(),
                 line,

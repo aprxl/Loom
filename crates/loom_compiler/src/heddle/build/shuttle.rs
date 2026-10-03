@@ -892,6 +892,7 @@ impl<'a> Builder<'a> {
             results: Vec::new(),
             span,
             unwind: pad,
+            site: None,
         });
         self.jump(done);
         self.enter(done);

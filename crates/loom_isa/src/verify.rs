@@ -318,6 +318,7 @@ mod tests {
             results: 1,
             lines: vec![],
             pads: vec![],
+            sites: vec![],
         };
         Image {
             funcs: vec![func],

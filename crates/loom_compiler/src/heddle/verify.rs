@@ -5,7 +5,8 @@
 //! - every value is defined exactly once;
 //! - every use is dominated by its definition;
 //! - landing pads exist, only instructions that can unravel have one, and
-//!   a pad reads no value but the function's parameters and its own.
+//!   a pad reads no value but the function's parameters, its own, and
+//!   those computed before every instruction that unwinds to it.
 
 use std::collections::HashMap;
 
@@ -85,22 +86,6 @@ fn verify_func(f: &Func) -> Result<(), String> {
         }
     }
     let idom = dominators(f, &preds);
-    // What landing pads (reached only by unwinding) can see: the function's
-    // parameters, and what the pads themselves compute.
-    let pad_blocks: std::collections::HashSet<usize> = pad_reach(f);
-    let params: std::collections::HashSet<Value> = f.params().iter().copied().collect();
-    for &b in &pad_blocks {
-        let block = &f.blocks[b];
-        let mut seen: std::collections::HashSet<Value> = block.params.iter().copied().collect();
-        for inst in &block.insts {
-            for u in uses(&inst.kind) {
-                if !seen.contains(&u) && !params.contains(&u) && !pad_defined(f, &pad_blocks, u) {
-                    return Err(format!("the landing pad b{b} reads v{}, which isn't its own", u.0));
-                }
-            }
-            seen.extend(inst.results.iter().copied());
-        }
-    }
     let dominates = |a: usize, mut b: usize| loop {
         if a == b {
             return true;
@@ -110,6 +95,49 @@ fn verify_func(f: &Func) -> Result<(), String> {
             _ => return false,
         }
     };
+    // What landing pads (reached only by unwinding) can see: the function's
+    // parameters, what the pads themselves compute, and what's computed
+    // before every instruction that unwinds to them (an inlined function's
+    // pads read its arguments).
+    let pad_blocks: std::collections::HashSet<usize> = pad_reach(f);
+    let params: std::collections::HashSet<Value> = f.params().iter().copied().collect();
+    let sources = unwind_sources(f, &pad_blocks);
+    for &b in &pad_blocks {
+        let block = &f.blocks[b];
+        let mut seen: std::collections::HashSet<Value> = block.params.iter().copied().collect();
+        let mut reads: Vec<Value> = Vec::new();
+        for inst in &block.insts {
+            for u in uses(&inst.kind) {
+                if !seen.contains(&u) {
+                    reads.push(u);
+                }
+            }
+            seen.extend(inst.results.iter().copied());
+        }
+        reads.extend(block.term.iter().flat_map(crate::heddle::opt::term_uses).filter(|u| !seen.contains(u)));
+        for u in reads {
+            if params.contains(&u) || pad_defined(f, &pad_blocks, u) {
+                continue;
+            }
+            let Some(&(db, di)) = defs.get(&u) else {
+                return Err(format!("v{} is used in b{b} but never defined", u.0));
+            };
+            // Before each instruction (or terminator, at the block's end)
+            // that unwinds here. (Not checked in other pads, nor in blocks
+            // nothing reaches.)
+            let before = |&(sb, si): &(usize, usize)| {
+                pad_blocks.contains(&sb)
+                    || idom[sb].is_none()
+                    || if db == sb { di.is_none_or(|di| di < si) } else { dominates(db, sb) }
+            };
+            if let Some((sb, si)) = sources[b].iter().find(|s| !before(s)) {
+                return Err(format!(
+                    "the landing pad b{b} reads v{}, which isn't there when b{sb}'s instruction {si} unwinds to it",
+                    u.0
+                ));
+            }
+        }
+    }
     // Whether the use at (block, index) sees `v`; the terminator is at
     // index `insts.len()`.
     let check = |v: Value, block: usize, index: usize| -> Result<(), String> {
@@ -199,6 +227,36 @@ fn pad_reach(f: &Func) -> std::collections::HashSet<usize> {
             stack.push(e.block.0 as usize);
         }
         stack.extend(f.blocks[b].pads().into_iter().map(|p| p.0 as usize));
+    }
+    out
+}
+
+/// For each block only unwinding reaches, every place that unwinds to it
+/// (straight, or to a pad that jumps to it): a block, and the index of the
+/// instruction (the block's length for its terminator).
+fn unwind_sources(f: &Func, pads: &std::collections::HashSet<usize>) -> Vec<Vec<(usize, usize)>> {
+    let mut out = vec![Vec::new(); f.blocks.len()];
+    for (b, block) in f.blocks.iter().enumerate() {
+        let mut add = |pad: BlockId, at: usize| {
+            // Every block the pad reaches by jumping.
+            let mut stack = vec![pad.0 as usize];
+            let mut seen = std::collections::HashSet::new();
+            while let Some(x) = stack.pop() {
+                if x >= f.blocks.len() || !pads.contains(&x) || !seen.insert(x) {
+                    continue;
+                }
+                out[x].push((b, at));
+                stack.extend(f.blocks[x].term.iter().flat_map(|t| t.edges()).map(|e| e.block.0 as usize));
+            }
+        };
+        for (i, inst) in block.insts.iter().enumerate() {
+            if let Some(pad) = inst.unwind {
+                add(pad, i);
+            }
+        }
+        if let Some(pad) = block.term_unwind {
+            add(pad, block.insts.len());
+        }
     }
     out
 }

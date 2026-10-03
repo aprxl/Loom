@@ -1010,7 +1010,7 @@ impl<'a> Builder<'a> {
         let b = self.cur_block();
         let results: Vals = tys.iter().map(|&t| self.new_value(t)).collect();
         let span = self.f.span;
-        self.f.blocks[b.0 as usize].insts.push(Inst { kind, results: results.clone(), span, unwind });
+        self.f.blocks[b.0 as usize].insts.push(Inst { kind, results: results.clone(), span, unwind, site: None });
         results
     }
 
@@ -1129,7 +1129,7 @@ impl<'a> Builder<'a> {
                     let span = self.f.span;
                     self.f.blocks[i]
                         .insts
-                        .insert(0, Inst { kind: InstKind::Undef, results: vec![v], span, unwind: None });
+                        .insert(0, Inst { kind: InstKind::Undef, results: vec![v], span, unwind: None, site: None });
                     v
                 }
                 [one] => self.read_in(var, *one),
@@ -1301,7 +1301,7 @@ fn finish(name: String, state: FnState<'_>, results: Vec<VTy>) -> (Func, bool) {
     }
     thread_jumps(&mut blocks);
     let blocks = reachable(blocks);
-    (Func { name, blocks, results, types, slots }, complete)
+    (Func { name, blocks, results, types, slots, sites: Vec::new() }, complete)
 }
 
 /// The blocks the entry reaches, by jumping or by unwinding to a landing
@@ -1384,7 +1384,7 @@ fn thread_jumps(blocks: &mut [Block]) {
 }
 
 /// Replaces every value `k` reads with `f` of it.
-pub(crate) fn rewrite(k: &mut InstKind, f: impl Fn(Value) -> Value) {
+pub(crate) fn rewrite(k: &mut InstKind, mut f: impl FnMut(Value) -> Value) {
     use InstKind as K;
     match k {
         K::Undef | K::Iconst(_) | K::Fconst(_) | K::Str(_) => {}

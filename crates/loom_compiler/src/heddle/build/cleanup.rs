@@ -118,12 +118,19 @@ impl<'a> Builder<'a> {
         for (n, ty) in std::mem::take(&mut self.f.owned_slots) {
             let Some((size, _)) = self.size_align(ty) else { continue };
             let ptr = self.new_value(VTy::Ptr);
-            insts.push(crate::heddle::Inst { kind: InstKind::Slot(n), results: vec![ptr], span: None, unwind: None });
+            insts.push(crate::heddle::Inst {
+                kind: InstKind::Slot(n),
+                results: vec![ptr],
+                span: None,
+                unwind: None,
+                site: None,
+            });
             insts.push(crate::heddle::Inst {
                 kind: InstKind::Zero { dst: ptr, size },
                 results: Vec::new(),
                 span: None,
                 unwind: None,
+                site: None,
             });
         }
         let entry = &mut self.f.blocks[0].insts;
@@ -320,6 +327,7 @@ impl<'a> Builder<'a> {
             results: Vec::new(),
             span,
             unwind: pad,
+            site: None,
         });
     }
 

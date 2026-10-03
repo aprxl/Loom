@@ -1,0 +1,15 @@
+// passes: cleanup
+// fns: main
+//
+// The blocks after a `return` nothing reaches go, and a block only one
+// jump reaches joins the block it's in.
+use std.io.print
+
+fn main() {
+    var n = 3
+    if n > 2 {
+        n += 1
+    }
+    print(n)
+    return
+}

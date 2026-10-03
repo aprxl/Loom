@@ -34,7 +34,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use indexmap::IndexMap;
 use loom_isa::image::Pad;
 use loom_isa::word::{cast_spec, word, word_i32};
-use loom_isa::{Func as IsaFunc, Image, IntSpec, LINK_SLOTS, Line, Op};
+use loom_isa::{Func as IsaFunc, Image, IntSpec, LINK_SLOTS, Line, NO_SITE, Op, Site as IsaSite};
 use loom_syntax::source::{SourceDb, Span};
 
 use crate::heddle::{BitOp, Cmp, Edge, FOp, Func, InstKind, IntOp, Mem, Module, Policy, Term, Value, inst_uses};
@@ -115,6 +115,20 @@ pub fn generate(db: &SourceDb, module: &Module) -> Result<Image, CodegenError> {
         };
         let out = out?;
         let entry = image.code.len() as u32;
+        let sites = f
+            .sites
+            .iter()
+            .map(|s| IsaSite {
+                name: s.name.clone(),
+                call: s.call.map(|span| {
+                    let at = db.line_col(span);
+                    let name = db.file(span.file).name().to_string();
+                    let next = files.len() as u32;
+                    (*files.entry(name).or_insert(next), at.line, at.col)
+                }),
+                parent: s.parent.unwrap_or(NO_SITE),
+            })
+            .collect();
         image.funcs.push(IsaFunc {
             name: f.name.clone(),
             entry,
@@ -124,6 +138,7 @@ pub fn generate(db: &SourceDb, module: &Module) -> Result<Image, CodegenError> {
             results: f.results.len() as u16,
             lines: out.lines,
             pads: out.pads,
+            sites,
         });
         image.code.extend(out.code);
     }
@@ -203,7 +218,9 @@ struct Emitter<'m> {
     natives: &'m mut IndexMap<&'static str, u16>,
     files: &'m mut IndexMap<String, u32>,
     db: &'m SourceDb,
-    last_line: Option<(u32, u32, u32)>,
+    last_line: Option<(u32, u32, u32, u32)>,
+    /// The inlined call the instruction being emitted came from.
+    site: Option<u32>,
 }
 
 fn emit_func(
@@ -334,6 +351,7 @@ fn emit_func(
         files,
         db,
         last_line: None,
+        site: None,
     };
     let mut block_at = vec![0usize; f.blocks.len()];
     e.prologue();
@@ -350,6 +368,7 @@ fn emit_func(
         e.tramp_at.push(e.code.len());
         let (from, edge) = e.tramps[k].clone();
         let span = f.blocks[order[from]].term_span;
+        e.site = f.blocks[order[from]].term_site;
         let start = e.code.len();
         e.edge_moves(&edge, span);
         e.jump_to(from, edge.block.0 as usize, span, true);
@@ -360,6 +379,7 @@ fn emit_func(
         }
     }
     // What unwinds without a pad of its own still has the big slots to free.
+    e.site = None;
     let free_pad = e.code.len();
     if e.big.contains(&true) {
         e.free_big(None);
@@ -1105,16 +1125,19 @@ impl Emitter<'_> {
         self.reg[v.0 as usize]
     }
 
+    /// Where the next instruction is from: a location, in a call inlined
+    /// there (`site`) or in the function's own code.
     fn line(&mut self, span: Option<Span>) {
         let Some(span) = span else { return };
         let at = self.db.line_col(span);
         let name = self.db.file(span.file).name().to_string();
         let next = self.files.len() as u32;
         let file = *self.files.entry(name).or_insert(next);
-        let key = (file, at.line, at.col);
+        let site = self.site.unwrap_or(NO_SITE);
+        let key = (file, at.line, at.col, site);
         if self.last_line != Some(key) {
             self.last_line = Some(key);
-            self.lines.push(Line { pc: self.code.len() as u32, file, line: at.line, column: at.col });
+            self.lines.push(Line { pc: self.code.len() as u32, file, line: at.line, column: at.col, site });
         }
     }
 
@@ -1262,6 +1285,7 @@ impl Emitter<'_> {
                 }
                 _ => None,
             };
+            self.site = elem.unwrap_or(inst).site;
             let unwind = match elem {
                 Some(e) => {
                     self.elem_access(e, inst)?;
@@ -1279,6 +1303,7 @@ impl Emitter<'_> {
             }
         }
         let span = block.term_span;
+        self.site = block.term_site;
         let term_start = self.code.len();
         match block.term.as_ref().expect("finished blocks end") {
             Term::Jump(e) => {

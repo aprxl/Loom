@@ -9,7 +9,7 @@
 mod inline;
 mod tidy;
 
-use super::Module;
+use super::{Module, Term, Value};
 
 /// How hard to optimize.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -21,10 +21,78 @@ pub enum Level {
     O2,
 }
 
-/// `module`, optimized at `level`.
-pub fn optimize(module: Module, level: Level) -> Module {
+/// A pass: what it's called, and what it does to a module.
+type Pass = (&'static str, fn(&mut Module));
+
+/// The passes `-O2` runs, in order.
+const PASSES: &[Pass] = &[("inline", inline::inline), ("cleanup", tidy::cleanup)];
+
+/// The names of the passes, in the order `-O2` runs them.
+pub fn passes() -> impl Iterator<Item = &'static str> {
+    PASSES.iter().map(|(name, _)| *name)
+}
+
+/// `module`, optimized at `level`; or what's wrong with what a pass made
+/// (a bug in Loom).
+pub fn optimize(module: Module, level: Level) -> Result<Module, String> {
     match level {
-        Level::O0 => module,
-        Level::O2 => inline::inline(&module),
+        Level::O0 => Ok(module),
+        Level::O2 => run(module, &passes().collect::<Vec<_>>()),
+    }
+}
+
+/// `module` after the passes named, in that order (for the optimizer's
+/// tests, which look at what one pass does).
+pub fn run(mut module: Module, names: &[&str]) -> Result<Module, String> {
+    for name in names {
+        let Some((name, pass)) = PASSES.iter().find(|(n, _)| n == name) else {
+            return Err(format!("no pass is called `{name}`"));
+        };
+        pass(&mut module);
+        // Every pass in a debug build (the tests), once at the end otherwise.
+        // `LOOM_DUMP_BAD=1` prints what a pass got wrong.
+        if cfg!(debug_assertions)
+            && let Err(e) = super::verify(&module)
+        {
+            if std::env::var_os("LOOM_DUMP_BAD").is_some() {
+                eprintln!("{}", super::print(&module));
+            }
+            return Err(format!("after {name}: {e}"));
+        }
+    }
+    if !cfg!(debug_assertions) {
+        super::verify(&module)?;
+    }
+    Ok(module)
+}
+
+/// The values a terminator reads, its edges' arguments included.
+pub(crate) fn term_uses(t: &Term) -> Vec<Value> {
+    let mut out = match t {
+        Term::Br { cond, .. } => vec![*cond],
+        Term::Ret(vs) => vs.clone(),
+        Term::Unravel { ptr, len } => vec![*ptr, *len],
+        Term::Jump(_) | Term::UnravelMsg | Term::Crash(_) | Term::Resume | Term::Suspend { .. } => Vec::new(),
+    };
+    for e in t.edges() {
+        out.extend(&e.args);
+    }
+    out
+}
+
+/// Replaces every value `t` reads (its edges' arguments included) with
+/// `f` of it.
+pub(crate) fn rewrite_term(t: &mut Term, mut f: impl FnMut(Value) -> Value) {
+    match t {
+        Term::Br { cond, .. } => *cond = f(*cond),
+        Term::Ret(vs) => vs.iter_mut().for_each(|v| *v = f(*v)),
+        Term::Unravel { ptr, len } => {
+            *ptr = f(*ptr);
+            *len = f(*len);
+        }
+        Term::Jump(_) | Term::UnravelMsg | Term::Crash(_) | Term::Resume | Term::Suspend { .. } => {}
+    }
+    for e in t.edges_mut() {
+        e.args.iter_mut().for_each(|a| *a = f(*a));
     }
 }

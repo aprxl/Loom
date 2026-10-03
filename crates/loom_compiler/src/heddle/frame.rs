@@ -295,7 +295,7 @@ pub fn lay_out(f: &mut Func, inp: &FrameInput) -> Result<FrameLayout, String> {
         f.types.push(ty);
         Value(f.types.len() as u32 - 1)
     };
-    let inst = |kind: InstKind, results: Vec<Value>| Inst { kind, results, span: None, unwind: None };
+    let inst = |kind: InstKind, results: Vec<Value>| Inst { kind, results, span: None, unwind: None, site: None };
     // Reloads (and recomputations) where each point resumes or closes.
     let mut reloads: HashMap<Value, Vec<(usize, Value)>> = HashMap::new();
     for (k, p) in points.iter().enumerate() {
@@ -461,7 +461,7 @@ fn switch(f: &mut Func, x: Value, targets: &[usize], default: usize) -> usize {
     let jump = |b: usize| Edge { block: BlockId(b as u32), args: Vec::new() };
     let head = push_block(f);
     let (n, c) = (new_value(f), new_value(f));
-    let inst = |kind, results| Inst { kind, results, span: None, unwind: None };
+    let inst = |kind, results| Inst { kind, results, span: None, unwind: None, site: None };
     f.blocks[head].insts.push(inst(InstKind::Iconst(targets.len() as u64), vec![n]));
     f.blocks[head].insts.push(inst(InstKind::ICmp { cmp: Cmp::Lt, unsigned: true, a: x, b: n }, vec![c]));
     fn tree(f: &mut Func, x: Value, lo: usize, targets: &[usize]) -> usize {
@@ -477,7 +477,7 @@ fn switch(f: &mut Func, x: Value, targets: &[usize], default: usize) -> usize {
         let k = Value(f.types.len() as u32 - 1);
         f.types.push(VTy::Int);
         let c = Value(f.types.len() as u32 - 1);
-        let inst = |kind, results| Inst { kind, results, span: None, unwind: None };
+        let inst = |kind, results| Inst { kind, results, span: None, unwind: None, site: None };
         f.blocks[b].insts.push(inst(InstKind::Iconst((lo + mid) as u64), vec![k]));
         f.blocks[b].insts.push(inst(InstKind::ICmp { cmp: Cmp::Lt, unsigned: true, a: x, b: k }, vec![c]));
         let jump = |b: usize| Edge { block: BlockId(b as u32), args: Vec::new() };

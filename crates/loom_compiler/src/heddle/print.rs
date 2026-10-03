@@ -89,6 +89,10 @@ fn func(out: &mut String, module: &Module, f: &Func) {
     for (i, s) in f.slots.iter().enumerate() {
         let _ = writeln!(out, "  slot{i}: {} bytes, align {}", s.size, s.align);
     }
+    for (i, s) in f.sites.iter().enumerate() {
+        let parent = s.parent.map(|p| format!(" in s{p}")).unwrap_or_default();
+        let _ = writeln!(out, "  s{i}: inlined {}{parent}", s.name);
+    }
     for (i, b) in f.blocks.iter().enumerate() {
         if b.params.is_empty() {
             let _ = writeln!(out, "b{i}:");
@@ -99,7 +103,8 @@ fn func(out: &mut String, module: &Module, f: &Func) {
         for inst in &b.insts {
             let lhs = if inst.results.is_empty() { String::new() } else { format!("{} = ", list(&inst.results)) };
             let pad = inst.unwind.map(|p| format!(" unwind b{}", p.0)).unwrap_or_default();
-            let _ = writeln!(out, "    {lhs}{}{pad}", kind(module, f, &inst.kind, &inst.results));
+            let site = inst.site.map(|s| format!(" @s{s}")).unwrap_or_default();
+            let _ = writeln!(out, "    {lhs}{}{pad}{site}", kind(module, f, &inst.kind, &inst.results));
         }
         let term = match &b.term {
             None => "(no terminator)".to_string(),
@@ -115,7 +120,8 @@ fn func(out: &mut String, module: &Module, f: &Func) {
             }
         };
         let pad = b.term_unwind.map(|p| format!(" unwind b{}", p.0)).unwrap_or_default();
-        let _ = writeln!(out, "    {term}{pad}");
+        let site = b.term_site.map(|s| format!(" @s{s}")).unwrap_or_default();
+        let _ = writeln!(out, "    {term}{pad}{site}");
     }
     out.push_str("}\n");
 }

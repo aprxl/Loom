@@ -1,0 +1,27 @@
+// passes: inline
+// fns: main, fact
+//
+// `twice` and `inc` are small: inlined, each a site of its own, `inc`'s
+// inside `twice`'s. `guarded` has a `defer`: its landing pad comes along,
+// and unwinds on to `main`'s. `fact` calls itself: never inlined into
+// itself.
+use std.io.print
+
+fn inc(x: i64) -> i64 = x + 1
+
+fn twice(x: i64) -> i64 = inc(inc(x))
+
+fn guarded(x: i64) -> i64 {
+    defer print("left")
+    x * 2
+}
+
+fn fact(n: i64) -> i64 {
+    if n <= 1 { return 1 }
+    n * fact(n - 1)
+}
+
+fn main() {
+    let names: List[i64] = [1, 2]
+    print(twice(names[0]) + guarded(names[1]) + fact(5))
+}

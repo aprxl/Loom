@@ -24,6 +24,13 @@ fn codegen_diagnostics(error: codegen::CodegenError) -> Vec<Diagnostic> {
     }]
 }
 
+/// `module` optimized at `level`, or the internal error a pass made.
+fn optimized(module: heddle::Module, level: Level) -> Result<heddle::Module, Vec<Diagnostic>> {
+    heddle::opt::optimize(module, level).map_err(|e| {
+        vec![Diagnostic::error(codes::U0102, format!("internal error: the optimizer made invalid Heddle: {e}"))]
+    })
+}
+
 /// A program compiled for Treadle.
 #[derive(Debug)]
 pub struct Compiled {
@@ -42,7 +49,7 @@ pub fn compile_tests(
 ) -> Result<(Compiled, Vec<(String, u32)>), Vec<Diagnostic>> {
     lower::compile_time(db, p, typed, true)?;
     let (heddle, tests) = heddle::build_tests(p, typed)?;
-    let heddle = heddle::opt::optimize(heddle, level);
+    let heddle = optimized(heddle, level)?;
     let tests = tests.into_iter().map(|(name, f)| (name, f.0)).collect();
     if heddle.funcs.is_empty() {
         let image = Image::default();
@@ -61,7 +68,7 @@ pub fn compile(db: &SourceDb, p: &Program, typed: &Typed) -> Result<Compiled, Ve
 /// [`compile`], optimized at `level`.
 pub fn compile_at(db: &SourceDb, p: &Program, typed: &Typed, level: Level) -> Result<Compiled, Vec<Diagnostic>> {
     lower::compile_time(db, p, typed, false)?;
-    let heddle = heddle::opt::optimize(heddle::build(p, typed)?, level);
+    let heddle = optimized(heddle::build(p, typed)?, level)?;
     let image = codegen::generate(db, &heddle).map_err(codegen_diagnostics)?;
     Ok(Compiled { heddle, image })
 }

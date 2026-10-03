@@ -38,7 +38,7 @@ Read your own diff before committing. One logical change per commit.
 | `crates/loom` | the `loom` binary (build, run, check, test, hidden lua-host) |
 | `runtime/rt` | `loomrt` Lua sources, embedded into the binary |
 | `runtime/std` | the standard library, written in Loom |
-| `tests/` | fixture corpora (run, fail, unravel, lower, examples) |
+| `tests/` | fixture corpora (run, fail, unravel, lower, examples, opt: the optimizer's snapshots) |
 
 ## Conventions
 

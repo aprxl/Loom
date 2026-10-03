@@ -41,7 +41,7 @@ use crate::stack::Stack;
 use crate::{Config, Fault, Trap, crash_message};
 
 /// How many frames of each end of a trace are kept (see `trace_at`).
-const TRACE_ENDS: usize = 64;
+pub(crate) const TRACE_ENDS: usize = 64;
 
 /// Loop iterations and calls between checks for Ctrl-C.
 const TICKS: i32 = 1 << 16;

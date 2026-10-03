@@ -73,12 +73,13 @@ fn func(name: String, params: &[VTy], result: VTy, kind: impl FnOnce(&[Value]) -
     types.push(result);
     let block = Block {
         params: args.clone(),
-        insts: vec![Inst { kind: kind(&args), results: vec![r], span: None, unwind: None }],
+        insts: vec![Inst { kind: kind(&args), results: vec![r], span: None, unwind: None, site: None }],
         term: Some(Term::Ret(vec![r])),
         term_span: None,
         term_unwind: None,
+        term_site: None,
     };
-    Func { name, blocks: vec![block], results: vec![result], types, slots: Vec::new() }
+    Func { name, blocks: vec![block], results: vec![result], types, slots: Vec::new(), sites: Vec::new() }
 }
 
 /// Compiles `funcs` and gives a machine to call them on.
@@ -391,17 +392,25 @@ fn immediates_match_the_oracle() {
                 let block = Block {
                     params: vec![Value(0)],
                     insts: vec![
-                        Inst { kind: InstKind::Iconst(k as u64), results: vec![Value(1)], span: None, unwind: None },
+                        Inst {
+                            kind: InstKind::Iconst(k as u64),
+                            results: vec![Value(1)],
+                            span: None,
+                            unwind: None,
+                            site: None,
+                        },
                         Inst {
                             kind: InstKind::Arith { op, policy, ty, a, b },
                             results: vec![Value(2)],
                             span: None,
                             unwind: None,
+                            site: None,
                         },
                     ],
                     term: Some(Term::Ret(vec![Value(2)])),
                     term_span: None,
                     term_unwind: None,
+                    term_site: None,
                 };
                 let types = vec![VTy::Int; 3];
                 funcs.push(Func {
@@ -410,6 +419,7 @@ fn immediates_match_the_oracle() {
                     results: vec![VTy::Int],
                     types,
                     slots: Vec::new(),
+                    sites: Vec::new(),
                 });
                 cases.push((ty, k, op, policy, flip, None));
             }
@@ -425,12 +435,14 @@ fn immediates_match_the_oracle() {
                                 results: vec![Value(1)],
                                 span: None,
                                 unwind: None,
+                                site: None,
                             },
                             Inst {
                                 kind: InstKind::ICmp { cmp, unsigned: !ty.signed, a, b },
                                 results: vec![Value(2)],
                                 span: None,
                                 unwind: None,
+                                site: None,
                             },
                         ],
                         term: Some(Term::Br {
@@ -446,6 +458,7 @@ fn immediates_match_the_oracle() {
                         }),
                         term_span: None,
                         term_unwind: None,
+                        term_site: None,
                     };
                     let ret = |v: u32, bits: u64| Block {
                         params: vec![],
@@ -454,10 +467,12 @@ fn immediates_match_the_oracle() {
                             results: vec![Value(v)],
                             span: None,
                             unwind: None,
+                            site: None,
                         }],
                         term: Some(Term::Ret(vec![Value(v)])),
                         term_span: None,
                         term_unwind: None,
+                        term_site: None,
                     };
                     let types = vec![VTy::Int; 5];
                     let blocks = vec![entry, ret(3, 1), ret(4, 0)];
@@ -467,6 +482,7 @@ fn immediates_match_the_oracle() {
                         results: vec![VTy::Int],
                         types,
                         slots: Vec::new(),
+                        sites: Vec::new(),
                     });
                     cases.push((ty, k, IntOp::Add, Policy::Trap, flip, Some(cmp)));
                 }

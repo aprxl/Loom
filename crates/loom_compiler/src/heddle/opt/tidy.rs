@@ -1,16 +1,67 @@
-//! Tidying a function up after inlining: a block that only one jump
-//! reaches becomes part of the block it jumps from (so an inlined
-//! function's comparison can fuse with the caller's branch on it), and
-//! instructions that only compute a value nothing reads go.
+//! Tidying a function up (pass 12 of design/vm.md §7, which other passes
+//! also run when they're done): a block that only one jump reaches becomes
+//! part of the block it jumps from (so an inlined function's comparison can
+//! fuse with the caller's branch on it), instructions that only compute a
+//! value nothing reads go, and so do blocks nothing reaches.
 
 use std::collections::HashMap;
 
-use crate::heddle::{Func, InstKind, Policy, Term, Value, rewrite};
+use crate::heddle::{BlockId, Func, InstKind, Module, Policy, Term, Value, rewrite};
+
+/// Tidies every function of `module` up: the `cleanup` pass.
+pub fn cleanup(module: &mut Module) {
+    module.funcs.iter_mut().for_each(tidy);
+}
 
 /// Tidies `f` up (see the module's documentation).
 pub fn tidy(f: &mut Func) {
     merge_chains(f);
     drop_dead(f);
+    drop_unreached(f);
+}
+
+/// Removes the blocks nothing reaches, from the entry or by unwinding from
+/// a block something does, and numbers the rest again, in order.
+fn drop_unreached(f: &mut Func) {
+    let n = f.blocks.len();
+    let mut seen = vec![false; n];
+    let mut stack = vec![0usize];
+    while let Some(b) = stack.pop() {
+        if std::mem::replace(&mut seen[b], true) {
+            continue;
+        }
+        let block = &f.blocks[b];
+        stack.extend(block.term.iter().flat_map(|t| t.edges()).map(|e| e.block.0 as usize));
+        stack.extend(block.pads().into_iter().map(|p| p.0 as usize));
+    }
+    if seen.iter().all(|&s| s) {
+        return;
+    }
+    let mut new = vec![u32::MAX; n];
+    let mut next = 0;
+    for (b, &kept) in seen.iter().enumerate() {
+        if kept {
+            new[b] = next;
+            next += 1;
+        }
+    }
+    let to = |b: BlockId| BlockId(new[b.0 as usize]);
+    let blocks = std::mem::take(&mut f.blocks);
+    for (mut block, kept) in blocks.into_iter().zip(seen) {
+        if !kept {
+            continue;
+        }
+        for inst in &mut block.insts {
+            inst.unwind = inst.unwind.map(to);
+        }
+        block.term_unwind = block.term_unwind.map(to);
+        if let Some(t) = &mut block.term {
+            for e in t.edges_mut() {
+                e.block = to(e.block);
+            }
+        }
+        f.blocks.push(block);
+    }
 }
 
 /// Merges each block that only a `jump` reaches into the block it's in.
@@ -60,24 +111,8 @@ fn merge_chains(f: &mut Func) {
             rewrite(&mut inst.kind, subst);
         }
         if let Some(t) = &mut block.term {
-            rewrite_term(t, subst);
+            super::rewrite_term(t, subst);
         }
-    }
-}
-
-/// Replaces every value `t` reads with `f` of it.
-fn rewrite_term(t: &mut Term, f: impl Fn(Value) -> Value) {
-    match t {
-        Term::Br { cond, .. } => *cond = f(*cond),
-        Term::Ret(vs) => vs.iter_mut().for_each(|v| *v = f(*v)),
-        Term::Unravel { ptr, len } => {
-            *ptr = f(*ptr);
-            *len = f(*len);
-        }
-        Term::Jump(_) | Term::UnravelMsg | Term::Crash(_) | Term::Resume | Term::Suspend { .. } => {}
-    }
-    for e in t.edges_mut() {
-        e.args.iter_mut().for_each(|a| *a = f(*a));
     }
 }
 
@@ -120,20 +155,8 @@ fn drop_dead(f: &mut Func) {
                     read[u.0 as usize] = true;
                 }
             }
-            if let Some(t) = &b.term {
-                let mut mark = |v: Value| read[v.0 as usize] = true;
-                match t {
-                    Term::Br { cond, .. } => mark(*cond),
-                    Term::Ret(vs) => vs.iter().for_each(|&v| mark(v)),
-                    Term::Unravel { ptr, len } => {
-                        mark(*ptr);
-                        mark(*len);
-                    }
-                    _ => {}
-                }
-                for e in t.edges() {
-                    e.args.iter().for_each(|&a| mark(a));
-                }
+            for v in b.term.iter().flat_map(super::term_uses) {
+                read[v.0 as usize] = true;
             }
         }
         let mut changed = false;

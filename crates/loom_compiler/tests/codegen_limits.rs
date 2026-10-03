@@ -21,12 +21,13 @@ fn func(params: u32, types: Vec<VTy>, insts: Vec<Inst>, ret: Vec<Value>, slots: 
         term: Some(Term::Ret(ret.clone())),
         term_span: None,
         term_unwind: None,
+        term_site: None,
     };
-    Func { name: "f".into(), blocks: vec![block], results: vec![VTy::Int; ret.len()], types, slots }
+    Func { name: "f".into(), blocks: vec![block], results: vec![VTy::Int; ret.len()], types, slots, sites: Vec::new() }
 }
 
 fn inst(kind: InstKind, results: Vec<Value>) -> Inst {
-    Inst { kind, results, span: None, unwind: None }
+    Inst { kind, results, span: None, unwind: None, site: None }
 }
 
 #[test]

@@ -7,7 +7,7 @@ use std::sync::atomic::AtomicBool;
 
 use loom_isa::image::Pad;
 use loom_isa::word::{word, word_i32};
-use loom_isa::{FmtItem, Func, Image, IntSpec, Line, Op, ValueKind};
+use loom_isa::{FmtItem, Func, Image, IntSpec, Line, NO_SITE, Op, ValueKind};
 use loom_sys::{Host, Location, Outcome};
 use loom_vm::{Config, run};
 
@@ -35,8 +35,18 @@ fn image(funcs: Vec<(&str, u16, u16, u16, Vec<u64>)>) -> Image {
         let entry = image.code.len() as u32;
         let len = code.len() as u32;
         image.code.extend(code);
-        let lines = vec![Line { pc: 0, file: 0, line: entry + 1, column: 1 }];
-        image.funcs.push(Func { name: name.into(), entry, len, frame, params, results, lines, pads: vec![] });
+        let lines = vec![Line { pc: 0, file: 0, line: entry + 1, column: 1, site: NO_SITE }];
+        image.funcs.push(Func {
+            name: name.into(),
+            entry,
+            len,
+            frame,
+            params,
+            results,
+            lines,
+            pads: vec![],
+            sites: vec![],
+        });
     }
     image
 }
@@ -124,7 +134,10 @@ fn endless_recursion_is_a_stack_overflow() {
 fn traps_carry_the_location_of_their_code() {
     let code = vec![word_i32(Op::Ldi, 0, 100), word(Op::AddTI8, 0, 0, 0), word(Op::Ret, 0, 0, 0)];
     let mut img = image(vec![("main", 1, 0, 0, code)]);
-    img.funcs[0].lines = vec![Line { pc: 0, file: 0, line: 3, column: 5 }, Line { pc: 1, file: 0, line: 4, column: 9 }];
+    img.funcs[0].lines = vec![
+        Line { pc: 0, file: 0, line: 3, column: 5, site: NO_SITE },
+        Line { pc: 1, file: 0, line: 4, column: 9, site: NO_SITE },
+    ];
     let (outcome, _) = exec(&img, &Config::default());
     let location = Some(Location { file: "test.loom".into(), line: 4, column: 9 });
     assert_eq!(outcome, Outcome::Unravel { message: "arithmetic overflow".into(), location });
