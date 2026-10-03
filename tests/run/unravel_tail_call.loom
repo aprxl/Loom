@@ -1,0 +1,13 @@
+// An unravel in a function's last expression is reported there, not at
+// the call: on Lua, `return rt.add(…)` was a tail call, which left the
+// function's frame out (found by crates/loom/tests/gen.rs).
+use std.io.print
+
+fn f(a: i32) -> i32 {
+    print("in f")
+    (((a as? i8) mend 1i8) as i32) + 2147483647i32
+}
+
+fn main() {
+    print(f(5))
+}

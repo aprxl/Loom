@@ -281,7 +281,17 @@ impl Printer {
                 self.write("do return");
                 if let Some(v) = value {
                     self.write(" ");
+                    // A runtime helper isn't tail-called: one that unravels
+                    // would report at the caller, its frame gone.
+                    let helper = matches!(v, Expr::Call(callee, _)
+                        if matches!(&**callee, Expr::Field(base, _) if matches!(&**base, Expr::Name(n) if n == "rt")));
+                    if helper {
+                        self.write("(");
+                    }
                     self.expr(v, 0);
+                    if helper {
+                        self.write(")");
+                    }
                 }
                 self.write(" end");
                 self.end_line();
