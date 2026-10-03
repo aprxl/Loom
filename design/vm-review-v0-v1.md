@@ -127,6 +127,8 @@ unravels therefore don't verify they free everything. Fix: check leaks after
 every outcome, in the checked build (an unravel inside a `defer` during an
 unwind is the case to test).
 
+*Fixed: The checked build checks for leaks after every outcome (found and fixed: a half-collected list leaked when its stream unravelled)*
+
 **M6. Hashes are deterministic and unseeded.** *Read.* A program that
 builds a map from untrusted keys can be driven into long probe chains.
 Because maps iterate in insertion order, a per-process random seed

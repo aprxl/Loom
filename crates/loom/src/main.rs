@@ -380,11 +380,8 @@ fn run_vm(path: &Path, args: &[String], color: ColorMode) -> ExitCode {
         let config = loom_vm::Config { interrupt: Some(loom_sys::interrupt::install()), ..loom_vm::Config::default() };
         let outcome = match (compiled.image.entry, loom_vm::Vm::new(&compiled.image, host, &config)) {
             (Some(entry), Ok(mut vm)) => {
-                let outcome = match vm.call(entry, &[]) {
-                    Ok(_) => vm.leaks().unwrap_or(Outcome::Finished),
-                    Err(failed @ Outcome::Failed { .. }) => vm.leaks().unwrap_or(failed),
-                    Err(outcome) => outcome,
-                };
+                let result = vm.call(entry, &[]);
+                let outcome = vm.ended(result);
                 trace = vm.backtrace().to_vec();
                 gap = vm.backtrace_gap();
                 outcome
@@ -496,11 +493,10 @@ fn test_vm(path: &Path, color: ColorMode) -> ExitCode {
             let buffer = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
             let host = Host::captured(buffer.clone());
             let outcome = match loom_vm::Vm::new(&compiled.image, host, &loom_vm::Config::default()) {
-                Ok(mut vm) => match vm.call(func, &[]) {
-                    Ok(_) => vm.leaks().unwrap_or(Outcome::Finished),
-                    Err(failed @ Outcome::Failed { .. }) => vm.leaks().unwrap_or(failed),
-                    Err(outcome) => outcome,
-                },
+                Ok(mut vm) => {
+                    let result = vm.call(func, &[]);
+                    vm.ended(result)
+                }
                 Err(outcome) => outcome,
             };
             let output = String::from_utf8_lossy(&buffer.borrow()).into_owned();

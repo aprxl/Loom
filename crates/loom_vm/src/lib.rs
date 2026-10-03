@@ -113,12 +113,8 @@ pub fn run(image: &Image, host: Host, config: &Config) -> Outcome {
         Ok(vm) => vm,
         Err(outcome) => return outcome,
     };
-    match vm.call(entry, &[]) {
-        Ok(_) => vm.leaks().unwrap_or(Outcome::Finished),
-        // `main` returned an error: the run ended normally all the same.
-        Err(failed @ Outcome::Failed { .. }) => vm.leaks().unwrap_or(failed),
-        Err(outcome) => outcome,
-    }
+    let result = vm.call(entry, &[]);
+    vm.ended(result)
 }
 
 /// A loaded image, whose functions can be called one after another.
@@ -165,6 +161,22 @@ impl<'i> Vm<'i> {
             message: format!("loom internal: {objects} objects ({bytes} bytes) were never freed"),
             location: None,
         })
+    }
+
+    /// How a call from [`call`](Self::call) ended, as an outcome: with
+    /// `checked`, a leak turns an ending that should have freed everything
+    /// (a return, an error `main` gave, an unravel, an exit, Ctrl-C: all
+    /// unwind through the pads) into an internal error. An internal error is
+    /// left alone: nothing about its state can be trusted.
+    pub fn ended(&self, result: Result<Vec<u64>, Outcome>) -> Outcome {
+        let outcome = match result {
+            Ok(_) => Outcome::Finished,
+            Err(outcome) => outcome,
+        };
+        if matches!(outcome, Outcome::Crash { .. }) {
+            return outcome;
+        }
+        self.leaks().unwrap_or(outcome)
     }
 
     /// How many instructions have been dispatched so far; `None` unless

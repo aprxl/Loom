@@ -1213,6 +1213,9 @@ impl<'a> Builder<'a> {
                 let dst = self.f.sret?;
                 self.empty_header(dst, ret)?;
                 let (size, align) = self.size_align(item)?;
+                // The list so far is dropped if the stream unravels while
+                // it's being collected.
+                let partial = self.add_cleanup(CleanupKind::Drop { at: Stable::Param(dst), ty: ret });
                 run(self, &mut |this, _| {
                     let (_, n) = this.list_view(dst);
                     let one = this.iconst(1);
@@ -1227,6 +1230,7 @@ impl<'a> Builder<'a> {
                     this.store(Mem::W64, dst, 8, want);
                     Some(())
                 })?;
+                self.kill_cleanup(partial);
                 self.ret_written()
             }
             "each" => {
