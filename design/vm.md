@@ -1153,7 +1153,9 @@ fixture has a `NAME.vm.out` next to its `.out`, and a comment naming the row.
 5. **The verifier** is given hand-built broken functions it must reject.
 6. **A program generator.** `tests/gen` makes random, well-typed programs from
    a seed: integers of odd widths under every policy, floats, records, sums,
-   `match`, loops, lists, `?` and `mend`, `defer`. `cargo test` runs 300
+   `match`, loops, lists, `?` and `mend`, `defer`, and the values that own
+   memory: `String`s, lists of them, maps of `String`s to integers and the
+   other way, and lambdas that capture locals. `cargo test` runs 300
    seeds, comparing Lua, `-O0`, `-O2` and the checked build. A longer run
    (`--ignored`) does 20 000. A failing seed is shrunk and kept as a fixture.
 7. **Leaks and bad accesses**: every fixture, in the checked build.

@@ -6,7 +6,9 @@
 //! A program has a record, a sum and an error type, a few functions (some
 //! fallible), and a `main`, using integers of odd widths under every
 //! overflow policy, casts, floats, `match`, loops, lists, optionals, `?`,
-//! `mend` and `defer`. `cargo test` runs 300 seeds; `cargo test -p loom
+//! `mend` and `defer`; and the values that own memory (`String`s, lists of
+//! them, maps of `String`s to integers and the other way, lambdas capturing
+//! locals), where drops, copies and moves are hardest. `cargo test` runs 300 seeds; `cargo test -p loom
 //! --test gen -- --ignored` runs 20 000. A failing seed is shrunk (the
 //! statements of `main` it doesn't need are left out) and printed, to keep
 //! as a `tests/run` fixture.
@@ -546,7 +548,7 @@ impl Gen {
 
     fn stmt(&mut self, depth: u32, indent: usize) -> String {
         let pad = "    ".repeat(indent);
-        let choice = if depth == 0 { self.rng.below(4) } else { self.rng.below(13) };
+        let choice = if depth == 0 { self.rng.below(4) } else { self.rng.below(14) };
         match choice {
             0 | 1 => {
                 let t = self.local_ty();
@@ -575,7 +577,10 @@ impl Gen {
                                 | Ty::MapIS(_)
                         )
                 });
-                let Some(v) = vs.first().cloned() else { return self.print(indent) };
+                if vs.is_empty() {
+                    return self.print(indent);
+                }
+                let v = vs[self.rng.below(vs.len() as u64) as usize].clone();
                 match v.ty {
                     Ty::MapSI(i) => {
                         let key = self.str_key();
@@ -729,6 +734,7 @@ impl Gen {
                 self.bind(&name, f.ret, false);
                 s
             }
+            13 => self.lambda_stmt(indent),
             _ => {
                 if self.fallible && self.rng.chance(50) {
                     format!(
@@ -740,6 +746,54 @@ impl Gen {
                     self.print(indent)
                 }
             }
+        }
+    }
+
+    /// Lambdas that capture locals, given to `map`, `filter` and `each` of a
+    /// list (`each` changes a captured `var`).
+    fn lambda_stmt(&mut self, indent: usize) -> String {
+        let pad = "    ".repeat(indent);
+        let strs = self.vars(|v| v.ty == Ty::StrList);
+        let ints = self.vars(|v| matches!(v.ty, Ty::List(_)));
+        let (x, r, acc) = (self.fresh("x"), self.fresh("r"), self.fresh("n"));
+        if !strs.is_empty() && (ints.is_empty() || self.rng.chance(40)) {
+            let l = strs[self.rng.below(strs.len() as u64) as usize].name.clone();
+            let capture = self.vars(|v| v.ty == Ty::Str).first().map(|v| v.name.clone());
+            return match (self.rng.below(4), capture) {
+                (0, _) => {
+                    format!("{pad}let {r}: List[String] = {l}.map({x} => {x}.to_upper())\n{pad}print(\"{{{r}}}\")\n")
+                }
+                (1, Some(c)) => {
+                    format!(
+                        "{pad}let {r}: List[String] = {l}.map({x} => \"{{{x}}}{{{c}}}\")\n{pad}print(\"{{{r}}}\")\n"
+                    )
+                }
+                (1 | 2, _) => {
+                    let n = self.rng.below(3);
+                    format!(
+                        "{pad}let {r}: List[String] = {l}.filter({x} => {x}.len() > {n})\n{pad}print(\"{{{r}}}\")\n"
+                    )
+                }
+                _ => format!(
+                    "{pad}var {acc} = 0usize\n{pad}{l}.each({x} => {acc} = {acc} +% {x}.len())\n{pad}print(\"{{{acc}}}\")\n"
+                ),
+            };
+        }
+        let Some(Var { name: l, ty: Ty::List(i), .. }) =
+            ints.get(self.rng.below(ints.len().max(1) as u64) as usize).cloned()
+        else {
+            return self.print(indent);
+        };
+        let captured = self.vars(|v| v.ty == Ty::Int(i)).first().map(|v| v.name.clone());
+        let cap = captured.unwrap_or_else(|| self.int_lit(i));
+        let t = i.name();
+        match self.rng.below(5) {
+            0 => format!("{pad}let {r}: List[{t}] = {l}.map({x} => ({x} +% {cap}))\n{pad}print(\"{{{r}}}\")\n"),
+            1 => format!("{pad}let {r}: List[{t}] = {l}.map({x} => ({x} *| {cap}))\n{pad}print(\"{{{r}}}\")\n"),
+            2 | 3 => format!("{pad}let {r}: List[{t}] = {l}.filter({x} => {x} > {cap})\n{pad}print(\"{{{r}}}\")\n"),
+            _ => format!(
+                "{pad}var {acc} = 0{t}\n{pad}{l}.each({x} => {acc} = {acc} +% {x})\n{pad}print(\"{{{acc}}}\")\n"
+            ),
         }
     }
 
@@ -1022,6 +1076,8 @@ fn the_generator_covers_its_kinds() {
         ("removing a String", ".remove(0)"),
         ("a map of Strings to integers", ": Map[String, "),
         ("a map of integers to Strings", "String] = "),
+        ("a lambda over Strings", ".to_upper())"),
+        ("a lambda changing a captured var", ".each("),
     ] {
         assert!(text.matches(needle).count() >= 10, "{what}: {} in 300 programs", text.matches(needle).count());
     }
