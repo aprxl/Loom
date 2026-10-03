@@ -7,7 +7,7 @@ Anything not built stops with a `U` code, and most stop with [U0102](diag:U0102)
 
 ## Next in line
 
-These are planned next, in this order: the rest of Loom's own VM, Treadle (designed in `design/vm.md`), then threads and spools. Treadle already runs the sequential language (all but shuttles and compile-time code): `loom run --backend vm file.loom`. A program over one of its limits (a frame of more than 65 535 registers, say) stops with [U0103](diag:U0103).
+These are planned next, in this order: the rest of Loom's own VM, Treadle (designed in `design/vm.md`), then threads and spools. Treadle already runs everything but compile-time code: `loom run --backend vm file.loom`. A program over one of its limits (a frame of more than 65 535 registers, say) stops with [U0103](diag:U0103).
 
 ### Threads
 

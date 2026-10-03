@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use super::{Func, InstKind, Policy, Term, Value, rewrite};
+use crate::heddle::{Func, InstKind, Policy, Term, Value, rewrite};
 
 /// Tidies `f` up (see the module's documentation).
 pub fn tidy(f: &mut Func) {
@@ -116,7 +116,7 @@ fn drop_dead(f: &mut Func) {
         let mut read = vec![false; f.types.len()];
         for b in &f.blocks {
             for inst in &b.insts {
-                for u in super::inst_uses(&inst.kind) {
+                for u in crate::heddle::inst_uses(&inst.kind) {
                     read[u.0 as usize] = true;
                 }
             }

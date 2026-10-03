@@ -6,6 +6,7 @@ use loom_syntax::Diagnostic;
 use loom_syntax::diag::codes;
 use loom_syntax::source::SourceDb;
 
+use crate::heddle::opt::Level;
 use crate::hir::Program;
 use crate::typeck::Typed;
 use crate::{codegen, heddle, lower};
@@ -37,9 +38,11 @@ pub fn compile_tests(
     db: &SourceDb,
     p: &Program,
     typed: &Typed,
+    level: Level,
 ) -> Result<(Compiled, Vec<(String, u32)>), Vec<Diagnostic>> {
     lower::compile_time(db, p, typed, true)?;
     let (heddle, tests) = heddle::build_tests(p, typed)?;
+    let heddle = heddle::opt::optimize(heddle, level);
     let tests = tests.into_iter().map(|(name, f)| (name, f.0)).collect();
     if heddle.funcs.is_empty() {
         let image = Image::default();
@@ -50,10 +53,15 @@ pub fn compile_tests(
 }
 
 /// Compiles a program type-checked for [`Target::VM`](crate::target::Target::VM)
-/// with no errors, after running its compile-time code.
+/// with no errors, after running its compile-time code, at `-O2`.
 pub fn compile(db: &SourceDb, p: &Program, typed: &Typed) -> Result<Compiled, Vec<Diagnostic>> {
+    compile_at(db, p, typed, Level::O2)
+}
+
+/// [`compile`], optimized at `level`.
+pub fn compile_at(db: &SourceDb, p: &Program, typed: &Typed, level: Level) -> Result<Compiled, Vec<Diagnostic>> {
     lower::compile_time(db, p, typed, false)?;
-    let heddle = heddle::build(p, typed)?;
+    let heddle = heddle::opt::optimize(heddle::build(p, typed)?, level);
     let image = codegen::generate(db, &heddle).map_err(codegen_diagnostics)?;
     Ok(Compiled { heddle, image })
 }

@@ -47,7 +47,8 @@ loom test FILE                 run the file's tests
 ```
 
 - `loom run` compiles in memory and runs the result in the bundled Lua VM. Arguments after `--` go to the program, which reads them with `env.args()` (the first is the file's path).
-- `loom build --emit tokens|ast|hir|lua` prints one stage of the compiler instead of writing Lua.
+- `loom run --backend vm` (and `loom test --backend vm`) runs it on Treadle, Loom's own VM, instead. Its code is optimized; `-O0` turns that off (the fastest compile, every call kept in a backtrace).
+- `loom build --emit tokens|ast|hir|lua|heddle|bytecode` prints one stage of the compiler instead of writing Lua.
 - `--color auto|always|never` controls colored diagnostics.
 
 | Exit code | Meaning |

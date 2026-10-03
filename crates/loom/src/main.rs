@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
+use loom_compiler::heddle::opt::Level;
 use loom_compiler::hir::{self, Resolved};
 use loom_compiler::lower::{self, Bundle};
 use loom_compiler::modules::FsLoader;
@@ -47,6 +48,11 @@ struct Cli {
     /// When to color diagnostics.
     #[arg(long, value_enum, default_value_t = Color::Auto, global = true)]
     color: Color,
+
+    /// How much Treadle's code is optimized: `-O0` not at all (the fastest
+    /// compile, every call kept), `-O2` fully (design/vm.md §7).
+    #[arg(short = 'O', value_enum, default_value_t = Opt::O2, global = true)]
+    opt: Opt,
 
     #[command(subcommand)]
     command: Command,
@@ -129,6 +135,23 @@ enum Backend {
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
+enum Opt {
+    #[value(name = "0")]
+    O0,
+    #[value(name = "2")]
+    O2,
+}
+
+impl From<Opt> for Level {
+    fn from(o: Opt) -> Self {
+        match o {
+            Opt::O0 => Level::O0,
+            Opt::O2 => Level::O2,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
 enum Color {
     Auto,
     Always,
@@ -174,13 +197,14 @@ fn main() -> ExitCode {
 
 fn run(cli: Cli) -> ExitCode {
     let color = ColorMode::from(cli.color);
+    let level = cli.opt.into();
     match cli.command {
-        Command::Build { file, out, emit } => build(&file, out.as_deref(), emit, color),
+        Command::Build { file, out, emit } => build(&file, out.as_deref(), emit, color, level),
         Command::Check { file } => check(&file, color),
         Command::Run { file, backend: Backend::Lua, args } => run_file(&file, &args, color),
-        Command::Run { file, backend: Backend::Vm, args } => run_vm(&file, &args, color),
+        Command::Run { file, backend: Backend::Vm, args } => run_vm(&file, &args, color, level),
         Command::Test { file, backend: Backend::Lua } => test_file(&file, color),
-        Command::Test { file, backend: Backend::Vm } => test_vm(&file, color),
+        Command::Test { file, backend: Backend::Vm } => test_vm(&file, color, level),
         Command::Docs { no_open } => docs::docs(!no_open),
         Command::LuaHost { bundle, test: true, .. } => lua_host_tests(&bundle),
         Command::LuaHost { bundle, test: false, program, args } => lua_host(&bundle, program, args),
@@ -288,7 +312,7 @@ fn compile_with(path: &Path, color: ColorMode, lowering: Lowering) -> Result<(So
     }
 }
 
-fn build(path: &Path, out: Option<&Path>, emit: Option<Emit>, color: ColorMode) -> ExitCode {
+fn build(path: &Path, out: Option<&Path>, emit: Option<Emit>, color: ColorMode, level: Level) -> ExitCode {
     let run = || -> Result<(), ExitCode> {
         let (db, id) = load(path)?;
         let text = match emit {
@@ -308,8 +332,8 @@ fn build(path: &Path, out: Option<&Path>, emit: Option<Emit>, color: ColorMode) 
                 p.root.map(|root| hir::pretty::module(p, root)).unwrap_or_default()
             }
             Some(Emit::Lua) => compile(path, color)?.1.lua,
-            Some(Emit::Heddle) => loom_compiler::heddle::print(&compile_vm(path, color)?.heddle),
-            Some(Emit::Bytecode) => loom_isa::disassemble(&compile_vm(path, color)?.image),
+            Some(Emit::Heddle) => loom_compiler::heddle::print(&compile_vm(path, color, level)?.heddle),
+            Some(Emit::Bytecode) => loom_isa::disassemble(&compile_vm(path, color, level)?.image),
             None => {
                 // A bundle and its source map.
                 let (_, bundle) = compile(path, color)?;
@@ -366,9 +390,9 @@ fn run_file(path: &Path, args: &[String], color: ColorMode) -> ExitCode {
 }
 
 /// Compiles the program rooted at `path` for Treadle.
-fn compile_vm(path: &Path, color: ColorMode) -> Result<treadle::Compiled, ExitCode> {
+fn compile_vm(path: &Path, color: ColorMode, level: Level) -> Result<treadle::Compiled, ExitCode> {
     let (db, resolved, typed) = typecheck_for(path, color, Target::VM)?;
-    match treadle::compile(&db, &resolved.program, &typed) {
+    match treadle::compile_at(&db, &resolved.program, &typed, level) {
         Ok(compiled) => Ok(compiled),
         Err(diagnostics) => {
             report(&db, path, &diagnostics, "compile", color)?;
@@ -378,9 +402,9 @@ fn compile_vm(path: &Path, color: ColorMode) -> Result<treadle::Compiled, ExitCo
 }
 
 /// `loom run --backend vm`: compile for Treadle and run the program here.
-fn run_vm(path: &Path, args: &[String], color: ColorMode) -> ExitCode {
+fn run_vm(path: &Path, args: &[String], color: ColorMode, level: Level) -> ExitCode {
     let run = || -> Result<ExitCode, ExitCode> {
-        let compiled = compile_vm(path, color)?;
+        let compiled = compile_vm(path, color, level)?;
         let args = std::iter::once(path.display().to_string()).chain(args.iter().cloned()).collect();
         let host = Host { output: Output::Stdout, sandbox: false, args };
         let mut trace = Vec::new();
@@ -495,10 +519,10 @@ fn lua_host_tests(bundle: &Path) -> ExitCode {
 
 /// `loom test --backend vm`: compile the tests for Treadle, and run each
 /// here, on a machine of its own, its output kept for the report.
-fn test_vm(path: &Path, color: ColorMode) -> ExitCode {
+fn test_vm(path: &Path, color: ColorMode, level: Level) -> ExitCode {
     let run = || -> Result<ExitCode, ExitCode> {
         let (db, resolved, typed) = typecheck_for(path, color, Target::VM)?;
-        let (compiled, tests) = match treadle::compile_tests(&db, &resolved.program, &typed) {
+        let (compiled, tests) = match treadle::compile_tests(&db, &resolved.program, &typed, level) {
             Ok(done) => done,
             Err(diagnostics) => {
                 report(&db, path, &diagnostics, "compile", color)?;

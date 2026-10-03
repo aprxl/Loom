@@ -23,6 +23,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::rc::Rc;
 
+use loom_compiler::heddle::opt::Level;
 use loom_compiler::hir::resolve;
 use loom_compiler::modules::FsLoader;
 use loom_compiler::target::Target;
@@ -1088,7 +1089,7 @@ fn run_lua(text: &str) -> Result<(String, String), String> {
     Ok((out, ending(outcome)))
 }
 
-fn run_vm(text: &str) -> Result<(String, String), String> {
+fn run_vm(text: &str, level: Level) -> Result<(String, String), String> {
     let path = Path::new("gen.loom");
     let mut db = SourceDb::new();
     let root = db.add("gen.loom".to_string(), text.to_string());
@@ -1100,7 +1101,7 @@ fn run_vm(text: &str) -> Result<(String, String), String> {
     if typed.has_errors() {
         return Err(rendered(&db, &typed.diagnostics));
     }
-    let compiled = treadle::compile(&db, &resolved.program, &typed).map_err(|d| rendered(&db, &d))?;
+    let compiled = treadle::compile_at(&db, &resolved.program, &typed, level).map_err(|d| rendered(&db, &d))?;
     let buffer = Rc::new(RefCell::new(Vec::new()));
     let config = loom_vm::Config { stack_limit: 64 << 20, ..loom_vm::Config::default() };
     let outcome = loom_vm::run(&compiled.image, Host::captured(buffer.clone()), &config);
@@ -1123,18 +1124,26 @@ fn ending(outcome: Outcome) -> String {
     }
 }
 
-/// What's wrong with `text`: it doesn't compile, or the backends disagree.
+/// What's wrong with `text`: it doesn't compile, or the backends (Lua, and
+/// Treadle at `-O2` and `-O0`) disagree.
 fn problem(text: &str) -> Option<String> {
     let lua = match run_lua(text) {
         Ok(r) => r,
         Err(e) => return Some(format!("doesn't compile (a generator bug):\n{e}")),
     };
-    let vm = match run_vm(text) {
-        Ok(r) => r,
-        Err(e) => return Some(format!("doesn't compile for Treadle:\n{e}")),
-    };
-    (lua != vm)
-        .then(|| format!("the backends disagree\n--- Lua ({})\n{}--- Treadle ({})\n{}", lua.1, lua.0, vm.1, vm.0))
+    for level in [Level::O2, Level::O0] {
+        let vm = match run_vm(text, level) {
+            Ok(r) => r,
+            Err(e) => return Some(format!("doesn't compile for Treadle at {level:?}:\n{e}")),
+        };
+        if lua != vm {
+            return Some(format!(
+                "the backends disagree\n--- Lua ({})\n{}--- Treadle at {level:?} ({})\n{}",
+                lua.1, lua.0, vm.1, vm.0
+            ));
+        }
+    }
+    None
 }
 
 /// `main`'s statements, as few as still show the problem (and compile).

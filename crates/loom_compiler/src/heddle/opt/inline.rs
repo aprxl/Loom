@@ -8,7 +8,7 @@
 //! too (they take the call's location), and they unwind to the call's
 //! landing pad. One level: what an inlined function calls stays a call.
 
-use super::{Block, BlockId, Edge, Func, InstKind, Module, Term, Value};
+use crate::heddle::{Block, BlockId, Edge, Func, InstKind, Module, Term, Value};
 
 /// The most instructions (constants aside) a function inlined may have.
 const SMALL: usize = 20;
@@ -103,10 +103,10 @@ fn inline_into(f: &mut Func, me: usize, module: &Module, small: &[bool]) {
             let mut insts = Vec::with_capacity(cb.insts.len());
             for inst in &cb.insts {
                 let mut inst = inst.clone();
-                for u in super::inst_uses(&inst.kind) {
+                for u in crate::heddle::inst_uses(&inst.kind) {
                     new(u, f, &mut map);
                 }
-                super::rewrite(&mut inst.kind, |v| map[v.0 as usize].expect("numbered just above"));
+                crate::heddle::rewrite(&mut inst.kind, |v| map[v.0 as usize].expect("numbered just above"));
                 if let InstKind::Slot(n) = &mut inst.kind {
                     *n += slot_base;
                 }

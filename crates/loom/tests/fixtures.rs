@@ -22,6 +22,7 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+use loom_compiler::heddle::opt::Level;
 use loom_compiler::hir::resolve;
 use loom_compiler::modules::FsLoader;
 use loom_compiler::target::Target;
@@ -64,7 +65,7 @@ fn compile(path: &Path) -> (SourceDb, Vec<Diagnostic>, Option<lower::Bundle>) {
 
 /// What compiling `path` for Treadle gives: its diagnostics, and the image
 /// if there were none.
-fn compile_vm(path: &Path) -> (SourceDb, Vec<Diagnostic>, Option<Image>) {
+fn compile_vm(path: &Path, level: Level) -> (SourceDb, Vec<Diagnostic>, Option<Image>) {
     let text = std::fs::read_to_string(path).expect("readable fixture");
     let mut db = SourceDb::new();
     let root = db.add(path.display().to_string(), text);
@@ -76,7 +77,7 @@ fn compile_vm(path: &Path) -> (SourceDb, Vec<Diagnostic>, Option<Image>) {
     if typed.has_errors() {
         return (db, typed.diagnostics, None);
     }
-    match treadle::compile(&db, &resolved.program, &typed) {
+    match treadle::compile_at(&db, &resolved.program, &typed, level) {
         Ok(compiled) => (db, Vec::new(), Some(compiled.image)),
         Err(diags) => (db, diags, None),
     }
@@ -121,10 +122,11 @@ fn check_outcome(path: &Path, outcome: Outcome) -> Option<String> {
     }
 }
 
-/// Runs a `tests/run` fixture on Treadle; the problem, if it doesn't end
-/// the way it should, and `Err` when Treadle can't compile it yet.
-fn run_on_vm(path: &Path) -> Result<Option<String>, String> {
-    let (db, diags, image) = compile_vm(path);
+/// Runs a `tests/run` fixture on Treadle, its code optimized at `level`;
+/// the problem, if it doesn't end the way it should, and `Err` when
+/// Treadle can't compile it yet.
+fn run_on_vm(path: &Path, level: Level) -> Result<Option<String>, String> {
+    let (db, diags, image) = compile_vm(path, level);
     let Some(image) = image else {
         let text = rendered(&db, &diags);
         let not_yet = !diags.is_empty() && diags.iter().all(|d| d.code == codes::U0102);
@@ -139,10 +141,10 @@ fn run_on_vm(path: &Path) -> Result<Option<String>, String> {
         std::fs::read_to_string(if vm_out.exists() { vm_out } else { path.with_extension("out") }).unwrap_or_default();
     if out != expected {
         return Ok(Some(format!(
-            "output differs on Treadle (it ended with {outcome:?})\n--- expected\n{expected}--- got\n{out}"
+            "output differs on Treadle at {level:?} (it ended with {outcome:?})\n--- expected\n{expected}--- got\n{out}"
         )));
     }
-    Ok(check_outcome(path, outcome).map(|p| format!("on Treadle: {p}")))
+    Ok(check_outcome(path, outcome).map(|p| format!("on Treadle at {level:?}: {p}")))
 }
 
 fn rendered(db: &SourceDb, diags: &[Diagnostic]) -> String {
@@ -163,15 +165,22 @@ fn run_corpus() {
     for path in &paths {
         let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("?").to_string();
         let skipped = skips.contains(&name);
-        match run_on_vm(path) {
-            Ok(None) if skipped => {
-                failures.push(format!("{name}: passes on Treadle now: take it out of tests/vm_skip.txt"));
+        // The optimized code (what `loom run` runs) first; the code as
+        // built must end the same way.
+        for level in [Level::O2, Level::O0] {
+            match run_on_vm(path, level) {
+                Ok(None) if skipped => {
+                    failures.push(format!("{name}: passes on Treadle now: take it out of tests/vm_skip.txt"));
+                }
+                Ok(Some(problem)) if !skipped => failures.push(format!("{name}: {problem}")),
+                Err(diags) if !skipped => failures.push(format!(
+                    "{name}: Treadle can't run this yet: list it in tests/vm_skip.txt with its milestone\n{diags}"
+                )),
+                _ => {}
             }
-            Ok(Some(problem)) if !skipped => failures.push(format!("{name}: {problem}")),
-            Err(diags) if !skipped => failures.push(format!(
-                "{name}: Treadle can't run this yet: list it in tests/vm_skip.txt with its milestone\n{diags}"
-            )),
-            _ => {}
+            if skipped {
+                break;
+            }
         }
         let (db, diags, bundle) = compile(path);
         let Some(bundle) = bundle else {
@@ -216,21 +225,25 @@ fn examples_corpus() {
         let name = out_path.file_stem().and_then(|s| s.to_str()).unwrap_or("?").to_string();
         let path = root.join("examples").join(format!("{name}.loom"));
         let expected = std::fs::read_to_string(out_path).unwrap_or_default();
-        match compile_vm(&path) {
-            (_, _, Some(image)) => {
-                let buffer = Rc::new(RefCell::new(Vec::new()));
-                let config = loom_vm::Config { stack_limit: 64 << 20, ..loom_vm::Config::default() };
-                let outcome = loom_vm::run(&image, Host::captured(buffer.clone()), &config);
-                let out = String::from_utf8_lossy(&buffer.borrow()).into_owned();
-                if out != expected {
-                    failures.push(format!("{name}: output differs on Treadle\n--- expected\n{expected}--- got\n{out}"));
+        for level in [Level::O2, Level::O0] {
+            match compile_vm(&path, level) {
+                (_, _, Some(image)) => {
+                    let buffer = Rc::new(RefCell::new(Vec::new()));
+                    let config = loom_vm::Config { stack_limit: 64 << 20, ..loom_vm::Config::default() };
+                    let outcome = loom_vm::run(&image, Host::captured(buffer.clone()), &config);
+                    let out = String::from_utf8_lossy(&buffer.borrow()).into_owned();
+                    if out != expected {
+                        failures.push(format!(
+                            "{name}: output differs on Treadle at {level:?}\n--- expected\n{expected}--- got\n{out}"
+                        ));
+                    }
+                    if !matches!(outcome, Outcome::Finished) {
+                        failures.push(format!("{name}: ended with {outcome:?} on Treadle at {level:?}"));
+                    }
                 }
-                if !matches!(outcome, Outcome::Finished) {
-                    failures.push(format!("{name}: ended with {outcome:?} on Treadle"));
+                (db, diags, None) => {
+                    failures.push(format!("{name}: didn't compile for Treadle:\n{}", rendered(&db, &diags)));
                 }
-            }
-            (db, diags, None) => {
-                failures.push(format!("{name}: didn't compile for Treadle:\n{}", rendered(&db, &diags)));
             }
         }
         let (db, diags, bundle) = compile(&path);
@@ -262,10 +275,10 @@ fn test_corpus() {
     assert!(!paths.is_empty());
     for path in &paths {
         let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("?").to_string();
-        for backend in ["lua", "vm"] {
+        for (backend, level) in [("lua", "-O2"), ("vm", "-O2"), ("vm", "-O0")] {
             let out = std::process::Command::new(env!("CARGO_BIN_EXE_loom"))
                 .current_dir(&root)
-                .args(["--color", "never", "test", "--backend", backend, &format!("tests/test/{name}.loom")])
+                .args(["--color", "never", level, "test", "--backend", backend, &format!("tests/test/{name}.loom")])
                 .output()
                 .expect("the loom binary runs");
             let report = String::from_utf8_lossy(&out.stdout).into_owned();
@@ -273,12 +286,13 @@ fn test_corpus() {
             if report != expected {
                 let stderr = String::from_utf8_lossy(&out.stderr);
                 failures.push(format!(
-                    "{name} ({backend}): report differs\n--- expected\n{expected}--- got\n{report}{stderr}"
+                    "{name} ({backend} {level}): report differs\n--- expected\n{expected}--- got\n{report}{stderr}"
                 ));
             }
             let want = if expected.contains("\ntest result: ok.") { 0 } else { 1 };
             if out.status.code() != Some(want) {
-                failures.push(format!("{name} ({backend}): exited with {:?}, expected {want}", out.status.code()));
+                failures
+                    .push(format!("{name} ({backend} {level}): exited with {:?}, expected {want}", out.status.code()));
             }
         }
     }
