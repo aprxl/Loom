@@ -96,10 +96,11 @@ pub warp Stream[T] {
 #builtin
 pub warp Shuttle[T, U] {
     /// Resumes it with `input` as the value of its pending `pull` (the first
-    /// push starts it). The burst is what it yields before its next `pull`.
+    /// push starts it), once what's left of the last burst has run. The
+    /// burst is what it yields before its next `pull`.
     pub fn push(mut self, take input: U) -> Burst[T]
-    /// Makes its pending and later `pull`s give `none`. The burst is what it
-    /// yields from here on.
+    /// Makes its pending and later `pull`s give `none`, once what's left of
+    /// the last burst has run. The burst is what it yields from here on.
     pub fn close(mut self) -> Burst[T]
 }
 

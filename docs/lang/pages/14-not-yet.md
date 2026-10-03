@@ -63,4 +63,4 @@ Also missing:
 
 ## The examples
 
-`examples/tour.loom`, `examples/widgets.loom`, `examples/ledger.loom` and `examples/chip8.loom` compile and run. `examples/lexer.loom` fails only at one line, the `lexer.Frame.size` assert, which needs reflection. `examples/compile_time.loom` fails only at `std.sys`. `examples/calc.loom` needs spools, `given` and `ref warp`, and `examples/parallel.loom` needs threads.
+`examples/tour.loom`, `examples/widgets.loom`, `examples/ledger.loom`, `examples/lexer.loom` and `examples/chip8.loom` compile and run. `examples/compile_time.loom` fails only at `std.sys`. `examples/calc.loom` needs spools, `given` and `ref warp`, and `examples/parallel.loom` needs threads.

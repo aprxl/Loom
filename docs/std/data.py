@@ -170,8 +170,8 @@ MODULES = [
     {"kind": "warp", "name": "Shuttle", "suffix": "[T, U]", "builtin": True,
      "doc": "A shuttle: a function paused between the `T`s it yields and the `U`s it pulls. Calling `fn f() ~> T <~ U` makes one without running any of it. A generator (`~> T`, which pulls nothing) is a stream of what it yields: `for x in fib()`, `fib().take(10)`.",
      "methods": [
-       {"sig": "fn push(mut self, take input: U) -> Burst[T]", "doc": "Resumes it with `input` as the value of its pending `pull` (the first push starts it). The burst is what it yields before its next `pull`."},
-       {"sig": "fn close(mut self) -> Burst[T]", "doc": "Makes its pending and later `pull`s give `none`. The burst is what it yields from here on."},
+       {"sig": "fn push(mut self, take input: U) -> Burst[T]", "doc": "Resumes it with `input` as the value of its pending `pull` (the first push starts it), once what's left of the last burst has run. The burst is what it yields before its next `pull`."},
+       {"sig": "fn close(mut self) -> Burst[T]", "doc": "Makes its pending and later `pull`s give `none`, once what's left of the last burst has run. The burst is what it yields from here on."},
      ]},
     {"kind": "once warp", "name": "Burst", "suffix": "[T]", "builtin": True,
      "doc": "What a shuttle yields between one input and its next `pull`. It's lazy: going through it is what runs the shuttle. It's `once`, so outputs can't be dropped by accident: go through it with `for` (or a `Stream` method), or `drain()` it.",

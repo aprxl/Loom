@@ -145,7 +145,7 @@
 <h2 id="running-programs">Running programs</h2>
 <ul><li>Ctrl-C handling (exit status 130), <code>process.exit</code>, an instruction budget for <code>loom run</code>, and running a bundle in an outside Lua (<code>--lua PATH</code>).</li><li>Async I/O and composing shuttles (<code>lexer().feed(parser())</code>) aren't in the design for this version.</li><li>The emitted Lua isn't optimized: checks the compiler could prove unneeded are still emitted. Speed comes later, with Loom's own interpreter.</li></ul>
 <h2 id="the-examples">The examples</h2>
-<p><code>examples/tour.loom</code>, <code>examples/widgets.loom</code>, <code>examples/ledger.loom</code> and <code>examples/chip8.loom</code> compile and run. <code>examples/lexer.loom</code> fails only at one line, the <code>lexer.Frame.size</code> assert, which needs reflection. <code>examples/compile_time.loom</code> fails only at <code>std.sys</code>. <code>examples/calc.loom</code> needs spools, <code>given</code> and <code>ref warp</code>, and <code>examples/parallel.loom</code> needs threads.</p>
+<p><code>examples/tour.loom</code>, <code>examples/widgets.loom</code>, <code>examples/ledger.loom</code>, <code>examples/lexer.loom</code> and <code>examples/chip8.loom</code> compile and run. <code>examples/compile_time.loom</code> fails only at <code>std.sys</code>. <code>examples/calc.loom</code> needs spools, <code>given</code> and <code>ref warp</code>, and <code>examples/parallel.loom</code> needs threads.</p>
 <div class="pager">
 <a href="tests.html">&larr; Tests</a>
 <a href="diagnostics.html">Diagnostic codes &rarr;</a>

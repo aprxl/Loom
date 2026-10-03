@@ -276,14 +276,14 @@
 <span class="sig">fn push(mut self, take input: U) -&gt; Burst[T]</span>
 
 </div>
-<p class="member-doc">Resumes it with <code>input</code> as the value of its pending <code>pull</code> (the first push starts it). The burst is what it yields before its next <code>pull</code>.</p>
+<p class="member-doc">Resumes it with <code>input</code> as the value of its pending <code>pull</code> (the first push starts it), once what's left of the last burst has run. The burst is what it yields before its next <code>pull</code>.</p>
 </div>
 <div class="member" id="Shuttle.close">
 <div class="member-head">
 <span class="sig">fn close(mut self) -&gt; Burst[T]</span>
 
 </div>
-<p class="member-doc">Makes its pending and later <code>pull</code>s give <code>none</code>. The burst is what it yields from here on.</p>
+<p class="member-doc">Makes its pending and later <code>pull</code>s give <code>none</code>, once what's left of the last burst has run. The burst is what it yields from here on.</p>
 </div>
 </div>
 </div>

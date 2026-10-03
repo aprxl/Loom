@@ -75,11 +75,19 @@ reads top to bottom.
 
 ### Frames
 
-- A shuttle's frame (its locals that live across `yield` and `pull`) has a
-  **size known at compile time** and is stored **inline** in the shuttle
-  value. There's no heap allocation. `const lexer.Frame.size` gives the size.
-- Because of that, a shuttle can't recurse into itself directly. To nest one,
-  allocate it: `^inner()`.
+- A shuttle's frame (what it keeps across its `yield`s and `pull`s) has a
+  **size known at compile time**: `lexer.Frame.size` gives it, and
+  `lexer.Frame.align` its alignment. Locals never live at the same
+  suspension point share space.
+- What calling a shuttle function makes has that function's frame in it. A
+  value whose maker is known can keep its frame **inline**; one stored where
+  makers can differ (a field, a list, two makers meeting in an `if`) is a
+  plain `Shuttle[T, U]`, its frame boxed like a large `any`. On Treadle
+  today, a generator a `for` loop calls directly has no frame at all (its
+  body runs in place, in the loop), and every shuttle held in a value has
+  its frame in a box: one allocation when it's made.
+- Because the frame is part of the shuttle, a shuttle can't recurse into
+  itself directly. To nest one, allocate it: `^inner()`.
 - If a shuttle takes **borrowed** parameters, it's second-class, like a
   `ref warp`: it can't be returned or stored. If it only takes owned (`take`)
   parameters, it's an ordinary value and can be stored, moved, or sent to

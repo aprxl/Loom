@@ -12,7 +12,7 @@ A **shuttle** is a function that can pause and resume. The return arrow says wha
 
 Two expressions work only inside a shuttle. `yield v` sends `v` out and pauses. `pull` pauses until the driver pushes an input, and evaluates to `?U`: `none` once the shuttle is closed. `return` ends it.
 
-**Calling a shuttle function runs none of its body.** It builds a suspended shuttle value. On the Lua backend that's a coroutine.
+**Calling a shuttle function runs none of its body.** It builds a suspended shuttle value. On the Lua backend that's a coroutine; on Treadle, a frame holding what the shuttle keeps between pauses, and the function that runs it from one pause to the next.
 
 ## Generators
 
@@ -37,9 +37,14 @@ This push model suits lexers, protocol state machines and stream decoders: the c
 - `yield` in a shuttle that doesn't yield, or `pull` in one that doesn't pull, is [T0120](diag:T0120). Neither can be inside a `defer` ([T0118](diag:T0118)).
 - A shuttle that calls itself is [T0121](diag:T0121): its frame would contain itself.
 - A shuttle keeps its parameters as long as it lives. For now it only takes ones it owns: `take` parameters, and `Copy` ones, which it copies when it's made. A borrowed parameter is [U0102](diag:U0102).
-- A shuttle that's dropped part-way, other than by leaving a `for` loop over a generator, is left to the garbage collector, and its `defer`s don't run.
+- Leaving a `for` loop over a generator early closes it: its `defer`s that it has reached run. One of them that unravels unravels in the loop.
+- A shuttle dropped part-way any other way (after `.take(3)`, say) runs the `defer`s it has reached on Treadle; on the Lua backend it's left to the garbage collector, and they don't run.
 - An unravel inside a shuttle closes it (running its `defer`s) and is raised again where it was driven.
-- Frames aren't laid out in Lua, so a shuttle's `Frame.size` waits for reflection. Projections (`~> mut T`) aren't supported yet.
+- Projections (`~> mut T`) aren't supported yet.
+
+## Frames
+
+What a shuttle keeps between pauses is its **frame**, and its size is known while compiling: `fib.Frame.size` is how many bytes a shuttle made by `fib` keeps (24: two `u64`s and a state word), and `fib.Frame.align` its alignment. Locals that are never kept at the same pause share space. `examples/lexer.loom` checks its lexer's with `const assert(lexer.Frame.size <= 64)`.
 
 ## Where next
 

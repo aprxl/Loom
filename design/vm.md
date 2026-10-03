@@ -130,7 +130,7 @@ narrowed as below.
 | D2 | How the interpreter dispatches | A `match` loop on stable Rust now. In V8, try tail-call threading: Rust's `become` once it's stable, or a C interpreter generated from the same op table and built with clang-cl like the Lua VM. Keep it only if it wins at least 15% | V0, V8 |
 | D3 | `usize` on Treadle | 64 bits (`target.pointer_bits == 64`), like a native target. The Lua target keeps 63 | V0 |
 | D4 | Field order in memory | Largest alignment first, declaration order among equals. `#layout(C)` keeps declaration order. It's only visible through `T.size` and `f.offset` | V1 |
-| D5 | What `Shuttle[T, U]` and `Stream[T]` are | Existentials. A value made by a known function has that function's own type, sized and stored inline. Where the maker isn't known (a field, a list, two makers meeting in an `if`), the value is boxed like a large `any`. This needs a paragraph in 05-concurrency.md | V2 |
+| D5 | What `Shuttle[T, U]` and `Stream[T]` are | Existentials. A value made by a known function has that function's own type, sized and stored inline. Where the maker isn't known (a field, a list, two makers meeting in an `if`), the value is boxed like a large `any`. This needs a paragraph in 05-concurrency.md. V2 boxes every held shuttle and builds a generator a `for` loop calls in place (§10.14); inline frames move to V8 | V2, V8 |
 | D6 | A `mut` argument when the callee unravels | Its writes are visible, as if it were passed by reference: a `defer` in the caller sees what the callee left. The Lua backend only copies back on return, and that's documented as a deviation | V1 |
 | D7 | Dropping a suspended shuttle | Runs its pending `defer`s, the same as closing it: only the ones whose `defer` statement the shuttle has already run, in scopes it's still inside (§10.14). The Lua backend leaves them to the garbage collector | V2 |
 | D8 | `x.hash()` values | Deterministic, but each backend's own. Nothing may depend on them matching | V1 |
@@ -935,63 +935,89 @@ promised gauges would let an optimizer do.
 
 ### 10.14 Shuttles
 
-**The frame.** A shuttle made by `f` is a value of type `f.Frame`: a state
-word, plus the locals `f` keeps across its suspension points. Locals that are
-never live at the same suspension point share space. `Frame.size` is its size
-(Appendix B). The rule is about the source (what's live across a `yield` or a
-`pull`, worked out on unoptimized Heddle), so `Frame.size` doesn't change
-with `-O` levels.
+**The frame.** What a shuttle made by `f` keeps across its suspension points
+(its `yield`s and `pull`s) is its *frame*: a state word, then each value
+that's live across one of them. Values never live at the same suspension
+point share space. `f.Frame.size` is its size (Appendix B), and
+`f.Frame.align` its alignment. It's worked out on Heddle before anything is
+optimized (`heddle/frame.rs`), so it doesn't change with `-O` levels, and it's
+the same number on both backends: the Lua backend builds the shuttle for
+Treadle to answer it.
 
-**Running it.** `f`'s body is compiled as a *step function* that takes the
-shuttle's address as a hidden parameter. A step:
+- A value in registers is kept at its own width (a `u32` local takes 4
+  bytes) and is in the frame only while the shuttle is suspended. A local in
+  memory (a `String`, an array) lives in the frame from where its value
+  starts until its block ends, since something may hold its address until
+  then. Constants and addresses in the frame aren't kept: they're made again
+  after the resume.
+- Items go in order of alignment, largest first, then of where they first
+  appear, each at the lowest offset where it doesn't overlap one that's live
+  at the same time. The state word is first, 4 bytes, with the "closed" bit.
+- An item's temporaries are dropped before the `yield` suspends, when the
+  item can't borrow from them: they'd be dropped at the end of the statement
+  anyway, and nothing could tell.
 
-1. switches on the state;
-2. reloads what that suspension point needs from the frame into registers;
-3. runs until the next `yield` or `pull`;
-4. stores what's live there, sets the state, and returns.
+**Running it.** `f`'s body is compiled as its *step function*,
+`step(op, frame, out, input) -> status`. A step:
 
-So a resume costs about a call, nothing allocates, the body runs on the
-ordinary value stack, and the calls it makes are ordinary calls.
+1. reads the state and marks the shuttle finished (a `return` or an unravel
+   leaves it so);
+2. resuming (`op` 0), goes on after the suspension point the state names;
+3. runs until the next `yield` or `pull`, stores what's live there and the
+   new state, and returns `Yielded` (the item is at `out`) or `Pulled`; or
+   returns `Finished`.
 
-- `yield v` writes `v` to the driver's destination (the step gets a pointer
-  to it) and returns `Yielded`. `pull` returns `Pulled`, and the next step gets
-  the input (or `none` once closed) as a parameter.
-- **Generators**: `for x in fib()` keeps the frame in the loop's own frame and
-  steps once per item. `fib().take(10)` wraps it in a stream state.
-- **Bursts**: `push` stores the input in the burst, and going through the
-  burst steps until `Pulled` or `Returned`. `close` sets a bit that makes
-  every later `pull` give `none` without suspending. Pushing into a closed
-  shuttle unravels.
-- **Pointers into the frame across a suspension.** A suspended shuttle is a
-  value, and it can move: it can be stored, or sent to another thread. So a
-  local whose address is taken lives in the frame permanently, never in a
-  register. A pointer that's live across a suspension and points into the
-  frame is stored as an offset and turned back into an address after the
-  resume. Pointers anywhere else (list buffers, the heap) are stored as they
-  are. Where the compiler can't tell which kind a pointer is, a range check
-  against the frame decides at the suspension. Rust needs `Pin` for this.
-  Loom doesn't, because the compiler sees every borrow.
-- **An unravel in a shuttle** unwinds its frame (defers, drops), marks the
-  shuttle finished, and carries on in the driver with the shuttle's
-  location, as on Lua.
-- **Closing or dropping a suspended shuttle** enters the step function in
-  close mode. It jumps to the landing pad for the current suspension point
-  and runs the pending `defer`s and drops (D7). A `defer` that unravels there
-  unravels in whoever closed it (the review's V5).
+A resume costs about a call: the body runs on the ordinary value stack, and
+the calls it makes are ordinary calls. Calling `f` makes the shuttle: a box
+on the heap with a header (who holds it, the latest burst, the input being
+handed over), then the frame, with `f`'s arguments in it. A
+`Shuttle[T, U]` is the box's address and the step: every shuttle is the
+erased form D5 describes (see below).
+
+- **Generators**: `for x in g(…)`, where `g` is a generator the program
+  writes, called right there, doesn't make a shuttle at all: `g`'s body is
+  built in place, each `yield` running the loop's body with the item. An
+  item costs what a `while` loop's iteration does (`bench/` has the
+  numbers). `break`, `return` and unravels leave through `g`'s pending
+  `defer`s, as closing it would; `continue` goes on after the `yield`.
+  Anywhere else (a generator held in a variable, `fib().take(10)`), the
+  shuttle is a stream whose step resumes it.
+- **Bursts**: a `Burst[T]` is the box and the number of the push that made
+  it. `push` puts the input in the box; going through the burst steps the
+  shuttle, handing the input to its first `pull` and stopping at the next.
+  Pushing (or closing) again first runs what's left of the burst before,
+  throwing its items away. `close` sets the closed bit, and from then on
+  the driver hands `none` to every `pull`. Pushing into a closed shuttle
+  unravels.
+- **Bursts share the box** with the shuttle: each holds it, and the last to
+  go drops it. A burst kept after its shuttle is dropped still works.
+- **An unravel in a shuttle** unwinds its frame (defers, drops), leaves it
+  finished, and carries on in the driver with the shuttle's location, as on
+  Lua.
+- **Closing or dropping a suspended shuttle** enters the step in close mode.
+  It runs the cleanups of the suspension point it's at, the pending
+  `defer`s and drops (D7), as a `return` there would. A `defer` that
+  unravels there unravels in whoever closed it (P3).
   - **Only `defer`s the shuttle has reached run**: a `defer` whose statement
     ran before the current suspension point, in a scope the shuttle is still
     inside. One further down the body, or in a scope it already left, doesn't
     run. A `defer` inside a loop runs once, for the iteration it's suspended
-    in. That's the same rule as for an unravel, and it falls out of the
-    landing pads: each suspension point's pad holds exactly the `defer`s in
-    scope there.
+    in. That's the same rule as for an unravel: each suspension point's
+    cleanups are exactly those in scope there.
   - A shuttle that never started runs no `defer`s; it only drops what it
     owns (its `take` parameters). A finished one runs nothing.
+- **Pointers into the frame** stay valid: the frame is in its box, which
+  doesn't move when the shuttle value does.
+- **D5, inline frames.** The decided design stores a shuttle made by a
+  known function inline in its holder, with its frame's size, and boxes it
+  only where the maker isn't known; pointers into the frame would then be
+  rebased after a move. V2 boxes every held shuttle (one allocation when
+  it's made) and builds the common case, a generator in a `for` loop, in
+  place with no frame at all. Inline frames come with V8, measured against
+  the allocation they save.
 - **Projections** (`~> mut T`, `~> ref T`) yield an address. The caller uses
   the place until the end of the statement, then steps once more. The
   optimizer inlines them where it can (§7, pass 9).
-- **An erased `Shuttle[T, U]`** (D5) is a box holding the frame, plus a
-  vtable with its step, drop and size.
 
 ### 10.15 Tests
 
@@ -1618,7 +1644,9 @@ arms' locals; the rest never meet:
 ```
 
 `lexer.Frame.size` is 40, inside the example's `<= 64`. `fib()` (`a` and `b`,
-two `u64`s) is 24: the state, padding, then 8 bytes each.
+two `u64`s) is 24: the state, padding, then 8 bytes each. The example prints
+the lexer's (`tests/examples/lexer.out`), and `tests/run/frame_size` pins
+`fib`'s and a few more, on both backends.
 
 ## Appendix C: from the Lua backend to Treadle
 
