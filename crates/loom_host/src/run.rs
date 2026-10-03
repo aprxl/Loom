@@ -37,12 +37,13 @@ pub fn run_bundle(bundle: &str, map: Option<&SourceMap>, host: Host) -> Outcome 
     let _ = lua.set_memory_limit(RUN_MEMORY_LIMIT);
     let stdout = matches!(host.output, Output::Stdout);
     let term = Rc::new(RefCell::new(Term::default()));
+    let watch = watch_interrupt(&lua);
     let result = install_host(&lua, host, term.clone()).and_then(|()| {
-        watch_interrupt(&lua)?;
         let main: Function = lua.load(bundle).set_name("=bundle").eval()?;
         // `main ! E` returns its error's text when it fails.
         main.call::<Option<mlua::String>>(())
     });
+    drop(watch);
     term.borrow_mut().restore();
     if stdout {
         let _ = std::io::stdout().flush();
@@ -50,19 +51,41 @@ pub fn run_bundle(bundle: &str, map: Option<&SourceMap>, host: Host) -> Outcome 
     outcome(result, map)
 }
 
-/// With Ctrl-C's handler installed, checks its flag every 10 000
-/// instructions (coroutines' too), and unwinds the program once it's set:
-/// once, so its `defer`s run to the end.
-fn watch_interrupt(lua: &Lua) -> mlua::Result<()> {
-    let Some(flag) = loom_sys::interrupt::installed() else { return Ok(()) };
-    let raised = std::cell::Cell::new(false);
-    lua.set_global_hook(mlua::HookTriggers::new().every_nth_instruction(10_000), move |_, _| {
-        if !raised.get() && flag.load(std::sync::atomic::Ordering::Relaxed) {
-            raised.set(true);
-            return Err(mlua::Error::runtime(format!("{UNRAVEL_MARK}{INTERRUPT_MARK}")));
+/// With Ctrl-C's handler installed, a watch that unwinds the program at
+/// its next instruction once Ctrl-C comes, as the standalone `lua` does: a
+/// hook installed then, which raises the interrupt and takes itself away
+/// (so the unwinding runs `defer`s to the end). A hook installed all along
+/// would send every instruction through Lua's slow path.
+fn watch_interrupt(lua: &Lua) -> Option<loom_sys::interrupt::Watch> {
+    loom_sys::interrupt::installed()?;
+    let state = lua.exec_raw_lua(|raw| raw.state()) as usize;
+    Some(loom_sys::interrupt::watch(move || {
+        let state = state as *mut mlua::ffi::lua_State;
+        let mask = mlua::ffi::LUA_MASKCALL | mlua::ffi::LUA_MASKRET | mlua::ffi::LUA_MASKCOUNT;
+        // SAFETY: `lua_sethook` may be called while the state runs (the
+        // standalone `lua` calls it from a signal handler): it only sets
+        // the hook's fields, read at the next instruction. The state is
+        // alive: the watch goes before it, and can't while this runs.
+        #[allow(unsafe_code)]
+        unsafe {
+            mlua::ffi::lua_sethook(state, Some(stop), mask, 1)
         }
-        Ok(mlua::VmState::Continue)
-    })
+    }))
+}
+
+/// The hook `watch_interrupt` installs: raises the interrupt.
+#[allow(unsafe_code)]
+unsafe extern "C-unwind" fn stop(state: *mut mlua::ffi::lua_State, _: *mut mlua::ffi::lua_Debug) {
+    let message = format!("{UNRAVEL_MARK}{INTERRUPT_MARK}");
+    // SAFETY: Lua calls the hook with its state; the message is copied in
+    // before it's freed, and `lua_error` doesn't return (nothing of this
+    // frame is left to drop).
+    unsafe {
+        mlua::ffi::lua_sethook(state, None, 0, 0);
+        mlua::ffi::lua_pushlstring(state, message.as_ptr().cast(), message.len());
+        drop(message);
+        mlua::ffi::lua_error(state);
+    }
 }
 
 /// One test of a test bundle, and how it went.
