@@ -4,11 +4,11 @@
 fib          20     109463
 mandelbrot   40     993961
 sieve        100000 1901120
-spectral_norm 40     1422428
-fannkuch     7      954915
+spectral_norm 40     1422427
+fannkuch     7      954901
 binary_trees 8      1775852
-richards     10000  712581
-word_freq    40000  2415424
-sort         20000  7676958
-streams      30000  10150921
+richards     10000  653850
+word_freq    40000  2215186
+sort         20000  7636958
+streams      30000  10050916
 chip8        30000  1179337

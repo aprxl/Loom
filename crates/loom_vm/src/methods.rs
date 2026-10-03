@@ -377,13 +377,81 @@ fn pop(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV_PRIME: u64 = 0x0100_0000_01b3;
 
-/// FNV-1a (64-bit) of `bytes`.
-fn fnv(bytes: &[u8]) -> u64 {
-    let mut h = FNV_OFFSET;
-    for &b in bytes {
-        h = (h ^ u64::from(b)).wrapping_mul(FNV_PRIME);
+/// The multiplier of `text_hash`: 2^64 over the golden ratio, odd.
+const TEXT_MUL: u64 = 0x9e37_79b9_7f4a_7c15;
+
+/// The bytes of `p` (`n` of them, `0 < n <= 8`) as one word: two
+/// overlapping reads, which together cover every byte. Equal for equal
+/// bytes, different for different ones of the same length.
+///
+/// # Safety
+///
+/// `p` is `n` readable bytes.
+#[inline(always)]
+unsafe fn short_word(p: *const u8, n: usize) -> u64 {
+    // SAFETY: every read is inside the `n` bytes.
+    unsafe {
+        if n >= 4 {
+            let lo = u64::from((p as *const u32).read_unaligned());
+            let hi = u64::from((p.add(n - 4) as *const u32).read_unaligned());
+            lo | (hi << 32)
+        } else {
+            u64::from(*p) | (u64::from(*p.add(n / 2)) << 8) | (u64::from(*p.add(n - 1)) << 16)
+        }
     }
+}
+
+/// Treadle's hash of text (design/vm.md D8): a word at a time, each mixed
+/// in by a multiply, so a short key costs one. Words past the first 8
+/// bytes are read whole, the last overlapping the one before.
+fn text_hash(bytes: &[u8]) -> u64 {
+    let n = bytes.len();
+    let mut h = FNV_OFFSET ^ (n as u64).wrapping_mul(FNV_PRIME);
+    let mut mix = |w: u64| {
+        h = (h ^ w).wrapping_mul(TEXT_MUL);
+        h ^= h >> 32;
+    };
+    let p = bytes.as_ptr();
+    if n == 0 {
+        return h;
+    }
+    if n <= 8 {
+        // SAFETY: `p` is `n` bytes.
+        mix(unsafe { short_word(p, n) });
+        return h;
+    }
+    let mut at = 0;
+    while at + 8 < n {
+        // SAFETY: inside the text.
+        mix(unsafe { (p.add(at) as *const u64).read_unaligned() });
+        at += 8;
+    }
+    // SAFETY: `n > 8`, so the last 8 bytes are inside it.
+    mix(unsafe { (p.add(n - 8) as *const u64).read_unaligned() });
     h
+}
+
+/// Whether the `key.len()` bytes at `p` are `key`'s.
+///
+/// # Safety
+///
+/// `p` is `key.len()` readable bytes.
+#[inline(always)]
+unsafe fn same_text(p: *const u8, key: &[u8]) -> bool {
+    let n = key.len();
+    let k = key.as_ptr();
+    // SAFETY: every read is inside the `n` bytes of each.
+    unsafe {
+        match n {
+            0 => true,
+            1..=8 => short_word(p, n) == short_word(k, n),
+            9..=16 => {
+                let first = (p as *const u64).read_unaligned() == (k as *const u64).read_unaligned();
+                first && (p.add(n - 8) as *const u64).read_unaligned() == (k.add(n - 8) as *const u64).read_unaligned()
+            }
+            _ => std::slice::from_raw_parts(p, n) == key,
+        }
+    }
 }
 
 /// A one-word key's hash, as the compiler's `key_hash` makes it: the word
@@ -425,14 +493,15 @@ fn probe(header: u64, h: u64, esize: u64, same: impl Fn(u64) -> bool) -> u64 {
 fn map_find_str(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let key = text(ctx, args[1], args[2])?;
     let (koff, esize) = (args[3] & 0xFFFF, args[3] >> 32);
-    let h = key_hash(fnv(key));
+    let h = key_hash(text_hash(key));
     let e = probe(args[0], h, esize, |entry| {
         // SAFETY: an entry's key is text: its address and length first.
         let (p, n) = unsafe {
             let k = (entry + koff) as *const u64;
             (k.read(), k.add(1).read())
         };
-        n as usize == key.len() && unsafe { std::slice::from_raw_parts(p as *const u8, n as usize) } == key
+        // SAFETY: the key's text: `n` bytes at `p`.
+        n as usize == key.len() && unsafe { same_text(p as *const u8, key) }
     });
     args[0] = e;
     args[1] = h;
@@ -476,13 +545,9 @@ fn concat(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     Ok(())
 }
 
-/// `str.hash(s)`: FNV-1a (64-bit) of the text's bytes.
+/// `str.hash(s)`: `text_hash` of the text.
 fn str_hash(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for &b in text(ctx, args[0], args[1])? {
-        h = (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
-    }
-    args[0] = h;
+    args[0] = text_hash(text(ctx, args[0], args[1])?);
     Ok(())
 }
 
@@ -636,4 +701,52 @@ fn float_math(_: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
     };
     args[0] = if f32_ { u64::from((r as f32).to_bits()) } else { r.to_bits() };
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn short_texts_compare_and_hash_as_their_bytes() {
+        // Every text of up to 3 bytes over a small alphabet, and texts of
+        // every length to 40 that differ in one byte.
+        let alphabet = [b'a', b'b', 0, 0xff];
+        let mut texts: Vec<Vec<u8>> = vec![Vec::new()];
+        for n in 1..=3 {
+            let mut all = vec![Vec::new()];
+            for _ in 0..n {
+                all = all.iter().flat_map(|t| alphabet.iter().map(move |&c| [t.clone(), vec![c]].concat())).collect();
+            }
+            texts.extend(all);
+        }
+        for n in 1..=40 {
+            let base: Vec<u8> = (0..n).map(|i| b'a' + (i % 26) as u8).collect();
+            texts.push(base.clone());
+            for at in 0..n {
+                let mut t = base.clone();
+                t[at] ^= 1;
+                texts.push(t);
+            }
+        }
+        let mut hashes = std::collections::HashMap::new();
+        for a in &texts {
+            for b in &texts {
+                if a.len() == b.len() {
+                    // SAFETY: `a` is `b.len()` bytes.
+                    assert_eq!(unsafe { same_text(a.as_ptr(), b) }, a == b, "{a:?} {b:?}");
+                }
+            }
+            let h = text_hash(a);
+            assert_eq!(h, text_hash(&a.clone()));
+            hashes.entry(h).or_insert_with(Vec::new).push(a.clone());
+        }
+        let collisions = hashes.values().filter(|v| {
+            let mut v = (*v).clone();
+            v.sort();
+            v.dedup();
+            v.len() > 1
+        });
+        assert_eq!(collisions.count(), 0);
+    }
 }

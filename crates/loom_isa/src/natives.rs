@@ -118,7 +118,7 @@ pub const NATIVES: &[NativeSig] = &[
     sig("map.find_int", 3, 2, NativeImm::None),
     // `mem.calloc(size, align) -> address`: zeroed.
     sig("mem.calloc", 2, 1, NativeImm::None),
-    // `str.hash(text) -> u64`: FNV-1a of its bytes.
+    // `str.hash(text) -> u64`: Treadle's hash of the text (D8).
     sig("str.hash", 2, 1, NativeImm::None),
     // `mem.move(dst, src, bytes)`: copies bytes that may overlap.
     sig("mem.move", 3, 0, NativeImm::None),

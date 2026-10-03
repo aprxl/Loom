@@ -2,7 +2,7 @@
 //! D8; it's allowed to differ from Lua's, row P4 of §14).
 //!
 //! FNV-1a over 64-bit words: each part of a value is mixed in in turn,
-//! text a word at a time after hashing its bytes (`str.hash`), a sum's tag
+//! text by the hash of its bytes (`str.hash`), a sum's tag
 //! before its fields, a sequence's length before its elements. Values in
 //! registers are hashed inline, ones in memory through glue (`hash[T]`).
 
