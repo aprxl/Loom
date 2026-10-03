@@ -21,8 +21,7 @@ and an idiomatic Lua 5.4 version of it in `lua/`:
 | `sort` | `List.sort` on records, comparing through `Ord` |
 | `streams` | iterator chains: `filter`, `map`, `take_while`, `sum` |
 | `chip8` | twill `match`, `u8` and `u12` wrapping arithmetic, an interpreter loop |
-
-The lexer benchmark comes with shuttles (V2).
+| `lexer` | chars, strings and a shuttle: a push lexer fed one char at a time (in Lua, a coroutine) |
 
 ## Running them
 

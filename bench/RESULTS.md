@@ -3,6 +3,40 @@
 Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
+## V2 (2026-10-03)
+
+Same machine and build as V1, best of five (`python bench/run.py
+--lua-backend`), with `lexer` added: a push lexer, a duplex shuttle fed one
+char at a time, against Lua running the same lexer in a coroutine.
+
+| Benchmark | Lua backend | PUC Lua 5.4, idiomatic | Treadle | Treadle vs Lua 5.4 |
+|---|---|---|---|---|
+| `fib` | 0.573 s | 0.083 s | **0.037 s** | 2.23× |
+| `sieve` | 2.059 s | 0.335 s | **0.155 s** | 2.15× |
+| `mandelbrot` | 0.939 s | 0.115 s | **0.082 s** | 1.40× |
+| `nbody` | 2.232 s | 0.519 s | **0.360 s** | 1.44× |
+| `spectral_norm` | 2.335 s | 0.151 s | **0.116 s** | 1.31× |
+| `fannkuch` | 14.424 s | 1.427 s | **1.163 s** | 1.23× |
+| `binary_trees` | 7.918 s | 2.662 s | **0.883 s** | 3.02× |
+| `richards` | 2.458 s | 0.181 s | **0.072 s** | 2.50× |
+| `word_freq` | 2.966 s | 0.229 s | **0.289 s** | 0.79× |
+| `maps` | 0.356 s | 0.119 s | **0.112 s** | 1.05× |
+| `sort` | 0.969 s | 0.298 s | **0.122 s** | 2.45× |
+| `streams` | 3.776 s | 0.902 s | **0.832 s** | 1.08× |
+| `chip8` | 0.730 s | 0.097 s | **0.091 s** | 1.06× |
+| `lexer` | 3.486 s | 1.464 s | **0.249 s** | 5.87× |
+
+Geometric mean 1.70× over the 14, 1.54× without `lexer`; the rest move
+within a run's 5% of the review's numbers. A resume of a held shuttle is
+about a call (the `lexer`'s, per char), where Lua switches coroutines.
+
+V2's gate is about generators: `for x in g()` costs at most twice what
+`for x in 0..n` does per item, on a trivial body. Summing 50M items: the
+range loop 0.33 s; a generator built in place (what `for x in g()` does)
+0.21 s; the same generator held in a variable, and so stepped, 1.91 s,
+about 38 ns an item. Met, for the loop the gate names; resuming a held
+shuttle cheaply is V8's.
+
 ## V1 (2026-10-02)
 
 Same machine and build: rustc 1.98.0 (88d9e12ae 2026-08-18), release, with

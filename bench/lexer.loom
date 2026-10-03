@@ -1,0 +1,106 @@
+// A push lexer (examples/lexer.loom, scaled up): a duplex shuttle fed one
+// char at a time, handing back the tokens each char finishes. Chars,
+// strings and a shuttle.
+use std.io.print
+
+const SIZE = 20_000
+
+warp Token {
+    case Ident(String)
+    case Int(u64)
+    case Str(String)
+    case Punct(char)
+    case Eof
+}
+
+fn lexer() ~> Token <~ char {
+    var next = pull
+    loop {
+        let c = next mend {
+            yield .Eof
+            return
+        }
+        match c {
+            ' ' | '\t' | '\n' => next = pull,
+            '0'..='9' => {
+                var n: u64 = 0
+                while next is some(d) and d.is_digit() {
+                    n = n * 10 + d.digit()
+                    next = pull
+                }
+                yield .Int(n)
+            }
+            'a'..='z' | 'A'..='Z' | '_' => {
+                var name = String()
+                while next is some(d) and (d.is_alphanumeric() or d == '_') {
+                    name.push(d)
+                    next = pull
+                }
+                yield .Ident(name)
+            }
+            '"' => {
+                var text = String()
+                next = pull
+                while next is some(d) and d != '"' {
+                    text.push(d)
+                    next = pull
+                }
+                next = pull
+                yield .Str(text)
+            }
+            _ => {
+                next = pull
+                yield .Punct(c)
+            }
+        }
+    }
+}
+
+warp Stats {
+    idents: u64 = 0
+    ident_chars: u64 = 0
+    ints: u64 = 0
+    int_sum: u64 = 0
+    strs: u64 = 0
+    str_chars: u64 = 0
+    puncts: u64 = 0
+    eofs: u64 = 0
+
+    fn count(mut self, take tok: Token) {
+        match tok {
+            .Ident(name) => {
+                .idents += 1
+                .ident_chars += name.len() as u64
+            }
+            .Int(n) => {
+                .ints += 1
+                .int_sum += n
+            }
+            .Str(text) => {
+                .strs += 1
+                .str_chars += text.len() as u64
+            }
+            .Punct(_) => .puncts += 1,
+            .Eof => .eofs += 1,
+        }
+    }
+}
+
+fn main() {
+    let line = "let greeting = \"hi there\" + 42 * count_7 - (x1 / 1234567);\n"
+    var source = String()
+    for _ in 0..SIZE {
+        source.push_str(line)
+    }
+    var stats = Stats()
+    var lex = lexer()
+    for ch in source.chars() {
+        for tok in lex.push(ch) {
+            stats.count(tok)
+        }
+    }
+    for tok in lex.close() {
+        stats.count(tok)
+    }
+    print("{stats.idents} {stats.ident_chars} {stats.ints} {stats.int_sum} {stats.strs} {stats.str_chars} {stats.puncts} {stats.eofs}")
+}
