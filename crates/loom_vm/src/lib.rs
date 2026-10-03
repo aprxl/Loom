@@ -42,7 +42,7 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Config { stack_limit: 1 << 30, interrupt: None }
+        Config { stack_limit: 256 << 20, interrupt: None }
     }
 }
 
@@ -100,6 +100,8 @@ pub(crate) struct Fault {
     pub pc: usize,
     /// Every frame it happened in, innermost first (see `exec::trace_at`).
     pub trace: Vec<usize>,
+    /// How many frames were left out of `trace`, after its first 64.
+    pub skipped: usize,
 }
 
 /// Runs `image`'s entry function, with `host` for its output.
@@ -126,6 +128,8 @@ pub struct Vm<'i> {
     machine: exec::Machine<'i>,
     /// The frames of the last unravel: each function, and where in it.
     trace: Vec<(String, Option<Location>)>,
+    /// How many frames of the trace were left out, after its first 64.
+    skipped: usize,
 }
 
 impl<'i> Vm<'i> {
@@ -136,13 +140,20 @@ impl<'i> Vm<'i> {
         }
         let machine =
             exec::Machine::load(image, host, config).map_err(|message| Outcome::Crash { message, location: None })?;
-        Ok(Vm { image, machine, trace: Vec::new() })
+        Ok(Vm { image, machine, trace: Vec::new(), skipped: 0 })
     }
 
     /// The frames the last unravel happened in, innermost first: each
     /// function's name, and where in it (`LOOM_BACKTRACE=1`).
     pub fn backtrace(&self) -> &[(String, Option<Location>)] {
         &self.trace
+    }
+
+    /// Where [`backtrace`](Self::backtrace) has frames left out (a stack
+    /// overflow is millions deep): the number of frames before the gap, and
+    /// how many are in it.
+    pub fn backtrace_gap(&self) -> Option<(usize, usize)> {
+        (self.skipped > 0).then_some((64, self.skipped))
     }
 
     /// With `checked`: an internal error if anything the program allocated
@@ -172,6 +183,7 @@ impl<'i> Vm<'i> {
         self.machine.ctx.term.restore();
         result.map_err(|fault| {
             let image = self.image;
+            self.skipped = fault.skipped;
             self.trace = fault
                 .trace
                 .iter()

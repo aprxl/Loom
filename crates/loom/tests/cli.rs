@@ -449,3 +449,26 @@ fn main() {
         );
     }
 }
+
+#[test]
+fn a_runaway_recursion_unravels_quickly_with_a_short_backtrace() {
+    let path = temp_source(
+        "runaway",
+        "use std.io.print\nfn down(n: u64) -> u64 { 1 + down(n + 1) }\nfn main() { print(down(0)) }\n",
+    );
+    let started = std::time::Instant::now();
+    let out = Command::new(env!("CARGO_BIN_EXE_loom"))
+        .args(["--color", "never", "run", "--backend", "vm"])
+        .arg(&path)
+        .env("LOOM_BACKTRACE", "1")
+        .output()
+        .expect("the loom binary runs");
+    let _ = std::fs::remove_file(&path);
+    let err = text(&out.stderr);
+    assert_eq!(out.status.code(), Some(101), "{err}");
+    assert!(err.contains("stack overflow"), "{err}");
+    assert!(err.contains(" more frames ..."), "{err}");
+    assert!(err.lines().count() < 200, "{} lines", err.lines().count());
+    // Debug builds are slower than release (about 0.3 s): a generous bound.
+    assert!(started.elapsed().as_secs() < 20, "{:?}", started.elapsed());
+}

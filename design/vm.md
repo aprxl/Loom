@@ -680,7 +680,7 @@ but not perfectly (D2). What V8 measures:
   reads the linkage back. The target is under 10 ns for a call and its
   return: `fib(32)` makes about 7 million calls, so under 70 ms for those
   (V0 runs the whole program in about 30 ms).
-- **Stack overflow**: past the limit (1 GiB of value stack for the main task
+- **Stack overflow**: past the limit (256 MiB of value stack for the main task
   by default), a call unravels with `stack overflow`. Loom code never
   recurses on the Rust stack, so only memory limits the depth.
 
@@ -1107,7 +1107,7 @@ On Treadle:
 | P4 | `x.hash()` values (D8) | Treadle's own hash | FNV-1a of the debug text. Allowed to differ |
 | P5 | formatting numbers (the review's F2–F4) | one table of cases, Rust's formatting where the spec is silent | fixed to match |
 | P6 | `usize` (D3) | 64 bits | 63 bits |
-| P7 | how deep recursion goes before `stack overflow` | memory-bound (1 GiB by default) | Lua's limits |
+| P7 | how deep recursion goes before `stack overflow` | memory-bound (256 MiB of stack by default) | Lua's limits |
 | P8 | which unravel wins when two things in a statement could unravel | the first in evaluation order | the same |
 | P9 | a `Map` or `Set` key with a hand-written `eq` or `hash` | uses them | structural. Fixed to match where it can be |
 

@@ -376,6 +376,7 @@ fn run_vm(path: &Path, args: &[String], color: ColorMode) -> ExitCode {
         let args = std::iter::once(path.display().to_string()).chain(args.iter().cloned()).collect();
         let host = Host { output: Output::Stdout, sandbox: false, args };
         let mut trace = Vec::new();
+        let mut gap = None;
         let config = loom_vm::Config { interrupt: Some(loom_sys::interrupt::install()), ..loom_vm::Config::default() };
         let outcome = match (compiled.image.entry, loom_vm::Vm::new(&compiled.image, host, &config)) {
             (Some(entry), Ok(mut vm)) => {
@@ -385,6 +386,7 @@ fn run_vm(path: &Path, args: &[String], color: ColorMode) -> ExitCode {
                     Err(outcome) => outcome,
                 };
                 trace = vm.backtrace().to_vec();
+                gap = vm.backtrace_gap();
                 outcome
             }
             (None, _) => Outcome::Crash { message: "the image has no entry function".into(), location: None },
@@ -394,7 +396,7 @@ fn run_vm(path: &Path, args: &[String], color: ColorMode) -> ExitCode {
             eprint!("{text}");
         }
         if matches!(outcome, Outcome::Unravel { .. }) && std::env::var_os("LOOM_BACKTRACE").is_some_and(|v| v == "1") {
-            eprint!("{}", backtrace_text(&trace));
+            eprint!("{}", backtrace_text(&trace, gap));
         }
         Ok(exit_code(&outcome))
     };
@@ -568,9 +570,14 @@ fn describe(outcome: &Outcome) -> Option<String> {
 /// `  --> file:line:col` and the source line, with a caret under the column.
 /// Every frame an unravel happened in (`LOOM_BACKTRACE=1`, on Treadle),
 /// innermost first.
-fn backtrace_text(trace: &[(String, Option<loom_host::Location>)]) -> String {
+fn backtrace_text(trace: &[(String, Option<loom_host::Location>)], gap: Option<(usize, usize)>) -> String {
     let mut out = String::from("backtrace:\n");
     for (i, (name, at)) in trace.iter().enumerate() {
+        if let Some((before, skipped)) = gap
+            && i == before
+        {
+            out.push_str(&format!("  ... {skipped} more frames ...\n"));
+        }
         match at {
             Some(at) => out.push_str(&format!("  {i}: {name} at {}:{}:{}\n", at.file, at.line, at.column)),
             None => out.push_str(&format!("  {i}: {name}\n")),

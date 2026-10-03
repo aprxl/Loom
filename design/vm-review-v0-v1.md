@@ -54,6 +54,8 @@ Fix: a much smaller default (64–256 MiB, or a call-depth limit), and keep
 only the first and last N frames of the trace. `fixtures.rs` already runs
 with 64 MiB, so the default isn't what is tested.
 
+*Fixed: A stack overflow takes 0.3 s: 256 MiB default stack, and a backtrace of the first and last 64 frames*
+
 **H4. A local array over about 512 KiB fails to compile for Treadle.**
 *Reproduced:* `var a = [0u8; 600000]` gives `U0102: not implemented yet:
 `main` needs more than 65535 registers` (works on Lua). Frames are

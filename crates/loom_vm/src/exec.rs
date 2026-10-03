@@ -41,6 +41,9 @@ use crate::natives::{Ctx, NativeFn, resolve};
 use crate::stack::Stack;
 use crate::{Config, Fault, Trap, crash_message};
 
+/// How many frames of each end of a trace are kept (see `trace_at`).
+const TRACE_ENDS: usize = 64;
+
 /// Loop iterations and calls between checks for Ctrl-C.
 const TICKS: i32 = 1 << 16;
 
@@ -134,7 +137,12 @@ impl<'i> Machine<'i> {
     /// gives its results.
     pub fn call(&mut self, entry: usize, args: &[u64]) -> Result<Vec<u64>, Fault> {
         let Some(start) = self.funcs.get(entry) else {
-            return Err(Fault { trap: Trap::Crash(format!("there's no function {entry}")), pc: 0, trace: Vec::new() });
+            return Err(Fault {
+                trap: Trap::Crash(format!("there's no function {entry}")),
+                pc: 0,
+                trace: Vec::new(),
+                skipped: 0,
+            });
         };
         if args.len() != start.params {
             let trap = Trap::Crash(format!("{} arguments for {} parameters", args.len(), start.params));
@@ -142,6 +150,7 @@ impl<'i> Machine<'i> {
                 trap,
                 pc: (start.entry as usize - self.code.as_ptr() as usize) / 8,
                 trace: Vec::new(),
+                skipped: 0,
             });
         }
         let need = LINK_SLOTS + start.frame;
@@ -150,7 +159,12 @@ impl<'i> Machine<'i> {
                 stack.reset();
                 stack
             }
-            _ => Stack::new(self.stack_limit, need).map_err(|trap| Fault { trap, pc: 0, trace: Vec::new() })?,
+            _ => Stack::new(self.stack_limit, need).map_err(|trap| Fault {
+                trap,
+                pc: 0,
+                trace: Vec::new(),
+                skipped: 0,
+            })?,
         };
         let result = self.execute(&mut stack, entry, args);
         self.stack = Some(stack);
@@ -204,7 +218,7 @@ impl<'i> Machine<'i> {
         }
         macro_rules! fault {
             ($trap:expr, $at:expr $(,)?) => {
-                Fault { trap: $trap, pc: at_index!($at), trace: Vec::new() }
+                Fault { trap: $trap, pc: at_index!($at), trace: Vec::new(), skipped: 0 }
             };
         }
         'run: loop {
@@ -1131,8 +1145,8 @@ impl<'i> Machine<'i> {
             if matches!(trap, Trap::Crash(_) | Trap::Failed(_)) {
                 return Err(fault!(trap, at));
             }
-            let trace = trace_at(env.image, env.code_base, fp, at);
-            env.in_flight = Some(Fault { trap, pc: trace.first().copied().unwrap_or(at_index!(at)), trace });
+            let (trace, skipped) = trace_at(env.image, env.code_base, fp, at);
+            env.in_flight = Some(Fault { trap, pc: trace.first().copied().unwrap_or(at_index!(at)), trace, skipped });
             match unwind(env.image, env.code_base, env.stack, fp, at, false) {
                 Some((to, frame, end)) => {
                     pc = to;
@@ -1257,12 +1271,30 @@ fn unwind(
 /// no locations (std's methods the compiler writes, glue) is left out, so a
 /// trap there is reported at the call into it, as Lua's `error(message,
 /// level)` reports at a caller. (Empty when nothing has a location.)
-fn trace_at(image: &Image, code_base: *const u64, mut fp: *mut u64, at: *const u64) -> Vec<usize> {
+///
+/// Only the first and the last [`TRACE_ENDS`] frames are kept, and how many
+/// are left out between them: a stack overflow is millions of frames deep.
+fn trace_at(image: &Image, code_base: *const u64, mut fp: *mut u64, at: *const u64) -> (Vec<usize>, usize) {
     let mut index = (at as usize - code_base as usize) / 8;
-    let mut out = Vec::new();
+    let mut head = Vec::new();
+    let mut tail = std::collections::VecDeque::new();
+    let mut skipped = 0;
+    let finish = |head: Vec<usize>, tail: std::collections::VecDeque<usize>, skipped| {
+        let mut out = head;
+        out.extend(tail);
+        (out, skipped)
+    };
     loop {
         if image.line_at(index as u32).is_some() {
-            out.push(index);
+            if head.len() < TRACE_ENDS {
+                head.push(index);
+            } else {
+                if tail.len() == TRACE_ENDS {
+                    tail.pop_front();
+                    skipped += 1;
+                }
+                tail.push_back(index);
+            }
         }
         // SAFETY: every frame has its linkage just below it (see `call`).
         let (back, caller) = unsafe {
@@ -1270,7 +1302,7 @@ fn trace_at(image: &Image, code_base: *const u64, mut fp: *mut u64, at: *const u
             (*link as *const u64, *link.add(1) as *mut u64)
         };
         if back.is_null() {
-            return out;
+            return finish(head, tail, skipped);
         }
         // The call is the word before where it returns to.
         index = (back as usize - code_base as usize) / 8 - 1;
