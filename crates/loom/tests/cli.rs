@@ -451,6 +451,37 @@ fn main() {
 }
 
 #[test]
+fn ctrl_c_at_a_back_edge_after_an_if_runs_the_defers() {
+    // The loop's back edge is a branch of the `if`'s condition once the
+    // empty block between them is gone: it still unwinds through `defer`s.
+    let path = temp_source(
+        "interrupt_branch",
+        "use std.io.print
+
+fn main() {
+    defer print(\"cleaned up\")
+    var i = 0u64
+    loop {
+        i = i +% 1
+        if i == 0 { print(i) }
+    }
+}
+",
+    );
+    let file = path.to_str().expect("utf-8 path");
+    for backend in ["lua", "vm"] {
+        let out = Command::new(env!("CARGO_BIN_EXE_loom"))
+            .args(["--color", "never", "run", "--backend", backend, file])
+            .env("LOOM_INTERRUPT_AFTER_MS", "200")
+            .output()
+            .expect("the loom binary runs");
+        assert_eq!(out.status.code(), Some(130), "{backend}: {}", text(&out.stderr));
+        assert_eq!(text(&out.stdout), "cleaned up\n", "{backend}");
+    }
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
 fn a_runaway_recursion_unravels_quickly_with_a_short_backtrace() {
     let path = temp_source(
         "runaway",

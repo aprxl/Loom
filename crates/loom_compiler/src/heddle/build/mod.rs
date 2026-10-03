@@ -1238,26 +1238,39 @@ fn reachable(mut blocks: Vec<Block>) -> Vec<Block> {
 /// jump passes are defined where they reach the block, and so where they
 /// reach its predecessors.
 fn thread_jumps(blocks: &mut [Block]) {
-    let forward = |blocks: &[Block], b: usize| -> Option<Edge> {
+    let forward = |blocks: &[Block], b: usize| -> Option<(Edge, Option<BlockId>)> {
         let block = &blocks[b];
         match &block.term {
-            Some(Term::Jump(e)) if b != 0 && block.params.is_empty() && block.insts.is_empty() => Some(e.clone()),
+            Some(Term::Jump(e)) if b != 0 && block.params.is_empty() && block.insts.is_empty() => {
+                Some((e.clone(), block.term_unwind))
+            }
             _ => None,
         }
     };
     for i in 0..blocks.len() {
         let Some(mut term) = blocks[i].term.take() else { continue };
+        let mut unwind = blocks[i].term_unwind;
         for e in term.edges_mut() {
             // Follow a chain of them, stopping at a cycle.
             let mut seen = HashSet::new();
-            while let Some(next) = forward(blocks, e.block.0 as usize) {
+            while let Some((next, pad)) = forward(blocks, e.block.0 as usize) {
                 if !seen.insert(e.block) || next.block == e.block || !e.args.is_empty() {
                     break;
+                }
+                // A jump skipped may be a loop's back edge, where an
+                // interrupt is noticed: its landing pad comes along, unless
+                // this block's terminator has another.
+                if pad.is_some() {
+                    if unwind.is_some() && unwind != pad {
+                        break;
+                    }
+                    unwind = pad;
                 }
                 *e = next;
             }
         }
         blocks[i].term = Some(term);
+        blocks[i].term_unwind = unwind;
     }
 }
 

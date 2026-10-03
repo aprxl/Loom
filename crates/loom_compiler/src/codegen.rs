@@ -351,8 +351,14 @@ fn emit_func(
         e.tramp_at.push(e.code.len());
         let (from, edge) = e.tramps[k].clone();
         let span = f.blocks[order[from]].term_span;
+        let start = e.code.len();
         e.edge_moves(&edge, span);
         e.jump_to(from, edge.block.0 as usize, span, true);
+        // A loop's back edge notices an interrupt: from here too, it
+        // unwinds to its block's landing pad.
+        if let Some(pad) = f.blocks[order[from]].term_unwind {
+            e.unwinds.push((start, e.code.len(), pad.0 as usize));
+        }
     }
     // What unwinds without a pad of its own still has the big slots to free.
     let free_pad = e.code.len();
