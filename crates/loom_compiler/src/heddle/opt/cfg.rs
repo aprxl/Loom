@@ -1,5 +1,5 @@
-//! The control-flow facts the passes share: each block's predecessors, and
-//! its dominators.
+//! The control-flow facts the passes share: each block's successors and
+//! predecessors, reverse postorder, dominators, and loops.
 //!
 //! Only normal edges count: landing pads, entered by unwinding, aren't
 //! reached from the entry, so they have no dominator and no reverse
@@ -9,11 +9,21 @@
 use crate::heddle::Func;
 
 pub struct Cfg {
+    pub succs: Vec<Vec<usize>>,
     pub preds: Vec<Vec<usize>>,
+    /// The blocks the entry reaches, in reverse postorder.
+    pub rpo: Vec<usize>,
+    /// Each block's place in `rpo` (`usize::MAX` if the entry doesn't
+    /// reach it).
+    pub rank: Vec<usize>,
     /// Each reached block's immediate dominator (the entry's is itself).
     pub idom: Vec<Option<usize>>,
     /// The dominator tree: each block's children, in reverse postorder.
     pub children: Vec<Vec<usize>>,
+    /// Each block's entry and exit numbers in a walk of the dominator tree:
+    /// `a` dominates `b` when `b`'s numbers are inside `a`'s.
+    pre: Vec<u32>,
+    post: Vec<u32>,
 }
 
 impl Cfg {
@@ -98,6 +108,74 @@ impl Cfg {
                 children[d].push(b);
             }
         }
-        Cfg { preds, idom, children }
+        let (mut pre, mut post) = (vec![0u32; n], vec![0u32; n]);
+        let mut clock = 0;
+        let mut walk = vec![(0usize, 0usize)];
+        if n > 0 {
+            pre[0] = clock;
+            clock += 1;
+        }
+        while let Some(&mut (b, ref mut i)) = walk.last_mut() {
+            if let Some(&c) = children[b].get(*i) {
+                *i += 1;
+                pre[c] = clock;
+                clock += 1;
+                walk.push((c, 0));
+            } else {
+                post[b] = clock;
+                clock += 1;
+                walk.pop();
+            }
+        }
+        Cfg { succs, preds, rpo, rank, idom, children, pre, post }
     }
+
+    /// Whether the entry reaches `b` by normal edges.
+    pub fn reached(&self, b: usize) -> bool {
+        self.rank[b] != usize::MAX
+    }
+
+    /// Whether `a` dominates `b` (every block dominates itself). Only for
+    /// blocks the entry reaches.
+    pub fn dominates(&self, a: usize, b: usize) -> bool {
+        self.reached(a) && self.reached(b) && self.pre[a] <= self.pre[b] && self.post[b] <= self.post[a]
+    }
+
+    /// The natural loops: for each block some edge goes back to (one that
+    /// dominates where the edge comes from), the blocks of its loop, header
+    /// first. Loops that share a header are one. Innermost last isn't
+    /// promised: sort by size when it matters.
+    pub fn loops(&self) -> Vec<Loop> {
+        let mut out: Vec<Loop> = Vec::new();
+        for &h in &self.rpo {
+            let latches: Vec<usize> =
+                self.preds[h].iter().copied().filter(|&p| self.reached(p) && self.dominates(h, p)).collect();
+            if latches.is_empty() {
+                continue;
+            }
+            let mut inside = vec![false; self.succs.len()];
+            inside[h] = true;
+            let mut blocks = vec![h];
+            let mut stack = latches;
+            while let Some(b) = stack.pop() {
+                if std::mem::replace(&mut inside[b], true) {
+                    continue;
+                }
+                blocks.push(b);
+                stack.extend(self.preds[b].iter().copied().filter(|&p| self.reached(p)));
+            }
+            blocks[1..].sort_by_key(|&b| self.rank[b]);
+            out.push(Loop { header: h, blocks, inside });
+        }
+        out
+    }
+}
+
+/// A natural loop.
+pub struct Loop {
+    pub header: usize,
+    /// Its blocks, the header first, then in reverse postorder.
+    pub blocks: Vec<usize>,
+    /// Whether each block of the function is in it.
+    pub inside: Vec<bool>,
 }

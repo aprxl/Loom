@@ -62,7 +62,7 @@ enum Role {
 }
 
 /// Natives that only compute their results from their arguments.
-const PURE_NATIVES: &[&str] = &[
+pub(super) const PURE_NATIVES: &[&str] = &[
     "int.add_chk",
     "int.sub_chk",
     "int.mul_chk",
@@ -77,7 +77,7 @@ const PURE_NATIVES: &[&str] = &[
 
 /// Natives that read memory, or make something new, but change nothing a
 /// load could see.
-const QUIET_NATIVES: &[&str] = &[
+pub(super) const QUIET_NATIVES: &[&str] = &[
     "str.eq",
     "str.cmp",
     "str.char_count",
