@@ -89,6 +89,10 @@ enum Ty {
     Str,
     /// A `List[String]`, never empty.
     StrList,
+    /// A `Map[String, iN]`.
+    MapSI(Int),
+    /// A `Map[iN, String]`.
+    MapIS(Int),
 }
 
 #[derive(Clone, Debug)]
@@ -157,7 +161,14 @@ impl Gen {
             Ty::Opt(i) => format!("?{}", i.name()),
             Ty::Str => "String".into(),
             Ty::StrList => "List[String]".into(),
+            Ty::MapSI(i) => format!("Map[String, {}]", i.name()),
+            Ty::MapIS(i) => format!("Map[{}, String]", i.name()),
         }
+    }
+
+    /// A key for a map of Strings: few, so keys come again.
+    fn str_key(&mut self) -> String {
+        format!("{:?}", self.rng.pick(&["a", "b", "c", "d", "é", "zz", ""]))
     }
 
     fn vars(&self, want: impl Fn(&Var) -> bool) -> Vec<Var> {
@@ -233,6 +244,32 @@ impl Gen {
                 let items: Vec<String> = (0..n).map(|_| self.str_expr(depth.saturating_sub(1))).collect();
                 format!("[{}]", items.join(", "))
             }
+            Ty::MapSI(i) => {
+                let n = self.rng.below(4);
+                if n == 0 {
+                    return "[:]".into();
+                }
+                let pairs: Vec<String> = (0..n)
+                    .map(|_| {
+                        let k = self.str_key();
+                        format!("{k}: {}", self.int_expr(i, depth.saturating_sub(1)))
+                    })
+                    .collect();
+                format!("[{}]", pairs.join(", "))
+            }
+            Ty::MapIS(i) => {
+                let n = self.rng.below(4);
+                if n == 0 {
+                    return "[:]".into();
+                }
+                let pairs: Vec<String> = (0..n)
+                    .map(|_| {
+                        let k = self.int_lit(i);
+                        format!("{k}: {}", self.str_expr(depth.saturating_sub(1)))
+                    })
+                    .collect();
+                format!("[{}]", pairs.join(", "))
+            }
         }
     }
 
@@ -244,7 +281,15 @@ impl Gen {
         let vars = self.vars(|v| v.ty == Ty::Str);
         let var = |this: &mut Self| vars[this.rng.below(vars.len() as u64) as usize].name.clone();
         let lists = self.vars(|v| v.ty == Ty::StrList);
-        match self.rng.below(if depth == 0 { 3 } else { 10 }) {
+        let maps = self.vars(|v| matches!(v.ty, Ty::MapIS(_)));
+        match self.rng.below(if depth == 0 { 3 } else { 11 }) {
+            10 if !maps.is_empty() => {
+                let m = &maps[self.rng.below(maps.len() as u64) as usize];
+                let Ty::MapIS(k) = m.ty else { unreachable!("a map of Strings") };
+                let name = m.name.clone();
+                let key = self.int_lit(k);
+                format!("({name}.get({key}) mend \"none\".to_string())")
+            }
             9 if !lists.is_empty() => {
                 let l = &lists[self.rng.below(lists.len() as u64) as usize].name;
                 let from = self.int();
@@ -384,10 +429,18 @@ impl Gen {
                 }
             }
             13 => format!("({} as| {})", self.f64_expr(d), i.name()),
-            14 => match self.vars(|v| matches!(v.ty, Ty::Str | Ty::StrList)).first() {
-                Some(s) => format!("({}.len() as% {})", s.name, i.name()),
-                None => self.int_lit(i),
-            },
+            14 => {
+                let maps = self.vars(|v| v.ty == Ty::MapSI(i));
+                if !maps.is_empty() && self.rng.chance(50) {
+                    let name = maps[self.rng.below(maps.len() as u64) as usize].name.clone();
+                    let key = self.str_key();
+                    return format!("({name}.get({key}) mend {})", self.int_lit(i));
+                }
+                match self.vars(|v| matches!(v.ty, Ty::Str | Ty::StrList | Ty::MapSI(_) | Ty::MapIS(_))).first() {
+                    Some(s) => format!("({}.len() as% {})", s.name, i.name()),
+                    None => self.int_lit(i),
+                }
+            }
             _ => format!("({} mend {})", self.opt_expr(i, d), self.int_lit(i)),
         }
     }
@@ -411,6 +464,15 @@ impl Gen {
                 format!("({} {op} {})", self.f64_expr(d), self.f64_expr(d))
             }
             5 => {
+                let maps = self.vars(|v| matches!(v.ty, Ty::MapSI(_) | Ty::MapIS(_)));
+                if !maps.is_empty() && self.rng.chance(50) {
+                    let m = maps[self.rng.below(maps.len() as u64) as usize].clone();
+                    let key = match m.ty {
+                        Ty::MapIS(k) => self.int_lit(k),
+                        _ => self.str_key(),
+                    };
+                    return format!("{}.has({key})", m.name);
+                }
                 let op = self.rng.pick(&["and", "or"]);
                 format!("({} {op} {})", self.bool_expr(d), self.bool_expr(d))
             }
@@ -447,7 +509,7 @@ impl Gen {
 
     /// A type for a new local.
     fn local_ty(&mut self) -> Ty {
-        match self.rng.below(13) {
+        match self.rng.below(15) {
             0..=3 => Ty::Int(self.int()),
             4 => Ty::Bool,
             5 => Ty::F64,
@@ -456,7 +518,9 @@ impl Gen {
             8 => Ty::List(self.int()),
             9 => Ty::Opt(self.int()),
             10 => Ty::Str,
-            _ => Ty::StrList,
+            11 => Ty::StrList,
+            12 => Ty::MapSI(self.int()),
+            _ => Ty::MapIS(self.int()),
         }
     }
 
@@ -500,11 +564,42 @@ impl Gen {
                     v.mutable
                         && matches!(
                             v.ty,
-                            Ty::Int(_) | Ty::F64 | Ty::Bool | Ty::Rec | Ty::List(_) | Ty::Str | Ty::StrList
+                            Ty::Int(_)
+                                | Ty::F64
+                                | Ty::Bool
+                                | Ty::Rec
+                                | Ty::List(_)
+                                | Ty::Str
+                                | Ty::StrList
+                                | Ty::MapSI(_)
+                                | Ty::MapIS(_)
                         )
                 });
                 let Some(v) = vs.first().cloned() else { return self.print(indent) };
                 match v.ty {
+                    Ty::MapSI(i) => {
+                        let key = self.str_key();
+                        match self.rng.below(3) {
+                            0 => format!("{pad}{}[{key}] = {}\n", v.name, self.int_expr(i, 2)),
+                            1 => format!("{pad}print(\"removed {{{}.remove({key})}}\")\n", v.name),
+                            _ => {
+                                let val = self.int_expr(i, 1);
+                                format!(
+                                    "{pad}print(\"inserted {{{}.insert({key}, {val})}}\")
+",
+                                    v.name
+                                )
+                            }
+                        }
+                    }
+                    Ty::MapIS(k) => {
+                        let key = self.int_lit(k);
+                        match self.rng.below(3) {
+                            0 => format!("{pad}{}[{key}] = {}\n", v.name, self.str_expr(2)),
+                            1 => format!("{pad}print(\"removed {{{}.remove({key})}}\")\n", v.name),
+                            _ => format!("{pad}{}[{key}] = {}\n", v.name, self.str_expr(1)),
+                        }
+                    }
                     Ty::StrList => {
                         let e = self.str_expr(2);
                         match self.rng.below(3) {
@@ -578,6 +673,25 @@ impl Gen {
             }
             8 => self.int_match(indent),
             9 => self.sum_match(indent),
+            10 if self.rng.chance(30) => {
+                // A map, read in a loop, in the order things went in.
+                let (m, x, k, acc) = (self.fresh("m"), self.fresh("v"), self.fresh("k"), self.fresh("t"));
+                if self.rng.chance(50) {
+                    let i = self.int();
+                    let items = self.expr(Ty::MapSI(i), 2);
+                    format!(
+                        "{pad}let {m}: Map[String, {0}] = {items}\n{pad}var {acc} = 0usize\n{pad}for ({k}, {x}) in {m} {{ {acc} = {acc} +% {k}.len() +% 1usize\n{pad}    print(\"{{{k}}}={{{x}}}\") }}\n{pad}print(\"{{{acc}}} {{{m}}}\")\n",
+                        i.name()
+                    )
+                } else {
+                    let i = self.int();
+                    let items = self.expr(Ty::MapIS(i), 2);
+                    format!(
+                        "{pad}let {m}: Map[{0}, String] = {items}\n{pad}var {acc} = 0usize\n{pad}for ({k}, {x}) in {m} {{ {acc} = {acc} +% {x}.len() +% 1usize\n{pad}    print(\"{{{k}}}={{{x}}}\") }}\n{pad}print(\"{{{acc}}} {{{m}}}\")\n",
+                        i.name()
+                    )
+                }
+            }
             10 if self.rng.chance(40) => {
                 // A list of Strings, read in a loop.
                 let l = self.fresh("l");
@@ -906,6 +1020,8 @@ fn the_generator_covers_its_kinds() {
         ("push_str", ".push_str("),
         ("a list of Strings", ": List[String] = "),
         ("removing a String", ".remove(0)"),
+        ("a map of Strings to integers", ": Map[String, "),
+        ("a map of integers to Strings", "String] = "),
     ] {
         assert!(text.matches(needle).count() >= 10, "{what}: {} in 300 programs", text.matches(needle).count());
     }
