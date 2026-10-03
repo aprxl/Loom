@@ -59,7 +59,7 @@ A **fallback defer**, `defer tx => tx.rollback()`, names a `once` value and runs
 
 ## Not supported yet
 
-`ref warp`, projections (`~> mut T`), spools and region pointers, and `given` all belong to this part of the design and stop with [U0102](diag:U0102). See [Not supported yet](page:not-yet).
+`ref warp`, spools and region pointers, and `given` all belong to this part of the design and stop with [U0102](diag:U0102). Projections (`~> mut T`), which lend a place, work: see [Shuttles](page:shuttles). See [Not supported yet](page:not-yet).
 
 ## Where next
 

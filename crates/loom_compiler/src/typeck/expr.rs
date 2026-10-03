@@ -288,8 +288,7 @@ impl Checker<'_> {
                 self.tcx.never
             }
             ExprKind::Fail(value) => self.check_fail(e, value),
-            ExprKind::Yield { place: Some(_), .. } => self.unsupported(span, "projections (`yield mut`, `yield ref`)"),
-            ExprKind::Yield { place: None, value } => self.check_yield(value, span),
+            ExprKind::Yield { place, value } => self.check_yield(value, *place, span),
             ExprKind::Pull => self.check_pull(span),
             ExprKind::Unsafe { .. } => self.unsupported(span, "`unsafe` blocks"),
             ExprKind::Const(inner) => self.check_const_expr(span, inner, expected),
@@ -1104,8 +1103,25 @@ impl Checker<'_> {
             }
             ExprKind::Index { .. } => self.index_place(target),
             ExprKind::Call { .. } => {
-                self.unsupported(target.span, "assigning through projections");
-                None
+                let ty = self.check_expr(target, None);
+                if self.tcx.is_error(ty) {
+                    return None;
+                }
+                match self.place(target) {
+                    Some(true) => Some(ty),
+                    Some(false) => {
+                        self.diags.push(
+                            Diagnostic::error(codes::T0107, "can't change what this projection lends")
+                                .primary(target.span, "it lends with `~> ref`")
+                                .help("a projection that lends places to change is `~> mut T`"),
+                        );
+                        None
+                    }
+                    None => {
+                        self.error(codes::T0107, target.span, "can't assign to this", "a call's value");
+                        None
+                    }
+                }
             }
             ExprKind::Deref(_) => {
                 self.unsupported(target.span, "spool pointers");

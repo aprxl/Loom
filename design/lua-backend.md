@@ -250,6 +250,13 @@ their items go through `for` and every `Stream` method.
 - `yield`/`pull` in a shuttle that doesn't yield/pull is T0120; a shuttle
   calling itself is T0121 (its frame would contain itself); neither can be
   inside a `defer` (T0118). A burst is `once`, so dropping one is L0301.
+- A projection (`~> mut T`, `~> ref T`) yields its place as `{table, key}`:
+  a call of one is `rt.lend(…)`, which runs it to that `yield`, and the place
+  is `t[k]` until the statement ends, when `rt.lend_end` runs it to its end
+  (it unravels if it lends a second place, and so does one that ends without
+  lending any). The place has to be in a table: a projection's own local
+  can't be lent (U0102). One whose statement unravels is left to the garbage
+  collector (P2).
 - `f.Frame.size` and `f.Frame.align` are about Treadle's frame (vm.md
   §10.14): to answer them, the program is checked for Treadle too and the
   shuttle built for it. They're never folded while type checking, so a

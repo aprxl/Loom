@@ -30,7 +30,7 @@ use loom_syntax::source::Span;
 use super::cleanup::{CleanupKind, Stable};
 use super::stream::Step;
 use super::text::Msg;
-use super::value::{Storage, Val};
+use super::value::{Place, Storage, Val};
 use super::{Builder, FnKey};
 use crate::heddle::frame::{self, FrameInput, FrameLayout};
 use crate::heddle::{BlockId, Cmp, Edge, InstKind, Mem, Term, VTy, Value};
@@ -133,6 +133,8 @@ impl<'a> Builder<'a> {
         let sig = self.typed.results.sigs.get(&id)?.clone();
         let (t, u) = self.shuttle_parts(sig.ret)?;
         let body = f.body.as_ref()?;
+        let lends = Self::is_projection(f);
+        let abi = self.body_abi(id, span)?;
         self.f.scan = self.scan(id, body);
         let entry: Vec<Value> = [VTy::Int, VTy::Ptr, VTy::Ptr, VTy::Ptr].iter().map(|&t| self.new_value(t)).collect();
         self.f.blocks[0].params.extend(&entry);
@@ -147,18 +149,32 @@ impl<'a> Builder<'a> {
         self.f.ret = Some(self.tcx().unit);
         let depth = self.open_scope();
         // The parameters are in the frame, where making the shuttle put
-        // them; what it took is dropped when it ends.
-        for (param, sp) in f.params.iter().zip(&sig.params) {
+        // them; what it took is dropped when it ends. A projection's
+        // borrowed ones are there as their addresses.
+        let mut borrowed = Vec::new();
+        for ((param, sp), pabi) in f.params.iter().zip(&sig.params).zip(&abi.params) {
             let ty = self.local_ty(param.local);
+            if lends && Self::by_address(sp.mode, pabi) {
+                let slot = self.raw_slot(8, 8);
+                borrowed.push((param.local, slot));
+                self.f.shuttle.as_mut()?.params.push(slot);
+                continue;
+            }
             let slot = self.new_slot(ty, param.span)?;
             self.f.locals.insert(param.local, Storage::Slot(slot));
             if self.needs_drop(ty) {
                 self.add_cleanup(CleanupKind::Drop { at: Stable::Slot(slot), ty });
             }
-            let _ = sp;
             self.f.shuttle.as_mut()?.params.push(slot);
         }
         self.suspend(frame::START);
+        for (local, slot) in borrowed {
+            let at = self.slot_addr(slot);
+            let ptr = self.load(Mem::W64, at, 0, VTy::Ptr);
+            let var = self.new_var(VTy::Ptr);
+            self.write(var, ptr);
+            self.f.locals.insert(local, Storage::Ref(var));
+        }
         self.f.span = Some(span);
         let val = self.expr(body);
         if self.live() && val.is_some() {
@@ -196,6 +212,122 @@ impl<'a> Builder<'a> {
             self.terminate(Term::Ret(vec![k]));
         }
         self.enter(resume);
+    }
+
+    /// Whether `f` is a projection (`~> mut T`, `~> ref T`).
+    pub(super) fn is_projection(f: &hir::FnDef) -> bool {
+        matches!(f.ret, hir::FnRet::Shuttle { yields: Some((Some(_), _)), .. })
+    }
+
+    /// Whether a projection keeps a parameter passed this way as its
+    /// address: a borrowed one, given in memory.
+    fn by_address(mode: ParamMode, pabi: &super::ParamAbi) -> bool {
+        mode != ParamMode::Take && matches!(pabi, super::ParamAbi::Addr)
+    }
+
+    /// A projection's `yield mut place`: the place's address, for the
+    /// driver.
+    pub(super) fn yield_place(&mut self, value: &'a hir::Expr, span: Span) -> Option<Val> {
+        self.f.span = Some(span);
+        let out = self.f.shuttle.as_ref()?.out?;
+        let (place, _) = self.place_or_temp(value)?;
+        let ptr = self.place_addr(&place, span)?;
+        self.store(Mem::W64, out, 0, ptr);
+        self.suspend(frame::YIELDED as u8);
+        Some(Val::Regs(Vec::new()))
+    }
+
+    /// A call of a projection (`g.at(1, 2)`): makes it and runs it to its
+    /// first `yield`, which lends the place. It's finished when the
+    /// statement is (see `CleanupKind::Lend`).
+    pub(super) fn lend_place(&mut self, e: &'a hir::Expr) -> Option<(Place, Ty)> {
+        let span = e.span;
+        let crate::hir::ExprKind::Call { callee, args } = &e.kind else { return None };
+        let info = self.tables().calls.get(&e.id)?.clone();
+        let sig = self.typed.results.sigs.get(&info.callee)?.clone();
+        let abi = self.body_abi(info.callee, span)?;
+        let modes: Vec<ParamMode> = sig.params.iter().map(|p| p.mode).collect();
+        let recv_ty = info
+            .args
+            .iter()
+            .position(|&s| s == crate::typeck::ArgSource::Receiver)
+            .map(|k| self.plain_ty(sig.params[k].ty));
+        let worked = self.call_args(callee, args, &info, &modes, recv_ty)?;
+        let mut worked: Vec<Option<super::call::Arg>> = worked.into_iter().map(Some).collect();
+        let def = self.typed.results.instance(info.callee).def;
+        let DefKind::Fn(f) = &self.p.def(def).kind else { return None };
+        let mut by_param = Vec::with_capacity(info.args.len());
+        for (k, source) in info.args.iter().enumerate() {
+            by_param.push(match source {
+                crate::typeck::ArgSource::Receiver => worked[0].take(),
+                crate::typeck::ArgSource::Arg(i) => worked[i + usize::from(info.receiver.is_some())].take(),
+                crate::typeck::ArgSource::Default => {
+                    let default = f.params.get(k).and_then(|p| p.default.as_ref())?;
+                    let saved = std::mem::replace(&mut self.f.body, info.callee);
+                    let v = self.expr(default);
+                    let dty = self.coerced_ty(default);
+                    self.f.body = saved;
+                    Some(super::call::Arg::Val(v?, dty))
+                }
+            });
+        }
+        let func = self.func_id(FnKey::Body(info.callee));
+        let sh_ty = self.plain_ty(sig.ret);
+        let Some(Val::Mem(sh)) = self.emit_call(func, &abi, by_param, sh_ty, &modes, span, sh_ty) else {
+            return self.internal(span, "a projection made in registers");
+        };
+        // It's finished, or closed, when the statement ends.
+        if let Some(id) = self.f.temps.remove(&sh) {
+            self.kill_cleanup(id);
+        }
+        let slot = self.slot_of(sh)?;
+        self.add_cleanup(CleanupKind::Lend { slot, ty: sh_ty });
+        let (t, _) = self.shuttle_parts(sh_ty)?;
+        let out = self.raw_slot(8, 8);
+        let out = self.slot_addr(out);
+        let b = self.load(Mem::W64, sh, 0, VTy::Ptr);
+        let frame = self.frame_of(b);
+        let input = self.offset(b, H_INPUT as i64);
+        let st = self.step_box(b, frame::RESUME, frame, out, input);
+        let yielded = self.iconst(frame::YIELDED);
+        let lent = self.ucmp(Cmp::Eq, st, yielded);
+        let (ok, none) = (self.new_block(), self.new_block());
+        self.br(lent, ok, none);
+        self.enter(none);
+        self.unravel_msg(&[Msg::Text("a projection ended without lending a place")], span)?;
+        self.enter(ok);
+        let ptr = self.load(Mem::W64, out, 0, VTy::Ptr);
+        Some((Place::At { ptr, off: 0 }, t))
+    }
+
+    /// Finishes the projection in slot `slot` (a shuttle of type `ty`):
+    /// resumes it to its end, unless unwinding, then drops it. One that
+    /// lends a second place unravels.
+    pub(super) fn finish_lend(&mut self, slot: u32, ty: Ty) {
+        let at = self.slot_addr(slot);
+        let mut again = None;
+        if self.f.in_pad == 0 {
+            let b = self.load(Mem::W64, at, 0, VTy::Ptr);
+            let frame = self.frame_of(b);
+            let out = self.raw_slot(8, 8);
+            let out = self.slot_addr(out);
+            let input = self.offset(b, H_INPUT as i64);
+            let st = self.step_box(b, frame::RESUME, frame, out, input);
+            let yielded = self.iconst(frame::YIELDED);
+            again = Some(self.ucmp(Cmp::Eq, st, yielded));
+        }
+        self.drop_at(at, ty);
+        if let Some((size, _)) = self.size_align(ty) {
+            self.emit(InstKind::Zero { dst: at, size }, &[]);
+        }
+        if let Some(again) = again {
+            let (bad, ok) = (self.new_block(), self.new_block());
+            self.br(again, bad, ok);
+            self.enter(bad);
+            let span = self.here();
+            let _ = self.unravel_msg(&[Msg::Text("a projection lent more than one place")], span);
+            self.enter(ok);
+        }
     }
 
     /// `yield v`: moved to where the driver wants it, then suspended.
@@ -534,8 +666,15 @@ impl<'a> Builder<'a> {
         };
         self.store(Mem::W64, b, H_DROP_INPUT, drop_input);
         let frame = self.offset(b, frame_off as i64);
+        let lends = Self::is_projection(f);
         for (i, ((param, sp), vals)) in f.params.iter().zip(&sig.params).zip(params).enumerate() {
             let ty = self.plain_ty(sp.ty);
+            if lends && Self::by_address(sp.mode, &abi.params[i]) {
+                if let Some(off) = layout.params.get(i).copied().flatten() {
+                    self.store(Mem::W64, frame, off as i64, vals[0]);
+                }
+                continue;
+            }
             let v = match abi.params[i] {
                 super::ParamAbi::Regs(_) => Val::Regs(vals),
                 super::ParamAbi::Addr => Val::Mem(vals[0]),

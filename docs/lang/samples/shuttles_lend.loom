@@ -1,0 +1,21 @@
+use std.io.print
+
+warp Grid {
+    cells: List[i32]
+    width: usize
+
+    // `~> mut T` lends a place to change.
+    fn at(mut self, x: usize, y: usize) ~> mut i32 {
+        yield mut .cells[y * .width + x]
+        // Runs once the statement that used the place is done.
+        print("  ({x}, {y}) is {.cells[y * .width + x]}")
+    }
+}
+
+fn main() {
+    var g = Grid(cells: [0, 0, 0, 0], width: 2)
+    g.at(1, 0) = 5
+    g.at(1, 0) += 1
+    print(g.cells)
+}
+//@ run

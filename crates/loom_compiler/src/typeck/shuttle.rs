@@ -11,7 +11,7 @@
 //! ones, and `Copy` ones, which it gets a copy of.
 
 use loom_syntax::Diagnostic;
-use loom_syntax::ast::ParamMode;
+use loom_syntax::ast::{ParamMode, PlaceMode};
 use loom_syntax::diag::codes;
 use loom_syntax::source::Span;
 
@@ -27,6 +27,8 @@ use crate::ty::{Ty, TyKind};
 pub(super) struct ShuttleCtx {
     pub yields: Option<Ty>,
     pub pulls: Option<Ty>,
+    /// A projection's: it yields places.
+    pub lends: Option<PlaceMode>,
 }
 
 impl Checker<'_> {
@@ -58,7 +60,10 @@ impl Checker<'_> {
     pub(super) fn shuttle_ctx(&mut self, f: &hir::FnDef, sig: &FnSig) -> Option<ShuttleCtx> {
         let FnRet::Shuttle { yields, pulls } = &f.ret else { return None };
         let (t, u) = self.shuttle_parts(sig.ret)?;
-        for (param, sig_param) in f.params.iter().zip(&sig.params) {
+        let lends = yields.as_ref().and_then(|(mode, _)| *mode);
+        // A projection lends places for one statement of its caller's: it
+        // can borrow what it's given for that long.
+        for (param, sig_param) in f.params.iter().zip(&sig.params).filter(|_| lends.is_none()) {
             let kept = match sig_param.mode {
                 ParamMode::Take => true,
                 ParamMode::Read => self.is_copy(sig_param.ty),
@@ -70,16 +75,58 @@ impl Checker<'_> {
                 self.unsupported(param.span, &format!("{what} (take it with `take`, or make it `Copy`)"));
             }
         }
-        Some(ShuttleCtx { yields: yields.as_ref().map(|_| t), pulls: pulls.as_ref().map(|_| u) })
+        Some(ShuttleCtx { yields: yields.as_ref().map(|_| t), pulls: pulls.as_ref().map(|_| u), lends })
     }
 
-    /// `yield v`.
-    pub(super) fn check_yield(&mut self, value: &Expr, span: Span) -> Ty {
-        match self.shuttle.and_then(|s| s.yields) {
-            Some(t) => {
+    /// Whether `def` is a projection, and how it lends.
+    pub(super) fn lends(&self, def: DefId) -> Option<PlaceMode> {
+        match &self.p.def(def).kind {
+            DefKind::Fn(f) => match &f.ret {
+                FnRet::Shuttle { yields: Some((mode, _)), .. } => *mode,
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// `yield v`, or a projection's `yield mut place`.
+    pub(super) fn check_yield(&mut self, value: &Expr, place: Option<PlaceMode>, span: Span) -> Ty {
+        let lends = self.shuttle.and_then(|s| s.lends);
+        match (self.shuttle.and_then(|s| s.yields), place, lends) {
+            (Some(t), None, None) => {
                 self.check_coerce(value, t);
             }
-            None => {
+            (Some(t), Some(mode), Some(lends)) => {
+                let ty = self.check_expr(value, Some(t));
+                self.coerce(value, ty, t);
+                match self.place(value) {
+                    None => self.error(codes::T0107, value.span, "a projection lends a place", "not a place"),
+                    Some(false) if mode == PlaceMode::Mut => self.error(
+                        codes::T0107,
+                        value.span,
+                        "can't lend this to change",
+                        "part of something that can't be changed",
+                    ),
+                    Some(_) if mode != lends => {
+                        let (want, got) = if lends == PlaceMode::Mut { ("mut", "ref") } else { ("ref", "mut") };
+                        self.wrong_side(
+                            span,
+                            &format!("yield {got}"),
+                            &format!("this projection lends with `~> {want}`"),
+                        );
+                    }
+                    Some(_) => {}
+                }
+            }
+            (Some(_), None, Some(_)) => {
+                self.check_expr(value, None);
+                self.wrong_side(span, "yield", "a projection lends places: `yield mut place` or `yield ref place`");
+            }
+            (Some(_), Some(_), None) => {
+                self.check_expr(value, None);
+                self.wrong_side(span, "yield mut", "only a projection (`~> mut T`, `~> ref T`) lends places");
+            }
+            (None, ..) => {
                 self.check_expr(value, None);
                 self.wrong_side(span, "yield", "this shuttle only pulls: it has no `~> T`");
             }

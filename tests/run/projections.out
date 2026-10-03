@@ -1,0 +1,13 @@
+  at(1, 1) is 5 now
+  at(1, 1) is 7 now
+  at(0, 0) is -1 now
+  at(1, 1) is 7 now
+[-1, 0, 0, 0, 7, 0] 7 7
+  peeked 4
+30 4
+  at(4) done
+[1, 20, 3]
+  at(1) done
+  at(0) done
+[z, bc]
+[ann!, bo] 4

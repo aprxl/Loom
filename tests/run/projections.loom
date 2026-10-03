@@ -1,0 +1,68 @@
+// Projections (`~> mut T`, `~> ref T`): shuttles that lend a place. A call
+// of one is that place, for the statement it's in: read, assigned,
+// changed in place, or called a method on. Then the projection resumes,
+// so the code after its `yield` (and its `defer`s) runs.
+
+use std.io.print
+
+warp Grid {
+    cells: List[i32]
+    width: usize
+
+    fn at(mut self, x: usize, y: usize) ~> mut i32 {
+        let i = y * .width + x
+        if i >= .cells.len() { unravel("({x}, {y}) is off the grid") }
+        yield mut .cells[i]
+        print("  at({x}, {y}) is {.cells[i]} now")
+    }
+
+    fn peek(self, i: usize) ~> ref i32 {
+        defer print("  peeked {i}")
+        yield ref .cells[i]
+    }
+}
+
+warp P { x: i32, y: i32 }
+
+fn second(mut ps: List[P]) ~> mut P {
+    yield mut ps[1]
+}
+
+fn at[T](mut xs: List[T], i: usize) ~> mut T {
+    defer print("  at({i}) done")
+    yield mut xs[i % xs.len()]
+}
+
+warp Bag {
+    names: List[String]
+
+    fn first(mut self) ~> mut String {
+        yield mut .names[0]
+    }
+}
+
+fn main() {
+    var g = Grid(cells: [0, 0, 0, 0, 0, 0], width: 3)
+    g.at(1, 1) = 5
+    g.at(1, 1) += 2
+    g.at(0, 0) -= 1
+    let v = g.at(1, 1)
+    print("{g.cells} {v} {g.peek(4)}")
+
+    var ps: List[P] = [P(x: 1, y: 2), P(x: 3, y: 4)]
+    second(mut ps).x = 30
+    print("{ps[1].x} {ps[1].y}")
+
+    var xs: List[i64] = [1, 2, 3]
+    at(mut xs, 4) *= 10
+    print(xs)
+    var ys: List[String] = ["a", "b"]
+    at(mut ys, 1).push_str("c")
+    at(mut ys, 0) = "z"
+    print(ys)
+
+    var b = Bag(names: ["ann", "bo"])
+    b.first().push('!')
+    let n = b.first().len()
+    print("{b.names} {n}")
+}

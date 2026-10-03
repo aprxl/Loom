@@ -40,7 +40,7 @@ Also missing:
 
 ## Memory and safety
 
-- `given` parameters, `ref warp`, and projections (`~> mut T`, the design's way to lend a place).
+- `given` parameters, `ref warp`, a `for` loop over a projection that lends many places, and `xs[i]` through an `Index` weave.
 - `unsafe` blocks, raw pointers (`*T`), `extern "C"`, `Volatile`. `#layout(...)` is parsed but nothing acts on it.
 - User-written `Spool` weaves.
 - The region checker. Lambdas, slices and streams can't outlive the locals they borrow ([M0106](diag:M0106)), but nothing checks region pointers yet.

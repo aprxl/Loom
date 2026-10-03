@@ -217,6 +217,11 @@ impl<'a> Builder<'a> {
         if let Some(&v) = self.tables().const_values.get(&e.id) {
             return self.const_val(v, ty, span).map(Val::Regs);
         }
+        // A place a projection lends, read.
+        if self.tables().lends.contains_key(&e.id) {
+            let (place, pty) = self.lend_place(e)?;
+            return self.read_place(&place, pty, span);
+        }
         if let Some(&q) = self.tables().frames.get(&e.id) {
             let layout = self.frame_layout(q.shuttle)?;
             let n = if q.align { layout.align } else { layout.size };
@@ -341,7 +346,7 @@ impl<'a> Builder<'a> {
             ExprKind::Intrinsic(hir::Intrinsic::Target) => self.target_value(ty, span),
             ExprKind::Intrinsic(_) => self.unsupported(span, "`heap`"),
             ExprKind::Yield { place: None, value } => self.yield_expr(value, span),
-            ExprKind::Yield { .. } => self.unsupported(span, "projections (`yield mut`, `yield ref`)"),
+            ExprKind::Yield { value, .. } => self.yield_place(value, span),
             ExprKind::Pull => self.pull_expr(e, span),
             ExprKind::Loom { .. } | ExprKind::Thread(_) => self.unsupported(span, "threads"),
             _ => self.unsupported(span, "this expression"),
@@ -1098,6 +1103,7 @@ impl<'a> Builder<'a> {
             }
             ExprKind::Field { .. } | ExprKind::LeadingDot(_) | ExprKind::ConstField { .. } => self.field_place(e),
             ExprKind::Index { .. } => self.index_place(e),
+            ExprKind::Call { .. } if self.tables().lends.contains_key(&e.id) => self.lend_place(e),
             _ => self.unsupported(span, "assigning to this"),
         }
     }

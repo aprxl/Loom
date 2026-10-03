@@ -1,0 +1,30 @@
+// What a projection can and can't do.
+
+fn look(xs: List[i32]) ~> ref i32 {
+    yield ref xs[0]
+}
+
+fn plain(mut xs: List[i32]) ~> mut i32 {
+    yield xs[0]                             //~ T0120
+}
+
+fn value(mut xs: List[i32]) ~> mut i32 {
+    yield mut xs[0] + 1                     //~ T0107
+}
+
+fn gen() ~> i32 {
+    var x = 1
+    yield mut x                             //~ T0120
+}
+
+fn first(mut xs: List[String]) ~> mut String {
+    yield mut xs[0]
+}
+
+fn main() {
+    var xs: List[i32] = [1, 2]
+    look(xs) = 3                            //~ T0107
+    var names: List[String] = ["a"]
+    let s = first(mut names)                //~ M0103
+    first(mut names) = first(mut names)     //~ M0104 M0103
+}

@@ -257,6 +257,9 @@ pub struct Body {
     pub unrolled: HashMap<HirId, Vec<BodyId>>,
     /// Each `f.Frame.size` and `f.Frame.align`: which shuttle's frame.
     pub frames: HashMap<HirId, FrameQuery>,
+    /// Calls of projections (`fn at(mut self, i: usize) ~> mut T`): each is
+    /// a place, for the statement it's in, and whether it can be changed.
+    pub lends: HashMap<HirId, PlaceMode>,
 }
 
 /// `f.Frame.size` (or `.align`): about the frame of shuttle function
@@ -267,6 +270,8 @@ pub struct FrameQuery {
     pub shuttle: BodyId,
     pub align: bool,
 }
+
+pub use loom_syntax::ast::PlaceMode;
 
 /// How a value that isn't a `Stream` gives its items one at a time.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1181,8 +1186,8 @@ impl<'p> Checker<'p> {
         let ret = match &f.ret {
             FnRet::Unit => self.tcx.unit,
             FnRet::Value(t) => self.lower_ty(t),
-            FnRet::Shuttle { yields: Some((Some(_), _)), .. } => {
-                self.unsupported(span, "projections (`~> mut T`, `~> ref T`)");
+            FnRet::Shuttle { yields: Some((Some(_), _)), pulls: Some(_) } => {
+                self.unsupported(span, "a projection that pulls");
                 return None;
             }
             FnRet::Shuttle { yields, pulls } => {

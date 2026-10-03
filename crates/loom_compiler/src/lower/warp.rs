@@ -91,6 +91,7 @@ impl Lowerer<'_> {
     pub(super) fn is_place(&self, e: &hir::Expr) -> bool {
         match &e.kind {
             ExprKind::Local(_) => true,
+            ExprKind::Call { .. } if self.tables().lends.contains_key(&e.id) => true,
             _ if self.is_const(e) => true,
             ExprKind::Field { base, .. } | ExprKind::ConstField { base, .. } => self.is_place(base),
             ExprKind::Index { base, args } => {
@@ -262,6 +263,7 @@ impl Lowerer<'_> {
                 None => Expr::Name(self.local_name(*l)),
             },
             ExprKind::Index { base, args } => self.index(base, args),
+            ExprKind::Call { .. } if self.tables().lends.contains_key(&e.id) => self.lend_place(e),
             ExprKind::Field { base, .. } => {
                 let key = self.tables().fields.get(&e.id).map(|f| f.key.clone());
                 let base = if self.is_place(base) { self.lower_place(base) } else { self.lower_expr(base) };

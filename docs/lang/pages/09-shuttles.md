@@ -40,11 +40,18 @@ This push model suits lexers, protocol state machines and stream decoders: the c
 - Leaving a `for` loop over a generator early closes it: its `defer`s that it has reached run. One of them that unravels unravels in the loop.
 - A shuttle dropped part-way any other way (after `.take(3)`, say) runs the `defer`s it has reached on Treadle; on the Lua backend it's left to the garbage collector, and they don't run.
 - An unravel inside a shuttle closes it (running its `defer`s) and is raised again where it was driven.
-- Projections (`~> mut T`) aren't supported yet.
 
 ## Frames
 
 What a shuttle keeps between pauses is its **frame**, and its size is known while compiling: `fib.Frame.size` is how many bytes a shuttle made by `fib` keeps (24: two `u64`s and a state word), and `fib.Frame.align` its alignment. Locals that are never kept at the same pause share space. `examples/lexer.loom` checks its lexer's with `const assert(lexer.Frame.size <= 64)`.
+
+## Projections
+
+A **projection** is a shuttle that lends a place instead of yielding a value: `~> mut T` lends one to change, `~> ref T` one to read, with `yield mut place` (or `yield ref`). A call of one is that place, for the statement it's in:
+
+@sample shuttles_lend
+
+When the statement ends, the projection resumes, so the code after its `yield` (and its `defer`s) runs. One that ends without lending a place unravels, and so does one that lends a second. A projection can borrow its parameters (`mut self` here), and what it borrows stays borrowed until the statement ends ([M0104](diag:M0104)). What it lends can be read or changed, but not moved out ([M0103](diag:M0103)). A `for` loop over a projection that lends many places isn't supported yet.
 
 ## Where next
 

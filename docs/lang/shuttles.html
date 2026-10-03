@@ -169,9 +169,38 @@ sum: 10</code></pre></div>
 </div>
 <p>This push model suits lexers, protocol state machines and stream decoders: the caller keeps control of input, and the logic reads from top to bottom. <code>examples/lexer.loom</code> is one.</p>
 <h2 id="rules">Rules</h2>
-<ul><li><code>yield</code> in a shuttle that doesn't yield, or <code>pull</code> in one that doesn't pull, is <a href="diagnostics.html#T0120">T0120</a>. Neither can be inside a <code>defer</code> (<a href="diagnostics.html#T0118">T0118</a>).</li><li>A shuttle that calls itself is <a href="diagnostics.html#T0121">T0121</a>: its frame would contain itself.</li><li>A shuttle keeps its parameters as long as it lives. For now it only takes ones it owns: <code>take</code> parameters, and <code>Copy</code> ones, which it copies when it's made. A borrowed parameter is <a href="diagnostics.html#U0102">U0102</a>.</li><li>Leaving a <code>for</code> loop over a generator early closes it: its <code>defer</code>s that it has reached run. One of them that unravels unravels in the loop.</li><li>A shuttle dropped part-way any other way (after <code>.take(3)</code>, say) runs the <code>defer</code>s it has reached on Treadle; on the Lua backend it's left to the garbage collector, and they don't run.</li><li>An unravel inside a shuttle closes it (running its <code>defer</code>s) and is raised again where it was driven.</li><li>Projections (<code>~&gt; mut T</code>) aren't supported yet.</li></ul>
+<ul><li><code>yield</code> in a shuttle that doesn't yield, or <code>pull</code> in one that doesn't pull, is <a href="diagnostics.html#T0120">T0120</a>. Neither can be inside a <code>defer</code> (<a href="diagnostics.html#T0118">T0118</a>).</li><li>A shuttle that calls itself is <a href="diagnostics.html#T0121">T0121</a>: its frame would contain itself.</li><li>A shuttle keeps its parameters as long as it lives. For now it only takes ones it owns: <code>take</code> parameters, and <code>Copy</code> ones, which it copies when it's made. A borrowed parameter is <a href="diagnostics.html#U0102">U0102</a>.</li><li>Leaving a <code>for</code> loop over a generator early closes it: its <code>defer</code>s that it has reached run. One of them that unravels unravels in the loop.</li><li>A shuttle dropped part-way any other way (after <code>.take(3)</code>, say) runs the <code>defer</code>s it has reached on Treadle; on the Lua backend it's left to the garbage collector, and they don't run.</li><li>An unravel inside a shuttle closes it (running its <code>defer</code>s) and is raised again where it was driven.</li></ul>
 <h2 id="frames">Frames</h2>
 <p>What a shuttle keeps between pauses is its <strong>frame</strong>, and its size is known while compiling: <code>fib.Frame.size</code> is how many bytes a shuttle made by <code>fib</code> keeps (24: two <code>u64</code>s and a state word), and <code>fib.Frame.align</code> its alignment. Locals that are never kept at the same pause share space. <code>examples/lexer.loom</code> checks its lexer's with <code>const assert(lexer.Frame.size &lt;= 64)</code>.</p>
+<h2 id="projections">Projections</h2>
+<p>A <strong>projection</strong> is a shuttle that lends a place instead of yielding a value: <code>~&gt; mut T</code> lends one to change, <code>~&gt; ref T</code> one to read, with <code>yield mut place</code> (or <code>yield ref</code>). A call of one is that place, for the statement it's in:</p>
+<div class="sample" id="sample-shuttles_lend">
+<div class="sample-head"><span class="file">samples/shuttles_lend.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Grid</span> {
+    cells: <span class="t">List</span>[i32]
+    width: usize
+
+    <span class="c">// `~&gt; mut T` lends a place to change.</span>
+    <span class="k">fn</span> at(<span class="k">mut</span> <span class="k">self</span>, x: usize, y: usize) ~&gt; <span class="k">mut</span> i32 {
+        <span class="k">yield</span> <span class="k">mut</span> .cells[y * .width + x]
+        <span class="c">// Runs once the statement that used the place is done.</span>
+        print(<span class="s">"  ({</span>x<span class="s">}, {</span>y<span class="s">}) is {</span>.cells[y * .width + x]<span class="s">}"</span>)
+    }
+}
+
+<span class="k">fn</span> main() {
+    <span class="k">var</span> g = <span class="t">Grid</span>(cells: [<span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>], width: <span class="n">2</span>)
+    g.at(<span class="n">1</span>, <span class="n">0</span>) = <span class="n">5</span>
+    g.at(<span class="n">1</span>, <span class="n">0</span>) += <span class="n">1</span>
+    print(g.cells)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>  (1, 0) is 5
+  (1, 0) is 6
+[0, 6, 0, 0]</code></pre></div>
+</div>
+<p>When the statement ends, the projection resumes, so the code after its <code>yield</code> (and its <code>defer</code>s) runs. One that ends without lending a place unravels, and so does one that lends a second. A projection can borrow its parameters (<code>mut self</code> here), and what it borrows stays borrowed until the statement ends (<a href="diagnostics.html#M0104">M0104</a>). What it lends can be read or changed, but not moved out (<a href="diagnostics.html#M0103">M0103</a>). A <code>for</code> loop over a projection that lends many places isn't supported yet.</p>
 <h2 id="where-next">Where next</h2>
 <p><a href="compile-time.html">Compile-time code</a> runs ordinary Loom while the program compiles.</p>
 <div class="pager">

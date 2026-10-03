@@ -274,6 +274,9 @@ impl Lowerer<'_> {
     pub(super) fn lower_raw(&mut self, e: &hir::Expr) -> Expr {
         let span = e.span;
         let ty = self.ty_of(e);
+        if self.tables().lends.contains_key(&e.id) {
+            return self.lend_place(e);
+        }
         if let Some(v) = self.warp_value(e) {
             return v;
         }
@@ -365,6 +368,19 @@ impl Lowerer<'_> {
                     TyKind::Gauge(def, base) => self.gauge_cast(expr, *kind, def, base, span),
                     _ => self.cast(expr, *kind, ty),
                 }
+            }
+            // A projection's: the place, as its table and its key.
+            ExprKind::Yield { place: Some(_), value } => {
+                let (t, k) = match self.lower_place(value) {
+                    Expr::Index(t, k) => (*t, *k),
+                    Expr::Field(t, name) => (*t, Expr::Str(name.into_bytes())),
+                    _ => {
+                        self.unsupported(value.span, "lending a local's own place (on the Lua backend)");
+                        return Expr::Nil;
+                    }
+                };
+                self.push(StmtKind::Call(Expr::rt("out", vec![Expr::Table(vec![t, k])])));
+                Expr::Nil
             }
             // In a shuttle's body, which runs as a coroutine.
             ExprKind::Yield { value, .. } => {
@@ -999,6 +1015,12 @@ impl Lowerer<'_> {
                 _ => {}
             },
             Dest::Assign(t) => self.push(StmtKind::Assign(vec![Expr::name(t)], vec![v])),
+            // What projections lent is done with once the value is read.
+            Dest::Return if !self.lend_ends.is_empty() => {
+                let t = self.spill_always(v);
+                self.finish_lends(0);
+                self.push(StmtKind::Return(Some(t)));
+            }
             Dest::Return => self.push(StmtKind::Return(Some(v))),
         }
     }
@@ -1114,13 +1136,39 @@ impl Lowerer<'_> {
             HirStmt::Expr(tail) if !matches!(tail.kind, ExprKind::Assign { .. }) => {
                 self.span = Some(last.span);
                 let discard = self.tables().coercions.get(&tail.id) == Some(&Coercion::Discard);
+                let lent = self.lend_ends.len();
                 self.lower_into(tail, if discard { &Dest::Discard } else { dest });
+                self.finish_lends(lent);
             }
             _ => self.stmt(last),
         }
     }
 
     fn stmt(&mut self, stmt: &hir::Stmt) {
+        let lent = self.lend_ends.len();
+        self.stmt_inner(stmt);
+        self.finish_lends(lent);
+    }
+
+    /// Resumes the projections that lent places since `from` to their
+    /// ends: their statements are done.
+    pub(super) fn finish_lends(&mut self, from: usize) {
+        for r in self.lend_ends.split_off(from).into_iter().rev() {
+            self.push(StmtKind::Call(Expr::rt("lend_end", vec![r])));
+        }
+    }
+
+    /// A call of a projection (`g.at(1, 2)`): the place it lends, `t[k]`
+    /// with the table and the key it yielded, until the statement ends.
+    pub(super) fn lend_place(&mut self, e: &hir::Expr) -> Expr {
+        let ExprKind::Call { callee, args } = &e.kind else { return Expr::Nil };
+        let sh = self.call(e, callee, args);
+        let r = self.spill_always(Expr::rt("lend", vec![sh]));
+        self.lend_ends.push(r.clone());
+        Expr::index(Expr::index(r.clone(), Expr::Int(1)), Expr::index(r, Expr::Int(2)))
+    }
+
+    fn stmt_inner(&mut self, stmt: &hir::Stmt) {
         self.span = Some(stmt.span);
         match &stmt.kind {
             HirStmt::Let { pat, init, .. } => {
@@ -1474,6 +1522,16 @@ impl Lowerer<'_> {
             && let [hir::GenericArg::Expr(key)] = args.as_slice()
         {
             return self.map_assign(base, key, k, v, op, value, target.span);
+        }
+        if self.tables().lends.contains_key(&target.id) {
+            let v = if op == AssignOp::Assign { self.lower_owned(value) } else { self.lower_expr(value) };
+            let place = self.lower_place(target);
+            let result = match op {
+                AssignOp::Assign => v,
+                AssignOp::Compound(bin) => self.apply(bin, place.clone(), v, self.ty_of(target), target.span),
+            };
+            self.push(StmtKind::Assign(vec![place], vec![result]));
+            return;
         }
         match (&target.kind, op) {
             (ExprKind::Local(local), AssignOp::Assign) if self.overwrites(*local) => {

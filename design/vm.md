@@ -1015,9 +1015,17 @@ erased form D5 describes (see below).
   it's made) and builds the common case, a generator in a `for` loop, in
   place with no frame at all. Inline frames come with V8, measured against
   the allocation they save.
-- **Projections** (`~> mut T`, `~> ref T`) yield an address. The caller uses
-  the place until the end of the statement, then steps once more. The
-  optimizer inlines them where it can (§7, pass 9).
+- **Projections** (`~> mut T`, `~> ref T`) are shuttles that yield the
+  address of a place. A call of one makes it and steps it once: the place it
+  lends is what the call is, for the rest of the statement (read, assigned,
+  changed in place, called a `mut` method on). When the statement ends, it's
+  stepped to its end, so the code after its `yield` runs; one that ends
+  without lending a place, or lends a second, unravels. Unwinding, it's
+  closed instead. A projection may borrow its parameters (it lives for one
+  statement of its caller's), so the frame keeps a borrowed one's address,
+  and what it borrows stays borrowed until the statement ends (M0104). The
+  optimizer inlines them where it can (§7, pass 9). A `for` loop over one
+  that lends many places, and `xs[i]` through an `Index` weave, come later.
 
 ### 10.15 Tests
 
@@ -1148,7 +1156,7 @@ On Treadle:
 | # | What | Treadle | Lua backend |
 |---|---|---|---|
 | P1 | writes to a `mut` argument when the callee unravels (D6) | visible | lost: copy-out happens on return only. Allowed to differ |
-| P2 | dropping a suspended shuttle (D7) | runs the `defer`s it has reached | left to the garbage collector. Allowed to differ |
+| P2 | dropping a suspended shuttle (D7), or a projection whose statement unravels | runs the `defer`s it has reached | left to the garbage collector. Allowed to differ |
 | P3 | a `defer` that unravels while a generator is being closed (the review's V5) | unravels in whoever closed it | fixed to match |
 | P4 | `x.hash()` values (D8) | Treadle's own hash | FNV-1a of the debug text. Allowed to differ |
 | P5 | formatting numbers (the review's F2–F4) | one table of cases, Rust's formatting where the spec is silent | fixed to match |

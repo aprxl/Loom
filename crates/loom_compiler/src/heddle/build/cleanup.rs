@@ -54,6 +54,10 @@ pub(super) enum CleanupKind<'a> {
     /// Frees the `size` bytes, aligned to 8, at this address: a stream's
     /// box (see `stream.rs`).
     Free { at: Value, size: u64 },
+    /// Finishes the projection (a shuttle of type `ty`) in slot `slot`,
+    /// which lent a place for the statement, then drops it; unwinding, it
+    /// only drops it (see `shuttle.rs`).
+    Lend { slot: u32, ty: Ty },
 }
 
 #[derive(Clone, Debug)]
@@ -281,6 +285,7 @@ impl<'a> Builder<'a> {
                 self.emit(InstKind::Life { slot: *n, end: true }, &[]);
             }
             CleanupKind::FreeShuttle(b) => self.free_shuttle_box(*b),
+            CleanupKind::Lend { slot, ty } => self.finish_lend(*slot, *ty),
             CleanupKind::Free { at, size } => {
                 let (n, a) = (self.iconst(*size), self.iconst(8));
                 self.emit(InstKind::Native { name: "mem.free", imm: 0, args: vec![*at, n, a] }, &[]);

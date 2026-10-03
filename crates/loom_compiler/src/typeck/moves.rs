@@ -114,6 +114,9 @@ enum Root {
 #[derive(Default)]
 struct MoveCx {
     flow: Flow,
+    /// What projections called in the statement being gone through
+    /// borrow until it ends: each local, how, and where.
+    lent: Vec<(LocalId, ParamMode, Span)>,
     borrowed: HashMap<LocalId, Borrow>,
     /// Locals a pattern bound to part of a place: moving one moves out of
     /// that place's variable.
@@ -197,6 +200,17 @@ impl Checker<'_> {
         // gets the value itself, so nothing is read or moved.
         if self.b.const_values.contains_key(&e.id) {
             return;
+        }
+        // What a projection lends is someone else's: it can be read or
+        // changed, but not taken.
+        if owning && self.lent(e) && !self.is_copy_expr(e) {
+            self.report(
+                cx,
+                Diagnostic::error(codes::M0103, "can't move a value out of what a projection lends")
+                    .primary(e.span, "this would take it out of its place")
+                    .help("copy it (`x.copy()`)"),
+            );
+            return self.mv(cx, e, false);
         }
         match &e.kind {
             ExprKind::Local(_) | ExprKind::LeadingDot(_) => self.mv_place(cx, e, owning),
@@ -461,6 +475,8 @@ impl Checker<'_> {
                     self.check_escape(cx, value, Escape::Stored);
                 }
             }
+            // A projection lends the place: it's used, not moved.
+            ExprKind::Yield { place: Some(_), value } => self.mv(cx, value, false),
             ExprKind::Yield { value, .. } => {
                 self.mv(cx, value, true);
                 self.check_escape(cx, value, Escape::Out);
@@ -495,6 +511,12 @@ impl Checker<'_> {
     }
 
     fn mv_stmt(&mut self, cx: &mut MoveCx, stmt: &crate::hir::Stmt, owning: bool) {
+        let lent = cx.lent.len();
+        self.mv_stmt_inner(cx, stmt, owning);
+        cx.lent.truncate(lent);
+    }
+
+    fn mv_stmt_inner(&mut self, cx: &mut MoveCx, stmt: &crate::hir::Stmt, owning: bool) {
         match &stmt.kind {
             HirStmt::Let { pat, init, .. } => {
                 self.mv(cx, init, true);
@@ -669,6 +691,34 @@ impl Checker<'_> {
                 self.changes(cx, *l, *span);
             }
         }
+        // A projection keeps what it borrows until the statement ends: the
+        // place it lent may be inside it.
+        for (root, _, mode, span, _) in &places {
+            let Root::Local(l) = root else { continue };
+            let earlier = cx.lent.iter().find(|(o, m, _)| o == l && (*m == ParamMode::Mut || *mode == ParamMode::Mut));
+            if let Some(&(_, _, at)) = earlier {
+                let name = self.p.local(*l).name.clone();
+                self.report(
+                    cx,
+                    Diagnostic::error(
+                        codes::M0104,
+                        format!("`{name}` is lent to a projection for this whole statement"),
+                    )
+                    .primary(*span, "used here again")
+                    .secondary(at, "a projection borrows it here")
+                    .help("use what the projection lends in a statement of its own"),
+                );
+            }
+        }
+        if self.b.lends.contains_key(&call.id) {
+            for (root, _, mode, span, _) in &places {
+                if let Root::Local(l) = root
+                    && *mode != ParamMode::Take
+                {
+                    cx.lent.push((*l, *mode, *span));
+                }
+            }
+        }
         for (i, (ra, pa, ma, sa, share_a)) in places.iter().enumerate() {
             for (rb, pb, mb, sb, share_b) in &places[i + 1..] {
                 let (Root::Local(a), Root::Local(b)) = (ra, rb) else { continue };
@@ -695,6 +745,17 @@ impl Checker<'_> {
                     .help("a `mut` argument must be the only way the call reaches that value"),
                 );
             }
+        }
+    }
+
+    /// Whether `e` is a place a projection lends, or part of one.
+    fn lent(&self, e: &Expr) -> bool {
+        match &e.kind {
+            ExprKind::Call { .. } => self.b.lends.contains_key(&e.id),
+            ExprKind::Field { base, .. } | ExprKind::Index { base, .. } | ExprKind::ConstField { base, .. } => {
+                self.lent(base)
+            }
+            _ => false,
         }
     }
 

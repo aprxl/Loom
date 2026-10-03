@@ -287,6 +287,7 @@ impl Scanner<'_, '_> {
                 return;
             }
             ExprKind::Call { callee, args } => self.call(e, callee, args),
+            ExprKind::Yield { place: Some(_), value } => self.needs_address(value),
             ExprKind::DotBlock { subject, .. } if self.tables().dot_blocks.get(&e.id) == Some(&true) => {
                 self.needs_address(subject);
             }

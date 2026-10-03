@@ -341,7 +341,7 @@ end of iteration 2</code></pre></div>
 </div>
 <p>A <strong>fallback defer</strong>, <code>defer tx =&gt; tx.rollback()</code>, names a <code>once</code> value and runs only on exits where that value is still live. It's how the <code>transfer</code> function above rolls back on an early exit without doing it after a commit. Giving <code>tx</code> a new value re-arms it.</p>
 <h2 id="not-supported-yet">Not supported yet</h2>
-<p><code>ref warp</code>, projections (<code>~&gt; mut T</code>), spools and region pointers, and <code>given</code> all belong to this part of the design and stop with <a href="diagnostics.html#U0102">U0102</a>. See <a href="not-yet.html">Not supported yet</a>.</p>
+<p><code>ref warp</code>, spools and region pointers, and <code>given</code> all belong to this part of the design and stop with <a href="diagnostics.html#U0102">U0102</a>. Projections (<code>~&gt; mut T</code>), which lend a place, work: see <a href="shuttles.html">Shuttles</a>. See <a href="not-yet.html">Not supported yet</a>.</p>
 <h2 id="where-next">Where next</h2>
 <p><a href="gauges.html">Gauges</a> restrict a number to a range.</p>
 <div class="pager">

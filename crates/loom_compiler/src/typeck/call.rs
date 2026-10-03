@@ -274,6 +274,14 @@ impl Checker<'_> {
             self.pending.push(pending);
         }
         self.solve_projections();
+        // A projection's call is the place it lends.
+        if let Some(mode) = self.lends(def) {
+            self.b.lends.insert(call.id, mode);
+            return match self.shuttle_parts(sig.ret) {
+                Some((t, _)) => self.deep_resolve(t),
+                None => self.tcx.error,
+            };
+        }
         // `zeros(4)` is a `[f32; 4]` now that its argument said what `n` is.
         self.deep_resolve(sig.ret)
     }
@@ -838,6 +846,9 @@ impl Checker<'_> {
     /// `Some(changeable)` if `e` is a place (a variable, or a field of one),
     /// `None` if it's a value.
     pub(super) fn place(&self, e: &Expr) -> Option<bool> {
+        if let Some(&mode) = self.b.lends.get(&e.id) {
+            return Some(mode == super::PlaceMode::Mut);
+        }
         match &e.kind {
             ExprKind::Local(l) => Some(self.p.local(*l).mutable),
             ExprKind::Field { base, .. } | ExprKind::Index { base, .. } | ExprKind::ConstField { base, .. } => {

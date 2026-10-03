@@ -672,7 +672,12 @@ impl Gen {
                     }
                     Ty::Rec => {
                         let a = self.a;
-                        format!("{pad}{}.a = {}\n", v.name, self.int_expr(a, 2))
+                        // Through the projection that lends `a`, or directly.
+                        match self.rng.below(4) {
+                            0 => format!("{pad}lend_a(mut {}) = {}\n", v.name, self.int_expr(a, 2)),
+                            1 => format!("{pad}lend_a(mut {}) +%= {}\n", v.name, self.int_expr(a, 1)),
+                            _ => format!("{pad}{}.a = {}\n", v.name, self.int_expr(a, 2)),
+                        }
                     }
                     Ty::List(i) => {
                         if self.rng.chance(50) {
@@ -1044,7 +1049,7 @@ impl Gen {
     fn program(&mut self) -> (String, Vec<String>, String) {
         let (a, b) = (self.a.name(), self.b.name());
         let mut head = format!(
-            "use std.io.print\n\nwarp R {{\n    a: {a}\n    b: {b}\n    f: f64\n}}\n\nwarp S {{\n    case P(x: {a})\n    case Q\n    case W(y: {b}, z: bool)\n}}\n\nwarp E: Error, Show {{\n    case Bad(i64)\n    case Worse\n}}\n\n"
+            "use std.io.print\n\nwarp R {{\n    a: {a}\n    b: {b}\n    f: f64\n}}\n\nwarp S {{\n    case P(x: {a})\n    case Q\n    case W(y: {b}, z: bool)\n}}\n\nwarp E: Error, Show {{\n    case Bad(i64)\n    case Worse\n}}\n\nfn lend_a(mut r: R) ~> mut {a} {{\n    yield mut r.a\n    print(\"lent a: {{r.a}}\")\n}}\n\n"
         );
         for _ in 0..1 + self.rng.below(4) {
             head.push_str(&self.func());
@@ -1226,6 +1231,7 @@ fn the_generator_covers_its_kinds() {
         ("a generator held, then gone through", "let g_"),
         ("a generator taken from", ".take("),
         ("a push", ".push(v_"),
+        ("a projection", "lend_a(mut "),
     ] {
         assert!(text.matches(needle).count() >= 10, "{what}: {} in 300 programs", text.matches(needle).count());
     }

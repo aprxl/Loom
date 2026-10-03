@@ -1,0 +1,15 @@
+// A projection lends one place: one that yields again, when it's resumed
+// after its statement, unravels there.
+
+use std.io.print
+
+fn both(mut xs: List[i32]) ~> mut i32 {
+    yield mut xs[0]
+    yield mut xs[1]
+}
+
+fn main() {
+    var xs: List[i32] = [1, 2]
+    both(mut xs) = 5
+    print(xs)
+}

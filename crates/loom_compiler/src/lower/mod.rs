@@ -219,6 +219,9 @@ struct Lowerer<'a> {
     /// What `f.Frame.size` and `f.Frame.align` say (see `heddle::frames`),
     /// once one is lowered.
     frames: Option<HashMap<BodyId, (u64, u64)>>,
+    /// The places projections lent in the statements being lowered: each
+    /// is finished (`rt.lend_end`) when its statement is.
+    lend_ends: Vec<Expr>,
 }
 
 impl<'a> Lowerer<'a> {
@@ -250,6 +253,7 @@ impl<'a> Lowerer<'a> {
             gauges_used: IndexSet::new(),
             reported: HashSet::new(),
             frames: None,
+            lend_ends: Vec::new(),
         }
     }
 

@@ -224,7 +224,7 @@ impl<'a> Builder<'a> {
     }
 
     /// The slot `ptr` is the address of, if it's one.
-    fn slot_of(&self, ptr: Value) -> Option<u32> {
+    pub(super) fn slot_of(&self, ptr: Value) -> Option<u32> {
         self.f.slot_of.get(&ptr).copied()
     }
 

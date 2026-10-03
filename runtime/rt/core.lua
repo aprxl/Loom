@@ -1411,6 +1411,21 @@ local function resume(sh, ...)
   return "pull"
 end
 
+-- A projection lends one place for a statement: run to its first `yield`,
+-- which gives the place as `{table, key}`, and on to its end once the
+-- statement is done.
+function rt.lend(sh)
+  local what, place = resume(sh)
+  if what ~= "out" then error(MARK .. "a projection ended without lending a place", 2) end
+  place.sh = sh
+  return place
+end
+
+function rt.lend_end(place)
+  if place.sh.done then return end
+  if resume(place.sh) == "out" then error(MARK .. "a projection lent more than one place", 2) end
+end
+
 -- The next item of burst `b`: `true, item`, or nothing once it's over.
 local function burst_next(b)
   local sh = b.sh
