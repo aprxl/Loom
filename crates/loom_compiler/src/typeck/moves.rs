@@ -321,7 +321,14 @@ impl Checker<'_> {
                 let locked = cx.locked.len();
                 cx.locked.extend(over.into_iter().map(|l| (l, iter.span)));
                 cx.loops.push((e.id, cx.scopes.len()));
-                self.mv_loop(cx, |this, cx| this.mv_block(cx, body, false));
+                self.mv_loop(cx, |this, cx| {
+                    // Each iteration binds the pattern anew: what the last
+                    // one moved out of it is gone with it.
+                    for local in pat_locals(pat) {
+                        fresh(cx, local);
+                    }
+                    this.mv_block(cx, body, false)
+                });
                 cx.loops.pop();
                 cx.locked.truncate(locked);
             }

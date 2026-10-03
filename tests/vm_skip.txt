@@ -5,6 +5,7 @@
 
 const_eval           V2  shuttles
 
+loop_item_moves      V2  shuttles
 shuttles             V2  shuttles, streams
 unravel_closed       V2  shuttles
 unravel_shuttle      V2  shuttles

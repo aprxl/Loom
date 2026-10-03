@@ -1,0 +1,34 @@
+// A `for` loop's item is its own, each iteration, when what it goes over
+// hands out values (a stream, a generator, a burst): the body can move it.
+// (A list's items are borrowed: moving one is M0102, in tests/fail.)
+
+use std.io.print
+
+fn eat(take s: String) {
+    print("ate {s}")
+}
+
+fn names() ~> String {
+    yield "ada"
+    yield "bob"
+}
+
+fn echo() ~> String <~ String {
+    while pull is some(s) {
+        yield s
+    }
+}
+
+fn main() {
+    for s in ["x", "y"].map(c => c.to_string()) {
+        eat(s)
+    }
+    for s in names() {
+        eat(s)
+    }
+    var e = echo()
+    for s in e.push("pushed") {
+        eat(s)
+    }
+    e.close().drain()
+}
