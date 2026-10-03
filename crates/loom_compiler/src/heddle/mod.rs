@@ -134,7 +134,7 @@ pub enum FOp {
     Rem,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum InstKind {
     /// A value nothing reads before something else is written (a variable
     /// read on a path where it has no value, which typing rules out).

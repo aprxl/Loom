@@ -1,0 +1,29 @@
+// passes: gvn
+// fns: square_sum, fields
+//
+// `x * x` is computed once; the second `p.a` is the value loaded first,
+// and a field stored is the value stored, but not past a store that may
+// change it.
+use std.io.print
+
+warp P { a: i64, b: i64 }
+
+fn square_sum(x: f64, y: f64) -> f64 {
+    let s = x * x + y * y
+    s + x * x
+}
+
+fn fields(mut p: P, mut q: P) -> i64 {
+    let one = p.a + p.a
+    p.b = 7
+    let two = p.b + p.a
+    q.a = 1
+    one + two + p.a
+}
+
+fn main() {
+    var p = P(a: 1, b: 2)
+    var q = P(a: 3, b: 4)
+    print(square_sum(1.0, 2.0))
+    print(fields(mut p, mut q))
+}

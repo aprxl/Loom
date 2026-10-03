@@ -1,0 +1,3 @@
+cargo:rustc-env=LOOM_VM_RUSTFLAGS=-C llvm-args=-tail-dup-pred-size=1000 -C llvm-args=-tail-dup-succ-size=1000
+cargo:rerun-if-env-changed=CARGO_ENCODED_RUSTFLAGS
+cargo:rerun-if-changed=build.rs

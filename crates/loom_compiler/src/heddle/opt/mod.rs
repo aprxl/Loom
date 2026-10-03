@@ -6,6 +6,9 @@
 //! default, runs the passes in order. Each pass keeps what Heddle promises
 //! (`verify`), which the optimizer's tests check after every pass.
 
+mod alias;
+mod cfg;
+mod gvn;
 mod inline;
 mod tidy;
 
@@ -25,7 +28,7 @@ pub enum Level {
 type Pass = (&'static str, fn(&mut Module));
 
 /// The passes `-O2` runs, in order.
-const PASSES: &[Pass] = &[("inline", inline::inline), ("cleanup", tidy::cleanup)];
+const PASSES: &[Pass] = &[("inline", inline::inline), ("gvn", gvn::gvn), ("cleanup", tidy::cleanup)];
 
 /// The names of the passes, in the order `-O2` runs them.
 pub fn passes() -> impl Iterator<Item = &'static str> {
@@ -37,7 +40,12 @@ pub fn passes() -> impl Iterator<Item = &'static str> {
 pub fn optimize(module: Module, level: Level) -> Result<Module, String> {
     match level {
         Level::O0 => Ok(module),
-        Level::O2 => run(module, &passes().collect::<Vec<_>>()),
+        // `LOOM_PASSES=inline,cleanup` runs only those (to see what one
+        // does).
+        Level::O2 => match std::env::var("LOOM_PASSES") {
+            Ok(names) => run(module, &names.split(',').filter(|n| !n.is_empty()).collect::<Vec<_>>()),
+            Err(_) => run(module, &passes().collect::<Vec<_>>()),
+        },
     }
 }
 

@@ -2,15 +2,15 @@
 # size: name, size, count. crates/loom/tests/bench_counts.rs checks them
 # (with `--features vm-stats`); LOOM_BLESS=1 writes them anew.
 fib          20     109461
-mandelbrot   40     986045
+mandelbrot   40     858523
 sieve        100000 1901120
-spectral_norm 40     1102307
+spectral_norm 40     1038307
 fannkuch     7      954901
 binary_trees 8      1734985
-richards     10000  603819
-word_freq    40000  2215687
-sort         20000  7636954
+richards     10000  597397
+word_freq    40000  2214820
+sort         20000  7190091
 streams      30000  10050900
-chip8        30000  1065336
-maps         20000  5495634
-lexer        500    6950021
+chip8        30000  1041356
+maps         20000  5415601
+lexer        500    6904017
