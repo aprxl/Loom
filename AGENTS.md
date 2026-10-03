@@ -161,9 +161,17 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
     generator (`crates/loom/tests/gen.rs`) runs random programs on both
     backends: 300 seeds in `cargo test`, 20 000 with `--ignored`.
 
-Next: Treadle V2, shuttles (design/vm.md §17). Then V3 the optimizer, V4
-compile-time code on Treadle, V5 threads, V6 spools, V7 Lua interop, V8
-speed, V9 Treadle by default.
+24. Treadle V2: shuttles (design/vm.md §10.14). Each shuttle body is a step
+    function the frame pass (`heddle/frame.rs`) lays out; `f.Frame.size`
+    on both backends (40 bytes for `examples/lexer.loom`'s lexer); bursts,
+    `close`, dropping runs the `defer`s reached (P2); a generator a `for`
+    loop calls is built in place; and projections (`~> mut T`, `~> ref T`)
+    on both backends. `tests/vm_skip.txt` is empty. Held shuttles keep
+    their frames in boxes: D5's inline frames are V8's.
+
+Next: Treadle V3, the optimizer (design/vm.md §17). Then V4 compile-time
+code on Treadle, V5 threads, V6 spools, V7 Lua interop, V8 speed, V9
+Treadle by default.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and

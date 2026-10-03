@@ -1,10 +1,10 @@
 # Treadle: Loom's own VM
 
-> **Status: V1 is built** (2026-10-02): the sequential language, everything
-> that runs on Lua but shuttles and compile-time code, runs on Treadle
-> (`loom run --backend vm file.loom`), 1.65× as fast as PUC Lua 5.4 on
-> `bench/` (geomean, nothing below 0.85×). V2, shuttles, is next. The
-> decisions in [section 3](#3-decisions) were settled on 2026-09-29.
+> **Status: V2 is built** (2026-10-03): everything that runs on Lua but
+> compile-time code runs on Treadle (`loom run --backend vm file.loom`),
+> shuttles and projections included, 1.70× as fast as PUC Lua 5.4 on
+> `bench/` (geomean). V3, the optimizer, is next. The decisions in
+> [section 3](#3-decisions) were settled on 2026-09-29.
 
 Loom runs today by compiling to Lua 5.4 (see [lua-backend](lua-backend.md)).
 That backend exists to get the whole language running with the right
@@ -1397,6 +1397,20 @@ Passing:
    or finished.
 7. Speed: `for x in gen()` costs at most 2× `for x in 0..n` per item on a
    trivial body, and the `lexer` benchmark is recorded.
+
+Met on 2026-10-03, but for D5's inline frames, which move to V8 (§10.14):
+every held shuttle has its frame in a box, so no pointer into one needs
+rebasing. `vm_skip.txt` is empty. Shuttle bodies are step functions laid
+out by the frame pass, a generator a `for` loop calls is built in place
+(0.21 s for 50M items, where `for x in 0..n` takes 0.33 s), and the lexer
+benchmark runs 5.9× as fast as PUC Lua, with Lua's coroutine per char
+(`bench/RESULTS.md`). The program generator writes generators and duplex
+shuttles, and 20 000 seeds agree on the checked build. On the way: a loop's
+back edge lost its landing pad when an `if` ended it (Ctrl-C skipped the
+`defer`s), a constant slice viewed its init's temporaries, the move checker
+bound a `for` loop's own items once for all iterations, and on Lua a
+`defer` that unravelled while a loop closed its generator was swallowed (P3)
+and `close` handed `none` to the burst before it.
 
 ### V3: the optimizer (about 8k)
 
