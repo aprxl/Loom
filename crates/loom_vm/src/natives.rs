@@ -7,7 +7,7 @@
 use std::io::{IsTerminal as _, Write as _};
 
 use loom_isa::natives::native;
-use loom_isa::{FmtItem, Image};
+use loom_isa::{FmtItem, Image, Op};
 use loom_sys::Output;
 
 use crate::Trap;
@@ -56,6 +56,8 @@ pub(crate) struct Ctx<'i> {
     pub data_range: (u64, u64),
     /// How many instructions have been dispatched (with `stats`).
     pub dispatched: u64,
+    /// How many of each op, by opcode (with `stats`; empty otherwise).
+    pub op_counts: Vec<u64>,
 }
 
 /// How much output is kept before it's written.
@@ -92,6 +94,7 @@ impl<'i> Ctx<'i> {
             stack: std::ptr::null(),
             data_range: (0, 0),
             dispatched: 0,
+            op_counts: if cfg!(feature = "stats") { vec![0; Op::ALL.len()] } else { Vec::new() },
         }
     }
 

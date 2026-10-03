@@ -185,6 +185,21 @@ impl<'i> Vm<'i> {
         cfg!(feature = "stats").then_some(self.machine.ctx.dispatched)
     }
 
+    /// How many times each op was dispatched, the ones that were, most
+    /// first; `None` unless Treadle is built with the `stats` feature.
+    pub fn op_counts(&self) -> Option<Vec<(loom_isa::Op, u64)>> {
+        cfg!(feature = "stats").then(|| {
+            let mut out: Vec<(loom_isa::Op, u64)> = loom_isa::Op::ALL
+                .iter()
+                .zip(&self.machine.ctx.op_counts)
+                .filter(|(_, n)| **n > 0)
+                .map(|(op, n)| (*op, *n))
+                .collect();
+            out.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.name().cmp(b.0.name())));
+            out
+        })
+    }
+
     /// Calls function `func` with `args`, one register each, and gives its
     /// results; or how it ended when it didn't return. Output is flushed
     /// before this returns.

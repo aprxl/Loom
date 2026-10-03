@@ -228,6 +228,7 @@ impl<'i> Machine<'i> {
             pc = unsafe { pc.add(1) };
             if cfg!(feature = "stats") {
                 env.ctx.dispatched += 1;
+                env.ctx.op_counts[usize::from(w as u16)] += 1;
             }
             let op = if cfg!(feature = "checked") {
                 Op::from_u16(w as u16).expect("the verifier checked every opcode")

@@ -392,6 +392,15 @@ fn run_vm(path: &Path, args: &[String], color: ColorMode) -> ExitCode {
                 let outcome = vm.ended(result);
                 trace = vm.backtrace().to_vec();
                 gap = vm.backtrace_gap();
+                // A stats build's op histogram (`LOOM_STATS=1`).
+                if let (Some(counts), Some(total)) = (vm.op_counts(), vm.dispatched())
+                    && std::env::var_os("LOOM_STATS").is_some_and(|v| v == "1")
+                {
+                    eprintln!("{total} instructions dispatched");
+                    for (op, n) in counts {
+                        eprintln!("{n:>14}  {:5.1}%  {}", 100.0 * n as f64 / total.max(1) as f64, op.name());
+                    }
+                }
                 outcome
             }
             (None, _) => Outcome::Crash { message: "the image has no entry function".into(), location: None },
