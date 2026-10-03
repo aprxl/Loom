@@ -1,0 +1,22 @@
+running 3 tests
+test breaks_while_showing ... FAILED
+test fails_cleanly ... FAILED
+test still_fine ... ok
+
+failures:
+
+---- breaks_while_showing ----
+unravel: inner 1
+  --> tests/test/clean_state.loom:9:9
+  |
+9 |         unravel("inner {self.n}")
+  |         ^
+
+---- fails_cleanly ----
+unravel: second 2
+  --> tests/test/clean_state.loom:18:5
+   |
+18 |     assert(1 == 2, "second {2}")
+   |     ^
+
+test result: FAILED. 1 passed; 2 failed

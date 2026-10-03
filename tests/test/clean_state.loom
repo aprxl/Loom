@@ -1,0 +1,21 @@
+// One test that unravels while its message is half built must not leak into
+// the next test's message (Treadle runs them on one machine).
+
+warp Bomb { n: i32 }
+
+weave Show into Bomb {
+    fn show(self, mut f: Fmt) {
+        f.put("bomb ")
+        unravel("inner {self.n}")
+    }
+}
+
+test breaks_while_showing() {
+    unravel("outer {Bomb(1)}")
+}
+
+test fails_cleanly() {
+    assert(1 == 2, "second {2}")
+}
+
+test still_fine() = assert(true)

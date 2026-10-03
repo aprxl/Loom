@@ -1,0 +1,21 @@
+// A hand-written `show` that itself unravels, reached while a message is
+// being built: the message is the inner one alone (not the half-built text
+// of the outer, with the inner's after it).
+
+use std.io.print
+
+warp Bomb { n: i32 }
+
+weave Show into Bomb {
+    fn show(self, mut f: Fmt) {
+        f.put("bomb ")
+        if self.n > 0 { unravel("inner {self.n}") }
+        f.put(self.n)
+    }
+}
+
+fn main() {
+    print("fine: {Bomb(0)}")
+    let b = Bomb(7)
+    unravel("outer {b}")
+}

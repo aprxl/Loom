@@ -50,6 +50,14 @@ impl<'a> Builder<'a> {
         Sink(self.iconst(handle))
     }
 
+    /// The sink of the message being built, which starts empty: building it
+    /// can run the program's code (a hand-written `show`), which may unravel
+    /// with a message of its own.
+    pub(super) fn msg_sink(&mut self) -> Sink {
+        self.emit(InstKind::Native { name: "msg.begin", imm: 0, args: Vec::new() }, &[]);
+        self.sink(MSG)
+    }
+
     /// A call of an `extern "lua"` function of std.
     pub(super) fn extern_call(&mut self, def: DefId, info: &Call, args: &'a [hir::Arg], span: Span) -> Option<Val> {
         let path = self.p.def_path(def);
@@ -323,7 +331,7 @@ impl<'a> Builder<'a> {
     /// Unravels with a message the runtime would write: text, and `usize`
     /// values.
     pub(super) fn unravel_msg(&mut self, pieces: &[Msg], span: Span) -> Option<()> {
-        let msg = self.sink(MSG);
+        let msg = self.msg_sink();
         let usize = self.tcx().usize;
         for piece in pieces {
             match *piece {
@@ -345,7 +353,7 @@ impl<'a> Builder<'a> {
             self.terminate(Term::Unravel { ptr, len });
             return Some(());
         }
-        let msg = self.sink(MSG);
+        let msg = self.msg_sink();
         self.write_pieces(msg, pieces)?;
         self.terminate(Term::UnravelMsg);
         Some(())

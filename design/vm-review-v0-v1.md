@@ -196,12 +196,16 @@ harmless today; will matter when a test timeout or threads (V5) arrive.
 `Env.stopping` also resets per `execute` while the interrupt flag stays set,
 so a second `call` after an interrupt would be interrupted again.
 
+*Fixed: Each call starts with an empty message and no half-built buffers (Ctx::reset_sinks)*
+
 **M12. Message buffer reentrancy.** *Unsure.* `msg` (sink 1) is one global
 `Vec`. A template being built into an unravel message whose argument
 unravels (or another message build begins) leaves stale text that the next
 `unravel` appends to. Check whether the compiler always evaluates the
 arguments into registers before the first `msg.*` call; if so, say so in the
 code.
+
+*Fixed: Reproduced (a hand-written show that unravels while a message is built gave outer + inner text); every message build now starts with msg.begin, so the inner one stands alone as on Lua (fixture unravel_in_show)*
 
 ### L
 

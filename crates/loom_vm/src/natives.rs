@@ -101,6 +101,16 @@ impl<'i> Ctx<'i> {
         asked
     }
 
+    /// Forgets what a call that ended early (an unravel) left unfinished:
+    /// the message and the buffers being built, for the next call to start
+    /// clean.
+    pub fn reset_sinks(&mut self) {
+        self.msg.clear();
+        while let Some(buf) = self.bufs.pop() {
+            self.recycle(buf);
+        }
+    }
+
     /// Where the image's text is.
     pub fn rodata_range(&self) -> (u64, u64) {
         let r = self.rodata.as_ptr_range();
@@ -233,6 +243,7 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
     let f: NativeFn = match name {
         "out.str" => out_str,
         "out.fmt" | "out.fmt2" => out_fmt,
+        "msg.begin" => msg_begin,
         "msg.str" => msg_str,
         "msg.fmt" | "msg.fmt2" => msg_fmt,
         "msg.unravel" => msg_unravel,
@@ -274,6 +285,14 @@ fn out_fmt(ctx: &mut Ctx, args: &mut [u64], item: u16) -> Result<(), Trap> {
     let mut buf = Vec::new();
     ctx.format(&mut buf, item, args)?;
     ctx.write(&buf);
+    Ok(())
+}
+
+/// `msg.begin()`: a new message. Building one can run the program's code (a
+/// hand-written `show`), which may unravel with a message of its own; that
+/// one must not find the half-built text of this one.
+fn msg_begin(ctx: &mut Ctx, _: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.msg.clear();
     Ok(())
 }
 

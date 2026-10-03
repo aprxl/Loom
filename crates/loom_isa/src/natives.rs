@@ -127,6 +127,8 @@ pub const NATIVES: &[NativeSig] = &[
     sig("out.str", 2, 0, NativeImm::None),
     sig("out.fmt", 1, 0, NativeImm::Fmt),
     sig("out.fmt2", 2, 0, NativeImm::Fmt),
+    // Starts a message: empties it of what an unfinished one left.
+    sig("msg.begin", 0, 0, NativeImm::None),
     sig("msg.str", 2, 0, NativeImm::None),
     sig("msg.fmt", 1, 0, NativeImm::Fmt),
     sig("msg.fmt2", 2, 0, NativeImm::Fmt),

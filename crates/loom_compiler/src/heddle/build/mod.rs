@@ -454,7 +454,7 @@ impl<'a> Builder<'a> {
         self.br(ok, yes, no);
         self.enter(no);
         let e = self.payload(&v, ret, err, span)?;
-        let msg = self.sink(text::MSG);
+        let msg = self.msg_sink();
         self.write_value(msg, e, err, None, false, span)?;
         self.drop_at(r, ret);
         self.emit(InstKind::Call { func: exit, args: Vec::new() }, &[]);

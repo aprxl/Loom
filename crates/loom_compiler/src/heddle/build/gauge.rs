@@ -9,7 +9,6 @@
 use loom_syntax::ast::CastKind;
 use loom_syntax::source::Span;
 
-use super::text::MSG;
 use super::value::Val;
 use super::{Builder, FnKey, Vals};
 use crate::heddle::{BitOp, Cmp, InstKind, Term, VTy, Value};
@@ -169,7 +168,7 @@ impl<'a> Builder<'a> {
                 let (fail, good) = (self.new_block(), self.new_block());
                 self.br(ok, good, fail);
                 self.enter(fail);
-                let msg = self.sink(MSG);
+                let msg = self.msg_sink();
                 self.write_text(msg, &format!("value out of range for `{name}`"));
                 self.terminate(Term::UnravelMsg);
                 self.enter(good);

@@ -22,7 +22,6 @@
 use loom_syntax::source::Span;
 
 use super::Builder;
-use super::text::MSG;
 use super::value::{Place, Val};
 use crate::heddle::{BitOp, Cmp, InstKind, IntOp, Mem, Policy, Term, VTy, Value};
 use crate::hir::{self, ExprKind};
@@ -684,7 +683,7 @@ impl<'a> Builder<'a> {
         let (fail, ok) = (self.new_block(), self.new_block());
         self.br(missing, fail, ok);
         self.enter(fail);
-        let msg = self.sink(MSG);
+        let msg = self.msg_sink();
         self.write_text(msg, "key not found: ");
         self.write_value(msg, key, c.key, None, true, span)?;
         self.terminate(Term::UnravelMsg);
