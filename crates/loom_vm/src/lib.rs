@@ -205,3 +205,18 @@ impl<'i> Vm<'i> {
 fn crash_message(k: usize) -> String {
     CRASHES.get(k).copied().unwrap_or("loom internal: unknown crash").to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    /// The dispatch loop's speed depends on LLVM giving each op its own
+    /// indirect jump (design/vm.md §9.1), which `.cargo/config.toml` asks
+    /// for with `-tail-dup-*` flags.
+    #[test]
+    fn the_dispatch_flags_are_in_effect() {
+        let flags = env!("LOOM_VM_RUSTFLAGS");
+        assert!(
+            flags.contains("tail-dup-pred-size"),
+            "Treadle was built without the `-C llvm-args=-tail-dup-*` flags of .cargo/config.toml              (its dispatch loop is up to 30% slower without them). A `RUSTFLAGS` environment              variable replaces the config's flags: put them in it too, or unset it. Flags: {flags:?}"
+        );
+    }
+}

@@ -6,6 +6,9 @@ AR_x86_64_pc_windows_msvc = "llvm-lib"
 
 [target.x86_64-pc-windows-msvc]
 linker = "lld-link"
+
+# Every target (not only Windows): see the flags' comment below.
+[target.'cfg(all())']
 # Treadle's dispatch loop is one `match` over every op. LLVM gives each op
 # its own copy of the dispatch (tail duplication: what computed goto does
 # in C) only when these caps allow that many successors; with one shared

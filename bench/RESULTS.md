@@ -5,7 +5,12 @@ each way of running). Lower is better.
 
 ## V1 (2026-10-02)
 
-Same machine and build. Treadle against PUC Lua 5.4 running the idiomatic
+Same machine and build: rustc 1.98.0 (88d9e12ae 2026-08-18), release, with
+the `-tail-dup-*` flags of `.cargo/config.toml` (a test checks they're in
+effect). The Lua is the vendored 5.4 built with clang-cl, which doesn't
+define `__GNUC__`, so its VM dispatches with `switch`, not computed gotos: a
+gcc-built `lua5.4` is faster, and the ratios below are against this one.
+Treadle against PUC Lua 5.4 running the idiomatic
 Lua of each benchmark (`bench/lua/`), and the Lua backend running the same
 Loom (`python bench/run.py --runs 5 --lua-backend`).
 
