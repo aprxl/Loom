@@ -17,7 +17,11 @@
 //!    function value being called), then scratch: natives take their
 //!    arguments there, and calls put their linkage and window there. A load
 //!    or store at a slot's address is one at an offset from the frame
-//!    pointer, with no address in a register.
+//!    pointer, with no address in a register. A slot over 64 KiB (an array
+//!    on the stack) lives on the heap instead, so a frame stays what 16-bit
+//!    register numbers can reach: the frame has its pointer (and size), the
+//!    prologue allocates it, and every way out frees it (a return, and the
+//!    end of every landing pad, including one made just for that).
 //! 5. **Emission**: block arguments become parallel moves on their edge (on
 //!    a small trampoline when the edge is one way out of a conditional
 //!    branch), and jumps are patched once every block's place is known.
@@ -35,6 +39,18 @@ use loom_syntax::source::{SourceDb, Span};
 
 use crate::heddle::{BitOp, Cmp, Edge, FOp, Func, InstKind, IntOp, Mem, Module, Policy, Term, Value, inst_uses};
 use crate::ty::{FloatTy, IntTy};
+
+/// The size over which a frame slot lives on the heap, in bytes. If a frame
+/// is still too big for its registers, [`SMALL_BIG_SLOT`] is tried.
+const BIG_SLOT: u64 = 64 * 1024;
+const SMALL_BIG_SLOT: u64 = 1024;
+/// The words of a big slot's cell in the frame: the heap block's address, a
+/// word nobody uses, and its size in bytes (a list header's shape, which
+/// `freebuf` frees the buffer of).
+const CELL_WORDS: u64 = 3;
+/// What an unwind in an instruction with no landing pad goes to, when the
+/// function has big slots to free: the code at the end.
+const FREE_PAD: usize = usize::MAX;
 
 /// Generates the bytecode of `module`.
 pub fn generate(db: &SourceDb, module: &Module) -> Result<Image, String> {
@@ -113,8 +129,11 @@ struct Emitter<'m> {
     /// The temporary for a function value being called, out of the way of
     /// its arguments' moves; and for an address too far to fold.
     tmp2: u16,
-    /// Each frame slot's byte offset from the frame pointer.
+    /// Each frame slot's byte offset from the frame pointer (a big slot's is
+    /// its cell's).
     slot_at: Vec<u32>,
+    /// Which slots are on the heap (see [`BIG_SLOT`]).
+    big: Vec<bool>,
     /// Values that are a frame slot's address: its number.
     slot_of: HashMap<Value, usize>,
     /// Stretches of code that unwind to a landing pad: where they start
@@ -162,25 +181,38 @@ fn emit_func(
         rank[b] = i;
     }
     let fused = if fuse { fusions(f) } else { HashSet::new() };
-    let (folds, mut dead) = immediates(f);
-    // Slot addresses only loads and stores use need no register.
-    let (slot_of, folded_slots) = slot_uses(f);
-    dead.extend(folded_slots);
+    let (folds, dead) = immediates(f);
     let elems = elem_accesses(f);
-    let skip: HashSet<Value> = fused.union(&dead).chain(&elems).copied().collect();
-    // The window's place comes from how many registers values need; a
-    // second pass then lets values sit in it, which only frees registers.
-    let (_, first) = allocate(f, &order, &skip, None);
-    // The slots, after the values' registers, each at its alignment.
-    let mut slot_at = Vec::with_capacity(f.slots.len());
-    let mut bytes = u64::from(first) * 8;
-    for s in &f.slots {
-        bytes = bytes.div_ceil(s.align.max(1)) * s.align.max(1);
-        slot_at.push(bytes);
-        bytes += s.size;
+    // The slots, after the values' registers, each at its alignment: the big
+    // ones as a cell, whose block is on the heap (what is big gets smaller
+    // when the frame doesn't fit its registers otherwise).
+    let mut laid = None;
+    for limit in [BIG_SLOT, SMALL_BIG_SLOT] {
+        let big: Vec<bool> = f.slots.iter().map(|s| s.size > limit).collect();
+        // Slot addresses only loads and stores use need no register (not a
+        // big slot's: its address is loaded from its cell).
+        let (slot_of, folded_slots) = slot_uses(f, &big);
+        let mut dead = dead.clone();
+        dead.extend(folded_slots);
+        let skip: HashSet<Value> = fused.union(&dead).chain(&elems).copied().collect();
+        // The window's place comes from how many registers values need; a
+        // second pass then lets values sit in it, which only frees registers.
+        let (_, first) = allocate(f, &order, &skip, None);
+        let mut slot_at = Vec::with_capacity(f.slots.len());
+        let mut bytes = u64::from(first) * 8;
+        for (s, &is_big) in f.slots.iter().zip(&big) {
+            let (size, align) = if is_big { (CELL_WORDS * 8, 8) } else { (s.size, s.align.max(1)) };
+            bytes = bytes.div_ceil(align) * align;
+            slot_at.push(bytes);
+            bytes += size;
+        }
+        let slot_words = bytes.div_ceil(8) - u64::from(first);
+        if let Some(tmp) = u16::try_from(u64::from(first) + slot_words).ok().filter(|&t| t < u16::MAX - 8) {
+            laid = Some((big, slot_at, tmp, slot_of, dead, skip));
+            break;
+        }
     }
-    let slot_words = bytes.div_ceil(8) - u64::from(first);
-    let Some(tmp) = u16::try_from(u64::from(first) + slot_words).ok().filter(|&t| t < u16::MAX - 8) else {
+    let Some((big, slot_at, tmp, slot_of, dead, skip)) = laid else {
         return Ok(Err(format!("`{}` needs more than 65535 registers", f.name)));
     };
     let Ok(slot_at) = slot_at.into_iter().map(u32::try_from).collect::<Result<Vec<u32>, _>>() else {
@@ -210,6 +242,10 @@ fn emit_func(
         }
     }
     max(f.params().len() as u32);
+    if big.contains(&true) {
+        // The prologue's `mem.alloc`.
+        max(u32::from(scratch) + 2);
+    }
     let Ok(frame) = u16::try_from(frame) else {
         return Ok(Err(format!("`{}` needs more than 65535 registers", f.name)));
     };
@@ -240,6 +276,7 @@ fn emit_func(
         tmp,
         tmp2,
         slot_at,
+        big,
         slot_of,
         unwinds: Vec::new(),
         scratch,
@@ -259,6 +296,7 @@ fn emit_func(
         last_line: None,
     };
     let mut block_at = vec![0usize; f.blocks.len()];
+    e.prologue();
     for (i, &b) in order.iter().enumerate() {
         block_at[b] = e.code.len();
         if let Err(msg) = e.block(b, i, &fused) {
@@ -275,11 +313,18 @@ fn emit_func(
         e.edge_moves(&edge, span);
         e.jump_to(from, edge.block.0 as usize, span, true);
     }
+    // What unwinds without a pad of its own still has the big slots to free.
+    let free_pad = e.code.len();
+    if e.big.contains(&true) {
+        e.free_big(None);
+        e.put(None, word(Op::Resume, 0, 0, 0));
+    }
     // Each stretch of code with a landing pad, merged with the next when
     // they share it.
     let mut pads: Vec<Pad> = Vec::new();
     for &(start, end, pad) in &e.unwinds {
-        let (start, end, pad) = (start as u32, end as u32, block_at[pad] as u32);
+        let at = if pad == FREE_PAD { free_pad } else { block_at[pad] };
+        let (start, end, pad) = (start as u32, end as u32, at as u32);
         match pads.last_mut() {
             Some(last) if last.end == start && last.pad == pad => last.end = end,
             _ if start < end => pads.push(Pad { start, end, pad }),
@@ -348,11 +393,13 @@ fn layout(f: &Func) -> Vec<usize> {
 /// The values that are frame slots' addresses, with their slots; and those
 /// whose every use is a load or a store (at an offset that stays inside
 /// the frame), which needs no register for the address.
-fn slot_uses(f: &Func) -> (HashMap<Value, usize>, HashSet<Value>) {
+fn slot_uses(f: &Func, big: &[bool]) -> (HashMap<Value, usize>, HashSet<Value>) {
     let mut slot_of = HashMap::new();
     for b in &f.blocks {
         for inst in &b.insts {
-            if let (InstKind::Slot(n), [r]) = (&inst.kind, inst.results.as_slice()) {
+            if let (InstKind::Slot(n), [r]) = (&inst.kind, inst.results.as_slice())
+                && !big[*n as usize]
+            {
                 slot_of.insert(*r, *n as usize);
             }
         }
@@ -1068,6 +1115,42 @@ impl Emitter<'_> {
         }
     }
 
+    fn has_big(&self) -> bool {
+        self.big.contains(&true)
+    }
+
+    /// Allocates the heap block of each big slot, and puts its address and
+    /// size in the slot's cell (see [`BIG_SLOT`]).
+    fn prologue(&mut self) {
+        for n in 0..self.big.len() {
+            if !self.big[n] {
+                continue;
+            }
+            let (size, align) = (self.f.slots[n].size, self.f.slots[n].align.max(1));
+            let at = self.slot_at[n] as i32;
+            self.put_ext(None, word(Op::Ldk, self.scratch, 0, 0), Some(size));
+            self.put(None, word_i32(Op::Ldi, self.scratch + 1, align as i32));
+            let alloc = self.native("mem.alloc");
+            self.put(None, word(Op::CallN, self.scratch, alloc, 0));
+            self.put(None, word_i32(Op::StF64, self.scratch, at));
+            self.put_ext(None, word(Op::Ldk, self.tmp, 0, 0), Some(size));
+            self.put(None, word_i32(Op::StF64, self.tmp, at + 16));
+        }
+    }
+
+    /// Frees the heap block of each big slot: at a return, and at the end
+    /// of an unwind through this function.
+    fn free_big(&mut self, span: Option<Span>) {
+        for n in 0..self.big.len() {
+            if !self.big[n] {
+                continue;
+            }
+            let log = self.f.slots[n].align.max(1).trailing_zeros() as u16;
+            let ext = (u64::from(self.slot_at[n]) << 32) | 1;
+            self.put_ext(span, word(Op::FreeBufF, log, 0, 0), Some(ext));
+        }
+    }
+
     fn native(&mut self, name: &'static str) -> u16 {
         let next = self.natives.len() as u16;
         *self.natives.entry(name).or_insert(next)
@@ -1141,8 +1224,10 @@ impl Emitter<'_> {
                     inst.unwind
                 }
             };
-            if let Some(pad) = unwind {
-                self.unwinds.push((start, self.code.len(), pad.0 as usize));
+            match unwind {
+                Some(pad) => self.unwinds.push((start, self.code.len(), pad.0 as usize)),
+                None if self.has_big() => self.unwinds.push((start, self.code.len(), FREE_PAD)),
+                None => {}
             }
         }
         let span = block.term_span;
@@ -1192,6 +1277,7 @@ impl Emitter<'_> {
                 }
             }
             Term::Ret(vs) => {
+                self.free_big(span);
                 let moves = vs.iter().enumerate().map(|(i, &v)| (i as u16, self.r(v))).collect();
                 self.parallel(span, moves);
                 self.put(span, word(Op::Ret, 0, vs.len() as u16, 0));
@@ -1203,10 +1289,17 @@ impl Emitter<'_> {
                 self.put(span, word(Op::Crash, 1, 0, 0));
             }
             Term::Crash(k) => self.put(span, word(Op::Crash, *k, 0, 0)),
-            Term::Resume => self.put(span, word(Op::Resume, 0, 0, 0)),
+            Term::Resume => {
+                self.free_big(span);
+                self.put(span, word(Op::Resume, 0, 0, 0));
+            }
         }
-        if let Some(pad) = block.term_unwind {
-            self.unwinds.push((term_start, self.code.len(), pad.0 as usize));
+        match block.term_unwind {
+            Some(pad) => self.unwinds.push((term_start, self.code.len(), pad.0 as usize)),
+            None if self.has_big() && matches!(block.term, Some(Term::Unravel { .. } | Term::UnravelMsg)) => {
+                self.unwinds.push((term_start, self.code.len(), FREE_PAD));
+            }
+            None => {}
         }
         Ok(())
     }
@@ -1614,7 +1707,9 @@ impl Emitter<'_> {
             }
             K::Slot(n) => {
                 let at = self.slot_at[*n as usize];
-                self.put(span, word_i32(Op::Lea, dst, at as i32));
+                // A big slot's address is in its cell.
+                let op = if self.big[*n as usize] { Op::LdF64 } else { Op::Lea };
+                self.put(span, word_i32(op, dst, at as i32));
             }
             K::Global(off) => self.put(span, word_i32(Op::Gaddr, dst, *off as i32)),
             K::Offset { ptr, off } => {

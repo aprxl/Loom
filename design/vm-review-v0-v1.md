@@ -70,6 +70,8 @@ slots (say over 4 KiB) go to the heap and are freed by ownership; or a
 proper diagnostic. The same limit bites a function that inlines many
 callees (see M9).
 
+*Fixed: Frame slots over 64 KiB live on the heap (allocated in the prologue, freed at a return and at the end of every landing pad); a 600 KB local array runs. The remaining 65 535-register limit's wording is card 9*
+
 **H5. On the Lua backend, Ctrl-C isn't delivered inside a coroutine.**
 *Reproduced:* a shuttle body that loops without yielding, with
 `LOOM_INTERRUPT_AFTER_MS=300`: still running after 8 s (killed by

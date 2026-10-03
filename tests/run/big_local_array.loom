@@ -1,0 +1,44 @@
+// A local array bigger than 65 535 words (512 KiB): Treadle's frames keep
+// such arrays after their registers, so only the stack's size limits them.
+
+use std.io.print
+
+fn sum(xs: [i64]) -> i64 {
+    var total = 0i64
+    for x in xs { total += x }
+    total
+}
+
+fn fill(n: i64) -> i64 {
+    var a = [1i64; 100_000]
+    a[99_999] = n
+    sum(a)
+}
+
+fn deeper(n: u32) -> u64 {
+    var pad = [0u8; 70_000]
+    pad[(n as usize) % 70_000] = n as u8
+    if n == 0 { return pad.len() as u64 }
+    deeper(n - 1) + pad[(n as usize) % 70_000] as u64
+}
+
+fn boom() -> u8 {
+    var a = [7u8; 600_000]
+    let i = 599_999
+    a[i] = 9
+    a[i + 1]
+}
+
+fn main() {
+    var a = [0u8; 600_000]
+    a[5] = 3
+    a[599_999] = 4
+    print("{a[5]} {a.len()} {a[599_999]} {a[6]}")
+    print(fill(42))
+    print(deeper(4))
+    let words: List[String] = ["x", "y"]
+    var big = [0u32; 150_000]
+    big[149_999] = words.len() as u32
+    print("{big[149_999]} {words}")
+    print(boom())
+}

@@ -478,6 +478,11 @@ An instruction is one 64-bit word, sometimes followed by extension words:
 - `a`, `b` and `c` are register numbers (0–65535, counted in 8-byte slots
   from the frame pointer), or a 16-bit immediate. Together, `b:c` can be a
   32-bit immediate or jump offset.
+- A frame is at most 65 535 words, since registers number them, and frame
+  slots (memory for values that live in memory, arrays on the stack) are in
+  it too; so a slot over 64 KiB (1 KiB, if the frame is still too big)
+  lives on the heap: the frame holds its address (and size), the prologue
+  allocates it, and a return and every landing pad's end free it.
 - A 64-bit constant (an `i64`, an `f64`, an address) takes an extension word.
 - Why 64-bit words: 16-bit register numbers mean no 200-local or
   255-register limit (lua-backend.md's biggest headache), three operands
