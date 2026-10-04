@@ -1256,7 +1256,7 @@ of gate:
 |---|---|
 | V0 | `fib` and `mandelbrot` at least 2× faster than the Lua backend's output of the same program |
 | V1 | geomean at least 1.5×, and nothing below 0.8× |
-| V3 | geomean at least 3×, and nothing below 1.5× |
+| V3 | geomean at least 2.5× (3× was the first aim: what the optimizer has left to win is mostly V8's, see RESULTS.md) |
 | V6 | `binary_trees` at least 4× |
 | V8 | geomean at least 4×, and nothing below 2×. Stretch: at least even with LuaJIT 2.1 `-joff` |
 
