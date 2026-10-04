@@ -1,0 +1,7 @@
+// A fused open range traps when it's asked for an item past its type's
+// maximum, as the stream does: after the ones before it went through.
+use std.io.print
+
+fn main() {
+    (254u8..).take(3).each(x => print(x))
+}

@@ -15,6 +15,10 @@
 //! Only for items, and adaptors' arguments, that own nothing (numbers,
 //! `bool`s, `char`s, `str` views): what owns memory goes through boxes as
 //! before, where the steps drop what they drop.
+//!
+//! A source that's a range written out (`(0..n).filter(p)`) is no stream
+//! at all: the loop counts, as `for i in 0..n` does, so what's known about
+//! the count (it's below `n`) is known about the items.
 
 use loom_syntax::source::Span;
 
@@ -23,6 +27,7 @@ use super::value::Val;
 use super::{Builder, LoopCtx, LoopResult, Var};
 use crate::heddle::{BlockId, Cmp, FOp, InstKind, IntOp, Policy, VTy, Value};
 use crate::hir::{self, ExprKind};
+use crate::ty::IntTy;
 use crate::ty::{Ty, TyKind};
 use crate::typeck::{ArgSource, IterSource, Receiver};
 
@@ -67,15 +72,31 @@ impl Pipeline<'_> {
     }
 }
 
-/// A pipeline started: its source stream (at `s`, owned by the scope at
-/// `depth`), its adaptors' arguments, and a variable for each `take` and
-/// `skip` (how many are left) and `skip_while` (whether it's still
-/// skipping).
+/// A pipeline started: its source (a stream at `Source::Stream`, owned by
+/// the scope at `depth`), its adaptors' arguments, and a variable for each
+/// `take` and `skip` (how many are left) and `skip_while` (whether it's
+/// still skipping).
 struct Started {
-    s: Value,
+    source: Source,
     depth: usize,
     args: Vec<Vec<Value>>,
     vars: Vec<Option<Var>>,
+}
+
+/// Where a started pipeline's items come from.
+enum Source {
+    Stream(Value),
+    /// A range written out: the next item (for an open range, the last one
+    /// given), the end (if there is one), whether that's included, and
+    /// whether there are items left (an inclusive range) or none has been
+    /// given yet (an open one).
+    Count {
+        next: Var,
+        end: Option<Value>,
+        inclusive: bool,
+        left: Option<Var>,
+        int: IntTy,
+    },
 }
 
 impl<'a> Builder<'a> {
@@ -155,19 +176,47 @@ impl<'a> Builder<'a> {
     /// arguments, in the order the calls would. The source is owned by a
     /// scope that [`run_pipeline`](Self::run_pipeline) closes.
     fn start_pipeline(&mut self, p: &Pipeline<'a>, span: Span) -> Option<Started> {
-        let v = self.expr(p.source)?;
-        self.moved_away(p.source);
-        let from = self.coerced_ty(p.source);
-        let v = match &p.of {
-            Some(src) => self.stream_of(src, v, from, p.sty, span)?,
-            None => v,
+        let (source, depth) = if let Some(IterSource::Range(elem)) = p.of
+            && let ExprKind::Range { lo: Some(lo), hi, inclusive } = &p.source.kind
+            && let Some(int) = self.int_of(self.tcx().degauge(elem))
+        {
+            // The bounds, evaluated once, as `for` does.
+            let lo = self.value(lo)?[0];
+            let end = match hi {
+                Some(hi) => Some(self.value(hi)?[0]),
+                None => None,
+            };
+            let next = self.new_var(VTy::Int);
+            self.write(next, lo);
+            // An inclusive range: whether there are items left. An open
+            // one: whether none has been given yet.
+            let left = match (end, inclusive) {
+                (Some(_), false) => None,
+                _ => {
+                    let left = self.new_var(VTy::Int);
+                    let one = self.iconst(1);
+                    self.write(left, one);
+                    Some(left)
+                }
+            };
+            let depth = self.open_scope();
+            (Source::Count { next, end, inclusive: *inclusive, left, int }, depth)
+        } else {
+            let v = self.expr(p.source)?;
+            self.moved_away(p.source);
+            let from = self.coerced_ty(p.source);
+            let v = match &p.of {
+                Some(src) => self.stream_of(src, v, from, p.sty, span)?,
+                None => v,
+            };
+            // The loop owns the source: dropped however it ends.
+            let Val::Mem(s) = self.owned(v, p.sty, span)? else { return None };
+            let depth = self.open_scope();
+            if let Some(slot) = self.f.slot_of.get(&s).copied() {
+                self.add_cleanup(CleanupKind::Drop { at: Stable::Slot(slot), ty: p.sty });
+            }
+            (Source::Stream(s), depth)
         };
-        // The loop owns the source: dropped however it ends.
-        let Val::Mem(s) = self.owned(v, p.sty, span)? else { return None };
-        let depth = self.open_scope();
-        if let Some(slot) = self.f.slot_of.get(&s).copied() {
-            self.add_cleanup(CleanupKind::Drop { at: Stable::Slot(slot), ty: p.sty });
-        }
         let mut args: Vec<Vec<Value>> = Vec::with_capacity(p.stages.len());
         let mut vars = Vec::with_capacity(p.stages.len());
         for st in &p.stages {
@@ -190,7 +239,80 @@ impl<'a> Builder<'a> {
             });
             args.push(r);
         }
-        Some(Started { s, depth, args, vars })
+        Some(Started { source, depth, args, vars })
+    }
+
+    /// The next item of a counted source, in a block that goes on only when
+    /// there is one (to `done` otherwise); the count is stepped past it.
+    fn count_next(&mut self, source: &Source, done: BlockId) -> Value {
+        let Source::Count { next, end, inclusive, left, int } = *source else { unreachable!("a counted source") };
+        if end.is_none() {
+            return self.open_next(next, left.expect("a flag"), int);
+        }
+        let cur = self.read(next);
+        if let Some(end) = end {
+            if let Some(left) = left {
+                let more = self.read(left);
+                let go = self.new_block();
+                self.br(more, go, done);
+                self.enter(go);
+            }
+            let cmp = if inclusive { Cmp::Le } else { Cmp::Lt };
+            let c = self.emit1(InstKind::ICmp { cmp, unsigned: !int.signed, a: cur, b: end }, VTy::Int);
+            let go = self.new_block();
+            self.br(c, go, done);
+            self.enter(go);
+        }
+        let one = self.iconst(1);
+        let step = |this: &mut Self, policy| {
+            let n = this.emit1(InstKind::Arith { op: IntOp::Add, policy, ty: int, a: cur, b: one }, VTy::Int);
+            this.write(next, n);
+        };
+        match (end, left) {
+            // Stepping past the last item of an inclusive range at the
+            // type's maximum mustn't overflow: there are none left instead.
+            (Some(end), Some(left)) => {
+                let last = self.emit1(InstKind::ICmp { cmp: Cmp::Eq, unsigned: true, a: cur, b: end }, VTy::Int);
+                let (stop, inc, go) = (self.new_block(), self.new_block(), self.new_block());
+                self.br(last, stop, inc);
+                self.enter(stop);
+                let zero = self.iconst(0);
+                self.write(left, zero);
+                self.jump(go);
+                self.enter(inc);
+                step(self, Policy::Wrap);
+                self.jump(go);
+                self.enter(go);
+            }
+            _ => step(self, Policy::Wrap),
+        }
+        cur
+    }
+
+    /// The next item of an open range (`lo..`): `next` is the last one
+    /// given, past the first. It steps when the next item is asked for, as
+    /// the stream does, so it traps only when asked for one past the type's
+    /// maximum.
+    fn open_next(&mut self, next: Var, first: Var, int: IntTy) -> Value {
+        let item = self.new_var(VTy::Int);
+        let fresh = self.read(first);
+        let (start, step, go) = (self.new_block(), self.new_block(), self.new_block());
+        self.br(fresh, start, step);
+        self.enter(start);
+        let zero = self.iconst(0);
+        self.write(first, zero);
+        let cur = self.read(next);
+        self.write(item, cur);
+        self.jump(go);
+        self.enter(step);
+        let cur = self.read(next);
+        let one = self.iconst(1);
+        let n = self.emit1(InstKind::Arith { op: IntOp::Add, policy: Policy::Trap, ty: int, a: cur, b: one }, VTy::Int);
+        self.write(next, n);
+        self.write(item, n);
+        self.jump(go);
+        self.enter(go);
+        self.read(item)
     }
 
     /// Loops over started pipeline `p`, giving `each` every item out of its
@@ -203,8 +325,11 @@ impl<'a> Builder<'a> {
         span: Span,
         each: &mut dyn FnMut(&mut Self, Val, BlockId, BlockId) -> Option<()>,
     ) -> Option<()> {
-        let Started { s, depth, args, vars } = st;
-        let x = self.temp(p.item, span)?;
+        let Started { source, depth, args, vars } = st;
+        let x = match source {
+            Source::Stream(_) => Some(self.temp(p.item, span)?),
+            Source::Count { .. } => None,
+        };
         let (head, pull, body, done) = (self.new_block(), self.new_block(), self.new_block(), self.new_block());
         self.jump(head);
         self.switch_to(head);
@@ -221,10 +346,20 @@ impl<'a> Builder<'a> {
         }
         self.jump(pull);
         self.enter(pull);
-        let got = self.step(s, x);
-        self.br(got, body, done);
-        self.enter(body);
-        let mut cur = self.load_val(x, 0, p.item, span)?;
+        let mut cur = match (&source, x) {
+            (&Source::Stream(s), Some(x)) => {
+                let got = self.step(s, x);
+                self.br(got, body, done);
+                self.enter(body);
+                self.load_val(x, 0, p.item, span)?
+            }
+            _ => {
+                let cur = self.count_next(&source, done);
+                self.jump(body);
+                self.enter(body);
+                Val::Regs(vec![cur])
+            }
+        };
         for (k, stage) in p.stages.iter().enumerate() {
             let pass = |this: &mut Self, f: &[Value], x: &Val| -> Option<Value> {
                 let r = this.call_fn(f, stage.arg_ty, vec![x.clone()], span)?;

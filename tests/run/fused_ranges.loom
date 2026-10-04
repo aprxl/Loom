@@ -1,0 +1,39 @@
+// Pipelines whose source is a range written out: the loop counts.
+use std.io.print
+
+fn main() {
+    print((0..10).filter(_ % 3 == 0).sum())
+    print((1..=5).map(x => x * x).sum())
+    print((5..3).map(_ + 1).count())
+    print((3..=3).map(_ * 2).sum())
+    print((-3..3).map(x => x * 2).fold(0, (a, x) => a + x))
+    // An inclusive range that ends at the type's maximum stops there.
+    print((250u8..=255).map(x => x as u32).sum())
+    print((250u8..=255).filter(_ > 252).count())
+    // An open range: as many as asked for.
+    print((7..).take(3).sum())
+    print((0u64..).take_while(_ < 4).map(_ * 10).sum())
+    // It steps when asked for the next item: taking the type's maximum
+    // doesn't overflow.
+    print((254u8..).take(2).map(x => x as u32).sum())
+    print((254u8..).take_while(_ < 255).count())
+    print((0..10).skip(7).sum())
+    print((0..20).skip_while(_ < 15).filter(_ % 2 == 0).count())
+    print((0..6).filter(_ % 2 == 1).all(_ < 6))
+    print((0..6).map(_ * 3).exists(_ == 9))
+    (0..4).map(_ + 100).each(x => print(x))
+    var seen = 0
+    for x in (0..100).filter(_ % 7 == 0) {
+        if x == 14 { continue }
+        if x > 40 { break }
+        seen += x
+    }
+    print(seen)
+    var pairs = 0
+    for i in (0..4).map(_ * 2) {
+        for j in (i..=8).filter(_ % 4 == 0) {
+            pairs += 1
+        }
+    }
+    print(pairs)
+}
