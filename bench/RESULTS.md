@@ -87,6 +87,38 @@ can't be told from that without a longer A/B. The pieces the review found
 slow are fast now: 200 000 clustered keys 1966 ms to 70 ms, 30 000 removes
 4.8 s to 0.17 s, a stack overflow 5.2 s to 0.3 s.
 
+## Other languages (2026-10-04, during V3)
+
+`python bench/compare.py --runs 3`: the best of 3, start-up included, on
+the machine of the V0 table. Each language runs an idiomatic version of
+each program (`bench/lua`, `bench/luajit` for the two that need 64-bit
+integers, `bench/py`, `bench/js`), which prints exactly what the Loom
+program does. CPython 3.14.7, LuaJIT 2.1.1788460057 and Bun 1.4.2, from
+Scoop's main bucket. LuaJIT and Bun compile to machine code; Treadle and
+the others interpret.
+
+| Benchmark | Treadle | PUC Lua 5.4 | LuaJIT | CPython | Bun |
+|---|---|---|---|---|---|
+| `fib` | 0.038 s | 0.087 s | 0.025 s | 0.194 s | 0.032 s |
+| `sieve` | 0.139 s | 0.339 s | 0.083 s | 1.141 s | 0.047 s |
+| `mandelbrot` | 0.069 s | 0.133 s | 0.028 s | 0.486 s | 0.095 s |
+| `nbody` | 0.321 s | 0.548 s | 0.055 s | 1.368 s | 0.060 s |
+| `spectral_norm` | 0.071 s | 0.153 s | 0.021 s | 0.647 s | 0.032 s |
+| `fannkuch` | 0.983 s | 1.487 s | 0.319 s | 10.169 s | 0.319 s |
+| `binary_trees` | 0.731 s | 2.683 s | 0.461 s | 2.675 s | 0.363 s |
+| `richards` | 0.057 s | 0.178 s | 0.063 s | 0.503 s | 0.041 s |
+| `word_freq` | 0.249 s | 0.250 s | 0.222 s | 1.606 s | 0.639 s |
+| `maps` | 0.111 s | 0.123 s | 0.067 s | 0.141 s | 0.097 s |
+| `sort` | 0.108 s | 0.305 s | 0.214 s | 0.391 s | 0.090 s |
+| `streams` | 0.082 s | 0.909 s | 0.374 s | 0.736 s | 0.233 s |
+| `chip8` | 0.066 s | 0.109 s | 0.030 s | 1.125 s | 0.030 s |
+| `lexer` | 0.218 s | 1.514 s | 0.079 s | 0.187 s | 0.056 s |
+
+Geometric mean of each one's time over Treadle's: PUC Lua 5.4 2.44x,
+CPython 5.33x, LuaJIT 0.63x, Bun 0.65x. Treadle beats both JITs on
+`streams` and `sort`, LuaJIT on `richards`, and Bun on `mandelbrot` and
+`word_freq`.
+
 ## V0 (2026-09-29)
 
 AMD Ryzen 7 9800X3D, Windows 11, Rust 1.98.0, release build. PUC Lua 5.4 is
