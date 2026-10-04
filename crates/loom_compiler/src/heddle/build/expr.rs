@@ -984,6 +984,9 @@ impl<'a> Builder<'a> {
         if let Some(g) = self.inlinable_generator(e, iter) {
             return self.for_generator(e, pat, iter, body, g);
         }
+        if let Some(p) = self.pipeline(iter) {
+            return self.for_pipeline(e, pat, body, p);
+        }
         let ity = self.ty_of(iter);
         if let Some(seq) = self.seq_of(ity) {
             return self.for_seq(e, pat, iter, body, seq);

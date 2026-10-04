@@ -10,7 +10,7 @@ binary_trees 8      1549178
 richards     10000  539772
 word_freq    40000  2011034
 sort         20000  6470825
-streams      30000  9750810
+streams      30000  3600265
 chip8        30000  917222
 maps         20000  4630864
 lexer        500    6274024

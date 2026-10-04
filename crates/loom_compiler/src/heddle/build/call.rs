@@ -54,6 +54,13 @@ impl<'a> Builder<'a> {
         if f.abi.is_some() {
             return self.extern_call(def, &info, args, span);
         }
+        // A stream made by adaptors and used up here: one loop (see
+        // `fuse.rs`).
+        if let Some(name) = p.def_path(def).strip_prefix("std.iter.Stream.")
+            && let Some(fused) = self.fused_consume(e, callee, args, name)
+        {
+            return fused;
+        }
         if f.body.is_none()
             && self.typed.results.instance(info.callee).self_ty.is_none()
             && !super::builtin::writes_body(&p.def_path(def))

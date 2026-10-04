@@ -29,6 +29,7 @@ mod compare;
 mod consts;
 mod expr;
 mod fallible;
+mod fuse;
 mod gauge;
 mod glue;
 mod hash;
