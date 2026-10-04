@@ -20,9 +20,33 @@ use crate::heddle::{BitOp, Cmp, FOp, Func, InstKind, IntOp, Mem, Module, VTy, Va
 
 /// Numbers every function's values.
 pub fn gvn(module: &mut Module) {
+    // What each function takes and gives, for calls through a known
+    // function value.
+    let shapes: Vec<(usize, usize)> = module.funcs.iter().map(|f| (f.params().len(), f.results.len())).collect();
     for f in &mut module.funcs {
         gvn_func(f);
+        devirtualize(f, &shapes);
         super::tidy::tidy(f);
+    }
+}
+
+/// A call through a function value that's a known function (a lambda
+/// passed to a method inlined here, whose value GVN found in memory)
+/// becomes a call of that function, which inlining can then copy in.
+fn devirtualize(f: &mut Func, shapes: &[(usize, usize)]) {
+    let mut func_of: HashMap<Value, crate::heddle::FuncId> = HashMap::new();
+    for inst in f.blocks.iter().flat_map(|b| &b.insts) {
+        if let (InstKind::FuncRef(g), [r]) = (&inst.kind, inst.results.as_slice()) {
+            func_of.insert(*r, *g);
+        }
+    }
+    for inst in f.blocks.iter_mut().flat_map(|b| &mut b.insts) {
+        if let InstKind::CallInd { callee, args } = &inst.kind
+            && let Some(&g) = func_of.get(callee)
+            && shapes.get(g.0 as usize) == Some(&(args.len(), inst.results.len()))
+        {
+            inst.kind = InstKind::Call { func: g, args: args.clone() };
+        }
     }
 }
 
@@ -30,8 +54,23 @@ pub fn gvn(module: &mut Module) {
 /// known memory.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum MemKey {
-    Load { ptr: Value, off: i32, mem: Mem },
-    Elem { header: Value, off: i32, index: Value, scale: u64 },
+    Load {
+        ptr: Value,
+        off: i32,
+        mem: Mem,
+    },
+    Elem {
+        header: Value,
+        off: i32,
+        index: Value,
+        scale: u64,
+    },
+    /// `size` bytes at `ptr + off` are all zero (a `zero` wrote them).
+    Zero {
+        ptr: Value,
+        off: i64,
+        size: u64,
+    },
 }
 
 impl MemKey {
@@ -41,6 +80,7 @@ impl MemKey {
             MemKey::Load { ptr, off, mem } => Access { ptr: *ptr, off: i64::from(*off), size: mem.bytes() },
             // An element's address reads its list's buffer and length.
             MemKey::Elem { header, off, .. } => Access { ptr: *header, off: i64::from(*off), size: 16 },
+            MemKey::Zero { ptr, off, size } => Access { ptr: *ptr, off: *off, size: *size },
         }
     }
 }
@@ -193,6 +233,43 @@ impl Gvn<'_> {
         v
     }
 
+    /// Whether a `zero` known to hold wrote all of `access`'s bytes.
+    fn zeroed(&self, access: Access) -> bool {
+        let (root, off) = self.alias.root(access.ptr);
+        let Some(off) = off.map(|o| o.wrapping_add(access.off)) else { return false };
+        self.mem.keys().any(|k| match k {
+            MemKey::Zero { ptr, off: zoff, size } => match self.alias.root(*ptr) {
+                (r, Some(start)) if r == root => {
+                    let start = start + zoff;
+                    off >= start && off + access.size as i64 <= start + *size as i64
+                }
+                _ => false,
+            },
+            _ => false,
+        })
+    }
+
+    /// When `k` is a zeroed stretch `access` writes part of, at offsets
+    /// known from the same root: the parts before and after it.
+    fn zero_left(&self, k: &MemKey, access: Access) -> Option<Vec<MemKey>> {
+        let MemKey::Zero { ptr, off, size } = *k else { return None };
+        let (zr, zstart) = self.alias.root(ptr);
+        let (wr, wstart) = self.alias.root(access.ptr);
+        let (zstart, wstart) = (zstart? + off, wstart? + access.off);
+        let (zend, wend) = (zstart + size as i64, wstart + access.size as i64);
+        if zr != wr || wend <= zstart || zend <= wstart {
+            return None;
+        }
+        let mut out = Vec::new();
+        if wstart > zstart {
+            out.push(MemKey::Zero { ptr, off, size: (wstart - zstart) as u64 });
+        }
+        if zend > wend {
+            out.push(MemKey::Zero { ptr, off: off + (wend - zstart), size: (zend - wend) as u64 });
+        }
+        Some(out)
+    }
+
     fn remember(&mut self, key: MemKey, v: Value) {
         let old = self.mem.insert(key.clone(), v);
         self.undo.push(Undo::Mem(key, old));
@@ -237,6 +314,8 @@ fn gvn_func(f: &mut Func) {
     // (block, the undo mark to go back to once its children are done).
     let mut stack: Vec<(usize, Option<usize>)> = vec![(0, None)];
     let mut dead: Vec<Vec<bool>> = f.blocks.iter().map(|b| vec![false; b.insts.len()]).collect();
+    // Loads of memory known to be zero, which become constants.
+    let mut zero = dead.clone();
     while let Some((b, done)) = stack.pop() {
         if let Some(mark) = done {
             g.undo_to(mark);
@@ -248,14 +327,20 @@ fn gvn_func(f: &mut Func) {
         if !only {
             g.forget(|_, _| false);
         }
-        visit(&mut g, f, b, &mut dead[b]);
+        visit(&mut g, f, b, &mut dead[b], &mut zero[b]);
         for &c in g.cfg.children[b].iter().rev() {
             stack.push((c, None));
         }
     }
     // Replace what went everywhere (landing pads too), and drop it.
     let repl: Vec<Value> = (0..f.types.len() as u32).map(|v| g.find(Value(v))).collect();
-    for (block, dead) in f.blocks.iter_mut().zip(&dead) {
+    for ((block, dead), zero) in f.blocks.iter_mut().zip(&dead).zip(&zero) {
+        for (inst, &z) in block.insts.iter_mut().zip(zero) {
+            if z {
+                let floats = matches!(f.types[inst.results[0].0 as usize], VTy::F32 | VTy::F64);
+                inst.kind = if floats { InstKind::Fconst(0) } else { InstKind::Iconst(0) };
+            }
+        }
         let mut i = 0;
         block.insts.retain(|_| {
             i += 1;
@@ -271,7 +356,7 @@ fn gvn_func(f: &mut Func) {
 }
 
 /// Numbers block `b`'s instructions, marking those that go in `dead`.
-fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool]) {
+fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool]) {
     for (i, inst) in f.blocks[b].insts.iter().enumerate() {
         let mut kind = inst.kind.clone();
         crate::heddle::rewrite(&mut kind, |v| g.find(v));
@@ -295,13 +380,39 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool]) {
                     g.repl[r.0 as usize] = old;
                     dead[i] = true;
                 }
-                (_, [r]) => g.remember(key, *r),
+                (_, [r]) => {
+                    // From memory a `zero` wrote: it's 0.
+                    if let MemKey::Load { .. } = key
+                        && g.zeroed(key.access())
+                    {
+                        zero[i] = true;
+                    }
+                    g.remember(key, *r);
+                }
                 _ => {}
             },
+            // Zeroing what's known to be zero already does nothing.
+            Role::Write(access) if matches!(kind, InstKind::Zero { .. }) && g.zeroed(access) => dead[i] = true,
+            // Nor does freeing the buffer of a list whose capacity is zero.
+            Role::Clobber
+                if matches!(kind, InstKind::FreeBuf { header, off, .. }
+                    if g.zeroed(Access { ptr: header, off: i64::from(off) + 16, size: 8 })) =>
+            {
+                dead[i] = true;
+            }
             Role::Write(access) => {
+                // What's left zero around the bytes written, when they're
+                // at known places in a zeroed stretch.
+                let kept: Vec<MemKey> = g.mem.keys().filter_map(|k| g.zero_left(k, access)).flatten().collect();
                 g.forget(|alias, k| !alias.may_alias(access, k.access()));
-                if let InstKind::Store { ptr, off, mem, val } = kind {
-                    g.remember(MemKey::Load { ptr, off, mem }, val);
+                for k in kept {
+                    let at = k.access().ptr;
+                    g.remember(k, at);
+                }
+                match kind {
+                    InstKind::Store { ptr, off, mem, val } => g.remember(MemKey::Load { ptr, off, mem }, val),
+                    InstKind::Zero { dst, size } => g.remember(MemKey::Zero { ptr: dst, off: 0, size }, dst),
+                    _ => {}
                 }
             }
             Role::Clobber => g.forget(|_, _| false),

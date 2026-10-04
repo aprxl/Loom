@@ -1,0 +1,17 @@
+// passes: inline, gvn, sccp, gvn
+// fns: empty
+//
+// The list starts zeroed, and making it empty writes only its buffer's
+// address: GVN knows its length is 0, and SCCP that the loop of its drop
+// (inlined) never runs; once it's gone, GVN sees its capacity is 0 too, so
+// it frees nothing.
+use std.io.print
+
+fn empty() -> usize {
+    let xs: List[List[i32]] = List()
+    xs.len()
+}
+
+fn main() {
+    print(empty())
+}

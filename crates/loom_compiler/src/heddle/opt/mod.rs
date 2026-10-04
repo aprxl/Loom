@@ -35,6 +35,13 @@ const PASSES: &[Pass] = &[
     ("inline", inline::inline),
     ("sccp", sccp::sccp),
     ("gvn", gvn::gvn),
+    // What GVN found (a load of memory a `zero` wrote) may decide a branch.
+    ("sccp", sccp::sccp),
+    // Again: what GVN found to call (a lambda passed to a method that was
+    // inlined) can be inlined now, and numbered with the rest.
+    ("inline", inline::inline),
+    ("gvn", gvn::gvn),
+    ("sccp", sccp::sccp),
     ("licm", licm::licm),
     ("cleanup", tidy::cleanup),
 ];

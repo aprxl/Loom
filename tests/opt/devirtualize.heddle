@@ -1,0 +1,20 @@
+fn main() -> () {
+  slot0: 8 bytes, align 8
+  slot1: 8 bytes, align 8
+  s0: inlined apply
+b0:
+    v0 = iconst 3
+    v1 = slot0
+    store.64 v1, v0
+    v2 = slot1
+    v3 = slot0
+    store.64 v2, v3
+    v5 = iconst 14
+    v10 = call main.{lambda}(v2, v5) @s0
+    v7 = iconst 0
+    native sink.fmt #0(v7, v10)
+    v8 = str "\n"
+    v9 = iconst 1
+    native sink.str #0(v7, v8, v9)
+    ret
+}

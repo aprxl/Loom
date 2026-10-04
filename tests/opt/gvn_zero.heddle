@@ -1,0 +1,14 @@
+fn empty() -> (int) {
+  slot0: 24 bytes, align 8
+  s0: inlined drop[List[List[i32]]]
+b0:
+    v6 = slot0
+    zero v6, 24
+    v0 = slot0
+    v1 = iconst 8
+    store.64 v0, v1
+    v4 = iconst 0
+    v5 = slot0
+    zero v5, 24
+    ret v4
+}
