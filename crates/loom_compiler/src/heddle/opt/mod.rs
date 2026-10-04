@@ -8,9 +8,11 @@
 
 mod alias;
 mod cfg;
+mod fold;
 mod gvn;
 mod inline;
 mod licm;
+mod sccp;
 mod tidy;
 
 use super::{Module, Term, Value};
@@ -29,8 +31,13 @@ pub enum Level {
 type Pass = (&'static str, fn(&mut Module));
 
 /// The passes `-O2` runs, in order.
-const PASSES: &[Pass] =
-    &[("inline", inline::inline), ("gvn", gvn::gvn), ("licm", licm::licm), ("cleanup", tidy::cleanup)];
+const PASSES: &[Pass] = &[
+    ("inline", inline::inline),
+    ("sccp", sccp::sccp),
+    ("gvn", gvn::gvn),
+    ("licm", licm::licm),
+    ("cleanup", tidy::cleanup),
+];
 
 /// The names of the passes, in the order `-O2` runs them.
 pub fn passes() -> impl Iterator<Item = &'static str> {

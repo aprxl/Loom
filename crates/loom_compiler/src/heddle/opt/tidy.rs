@@ -15,6 +15,8 @@ pub fn cleanup(module: &mut Module) {
 
 /// Tidies `f` up (see the module's documentation).
 pub fn tidy(f: &mut Func) {
+    // Blocks nothing reaches first: their jumps would count.
+    drop_unreached(f);
     merge_chains(f);
     drop_dead(f);
     drop_unreached(f);
