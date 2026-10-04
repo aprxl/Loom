@@ -57,20 +57,13 @@ fn devirtualize(f: &mut Func, shapes: &[(usize, usize)]) {
     }
 }
 
-/// What a load or an element's address reads, as a key of the table of
-/// known memory.
+/// What a load reads, as a key of the table of known memory.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum MemKey {
     Load {
         ptr: Value,
         off: i32,
         mem: Mem,
-    },
-    Elem {
-        header: Value,
-        off: i32,
-        index: Value,
-        scale: u64,
     },
     /// `size` bytes at `ptr + off` are all zero (a `zero` wrote them).
     Zero {
@@ -85,8 +78,6 @@ impl MemKey {
     fn access(&self) -> Access {
         match self {
             MemKey::Load { ptr, off, mem } => Access { ptr: *ptr, off: i64::from(*off), size: mem.bytes() },
-            // An element's address reads its list's buffer and length.
-            MemKey::Elem { header, off, .. } => Access { ptr: *header, off: i64::from(*off), size: 16 },
             MemKey::Zero { ptr, off, size } => Access { ptr: *ptr, off: *off, size: *size },
         }
     }
@@ -171,17 +162,18 @@ fn role(k: &InstKind) -> Role {
         K::Native { name, .. } if PURE_NATIVES.contains(name) => Role::Pure,
         K::Native { name, .. } if QUIET_NATIVES.contains(name) => Role::Other,
         K::Load { ptr, off, mem } => Role::Read(MemKey::Load { ptr: *ptr, off: *off, mem: *mem }),
-        K::Elem { header, off, index, scale } => {
-            Role::Read(MemKey::Elem { header: *header, off: *off, index: *index, scale: *scale })
-        }
         K::Store { ptr, off, mem, .. } => Role::Write(Access { ptr: *ptr, off: i64::from(*off), size: mem.bytes() }),
         K::Copy { dst, size, .. } | K::Zero { dst, size } => Role::Write(Access { ptr: *dst, off: 0, size: *size }),
         K::Call { .. } | K::CallInd { .. } | K::Native { .. } | K::FreeBuf { .. } => Role::Clobber,
         // Each `undef` stands for itself. Constants and a slot's address
         // are cheapest made where they're used (codegen folds them into the
         // instruction, or makes them in the call window): one shared would
-        // live in a register of its own, and be moved where it's needed.
-        K::Undef
+        // live in a register of its own, and be moved where it's needed. So
+        // is an element's address: a load or a store of it is one checked
+        // instruction (`ldelf`), where a shared one is the address and then
+        // a plain load or store at it.
+        K::Elem { .. }
+        | K::Undef
         | K::Iconst(_)
         | K::Fconst(_)
         | K::Str(_)

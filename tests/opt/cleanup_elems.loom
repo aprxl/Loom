@@ -1,0 +1,24 @@
+// passes: cleanup
+// fns: scale, bump
+//
+// An element's address comes before the value stored at it is worked
+// out, and `+=` loads and stores at one address: each load and store gets
+// a copy of the address just before it, which codegen fuses with it
+// (`ldelf`, `stelf`). The multiplication between can't trap.
+use std.io.print
+
+fn scale(mut xs: List[f64], i: usize, a: f64, b: f64) {
+    xs[i] = a * b
+}
+
+fn bump(mut xs: List[i64], i: usize) {
+    xs[i] += 1
+}
+
+fn main() {
+    var xs: List[f64] = [1.0, 2.0]
+    scale(mut xs, 1, 3.0, 4.0)
+    var ys: List[i64] = [1, 2]
+    bump(mut ys, 0)
+    print("{xs} {ys}")
+}

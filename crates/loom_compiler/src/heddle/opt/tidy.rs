@@ -3,6 +3,12 @@
 //! part of the block it jumps from (so an inlined function's comparison can
 //! fuse with the caller's branch on it), instructions that only compute a
 //! value nothing reads go, and so do blocks nothing reaches.
+//!
+//! The last pass (`cleanup`) also moves an element's address down to the
+//! loads and stores of it, a copy before each, where codegen makes each
+//! pair one checked instruction (`ldelf`, `stelf`): in `xs[i] = a * b` the
+//! address comes before the value it's given, and `xs[i] += 1` loads and
+//! stores at one address.
 
 use std::collections::HashMap;
 
@@ -10,7 +16,129 @@ use crate::heddle::{BlockId, Func, InstKind, Module, Policy, Term, Value, rewrit
 
 /// Tidies every function of `module` up: the `cleanup` pass.
 pub fn cleanup(module: &mut Module) {
-    module.funcs.iter_mut().for_each(tidy);
+    for f in &mut module.funcs {
+        tidy(f);
+        sink_elems(f);
+    }
+}
+
+/// Moves each `elem` whose uses are all loads and stores of it later in its
+/// block down to them, one copy before each: what's before the first can't
+/// trap and has no effect, so its check runs where it would have, as far
+/// as anything can tell; and what's between them writes no memory but the
+/// element, so the copies after it check what's already checked.
+fn sink_elems(f: &mut Func) {
+    // Each slot's address, by slot (each use has a value of its own).
+    let slot: HashMap<Value, u32> = f
+        .blocks
+        .iter()
+        .flat_map(|b| &b.insts)
+        .filter_map(|i| match (&i.kind, i.results.as_slice()) {
+            (InstKind::Slot(n), [r]) => Some((*r, *n)),
+            _ => None,
+        })
+        .collect();
+    let same = |a: Value, b: Value| a == b || slot.get(&a).is_some_and(|n| slot.get(&b) == Some(n));
+    let mut uses: HashMap<Value, usize> = HashMap::new();
+    for b in &f.blocks {
+        for inst in &b.insts {
+            for u in crate::heddle::inst_uses(&inst.kind) {
+                *uses.entry(u).or_default() += 1;
+            }
+        }
+        for u in b.term.iter().flat_map(super::term_uses) {
+            *uses.entry(u).or_default() += 1;
+        }
+    }
+    for b in 0..f.blocks.len() {
+        let mut i = 0;
+        while i < f.blocks[b].insts.len() {
+            let insts = &f.blocks[b].insts;
+            let (InstKind::Elem { .. }, [r]) = (&insts[i].kind, insts[i].results.as_slice()) else {
+                i += 1;
+                continue;
+            };
+            let r = *r;
+            let at: Vec<usize> = (i + 1..insts.len())
+                .filter(|&k| match &insts[k].kind {
+                    InstKind::Load { ptr, .. } => *ptr == r,
+                    InstKind::Store { ptr, val, .. } => *ptr == r && *val != r,
+                    _ => false,
+                })
+                .collect();
+            let (Some(&first), Some(&last)) = (at.first(), at.last()) else {
+                i += 1;
+                continue;
+            };
+            let quiet_before = insts[i + 1..first].iter().all(|j| pure(&j.kind));
+            let no_writes = insts[first..=last].iter().all(|j| match &j.kind {
+                InstKind::Store { ptr, .. } => *ptr == r,
+                k => !writes(k),
+            });
+            // A store whose element is read again soon after keeps its
+            // address computed early: a fused store works it out late, and a
+            // load after it that ran ahead has to run again.
+            let reread = match (&insts[i].kind, &insts[last].kind) {
+                (&InstKind::Elem { header, off, index, .. }, &InstKind::Store { off: at, .. }) => {
+                    let rest = &insts[last + 1..];
+                    rest.iter().enumerate().any(|(n, j)| match (&j.kind, j.results.as_slice()) {
+                        (&InstKind::Elem { header: h, off: o, index: x, .. }, [e])
+                            if same(h, header) && (o, x) == (off, index) =>
+                        {
+                            rest[n + 1..]
+                                .iter()
+                                .any(|l| matches!(l.kind, InstKind::Load { ptr, off, .. } if ptr == *e && off == at))
+                        }
+                        _ => false,
+                    })
+                }
+                _ => false,
+            };
+            if reread
+                || uses.get(&r) != Some(&at.len())
+                || !quiet_before
+                || !no_writes
+                || (at.len() == 1 && first == i + 1)
+            {
+                i += 1;
+                continue;
+            }
+            let elem = f.blocks[b].insts.remove(i);
+            // From the last use up, so the places before stay put.
+            for (n, &k) in at.iter().enumerate().rev() {
+                let mut copy = elem.clone();
+                let v = if n == 0 {
+                    r
+                } else {
+                    let v = Value(f.types.len() as u32);
+                    f.types.push(f.ty(r));
+                    copy.results = vec![v];
+                    v
+                };
+                let k = k - 1;
+                if let InstKind::Load { ptr, .. } | InstKind::Store { ptr, .. } = &mut f.blocks[b].insts[k].kind {
+                    *ptr = v;
+                }
+                f.blocks[b].insts.insert(k, copy);
+            }
+            i += 1;
+        }
+    }
+}
+
+/// Whether `k` may write memory.
+fn writes(k: &InstKind) -> bool {
+    use InstKind as K;
+    matches!(
+        k,
+        K::Store { .. }
+            | K::Copy { .. }
+            | K::Zero { .. }
+            | K::Call { .. }
+            | K::CallInd { .. }
+            | K::Native { .. }
+            | K::FreeBuf { .. }
+    )
 }
 
 /// Tidies `f` up (see the module's documentation).
