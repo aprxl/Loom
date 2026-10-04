@@ -11,10 +11,17 @@
 //! `if`'s arms meet) starts with no loads known, and so does what comes
 //! after a call. A store or a copy forgets what it may change (see
 //! `alias`), and a store is then known to have put its value there.
+//!
+//! A map lookup (`map.find_str`, `map.find_int`) that one with the same map
+//! and key dominates gives what that one gave, when nothing on the way could
+//! have written memory: `if m.has(k) { m[k] += 1 }` looks `k` up once. Its
+//! key is often loaded again after the first lookup (see `Role::Other`), so
+//! a second table of known memory, which quiet natives leave alone, tells
+//! when two loads read the same thing.
 
 use std::collections::HashMap;
 
-use super::alias::{Access, Alias};
+use super::alias::{Access, Alias, Root};
 use super::cfg::Cfg;
 use crate::heddle::{BitOp, Cmp, FOp, Func, InstKind, IntOp, Mem, Module, VTy, Value};
 
@@ -205,11 +212,29 @@ fn canonical(mut k: InstKind) -> InstKind {
     k
 }
 
+/// Natives that look a key up in a map: they read the map, and change
+/// nothing.
+const LOOKUPS: &[&str] = &["map.find_str", "map.find_int"];
+
+/// An argument of a lookup, as its key: constants by value (GVN leaves each
+/// constant its own value).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum Arg {
+    Const(u64),
+    Value(Value),
+}
+
+type FindKey = (&'static str, u16, Vec<Arg>);
+
 /// One change to a table, to undo when the walk leaves the block.
 enum Undo {
     Expr((InstKind, Vec<VTy>)),
     /// What a key of known memory was before.
     Mem(MemKey, Option<Value>),
+    /// The same for the memory quiet natives leave known.
+    Stable(MemKey, Option<Value>),
+    /// A lookup made (to forget), or forgotten (to know again).
+    Find(FindKey, Option<Vec<Value>>),
 }
 
 struct Gvn<'a> {
@@ -222,6 +247,19 @@ struct Gvn<'a> {
     exprs: HashMap<(InstKind, Vec<VTy>), Vec<Value>>,
     /// Known memory: what a load at each key gives.
     mem: HashMap<MemKey, Value>,
+    /// Known memory that natives which write nothing don't forget: which
+    /// value a load at each key read first.
+    stable: HashMap<MemKey, Value>,
+    /// For a load of what an earlier one read: that one (for lookups' keys
+    /// alone; the load stays).
+    same: HashMap<Value, Value>,
+    /// The constant each value is, when it is one.
+    consts: HashMap<Value, u64>,
+    /// For an address in a slot or the program's data (which GVN leaves
+    /// unshared, like constants): the first value that is that address.
+    addrs: HashMap<Value, Value>,
+    /// The lookups made, and their results.
+    finds: HashMap<FindKey, Vec<Value>>,
     undo: Vec<Undo>,
 }
 
@@ -284,6 +322,33 @@ impl Gvn<'_> {
         }
     }
 
+    /// Forgets the stable memory `keep` says no to, and every lookup (a
+    /// write may change a map).
+    fn forget_stable(&mut self, keep: impl Fn(&Alias, &MemKey) -> bool) {
+        let gone: Vec<MemKey> = self.stable.keys().filter(|k| !keep(&self.alias, k)).cloned().collect();
+        for k in gone {
+            let old = self.stable.remove(&k);
+            self.undo.push(Undo::Stable(k, old));
+        }
+        for (k, v) in self.finds.drain().collect::<Vec<_>>() {
+            self.undo.push(Undo::Find(k, Some(v)));
+        }
+    }
+
+    /// `v` as a lookup's argument.
+    fn arg(&self, v: Value) -> Arg {
+        let v = self.find(v);
+        match self.consts.get(&v) {
+            Some(&c) => Arg::Const(c),
+            None => Arg::Value(self.same.get(&v).copied().unwrap_or_else(|| self.addr(v))),
+        }
+    }
+
+    /// `v`, or the first value that's the same address.
+    fn addr(&self, v: Value) -> Value {
+        self.addrs.get(&v).copied().unwrap_or(v)
+    }
+
     fn undo_to(&mut self, mark: usize) {
         while self.undo.len() > mark {
             match self.undo.pop().expect("above the mark") {
@@ -295,6 +360,18 @@ impl Gvn<'_> {
                 }
                 Undo::Mem(k, None) => {
                     self.mem.remove(&k);
+                }
+                Undo::Stable(k, Some(v)) => {
+                    self.stable.insert(k, v);
+                }
+                Undo::Stable(k, None) => {
+                    self.stable.remove(&k);
+                }
+                Undo::Find(k, Some(v)) => {
+                    self.finds.insert(k, v);
+                }
+                Undo::Find(k, None) => {
+                    self.finds.remove(&k);
                 }
             }
         }
@@ -309,8 +386,27 @@ fn gvn_func(f: &mut Func) {
         repl: (0..f.types.len() as u32).map(Value).collect(),
         exprs: HashMap::new(),
         mem: HashMap::new(),
+        stable: HashMap::new(),
+        same: HashMap::new(),
+        consts: f
+            .blocks
+            .iter()
+            .flat_map(|b| &b.insts)
+            .filter_map(|i| match (&i.kind, i.results.as_slice()) {
+                (InstKind::Iconst(c), [r]) => Some((*r, *c)),
+                _ => None,
+            })
+            .collect(),
+        finds: HashMap::new(),
+        addrs: HashMap::new(),
         undo: Vec::new(),
     };
+    let mut first: HashMap<(Root, i64), Value> = HashMap::new();
+    for r in f.blocks.iter().flat_map(|b| &b.insts).flat_map(|i| &i.results) {
+        if let (root @ (Root::Slot(_) | Root::Data), Some(off)) = g.alias.root(*r) {
+            g.addrs.insert(*r, *first.entry((root, off)).or_insert(*r));
+        }
+    }
     // (block, the undo mark to go back to once its children are done).
     let mut stack: Vec<(usize, Option<usize>)> = vec![(0, None)];
     let mut dead: Vec<Vec<bool>> = f.blocks.iter().map(|b| vec![false; b.insts.len()]).collect();
@@ -326,6 +422,7 @@ fn gvn_func(f: &mut Func) {
         let only = g.cfg.preds[b].len() == 1 && g.cfg.idom[b] == Some(g.cfg.preds[b][0]);
         if !only {
             g.forget(|_, _| false);
+            g.forget_stable(|_, _| false);
         }
         visit(&mut g, f, b, &mut dead[b], &mut zero[b]);
         for &c in g.cfg.children[b].iter().rev() {
@@ -381,6 +478,19 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool]) 
                     dead[i] = true;
                 }
                 (_, [r]) => {
+                    let skey = match key {
+                        MemKey::Load { ptr, off, mem } => MemKey::Load { ptr: g.addr(ptr), off, mem },
+                        ref k => k.clone(),
+                    };
+                    match g.stable.get(&skey).copied() {
+                        Some(old) if f.ty(old) == f.ty(*r) => {
+                            g.same.insert(*r, old);
+                        }
+                        _ => {
+                            let old = g.stable.insert(skey.clone(), *r);
+                            g.undo.push(Undo::Stable(skey, old));
+                        }
+                    }
                     // From memory a `zero` wrote: it's 0.
                     if let MemKey::Load { .. } = key
                         && g.zeroed(key.access())
@@ -405,6 +515,7 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool]) 
                 // at known places in a zeroed stretch.
                 let kept: Vec<MemKey> = g.mem.keys().filter_map(|k| g.zero_left(k, access)).flatten().collect();
                 g.forget(|alias, k| !alias.may_alias(access, k.access()));
+                g.forget_stable(|alias, k| !alias.may_alias(access, k.access()));
                 for k in kept {
                     let at = k.access().ptr;
                     g.remember(k, at);
@@ -415,7 +526,29 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool]) 
                     _ => {}
                 }
             }
-            Role::Clobber => g.forget(|_, _| false),
+            Role::Clobber => {
+                g.forget(|_, _| false);
+                g.forget_stable(|_, _| false);
+            }
+            Role::Other
+                if let InstKind::Native { name, imm, args } = &kind
+                    && LOOKUPS.contains(name) =>
+            {
+                let key: FindKey = (name, *imm, args.iter().map(|&a| g.arg(a)).collect());
+                match g.finds.get(&key) {
+                    Some(old) if old.len() == inst.results.len() => {
+                        for (r, o) in inst.results.iter().zip(old.clone()) {
+                            g.repl[r.0 as usize] = o;
+                        }
+                        dead[i] = true;
+                    }
+                    _ => {
+                        g.finds.insert(key.clone(), inst.results.clone());
+                        g.undo.push(Undo::Find(key, None));
+                        g.forget(|_, _| false);
+                    }
+                }
+            }
             // A loaded value kept past a call would have to be moved into
             // the next call's window, where loading it again puts it
             // straight: as cheap, and it needs no register of its own.

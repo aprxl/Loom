@@ -1,0 +1,20 @@
+// passes: inline, gvn
+// fns: bump
+//
+// `has` and then `[]` look the same key up in the same map, with nothing
+// written between: the second lookup is the first's. The key is loaded
+// again after the first (a native forgets loaded memory), so the loads are
+// told apart by what they read; in the `else` arm too, before the insert
+// writes.
+use std.io.print
+
+fn bump(mut counts: Map[String, u32], word: String) {
+    if counts.has(word) { counts[word] += 1 } else { counts[word] = 1 }
+}
+
+fn main() {
+    var m: Map[String, u32] = Map()
+    bump(mut m, "a")
+    bump(mut m, "a")
+    print("{m.len()}")
+}

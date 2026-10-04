@@ -1,0 +1,154 @@
+fn bump(v0: ptr, v1: ptr) -> () {
+  s0: inlined Map.has#2
+b0(v0: ptr, v1: ptr):
+    v103 = iconst 171800264712
+    v104 = load.64 v1
+    v105 = load.64 v1+8
+    v106, v107 = native map.find_str #0(v0, v104, v105, v103)
+    v108 = iconst -1
+    v109 = icmp.ne.u v106, v108
+    br v109, b1, b2
+b1:
+    v3 = iconst 1
+    v9 = iconst -1
+    v10 = icmp.eq.u v106, v9
+    br v10, b4, b5
+b2:
+    v21 = iconst 1
+    v27 = iconst -1
+    v28 = icmp.eq.u v106, v27
+    br v28, b6, b7
+b3:
+    ret
+b4:
+    native msg.begin #0()
+    v11 = iconst 1
+    v12 = str "key not found: "
+    v13 = iconst 15
+    native sink.str #0(v11, v12, v13)
+    v14 = load.64 v1
+    v15 = load.64 v1+8
+    native sink.fmt2 #1(v11, v14, v15)
+    unravel msg
+b5:
+    v16 = load.64 v0
+    v17 = index v16, v106 * 40
+    v18 = offset v17+32
+    v19 = load.u32 v18
+    v20 = add.u32 v19, v3
+    store.u32 v18, v20
+    jump b3
+b6:
+    v32 = load.64 v0+40
+    v33 = iconst 1
+    v34 = add%.u64 v32, v33
+    v35 = iconst 40
+    v36 = iconst 8
+    native mem.grow #0(v0, v35, v36, v34)
+    v37 = load.64 v0
+    v38 = index v37, v32 * 40
+    store.64 v38, v107
+    v39 = offset v38+8
+    copy v39, v1, 24
+    zero v1, 24
+    store.u32 v38+32, v21
+    v40 = load.64 v0+8
+    v41 = iconst 1
+    v42 = add%.u64 v40, v41
+    store.64 v0+8, v42
+    store.64 v0+40, v34
+    v43 = load.64 v0+32
+    v44 = iconst 2
+    v45 = mul%.u64 v34, v44
+    v46 = icmp.gt.u v45, v43
+    br v46, b8, b9
+b7:
+    v29 = load.64 v0
+    v30 = index v29, v106 * 40
+    v31 = offset v30+32
+    store.u32 v31, v21
+    jump b3
+b8:
+    v47 = mul%.u64 v43, v44
+    v48 = iconst 8
+    v49 = icmp.lt.u v47, v48
+    br v49, b10(v48), b10(v47)
+b9:
+    v89 = load.64 v0+24
+    v90 = iconst 1
+    v91 = sub%.u64 v43, v90
+    v92 = and v107, v91
+    jump b20(v92)
+b10(v50: int):
+    v52 = iconst 0
+    v53 = icmp.ne.u v43, v52
+    br v53, b11, b12
+b11:
+    v54 = load.64 v0+24
+    v55 = iconst 8
+    v56 = mul%.u64 v43, v55
+    native mem.free #0(v54, v56, v55)
+    jump b12
+b12:
+    v57 = iconst 8
+    v58 = mul.u64 v50, v57
+    v59 = native mem.calloc #0(v58, v57)
+    store.64 v0+24, v59
+    store.64 v0+32, v50
+    v60 = load.64 v0+40
+    v61 = iconst 0
+    jump b13(v61)
+b13(v62: int):
+    v63 = icmp.lt.u v62, v60
+    br v63, b14, b3
+b14:
+    v64 = load.64 v0
+    v65 = index v64, v62 * 40
+    v66 = load.64 v65
+    v67 = iconst 0
+    v68 = icmp.ne.u v66, v67
+    br v68, b15, b16
+b15:
+    v69 = load.64 v0+32
+    v70 = load.64 v0+24
+    v71 = iconst 1
+    v72 = sub%.u64 v69, v71
+    v73 = and v66, v72
+    jump b17(v73)
+b16:
+    v86 = iconst 1
+    v87 = add%.u64 v62, v86
+    jump b13(v87)
+b17(v74: int):
+    v75 = index v70, v74 * 8
+    v76 = load.64 v75
+    v77 = iconst 0
+    v78 = icmp.eq.u v76, v77
+    br v78, b19, b18
+b18:
+    v79 = iconst 1
+    v80 = add%.u64 v74, v79
+    v81 = and v80, v72
+    jump b17(v81)
+b19:
+    v82 = iconst 1
+    v83 = add%.u64 v62, v82
+    store.64 v75, v83
+    jump b16
+b20(v93: int):
+    v94 = index v89, v93 * 8
+    v95 = load.64 v94
+    v96 = iconst 0
+    v97 = icmp.eq.u v95, v96
+    br v97, b22, b21
+b21:
+    v98 = iconst 1
+    v99 = add%.u64 v93, v98
+    v100 = and v99, v91
+    jump b20(v100)
+b22:
+    v101 = iconst 1
+    v102 = add%.u64 v32, v101
+    store.64 v94, v102
+    jump b3
+}
