@@ -685,7 +685,13 @@ fn int_rotate(_: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
 }
 
 /// `float.math(a, b)`: `imm` is the operation times two, plus one for
-/// `f32` (whose bits are the low half of a register).
+/// `f32` (whose bits are the low half of a register). Next to the dispatch
+/// loop in the code, by this name (crates/loom/build.rs): `nbody` calls it
+/// for every square root.
+// SAFETY: no other symbol in the program has this name, and nothing calls
+// it through the name.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "loom_treadle_float_math")]
 fn float_math(_: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
     let f32_ = imm & 1 == 1;
     let get = |r: u64| if f32_ { f64::from(f32::from_bits(r as u32)) } else { f64::from_bits(r) };

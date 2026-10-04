@@ -169,6 +169,14 @@ impl<'i> Machine<'i> {
         result
     }
 
+    // At the start of the code (crates/loom/build.rs asks the linker for it
+    // by this name), so what changes elsewhere doesn't move it (design/vm.md
+    // §9.1).
+    // SAFETY: no other symbol in the program has this name, and nothing
+    // calls it through the name.
+    #[inline(never)]
+    #[allow(unsafe_code)]
+    #[unsafe(export_name = "loom_treadle_execute")]
     fn execute(&mut self, stack: &mut Stack, entry: usize, args: &[u64]) -> Result<Vec<u64>, Fault> {
         let start = &self.funcs[entry];
         let (base, seg_end) = stack.bounds();
