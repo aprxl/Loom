@@ -23,7 +23,7 @@ pub mod word;
 pub use disasm::{disassemble, disassemble_func};
 pub use fmt::{Align, FmtItem, Spec, ValueKind};
 pub use image::{CRASHES, Func, Image, Line, NO_SITE, Site};
-pub use op::{Form, Op};
+pub use op::{Check, Form, Op};
 pub use verify::{VerifyError, verify};
 pub use word::IntSpec;
 

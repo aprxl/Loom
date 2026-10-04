@@ -1,0 +1,57 @@
+fn fib(v0: int) -> (int) {
+b0(v0: int):
+    v1 = iconst 2
+    v2 = icmp.lt.s v0, v1
+    br v2, b2(v0), b1
+b1:
+    v3 = iconst 1
+    v4 = sub%.i32 v0, v3
+    v5 = call fib(v4)
+    v6 = iconst 2
+    v7 = sub%.i32 v0, v6
+    v8 = call fib(v7)
+    v9 = add.i32 v5, v8
+    jump b2(v9)
+b2(v10: int):
+    ret v10
+}
+fn total(v0: ptr, v1: int) -> (int) {
+b0(v0: ptr, v1: int):
+    v2 = iconst 0
+    v3 = iconst 0
+    jump b1(v3, v2)
+b1(v4: int, v8: int):
+    v7 = icmp.lt.u v4, v1
+    br v7, b2, b3
+b2:
+    v9 = index v0, v4 * 4
+    v10 = load.u32 v9
+    v11 = add%.u64 v8, v10
+    v12 = iconst 1
+    v13 = add%.usize v4, v12
+    jump b1(v13, v11)
+b3:
+    ret v8
+}
+fn clamp_index(v0: int) -> (int) {
+b0(v0: int):
+    v1 = iconst 255
+    v2 = icmp.lt.u v0, v1
+    br v2, b1, b2
+b1:
+    v3 = iconst 1
+    v4 = add%.u16 v0, v3
+    jump b3(v4)
+b2:
+    v5 = iconst 0
+    jump b3(v5)
+b3(v6: int):
+    ret v6
+}
+fn small(v0: ptr, v1: int) -> (int) {
+b0(v0: ptr, v1: int):
+    v2 = iconst 0
+    bounds v2, v1
+    v6 = iconst 1
+    ret v6
+}

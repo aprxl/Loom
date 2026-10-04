@@ -12,6 +12,7 @@ mod fold;
 mod gvn;
 mod inline;
 mod licm;
+mod range;
 mod sccp;
 mod tidy;
 
@@ -41,6 +42,9 @@ const PASSES: &[Pass] = &[
     // inlined) can be inlined now, and numbered with the rest.
     ("inline", inline::inline),
     ("gvn", gvn::gvn),
+    ("sccp", sccp::sccp),
+    ("ranges", range::ranges),
+    // What ranges decided about a comparison decides its branch.
     ("sccp", sccp::sccp),
     ("licm", licm::licm),
     ("cleanup", tidy::cleanup),

@@ -421,6 +421,12 @@ fn run_vm(path: &Path, args: &[String], color: ColorMode, level: Level) -> ExitC
                     && std::env::var_os("LOOM_STATS").is_some_and(|v| v == "1")
                 {
                     eprintln!("{total} instructions dispatched");
+                    let checks = |c| counts.iter().filter(|(op, _)| op.check() == Some(c)).map(|(_, n)| n).sum::<u64>();
+                    eprintln!(
+                        "{} bounds checks, {} overflow checks",
+                        checks(loom_isa::Check::Bounds),
+                        checks(loom_isa::Check::Overflow)
+                    );
                     for (op, n) in counts {
                         eprintln!("{n:>14}  {:5.1}%  {}", 100.0 * n as f64 / total.max(1) as f64, op.name());
                     }

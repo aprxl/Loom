@@ -170,6 +170,30 @@ impl Op {
     }
 }
 
+/// A check an op makes before it does its work (counted by the stats
+/// build, to see how many the optimizer removes).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Check {
+    /// An index against a length.
+    Bounds,
+    /// Integer arithmetic or a conversion that traps on overflow.
+    Overflow,
+}
+
+impl Op {
+    /// The check it makes, if any.
+    pub fn check(self) -> Option<Check> {
+        let name = self.name();
+        let (base, ty) = name.split_once('.').unwrap_or((name, ""));
+        match base {
+            "elem" | "elemf" | "ldelf" | "stelf" | "ldel" | "stel" | "bounds" | "boundsk" => Some(Check::Bounds),
+            "add" | "sub" | "mul" | "addk" | "subk" | "mulk" | "neg" if !ty.starts_with('f') => Some(Check::Overflow),
+            "cast" => Some(Check::Overflow),
+            _ => None,
+        }
+    }
+}
+
 ops! {
     // moves and constants
     Mov = "mov", AB;
