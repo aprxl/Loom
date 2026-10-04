@@ -393,39 +393,45 @@ main's defer
 #[test]
 fn ctrl_c_unwinds_then_exits_130_on_both_backends() {
     // Through the flag the handler sets: LOOM_INTERRUPT_AFTER_MS sets it.
-    let path = temp_source(
-        "interrupt",
-        "use std.io.print
+    // The second loop's back edge repeats its test and branches back on
+    // Treadle (rotated, at -O2): that branch notices the interrupt too.
+    for (name, spin) in [("interrupt", "while true { n +%= 1 }"), ("interrupt_test", "while n != 7 { n +%= 2 }")] {
+        let path = temp_source(
+            name,
+            &format!(
+                "use std.io.print
 
-fn main() {
+fn main() {{
     defer print(\"cleaned up\")
     var n = 0u64
     print(\"spinning\")
-    while true { n +%= 1 }
-}
-",
-    );
-    let file = path.to_str().expect("utf-8 path");
-    for backend in ["lua", "vm"] {
-        let out = Command::new(env!("CARGO_BIN_EXE_loom"))
-            .args(["--color", "never", "run", "--backend", backend, file])
-            .env("LOOM_INTERRUPT_AFTER_MS", "200")
-            .output()
-            .expect("the loom binary runs");
-        assert_eq!(out.status.code(), Some(130), "{backend}: {}", text(&out.stderr));
-        assert_eq!(
-            text(&out.stdout),
-            "spinning
+    {spin}
+}}
+"
+            ),
+        );
+        let file = path.to_str().expect("utf-8 path");
+        for (backend, level) in [("lua", "-O2"), ("vm", "-O2"), ("vm", "-O0")] {
+            let out = Command::new(env!("CARGO_BIN_EXE_loom"))
+                .args(["--color", "never", level, "run", "--backend", backend, file])
+                .env("LOOM_INTERRUPT_AFTER_MS", "200")
+                .output()
+                .expect("the loom binary runs");
+            assert_eq!(out.status.code(), Some(130), "{name} {backend} {level}: {}", text(&out.stderr));
+            assert_eq!(
+                text(&out.stdout),
+                "spinning
 cleaned up
 ",
-            "{backend}"
-        );
-        assert_eq!(
-            text(&out.stderr),
-            "interrupted (Ctrl-C)
+                "{name} {backend} {level}"
+            );
+            assert_eq!(
+                text(&out.stderr),
+                "interrupted (Ctrl-C)
 ",
-            "{backend}"
-        );
+                "{name} {backend} {level}"
+            );
+        }
     }
 }
 

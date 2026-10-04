@@ -292,6 +292,17 @@ impl<'i> Machine<'i> {
                         pc = unsafe { pc.offset($off - 1) };
                     }};
                 }
+                // A conditional jump: one backwards is a loop's back edge,
+                // which counts a tick as `loop` does.
+                macro_rules! cjump {
+                    ($off:expr) => {{
+                        let off: isize = $off as isize;
+                        if off < 0 {
+                            tick!();
+                        }
+                        jump!(off);
+                    }};
+                }
                 macro_rules! tick {
                     () => {{
                         env.ticks -= 1;
@@ -442,7 +453,7 @@ impl<'i> Machine<'i> {
                 macro_rules! branch_k {
                     ($f:expr) => {{
                         if $f(r!(a(w)), b(w) as u16 as i16 as i64 as u64) {
-                            jump!(c_i16(w));
+                            cjump!(c_i16(w));
                         }
                     }};
                 }
@@ -550,7 +561,7 @@ impl<'i> Machine<'i> {
                 macro_rules! branch {
                     ($f:expr) => {{
                         if $f(r!(a(w)), r!(b(w))) {
-                            jump!(c_i16(w));
+                            cjump!(c_i16(w));
                         }
                     }};
                 }
@@ -843,12 +854,12 @@ impl<'i> Machine<'i> {
                     }
                     Op::Jz => {
                         if r!(a(w)) == 0 {
-                            jump!(bc_i32(w) as isize);
+                            cjump!(bc_i32(w));
                         }
                     }
                     Op::Jnz => {
                         if r!(a(w)) != 0 {
-                            jump!(bc_i32(w) as isize);
+                            cjump!(bc_i32(w));
                         }
                     }
 

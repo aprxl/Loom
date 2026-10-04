@@ -1251,13 +1251,14 @@ impl Emitter<'_> {
     }
 
     /// Where a conditional branch at layout place `from` jumps for `e`: its
-    /// block, or a trampoline when the edge moves values or goes backwards.
+    /// block, or a trampoline when the edge moves values. (One that jumps
+    /// backwards counts a tick, as `loop` does.)
     fn cond_target(&mut self, from: usize, e: &Edge) -> Label {
         let target = e.block.0 as usize;
         let params = &self.f.blocks[target].params;
         let moves_nothing =
             params.iter().zip(&e.args).all(|(&p, &a)| self.unused.contains(&p) || self.r(p) == self.r(a));
-        if moves_nothing && self.rank[target] > from {
+        if moves_nothing {
             Label::Block(target)
         } else {
             self.tramps.push((from, e.clone()));
@@ -1265,7 +1266,36 @@ impl Emitter<'_> {
         }
     }
 
+    /// Emits block `b`'s instructions, then its terminator.
     fn block(&mut self, b: usize, place: usize, fused: &HashSet<Value>) -> Result<(), CodegenError> {
+        self.insts(b, fused)?;
+        self.term(b, place, fused)
+    }
+
+    /// Whether a jump from block `b` to `h` goes back to the head of a loop
+    /// that can be *rotated*: the jump runs the head's test itself and
+    /// branches back into the loop, which saves a jump (`loop`) on every
+    /// iteration. The head has to end in a branch, and be short, with
+    /// nothing in it that can unwind.
+    fn rotates(&self, b: usize, place: usize, h: usize, fused: &HashSet<Value>) -> bool {
+        let head = &self.f.blocks[h];
+        if h == b || self.rank[h] > place || !matches!(head.term, Some(Term::Br { .. })) {
+            return false;
+        }
+        let emitted = head
+            .insts
+            .iter()
+            .filter(|i| !i.results.first().is_some_and(|r| fused.contains(r) || self.dead.contains(r)))
+            .count();
+        emitted <= 4
+            && head
+                .insts
+                .iter()
+                .all(|i| !i.kind.can_unwind() && !matches!(i.kind, InstKind::Call { .. } | InstKind::CallInd { .. }))
+    }
+
+    /// Emits block `b`'s instructions.
+    fn insts(&mut self, b: usize, fused: &HashSet<Value>) -> Result<(), CodegenError> {
         let f = self.f;
         let block = &f.blocks[b];
         for (i, inst) in block.insts.iter().enumerate() {
@@ -1302,53 +1332,76 @@ impl Emitter<'_> {
                 None => {}
             }
         }
+        Ok(())
+    }
+
+    /// Emits the branch that ends block `b`, at layout place `place` (its
+    /// own, or that of a back edge that rotates its loop).
+    fn branch(&mut self, b: usize, place: usize, fused: &HashSet<Value>, span: Option<Span>) {
+        let block = &self.f.blocks[b];
+        let Some(Term::Br { cond, then, else_ }) = &block.term else { unreachable!("a branch") };
+        let fused_cmp = block.insts.last().filter(|i| fused.contains(cond) && i.results == [*cond]);
+        let then_block = then.block.0 as usize;
+        // When `then` comes next, jump away only when the condition fails,
+        // and fall into it.
+        let then_moves = self.f.blocks[then_block]
+            .params
+            .iter()
+            .zip(&then.args)
+            .any(|(&p, &a)| !self.unused.contains(&p) && self.r(p) != self.r(a));
+        let falls_into_then =
+            !then_moves && self.order.get(place + 1) == Some(&then_block) && self.rank[then_block] > place;
+        let (edge, holds) = if falls_into_then { (else_, false) } else { (then, true) };
+        let label = self.cond_target(place, edge);
+        let at = self.code.len();
+        let fold = self.folds.get(&(b, block.insts.len().wrapping_sub(1))).copied();
+        match fused_cmp.map(|i| &i.kind) {
+            // `not x`: a branch on `x` the other way.
+            Some(InstKind::Not(x)) => {
+                let op = if holds { Op::Jz } else { Op::Jnz };
+                self.put(span, word_i32(op, self.r(*x), 0));
+                self.fixups.push(Fixup { at, to: label, short: false });
+            }
+            Some(k) => {
+                let w = branch_word(k, holds, fold, self);
+                self.put(span, w);
+                self.fixups.push(Fixup { at, to: label, short: true });
+            }
+            None => {
+                let op = if holds { Op::Jnz } else { Op::Jz };
+                self.put(span, word_i32(op, self.r(*cond), 0));
+                self.fixups.push(Fixup { at, to: label, short: false });
+            }
+        }
+        if !falls_into_then {
+            self.edge_moves(else_, span);
+            self.jump_to(place, else_.block.0 as usize, span, false);
+        }
+    }
+
+    /// Emits block `b`'s terminator.
+    fn term(&mut self, b: usize, place: usize, fused: &HashSet<Value>) -> Result<(), CodegenError> {
+        let f = self.f;
+        let block = &f.blocks[b];
         let span = block.term_span;
         self.site = block.term_site;
         let term_start = self.code.len();
         match block.term.as_ref().expect("finished blocks end") {
+            Term::Jump(e) if self.rotates(b, place, e.block.0 as usize, fused) => {
+                // The loop's head again, here: its parameters, its
+                // instructions, and its branch, back into the loop.
+                let h = e.block.0 as usize;
+                self.edge_moves(e, span);
+                self.insts(h, fused)?;
+                let head = &f.blocks[h];
+                self.site = head.term_site;
+                self.branch(h, place, fused, head.term_span);
+            }
             Term::Jump(e) => {
                 self.edge_moves(e, span);
                 self.jump_to(place, e.block.0 as usize, span, false);
             }
-            Term::Br { cond, then, else_ } => {
-                let fused_cmp = block.insts.last().filter(|i| fused.contains(cond) && i.results == [*cond]);
-                let then_block = then.block.0 as usize;
-                // When `then` comes next, jump away only when the condition
-                // fails, and fall into it.
-                let then_moves = self.f.blocks[then_block]
-                    .params
-                    .iter()
-                    .zip(&then.args)
-                    .any(|(&p, &a)| !self.unused.contains(&p) && self.r(p) != self.r(a));
-                let falls_into_then =
-                    !then_moves && self.order.get(place + 1) == Some(&then_block) && self.rank[then_block] > place;
-                let (edge, holds) = if falls_into_then { (else_, false) } else { (then, true) };
-                let label = self.cond_target(place, edge);
-                let at = self.code.len();
-                let fold = self.folds.get(&(b, block.insts.len().wrapping_sub(1))).copied();
-                match fused_cmp.map(|i| &i.kind) {
-                    // `not x`: a branch on `x` the other way.
-                    Some(InstKind::Not(x)) => {
-                        let op = if holds { Op::Jz } else { Op::Jnz };
-                        self.put(span, word_i32(op, self.r(*x), 0));
-                        self.fixups.push(Fixup { at, to: label, short: false });
-                    }
-                    Some(k) => {
-                        let w = branch_word(k, holds, fold, self);
-                        self.put(span, w);
-                        self.fixups.push(Fixup { at, to: label, short: true });
-                    }
-                    None => {
-                        let op = if holds { Op::Jnz } else { Op::Jz };
-                        self.put(span, word_i32(op, self.r(*cond), 0));
-                        self.fixups.push(Fixup { at, to: label, short: false });
-                    }
-                }
-                if !falls_into_then {
-                    self.edge_moves(else_, span);
-                    self.jump_to(place, else_.block.0 as usize, span, false);
-                }
-            }
+            Term::Br { .. } => self.branch(b, place, fused, span),
             Term::Ret(vs) => {
                 self.free_big(span);
                 let moves = vs.iter().enumerate().map(|(i, &v)| (i as u16, self.r(v))).collect();

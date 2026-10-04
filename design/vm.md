@@ -517,7 +517,9 @@ Families, specialized along the dimensions that matter:
 - **calls**: `call f, base`, `call_fn`, `call_vt slot`, `call_native n`,
   `ret`, `ret1`, `ret0`.
 - **control**: `jmp`, `jz`, `jnz`, `switch` (a jump table), and `loop off`: a
-  back-edge that counts a tick (§9.5).
+  back-edge that counts a tick (§9.5). A conditional jump that goes
+  backwards counts one too: a loop whose back edge repeats the head's test
+  (it's *rotated*, §8.4) branches straight back into its body.
 - **counted loops**: `forrange i, end, off` increments, compares and
   branches in one instruction; `foreach.w` walks a buffer.
 - **traps**: `trap kind`, `unravel`.
@@ -549,7 +551,10 @@ interpreter, its handlers are generated from the same table.
 Code generation picks the fused form whenever the pattern is there. A compare
 whose only use is a branch becomes a compare-and-branch. A small constant
 operand becomes an immediate. A field's offset folds into the load. `i += 1`,
-a compare and the back-edge become `forrange`.
+a compare and the back-edge become `forrange`. A loop whose head is a short
+test is *rotated*: its back edge runs the head's instructions again and
+branches back into the body when the test holds, so an iteration costs no
+`loop`.
 
 V8 adds more from measurements. The stats build counts pairs of adjacent ops
 over the benchmark suite, and the most frequent pairs that can fuse become
@@ -743,8 +748,8 @@ All four run `defer`s and drops the same way. Only an unravel is an error.
 
 ### 9.5 Safepoints and ticks
 
-Back-edges (`loop`, `forrange`) and calls count down a tick counter kept in
-`Env`. When it runs out, one cold function checks everything that can
+Back-edges (`loop`, `forrange`, and any conditional jump backwards) and
+calls count down a tick counter kept in `Env`. When it runs out, one cold function checks everything that can
 interrupt a program:
 
 - Ctrl-C, a flag the signal handler sets;
