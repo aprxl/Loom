@@ -669,8 +669,11 @@ loop {
   each instruction, the loop got too big to keep `pc` and `fp` in registers.
 - Each op gets its own indirect jump only because LLVM is told to duplicate
   the dispatch (`-C llvm-args=-tail-dup-pred-size=1000` and `-succ-size`, in
-  `.cargo/config.toml`, for every target); a `RUSTFLAGS` environment variable
-  would replace them, which a test in `loom_vm` checks.
+  `.cargo/config.toml`, for every target), and each op's code starts on a
+  32-byte boundary (`-align-all-nofallthru-blocks=5`): without it, where the
+  code landed moved a benchmark by 24% when only the compiler changed. A
+  `RUSTFLAGS` environment variable would replace them, which a test in
+  `loom_vm` checks.
 - Everything rare is `#[cold]` and out of line: traps, the allocator's slow
   path, stack segment switches, unwinding.
 - Handlers never allocate Rust values or format strings on their fast path.

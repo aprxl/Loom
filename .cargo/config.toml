@@ -12,5 +12,12 @@ linker = "lld-link"
 # Treadle's dispatch loop is one `match` over every op. LLVM gives each op
 # its own copy of the dispatch (tail duplication: what computed goto does
 # in C) only when these caps allow that many successors; with one shared
-# dispatch, its speed swung by 30% with unrelated changes.
-rustflags = ["-C", "llvm-args=-tail-dup-pred-size=1000", "-C", "llvm-args=-tail-dup-succ-size=1000"]
+# dispatch, its speed swung by 30% with unrelated changes. Even with a
+# copy each, where each op's code lands still moved its speed (`nbody` by
+# 24% when only the optimizer changed): every block that isn't fallen into,
+# each op's code among them, starts on a 32-byte boundary.
+rustflags = [
+    "-C", "llvm-args=-tail-dup-pred-size=1000",
+    "-C", "llvm-args=-tail-dup-succ-size=1000",
+    "-C", "llvm-args=-align-all-nofallthru-blocks=5",
+]
