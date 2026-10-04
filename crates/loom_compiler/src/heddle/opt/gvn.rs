@@ -17,6 +17,13 @@
 //! program's data) is known by where it is, whichever of the values for
 //! that address reads it.
 //!
+//! An element's address (`elem`), whose list's buffer and length are
+//! known, becomes a check of the index against that length (gone when one
+//! like it dominates it) and the address in that buffer: which range
+//! analysis may then show can't fail. In a loop that can't change the
+//! header of a list in the frame, they're loaded there, and LICM takes the
+//! loads out of the loop.
+//!
 //! A map lookup (`map.find_str`, `map.find_int`) that one with the same map
 //! and key dominates gives what that one gave, when nothing on the way could
 //! have written memory: `if m.has(k) { m[k] += 1 }` looks `k` up once. Its
@@ -281,10 +288,30 @@ struct Gvn<'a> {
     addrs: HashMap<Value, Value>,
     /// The lookups made, and their results.
     finds: HashMap<FindKey, Vec<Value>>,
+    /// The `elem`s whose list's buffer and length are known, by (block,
+    /// instruction): the length to check the index against (none when a
+    /// check like it dominates), and the buffer.
+    split: HashMap<(usize, usize), (Option<Value>, Value)>,
+    /// Of those, the ones whose buffer and length are loaded there.
+    loads: HashMap<(usize, usize), (Value, Value)>,
+    /// What each loop may write, and the loops each block is in.
+    loops: Vec<LoopWrites>,
+    within: Vec<Vec<usize>>,
+    /// The types of the values made here, numbered from `types.len()`.
+    fresh: Vec<VTy>,
+    base: u32,
     undo: Vec<Undo>,
 }
 
 impl Gvn<'_> {
+    /// A new value, of type `ty`.
+    fn fresh(&mut self, ty: VTy) -> Value {
+        let v = Value(self.base + self.fresh.len() as u32);
+        self.fresh.push(ty);
+        self.repl.push(v);
+        v
+    }
+
     fn find(&self, mut v: Value) -> Value {
         while self.repl[v.0 as usize] != v {
             v = self.repl[v.0 as usize];
@@ -420,6 +447,12 @@ fn gvn_func(f: &mut Func) {
             .collect(),
         finds: HashMap::new(),
         addrs: HashMap::new(),
+        split: HashMap::new(),
+        loads: HashMap::new(),
+        loops: Vec::new(),
+        within: vec![Vec::new(); f.blocks.len()],
+        fresh: Vec::new(),
+        base: f.types.len() as u32,
         undo: Vec::new(),
     };
     let mut first: HashMap<(Root, i64), Value> = HashMap::new();
@@ -428,12 +461,16 @@ fn gvn_func(f: &mut Func) {
             g.addrs.insert(*r, *first.entry((root, off)).or_insert(*r));
         }
     }
-    // What each loop with one block before it may write, by its head.
-    let mut heads: HashMap<usize, LoopWrites> = HashMap::new();
+    // What each loop may write; by its head, when one block before it
+    // leads there.
+    let mut heads: HashMap<usize, usize> = HashMap::new();
     for l in cfg.loops() {
         let outside: Vec<usize> = cfg.preds[l.header].iter().copied().filter(|&p| !l.inside[p]).collect();
-        if outside != [cfg.idom[l.header].unwrap_or(usize::MAX)] {
-            continue;
+        if outside == [cfg.idom[l.header].unwrap_or(usize::MAX)] {
+            heads.insert(l.header, g.loops.len());
+        }
+        for &b in &l.blocks {
+            g.within[b].push(g.loops.len());
         }
         let mut w = LoopWrites { writes: Vec::new(), clobbers: false };
         for &b in &l.blocks {
@@ -453,7 +490,7 @@ fn gvn_func(f: &mut Func) {
                 w.clobbers = true;
             }
         }
-        heads.insert(l.header, w);
+        g.loops.push(w);
     }
     // (block, the undo mark to go back to once its children are done).
     let mut stack: Vec<(usize, Option<usize>)> = vec![(0, None)];
@@ -468,9 +505,11 @@ fn gvn_func(f: &mut Func) {
         stack.push((b, Some(g.undo.len())));
         // Memory is known only through a block's one way in.
         let only = g.cfg.preds[b].len() == 1 && g.cfg.idom[b] == Some(g.cfg.preds[b][0]);
-        if let Some(w) = heads.get(&b) {
+        if let Some(&l) = heads.get(&b) {
+            let w = std::mem::replace(&mut g.loops[l], LoopWrites { writes: Vec::new(), clobbers: false });
             g.forget(|alias, k| w.keeps(alias, k));
             g.forget_stable(|alias, k| w.keeps(alias, k));
+            g.loops[l] = w;
         } else if !only {
             g.forget(|_, _| false);
             g.forget_stable(|_, _| false);
@@ -481,19 +520,48 @@ fn gvn_func(f: &mut Func) {
         }
     }
     // Replace what went everywhere (landing pads too), and drop it.
+    f.types.extend(g.fresh.iter().copied());
     let repl: Vec<Value> = (0..f.types.len() as u32).map(|v| g.find(Value(v))).collect();
-    for ((block, dead), zero) in f.blocks.iter_mut().zip(&dead).zip(&zero) {
+    for (b, ((block, dead), zero)) in f.blocks.iter_mut().zip(&dead).zip(&zero).enumerate() {
         for (inst, &z) in block.insts.iter_mut().zip(zero) {
             if z {
                 let floats = matches!(f.types[inst.results[0].0 as usize], VTy::F32 | VTy::F64);
                 inst.kind = if floats { InstKind::Fconst(0) } else { InstKind::Iconst(0) };
             }
         }
-        let mut i = 0;
-        block.insts.retain(|_| {
-            i += 1;
-            !dead[i - 1]
-        });
+        let old = std::mem::take(&mut block.insts);
+        for (i, inst) in old.into_iter().enumerate() {
+            if dead[i] {
+                continue;
+            }
+            match (g.split.get(&(b, i)), &inst.kind) {
+                (Some(&(len, buf)), &InstKind::Elem { header, off, index, scale }) => {
+                    if let Some(&(buf, count)) = g.loads.get(&(b, i)) {
+                        for (at, mem_off, r) in [(header, off, buf), (header, off + 8, count)] {
+                            block.insts.push(crate::heddle::Inst {
+                                kind: InstKind::Load { ptr: at, off: mem_off, mem: Mem::W64 },
+                                results: vec![r],
+                                unwind: None,
+                                ..inst.clone()
+                            });
+                        }
+                    }
+                    if let Some(len) = len {
+                        block.insts.push(crate::heddle::Inst {
+                            kind: InstKind::Bounds { index, len },
+                            results: Vec::new(),
+                            ..inst.clone()
+                        });
+                    }
+                    block.insts.push(crate::heddle::Inst {
+                        kind: InstKind::Index { base: buf, index, scale },
+                        unwind: None,
+                        ..inst
+                    });
+                }
+                _ => block.insts.push(inst),
+            }
+        }
         for inst in &mut block.insts {
             crate::heddle::rewrite(&mut inst.kind, |v| repl[v.0 as usize]);
         }
@@ -501,6 +569,29 @@ fn gvn_func(f: &mut Func) {
             super::rewrite_term(t, |v| repl[v.0 as usize]);
         }
     }
+}
+
+/// The buffer and the length of the list whose header is at `header +
+/// off`, for the `elem` that's instruction `i` of block `b`: known, or new
+/// values for loads put just before it (see `loads`), when it's in loops
+/// none of which can change them and the header is in the frame (where
+/// LICM takes the loads out of them all, to run once).
+fn elem_parts(g: &mut Gvn, b: usize, i: usize, header: Value, off: i32) -> Option<(Value, Value)> {
+    let at = g.addr(header);
+    let keys = (MemKey::Load { ptr: at, off, mem: Mem::W64 }, MemKey::Load { ptr: at, off: off + 8, mem: Mem::W64 });
+    if let (Some(&buf), Some(&len)) = (g.mem.get(&keys.0), g.mem.get(&keys.1)) {
+        return Some((buf, len));
+    }
+    let framed = matches!(g.alias.root(header), (Root::Slot(_), Some(_)));
+    let kept = |l: &usize| g.loops[*l].keeps(&g.alias, &keys.0) && g.loops[*l].keeps(&g.alias, &keys.1);
+    if !framed || g.within[b].is_empty() || !g.within[b].iter().all(kept) {
+        return None;
+    }
+    let (buf, len) = (g.fresh(VTy::Ptr), g.fresh(VTy::Int));
+    g.remember(keys.0, buf);
+    g.remember(keys.1, len);
+    g.loads.insert((b, i), (buf, len));
+    Some((buf, len))
 }
 
 /// Numbers block `b`'s instructions, marking those that go in `dead`.
@@ -582,6 +673,20 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool]) 
             Role::Clobber => {
                 g.forget(|_, _| false);
                 g.forget_stable(|_, _| false);
+            }
+            // An element of a list whose buffer and length are known, or
+            // can be loaded where a loop can't change them.
+            Role::Other
+                if let InstKind::Elem { header, off, index, .. } = kind
+                    && let Some((buf, len)) = elem_parts(g, b, i, header, off) =>
+            {
+                let key = (InstKind::Bounds { index, len }, Vec::new());
+                let checked = g.exprs.contains_key(&key);
+                if !checked {
+                    g.exprs.insert(key.clone(), Vec::new());
+                    g.undo.push(Undo::Expr(key));
+                }
+                g.split.insert((b, i), ((!checked).then_some(len), buf));
             }
             Role::Other
                 if let InstKind::Native { name, imm, args } = &kind

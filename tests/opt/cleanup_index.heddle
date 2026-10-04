@@ -1,0 +1,69 @@
+fn count(v0: int) -> (int) {
+  slot0: 24 bytes, align 8
+  s0: inlined List.push#2
+b0(v0: int):
+    v32 = slot0
+    zero v32, 24
+    v1 = slot0
+    v2 = iconst 4
+    store.64 v1, v2
+    v3 = iconst 0
+    v7 = slot0
+    v34 = iconst 1
+    v36 = iconst 4
+    v37 = iconst 4
+    v9 = iconst 1
+    jump b1(v3) unwind b4
+b1(v5: int):
+    v6 = icmp.lt.u v5, v0
+    br v6, b2, b3
+b2:
+    v8 = cast usize to u32 v5 unwind b4
+    v33 = load.64 v7+8
+    v35 = add%.u64 v33, v34
+    native mem.grow #0(v7, v36, v37, v35) unwind b4
+    v38 = load.64 v7
+    v39 = index v38, v33 * 4
+    store.u32 v39, v8
+    store.64 v7+8, v35
+    v10 = add%.usize v5, v9
+    jump b1(v10) unwind b4
+b3:
+    v11 = iconst 0
+    v12 = iconst 0
+    v16 = slot0
+    v17 = iconst 0
+    v40 = load.64 v16
+    v41 = load.64 v16+8
+    v24 = iconst 1
+    v28 = iconst 1
+    jump b5(v12, v11) unwind b4
+b4:
+    v4 = slot0
+    freebuf v4+0, 4, align 4
+    zero v4, 24
+    resume
+b5(v14: int, v25: int):
+    v15 = icmp.lt.u v14, v0
+    br v15, b6, b7
+b6:
+    bounds v17, v41 unwind b4
+    v18 = index v40, v17 * 4
+    v19 = load.u32 v18
+    bounds v14, v41 unwind b4
+    v21 = index v40, v14 * 4
+    v22 = load.u32 v21
+    v23 = icmp.lt.u v19, v22
+    br v23, b8, b9(v25) unwind b4
+b7:
+    v31 = slot0
+    freebuf v31+0, 4, align 4
+    zero v31, 24
+    ret v25
+b8:
+    v26 = add.u32 v25, v24 unwind b4
+    jump b9(v26) unwind b4
+b9(v30: int):
+    v29 = add%.usize v14, v28
+    jump b5(v29, v30) unwind b4
+}

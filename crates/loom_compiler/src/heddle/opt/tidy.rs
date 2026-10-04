@@ -19,6 +19,8 @@ pub fn cleanup(module: &mut Module) {
     for f in &mut module.funcs {
         tidy(f);
         sink_elems(f);
+        sink_indexes(f);
+        place_indexes(f);
     }
 }
 
@@ -121,7 +123,145 @@ fn sink_elems(f: &mut Func) {
                 }
                 f.blocks[b].insts.insert(k, copy);
             }
-            i += 1;
+            // What came after it is at `i` now.
+        }
+    }
+}
+
+/// Moves each `index` whose uses are all loads and stores of it later in
+/// its block down to them, a copy before each (`ldx`, `stx` in codegen),
+/// with the `bounds` of the same index just before it, if there is one, in
+/// front of the first (`ldxc`, `stxc`): when what's before the first can't
+/// trap and has no effect, the check runs where it would have, as far as
+/// anything can tell. An `index` reads no memory, so its copies can go
+/// anywhere after it.
+fn sink_indexes(f: &mut Func) {
+    let mut uses: HashMap<Value, usize> = HashMap::new();
+    for b in &f.blocks {
+        for inst in &b.insts {
+            for u in crate::heddle::inst_uses(&inst.kind) {
+                *uses.entry(u).or_default() += 1;
+            }
+        }
+        for u in b.term.iter().flat_map(super::term_uses) {
+            *uses.entry(u).or_default() += 1;
+        }
+    }
+    for b in 0..f.blocks.len() {
+        let mut i = 0;
+        while i < f.blocks[b].insts.len() {
+            let insts = &f.blocks[b].insts;
+            let (&InstKind::Index { index, .. }, [r]) = (&insts[i].kind, insts[i].results.as_slice()) else {
+                i += 1;
+                continue;
+            };
+            let r = *r;
+            let check = i > 0 && matches!(insts[i - 1].kind, InstKind::Bounds { index: k, .. } if k == index);
+            let at: Vec<usize> = (i + 1..insts.len())
+                .filter(|&k| match &insts[k].kind {
+                    InstKind::Load { ptr, .. } => *ptr == r,
+                    InstKind::Store { ptr, val, .. } => *ptr == r && *val != r,
+                    _ => false,
+                })
+                .collect();
+            let Some(&first) = at.first() else {
+                i += 1;
+                continue;
+            };
+            if uses.get(&r) != Some(&at.len())
+                || (check && !insts[i + 1..first].iter().all(|j| pure(&j.kind)))
+                || (at.len() == 1 && first == i + 1)
+            {
+                i += 1;
+                continue;
+            }
+            let start = if check { i - 1 } else { i };
+            let group: Vec<_> = f.blocks[b].insts.drain(start..=i).collect();
+            let gone = group.len();
+            for (n, &k) in at.iter().enumerate().rev() {
+                let k = k - gone;
+                let mut copy = group.last().expect("the index").clone();
+                let v = if n == 0 {
+                    r
+                } else {
+                    let v = Value(f.types.len() as u32);
+                    f.types.push(f.ty(r));
+                    copy.results = vec![v];
+                    v
+                };
+                if let InstKind::Load { ptr, .. } | InstKind::Store { ptr, .. } = &mut f.blocks[b].insts[k].kind {
+                    *ptr = v;
+                }
+                f.blocks[b].insts.insert(k, copy);
+                if n == 0 && check {
+                    f.blocks[b].insts.insert(k, group[0].clone());
+                }
+            }
+            // What came after them is at `start` now.
+            i = start;
+        }
+    }
+}
+
+/// Moves each `index` whose one use is a load or a store of it, but not
+/// just after it (LICM took it out of a loop, or it was made in another
+/// block), to just before that use: there the two are one instruction
+/// (`ldx`), as cheap as the load alone, and a `bounds` of the same index
+/// just before it fuses too. Its operands were made before it, so they
+/// still are.
+fn place_indexes(f: &mut Func) {
+    let mut uses: HashMap<Value, usize> = HashMap::new();
+    for b in &f.blocks {
+        for inst in &b.insts {
+            for u in crate::heddle::inst_uses(&inst.kind) {
+                *uses.entry(u).or_default() += 1;
+            }
+        }
+        for u in b.term.iter().flat_map(super::term_uses) {
+            *uses.entry(u).or_default() += 1;
+        }
+    }
+    // The places just after each `index`.
+    let mut after: HashMap<Value, (usize, usize)> = HashMap::new();
+    for (b, block) in f.blocks.iter().enumerate() {
+        for (i, inst) in block.insts.iter().enumerate() {
+            if let (InstKind::Index { .. }, [r]) = (&inst.kind, inst.results.as_slice())
+                && uses.get(r) == Some(&1)
+            {
+                after.insert(*r, (b, i + 1));
+            }
+        }
+    }
+    let mut moving: HashMap<Value, crate::heddle::Inst> = HashMap::new();
+    for (b, block) in f.blocks.iter().enumerate() {
+        for (i, inst) in block.insts.iter().enumerate() {
+            let ptr = match &inst.kind {
+                InstKind::Load { ptr, .. } => *ptr,
+                InstKind::Store { ptr, val, .. } if ptr != val => *ptr,
+                _ => continue,
+            };
+            if let Some(&(db, di)) = after.get(&ptr)
+                && (db, di) != (b, i)
+            {
+                moving.insert(ptr, f.blocks[db].insts[di - 1].clone());
+            }
+        }
+    }
+    if moving.is_empty() {
+        return;
+    }
+    for block in &mut f.blocks {
+        let old = std::mem::take(&mut block.insts);
+        for inst in old {
+            if inst.results.first().is_some_and(|r| moving.contains_key(r)) {
+                continue;
+            }
+            if let InstKind::Load { ptr, .. } | InstKind::Store { ptr, .. } = &inst.kind
+                && let Some(idx) = moving.get(ptr)
+            {
+                block.insts.push(idx.clone());
+            }
+            block.insts.push(inst);
         }
     }
 }

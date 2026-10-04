@@ -1,0 +1,58 @@
+fn sum_to(v0: int) -> (int) {
+  slot0: 24 bytes, align 8
+  s0: inlined List.filled#2
+b0(v0: int):
+    v16 = slot0
+    zero v16, 24
+    v1 = iconst 1
+    v2 = slot0
+    v17 = iconst 8
+    v18 = iconst 0
+    v19 = icmp.ne.u v0, v18
+    br v19, b5, b6(v17)
+b1(v6: int, v8: int):
+    v7 = icmp.lt.u v6, v0
+    br v7, b2, b3
+b2:
+    v10 = index v24, v6 * 8
+    v11 = load.64 v10
+    v12 = add%.u64 v8, v11
+    v13 = iconst 1
+    v14 = add%.usize v6, v13
+    jump b1(v14, v12) unwind b4
+b3:
+    v15 = slot0
+    freebuf v15+0, 8, align 8
+    zero v15, 24
+    ret v8
+b4:
+    v5 = slot0
+    freebuf v5+0, 8, align 8
+    zero v5, 24
+    resume
+b5:
+    v20 = iconst 8
+    v21 = mul.u64 v0, v20
+    v22 = iconst 8
+    v23 = native mem.alloc #0(v21, v22)
+    jump b6(v23)
+b6(v24: ptr):
+    v25 = iconst 0
+    jump b7(v25)
+b7(v26: int):
+    v27 = icmp.lt.u v26, v0
+    br v27, b8, b9
+b8:
+    v28 = index v24, v26 * 8
+    store.64 v28, v1
+    v29 = iconst 1
+    v30 = add%.u64 v26, v29
+    jump b7(v30)
+b9:
+    store.64 v2, v24
+    store.64 v2+8, v0
+    store.64 v2+16, v0
+    v3 = iconst 0
+    v4 = iconst 0
+    jump b1(v4, v3) unwind b4
+}

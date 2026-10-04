@@ -1,0 +1,19 @@
+// passes: inline, sccp, gvn, sccp, ranges, sccp
+// fns: sum_to
+//
+// The list's buffer and length are known (`List.filled` stored them), so
+// `xs[i]` is a check of `i` against the length and an address in the
+// buffer; the length is `n`, and the loop runs while `i < n`, so range
+// analysis drops the check.
+use std.io.print
+
+fn sum_to(n: usize) -> u64 {
+    let xs: List[u64] = List.filled(1, n)
+    var s = 0u64
+    for i in 0..n { s = s +% xs[i] }
+    s
+}
+
+fn main() {
+    print(sum_to(5))
+}

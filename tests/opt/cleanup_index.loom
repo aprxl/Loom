@@ -1,0 +1,23 @@
+// passes: inline, sccp, gvn, sccp, ranges, sccp, licm, cleanup
+// fns: count
+//
+// In the second loop, nothing changes the list's header: its buffer and
+// length are loaded once, before the loop. `xs[0]`'s address doesn't
+// change either, and LICM takes it out of the loop, but its check stays
+// (the length isn't known); cleanup puts the address back next to its
+// load, where codegen makes check, address and load one instruction.
+use std.io.print
+
+fn count(n: usize) -> u32 {
+    var xs: List[u32] = List()
+    for i in 0..n { xs.push(i as u32) }
+    var c = 0u32
+    for i in 0..n {
+        if xs[0] < xs[i] { c += 1 }
+    }
+    c
+}
+
+fn main() {
+    print(count(5))
+}
