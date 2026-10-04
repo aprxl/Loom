@@ -512,6 +512,10 @@ fn probe(header: u64, h: u64, esize: u64, same: impl Fn(u64) -> bool) -> u64 {
 }
 
 /// `map.find_str(header, text, layout)`: (entry or `u64::MAX`, hash).
+// SAFETY: no other symbol in the program has this name, and nothing calls
+// it through the name.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "loom_treadle_map_find_str")]
 fn map_find_str(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let key = text(ctx, args[1], args[2])?;
     let (koff, esize) = (args[3] & 0xFFFF, args[3] >> 32);
@@ -531,6 +535,10 @@ fn map_find_str(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 }
 
 /// `map.find_int(header, word, layout)`: (entry or `u64::MAX`, hash).
+// SAFETY: no other symbol in the program has this name, and nothing calls
+// it through the name.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "loom_treadle_map_find_int")]
 fn map_find_int(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let word = args[1];
     let (koff, bytes, esize) = (args[2] & 0xFFFF, (args[2] >> 16) & 0xFFFF, args[2] >> 32);
@@ -549,6 +557,10 @@ fn map_find_int(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 }
 
 /// `str.concatN(text, …, dst)`: a `String` of the texts.
+// SAFETY: no other symbol in the program has this name, and nothing calls
+// it through the name.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "loom_treadle_concat")]
 fn concat(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let n = (args.len() - 1) / 2;
     let mut len = 0;
@@ -569,6 +581,10 @@ fn concat(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 }
 
 /// `str.hash(s)`: `text_hash` of the text.
+// SAFETY: no other symbol in the program has this name, and nothing calls
+// it through the name.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "loom_treadle_str_hash")]
 fn str_hash(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     args[0] = text_hash(text(ctx, args[0], args[1])?);
     Ok(())

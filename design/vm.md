@@ -674,13 +674,13 @@ loop {
   code landed moved a benchmark by 24% when only the compiler changed. A
   `RUSTFLAGS` environment variable would replace them, which a test in
   `loom_vm` checks.
-- The dispatch loop is the first code in the binary, and `float.math` next
-  (the `loom` binary's build script hands the linker an `/ORDER` file): its
-  address moved with the size of everything else, and `fib` ran 30% slower
-  with the same bytecode and the same loop at another address. What the
-  loop calls out of line (`memcpy`, the allocator, other natives) still
-  moves, worth about 3% on `richards` and `word_freq`. Only MSVC targets
-  (lld-link) take the file; elsewhere the loop lands where it lands.
+- The dispatch loop is the first code in the binary, then the natives and
+  the allocator it calls most (the `loom` binary's build script hands the
+  linker an `/ORDER` file of their names): their addresses moved with the
+  size of everything else, and `fib` ran 30% slower, `word_freq` 13%, with
+  the same bytecode. What else the loop calls out of line (`memcpy`, the
+  other natives) still moves, by a few percent at most. Only MSVC targets
+  (lld-link) take the file; elsewhere the code lands where it lands.
 - Everything rare is `#[cold]` and out of line: traps, the allocator's slow
   path, stack segment switches, unwinding.
 - Handlers never allocate Rust values or format strings on their fast path.

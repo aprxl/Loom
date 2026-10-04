@@ -40,15 +40,41 @@ fn collect(root: &Path, dir: &Path, files: &mut Vec<(String, PathBuf)>) {
     }
 }
 
-/// Treadle's dispatch loop first in the code, then the natives it calls
-/// most: where the loop lands moved benchmarks by 30% when only other code
-/// changed (design/vm.md §9.1). Only lld-link and link.exe take `/ORDER`.
+/// Treadle's dispatch loop first in the code, then the natives and the
+/// allocator it calls most: where they landed moved benchmarks by up to 30%
+/// when only other code changed (design/vm.md §9.1). Each has this name
+/// (`export_name`) in `loom_vm`.
+const ORDER: &[&str] = &[
+    "loom_treadle_execute",
+    "loom_treadle_float_math",
+    "loom_treadle_heap_alloc",
+    "loom_treadle_heap_free",
+    "loom_treadle_heap_realloc",
+    "loom_treadle_mem_alloc",
+    "loom_treadle_mem_free",
+    "loom_treadle_mem_calloc",
+    "loom_treadle_mem_grow",
+    "loom_treadle_mem_move",
+    "loom_treadle_str_eq",
+    "loom_treadle_str_hash",
+    "loom_treadle_concat",
+    "loom_treadle_map_find_str",
+    "loom_treadle_map_find_int",
+];
+
+/// Hands the linker [`ORDER`]. Only lld-link and link.exe take `/ORDER`.
 fn order_code() {
-    let env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
-    if env != "msvc" {
+    if std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default() != "msvc" {
         return;
     }
     let out = PathBuf::from(std::env::var_os("OUT_DIR").expect("set by cargo")).join("order.txt");
-    std::fs::write(&out, "loom_treadle_execute\nloom_treadle_float_math\n").expect("OUT_DIR is writable");
+    std::fs::write(
+        &out,
+        ORDER.join(
+            "
+",
+        ),
+    )
+    .expect("OUT_DIR is writable");
     println!("cargo:rustc-link-arg-bins=/ORDER:@{}", out.display());
 }

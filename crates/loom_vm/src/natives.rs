@@ -334,17 +334,29 @@ fn msg_unravel(ctx: &mut Ctx, _: &mut [u64], _: u16) -> Result<(), Trap> {
 }
 
 /// `mem.alloc(size, align) -> address`.
+// SAFETY: no other symbol in the program has this name, and nothing calls
+// it through the name.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "loom_treadle_mem_alloc")]
 fn mem_alloc(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     args[0] = ctx.heap.alloc(args[0], args[1])?;
     Ok(())
 }
 
 /// `mem.free(address, size, align)`.
+// SAFETY: no other symbol in the program has this name, and nothing calls
+// it through the name.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "loom_treadle_mem_free")]
 fn mem_free(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     ctx.heap.free(args[0], args[1], args[2])
 }
 
 /// `mem.calloc(size, align) -> address`: zeroed memory.
+// SAFETY: no other symbol in the program has this name, and nothing calls
+// it through the name.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "loom_treadle_mem_calloc")]
 fn mem_calloc(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let (size, align) = (args[0], args[1]);
     let ptr = ctx.heap.alloc(size, align)?;
@@ -357,6 +369,10 @@ fn mem_calloc(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 }
 
 /// `mem.move(dst, src, bytes)`: copies `bytes` bytes, which may overlap.
+// SAFETY: no other symbol in the program has this name, and nothing calls
+// it through the name.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "loom_treadle_mem_move")]
 fn mem_move(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let (dst, src, n) = (args[0], args[1], args[2]);
     if n == 0 {
@@ -375,6 +391,10 @@ fn mem_move(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 /// `mem.grow(header, element size, align, at least)`: makes room in the
 /// buffer of the list (or string) whose header (address, length, capacity)
 /// is at `header` for at least `at least` elements, at least doubling it.
+// SAFETY: no other symbol in the program has this name, and nothing calls
+// it through the name.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "loom_treadle_mem_grow")]
 fn mem_grow(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let (header, size, align, want) = (args[0], args[1], args[2], args[3]);
     // SAFETY: the compiler passes the address of a list's header, three
@@ -454,6 +474,10 @@ fn str_new(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 }
 
 /// `str.eq(a, a length, b, b length)`: whether the texts are the same.
+// SAFETY: no other symbol in the program has this name, and nothing calls
+// it through the name.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "loom_treadle_str_eq")]
 fn str_eq(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     // SAFETY: `str.eq` is passed two text values.
     let same = unsafe { ctx.text(args[0], args[1])? == ctx.text(args[2], args[3])? };

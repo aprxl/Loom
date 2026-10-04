@@ -85,6 +85,10 @@ impl Heap {
 
     /// `size` bytes aligned to `align`. Nothing is allocated for zero
     /// bytes: the address is `align`, never null and never dereferenced.
+    // SAFETY: no other symbol in the program has this name, and nothing calls
+    // it through the name.
+    #[allow(unsafe_code)]
+    #[unsafe(export_name = "loom_treadle_heap_alloc")]
     pub fn alloc(&mut self, size: u64, align: u64) -> Result<u64, Trap> {
         if size == 0 {
             return Ok(align.max(1));
@@ -135,6 +139,10 @@ impl Heap {
     }
 
     /// Frees what [`alloc`](Self::alloc) gave for `size` and `align`.
+    // SAFETY: no other symbol in the program has this name, and nothing calls
+    // it through the name.
+    #[allow(unsafe_code)]
+    #[unsafe(export_name = "loom_treadle_heap_free")]
     pub fn free(&mut self, ptr: u64, size: u64, align: u64) -> Result<(), Trap> {
         if size == 0 {
             return Ok(());
@@ -158,6 +166,10 @@ impl Heap {
 
     /// Moves an object of `old` bytes to one of `new` bytes, keeping what
     /// fits in both.
+    // SAFETY: no other symbol in the program has this name, and nothing calls
+    // it through the name.
+    #[allow(unsafe_code)]
+    #[unsafe(export_name = "loom_treadle_heap_realloc")]
     pub fn realloc(&mut self, ptr: u64, old: u64, new: u64, align: u64) -> Result<u64, Trap> {
         if old == 0 {
             return self.alloc(new, align);
