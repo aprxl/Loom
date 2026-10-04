@@ -562,7 +562,10 @@ ops. An op is kept only if it wins on the suite.
 
 ### 8.5 Registers and frames
 
-- Linear-scan allocation over SSA live ranges, with hints: a value only
+- Allocation over SSA live ranges with holes (a value dead between two
+  uses leaves its register to others there), after coalescing each block
+  parameter with what its edges pass it where their ranges don't clash
+  (loops' back edges first), with hints: a value only
   passed to a call is made in the call's window, a call's result stays where
   the call left it (when no other call comes before its last use), a value
   `ret` gives back is made in its result register, and a block parameter

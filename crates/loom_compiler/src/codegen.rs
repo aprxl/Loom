@@ -9,9 +9,13 @@
 //!    only feeds the block's branch becomes a compare-and-branch. A small
 //!    constant operand of `+`, `-` or such a branch becomes the
 //!    instruction's immediate, and a constant with no other use is dropped.
-//! 3. **Liveness and registers**: each value lives from its definition to
-//!    its last use, stretched over the blocks it's live across; a linear
-//!    scan gives each the lowest register free for all of that.
+//! 3. **Liveness and registers**: each value lives over ranges, from its
+//!    definition (or the start of a block it's live into) to its last use
+//!    (or the end of a block it's live out of), with holes between. A block
+//!    parameter shares a register with what its edges pass it when their
+//!    ranges allow (coalescing, loops' first), and each group gets, in
+//!    order, a register its hints want or the lowest one free over all its
+//!    ranges.
 //! 4. **Frame**: the values' registers, the frame slots (memory for values
 //!    that live in memory), two temporaries (for swaps at edges, and for a
 //!    function value being called), then scratch: natives take their
@@ -825,11 +829,18 @@ enum Use {
 /// A register for each value but those in `skip`; and how many registers
 /// they take.
 ///
-/// Linear scan, over each value's span from its definition to its last
-/// use, stretched over the blocks it's live across (a comparison fused into
-/// its branch is read at its own position, the one before the branch, and
-/// nothing is made in between). A value gets, when
-/// they're free for all of its span:
+/// Each value lives over a set of ranges of positions (each block's
+/// parameters at its start, then each instruction, then the terminator):
+/// from its definition, or the start of each block it's live into, to its
+/// last use there, or the end of each block it's live out of. Between them
+/// are holes, where another value may have its register. (A comparison
+/// fused into its branch is read at its own position, the one before the
+/// branch, and nothing is made in between.) A value whose last use is where
+/// another is made can give it its register: every instruction reads its
+/// operands before it writes.
+///
+/// In order of where they start, a value gets, when it's free over all of
+/// the value's ranges:
 ///
 /// 1. with `window` (the call window's first register), a register of the
 ///    window: a call's result stays where the call left it, and a value
@@ -842,8 +853,6 @@ enum Use {
 /// 4. otherwise, the lowest free register.
 fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16>) -> Option<(Vec<u16>, u16)> {
     let n = f.types.len();
-    // Positions: each block's parameters at its start, then each
-    // instruction, then the terminator.
     let mut start = vec![0usize; f.blocks.len()];
     let mut end = vec![0usize; f.blocks.len()];
     let mut pos = 0;
@@ -891,15 +900,9 @@ fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16
             }
         }
     }
-    // Each value's span of positions, and what hints need.
-    let mut span: Vec<Option<(usize, usize)>> = vec![None; n];
-    let mut touch = |v: Value, p: usize| {
-        let s = &mut span[v.0 as usize];
-        *s = Some(match *s {
-            None => (p, p),
-            Some((a, b)) => (a.min(p), b.max(p)),
-        });
-    };
+    // Each value's ranges, block by block (in layout order, so sorted), and
+    // what hints need.
+    let mut ranges: Vec<Vec<(usize, usize)>> = vec![Vec::new(); n];
     let mut calls = Vec::new();
     let mut natives = Vec::new();
     let mut result_of: HashMap<Value, (usize, u16)> = HashMap::new();
@@ -908,22 +911,29 @@ fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16
     let mut partners: HashMap<Value, Vec<Value>> = HashMap::new();
     for &b in order {
         let block = &f.blocks[b];
+        // Where each value touched in this block starts and ends here.
+        let mut here: HashMap<Value, (usize, usize)> = HashMap::new();
+        let touch = |v: Value, p: usize, here: &mut HashMap<Value, (usize, usize)>| {
+            let e = here.entry(v).or_insert((p, p));
+            e.0 = e.0.min(p);
+            e.1 = e.1.max(p);
+        };
         for &p in &block.params {
-            touch(p, start[b]);
+            touch(p, start[b], &mut here);
         }
         for &v in &live_in[b] {
-            touch(v, start[b]);
+            touch(v, start[b], &mut here);
         }
         for &v in &live_out[b] {
-            touch(v, end[b]);
+            touch(v, end[b], &mut here);
         }
         for (i, inst) in block.insts.iter().enumerate() {
             let at = start[b] + 1 + i;
             for u in inst_uses(&inst.kind) {
-                touch(u, at);
+                touch(u, at, &mut here);
             }
             for &r in &inst.results {
-                touch(r, at);
+                touch(r, at, &mut here);
             }
             match &inst.kind {
                 InstKind::Call { args, .. } | InstKind::CallInd { args, .. } => {
@@ -954,84 +964,155 @@ fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16
                 }
             }
         }
-        let Some(term) = &block.term else { continue };
-        for u in term_uses(term) {
-            touch(u, end[b]);
-        }
-        match term {
-            Term::Ret(vs) => {
-                for (i, &v) in vs.iter().enumerate() {
-                    uses.entry(v).or_default().push(Use::Ret(i as u16));
+        if let Some(term) = &block.term {
+            for u in term_uses(term) {
+                touch(u, end[b], &mut here);
+            }
+            match term {
+                Term::Ret(vs) => {
+                    for (i, &v) in vs.iter().enumerate() {
+                        uses.entry(v).or_default().push(Use::Ret(i as u16));
+                    }
+                }
+                Term::Br { cond, .. } => uses.entry(*cond).or_default().push(Use::Other),
+                Term::Unravel { ptr, len } => {
+                    uses.entry(*ptr).or_default().push(Use::Other);
+                    uses.entry(*len).or_default().push(Use::Other);
+                }
+                _ => {}
+            }
+            for e in term.edges() {
+                for (&param, &arg) in f.blocks[e.block.0 as usize].params.iter().zip(&e.args) {
+                    partners.entry(param).or_default().push(arg);
+                    partners.entry(arg).or_default().push(param);
+                    uses.entry(arg).or_default().push(Use::Other);
                 }
             }
-            Term::Br { cond, .. } => uses.entry(*cond).or_default().push(Use::Other),
-            Term::Unravel { ptr, len } => {
-                uses.entry(*ptr).or_default().push(Use::Other);
-                uses.entry(*len).or_default().push(Use::Other);
-            }
-            _ => {}
         }
-        for e in term.edges() {
-            for (&param, &arg) in f.blocks[e.block.0 as usize].params.iter().zip(&e.args) {
-                partners.entry(param).or_default().push(arg);
-                partners.entry(arg).or_default().push(param);
-                uses.entry(arg).or_default().push(Use::Other);
-            }
+        for (v, r) in here {
+            ranges[v.0 as usize].push(r);
         }
+    }
+    for r in &mut ranges {
+        r.sort_unstable();
     }
     // Whether a call (or native) runs strictly between `lo` and `hi`.
     let between = |list: &[usize], lo: usize, hi: usize| {
         let i = list.partition_point(|&p| p <= lo);
         list.get(i).is_some_and(|&p| p < hi)
     };
+    // Whether two ranges clash: one starts (is written) inside the other,
+    // or both start at the same place. A value read for the last time where
+    // another is made doesn't clash with it; one nothing reads still
+    // clashes where it's written.
+    let clash =
+        |a: (usize, usize), b: (usize, usize)| a.0 == b.0 || (b.0 < a.0 && a.0 < b.1) || (a.0 < b.0 && b.0 < a.1);
+    // The ranges each register holds, sorted.
+    let mut held: Vec<Vec<(usize, usize)>> = Vec::new();
+    let fits = |held: &[Vec<(usize, usize)>], r: u16, rs: &[(usize, usize)]| {
+        let Some(h) = held.get(usize::from(r)) else { return true };
+        rs.iter().all(|&x| {
+            // The first range held that ends at or after this one starts.
+            let i = h.partition_point(|&y| y.1 < x.0);
+            h[i..].iter().take_while(|y| y.0 <= x.1).all(|&y| !clash(x, y))
+        })
+    };
+    let take = |held: &mut Vec<Vec<(usize, usize)>>, r: u16, rs: &[(usize, usize)]| {
+        let r = usize::from(r);
+        if held.len() <= r {
+            held.resize(r + 1, Vec::new());
+        }
+        held[r].extend_from_slice(rs);
+        held[r].sort_unstable();
+    };
+
+    // Coalescing: a block parameter and a value an edge passes it share a
+    // group, which gets one register, when their ranges don't clash: the
+    // edge then moves nothing. Back edges first (a loop's values), then the
+    // rest.
+    let mut parent: Vec<usize> = (0..n).collect();
+    let mut group_ranges = ranges.clone();
+    fn root(parent: &mut [usize], mut v: usize) -> usize {
+        while parent[v] != v {
+            parent[v] = parent[parent[v]];
+            v = parent[v];
+        }
+        v
+    }
+    let mut rank = vec![0usize; f.blocks.len()];
+    for (i, &b) in order.iter().enumerate() {
+        rank[b] = i;
+    }
+    let mut pairs: Vec<(bool, Value, Value)> = Vec::new();
+    for &b in order {
+        for e in f.blocks[b].term.iter().flat_map(|t| t.edges()) {
+            let back = rank[e.block.0 as usize] <= rank[b];
+            for (&param, &arg) in f.blocks[e.block.0 as usize].params.iter().zip(&e.args) {
+                pairs.push((!back, param, arg));
+            }
+        }
+    }
+    // (Stable: back edges first, each in layout order.)
+    pairs.sort_by_key(|&(forward, _, _)| forward);
+    let fixed: HashSet<Value> = f.params().iter().copied().collect();
+    for (_, param, arg) in pairs {
+        if skip.contains(&param) || skip.contains(&arg) || ranges[arg.0 as usize].is_empty() {
+            continue;
+        }
+        let (a, b) = (root(&mut parent, param.0 as usize), root(&mut parent, arg.0 as usize));
+        if a == b {
+            continue;
+        }
+        let clashes = group_ranges[a].iter().any(|&x| group_ranges[b].iter().any(|&y| clash(x, y)));
+        if clashes {
+            continue;
+        }
+        // A function's parameter keeps its register: it's the group's root.
+        let (keep, gone) = if fixed.contains(&Value(b as u32)) { (b, a) } else { (a, b) };
+        parent[gone] = keep;
+        let moved = std::mem::take(&mut group_ranges[gone]);
+        group_ranges[keep].extend(moved);
+        group_ranges[keep].sort_unstable();
+    }
+    let mut members: Vec<Vec<Value>> = vec![Vec::new(); n];
+    for v in 0..n {
+        if !skip.contains(&Value(v as u32)) {
+            let r = root(&mut parent, v);
+            members[r].push(Value(v as u32));
+        }
+    }
 
     let mut reg = vec![0u16; n];
     let mut assigned = vec![false; n];
     let params = f.params();
     let mut used = params.len() as u16;
     for (i, &p) in params.iter().enumerate() {
-        reg[p.0 as usize] = i as u16;
-        assigned[p.0 as usize] = true;
+        for &m in &members[p.0 as usize] {
+            reg[m.0 as usize] = i as u16;
+            assigned[m.0 as usize] = true;
+        }
+        take(&mut held, i as u16, &group_ranges[p.0 as usize]);
     }
-    let mut values: Vec<(usize, usize, Value)> = (0..n)
-        .filter_map(|i| {
-            let v = Value(i as u32);
-            let (a, b) = span[i]?;
-            (!skip.contains(&v)).then_some((a, b, v))
+    let mut groups: Vec<(usize, usize, usize)> = (0..n)
+        .filter_map(|g| {
+            let first = group_ranges[g].first()?.0;
+            let last = group_ranges[g].iter().map(|r| r.1).max()?;
+            (!members[g].is_empty() && !assigned[g] && members[g].iter().all(|m| !assigned[m.0 as usize]))
+                .then_some((first, last, g))
         })
         .collect();
-    values.sort();
-    let param_set: HashSet<Value> = params.iter().copied().collect();
-    // Registers in use, with when they come free.
-    let mut active: Vec<(usize, u16)> =
-        values.iter().filter(|(_, _, v)| param_set.contains(v)).map(|&(_, end, v)| (end, reg[v.0 as usize])).collect();
-    let mut free: BTreeSet<u16> = BTreeSet::new();
-    for &(s, e, v) in &values {
-        if param_set.contains(&v) {
-            continue;
-        }
-        // A value whose last use is where this one is made can give it its
-        // register: every instruction reads its operands before it writes
-        // (a call's arguments are in its window before it runs, and its
-        // results come out after).
-        active.retain(|&(end, r)| {
-            if end <= s {
-                // Window registers aren't the pool's, nor the natives'
-                // scratch ones below them.
-                if window.is_none_or(|w| r < w - LINK_SLOTS as u16) {
-                    free.insert(r);
-                }
-                false
-            } else {
-                true
-            }
-        });
-        let busy = |r: u16, active: &[(usize, u16)]| active.iter().any(|&(_, a)| a == r);
+    groups.sort();
+    // Registers of the pool: below the natives' scratch, under a window.
+    let pool = |r: u16| window.is_none_or(|w| r < w - LINK_SLOTS as u16);
+    for &(s, e, g) in &groups {
+        let rs = &group_ranges[g];
         let mut choice = None;
-        if let Some(w) = window
+        // Only a value of its own goes in a window.
+        if let (Some(w), [v]) = (window, members[g].as_slice())
             && !between(&calls, s, e)
             && !between(&natives, s, e)
         {
+            let v = *v;
             let at_call_end =
                 |k: u16| matches!(uses.get(&v).map(Vec::as_slice), Some([Use::CallArg(at, j)]) if *at == e && *j == k);
             let at_native_end = |k: u16| matches!(uses.get(&v).map(Vec::as_slice), Some([Use::NativeArg(at, j)]) if *at == e && *j == k);
@@ -1047,42 +1128,31 @@ fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16
                 },
             };
             if let Some(r) = slot
-                && !busy(r, &active)
+                && fits(&held, r, rs)
             {
                 choice = Some(r);
             }
         }
         if choice.is_none() {
-            // A register of the pool, if it's free: below `used` and in
-            // `free`, or past `used` (the ones in between come free).
             let mut hinted: Vec<u16> = Vec::new();
-            for u in uses.get(&v).into_iter().flatten() {
-                if let Use::Ret(i) = u {
-                    hinted.push(*i);
+            for v in &members[g] {
+                for u in uses.get(v).into_iter().flatten() {
+                    if let Use::Ret(i) = u {
+                        hinted.push(*i);
+                    }
+                }
+                for p in partners.get(v).into_iter().flatten() {
+                    // Not a register of the windows: a call or a native writes those.
+                    if assigned[p.0 as usize] && pool(reg[p.0 as usize]) {
+                        hinted.push(reg[p.0 as usize]);
+                    }
                 }
             }
-            for p in partners.get(&v).into_iter().flatten() {
-                // Not a register of the windows: a call or a native writes those.
-                if assigned[p.0 as usize] && window.is_none_or(|w| reg[p.0 as usize] < w - LINK_SLOTS as u16) {
-                    hinted.push(reg[p.0 as usize]);
-                }
-            }
-            for h in hinted {
-                if h < used && free.remove(&h) {
-                    choice = Some(h);
-                    break;
-                }
-                if h >= used && !busy(h, &active) {
-                    free.extend(used..h);
-                    used = h.checked_add(1)?;
-                    choice = Some(h);
-                    break;
-                }
-            }
+            choice = hinted.into_iter().find(|&h| pool(h) && fits(&held, h, rs));
         }
         let r = match choice {
             Some(r) => r,
-            None => match free.pop_first() {
+            None => match (0..used).find(|&r| pool(r) && fits(&held, r, rs)) {
                 Some(r) => r,
                 None => {
                     used = used.checked_add(1)?;
@@ -1090,9 +1160,14 @@ fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16
                 }
             },
         };
-        reg[v.0 as usize] = r;
-        assigned[v.0 as usize] = true;
-        active.push((e, r));
+        if pool(r) && r >= used {
+            used = r.checked_add(1)?;
+        }
+        for &m in &members[g] {
+            reg[m.0 as usize] = r;
+            assigned[m.0 as usize] = true;
+        }
+        take(&mut held, r, rs);
     }
     Some((reg, used))
 }
