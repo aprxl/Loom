@@ -8,7 +8,8 @@
 //! - they're at known offsets from the same root, and their bytes don't
 //!   overlap;
 //! - one is in a frame slot whose address never escapes (it's only loaded
-//!   from, stored to, copied and zeroed), and the other isn't in that slot;
+//!   from, stored to, copied and zeroed, but by landing pads), and the
+//!   other isn't in that slot;
 //! - they're in different slots, or one is in a slot and the other in the
 //!   program's data;
 //! - one is in a list's buffer and the other in that list's header (a
@@ -56,7 +57,17 @@ impl Alias {
                 alias.escapes[n as usize] = true;
             }
         };
-        for b in &f.blocks {
+        // Only what the entry reaches: once a landing pad runs, the code
+        // that runs normally never does again, so what a pad does with a
+        // slot's address (pass it to a drop) can't change what it reads.
+        let mut reached = vec![false; f.blocks.len()];
+        let mut stack = vec![0usize];
+        while let Some(b) = stack.pop() {
+            if !std::mem::replace(&mut reached[b], true) {
+                stack.extend(f.blocks[b].term.iter().flat_map(|t| t.edges()).map(|e| e.block.0 as usize));
+            }
+        }
+        for b in f.blocks.iter().zip(&reached).filter(|(_, r)| **r).map(|(b, _)| b) {
             for inst in &b.insts {
                 use InstKind as K;
                 let escaping: Vec<Value> = match &inst.kind {

@@ -7,10 +7,10 @@ sieve        100000 1508039
 spectral_norm 40     972577
 fannkuch     7      792797
 binary_trees 8      1656997
-richards     10000  539776
-word_freq    40000  2011035
+richards     10000  539772
+word_freq    40000  2011036
 sort         20000  6470827
-streams      30000  9750809
+streams      30000  9750810
 chip8        30000  917222
 maps         20000  4630866
 lexer        500    6276526

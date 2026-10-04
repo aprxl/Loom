@@ -161,8 +161,15 @@ fn inline_into(f: &mut Func, funcs: &[Func], eligible: impl Fn(usize, &[Func]) -
     let slot_budget = f.slots.iter().map(|s| s.size).sum::<u64>() + SLOT_BYTES;
     let mut grown = size(f);
     // Blocks copied from a callee aren't looked at again: their calls were
-    // decided when the callee was done.
-    let mut copied = vec![false; f.blocks.len()];
+    // decided when the callee was done. Nor are landing pads, which only
+    // run when unwinding: a call there is cold.
+    let mut copied = vec![true; f.blocks.len()];
+    let mut stack = vec![0usize];
+    while let Some(b) = stack.pop() {
+        if std::mem::replace(&mut copied[b], false) {
+            stack.extend(f.blocks[b].term.iter().flat_map(|t| t.edges()).map(|e| e.block.0 as usize));
+        }
+    }
     let mut b = 0;
     while b < f.blocks.len() {
         if copied[b] {
@@ -193,6 +200,7 @@ fn inline_into(f: &mut Func, funcs: &[Func], eligible: impl Fn(usize, &[Func]) -
             grown += size(callee);
         }
         let added = inline_call(f, b, i, callee);
+        // The rest of the block, where the call returns, then the copy.
         copied.push(false);
         copied.resize(copied.len() + added, true);
         b += 1;

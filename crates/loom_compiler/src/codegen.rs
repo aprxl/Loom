@@ -509,7 +509,16 @@ fn succs(f: &Func, b: usize) -> Vec<usize> {
 /// entry block comes before. (Not every constant: one a cold path uses would
 /// cost every call.)
 fn hoist_constants(f: &Func) -> Option<Func> {
-    let looped = in_loops(f);
+    // Only loops the entry reaches: one in a landing pad (dropping a list's
+    // elements) runs only when unwinding.
+    let mut reached = vec![false; f.blocks.len()];
+    let mut stack = vec![0usize];
+    while let Some(b) = stack.pop() {
+        if !std::mem::replace(&mut reached[b], true) {
+            stack.extend(succs(f, b));
+        }
+    }
+    let looped: Vec<bool> = in_loops(f).into_iter().zip(&reached).map(|(l, r)| l && *r).collect();
     let constant =
         |k: &InstKind| matches!(k, InstKind::Iconst(_) | InstKind::Fconst(_) | InstKind::Str(_) | InstKind::Global(_));
     if !(1..f.blocks.len()).any(|b| looped[b] && f.blocks[b].insts.iter().any(|i| constant(&i.kind))) {
