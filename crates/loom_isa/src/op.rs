@@ -81,6 +81,14 @@ pub enum Form {
     /// word: a byte offset into the element (high half) and the scale (low
     /// half).
     RE,
+    /// `a`: the register loaded or stored; `b`: the register holding an
+    /// address; `c`: an index register; an extension word: a byte offset
+    /// (high half) and the scale (low half).
+    RX,
+    /// As [`Form::RX`], and the index checked against a length: the
+    /// extension word's low 32 bits are the scale, the next 16 a byte
+    /// offset, and the top 16 the register holding the length.
+    RXC,
     /// `a`: the log2 of an alignment; an extension word: the byte offset
     /// of a list's header from the frame pointer (high half) and an element
     /// size (low half).
@@ -111,6 +119,8 @@ impl Form {
             | Form::ABFZ
             | Form::FE
             | Form::RE
+            | Form::RX
+            | Form::RXC
             | Form::FB
             | Form::RB => 2,
             _ => 1,
@@ -186,7 +196,9 @@ impl Op {
         let name = self.name();
         let (base, ty) = name.split_once('.').unwrap_or((name, ""));
         match base {
-            "elem" | "elemf" | "ldelf" | "stelf" | "ldel" | "stel" | "bounds" | "boundsk" => Some(Check::Bounds),
+            "elem" | "elemf" | "ldelf" | "stelf" | "ldel" | "stel" | "ldxc" | "stxc" | "bounds" | "boundsk" => {
+                Some(Check::Bounds)
+            }
             "add" | "sub" | "mul" | "addk" | "subk" | "mulk" | "neg" if !ty.starts_with('f') => Some(Check::Overflow),
             "cast" => Some(Check::Overflow),
             _ => None,
@@ -536,6 +548,31 @@ ops! {
     StEl16 = "stel.16", RE;
     StEl32 = "stel.32", RE;
     StEl64 = "stel.64", RE;
+    // a load or a store at b + c * scale + offset: an element whose index
+    // was checked already (`x`), or is checked against the length in a
+    // register here (`xc`)
+    LdX8S = "ldx.i8", RX;
+    LdX8U = "ldx.u8", RX;
+    LdX16S = "ldx.i16", RX;
+    LdX16U = "ldx.u16", RX;
+    LdX32S = "ldx.i32", RX;
+    LdX32U = "ldx.u32", RX;
+    LdX64 = "ldx.64", RX;
+    StX8 = "stx.8", RX;
+    StX16 = "stx.16", RX;
+    StX32 = "stx.32", RX;
+    StX64 = "stx.64", RX;
+    LdXC8S = "ldxc.i8", RXC;
+    LdXC8U = "ldxc.u8", RXC;
+    LdXC16S = "ldxc.i16", RXC;
+    LdXC16U = "ldxc.u16", RXC;
+    LdXC32S = "ldxc.i32", RXC;
+    LdXC32U = "ldxc.u32", RXC;
+    LdXC64 = "ldxc.64", RXC;
+    StXC8 = "stxc.8", RXC;
+    StXC16 = "stxc.16", RXC;
+    StXC32 = "stxc.32", RXC;
+    StXC64 = "stxc.64", RXC;
     // free the buffer of a list (or a `String`) unless its capacity is 0:
     // its header in the frame, or at a register's address
     FreeBufF = "freebuf.f", FB;

@@ -208,6 +208,10 @@ struct Emitter<'m> {
     /// Elements' addresses only the next instruction, a load or a store,
     /// uses: made by that one.
     elems: HashSet<Value>,
+    /// The `index`es that fuse with their load or store (see
+    /// [`x_accesses`]), and the places of the `bounds` that fuse too.
+    xs: HashSet<Value>,
+    x_checks: HashSet<(usize, usize)>,
     /// Values nothing reads: a call's results that aren't, or a block's
     /// parameters. Their registers may be another value's, so they aren't
     /// written.
@@ -242,6 +246,7 @@ fn emit_func(
     let fused = if fuse { fusions(f) } else { HashSet::new() };
     let (folds, dead) = immediates(f);
     let elems = elem_accesses(f);
+    let (xs, x_checks) = x_accesses(f, &folds);
     // The slots, after the values' registers, each at its alignment: the big
     // ones as a cell, whose block is on the heap (what is big gets smaller
     // when the frame doesn't fit its registers otherwise).
@@ -253,7 +258,7 @@ fn emit_func(
         let (slot_of, folded_slots) = slot_uses(f, &big);
         let mut dead = dead.clone();
         dead.extend(folded_slots);
-        let skip: HashSet<Value> = fused.union(&dead).chain(&elems).copied().collect();
+        let skip: HashSet<Value> = fused.union(&dead).chain(&elems).chain(&xs).copied().collect();
         // The window's place comes from how many registers values need; a
         // second pass then lets values sit in it, which only frees registers.
         let Some((_, first)) = allocate(f, &order, &skip, None) else { break };
@@ -346,6 +351,8 @@ fn emit_func(
         folds,
         dead,
         elems,
+        xs,
+        x_checks,
         unused,
         tramps: Vec::new(),
         tramp_at: Vec::new(),
@@ -685,6 +692,48 @@ fn elem_accesses(f: &Func) -> HashSet<Value> {
         }
     }
     out
+}
+
+/// The `index`es that fuse with the load or store just after them, their
+/// only use (`ldx`, `stx`); and of those, the places of the `bounds` just
+/// before them that check the same index against a length in a register,
+/// which fuse too (`ldxc`, `stxc`).
+fn x_accesses(f: &Func, folds: &HashMap<(usize, usize), Fold>) -> (HashSet<Value>, HashSet<(usize, usize)>) {
+    let mut uses: HashMap<Value, usize> = HashMap::new();
+    for b in &f.blocks {
+        for inst in &b.insts {
+            for u in inst_uses(&inst.kind) {
+                *uses.entry(u).or_default() += 1;
+            }
+        }
+        for u in b.term.iter().flat_map(term_uses) {
+            *uses.entry(u).or_default() += 1;
+        }
+    }
+    let (mut xs, mut checks) = (HashSet::new(), HashSet::new());
+    for (bi, b) in f.blocks.iter().enumerate() {
+        for i in 0..b.insts.len().saturating_sub(1) {
+            let (InstKind::Index { index, scale, .. }, [r]) = (&b.insts[i].kind, b.insts[i].results.as_slice()) else {
+                continue;
+            };
+            let next = match &b.insts[i + 1].kind {
+                InstKind::Load { ptr, off, .. } => *ptr == *r && (0..=0xFFFF).contains(off),
+                InstKind::Store { ptr, off, val, .. } => *ptr == *r && *val != *r && (0..=0xFFFF).contains(off),
+                _ => false,
+            };
+            if !next || uses.get(r) != Some(&1) || u32::try_from(*scale).is_err() {
+                continue;
+            }
+            xs.insert(*r);
+            if i > 0
+                && matches!(b.insts[i - 1].kind, InstKind::Bounds { index: k, .. } if k == *index)
+                && !folds.contains_key(&(bi, i - 1))
+            {
+                checks.insert((bi, i - 1));
+            }
+        }
+    }
+    (xs, checks)
 }
 
 /// A constant operand folded into an instruction as its immediate.
@@ -1383,10 +1432,9 @@ impl Emitter<'_> {
         let f = self.f;
         let block = &f.blocks[b];
         for (i, inst) in block.insts.iter().enumerate() {
-            if inst
-                .results
-                .first()
-                .is_some_and(|r| fused.contains(r) || self.dead.contains(r) || self.elems.contains(r))
+            if inst.results.first().is_some_and(|r| {
+                fused.contains(r) || self.dead.contains(r) || self.elems.contains(r) || self.xs.contains(r)
+            }) || self.x_checks.contains(&(b, i))
             {
                 continue;
             }
@@ -1399,13 +1447,26 @@ impl Emitter<'_> {
                 }
                 _ => None,
             };
-            self.site = elem.unwrap_or(inst).site;
-            let unwind = match elem {
-                Some(e) => {
+            // A load or a store at an `index` the instruction before gave,
+            // and the `bounds` before that if it fuses too.
+            let x = match &inst.kind {
+                InstKind::Load { ptr, .. } | InstKind::Store { ptr, .. } if self.xs.contains(ptr) => {
+                    let check = (i >= 2 && self.x_checks.contains(&(b, i - 2))).then(|| &block.insts[i - 2]);
+                    Some((&block.insts[i - 1], check))
+                }
+                _ => None,
+            };
+            self.site = elem.or(x.and_then(|(_, c)| c)).unwrap_or(inst).site;
+            let unwind = match (elem, x) {
+                (Some(e), _) => {
                     self.elem_access(e, inst)?;
                     e.unwind.or(inst.unwind)
                 }
-                None => {
+                (None, Some((idx, check))) => {
+                    self.x_access(idx, check, inst)?;
+                    check.and_then(|c| c.unwind).or(inst.unwind)
+                }
+                (None, None) => {
                     self.inst(inst, fold)?;
                     inst.unwind
                 }
@@ -1558,6 +1619,52 @@ impl Emitter<'_> {
                 };
                 let ext = ((off as u64) << 32) | *scale;
                 self.put_ext(span, word(ops.1, reg, base, index), Some(ext));
+            }
+        }
+        Ok(())
+    }
+
+    /// A load or a store at `base + index * scale + off` (`ldx`, `stx`), its
+    /// index checked against a length here when `check` is the `bounds`
+    /// before it (`ldxc`, `stxc`).
+    fn x_access(
+        &mut self,
+        idx: &crate::heddle::Inst,
+        check: Option<&crate::heddle::Inst>,
+        access: &crate::heddle::Inst,
+    ) -> Result<(), CodegenError> {
+        use Op as O;
+        let InstKind::Index { base, index, scale } = &idx.kind else {
+            return Err("an indexed access without its index".into());
+        };
+        let span = check.and_then(|c| c.span).or(idx.span).or(access.span);
+        let (mem, off, reg, store) = match &access.kind {
+            InstKind::Load { mem, off, .. } => (*mem, *off, self.r(access.results[0]), false),
+            InstKind::Store { mem, off, val, .. } => (*mem, *off, self.r(*val), true),
+            _ => return Err("an indexed access that isn't a load or a store".into()),
+        };
+        let ops = match (mem, store) {
+            (Mem::I8, false) => (O::LdX8S, O::LdXC8S),
+            (Mem::U8, false) => (O::LdX8U, O::LdXC8U),
+            (Mem::I16, false) => (O::LdX16S, O::LdXC16S),
+            (Mem::U16, false) => (O::LdX16U, O::LdXC16U),
+            (Mem::I32, false) => (O::LdX32S, O::LdXC32S),
+            (Mem::U32, false) => (O::LdX32U, O::LdXC32U),
+            (Mem::W64, false) => (O::LdX64, O::LdXC64),
+            (Mem::I8 | Mem::U8, true) => (O::StX8, O::StXC8),
+            (Mem::I16 | Mem::U16, true) => (O::StX16, O::StXC16),
+            (Mem::I32 | Mem::U32, true) => (O::StX32, O::StXC32),
+            (Mem::W64, true) => (O::StX64, O::StXC64),
+        };
+        let (base, index) = (self.r(*base), self.r(*index));
+        match check.map(|c| &c.kind) {
+            Some(InstKind::Bounds { len, .. }) => {
+                let ext = (u64::from(self.r(*len)) << 48) | ((off as u64) << 32) | *scale;
+                self.put_ext(span, word(ops.1, reg, base, index), Some(ext));
+            }
+            _ => {
+                let ext = ((off as u64) << 32) | *scale;
+                self.put_ext(span, word(ops.0, reg, base, index), Some(ext));
             }
         }
         Ok(())

@@ -91,7 +91,16 @@ fn operands(image: &Image, op: Op, w: u64, ext: u64, pc: usize) -> String {
         Form::ABCZ => format!("r{}, r{}, r{} * {ext}", a(w), b(w), c(w)),
         Form::ABFZ => format!("r{}, fp+{}[r{}] * {}", a(w), ext >> 32, b(w), ext & 0xFFFF_FFFF),
         Form::FE => format!("r{}, fp+{}[r{}] * {} + {}", a(w), ext >> 32, b(w), ext & 0xFFFF_FFFF, c(w)),
-        Form::RE => format!("r{}, r{}[r{}] * {} + {}", a(w), b(w), c(w), ext & 0xFFFF_FFFF, ext >> 32),
+        Form::RE | Form::RX => format!("r{}, r{}[r{}] * {} + {}", a(w), b(w), c(w), ext & 0xFFFF_FFFF, ext >> 32),
+        Form::RXC => format!(
+            "r{}, r{}[r{} < r{}] * {} + {}",
+            a(w),
+            b(w),
+            c(w),
+            ext >> 48,
+            ext & 0xFFFF_FFFF,
+            (ext >> 32) & 0xFFFF
+        ),
         Form::FB => format!("fp+{} * {}, align {}", ext >> 32, ext & 0xFFFF_FFFF, 1u64 << a(w)),
         Form::RB => format!("r{} * {ext}, align {}", a(w), 1u64 << b(w)),
         Form::AFn => {

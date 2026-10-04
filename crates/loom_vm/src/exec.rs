@@ -547,6 +547,46 @@ impl<'i> Machine<'i> {
                         unsafe { (p as *mut $t).write_unaligned(v) }
                     }};
                 }
+                // The address of a load or a store at `b + c * scale + off`
+                // (`ldx`, `stx`): an index the compiler checked, or checks
+                // here against the length in a register (`ldxc`, `stxc`).
+                macro_rules! x_at {
+                    (plain, $n:expr) => {{
+                        let ext = ext!();
+                        let p = r!(b(w)).wrapping_add(r!(c(w)).wrapping_mul(ext & 0xFFFF_FFFF)).wrapping_add(ext >> 32);
+                        mem_check!(p, $n);
+                        p
+                    }};
+                    (checked, $n:expr) => {{
+                        let ext = ext!();
+                        let (index, len) = (r!(c(w)), r!((ext >> 48) as usize));
+                        if index >= len {
+                            throw!(Trap::Index { index, len });
+                        }
+                        let p = r!(b(w))
+                            .wrapping_add(index.wrapping_mul(ext & 0xFFFF_FFFF))
+                            .wrapping_add((ext >> 32) & 0xFFFF);
+                        mem_check!(p, $n);
+                        p
+                    }};
+                }
+                macro_rules! ld_x {
+                    ($at:tt, $t:ty, $ext:expr) => {{
+                        let p = x_at!($at, std::mem::size_of::<$t>());
+                        // SAFETY: an element of a list's buffer, whose index
+                        // the compiler checked (or `x_at` just did).
+                        let v = unsafe { (p as *const $t).read_unaligned() };
+                        set!(a(w), $ext(v))
+                    }};
+                }
+                macro_rules! st_x {
+                    ($at:tt, $t:ty) => {{
+                        let p = x_at!($at, std::mem::size_of::<$t>());
+                        let v = r!(a(w)) as $t;
+                        // SAFETY: as for `ld_x`.
+                        unsafe { (p as *mut $t).write_unaligned(v) }
+                    }};
+                }
                 // Frees the buffer of the list whose header is at `header`, of
                 // `size`-byte elements, unless its capacity is zero.
                 macro_rules! free_buf {
@@ -1052,6 +1092,28 @@ impl<'i> Machine<'i> {
                     Op::StEl16 => st_el!(reg, u16),
                     Op::StEl32 => st_el!(reg, u32),
                     Op::StEl64 => st_el!(reg, u64),
+                    Op::LdX8S => ld_x!(plain, i8, |v: i8| v as i64 as u64),
+                    Op::LdX8U => ld_x!(plain, u8, u64::from),
+                    Op::LdX16S => ld_x!(plain, i16, |v: i16| v as i64 as u64),
+                    Op::LdX16U => ld_x!(plain, u16, u64::from),
+                    Op::LdX32S => ld_x!(plain, i32, |v: i32| v as i64 as u64),
+                    Op::LdX32U => ld_x!(plain, u32, u64::from),
+                    Op::LdX64 => ld_x!(plain, u64, |v: u64| v),
+                    Op::StX8 => st_x!(plain, u8),
+                    Op::StX16 => st_x!(plain, u16),
+                    Op::StX32 => st_x!(plain, u32),
+                    Op::StX64 => st_x!(plain, u64),
+                    Op::LdXC8S => ld_x!(checked, i8, |v: i8| v as i64 as u64),
+                    Op::LdXC8U => ld_x!(checked, u8, u64::from),
+                    Op::LdXC16S => ld_x!(checked, i16, |v: i16| v as i64 as u64),
+                    Op::LdXC16U => ld_x!(checked, u16, u64::from),
+                    Op::LdXC32S => ld_x!(checked, i32, |v: i32| v as i64 as u64),
+                    Op::LdXC32U => ld_x!(checked, u32, u64::from),
+                    Op::LdXC64 => ld_x!(checked, u64, |v: u64| v),
+                    Op::StXC8 => st_x!(checked, u8),
+                    Op::StXC16 => st_x!(checked, u16),
+                    Op::StXC32 => st_x!(checked, u32),
+                    Op::StXC64 => st_x!(checked, u64),
                     Op::FreeBufF => {
                         let ext = ext!();
                         free_buf!((fp as u64).wrapping_add(ext >> 32), ext & 0xFFFF_FFFF, 1u64 << a(w))

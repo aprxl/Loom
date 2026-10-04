@@ -3,14 +3,14 @@
 # (with `--features vm-stats`); LOOM_BLESS=1 writes them anew.
 fib          20     109449
 mandelbrot   40     789517
-sieve        100000 1508039
-spectral_norm 40     908577
-fannkuch     7      792795
+sieve        100000 1408038
+spectral_norm 40     844457
+fannkuch     7      792774
 binary_trees 8      1549178
 richards     10000  519772
-word_freq    40000  1849984
+word_freq    40000  1849854
 sort         20000  6470818
 streams      30000  1100062
-chip8        30000  857139
-maps         20000  4630786
-lexer        500    5771496
+chip8        30000  775009
+maps         20000  4545253
+lexer        500    5741996

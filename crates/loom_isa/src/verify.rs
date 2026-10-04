@@ -227,10 +227,16 @@ fn verify_func(image: &Image, index: usize) -> Result<(), VerifyError> {
                 reg(b(w))?;
                 reg(c(w))?;
             }
-            Form::RE => {
+            Form::RE | Form::RX => {
                 reg(a(w))?;
                 reg(b(w))?;
                 reg(c(w))?;
+            }
+            Form::RXC => {
+                reg(a(w))?;
+                reg(b(w))?;
+                reg(c(w))?;
+                reg((ext >> 48) as usize)?;
             }
             Form::FB => {
                 // The list's header: three words, inside the frame.
