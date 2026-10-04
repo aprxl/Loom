@@ -1,0 +1,25 @@
+fn scaled(v0: int, v1: int) -> (int) {
+  slot0: 8 bytes, align 8
+  slot1: 8 bytes, align 8
+  s0: inlined scaled.{lambda}
+b0(v0: int, v1: int):
+    v2 = slot0
+    store.64 v2, v1
+    v3 = iconst 0
+    v4 = slot1
+    v5 = slot0
+    store.64 v4, v5
+    v7 = iconst 0
+    jump b1(v3, v7)
+b1(v8: int, v13: int):
+    v9 = icmp.lt.u v8, v0
+    br v9, b3, b2
+b2:
+    ret v13
+b3:
+    v10 = iconst 1
+    v11 = add%.u64 v8, v10
+    v17 = mul.u64 v8, v1 @s0
+    v14 = add.u64 v13, v17
+    jump b1(v11, v14)
+}

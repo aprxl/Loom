@@ -1,0 +1,13 @@
+// passes: inline, gvn, sccp, inline, gvn
+// fns: scaled
+//
+// The lambda reads `k` through its environment, a slot the loop never
+// writes: at the loop's head, what was stored there before the loop is
+// still known, so the loop multiplies by `k` itself, with no loads.
+use std.io.print
+
+fn scaled(n: u64, k: u64) -> u64 = (0..n).map(x => x * k).sum()
+
+fn main() {
+    print(scaled(4, 3))
+}

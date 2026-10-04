@@ -109,10 +109,8 @@ b14:
     v68 = icmp.ne.u v66, v67
     br v68, b15, b16
 b15:
-    v69 = load.64 v0+32
-    v70 = load.64 v0+24
     v71 = iconst 1
-    v72 = sub%.u64 v69, v71
+    v72 = sub%.u64 v50, v71
     v73 = and v66, v72
     jump b17(v73)
 b16:
@@ -120,7 +118,7 @@ b16:
     v87 = add%.u64 v62, v86
     jump b13(v87)
 b17(v74: int):
-    v75 = index v70, v74 * 8
+    v75 = index v59, v74 * 8
     v76 = load.64 v75
     v77 = iconst 0
     v78 = icmp.eq.u v76, v77

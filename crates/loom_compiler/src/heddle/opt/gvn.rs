@@ -7,10 +7,15 @@
 //! down. A trapping instruction (`x + y` checked, a bounds check) can go
 //! too: the one that dominates it already trapped, or found nothing wrong
 //! with the same operands. Loads are only kept along a path with no other
-//! way in: a block that more than one edge reaches (a loop's head, where an
-//! `if`'s arms meet) starts with no loads known, and so does what comes
-//! after a call. A store or a copy forgets what it may change (see
-//! `alias`), and a store is then known to have put its value there.
+//! way in: a block that more than one edge reaches (where an `if`'s arms
+//! meet) starts with no loads known, and so does what comes after a call.
+//! A loop's head is the exception, when one block before the loop leads to
+//! it: what was known there still is, but for what the loop may write (a
+//! call in it may write anything but a slot whose address never escapes).
+//! A store or a copy forgets what it may change (see `alias`), and a store
+//! is then known to have put its value there. Memory in a slot (or the
+//! program's data) is known by where it is, whichever of the values for
+//! that address reads it.
 //!
 //! A map lookup (`map.find_str`, `map.find_int`) that one with the same map
 //! and key dominates gives what that one gave, when nothing on the way could
@@ -23,7 +28,7 @@ use std::collections::HashMap;
 
 use super::alias::{Access, Alias, Root};
 use super::cfg::Cfg;
-use crate::heddle::{BitOp, Cmp, FOp, Func, InstKind, IntOp, Mem, Module, VTy, Value};
+use crate::heddle::{BitOp, Cmp, FOp, Func, InstKind, IntOp, Mem, Module, Term, VTy, Value};
 
 /// Numbers every function's values.
 pub fn gvn(module: &mut Module) {
@@ -74,6 +79,14 @@ enum MemKey {
 }
 
 impl MemKey {
+    /// The same key, with the address it reads named by `name`.
+    fn named(self, name: impl Fn(Value) -> Value) -> MemKey {
+        match self {
+            MemKey::Load { ptr, off, mem } => MemKey::Load { ptr: name(ptr), off, mem },
+            MemKey::Zero { ptr, off, size } => MemKey::Zero { ptr: name(ptr), off, size },
+        }
+    }
+
     /// The bytes it reads.
     fn access(&self) -> Access {
         match self {
@@ -227,6 +240,22 @@ enum Undo {
     Stable(MemKey, Option<Value>),
     /// A lookup made (to forget), or forgotten (to know again).
     Find(FindKey, Option<Vec<Value>>),
+}
+
+/// What a loop may write: memory known before it that none of this
+/// touches is known at its head too.
+struct LoopWrites {
+    writes: Vec<Access>,
+    /// A call, or anything else that may write what it can reach.
+    clobbers: bool,
+}
+
+impl LoopWrites {
+    fn keeps(&self, alias: &Alias, k: &MemKey) -> bool {
+        let a = k.access();
+        let private = matches!(alias.root(a.ptr), (Root::Slot(n), _) if !alias.escapes[n as usize]);
+        (private || !self.clobbers) && self.writes.iter().all(|w| !alias.may_alias(*w, a))
+    }
 }
 
 struct Gvn<'a> {
@@ -399,6 +428,33 @@ fn gvn_func(f: &mut Func) {
             g.addrs.insert(*r, *first.entry((root, off)).or_insert(*r));
         }
     }
+    // What each loop with one block before it may write, by its head.
+    let mut heads: HashMap<usize, LoopWrites> = HashMap::new();
+    for l in cfg.loops() {
+        let outside: Vec<usize> = cfg.preds[l.header].iter().copied().filter(|&p| !l.inside[p]).collect();
+        if outside != [cfg.idom[l.header].unwrap_or(usize::MAX)] {
+            continue;
+        }
+        let mut w = LoopWrites { writes: Vec::new(), clobbers: false };
+        for &b in &l.blocks {
+            for inst in &f.blocks[b].insts {
+                match role(&inst.kind) {
+                    Role::Write(a) => w.writes.push(a),
+                    Role::Clobber => {
+                        w.clobbers = true;
+                        if let InstKind::FreeBuf { header, off, .. } = inst.kind {
+                            w.writes.push(Access { ptr: header, off: i64::from(off), size: 24 });
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if matches!(f.blocks[b].term, Some(Term::Suspend { .. })) {
+                w.clobbers = true;
+            }
+        }
+        heads.insert(l.header, w);
+    }
     // (block, the undo mark to go back to once its children are done).
     let mut stack: Vec<(usize, Option<usize>)> = vec![(0, None)];
     let mut dead: Vec<Vec<bool>> = f.blocks.iter().map(|b| vec![false; b.insts.len()]).collect();
@@ -412,7 +468,10 @@ fn gvn_func(f: &mut Func) {
         stack.push((b, Some(g.undo.len())));
         // Memory is known only through a block's one way in.
         let only = g.cfg.preds[b].len() == 1 && g.cfg.idom[b] == Some(g.cfg.preds[b][0]);
-        if !only {
+        if let Some(w) = heads.get(&b) {
+            g.forget(|alias, k| w.keeps(alias, k));
+            g.forget_stable(|alias, k| w.keeps(alias, k));
+        } else if !only {
             g.forget(|_, _| false);
             g.forget_stable(|_, _| false);
         }
@@ -449,7 +508,11 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool]) 
     for (i, inst) in f.blocks[b].insts.iter().enumerate() {
         let mut kind = inst.kind.clone();
         crate::heddle::rewrite(&mut kind, |v| g.find(v));
-        match role(&kind) {
+        let role = match role(&kind) {
+            Role::Read(key) => Role::Read(key.named(|v| g.addr(v))),
+            other => other,
+        };
+        match role {
             Role::Pure => {
                 let key = (canonical(kind), inst.results.iter().map(|&r| f.ty(r)).collect());
                 if let Some(old) = g.exprs.get(&key) {
@@ -470,17 +533,13 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool]) 
                     dead[i] = true;
                 }
                 (_, [r]) => {
-                    let skey = match key {
-                        MemKey::Load { ptr, off, mem } => MemKey::Load { ptr: g.addr(ptr), off, mem },
-                        ref k => k.clone(),
-                    };
-                    match g.stable.get(&skey).copied() {
+                    match g.stable.get(&key).copied() {
                         Some(old) if f.ty(old) == f.ty(*r) => {
                             g.same.insert(*r, old);
                         }
                         _ => {
-                            let old = g.stable.insert(skey.clone(), *r);
-                            g.undo.push(Undo::Stable(skey, old));
+                            let old = g.stable.insert(key.clone(), *r);
+                            g.undo.push(Undo::Stable(key.clone(), old));
                         }
                     }
                     // From memory a `zero` wrote: it's 0.
@@ -513,8 +572,10 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool]) 
                     g.remember(k, at);
                 }
                 match kind {
-                    InstKind::Store { ptr, off, mem, val } => g.remember(MemKey::Load { ptr, off, mem }, val),
-                    InstKind::Zero { dst, size } => g.remember(MemKey::Zero { ptr: dst, off: 0, size }, dst),
+                    InstKind::Store { ptr, off, mem, val } => {
+                        g.remember(MemKey::Load { ptr: g.addr(ptr), off, mem }, val)
+                    }
+                    InstKind::Zero { dst, size } => g.remember(MemKey::Zero { ptr: g.addr(dst), off: 0, size }, dst),
                     _ => {}
                 }
             }
