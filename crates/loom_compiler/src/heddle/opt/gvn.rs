@@ -315,6 +315,14 @@ struct Gvn<'a> {
 }
 
 impl Gvn<'_> {
+    /// The type of `v`, one of `f`'s or one made here.
+    fn ty(&self, f: &Func, v: Value) -> VTy {
+        match v.0.checked_sub(self.base) {
+            Some(i) => self.fresh[i as usize],
+            None => f.ty(v),
+        }
+    }
+
     /// A new value, of type `ty`.
     fn fresh(&mut self, ty: VTy) -> Value {
         let v = Value(self.base + self.fresh.len() as u32);
@@ -686,13 +694,13 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool]) 
             Role::Read(key) => match (g.mem.get(&key).copied(), inst.results.as_slice()) {
                 // (A stored value of another type, as an address stored as
                 // an integer, is loaded again.)
-                (Some(old), [r]) if f.ty(old) == f.ty(*r) => {
+                (Some(old), [r]) if g.ty(f, old) == f.ty(*r) => {
                     g.repl[r.0 as usize] = old;
                     dead[i] = true;
                 }
                 (_, [r]) => {
                     match g.stable.get(&key).copied() {
-                        Some(old) if f.ty(old) == f.ty(*r) => {
+                        Some(old) if g.ty(f, old) == f.ty(*r) => {
                             g.same.insert(*r, old);
                         }
                         _ => {
