@@ -736,6 +736,21 @@ fn x_accesses(f: &Func, folds: &HashMap<(usize, usize), Fold>) -> (HashSet<Value
     (xs, checks)
 }
 
+/// Whether the `bounds` of `index` that's instruction `i` of `b` comes just
+/// before an `index` of the same index and a load or a store at it: the
+/// three that [`x_accesses`] fuses.
+fn checks_access(b: &crate::heddle::Block, i: usize, index: Value) -> bool {
+    match (b.insts.get(i + 1), b.insts.get(i + 2)) {
+        (Some(x), Some(access)) => match (&x.kind, x.results.as_slice(), &access.kind) {
+            (InstKind::Index { index: k, .. }, [r], InstKind::Load { ptr, .. } | InstKind::Store { ptr, .. }) => {
+                *k == index && ptr == r
+            }
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
 /// A constant operand folded into an instruction as its immediate.
 #[derive(Clone, Copy, Debug)]
 enum Fold {
@@ -844,6 +859,9 @@ fn immediates(f: &Func) -> (HashMap<(usize, usize), Fold>, HashSet<Value>) {
                     }
                     // `x % k` (or `x & m`, unsigned) is below `k` (`m + 1`).
                     (_, Some(&n)) if below.get(index).is_some_and(|&k| k <= n as u64) => Some((Fold::Gone, *len)),
+                    // Not when the check fuses with the access after it
+                    // (`ldxc`), which takes the length in a register.
+                    _ if checks_access(b, ii, *index) => None,
                     (_, Some(&n)) => u32::try_from(n as u64).ok().map(|n| (Fold::Len(n), *len)),
                     _ => None,
                 },

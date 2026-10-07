@@ -370,6 +370,24 @@ impl Gvn<'_> {
         }
     }
 
+    /// Forgets what a native that writes nothing makes not worth knowing:
+    /// a loaded value kept past it would have to be moved into the next
+    /// call's window, where loading it again puts it straight, as cheap and
+    /// with no register of its own. A constant (made where it's used) and
+    /// zeroed memory are still worth it.
+    fn forget_loaded(&mut self) {
+        let gone: Vec<MemKey> = self
+            .mem
+            .iter()
+            .filter(|(k, v)| !matches!(k, MemKey::Zero { .. }) && !self.consts.contains_key(&self.find(**v)))
+            .map(|(k, _)| k.clone())
+            .collect();
+        for k in gone {
+            let old = self.mem.remove(&k);
+            self.undo.push(Undo::Mem(k, old));
+        }
+    }
+
     /// Forgets the stable memory `keep` says no to, and every lookup (a
     /// write may change a map).
     fn forget_stable(&mut self, keep: impl Fn(&Alias, &MemKey) -> bool) {
@@ -703,14 +721,11 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool]) 
                     _ => {
                         g.finds.insert(key.clone(), inst.results.clone());
                         g.undo.push(Undo::Find(key, None));
-                        g.forget(|_, _| false);
+                        g.forget_loaded();
                     }
                 }
             }
-            // A loaded value kept past a call would have to be moved into
-            // the next call's window, where loading it again puts it
-            // straight: as cheap, and it needs no register of its own.
-            Role::Other if matches!(kind, InstKind::Native { .. }) => g.forget(|_, _| false),
+            Role::Other if matches!(kind, InstKind::Native { .. }) => g.forget_loaded(),
             Role::Other => {}
         }
     }
