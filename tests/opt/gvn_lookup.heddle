@@ -145,8 +145,6 @@ b21:
     v100 = and v99, v91
     jump b20(v100)
 b22:
-    v101 = iconst 1
-    v102 = add%.u64 v32, v101
-    store.64 v94, v102
+    store.64 v94, v34
     jump b3
 }

@@ -241,6 +241,9 @@ type FindKey = (&'static str, u16, Vec<Arg>);
 /// One change to a table, to undo when the walk leaves the block.
 enum Undo {
     Expr((InstKind, Vec<VTy>)),
+    /// An expression known by its constants' values made (to forget), or
+    /// forgotten at a call (to know again).
+    KExpr((InstKind, Vec<VTy>), Option<Vec<Value>>),
     /// What a key of known memory was before.
     Mem(MemKey, Option<Value>),
     /// The same for the memory quiet natives leave known.
@@ -273,6 +276,11 @@ struct Gvn<'a> {
     /// What's been computed, with its results' types (a zero address isn't
     /// a zero integer), and its results.
     exprs: HashMap<(InstKind, Vec<VTy>), Vec<Value>>,
+    /// The same, by what its constant operands are rather than which
+    /// values: until the next call, past which recomputing one (an
+    /// instruction) is as cheap as keeping it (a move into the call's
+    /// window).
+    kexprs: HashMap<(InstKind, Vec<VTy>), Vec<Value>>,
     /// Known memory: what a load at each key gives.
     mem: HashMap<MemKey, Value>,
     /// Known memory that natives which write nothing don't forget: which
@@ -283,6 +291,9 @@ struct Gvn<'a> {
     same: HashMap<Value, Value>,
     /// The constant each value is, when it is one.
     consts: HashMap<Value, u64>,
+    /// For a constant: the first value that's the same constant of the
+    /// same type (keys of expressions: each constant is its own value).
+    same_const: HashMap<Value, Value>,
     /// For an address in a slot or the program's data (which GVN leaves
     /// unshared, like constants): the first value that is that address.
     addrs: HashMap<Value, Value>,
@@ -410,6 +421,13 @@ impl Gvn<'_> {
         }
     }
 
+    /// `k` as a key of the expressions computed: its constant operands as
+    /// the first values that are those constants.
+    fn keyed(&self, mut k: InstKind) -> InstKind {
+        crate::heddle::rewrite(&mut k, |v| self.same_const.get(&v).copied().unwrap_or(v));
+        k
+    }
+
     /// `v`, or the first value that's the same address.
     fn addr(&self, v: Value) -> Value {
         self.addrs.get(&v).copied().unwrap_or(v)
@@ -420,6 +438,12 @@ impl Gvn<'_> {
             match self.undo.pop().expect("above the mark") {
                 Undo::Expr(k) => {
                     self.exprs.remove(&k);
+                }
+                Undo::KExpr(k, Some(v)) => {
+                    self.kexprs.insert(k, v);
+                }
+                Undo::KExpr(k, None) => {
+                    self.kexprs.remove(&k);
                 }
                 Undo::Mem(k, Some(v)) => {
                     self.mem.insert(k, v);
@@ -451,6 +475,7 @@ fn gvn_func(f: &mut Func) {
         cfg: &cfg,
         repl: (0..f.types.len() as u32).map(Value).collect(),
         exprs: HashMap::new(),
+        kexprs: HashMap::new(),
         mem: HashMap::new(),
         stable: HashMap::new(),
         same: HashMap::new(),
@@ -464,6 +489,7 @@ fn gvn_func(f: &mut Func) {
             })
             .collect(),
         finds: HashMap::new(),
+        same_const: HashMap::new(),
         addrs: HashMap::new(),
         split: HashMap::new(),
         loads: HashMap::new(),
@@ -473,6 +499,12 @@ fn gvn_func(f: &mut Func) {
         base: f.types.len() as u32,
         undo: Vec::new(),
     };
+    let mut first_const: HashMap<(u64, VTy), Value> = HashMap::new();
+    for inst in f.blocks.iter().flat_map(|b| &b.insts) {
+        if let (InstKind::Iconst(c), [r]) = (&inst.kind, inst.results.as_slice()) {
+            g.same_const.insert(*r, *first_const.entry((*c, f.ty(*r))).or_insert(*r));
+        }
+    }
     let mut first: HashMap<(Root, i64), Value> = HashMap::new();
     for r in f.blocks.iter().flat_map(|b| &b.insts).flat_map(|i| &i.results) {
         if let (root @ (Root::Slot(_) | Root::Data), Some(off)) = g.alias.root(*r) {
@@ -623,8 +655,25 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool]) 
         };
         match role {
             Role::Pure => {
-                let key = (canonical(kind), inst.results.iter().map(|&r| f.ty(r)).collect());
-                if let Some(old) = g.exprs.get(&key) {
+                let tys: Vec<VTy> = inst.results.iter().map(|&r| f.ty(r)).collect();
+                let kkey = (canonical(g.keyed(kind.clone())), tys.clone());
+                let key = (canonical(kind), tys);
+                if kkey != key {
+                    match g.kexprs.get(&kkey).or_else(|| g.exprs.get(&key)) {
+                        Some(old) => {
+                            for (r, o) in inst.results.iter().zip(old.clone()) {
+                                g.repl[r.0 as usize] = o;
+                            }
+                            dead[i] = true;
+                        }
+                        None => {
+                            g.kexprs.insert(kkey.clone(), inst.results.clone());
+                            g.undo.push(Undo::KExpr(kkey, None));
+                            g.exprs.insert(key.clone(), inst.results.clone());
+                            g.undo.push(Undo::Expr(key));
+                        }
+                    }
+                } else if let Some(old) = g.exprs.get(&key) {
                     for (r, o) in inst.results.iter().zip(old.clone()) {
                         g.repl[r.0 as usize] = o;
                     }
@@ -691,6 +740,11 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool]) 
             Role::Clobber => {
                 g.forget(|_, _| false);
                 g.forget_stable(|_, _| false);
+                if matches!(kind, InstKind::Call { .. } | InstKind::CallInd { .. }) {
+                    for (k, v) in g.kexprs.drain().collect::<Vec<_>>() {
+                        g.undo.push(Undo::KExpr(k, Some(v)));
+                    }
+                }
             }
             // An element of a list whose buffer and length are known, or
             // can be loaded where a loop can't change them.
@@ -698,7 +752,7 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool]) 
                 if let InstKind::Elem { header, off, index, .. } = kind
                     && let Some((buf, len)) = elem_parts(g, b, i, header, off) =>
             {
-                let key = (InstKind::Bounds { index, len }, Vec::new());
+                let key = (g.keyed(InstKind::Bounds { index, len }), Vec::new());
                 let checked = g.exprs.contains_key(&key);
                 if !checked {
                     g.exprs.insert(key.clone(), Vec::new());
