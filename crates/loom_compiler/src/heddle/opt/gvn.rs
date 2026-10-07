@@ -35,6 +35,7 @@ use std::collections::HashMap;
 
 use super::alias::{Access, Alias, Root};
 use super::cfg::Cfg;
+use super::modref::Writes;
 use crate::heddle::{BitOp, Cmp, FOp, Func, InstKind, IntOp, Mem, Module, Term, VTy, Value};
 
 /// Numbers every function's values.
@@ -42,8 +43,9 @@ pub fn gvn(module: &mut Module) {
     // What each function takes and gives, for calls through a known
     // function value.
     let shapes: Vec<(usize, usize)> = module.funcs.iter().map(|f| (f.params().len(), f.results.len())).collect();
+    let summaries = super::modref::summaries(module);
     for f in &mut module.funcs {
-        gvn_func(f);
+        gvn_func(f, &summaries);
         devirtualize(f, &shapes);
         super::tidy::tidy(f);
     }
@@ -256,21 +258,45 @@ enum Undo {
 /// touches is known at its head too.
 struct LoopWrites {
     writes: Vec<Access>,
-    /// A call, or anything else that may write what it can reach.
+    /// Anything that may write what it can reach but the calls.
     clobbers: bool,
+    /// The calls: what they're given.
+    calls: Vec<(usize, Vec<Value>)>,
 }
 
 impl LoopWrites {
-    fn keeps(&self, alias: &Alias, k: &MemKey) -> bool {
+    fn keeps(&self, alias: &Alias, k: &MemKey, summaries: &[Vec<Writes>]) -> bool {
         let a = k.access();
         let private = matches!(alias.root(a.ptr), (Root::Slot(n), _) if !alias.escapes[n as usize]);
-        (private || !self.clobbers) && self.writes.iter().all(|w| !alias.may_alias(*w, a))
+        (private || !self.clobbers)
+            && self.writes.iter().all(|w| !alias.may_alias(*w, a))
+            && self.calls.iter().all(|(g, args)| survives_call(alias, k, &summaries[*g], args))
     }
+}
+
+/// Whether what `k` reads stays as it is across a call of a function whose
+/// summary is `summary`, given `args`: it's in a frame slot that only calls
+/// are given the address of, and the call writes none of it through what
+/// it's given.
+fn survives_call(alias: &Alias, k: &MemKey, summary: &[Writes], args: &[Value]) -> bool {
+    let a = k.access();
+    let (Root::Slot(s), Some(at)) = alias.root(a.ptr) else { return false };
+    if alias.leaked[s as usize] {
+        return false;
+    }
+    let start = at + a.off;
+    args.iter().zip(summary).all(|(&arg, w)| match alias.root(arg) {
+        (Root::Slot(t), Some(d)) if t == s => !w.touches(start - d, a.size),
+        (Root::Slot(t), None) if t == s => false,
+        _ => true,
+    })
 }
 
 struct Gvn<'a> {
     alias: Alias,
     cfg: &'a Cfg,
+    /// What each function may write through its parameters (`modref`).
+    summaries: &'a [Vec<Writes>],
     /// What each value was replaced with.
     repl: Vec<Value>,
     /// What's been computed, with its results' types (a zero address isn't
@@ -476,11 +502,12 @@ impl Gvn<'_> {
     }
 }
 
-fn gvn_func(f: &mut Func) {
+fn gvn_func(f: &mut Func, summaries: &[Vec<Writes>]) {
     let cfg = Cfg::new(f);
     let mut g = Gvn {
         alias: Alias::new(f),
         cfg: &cfg,
+        summaries,
         repl: (0..f.types.len() as u32).map(Value).collect(),
         exprs: HashMap::new(),
         kexprs: HashMap::new(),
@@ -530,11 +557,14 @@ fn gvn_func(f: &mut Func) {
         for &b in &l.blocks {
             g.within[b].push(g.loops.len());
         }
-        let mut w = LoopWrites { writes: Vec::new(), clobbers: false };
+        let mut w = LoopWrites { writes: Vec::new(), clobbers: false, calls: Vec::new() };
         for &b in &l.blocks {
             for inst in &f.blocks[b].insts {
                 match role(&inst.kind) {
                     Role::Write(a) => w.writes.push(a),
+                    Role::Clobber if let InstKind::Call { func, args } = &inst.kind => {
+                        w.calls.push((func.0 as usize, args.clone()));
+                    }
                     Role::Clobber => {
                         w.clobbers = true;
                         if let InstKind::FreeBuf { header, off, .. } = inst.kind {
@@ -564,15 +594,18 @@ fn gvn_func(f: &mut Func) {
         // Memory is known only through a block's one way in.
         let only = g.cfg.preds[b].len() == 1 && g.cfg.idom[b] == Some(g.cfg.preds[b][0]);
         if let Some(&l) = heads.get(&b) {
-            let w = std::mem::replace(&mut g.loops[l], LoopWrites { writes: Vec::new(), clobbers: false });
-            g.forget(|alias, k| w.keeps(alias, k));
-            g.forget_stable(|alias, k| w.keeps(alias, k));
+            let w = std::mem::replace(
+                &mut g.loops[l],
+                LoopWrites { writes: Vec::new(), clobbers: false, calls: Vec::new() },
+            );
+            g.forget(|alias, k| w.keeps(alias, k, summaries));
+            g.forget_stable(|alias, k| w.keeps(alias, k, summaries));
             g.loops[l] = w;
         } else if !only {
             g.forget(|_, _| false);
             g.forget_stable(|_, _| false);
         }
-        visit(&mut g, f, b, &mut dead[b], &mut zero[b]);
+        visit(&mut g, f, b, &mut dead[b], &mut zero[b], summaries);
         for &c in g.cfg.children[b].iter().rev() {
             stack.push((c, None));
         }
@@ -641,7 +674,9 @@ fn elem_parts(g: &mut Gvn, b: usize, i: usize, header: Value, off: i32) -> Optio
         return Some((buf, len));
     }
     let framed = matches!(g.alias.root(header), (Root::Slot(_), Some(_)));
-    let kept = |l: &usize| g.loops[*l].keeps(&g.alias, &keys.0) && g.loops[*l].keeps(&g.alias, &keys.1);
+    let kept = |l: &usize| {
+        g.loops[*l].keeps(&g.alias, &keys.0, g.summaries) && g.loops[*l].keeps(&g.alias, &keys.1, g.summaries)
+    };
     if !framed || g.within[b].is_empty() || !g.within[b].iter().all(kept) {
         return None;
     }
@@ -653,7 +688,7 @@ fn elem_parts(g: &mut Gvn, b: usize, i: usize, header: Value, off: i32) -> Optio
 }
 
 /// Numbers block `b`'s instructions, marking those that go in `dead`.
-fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool]) {
+fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool], summaries: &[Vec<Writes>]) {
     for (i, inst) in f.blocks[b].insts.iter().enumerate() {
         let mut kind = inst.kind.clone();
         crate::heddle::rewrite(&mut kind, |v| g.find(v));
@@ -743,6 +778,15 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool]) 
                     }
                     InstKind::Zero { dst, size } => g.remember(MemKey::Zero { ptr: g.addr(dst), off: 0, size }, dst),
                     _ => {}
+                }
+            }
+            // A call: what's in the frame it can't change is still known.
+            Role::Clobber if let InstKind::Call { func, args } = &kind => {
+                let summary = &summaries[func.0 as usize];
+                g.forget(|alias, k| survives_call(alias, k, summary, args));
+                g.forget_stable(|alias, k| survives_call(alias, k, summary, args));
+                for (k, v) in g.kexprs.drain().collect::<Vec<_>>() {
+                    g.undo.push(Undo::KExpr(k, Some(v)));
                 }
             }
             Role::Clobber => {

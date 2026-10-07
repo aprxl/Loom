@@ -12,6 +12,7 @@ mod fold;
 mod gvn;
 mod inline;
 mod licm;
+mod modref;
 mod range;
 mod sccp;
 mod tidy;

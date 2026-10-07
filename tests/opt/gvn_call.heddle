@@ -1,0 +1,66 @@
+fn total() -> (int) {
+  slot0: 24 bytes, align 8
+  s0: inlined List.filled#4
+b0:
+    v23 = slot0
+    zero v23, 24
+    v0 = iconst 0
+    v1 = iconst 8
+    v2 = slot0
+    v24 = iconst 4
+    v25 = iconst 0
+    v26 = icmp.ne.u v1, v25
+    br v26, b5, b6(v24)
+b1:
+    v5 = slot0
+    freebuf v5+0, 4, align 4
+    zero v5, 24
+    resume
+b2(v13: int, v18: int):
+    v14 = icmp.lt.u v13, v1
+    br v14, b3, b4
+b3:
+    bounds v13, v1 unwind b1
+    v16 = index v31, v13 * 4
+    v17 = load.u32 v16
+    v19 = add%.u32 v18, v17
+    v20 = iconst 1
+    v21 = add%.usize v13, v20
+    jump b2(v21, v19) unwind b1
+b4:
+    v22 = slot0
+    freebuf v22+0, 4, align 4
+    zero v22, 24
+    ret v18
+b5:
+    v27 = iconst 4
+    v28 = mul.u64 v1, v27
+    v29 = iconst 4
+    v30 = native mem.alloc #0(v28, v29)
+    jump b6(v30)
+b6(v31: ptr):
+    v32 = iconst 0
+    jump b7(v32)
+b7(v33: int):
+    v34 = icmp.lt.u v33, v1
+    br v34, b8, b9
+b8:
+    v35 = index v31, v33 * 4
+    store.u32 v35, v0
+    v36 = iconst 1
+    v37 = add%.u64 v33, v36
+    jump b7(v37)
+b9:
+    store.64 v2, v31
+    store.64 v2+8, v1
+    store.64 v2+16, v1
+    v3 = slot0
+    v4 = iconst 3
+    call fill(v3, v4) unwind b1
+    v6 = slot0
+    v7 = iconst 4
+    call fill(v6, v7) unwind b1
+    v8 = iconst 0
+    v9 = iconst 0
+    jump b2(v9, v8) unwind b1
+}

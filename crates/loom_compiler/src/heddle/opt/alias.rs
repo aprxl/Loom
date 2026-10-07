@@ -13,7 +13,9 @@
 //! - they're in different slots, or one is in a slot and the other in the
 //!   program's data;
 //! - one is in a list's buffer and the other in that list's header (a
-//!   buffer never holds its own list).
+//!   buffer never holds its own list);
+//! - one is in memory just allocated (`mem.alloc`, `mem.calloc`) and the
+//!   other in a slot, or in another allocation.
 
 use crate::heddle::{Func, InstKind, Value};
 
@@ -25,6 +27,8 @@ pub enum Root {
     Data,
     /// The buffer of the list whose header is at `header + off`.
     Buffer(Value, i32),
+    /// Memory allocated by this native's call: on the heap, not the frame.
+    Heap(Value),
     Value(Value),
 }
 
@@ -41,6 +45,10 @@ pub struct Alias {
     kind: Vec<Option<InstKind>>,
     /// Whether each slot's address escapes.
     pub escapes: Vec<bool>,
+    /// Whether it escapes but to the calls it's passed to (and natives
+    /// that write nothing): when it doesn't, only those calls can reach
+    /// the slot, through their parameters (see `modref`).
+    pub leaked: Vec<bool>,
 }
 
 impl Alias {
@@ -51,7 +59,7 @@ impl Alias {
                 kind[r.0 as usize] = Some(inst.kind.clone());
             }
         }
-        let mut alias = Alias { kind, escapes: vec![false; f.slots.len()] };
+        let mut alias = Alias { kind, escapes: vec![false; f.slots.len()], leaked: vec![false; f.slots.len()] };
         let escape = |alias: &mut Alias, v: Value| {
             if let (Root::Slot(n), _) = alias.root(v) {
                 alias.escapes[n as usize] = true;
@@ -84,12 +92,29 @@ impl Alias {
                     K::Store { val, .. } => vec![*val],
                     other => crate::heddle::inst_uses(other),
                 };
+                let passed = match &inst.kind {
+                    K::Call { args, .. } => args.clone(),
+                    K::Native { name, args, .. }
+                        if super::gvn::QUIET_NATIVES.contains(name) || super::gvn::PURE_NATIVES.contains(name) =>
+                    {
+                        args.clone()
+                    }
+                    _ => Vec::new(),
+                };
                 for v in escaping {
                     escape(&mut alias, v);
+                    if !passed.contains(&v)
+                        && let (Root::Slot(n), _) = alias.root(v)
+                    {
+                        alias.leaked[n as usize] = true;
+                    }
                 }
             }
             for v in b.term.iter().flat_map(super::term_uses) {
                 escape(&mut alias, v);
+                if let (Root::Slot(n), _) = alias.root(v) {
+                    alias.leaked[n as usize] = true;
+                }
             }
         }
         alias
@@ -111,9 +136,11 @@ impl Alias {
                     return match self.kind.get(base.0 as usize).and_then(Option::as_ref) {
                         // An element of the buffer a header points at.
                         Some(InstKind::Load { ptr, off: ho, .. }) => (Root::Buffer(*ptr, *ho), None),
+                        Some(k) if allocates(k) => (Root::Heap(*base), None),
                         _ => (Root::Value(*base), None),
                     };
                 }
+                Some(k) if allocates(k) => return (Root::Heap(v), Some(off)),
                 _ => return (Root::Value(v), Some(off)),
             }
         }
@@ -132,6 +159,7 @@ impl Alias {
         }
         match (ra, rb) {
             (Root::Slot(_), Root::Slot(_)) => false,
+            (Root::Heap(_), Root::Slot(_) | Root::Heap(_)) | (Root::Slot(_), Root::Heap(_)) => false,
             (Root::Slot(n), _) | (_, Root::Slot(n)) if !self.escapes[n as usize] => false,
             (Root::Slot(_), Root::Data) | (Root::Data, Root::Slot(_)) => false,
             (Root::Buffer(h, ho), _) => !self.in_header(h, ho, rb, ob, b.size),
@@ -152,6 +180,12 @@ impl Alias {
             _ => false,
         }
     }
+}
+
+/// Whether `k` allocates memory: what it gives is in no slot, and in no
+/// other allocation.
+fn allocates(k: &InstKind) -> bool {
+    matches!(k, InstKind::Native { name: "mem.alloc" | "mem.calloc", .. })
 }
 
 /// Whether `[x, x + n)` and `[y, y + m)` overlap.

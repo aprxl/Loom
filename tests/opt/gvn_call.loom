@@ -1,0 +1,30 @@
+// passes: inline, gvn
+// fns: total
+//
+// `fill` (too big to inline, and called twice) writes the list's
+// elements, never its header (its buffer, length and capacity), and the
+// list's address goes to calls alone: across the calls, its length is
+// still the 8 `List.filled` stored, so the last loop's test is against 8.
+use std.io.print
+
+fn fill(mut xs: List[u32], k: u32) {
+    var i = 0
+    while i < xs.len() {
+        if i % 3 == 0 { xs[i] = k * 3 + 1 } else if i % 3 == 1 { xs[i] = k * 5 + 2 } else { xs[i] = k * 7 + 3 }
+        if xs[i] > 100 { xs[i] = xs[i] - 100 } else if xs[i] > 50 { xs[i] = xs[i] - 50 }
+        i += 1
+    }
+}
+
+fn total() -> u32 {
+    var xs: List[u32] = List.filled(0, 8)
+    fill(mut xs, 3)
+    fill(mut xs, 4)
+    var sum = 0u32
+    for i in 0..xs.len() { sum +%= xs[i] }
+    sum
+}
+
+fn main() {
+    print(total())
+}
