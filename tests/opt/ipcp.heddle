@@ -1,0 +1,6 @@
+fn scale(v0: int, v1: int) -> (int) {
+b0(v0: int, v1: int):
+    v3 = iconst 3
+    v2 = mul.i64 v0, v3
+    ret v2
+}

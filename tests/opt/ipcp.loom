@@ -1,0 +1,13 @@
+// passes: ipcp, sccp
+// fns: scale
+//
+// Every call of `scale` gives `k` the constant 3: inside it, `k` is 3, and
+// `x * k` folds its constant in.
+use std.io.print
+
+fn scale(x: i64, k: i64) -> i64 = x * k
+
+fn main() {
+    print(scale(5, 3))
+    print(scale(7, 3))
+}

@@ -11,6 +11,7 @@ mod cfg;
 mod fold;
 mod gvn;
 mod inline;
+mod ipcp;
 mod licm;
 mod modref;
 mod range;
@@ -44,6 +45,9 @@ const PASSES: &[Pass] = &[
     ("inline", inline::inline),
     ("gvn", gvn::gvn),
     ("sccp", sccp::sccp),
+    // A parameter all calls give one constant is that constant: GVN has
+    // just found what the calls give.
+    ("ipcp", ipcp::ipcp),
     ("ranges", range::ranges),
     // What ranges decided about a comparison decides its branch.
     ("sccp", sccp::sccp),
