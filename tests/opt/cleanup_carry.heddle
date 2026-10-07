@@ -1,0 +1,32 @@
+fn orbit(v0: f64, v1: f64) -> (int) {
+b0(v0: f64, v1: f64):
+    v2 = fconst.f64 0.0
+    v3 = fconst.f64 0.0
+    v4 = iconst 0
+    jump b1(v2, v3, v4)
+b1(v5: f64, v7: f64, v12: int):
+    v6 = fmul.f64 v5, v5
+    v8 = fmul.f64 v7, v7
+    v9 = fadd.f64 v6, v8
+    v10 = fconst.f64 4.0
+    v11 = fcmp.le.f64 v9, v10
+    br v11, b4, b3
+b2:
+    v25 = iconst 1
+    v26 = add.u32 v12, v25
+    v15 = fmul.f64 v5, v5
+    v16 = fmul.f64 v7, v7
+    v17 = fsub.f64 v15, v16
+    v20 = fconst.f64 2.0
+    v21 = fmul.f64 v20, v5
+    v19 = fadd.f64 v17, v0
+    v22 = fmul.f64 v21, v7
+    v24 = fadd.f64 v22, v1
+    jump b1(v19, v24, v26)
+b3:
+    ret v12
+b4:
+    v13 = iconst 50
+    v14 = icmp.lt.u v12, v13
+    br v14, b2, b3
+}

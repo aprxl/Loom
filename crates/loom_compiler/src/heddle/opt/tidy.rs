@@ -21,6 +21,7 @@ pub fn cleanup(module: &mut Module) {
         sink_elems(f);
         sink_indexes(f);
         place_indexes(f);
+        carry_last(f);
     }
 }
 
@@ -262,6 +263,119 @@ fn place_indexes(f: &mut Func) {
                 block.insts.push(idx.clone());
             }
             block.insts.push(inst);
+        }
+    }
+}
+
+/// Orders what a block computes only for the block parameters it jumps
+/// to (a loop's next `x` and `y`) after everything in the block that reads
+/// the parameters' old values, where it can be: then the new value can
+/// take its parameter's register, and no move is needed. In
+/// `x, y = x * x - y * y + cx, 2.0 * x * y + cy`, the new `x` is worked out
+/// after the new `y` has read the old one. Only arithmetic moves (no loads,
+/// nothing that traps); a cycle (a swap) leaves the block as it is.
+fn carry_last(f: &mut Func) {
+    for b in 0..f.blocks.len() {
+        let block = &f.blocks[b];
+        let Some(term) = &block.term else { continue };
+        // (parameter, the value passed for it) on this block's edges.
+        let pairs: Vec<(Value, Value)> = term
+            .edges()
+            .iter()
+            .flat_map(|e| f.blocks[e.block.0 as usize].params.iter().copied().zip(e.args.iter().copied()))
+            .filter(|(p, a)| p != a)
+            .collect();
+        if pairs.is_empty() {
+            continue;
+        }
+        let n = block.insts.len();
+        let def: HashMap<Value, usize> =
+            block.insts.iter().enumerate().flat_map(|(i, inst)| inst.results.iter().map(move |&r| (r, i))).collect();
+        let movable = |k: &InstKind| pure(k) && !matches!(k, InstKind::Load { .. });
+        // What moves: the instructions making what's passed, and what only
+        // they read (moving them later in the block delays no use: the
+        // block's end is after them all).
+        let mut moving = vec![false; n];
+        for &(_, a) in &pairs {
+            if let Some(&i) = def.get(&a) {
+                moving[i] = movable(&block.insts[i].kind);
+            }
+        }
+        loop {
+            let mut grew = false;
+            for i in 0..n {
+                let inst = &block.insts[i];
+                if moving[i] || !movable(&inst.kind) || inst.results.is_empty() {
+                    continue;
+                }
+                let only_moving = inst.results.iter().all(|r| {
+                    let readers: Vec<usize> =
+                        (0..n).filter(|&j| crate::heddle::inst_uses(&block.insts[j].kind).contains(r)).collect();
+                    !readers.is_empty() && readers.iter().all(|&j| moving[j])
+                });
+                if only_moving {
+                    moving[i] = true;
+                    grew = true;
+                }
+            }
+            if !grew {
+                break;
+            }
+        }
+        // Order: an instruction after what it reads, and the one making a
+        // parameter's new value after everything moving that reads its old.
+        let idx: Vec<usize> = (0..n).filter(|&i| moving[i]).collect();
+        if idx.len() < 2 {
+            continue;
+        }
+        let mut after: HashMap<usize, Vec<usize>> = HashMap::new();
+        for &i in &idx {
+            let uses = crate::heddle::inst_uses(&block.insts[i].kind);
+            for u in &uses {
+                if let Some(&j) = def.get(u)
+                    && moving[j]
+                {
+                    after.entry(i).or_default().push(j);
+                }
+            }
+            for &(p, a) in &pairs {
+                if uses.contains(&p)
+                    && let Some(&d) = def.get(&a)
+                    && moving[d]
+                    && d != i
+                {
+                    after.entry(d).or_default().push(i);
+                }
+            }
+        }
+        // Kahn's algorithm, keeping the old order among the ready.
+        let mut placed = vec![false; n];
+        let mut order = Vec::with_capacity(idx.len());
+        while order.len() < idx.len() {
+            let Some(&next) =
+                idx.iter().find(|&&i| !placed[i] && after.get(&i).is_none_or(|ds| ds.iter().all(|&d| placed[d])))
+            else {
+                break;
+            };
+            placed[next] = true;
+            order.push(next);
+        }
+        if order.len() < idx.len() || order == idx {
+            continue;
+        }
+        let block = &mut f.blocks[b];
+        let old = std::mem::take(&mut block.insts);
+        let mut moved: Vec<Option<crate::heddle::Inst>> = Vec::with_capacity(n);
+        for (i, inst) in old.into_iter().enumerate() {
+            if moving[i] {
+                moved.push(Some(inst));
+            } else {
+                moved.push(None);
+                block.insts.push(inst);
+            }
+        }
+        for i in order {
+            block.insts.push(moved[i].take().expect("each once"));
         }
     }
 }

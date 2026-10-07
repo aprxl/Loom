@@ -1,0 +1,24 @@
+// passes: cleanup
+// fns: orbit
+//
+// The loop's new `x` is passed to its parameter `x`, but the new `y`
+// reads the old `x`: cleanup works the new `x` out after the new `y`, so
+// it can take the old one's register and no move is needed.
+use std.io.print
+
+fn orbit(cx: f64, cy: f64) -> u32 {
+    var x = 0.0
+    var y = 0.0
+    var i = 0u32
+    while x * x + y * y <= 4.0 and i < 50 {
+        let nx = x * x - y * y + cx
+        y = 2.0 * x * y + cy
+        x = nx
+        i += 1
+    }
+    i
+}
+
+fn main() {
+    print(orbit(0.25, 0.5))
+}
