@@ -7,8 +7,10 @@ each way of running). Lower is better.
 
 The optimizer (design/vm.md §7). Same machine and build as V1 and V2, best
 of five (`python bench/run.py --runs 5`), start-up and compilation included
-(about 8 ms for Treadle: 5 ms of process, 1 ms of reading `std`, the rest
-compiling; `-O2` is the default).
+(about 8 ms for an empty program on Treadle, against 5 ms for Lua: the
+process itself, then in a cold start about 1.6 ms reading and resolving
+`std`, 0.2 ms type checking and 0.9 ms compiling; making the VM and running
+it is 30 µs; `-O2` is the default).
 
 | Benchmark | PUC Lua 5.4, idiomatic | Treadle | Treadle vs Lua 5.4 |
 |---|---|---|---|
@@ -32,8 +34,9 @@ is not met**: runs vary by about 5% and the geomean sat at 2.40–2.43 through
 the last changes. What's left is mostly not the optimizer's: `word_freq`
 (0.99×) and `maps` (1.11×) spend their time in string building, hashing and
 the map's natives (`calln`, 2 a trip), and a program pays about 3 ms before
-it runs (reading `std`, 1 ms, and compiling), which is 3–8% of the ones that
-take under 100 ms. Those are V8's (design/vm.md §17).
+it runs (reading `std` and compiling, cold), which is 3–8% of the ones that
+take under 100 ms; but cutting it from the front end lowers `-O0` and `-O2`
+alike, and so raises the compile-time ratio above. Those are V8's (design/vm.md §17).
 
 The other gates of §17's V3 passing list:
 
@@ -43,9 +46,12 @@ The other gates of §17's V3 passing list:
 | 6. compile time at `-O2` | at most 1.5× `-O0`, no example over 200 ms | **1.48×** from source to image over `tests/run` and `examples` (`compile_at` alone, the front end left out: 1.7×); slowest example 61 ms; the benchmarks compile in 0.8 to 7 ms (`cargo test --release -p loom --test compile_time -- --ignored --nocapture`) |
 
 The checks left at `-O2` (about 91 000 bounds checks): fannkuch's swap loop
-(the first `perm[j]` of the first trip is a real check; 39 000 left over the
-benchmark), chip8's `memory[addr]` (30 000: the length isn't a constant), and
-richards' task table (30 000: the indexes are read from data).
+(35 610 of its 39 230: `perm[j]` is checked on every trip, and only the
+first trip's check is needed; proving the rest takes peeling the loop,
+which is deferred for the code it grows; the other 3 620 are
+`count[r - 1]`), chip8's `memory[addr]` (30 018: the length isn't a
+constant), and richards' task table (20 000: the indexes are read from
+data).
 
 ## V2 (2026-10-03)
 

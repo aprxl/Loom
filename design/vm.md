@@ -5,7 +5,7 @@
 > bounds checks and 62% of the overflow checks a run executes, and costs
 > 1.5× of `-O0` to compile; Treadle is 2.42× as fast as PUC Lua 5.4 on
 > `bench/` (geomean) against the gate's 2.5×. The rest is hashing, strings
-> and natives (V8). V4 is next. The decisions in
+> and natives (V8), so the speed gate is open. The decisions in
 > [section 3](#3-decisions) were settled on 2026-09-29.
 
 Loom runs today by compiling to Lua 5.4 (see [lua-backend](lua-backend.md)).
