@@ -31,7 +31,7 @@
 //! a second table of known memory, which quiet natives leave alone, tells
 //! when two loads read the same thing.
 
-use crate::fxhash::FxHashMap;
+use crate::fxhash::{FxHashMap, FxHashSet};
 
 use super::alias::{Access, Alias, Root};
 use super::cfg::Cfg;
@@ -252,6 +252,51 @@ enum Undo {
     Stable(MemKey, Option<Value>),
     /// A lookup made (to forget), or forgotten (to know again).
     Find(FindKey, Option<Vec<Value>>),
+}
+
+/// What `blocks` may write.
+fn writes_of(f: &Func, blocks: impl Iterator<Item = usize>) -> LoopWrites {
+    let mut w = LoopWrites { writes: Vec::new(), clobbers: false, calls: Vec::new() };
+    for b in blocks {
+        for inst in &f.blocks[b].insts {
+            match role(&inst.kind) {
+                Role::Write(a) => w.writes.push(a),
+                Role::Clobber if let InstKind::Call { func, args } = &inst.kind => {
+                    w.calls.push((func.0 as usize, args.clone()));
+                }
+                Role::Clobber => {
+                    w.clobbers = true;
+                    if let InstKind::FreeBuf { header, off, .. } = inst.kind {
+                        w.writes.push(Access { ptr: header, off: i64::from(off), size: 24 });
+                    }
+                }
+                _ => {}
+            }
+        }
+        if matches!(f.blocks[b].term, Some(Term::Suspend { .. })) {
+            w.clobbers = true;
+        }
+    }
+    w
+}
+
+/// What may run between the end of `b`'s immediate dominator and `b`: the
+/// blocks the paths through the dominator's successors cross. Memory known at
+/// the dominator's end that none of this touches is known at `b` too.
+fn writes_before(f: &Func, cfg: &Cfg, b: usize) -> Option<LoopWrites> {
+    let d = cfg.idom[b].filter(|&d| d != b)?;
+    let mut seen: FxHashSet<usize> = FxHashSet::default();
+    let mut stack: Vec<usize> = cfg.preds[b].iter().copied().filter(|&p| cfg.reached(p)).collect();
+    let mut region = Vec::new();
+    while let Some(p) = stack.pop() {
+        // The dominator's own code ran already (and what it wrote is known).
+        if p == d || !seen.insert(p) {
+            continue;
+        }
+        region.push(p);
+        stack.extend(cfg.preds[p].iter().copied().filter(|&q| cfg.reached(q)));
+    }
+    Some(writes_of(f, region.into_iter()))
 }
 
 /// What a loop may write: memory known before it that none of this
@@ -557,28 +602,7 @@ fn gvn_func(f: &mut Func, summaries: &[Vec<Writes>]) {
         for &b in &l.blocks {
             g.within[b].push(g.loops.len());
         }
-        let mut w = LoopWrites { writes: Vec::new(), clobbers: false, calls: Vec::new() };
-        for &b in &l.blocks {
-            for inst in &f.blocks[b].insts {
-                match role(&inst.kind) {
-                    Role::Write(a) => w.writes.push(a),
-                    Role::Clobber if let InstKind::Call { func, args } = &inst.kind => {
-                        w.calls.push((func.0 as usize, args.clone()));
-                    }
-                    Role::Clobber => {
-                        w.clobbers = true;
-                        if let InstKind::FreeBuf { header, off, .. } = inst.kind {
-                            w.writes.push(Access { ptr: header, off: i64::from(off), size: 24 });
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            if matches!(f.blocks[b].term, Some(Term::Suspend { .. })) {
-                w.clobbers = true;
-            }
-        }
-        g.loops.push(w);
+        g.loops.push(writes_of(f, l.blocks.iter().copied()));
     }
     // (block, the undo mark to go back to once its children are done).
     let mut stack: Vec<(usize, Option<usize>)> = vec![(0, None)];
@@ -602,8 +626,18 @@ fn gvn_func(f: &mut Func, summaries: &[Vec<Writes>]) {
             g.forget_stable(|alias, k| w.keeps(alias, k, summaries));
             g.loops[l] = w;
         } else if !only {
-            g.forget(|_, _| false);
-            g.forget_stable(|_, _| false);
+            match writes_before(f, g.cfg, b) {
+                // A join: what's known where the paths split, and none of
+                // them writes.
+                Some(w) => {
+                    g.forget(|alias, k| w.keeps(alias, k, summaries));
+                    g.forget_stable(|alias, k| w.keeps(alias, k, summaries));
+                }
+                None => {
+                    g.forget(|_, _| false);
+                    g.forget_stable(|_, _| false);
+                }
+            }
         }
         visit(&mut g, f, b, &mut dead[b], &mut zero[b], summaries);
         for &c in g.cfg.children[b].iter().rev() {
