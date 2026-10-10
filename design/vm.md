@@ -1,9 +1,11 @@
 # Treadle: Loom's own VM
 
-> **Status: V2 is built** (2026-10-03): everything that runs on Lua but
-> compile-time code runs on Treadle (`loom run --backend vm file.loom`),
-> shuttles and projections included, 1.70× as fast as PUC Lua 5.4 on
-> `bench/` (geomean). V3, the optimizer, is next. The decisions in
+> **Status: V3 is built but for its speed gate** (2026-10-10): the
+> optimizer runs at `-O2` (`-O0` turns it off), takes away 87% of the
+> bounds checks and 62% of the overflow checks a run executes, and costs
+> 1.5× of `-O0` to compile; Treadle is 2.42× as fast as PUC Lua 5.4 on
+> `bench/` (geomean) against the gate's 2.5×. The rest is hashing, strings
+> and natives (V8). V4 is next. The decisions in
 > [section 3](#3-decisions) were settled on 2026-09-29.
 
 Loom runs today by compiling to Lua 5.4 (see [lua-backend](lua-backend.md)).
@@ -456,6 +458,35 @@ The passes, in order:
 
 Code generation adds switch lowering (jump tables, bit tests, binary search)
 and superinstructions (§8.4).
+
+**What V3 built.** `opt/` runs, in order: `inline`, `prune`, `sccp`,
+`cells`, `gvn`, `sccp`, `inline`, `prune`, `gvn`, `sccp`, `ipcp`, `ranges`,
+`sccp`, `licm`, `cleanup` (`LOOM_PASSES=a,b` runs only those;
+`LOOM_PASS_TIMES=1` times each). Besides the table's:
+
+- **`prune`**: a function nothing reaches (what inlining used up the last
+  call of) has its body replaced by a stub, so later passes and code
+  generation skip it. Functions are numbered, so they stay in place.
+- **`cells`** (with GVN): a loop that counts `p` from 0 below a bound and
+  adds one to a frame word each trip (a list's length, pushed to once a
+  trip) leaves the word `bound` more than it was; the pass says so with a
+  store where the loop exits, which GVN keeps. `mem.grow` writes words 0 and
+  2 of the header it's given and nothing else, so the header doesn't escape.
+- **`ranges`** takes a passed `bounds` as a fact from there on, and narrows
+  again what widening overshot.
+- **GVN** keeps what's known across a join no path to it writes in.
+- **`ipcp`** (a parameter every call gives one constant is that constant).
+
+Built where the typed program becomes Heddle, not as passes of their own:
+projections used by one statement and generators a `for` goes over (9), and
+the cleanups of moved values (10, 11, `build/cleanup.rs`).
+
+**Deferred**, with what covers them for now: *specialize lambdas* (2:
+GVN turns a call through a known function value into a call, which inlining
+then copies in), *SROA* (3: GVN forwards through frame slots, and the slowest
+benchmarks' time is in hashing, strings and natives; not measured to be
+what's missing)
+*self tail calls* (13), and merging frees (11).
 
 Every pass has snapshot tests, and the program generator (§15) compares
 `-O0` with `-O2`.
@@ -1430,7 +1461,11 @@ bound a `for` loop's own items once for all iterations, and on Lua a
 `defer` that unravelled while a loop closed its generator was swallowed (P3)
 and `close` handed `none` to the burst before it.
 
-### V3: the optimizer (about 8k)
+### V3: the optimizer (about 8k) — built, the speed gate not met
+
+Where it stands (2026-10-10): items 1–6 hold; 7 is 2.42× against 2.5×.
+`crates/loom/tests/check_counts.rs` holds item 4, `tests/compile_time.rs`
+(ignored, `--release`) measures item 6, and RESULTS.md has the numbers.
 
 In: the passes of §7, the `-O` levels, inline info for backtraces, the rest of
 the benchmark suite, `bench/run.py`, and RESULTS.md with every interpreter

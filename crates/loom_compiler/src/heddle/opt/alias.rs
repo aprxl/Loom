@@ -9,7 +9,9 @@
 //!   overlap;
 //! - one is in a frame slot whose address never escapes (it's only loaded
 //!   from, stored to, copied and zeroed, but by landing pads), and the
-//!   other isn't in that slot;
+//!   other isn't in that slot (`mem.grow(header, ..)` is a use that doesn't
+//!   let the header escape: it writes words 0 and 2 of it, and says so to
+//!   the passes: `grow_writes`);
 //! - they're in different slots, or one is in a slot and the other in the
 //!   program's data;
 //! - one is in a list's buffer and the other in that list's header (a

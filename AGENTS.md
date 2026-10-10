@@ -179,8 +179,16 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
     on both backends. `tests/vm_skip.txt` is empty. Held shuttles keep
     their frames in boxes: D5's inline frames are V8's.
 
-Next: Treadle V3, the optimizer (design/vm.md §17). Then V4 compile-time
-code on Treadle, V5 threads, V6 spools, V7 Lua interop, V8 speed, V9
+25. Treadle V3, the optimizer (design/vm.md §7, §17): inline, prune, SCCP,
+    cells, GVN, ipcp, ranges, LICM and cleanup at `-O2` (`-O0` runs none);
+    a pass's snapshots in `tests/opt`; `LOOM_PASSES` and `LOOM_PASS_TIMES`.
+    87% of bounds and 62% of overflow checks gone (`check_counts.rs`),
+    compiling at 1.5× `-O0` (`tests/compile_time.rs`, ignored). Not met: the
+    speed gate, 2.42× against 2.5× (bench/RESULTS.md says where the time
+    is). Deferred passes: specialize lambdas, SROA, self tail calls.
+
+Next: Treadle V4, compile-time code on Treadle (design/vm.md §17), and the
+speed gate with V8's. Then V5 threads, V6 spools, V7 Lua interop, V9
 Treadle by default.
 
 Keep these green:

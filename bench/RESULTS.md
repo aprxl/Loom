@@ -3,6 +3,50 @@
 Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
+## V3 (2026-10-10)
+
+The optimizer (design/vm.md §7). Same machine and build as V1 and V2, best
+of five (`python bench/run.py --runs 5`), start-up and compilation included
+(about 8 ms for Treadle: 5 ms of process, 1 ms of reading `std`, the rest
+compiling; `-O2` is the default).
+
+| Benchmark | PUC Lua 5.4, idiomatic | Treadle | Treadle vs Lua 5.4 |
+|---|---|---|---|
+| `fib` | 0.084 s | **0.038 s** | 2.20× |
+| `sieve` | 0.332 s | **0.134 s** | 2.48× |
+| `mandelbrot` | 0.115 s | **0.067 s** | 1.72× |
+| `nbody` | 0.515 s | **0.309 s** | 1.67× |
+| `spectral_norm` | 0.148 s | **0.070 s** | 2.12× |
+| `fannkuch` | 1.445 s | **0.898 s** | 1.61× |
+| `binary_trees` | 2.686 s | **0.716 s** | 3.75× |
+| `richards` | 0.179 s | **0.056 s** | 3.19× |
+| `word_freq` | 0.233 s | **0.235 s** | 0.99× |
+| `maps` | 0.118 s | **0.107 s** | 1.11× |
+| `sort` | 0.298 s | **0.107 s** | 2.79× |
+| `streams` | 0.923 s | **0.081 s** | 11.44× |
+| `chip8` | 0.097 s | **0.064 s** | 1.52× |
+| `lexer` | 1.478 s | **0.217 s** | 6.81× |
+
+Geometric mean 2.42×, lowest 0.99× (`word_freq`). **V3's speed gate (2.5×)
+is not met**: runs vary by about 5% and the geomean sat at 2.40–2.43 through
+the last changes. What's left is mostly not the optimizer's: `word_freq`
+(0.99×) and `maps` (1.11×) spend their time in string building, hashing and
+the map's natives (`calln`, 2 a trip), and a program pays about 3 ms before
+it runs (reading `std`, 1 ms, and compiling), which is 3–8% of the ones that
+take under 100 ms. Those are V8's (design/vm.md §17).
+
+The other gates of §17's V3 passing list:
+
+| | Gate | Now |
+|---|---|---|
+| 4. checks gone at `-O2` | 80% of bounds, 60% of overflow | **87.4%** of 721 048 bounds checks, **62.4%** of 1 434 750 overflow checks, over `bench/` at `counts.txt`'s sizes (`check_counts.rs`) |
+| 6. compile time at `-O2` | at most 1.5× `-O0`, no example over 200 ms | **1.48×** from source to image over `tests/run` and `examples` (`compile_at` alone, the front end left out: 1.7×); slowest example 61 ms; the benchmarks compile in 0.8 to 7 ms (`cargo test --release -p loom --test compile_time -- --ignored --nocapture`) |
+
+The checks left at `-O2` (about 91 000 bounds checks): fannkuch's swap loop
+(the first `perm[j]` of the first trip is a real check; 39 000 left over the
+benchmark), chip8's `memory[addr]` (30 000: the length isn't a constant), and
+richards' task table (30 000: the indexes are read from data).
+
 ## V2 (2026-10-03)
 
 Same machine and build as V1, best of five (`python bench/run.py
