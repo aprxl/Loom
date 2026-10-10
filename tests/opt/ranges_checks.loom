@@ -1,0 +1,26 @@
+// passes: ranges
+// fns: reverse
+//
+// `xs[i]` comes before `xs[j]`, and `i < j`, so only the first check of
+// `xs[j]` is needed: once it has passed, `j` is below 8, and every `j`
+// after it (each one less) and every `i` below it are too. The checks of
+// `xs[i]` and of the second `xs[j]` go; the first `xs[j]`'s stays.
+use std.io.print
+
+fn reverse(mut xs: [i32; 8], k: usize) {
+    var i = 0
+    var j = k
+    while i < j {
+        let t = xs[i]
+        xs[i] = xs[j]
+        xs[j] = t
+        i += 1
+        j -= 1
+    }
+}
+
+fn main() {
+    var xs = [1, 2, 3, 4, 5, 6, 7, 8]
+    reverse(mut xs, 7)
+    print(xs[0])
+}

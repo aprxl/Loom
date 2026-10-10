@@ -14,7 +14,13 @@
 //! everything on the side it's growing. What the program has tested
 //! narrows a value where the test dominates: in `while i < n { … }`'s body,
 //! `i` is below `n`'s highest value, so `i + 1` fits whatever `n` is, and an
-//! index the branch compared with the length itself is in bounds.
+//! index the branch compared with the length itself is in bounds. So does a
+//! bounds check that has passed, from there on: after `bounds j, 8`, `j` is
+//! below 8, and so is an `i` that a branch showed below `j`.
+//!
+//! Widening sends a counter that stops below a bound to everything above
+//! it; a few rounds of working each value out again, keeping what's
+//! narrower, bring it back.
 
 use super::cfg::Cfg;
 use crate::heddle::{BitOp, Cmp, Func, InstKind, IntOp, Mem, Module, Policy, Term, Value};
@@ -89,6 +95,9 @@ struct Fact {
     cmp: Cmp,
     unsigned: bool,
     b: Value,
+    /// Where in its block it starts to hold: the first instruction after the
+    /// check that made it (0 for a branch's, which holds all through).
+    from: usize,
 }
 
 fn negate(c: Cmp) -> Cmp {
@@ -144,21 +153,33 @@ impl Ranges<'_> {
         }
     }
 
-    /// The tests that hold in block `b`.
-    fn facts_at(&self, mut b: usize) -> impl Iterator<Item = &Fact> {
+    /// The tests that hold at instruction `pos` of block `b` (past its end
+    /// for the terminator): the dominators' all, and the block's own from
+    /// where they start to.
+    fn facts_at(&self, mut b: usize, pos: usize) -> impl Iterator<Item = &Fact> {
         let mut chain = vec![b];
         while let Some(d) = self.cfg.idom[b].filter(|&d| d != b) {
             chain.push(d);
             b = d;
         }
-        chain.into_iter().flat_map(|b| self.facts[b].iter())
+        chain
+            .into_iter()
+            .enumerate()
+            .flat_map(move |(n, b)| self.facts[b].iter().filter(move |f| n > 0 || f.from <= pos))
     }
 
-    /// `v` in block `b`, read signed or unsigned, narrowed by the tests that
-    /// hold there.
-    fn at(&self, v: Value, b: usize, signed: bool) -> Iv {
+    /// `v` at instruction `pos` of block `b`, read signed or unsigned,
+    /// narrowed by the tests that hold there.
+    fn at(&self, v: Value, b: usize, pos: usize, signed: bool) -> Iv {
+        self.at_depth(v, b, pos, signed, 1)
+    }
+
+    /// [`at`](Self::at), with `depth` more times a test's other side may be
+    /// narrowed the same way (a value below one that a check has just
+    /// shown below the length is below the length too).
+    fn at_depth(&self, v: Value, b: usize, pos: usize, signed: bool, depth: u8) -> Iv {
         let mut r = self.read(v, signed);
-        for fact in self.facts_at(b) {
+        for fact in self.facts_at(b, pos) {
             let (cmp, other) = if fact.a == v {
                 (fact.cmp, fact.b)
             } else if fact.b == v {
@@ -168,7 +189,7 @@ impl Ranges<'_> {
             };
             let s = !fact.unsigned;
             let mut x = r.view(s);
-            let o = self.read(other, s);
+            let o = if depth > 0 { self.at_depth(other, b, pos, s, depth - 1) } else { self.read(other, s) };
             match cmp {
                 Cmp::Lt => x.hi = x.hi.min(o.hi - 1),
                 Cmp::Le => x.hi = x.hi.min(o.hi),
@@ -188,11 +209,11 @@ impl Ranges<'_> {
     }
 
     /// Whether a test holds in block `b` (`Some(false)`: its opposite does).
-    fn decide(&self, b: usize, cmp: Cmp, unsigned: bool, a: Value, c: Value) -> Option<bool> {
+    fn decide(&self, b: usize, pos: usize, cmp: Cmp, unsigned: bool, a: Value, c: Value) -> Option<bool> {
         let s = !unsigned;
         // The same test, or its opposite, already made.
-        for fact in self.facts_at(b) {
-            if fact.unsigned != unsigned && !(self.nonneg(a, b) && self.nonneg(c, b)) {
+        for fact in self.facts_at(b, pos) {
+            if fact.unsigned != unsigned && !(self.nonneg(a, b, pos) && self.nonneg(c, b, pos)) {
                 continue;
             }
             let k = if (fact.a, fact.b) == (a, c) {
@@ -209,7 +230,7 @@ impl Ranges<'_> {
                 return Some(false);
             }
         }
-        let (x, y) = (self.at(a, b, s), self.at(c, b, s));
+        let (x, y) = (self.at(a, b, pos, s), self.at(c, b, pos, s));
         let holds = |cmp: Cmp| match cmp {
             Cmp::Lt => x.hi < y.lo,
             Cmp::Le => x.hi <= y.lo,
@@ -228,17 +249,17 @@ impl Ranges<'_> {
     }
 
     /// Whether `v` is never negative in block `b`, read signed.
-    fn nonneg(&self, v: Value, b: usize) -> bool {
-        self.at(v, b, true).lo >= 0
+    fn nonneg(&self, v: Value, b: usize, pos: usize) -> bool {
+        self.at(v, b, pos, true).lo >= 0
     }
 
     /// The interval of what instruction `i` of block `b` makes (one result
     /// that's an integer), and whether its check, if it has one, can't fire.
-    fn eval(&self, b: usize, k: &InstKind) -> (Iv, bool) {
+    fn eval(&self, b: usize, pos: usize, k: &InstKind) -> (Iv, bool) {
         use InstKind as K;
         match *k {
             K::Arith { op, policy, ty, a, b: c } => {
-                let (x, y) = (self.at(a, b, ty.signed).as_ty(ty), self.at(c, b, ty.signed).as_ty(ty));
+                let (x, y) = (self.at(a, b, pos, ty.signed).as_ty(ty), self.at(c, b, pos, ty.signed).as_ty(ty));
                 let exact = match op {
                     IntOp::Add => Some(Iv::of(x.lo + y.lo, x.hi + y.hi)),
                     IntOp::Sub => Some(Iv::of(x.lo - y.hi, x.hi - y.lo)),
@@ -268,7 +289,7 @@ impl Ranges<'_> {
                 }
             }
             K::IntCast { policy, to, from, a } => {
-                let x = self.at(a, b, from.signed).as_ty(from);
+                let x = self.at(a, b, pos, from.signed).as_ty(from);
                 if x.within(Iv::ty(to)) {
                     (x, true)
                 } else if policy == Policy::Sat {
@@ -280,15 +301,15 @@ impl Ranges<'_> {
                 }
             }
             K::Div { ty, a, b: c } if !ty.signed => {
-                let (x, y) = (self.at(a, b, false).as_ty(ty), self.at(c, b, false).as_ty(ty));
+                let (x, y) = (self.at(a, b, pos, false).as_ty(ty), self.at(c, b, pos, false).as_ty(ty));
                 if y.lo >= 1 { (Iv::of(x.lo / y.hi, x.hi / y.lo), false) } else { (Iv::ty(ty), false) }
             }
             K::Rem { ty, a, b: c } => {
-                let (x, y) = (self.at(a, b, ty.signed).as_ty(ty), self.at(c, b, ty.signed).as_ty(ty));
+                let (x, y) = (self.at(a, b, pos, ty.signed).as_ty(ty), self.at(c, b, pos, ty.signed).as_ty(ty));
                 if x.lo >= 0 && y.lo >= 1 { (Iv::of(0, x.hi.min(y.hi - 1)), false) } else { (Iv::ty(ty), false) }
             }
             K::Shr { ty, a, b: c } => {
-                let (x, y) = (self.at(a, b, ty.signed).as_ty(ty), self.at(c, b, false));
+                let (x, y) = (self.at(a, b, pos, ty.signed).as_ty(ty), self.at(c, b, pos, false));
                 if x.lo >= 0 && y.lo == y.hi && (0..i128::from(ty.bits)).contains(&y.lo) {
                     (Iv::of(x.lo >> y.lo, x.hi >> y.lo), false)
                 } else {
@@ -296,7 +317,7 @@ impl Ranges<'_> {
                 }
             }
             K::Bit { op, a, b: c } => {
-                let (x, y) = (self.at(a, b, true), self.at(c, b, true));
+                let (x, y) = (self.at(a, b, pos, true), self.at(c, b, pos, true));
                 match op {
                     BitOp::And if x.lo >= 0 && y.lo >= 0 => (Iv::of(0, x.hi.min(y.hi)), false),
                     BitOp::And if x.lo >= 0 => (Iv::of(0, x.hi), false),
@@ -371,11 +392,11 @@ impl Ranges<'_> {
                         }
                     }
                 }
-                for inst in &self.f.blocks[b].insts {
+                for (i, inst) in self.f.blocks[b].insts.iter().enumerate() {
                     if let [r] = inst.results.as_slice()
                         && self.consts[r.0 as usize].is_none()
                     {
-                        let (new, _) = self.eval(b, &inst.kind);
+                        let (new, _) = self.eval(b, i, &inst.kind);
                         if self.iv[r.0 as usize] != Some(new) {
                             self.iv[r.0 as usize] = Some(new);
                             changed = true;
@@ -384,12 +405,58 @@ impl Ranges<'_> {
                 }
             }
         }
+        // Widening overshoots (a counter that stops where a test says it
+        // does goes to everything above). What every value is now is a bound
+        // that holds, so working each value out again from the others, and
+        // keeping what's narrower than before, only tightens: a few rounds.
+        for _ in 0..3 {
+            let mut changed = false;
+            for i in 0..self.cfg.rpo.len() {
+                let b = self.cfg.rpo[i];
+                for (n, &p) in self.f.blocks[b].params.iter().enumerate() {
+                    let mut joined: Option<Iv> = None;
+                    for &q in self.cfg.preds[b].iter().filter(|&&q| self.cfg.reached(q)) {
+                        let Some(t) = &self.f.blocks[q].term else { continue };
+                        for e in t.edges().into_iter().filter(|e| e.block.0 as usize == b) {
+                            let a = e.args[n];
+                            if self.consts[a.0 as usize].is_none() && self.iv[a.0 as usize].is_none() {
+                                continue;
+                            }
+                            let x = self.at_edge(a, q);
+                            joined = Some(joined.map_or(x, |j| j.join(x)));
+                        }
+                    }
+                    if let (Some(new), Some(old)) = (joined, self.iv[p.0 as usize]) {
+                        let new = new.meet(old);
+                        if !new.empty() && new != old {
+                            self.iv[p.0 as usize] = Some(new);
+                            changed = true;
+                        }
+                    }
+                }
+                for (i, inst) in self.f.blocks[b].insts.iter().enumerate() {
+                    if let [r] = inst.results.as_slice()
+                        && self.consts[r.0 as usize].is_none()
+                        && let Some(old) = self.iv[r.0 as usize]
+                    {
+                        let new = self.eval(b, i, &inst.kind).0.meet(old);
+                        if !new.empty() && new != old {
+                            self.iv[r.0 as usize] = Some(new);
+                            changed = true;
+                        }
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
     }
 
     /// `a` at the end of block `q`, as it's passed on an edge: narrowed both
     /// ways it can be read, and kept as the narrower.
     fn at_edge(&self, a: Value, q: usize) -> Iv {
-        let (s, u) = (self.at(a, q, true), self.at(a, q, false));
+        let (s, u) = (self.at(a, q, usize::MAX, true), self.at(a, q, usize::MAX, false));
         let base = self.base(a);
         // The narrower that's still a reading of the pattern.
         [s, u, base].into_iter().min_by_key(|x| x.hi - x.lo).unwrap_or(ANY)
@@ -431,8 +498,20 @@ fn ranges_func(f: &mut Func) {
             for (e, holds) in [(then, cmp), (else_, negate(cmp))] {
                 let t = e.block.0 as usize;
                 if cfg.preds[t].len() == 1 {
-                    facts[t].push(Fact { a, cmp: holds, unsigned, b: c });
+                    facts[t].push(Fact { a, cmp: holds, unsigned, b: c, from: 0 });
                 }
+            }
+        }
+    }
+    // A check that passed: what it checked holds from there on (and where
+    // that dominates), since a failed one doesn't go on.
+    for (b, block) in f.blocks.iter().enumerate() {
+        if !cfg.reached(b) {
+            continue;
+        }
+        for (i, inst) in block.insts.iter().enumerate() {
+            if let InstKind::Bounds { index, len } = inst.kind {
+                facts[b].push(Fact { a: index, cmp: Cmp::Lt, unsigned: true, b: len, from: i + 1 });
             }
         }
     }
@@ -463,15 +542,15 @@ fn ranges_func(f: &mut Func) {
             use InstKind as K;
             match inst.kind {
                 K::Arith { policy: Policy::Trap, .. } | K::IntCast { policy: Policy::Trap, .. }
-                    if r.eval(b, &inst.kind).1 =>
+                    if r.eval(b, i, &inst.kind).1 =>
                 {
                     changes.push((b, i, Change::Wrap));
                 }
-                K::Bounds { index, len } if r.decide(b, Cmp::Lt, true, index, len) == Some(true) => {
+                K::Bounds { index, len } if r.decide(b, i, Cmp::Lt, true, index, len) == Some(true) => {
                     changes.push((b, i, Change::Drop));
                 }
                 K::ICmp { cmp, unsigned, a, b: c } => {
-                    if let Some(k) = r.decide(b, cmp, unsigned, a, c) {
+                    if let Some(k) = r.decide(b, i, cmp, unsigned, a, c) {
                         changes.push((b, i, Change::Const(k)));
                     }
                 }

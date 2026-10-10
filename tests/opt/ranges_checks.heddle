@@ -1,0 +1,26 @@
+fn reverse(v0: ptr, v1: int) -> () {
+b0(v0: ptr, v1: int):
+    v2 = iconst 0
+    jump b1(v2, v1)
+b1(v3: int, v4: int):
+    v5 = icmp.lt.u v3, v4
+    br v5, b2, b3
+b2:
+    v7 = index v0, v3 * 4
+    v8 = load.i32 v7
+    v9 = iconst 8
+    bounds v4, v9
+    v10 = index v0, v4 * 4
+    v11 = load.i32 v10
+    v13 = index v0, v3 * 4
+    store.i32 v13, v11
+    v15 = index v0, v4 * 4
+    store.i32 v15, v8
+    v16 = iconst 1
+    v17 = add%.usize v3, v16
+    v18 = iconst 1
+    v19 = sub%.usize v4, v18
+    jump b1(v17, v19)
+b3:
+    ret
+}
