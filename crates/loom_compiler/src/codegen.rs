@@ -231,6 +231,9 @@ struct Emitter<'m> {
     last_line: Option<(u32, u32, u32, u32)>,
     /// The inlined call the instruction being emitted came from.
     site: Option<u32>,
+    /// The last `mov`: where the code ended after it, and its destination
+    /// and source. Forgotten where a block or a trampoline starts.
+    last_mov: Option<(usize, u16, u16)>,
 }
 
 fn emit_func(
@@ -365,11 +368,13 @@ fn emit_func(
         db,
         last_line: None,
         site: None,
+        last_mov: None,
     };
     let mut block_at = vec![0usize; f.blocks.len()];
     e.prologue();
     for (i, &b) in order.iter().enumerate() {
         block_at[b] = e.code.len();
+        e.last_mov = None;
         if let Err(error) = e.block(b, i, &fused) {
             return Ok(Err(error));
         }
@@ -379,6 +384,7 @@ fn emit_func(
     // not on where the trampoline is.
     for k in 0..e.tramps.len() {
         e.tramp_at.push(e.code.len());
+        e.last_mov = None;
         let (from, edge) = e.tramps[k].clone();
         let span = f.blocks[order[from]].term_span;
         e.site = f.blocks[order[from]].term_site;
@@ -393,6 +399,7 @@ fn emit_func(
     }
     // What unwinds without a pad of its own still has the big slots to free.
     e.site = None;
+    e.last_mov = None;
     let free_pad = e.code.len();
     if e.big.contains(&true) {
         e.free_big(None);
@@ -1317,9 +1324,17 @@ impl Emitter<'_> {
     }
 
     fn mov(&mut self, span: Option<Span>, dst: u16, src: u16) {
-        if dst != src {
-            self.put(span, word(Op::Mov, dst, src, 0));
+        if dst == src {
+            return;
         }
+        // Moving back what was just moved (a value kept in a register of its
+        // own across natives, and put in their window again) does nothing:
+        // when nothing, not even a jump's target, comes between.
+        if self.last_mov == Some((self.code.len(), src, dst)) {
+            return;
+        }
+        self.put(span, word(Op::Mov, dst, src, 0));
+        self.last_mov = Some((self.code.len(), dst, src));
     }
 
     /// Moves every `src` into its `dst` at once: each source is read before
@@ -1728,13 +1743,22 @@ impl Emitter<'_> {
                 let (x, k) = fold.split(*a, *b);
                 word(if ty.signed { O::ShrKS } else { O::ShrKU }, dst, self.r(x), k as u16)
             }
+            // By a power of two, unsigned: a shift, or a mask (no divide).
             K::Div { ty, a, b } => {
                 let (x, k) = fold.split(*a, *b);
-                word(if ty.signed { O::DivKS } else { O::DivKU }, dst, self.r(x), k as u16)
+                if !ty.signed && k > 0 && (k as u16).is_power_of_two() {
+                    word(O::ShrKU, dst, self.r(x), (k as u16).trailing_zeros() as u16)
+                } else {
+                    word(if ty.signed { O::DivKS } else { O::DivKU }, dst, self.r(x), k as u16)
+                }
             }
             K::Rem { ty, a, b } => {
                 let (x, k) = fold.split(*a, *b);
-                word(if ty.signed { O::RemKS } else { O::RemKU }, dst, self.r(x), k as u16)
+                if !ty.signed && k > 0 && (k as u16).is_power_of_two() {
+                    word(O::AndK, dst, self.r(x), (k as u16) - 1)
+                } else {
+                    word(if ty.signed { O::RemKS } else { O::RemKU }, dst, self.r(x), k as u16)
+                }
             }
             K::ICmp { cmp, unsigned, a, b } => {
                 let (x, k) = fold.split(*a, *b);
