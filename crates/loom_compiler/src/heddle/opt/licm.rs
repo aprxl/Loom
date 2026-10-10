@@ -160,7 +160,6 @@ fn licm_func(f: &mut Func) {
             let mut kept = Vec::with_capacity(insts.len());
             for inst in insts {
                 let invariant = crate::heddle::inst_uses(&inst.kind)
-                    .iter()
                     .all(|u| home[u.0 as usize] == usize::MAX || !l.inside[home[u.0 as usize]]);
                 let load = match &inst.kind {
                     InstKind::Load { ptr, off, mem } => {

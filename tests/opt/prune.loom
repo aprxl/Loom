@@ -1,0 +1,21 @@
+// passes: inline, prune
+// fns: main, helper, used
+//
+// `helper` is called once, so inlining copies it into `main` and nothing
+// reaches it any more: its body is a stub. `used` calls itself: never inlined, so it stays.
+use std.io.print
+
+fn helper(x: i64) -> i64 {
+    var t = x
+    for i in 0..3 { t = t * 3 + i }
+    t
+}
+
+fn used(n: i64) -> i64 {
+    if n <= 0 { return 0 }
+    used(n - 1) + 1
+}
+
+fn main() {
+    print(helper(2) + used(1) + used(2))
+}

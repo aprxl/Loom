@@ -1,0 +1,79 @@
+fn main() -> () {
+  s0: inlined helper
+  s1: inlined used
+  s2: inlined used
+b0:
+    v0 = iconst 2
+    v11 = iconst 0 @s0
+    v12 = iconst 3 @s0
+    jump b1(v11, v0)
+b1(v13: int, v14: int):
+    v15 = icmp.lt.s v13, v12 @s0
+    br v15, b2, b3 @s0
+b2:
+    v16 = iconst 3 @s0
+    v17 = mul.i64 v14, v16 @s0
+    v18 = add.i64 v17, v13 @s0
+    v19 = iconst 1 @s0
+    v20 = add%.i64 v13, v19 @s0
+    jump b1(v20, v18) @s0
+b3:
+    v2 = iconst 1
+    v21 = iconst 0 @s1
+    v22 = icmp.le.s v2, v21 @s1
+    br v22, b5, b6 @s0
+b4(v3: int):
+    v4 = add.i64 v14, v3
+    v5 = iconst 2
+    v29 = iconst 0 @s2
+    v30 = icmp.le.s v5, v29 @s2
+    br v30, b8, b9
+b5:
+    v23 = iconst 0 @s1
+    jump b4(v23) @s1
+b6:
+    v24 = iconst 1 @s1
+    v25 = sub.i64 v2, v24 @s1
+    v26 = call used(v25) @s1
+    v27 = iconst 1 @s1
+    v28 = add.i64 v26, v27 @s1
+    jump b4(v28) @s1
+b7(v6: int):
+    v7 = add.i64 v4, v6
+    v8 = iconst 0
+    native sink.fmt #0(v8, v7)
+    v9 = str "\n"
+    v10 = iconst 1
+    native sink.str #0(v8, v9, v10)
+    ret
+b8:
+    v31 = iconst 0 @s2
+    jump b7(v31) @s2
+b9:
+    v32 = iconst 1 @s2
+    v33 = sub.i64 v5, v32 @s2
+    v34 = call used(v33) @s2
+    v35 = iconst 1 @s2
+    v36 = add.i64 v34, v35 @s2
+    jump b7(v36) @s2
+}
+fn helper() -> () {
+b0:
+    crash 0
+}
+fn used(v0: int) -> (int) {
+b0(v0: int):
+    v1 = iconst 0
+    v2 = icmp.le.s v0, v1
+    br v2, b1, b2
+b1:
+    v3 = iconst 0
+    ret v3
+b2:
+    v4 = iconst 1
+    v5 = sub.i64 v0, v4
+    v6 = call used(v5)
+    v7 = iconst 1
+    v8 = add.i64 v6, v7
+    ret v8
+}

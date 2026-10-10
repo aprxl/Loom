@@ -7,8 +7,14 @@ use loom_compiler::heddle::{Block, Func, FuncId, Inst, InstKind, Module, Slot, T
 use loom_syntax::SourceDb;
 
 fn generate(func: Func) -> Result<loom_isa::Image, CodegenError> {
-    let module =
-        Module { funcs: vec![func], strings: Vec::new(), fmts: Vec::new(), data: Vec::new(), entry: FuncId(0) };
+    let module = Module {
+        funcs: vec![func],
+        strings: Vec::new(),
+        fmts: Vec::new(),
+        data: Vec::new(),
+        entry: FuncId(0),
+        roots: Vec::new(),
+    };
     loom_compiler::heddle::verify(&module).expect("valid Heddle");
     codegen::generate(&SourceDb::new(), &module)
 }

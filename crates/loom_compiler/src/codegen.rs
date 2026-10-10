@@ -33,7 +33,9 @@
 //!    of instructions that unwinds to one becomes an entry of the
 //!    function's pad table.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::BTreeSet;
+
+use crate::fxhash::{FxHashMap, FxHashSet};
 
 use indexmap::IndexMap;
 use loom_isa::image::Pad;
@@ -192,7 +194,7 @@ struct Emitter<'m> {
     /// Which slots are on the heap (see [`BIG_SLOT`]).
     big: Vec<bool>,
     /// Values that are a frame slot's address: its number.
-    slot_of: HashMap<Value, usize>,
+    slot_of: FxHashMap<Value, usize>,
     /// Stretches of code that unwind to a landing pad: where they start
     /// and end, and the pad's block.
     unwinds: Vec<(usize, usize, usize)>,
@@ -202,20 +204,20 @@ struct Emitter<'m> {
     window: u16,
     fixups: Vec<Fixup>,
     /// Instructions with a constant operand folded in, by block and index.
-    folds: HashMap<(usize, usize), Fold>,
+    folds: FxHashMap<(usize, usize), Fold>,
     /// Constants whose every use is folded: never emitted.
-    dead: HashSet<Value>,
+    dead: FxHashSet<Value>,
     /// Elements' addresses only the next instruction, a load or a store,
     /// uses: made by that one.
-    elems: HashSet<Value>,
+    elems: FxHashSet<Value>,
     /// The `index`es that fuse with their load or store (see
     /// [`x_accesses`]), and the places of the `bounds` that fuse too.
-    xs: HashSet<Value>,
-    x_checks: HashSet<(usize, usize)>,
+    xs: FxHashSet<Value>,
+    x_checks: FxHashSet<(usize, usize)>,
     /// Values nothing reads: a call's results that aren't, or a block's
     /// parameters. Their registers may be another value's, so they aren't
     /// written.
-    unused: HashSet<Value>,
+    unused: FxHashSet<Value>,
     /// Trampolines: an edge's moves and jump, placed after every block,
     /// with the layout place of the block the edge leaves.
     tramps: Vec<(usize, Edge)>,
@@ -243,7 +245,7 @@ fn emit_func(
     for (i, &b) in order.iter().enumerate() {
         rank[b] = i;
     }
-    let fused = if fuse { fusions(f) } else { HashSet::new() };
+    let fused = if fuse { fusions(f) } else { FxHashSet::default() };
     let (folds, dead) = immediates(f);
     let elems = elem_accesses(f);
     let (xs, x_checks) = x_accesses(f, &folds);
@@ -258,7 +260,7 @@ fn emit_func(
         let (slot_of, folded_slots) = slot_uses(f, &big);
         let mut dead = dead.clone();
         dead.extend(folded_slots);
-        let skip: HashSet<Value> = fused.union(&dead).chain(&elems).chain(&xs).copied().collect();
+        let skip: FxHashSet<Value> = fused.union(&dead).chain(&elems).chain(&xs).copied().collect();
         // The window's place comes from how many registers values need; a
         // second pass then lets values sit in it, which only frees registers.
         let Some((_, first)) = allocate(f, &order, &skip, None) else { break };
@@ -315,7 +317,7 @@ fn emit_func(
     let Ok(frame) = u16::try_from(frame) else {
         return Ok(Err(too_big(f)));
     };
-    let mut read: HashSet<Value> = HashSet::new();
+    let mut read: FxHashSet<Value> = FxHashSet::default();
     for b in &f.blocks {
         for inst in &b.insts {
             read.extend(inst_uses(&inst.kind));
@@ -470,8 +472,8 @@ fn layout(f: &Func) -> Vec<usize> {
 /// The values that are frame slots' addresses, with their slots; and those
 /// whose every use is a load or a store (at an offset that stays inside
 /// the frame), which needs no register for the address.
-fn slot_uses(f: &Func, big: &[bool]) -> (HashMap<Value, usize>, HashSet<Value>) {
-    let mut slot_of = HashMap::new();
+fn slot_uses(f: &Func, big: &[bool]) -> (FxHashMap<Value, usize>, FxHashSet<Value>) {
+    let mut slot_of = FxHashMap::default();
     for b in &f.blocks {
         for inst in &b.insts {
             if let (InstKind::Slot(n), [r]) = (&inst.kind, inst.results.as_slice())
@@ -481,7 +483,7 @@ fn slot_uses(f: &Func, big: &[bool]) -> (HashMap<Value, usize>, HashSet<Value>) 
             }
         }
     }
-    let mut other: HashSet<Value> = HashSet::new();
+    let mut other: FxHashSet<Value> = FxHashSet::default();
     for b in &f.blocks {
         for inst in &b.insts {
             let folded = match &inst.kind {
@@ -535,7 +537,7 @@ fn hoist_constants(f: &Func) -> Option<Func> {
     // What's made at the start: the constants of the entry block and of
     // loops, then addresses at an offset from them (a constant's value
     // after its flag), which a loop would work out again too.
-    let mut made: HashSet<Value> = HashSet::new();
+    let mut made: FxHashSet<Value> = FxHashSet::default();
     for (b, block) in f.blocks.iter().enumerate() {
         if b == 0 || looped[b] {
             made.extend(block.insts.iter().filter(|i| constant(&i.kind)).flat_map(|i| i.results.iter().copied()));
@@ -638,8 +640,8 @@ fn term_uses(t: &Term) -> Vec<Value> {
 }
 
 /// Comparisons that become part of their block's branch.
-fn fusions(f: &Func) -> HashSet<Value> {
-    let mut uses: HashMap<Value, usize> = HashMap::new();
+fn fusions(f: &Func) -> FxHashSet<Value> {
+    let mut uses: FxHashMap<Value, usize> = FxHashMap::default();
     for b in &f.blocks {
         for inst in &b.insts {
             for u in inst_uses(&inst.kind) {
@@ -650,7 +652,7 @@ fn fusions(f: &Func) -> HashSet<Value> {
             *uses.entry(u).or_default() += 1;
         }
     }
-    let mut out = HashSet::new();
+    let mut out = FxHashSet::default();
     for b in &f.blocks {
         let (Some(Term::Br { cond, .. }), Some(last)) = (&b.term, b.insts.last()) else { continue };
         if last.results == [*cond]
@@ -665,8 +667,8 @@ fn fusions(f: &Func) -> HashSet<Value> {
 
 /// Elements' addresses (`elem`) whose only use is as the address of the
 /// load or store right after, which the access then works out itself.
-fn elem_accesses(f: &Func) -> HashSet<Value> {
-    let mut uses: HashMap<Value, usize> = HashMap::new();
+fn elem_accesses(f: &Func) -> FxHashSet<Value> {
+    let mut uses: FxHashMap<Value, usize> = FxHashMap::default();
     for b in &f.blocks {
         for inst in &b.insts {
             for u in inst_uses(&inst.kind) {
@@ -677,7 +679,7 @@ fn elem_accesses(f: &Func) -> HashSet<Value> {
             *uses.entry(u).or_default() += 1;
         }
     }
-    let mut out = HashSet::new();
+    let mut out = FxHashSet::default();
     for b in &f.blocks {
         for pair in b.insts.windows(2) {
             let (InstKind::Elem { scale, .. }, [r]) = (&pair[0].kind, pair[0].results.as_slice()) else { continue };
@@ -698,8 +700,8 @@ fn elem_accesses(f: &Func) -> HashSet<Value> {
 /// only use (`ldx`, `stx`); and of those, the places of the `bounds` just
 /// before them that check the same index against a length in a register,
 /// which fuse too (`ldxc`, `stxc`).
-fn x_accesses(f: &Func, folds: &HashMap<(usize, usize), Fold>) -> (HashSet<Value>, HashSet<(usize, usize)>) {
-    let mut uses: HashMap<Value, usize> = HashMap::new();
+fn x_accesses(f: &Func, folds: &FxHashMap<(usize, usize), Fold>) -> (FxHashSet<Value>, FxHashSet<(usize, usize)>) {
+    let mut uses: FxHashMap<Value, usize> = FxHashMap::default();
     for b in &f.blocks {
         for inst in &b.insts {
             for u in inst_uses(&inst.kind) {
@@ -710,7 +712,7 @@ fn x_accesses(f: &Func, folds: &HashMap<(usize, usize), Fold>) -> (HashSet<Value
             *uses.entry(u).or_default() += 1;
         }
     }
-    let (mut xs, mut checks) = (HashSet::new(), HashSet::new());
+    let (mut xs, mut checks) = (FxHashSet::default(), FxHashSet::default());
     for (bi, b) in f.blocks.iter().enumerate() {
         for i in 0..b.insts.len().saturating_sub(1) {
             let (InstKind::Index { index, scale, .. }, [r]) = (&b.insts[i].kind, b.insts[i].results.as_slice()) else {
@@ -777,8 +779,8 @@ impl Fold {
 }
 
 /// The value of each integer constant.
-fn constants(f: &Func) -> HashMap<Value, i64> {
-    let mut out = HashMap::new();
+fn constants(f: &Func) -> FxHashMap<Value, i64> {
+    let mut out = FxHashMap::default();
     for b in &f.blocks {
         for inst in &b.insts {
             if let (InstKind::Iconst(bits), [r]) = (&inst.kind, inst.results.as_slice()) {
@@ -793,12 +795,12 @@ fn constants(f: &Func) -> HashMap<Value, i64> {
 /// constants nothing else reads. An immediate is 16 bits, sign-extended to
 /// the 64-bit pattern of the register, so a constant fits when its pattern
 /// is a sign-extended `i16` (for any integer type).
-fn immediates(f: &Func) -> (HashMap<(usize, usize), Fold>, HashSet<Value>) {
+fn immediates(f: &Func) -> (FxHashMap<(usize, usize), Fold>, FxHashSet<Value>) {
     let consts = constants(f);
     let small = |v: Value| consts.get(&v).and_then(|&k| i16::try_from(k).ok());
     let mask = |v: Value| consts.get(&v).and_then(|&k| u16::try_from(k).ok());
     // Values below a constant: an unsigned `x % k`, or `x & m`.
-    let mut below: HashMap<Value, u64> = HashMap::new();
+    let mut below: FxHashMap<Value, u64> = FxHashMap::default();
     for b in &f.blocks {
         for inst in &b.insts {
             let bound = match &inst.kind {
@@ -813,8 +815,8 @@ fn immediates(f: &Func) -> (HashMap<(usize, usize), Fold>, HashSet<Value>) {
             }
         }
     }
-    let mut folds = HashMap::new();
-    let mut folded: HashMap<Value, usize> = HashMap::new();
+    let mut folds = FxHashMap::default();
+    let mut folded: FxHashMap<Value, usize> = FxHashMap::default();
     for (bi, b) in f.blocks.iter().enumerate() {
         for (ii, inst) in b.insts.iter().enumerate() {
             let fold = match &inst.kind {
@@ -873,7 +875,7 @@ fn immediates(f: &Func) -> (HashMap<(usize, usize), Fold>, HashSet<Value>) {
             }
         }
     }
-    let mut uses: HashMap<Value, usize> = HashMap::new();
+    let mut uses: FxHashMap<Value, usize> = FxHashMap::default();
     for b in &f.blocks {
         for inst in &b.insts {
             for u in inst_uses(&inst.kind) {
@@ -884,7 +886,8 @@ fn immediates(f: &Func) -> (HashMap<(usize, usize), Fold>, HashSet<Value>) {
             *uses.entry(u).or_default() += 1;
         }
     }
-    let mut dead: HashSet<Value> = folded.into_iter().filter(|(v, n)| uses.get(v) == Some(n)).map(|(v, _)| v).collect();
+    let mut dead: FxHashSet<Value> =
+        folded.into_iter().filter(|(v, n)| uses.get(v) == Some(n)).map(|(v, _)| v).collect();
     // And constants nothing reads at all.
     dead.extend(consts.keys().filter(|v| !uses.contains_key(v)));
     (folds, dead)
@@ -927,7 +930,7 @@ enum Use {
 /// 3. the register of a value an edge passes to it, or of the parameter it
 ///    passes itself to, so the edge moves nothing;
 /// 4. otherwise, the lowest free register.
-fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16>) -> Option<(Vec<u16>, u16)> {
+fn allocate(f: &Func, order: &[usize], skip: &FxHashSet<Value>, window: Option<u16>) -> Option<(Vec<u16>, u16)> {
     let n = f.types.len();
     let mut start = vec![0usize; f.blocks.len()];
     let mut end = vec![0usize; f.blocks.len()];
@@ -948,7 +951,7 @@ fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16
             let block = &f.blocks[b];
             let mut out = BTreeSet::new();
             for s in succs(f, b) {
-                let params: HashSet<Value> = f.blocks[s].params.iter().copied().collect();
+                let params: FxHashSet<Value> = f.blocks[s].params.iter().copied().collect();
                 out.extend(live_in[s].iter().filter(|v| !params.contains(v)));
             }
             // What a landing pad reads must survive every instruction that
@@ -981,15 +984,15 @@ fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16
     let mut ranges: Vec<Vec<(usize, usize)>> = vec![Vec::new(); n];
     let mut calls = Vec::new();
     let mut natives = Vec::new();
-    let mut result_of: HashMap<Value, (usize, u16)> = HashMap::new();
-    let mut native_result_of: HashMap<Value, (usize, u16)> = HashMap::new();
-    let mut uses: HashMap<Value, Vec<Use>> = HashMap::new();
-    let mut partners: HashMap<Value, Vec<Value>> = HashMap::new();
+    let mut result_of: FxHashMap<Value, (usize, u16)> = FxHashMap::default();
+    let mut native_result_of: FxHashMap<Value, (usize, u16)> = FxHashMap::default();
+    let mut uses: FxHashMap<Value, Vec<Use>> = FxHashMap::default();
+    let mut partners: FxHashMap<Value, Vec<Value>> = FxHashMap::default();
     for &b in order {
         let block = &f.blocks[b];
         // Where each value touched in this block starts and ends here.
-        let mut here: HashMap<Value, (usize, usize)> = HashMap::new();
-        let touch = |v: Value, p: usize, here: &mut HashMap<Value, (usize, usize)>| {
+        let mut here: FxHashMap<Value, (usize, usize)> = FxHashMap::default();
+        let touch = |v: Value, p: usize, here: &mut FxHashMap<Value, (usize, usize)>| {
             let e = here.entry(v).or_insert((p, p));
             e.0 = e.0.min(p);
             e.1 = e.1.max(p);
@@ -1098,8 +1101,17 @@ fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16
         if held.len() <= r {
             held.resize(r + 1, Vec::new());
         }
-        held[r].extend_from_slice(rs);
-        held[r].sort_unstable();
+        // Groups come in order of where they start, so what's added almost
+        // always goes at the end; the rest is inserted where it sorts.
+        let h = &mut held[r];
+        for &x in rs {
+            if h.last().is_none_or(|&last| last <= x) {
+                h.push(x);
+            } else {
+                let at = h.partition_point(|&y| y < x);
+                h.insert(at, x);
+            }
+        }
     };
 
     // Coalescing: a block parameter and a value an edge passes it share a
@@ -1130,7 +1142,7 @@ fn allocate(f: &Func, order: &[usize], skip: &HashSet<Value>, window: Option<u16
     }
     // (Stable: back edges first, each in layout order.)
     pairs.sort_by_key(|&(forward, _, _)| forward);
-    let fixed: HashSet<Value> = f.params().iter().copied().collect();
+    let fixed: FxHashSet<Value> = f.params().iter().copied().collect();
     for (_, param, arg) in pairs {
         if skip.contains(&param) || skip.contains(&arg) || ranges[arg.0 as usize].is_empty() {
             continue;
@@ -1418,7 +1430,7 @@ impl Emitter<'_> {
     }
 
     /// Emits block `b`'s instructions, then its terminator.
-    fn block(&mut self, b: usize, place: usize, fused: &HashSet<Value>) -> Result<(), CodegenError> {
+    fn block(&mut self, b: usize, place: usize, fused: &FxHashSet<Value>) -> Result<(), CodegenError> {
         self.insts(b, fused)?;
         self.term(b, place, fused)
     }
@@ -1428,7 +1440,7 @@ impl Emitter<'_> {
     /// branches back into the loop, which saves a jump (`loop`) on every
     /// iteration. The head has to end in a branch, and be short, with
     /// nothing in it that can unwind.
-    fn rotates(&self, b: usize, place: usize, h: usize, fused: &HashSet<Value>) -> bool {
+    fn rotates(&self, b: usize, place: usize, h: usize, fused: &FxHashSet<Value>) -> bool {
         let head = &self.f.blocks[h];
         if h == b || self.rank[h] > place || !matches!(head.term, Some(Term::Br { .. })) {
             return false;
@@ -1446,7 +1458,7 @@ impl Emitter<'_> {
     }
 
     /// Emits block `b`'s instructions.
-    fn insts(&mut self, b: usize, fused: &HashSet<Value>) -> Result<(), CodegenError> {
+    fn insts(&mut self, b: usize, fused: &FxHashSet<Value>) -> Result<(), CodegenError> {
         let f = self.f;
         let block = &f.blocks[b];
         for (i, inst) in block.insts.iter().enumerate() {
@@ -1500,7 +1512,7 @@ impl Emitter<'_> {
 
     /// Emits the branch that ends block `b`, at layout place `place` (its
     /// own, or that of a back edge that rotates its loop).
-    fn branch(&mut self, b: usize, place: usize, fused: &HashSet<Value>, span: Option<Span>) {
+    fn branch(&mut self, b: usize, place: usize, fused: &FxHashSet<Value>, span: Option<Span>) {
         let block = &self.f.blocks[b];
         let Some(Term::Br { cond, then, else_ }) = &block.term else { unreachable!("a branch") };
         let fused_cmp = block.insts.last().filter(|i| fused.contains(cond) && i.results == [*cond]);
@@ -1543,7 +1555,7 @@ impl Emitter<'_> {
     }
 
     /// Emits block `b`'s terminator.
-    fn term(&mut self, b: usize, place: usize, fused: &HashSet<Value>) -> Result<(), CodegenError> {
+    fn term(&mut self, b: usize, place: usize, fused: &FxHashSet<Value>) -> Result<(), CodegenError> {
         let f = self.f;
         let block = &f.blocks[b];
         let span = block.term_span;

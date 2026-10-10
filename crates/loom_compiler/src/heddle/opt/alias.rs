@@ -90,7 +90,7 @@ impl Alias {
                     | K::Index { .. }
                     | K::Bounds { .. } => Vec::new(),
                     K::Store { val, .. } => vec![*val],
-                    other => crate::heddle::inst_uses(other),
+                    other => crate::heddle::inst_uses(other).collect(),
                 };
                 let passed = match &inst.kind {
                     K::Call { args, .. } => args.clone(),

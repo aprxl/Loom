@@ -31,7 +31,7 @@
 //! a second table of known memory, which quiet natives leave alone, tells
 //! when two loads read the same thing.
 
-use std::collections::HashMap;
+use crate::fxhash::FxHashMap;
 
 use super::alias::{Access, Alias, Root};
 use super::cfg::Cfg;
@@ -55,7 +55,7 @@ pub fn gvn(module: &mut Module) {
 /// passed to a method inlined here, whose value GVN found in memory)
 /// becomes a call of that function, which inlining can then copy in.
 fn devirtualize(f: &mut Func, shapes: &[(usize, usize)]) {
-    let mut func_of: HashMap<Value, crate::heddle::FuncId> = HashMap::new();
+    let mut func_of: FxHashMap<Value, crate::heddle::FuncId> = FxHashMap::default();
     for inst in f.blocks.iter().flat_map(|b| &b.insts) {
         if let (InstKind::FuncRef(g), [r]) = (&inst.kind, inst.results.as_slice()) {
             func_of.insert(*r, *g);
@@ -301,36 +301,36 @@ struct Gvn<'a> {
     repl: Vec<Value>,
     /// What's been computed, with its results' types (a zero address isn't
     /// a zero integer), and its results.
-    exprs: HashMap<(InstKind, Vec<VTy>), Vec<Value>>,
+    exprs: FxHashMap<(InstKind, Vec<VTy>), Vec<Value>>,
     /// The same, by what its constant operands are rather than which
     /// values: until the next call, past which recomputing one (an
     /// instruction) is as cheap as keeping it (a move into the call's
     /// window).
-    kexprs: HashMap<(InstKind, Vec<VTy>), Vec<Value>>,
+    kexprs: FxHashMap<(InstKind, Vec<VTy>), Vec<Value>>,
     /// Known memory: what a load at each key gives.
-    mem: HashMap<MemKey, Value>,
+    mem: FxHashMap<MemKey, Value>,
     /// Known memory that natives which write nothing don't forget: which
     /// value a load at each key read first.
-    stable: HashMap<MemKey, Value>,
+    stable: FxHashMap<MemKey, Value>,
     /// For a load of what an earlier one read: that one (for lookups' keys
     /// alone; the load stays).
-    same: HashMap<Value, Value>,
+    same: FxHashMap<Value, Value>,
     /// The constant each value is, when it is one.
-    consts: HashMap<Value, u64>,
+    consts: FxHashMap<Value, u64>,
     /// For a constant: the first value that's the same constant of the
     /// same type (keys of expressions: each constant is its own value).
-    same_const: HashMap<Value, Value>,
+    same_const: FxHashMap<Value, Value>,
     /// For an address in a slot or the program's data (which GVN leaves
     /// unshared, like constants): the first value that is that address.
-    addrs: HashMap<Value, Value>,
+    addrs: FxHashMap<Value, Value>,
     /// The lookups made, and their results.
-    finds: HashMap<FindKey, Vec<Value>>,
+    finds: FxHashMap<FindKey, Vec<Value>>,
     /// The `elem`s whose list's buffer and length are known, by (block,
     /// instruction): the length to check the index against (none when a
     /// check like it dominates), and the buffer.
-    split: HashMap<(usize, usize), (Option<Value>, Value)>,
+    split: FxHashMap<(usize, usize), (Option<Value>, Value)>,
     /// Of those, the ones whose buffer and length are loaded there.
-    loads: HashMap<(usize, usize), (Value, Value)>,
+    loads: FxHashMap<(usize, usize), (Value, Value)>,
     /// What each loop may write, and the loops each block is in.
     loops: Vec<LoopWrites>,
     within: Vec<Vec<usize>>,
@@ -509,11 +509,11 @@ fn gvn_func(f: &mut Func, summaries: &[Vec<Writes>]) {
         cfg: &cfg,
         summaries,
         repl: (0..f.types.len() as u32).map(Value).collect(),
-        exprs: HashMap::new(),
-        kexprs: HashMap::new(),
-        mem: HashMap::new(),
-        stable: HashMap::new(),
-        same: HashMap::new(),
+        exprs: FxHashMap::default(),
+        kexprs: FxHashMap::default(),
+        mem: FxHashMap::default(),
+        stable: FxHashMap::default(),
+        same: FxHashMap::default(),
         consts: f
             .blocks
             .iter()
@@ -523,24 +523,24 @@ fn gvn_func(f: &mut Func, summaries: &[Vec<Writes>]) {
                 _ => None,
             })
             .collect(),
-        finds: HashMap::new(),
-        same_const: HashMap::new(),
-        addrs: HashMap::new(),
-        split: HashMap::new(),
-        loads: HashMap::new(),
+        finds: FxHashMap::default(),
+        same_const: FxHashMap::default(),
+        addrs: FxHashMap::default(),
+        split: FxHashMap::default(),
+        loads: FxHashMap::default(),
         loops: Vec::new(),
         within: vec![Vec::new(); f.blocks.len()],
         fresh: Vec::new(),
         base: f.types.len() as u32,
         undo: Vec::new(),
     };
-    let mut first_const: HashMap<(u64, VTy), Value> = HashMap::new();
+    let mut first_const: FxHashMap<(u64, VTy), Value> = FxHashMap::default();
     for inst in f.blocks.iter().flat_map(|b| &b.insts) {
         if let (InstKind::Iconst(c), [r]) = (&inst.kind, inst.results.as_slice()) {
             g.same_const.insert(*r, *first_const.entry((*c, f.ty(*r))).or_insert(*r));
         }
     }
-    let mut first: HashMap<(Root, i64), Value> = HashMap::new();
+    let mut first: FxHashMap<(Root, i64), Value> = FxHashMap::default();
     for r in f.blocks.iter().flat_map(|b| &b.insts).flat_map(|i| &i.results) {
         if let (root @ (Root::Slot(_) | Root::Data), Some(off)) = g.alias.root(*r) {
             g.addrs.insert(*r, *first.entry((root, off)).or_insert(*r));
@@ -548,7 +548,7 @@ fn gvn_func(f: &mut Func, summaries: &[Vec<Writes>]) {
     }
     // What each loop may write; by its head, when one block before it
     // leads there.
-    let mut heads: HashMap<usize, usize> = HashMap::new();
+    let mut heads: FxHashMap<usize, usize> = FxHashMap::default();
     for l in cfg.loops() {
         let outside: Vec<usize> = cfg.preds[l.header].iter().copied().filter(|&p| !l.inside[p]).collect();
         if outside == [cfg.idom[l.header].unwrap_or(usize::MAX)] {

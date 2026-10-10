@@ -84,7 +84,8 @@ fn func(name: String, params: &[VTy], result: VTy, kind: impl FnOnce(&[Value]) -
 
 /// Compiles `funcs` and gives a machine to call them on.
 fn compile(funcs: Vec<Func>) -> loom_isa::Image {
-    let module = Module { funcs, strings: Vec::new(), fmts: Vec::new(), data: Vec::new(), entry: FuncId(0) };
+    let module =
+        Module { funcs, strings: Vec::new(), fmts: Vec::new(), data: Vec::new(), entry: FuncId(0), roots: Vec::new() };
     loom_compiler::heddle::verify(&module).expect("valid Heddle");
     codegen::generate(&SourceDb::new(), &module).expect("compiles")
 }

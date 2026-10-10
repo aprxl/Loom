@@ -10,7 +10,7 @@
 //! address comes before the value it's given, and `xs[i] += 1` loads and
 //! stores at one address.
 
-use std::collections::HashMap;
+use crate::fxhash::FxHashMap;
 
 use crate::heddle::{BlockId, Func, InstKind, Module, Policy, Term, Value, rewrite};
 
@@ -32,7 +32,7 @@ pub fn cleanup(module: &mut Module) {
 /// element, so the copies after it check what's already checked.
 fn sink_elems(f: &mut Func) {
     // Each slot's address, by slot (each use has a value of its own).
-    let slot: HashMap<Value, u32> = f
+    let slot: FxHashMap<Value, u32> = f
         .blocks
         .iter()
         .flat_map(|b| &b.insts)
@@ -42,7 +42,7 @@ fn sink_elems(f: &mut Func) {
         })
         .collect();
     let same = |a: Value, b: Value| a == b || slot.get(&a).is_some_and(|n| slot.get(&b) == Some(n));
-    let mut uses: HashMap<Value, usize> = HashMap::new();
+    let mut uses: FxHashMap<Value, usize> = FxHashMap::default();
     for b in &f.blocks {
         for inst in &b.insts {
             for u in crate::heddle::inst_uses(&inst.kind) {
@@ -137,7 +137,7 @@ fn sink_elems(f: &mut Func) {
 /// anything can tell. An `index` reads no memory, so its copies can go
 /// anywhere after it.
 fn sink_indexes(f: &mut Func) {
-    let mut uses: HashMap<Value, usize> = HashMap::new();
+    let mut uses: FxHashMap<Value, usize> = FxHashMap::default();
     for b in &f.blocks {
         for inst in &b.insts {
             for u in crate::heddle::inst_uses(&inst.kind) {
@@ -211,7 +211,7 @@ fn sink_indexes(f: &mut Func) {
 /// just before it fuses too. Its operands were made before it, so they
 /// still are.
 fn place_indexes(f: &mut Func) {
-    let mut uses: HashMap<Value, usize> = HashMap::new();
+    let mut uses: FxHashMap<Value, usize> = FxHashMap::default();
     for b in &f.blocks {
         for inst in &b.insts {
             for u in crate::heddle::inst_uses(&inst.kind) {
@@ -223,7 +223,7 @@ fn place_indexes(f: &mut Func) {
         }
     }
     // The places just after each `index`.
-    let mut after: HashMap<Value, (usize, usize)> = HashMap::new();
+    let mut after: FxHashMap<Value, (usize, usize)> = FxHashMap::default();
     for (b, block) in f.blocks.iter().enumerate() {
         for (i, inst) in block.insts.iter().enumerate() {
             if let (InstKind::Index { .. }, [r]) = (&inst.kind, inst.results.as_slice())
@@ -233,7 +233,7 @@ fn place_indexes(f: &mut Func) {
             }
         }
     }
-    let mut moving: HashMap<Value, crate::heddle::Inst> = HashMap::new();
+    let mut moving: FxHashMap<Value, crate::heddle::Inst> = FxHashMap::default();
     for (b, block) in f.blocks.iter().enumerate() {
         for (i, inst) in block.insts.iter().enumerate() {
             let ptr = match &inst.kind {
@@ -289,7 +289,7 @@ fn carry_last(f: &mut Func) {
             continue;
         }
         let n = block.insts.len();
-        let def: HashMap<Value, usize> =
+        let def: FxHashMap<Value, usize> =
             block.insts.iter().enumerate().flat_map(|(i, inst)| inst.results.iter().map(move |&r| (r, i))).collect();
         let movable = |k: &InstKind| pure(k) && !matches!(k, InstKind::Load { .. });
         // What moves: the instructions making what's passed, and what only
@@ -310,7 +310,7 @@ fn carry_last(f: &mut Func) {
                 }
                 let only_moving = inst.results.iter().all(|r| {
                     let readers: Vec<usize> =
-                        (0..n).filter(|&j| crate::heddle::inst_uses(&block.insts[j].kind).contains(r)).collect();
+                        (0..n).filter(|&j| crate::heddle::inst_uses(&block.insts[j].kind).any(|u| u == *r)).collect();
                     !readers.is_empty() && readers.iter().all(|&j| moving[j])
                 });
                 if only_moving {
@@ -328,9 +328,9 @@ fn carry_last(f: &mut Func) {
         if idx.len() < 2 {
             continue;
         }
-        let mut after: HashMap<usize, Vec<usize>> = HashMap::new();
+        let mut after: FxHashMap<usize, Vec<usize>> = FxHashMap::default();
         for &i in &idx {
-            let uses = crate::heddle::inst_uses(&block.insts[i].kind);
+            let uses: Vec<Value> = crate::heddle::inst_uses(&block.insts[i].kind).collect();
             for u in &uses {
                 if let Some(&j) = def.get(u)
                     && moving[j]
@@ -462,7 +462,7 @@ fn merge_chains(f: &mut Func) {
         }
     }
     // Merging moves a block's edges to the block it joins: the counts hold.
-    let mut to: HashMap<Value, Value> = HashMap::new();
+    let mut to: FxHashMap<Value, Value> = FxHashMap::default();
     for a in 0..n {
         while let Some(Term::Jump(e)) = &f.blocks[a].term {
             let b = e.block.0 as usize;

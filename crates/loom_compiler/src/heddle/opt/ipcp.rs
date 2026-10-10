@@ -8,7 +8,7 @@
 //! driver). The parameter stays: callers still pass it, and codegen gives
 //! it no work.
 
-use std::collections::HashMap;
+use crate::fxhash::FxHashMap;
 
 use crate::heddle::{Inst, InstKind, Module, Value};
 
@@ -20,7 +20,7 @@ pub fn ipcp(module: &mut Module) {
     let mut barred = vec![false; n];
     barred[module.entry.0 as usize] = true;
     for f in &module.funcs {
-        let consts: HashMap<Value, InstKind> = f
+        let consts: FxHashMap<Value, InstKind> = f
             .blocks
             .iter()
             .flat_map(|b| &b.insts)
@@ -50,7 +50,7 @@ pub fn ipcp(module: &mut Module) {
         if barred[i] || suspends || f.blocks.is_empty() {
             continue;
         }
-        let mut repl: HashMap<Value, Value> = HashMap::new();
+        let mut repl: FxHashMap<Value, Value> = FxHashMap::default();
         let mut made = Vec::new();
         for (k, c) in known.iter().enumerate() {
             let (Some(c), Some(&p)) = (c, f.blocks[0].params.get(k)) else { continue };

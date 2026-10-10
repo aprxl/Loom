@@ -761,7 +761,7 @@ fn update_ssa(f: &mut Func, defs: &HashMap<Value, HashMap<usize, Value>>) -> Res
             let n_insts = f.blocks[b].insts.len();
             for i in 0..=n_insts {
                 let reads: Vec<Value> = if i < n_insts {
-                    super::inst_uses(&f.blocks[b].insts[i].kind)
+                    super::inst_uses(&f.blocks[b].insts[i].kind).collect()
                 } else {
                     f.blocks[b].term.as_ref().map(term_uses).unwrap_or_default()
                 };

@@ -18,6 +18,16 @@ cargo test -p loom --features vm-checked,vm-stats             # the fixtures on 
 
 Read your own diff before committing. One logical change per commit.
 
+## Agent workflow
+
+- Sonnet 5.5 is the main agent and writes the code.
+- Opus 5.5 is the advisor (the `advisor` tool): consult it before committing
+  to a design or architecture choice, when stuck, and before calling work done.
+  Let it make the important decisions.
+- Haiku 5.5 is the explorer: spawn it (`Agent`, `model: haiku`, `Explore`) to
+  find code and retrieve facts. A plain `grep` is fine when it's cheaper than
+  spawning one. Keep to 2–3 agents at a time.
+
 ## Toolchain
 
 - Rust stable ≥ 1.98, edition 2024, host `x86_64-pc-windows-msvc`.

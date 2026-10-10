@@ -495,6 +495,9 @@ pub struct Module {
     pub data: Vec<u64>,
     /// The function to run.
     pub entry: FuncId,
+    /// Functions something outside the module calls, besides the entry (a
+    /// test run's tests): the optimizer keeps them.
+    pub roots: Vec<FuncId>,
 }
 
 impl Module {

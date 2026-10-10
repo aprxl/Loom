@@ -67,8 +67,23 @@ pub fn compile(db: &SourceDb, p: &Program, typed: &Typed) -> Result<Compiled, Ve
 
 /// [`compile`], optimized at `level`.
 pub fn compile_at(db: &SourceDb, p: &Program, typed: &Typed, level: Level) -> Result<Compiled, Vec<Diagnostic>> {
+    // `LOOM_PASS_TIMES=1` prints how long each phase took (the passes
+    // themselves are timed in `heddle::opt`).
+    let timing = std::env::var_os("LOOM_PASS_TIMES").is_some();
+    let lap = |what: &str, since: &mut std::time::Instant| {
+        if timing {
+            eprintln!("phase {what:12} {:>9.2?}", since.elapsed());
+        }
+        *since = std::time::Instant::now();
+    };
+    let mut t = std::time::Instant::now();
     lower::compile_time(db, p, typed, false)?;
-    let heddle = optimized(heddle::build(p, typed)?, level)?;
+    lap("const code", &mut t);
+    let built = heddle::build(p, typed)?;
+    lap("build", &mut t);
+    let heddle = optimized(built, level)?;
+    lap("optimize", &mut t);
     let image = codegen::generate(db, &heddle).map_err(codegen_diagnostics)?;
+    lap("codegen", &mut t);
     Ok(Compiled { heddle, image })
 }

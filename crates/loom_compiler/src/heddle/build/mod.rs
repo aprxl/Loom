@@ -362,11 +362,20 @@ pub fn build_tests(p: &Program, typed: &Typed) -> Result<(Module, Vec<(String, F
     b.drain();
     let Some(&(_, entry)) = entries.first() else {
         return Ok((
-            Module { funcs: Vec::new(), strings: Vec::new(), fmts: Vec::new(), data: Vec::new(), entry: FuncId(0) },
+            Module {
+                funcs: Vec::new(),
+                strings: Vec::new(),
+                fmts: Vec::new(),
+                data: Vec::new(),
+                entry: FuncId(0),
+                roots: Vec::new(),
+            },
             entries,
         ));
     };
-    Ok((b.finish(entry)?, entries))
+    let mut module = b.finish(entry)?;
+    module.roots = entries.iter().map(|&(_, id)| id).collect();
+    Ok((module, entries))
 }
 
 impl<'a> Builder<'a> {
@@ -422,6 +431,7 @@ impl<'a> Builder<'a> {
             fmts: self.fmts.into_keys().collect(),
             data: self.data,
             entry,
+            roots: Vec::new(),
         };
         if let Err(e) = super::verify(&module) {
             let diag = Diagnostic::error(codes::U0102, format!("internal error: invalid Heddle: {e}"));

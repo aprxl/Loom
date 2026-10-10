@@ -38,8 +38,14 @@ fn func(operand: VTy, result: VTy, a: u64, b: u64, kind: InstKind) -> Func {
 /// What each function of `funcs` gives (`None`: it unravelled), compiled as
 /// it is, or after the `sccp` pass.
 fn run(funcs: &[Func], folded: bool) -> (Vec<Option<u64>>, usize) {
-    let mut module =
-        Module { funcs: funcs.to_vec(), strings: Vec::new(), fmts: Vec::new(), data: Vec::new(), entry: FuncId(0) };
+    let mut module = Module {
+        funcs: funcs.to_vec(),
+        strings: Vec::new(),
+        fmts: Vec::new(),
+        data: Vec::new(),
+        entry: FuncId(0),
+        roots: Vec::new(),
+    };
     if folded {
         module = opt::run(module, &["sccp"]).expect("valid after sccp");
     }

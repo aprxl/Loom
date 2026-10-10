@@ -177,11 +177,42 @@ fn verify_func(f: &Func) -> Result<(), String> {
     Ok(())
 }
 
+/// The values an instruction reads, in no allocation: up to three of its own,
+/// then a slice (a call's arguments).
+pub(crate) struct Uses<'a> {
+    fixed: [Value; 2],
+    n: usize,
+    i: usize,
+    rest: &'a [Value],
+}
+
+impl Iterator for Uses<'_> {
+    type Item = Value;
+
+    fn next(&mut self) -> Option<Value> {
+        if self.i < self.n {
+            self.i += 1;
+            return Some(self.fixed[self.i - 1]);
+        }
+        let (&first, rest) = self.rest.split_first()?;
+        self.rest = rest;
+        Some(first)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let n = self.n - self.i + self.rest.len();
+        (n, Some(n))
+    }
+}
+
+impl ExactSizeIterator for Uses<'_> {}
+
 /// The values an instruction reads.
-pub(crate) fn uses(k: &super::InstKind) -> Vec<Value> {
+pub(crate) fn uses(k: &super::InstKind) -> Uses<'_> {
     use super::InstKind as K;
-    match k {
-        K::Undef | K::Iconst(_) | K::Fconst(_) | K::Str(_) => Vec::new(),
+    let none = Value(0);
+    let (fixed, n, rest): ([Value; 2], usize, &[Value]) = match k {
+        K::Undef | K::Iconst(_) | K::Fconst(_) | K::Str(_) => ([none; 2], 0, &[]),
         K::Arith { a, b, .. }
         | K::Div { a, b, .. }
         | K::Rem { a, b, .. }
@@ -190,7 +221,7 @@ pub(crate) fn uses(k: &super::InstKind) -> Vec<Value> {
         | K::Bit { a, b, .. }
         | K::ICmp { a, b, .. }
         | K::FArith { a, b, .. }
-        | K::FCmp { a, b, .. } => vec![*a, *b],
+        | K::FCmp { a, b, .. } => ([*a, *b], 2, &[]),
         K::Neg { a, .. }
         | K::BitNot { a, .. }
         | K::Not(a)
@@ -199,19 +230,20 @@ pub(crate) fn uses(k: &super::InstKind) -> Vec<Value> {
         | K::IntToFloat { a, .. }
         | K::FloatToInt { a, .. }
         | K::FloatCast { a, .. }
-        | K::IntToChar { a, .. } => vec![*a],
-        K::Call { args, .. } | K::Native { args, .. } => args.clone(),
-        K::Slot(_) | K::Global(_) | K::FuncRef(_) | K::Life { .. } => Vec::new(),
-        K::Load { ptr, .. } | K::Offset { ptr, .. } => vec![*ptr],
-        K::Store { ptr, val, .. } => vec![*ptr, *val],
-        K::Copy { dst, src, .. } => vec![*dst, *src],
-        K::Zero { dst, .. } => vec![*dst],
-        K::Index { base, index, .. } => vec![*base, *index],
-        K::Bounds { index, len } => vec![*index, *len],
-        K::Elem { header, index, .. } => vec![*header, *index],
-        K::FreeBuf { header, .. } => vec![*header],
-        K::CallInd { callee, args } => std::iter::once(*callee).chain(args.iter().copied()).collect(),
-    }
+        | K::IntToChar { a, .. } => ([*a, none], 1, &[]),
+        K::Call { args, .. } | K::Native { args, .. } => ([none; 2], 0, args),
+        K::Slot(_) | K::Global(_) | K::FuncRef(_) | K::Life { .. } => ([none; 2], 0, &[]),
+        K::Load { ptr, .. } | K::Offset { ptr, .. } => ([*ptr, none], 1, &[]),
+        K::Store { ptr, val, .. } => ([*ptr, *val], 2, &[]),
+        K::Copy { dst, src, .. } => ([*dst, *src], 2, &[]),
+        K::Zero { dst, .. } => ([*dst, none], 1, &[]),
+        K::Index { base, index, .. } => ([*base, *index], 2, &[]),
+        K::Bounds { index, len } => ([*index, *len], 2, &[]),
+        K::Elem { header, index, .. } => ([*header, *index], 2, &[]),
+        K::FreeBuf { header, .. } => ([*header, none], 1, &[]),
+        K::CallInd { callee, args } => ([*callee, none], 1, args),
+    };
+    Uses { fixed, n, i: 0, rest }
 }
 
 /// The blocks only unwinding reaches: every landing pad, and what they

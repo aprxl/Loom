@@ -13,10 +13,10 @@
 //! type that holds every value of the one it's from, `not not x`, and an
 //! integer compared with itself, are what they are without computing.
 
-use std::collections::HashSet;
+use crate::fxhash::FxHashSet;
 
 use super::fold::fold;
-use crate::heddle::{BitOp, Cmp, Edge, Func, Inst, InstKind, IntOp, Module, Term, VTy, Value};
+use crate::heddle::{BitOp, Cmp, Func, Inst, InstKind, IntOp, Module, Term, VTy, Value};
 
 pub fn sccp(module: &mut Module) {
     for f in &mut module.funcs {
@@ -53,7 +53,7 @@ struct Sccp<'f> {
     lat: Vec<Lat>,
     users: Vec<Vec<User>>,
     run: Vec<bool>,
-    edges: HashSet<(usize, usize)>,
+    edges: FxHashSet<(usize, usize)>,
     blocks: Vec<usize>,
     values: Vec<Value>,
 }
@@ -76,44 +76,41 @@ impl Sccp<'_> {
     }
 
     fn inst(&mut self, b: usize, i: usize) {
-        let inst = &self.f.blocks[b].insts[i];
+        let f = self.f;
+        let inst = &f.blocks[b].insts[i];
         let lat = &self.lat;
-        let mut top = false;
         let operand = |v: Value| match lat[v.0 as usize] {
             Lat::Const(c) => Some(c),
             _ => None,
         };
-        for u in crate::heddle::inst_uses(&inst.kind) {
-            top |= lat[u.0 as usize] == Lat::Top;
-        }
-        let results = inst.results.clone();
-        let out = match (&results[..], top) {
+        let top = crate::heddle::inst_uses(&inst.kind).any(|u| lat[u.0 as usize] == Lat::Top);
+        let out = match (&inst.results[..], top) {
             // Not known yet: maybe a constant, once the operands are.
             ([_], true) if foldable(&inst.kind) => Lat::Top,
             ([_], _) => fold(&inst.kind, operand).map_or(Lat::Bottom, Lat::Const),
             _ => Lat::Bottom,
         };
-        for r in results {
+        for &r in &inst.results {
             self.set(r, out);
         }
     }
 
     fn term(&mut self, b: usize) {
-        let Some(term) = &self.f.blocks[b].term else { return };
-        let taken: Vec<usize> = match term {
+        let f = self.f;
+        let Some(term) = &f.blocks[b].term else { return };
+        let (first, count) = match term {
             Term::Br { cond, .. } => match self.lat[cond.0 as usize] {
-                Lat::Top => Vec::new(),
-                Lat::Const(c) => vec![if c != 0 { 0 } else { 1 }],
-                Lat::Bottom => vec![0, 1],
+                Lat::Top => (0, 0),
+                Lat::Const(c) => (if c != 0 { 0 } else { 1 }, 1),
+                Lat::Bottom => (0, 2),
             },
-            t => (0..t.edges().len()).collect(),
+            t => (0, t.edges().len()),
         };
-        let edges: Vec<Edge> = term.edges().into_iter().cloned().collect();
-        for k in taken {
-            let e = &edges[k];
+        let edges = term.edges();
+        for (k, e) in edges.into_iter().enumerate().skip(first).take(count) {
             let t = e.block.0 as usize;
             self.edges.insert((b, k));
-            for (&p, &a) in self.f.blocks[t].params.iter().zip(&e.args) {
+            for (&p, &a) in f.blocks[t].params.iter().zip(&e.args) {
                 let l = self.lat[a.0 as usize];
                 self.set(p, l);
             }
@@ -169,7 +166,7 @@ fn sccp_func(f: &mut Func) {
         lat: vec![Lat::Top; n],
         users,
         run: vec![false; f.blocks.len()],
-        edges: HashSet::new(),
+        edges: FxHashSet::default(),
         blocks: Vec::new(),
         values: Vec::new(),
     };

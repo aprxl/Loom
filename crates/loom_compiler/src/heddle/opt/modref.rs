@@ -144,7 +144,7 @@ fn summarize(f: &Func, alias: &Alias, all: &[Vec<Writes>]) -> Vec<Writes> {
                 K::Native { name, args, .. } if quiet(name) => args.clone(),
                 // Reading, and deriving addresses, write nothing.
                 K::Load { .. } | K::Offset { .. } | K::Index { .. } | K::Elem { .. } | K::Bounds { .. } => {
-                    crate::heddle::inst_uses(&inst.kind)
+                    crate::heddle::inst_uses(&inst.kind).collect()
                 }
                 _ => Vec::new(),
             };
