@@ -134,6 +134,10 @@ struct Ranges<'f> {
     facts: Vec<Vec<Fact>>,
     /// How many times each value's interval has grown (to widen).
     grown: Vec<u8>,
+    /// Whether any value was widened (and may be narrowed again).
+    widened: bool,
+    /// Each reached block's chain of dominators, itself first.
+    chains: Vec<Vec<usize>>,
 }
 
 impl Ranges<'_> {
@@ -156,14 +160,10 @@ impl Ranges<'_> {
     /// The tests that hold at instruction `pos` of block `b` (past its end
     /// for the terminator): the dominators' all, and the block's own from
     /// where they start to.
-    fn facts_at(&self, mut b: usize, pos: usize) -> impl Iterator<Item = &Fact> {
-        let mut chain = vec![b];
-        while let Some(d) = self.cfg.idom[b].filter(|&d| d != b) {
-            chain.push(d);
-            b = d;
-        }
-        chain
-            .into_iter()
+    fn facts_at(&self, b: usize, pos: usize) -> impl Iterator<Item = &Fact> {
+        self.chains[b]
+            .iter()
+            .copied()
             .enumerate()
             .flat_map(move |(n, b)| self.facts[b].iter().filter(move |f| n > 0 || f.from <= pos))
     }
@@ -377,6 +377,7 @@ impl Ranges<'_> {
                                 let g = &mut self.grown[p.0 as usize];
                                 *g = g.saturating_add(1);
                                 if *g > 2 {
+                                    self.widened = true;
                                     if new.hi > old.hi {
                                         new.hi = ANY.hi;
                                     }
@@ -409,7 +410,7 @@ impl Ranges<'_> {
         // does goes to everything above). What every value is now is a bound
         // that holds, so working each value out again from the others, and
         // keeping what's narrower than before, only tightens: a few rounds.
-        for _ in 0..3 {
+        for _ in 0..if self.widened { 3 } else { 0 } {
             let mut changed = false;
             for i in 0..self.cfg.rpo.len() {
                 let b = self.cfg.rpo[i];
@@ -528,7 +529,19 @@ fn ranges_func(f: &mut Func) {
             }
         }
     }
-    let mut r = Ranges { f, cfg, iv, consts, facts, grown: vec![0; n] };
+    let chains = (0..f.blocks.len())
+        .map(|mut b| {
+            let mut chain = vec![b];
+            if cfg.reached(b) {
+                while let Some(d) = cfg.idom[b].filter(|&d| d != b) {
+                    chain.push(d);
+                    b = d;
+                }
+            }
+            chain
+        })
+        .collect();
+    let mut r = Ranges { f, cfg, iv, consts, facts, grown: vec![0; n], widened: false, chains };
     r.solve();
     // What goes: (block, instruction) and what becomes of it.
     enum Change {
