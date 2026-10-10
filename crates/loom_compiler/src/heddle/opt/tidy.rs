@@ -25,11 +25,14 @@ pub fn cleanup(module: &mut Module) {
     }
 }
 
-/// Moves each `elem` whose uses are all loads and stores of it later in its
-/// block down to them, one copy before each: what's before the first can't
-/// trap and has no effect, so its check runs where it would have, as far
-/// as anything can tell; and what's between them writes no memory but the
-/// element, so the copies after it check what's already checked.
+/// Moves each `elem` whose only use is a load or a store of it later in its
+/// block down to it (`ldelf`, `stelf` in codegen): what's before the load or
+/// store can't trap and has no effect, so the check runs where it would have,
+/// as far as anything can tell.
+///
+/// An `elem` of several uses stays one: a copy before each would check again
+/// what's already checked, which costs less than the dispatch it saves but
+/// still runs one more check each time.
 fn sink_elems(f: &mut Func) {
     // Each slot's address, by slot (each use has a value of its own).
     let slot: FxHashMap<Value, u32> = f
@@ -101,6 +104,7 @@ fn sink_elems(f: &mut Func) {
                 || uses.get(&r) != Some(&at.len())
                 || !quiet_before
                 || !no_writes
+                || at.len() > 1
                 || (at.len() == 1 && first == i + 1)
             {
                 i += 1;

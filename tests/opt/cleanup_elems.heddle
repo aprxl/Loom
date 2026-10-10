@@ -11,7 +11,6 @@ b0(v0: ptr, v1: int):
     v3 = elem v0+0[v1] * 8
     v4 = load.64 v3
     v5 = add.i64 v4, v2
-    v6 = elem v0+0[v1] * 8
-    store.64 v6, v5
+    store.64 v3, v5
     ret
 }

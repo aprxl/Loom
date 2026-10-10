@@ -7,9 +7,9 @@ sieve        100000 1408038
 spectral_norm 40     844379
 fannkuch     7      771840
 binary_trees 8      1544450
-richards     10000  519760
+richards     10000  529760
 word_freq    40000  1769605
-sort         20000  6450815
+sort         20000  6450818
 streams      30000  1100062
 chip8        30000  696962
 maps         20000  4399787
