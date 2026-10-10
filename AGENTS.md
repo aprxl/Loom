@@ -187,9 +187,9 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
     speed gate, 2.42× against 2.5× (bench/RESULTS.md says where the time
     is). Deferred passes: specialize lambdas, SROA, self tail calls.
 
-Next: Treadle V4, compile-time code on Treadle (design/vm.md §17), and the
-speed gate with V8's. Then V5 threads, V6 spools, V7 Lua interop, V9
-Treadle by default.
+Next: V3's speed gate is open (close it at 2.42×, restate it, or fund the
+start-up and native work). Then V4 compile-time code on Treadle, V5
+threads, V6 spools, V7 Lua interop, V8 speed, V9 Treadle by default.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and
