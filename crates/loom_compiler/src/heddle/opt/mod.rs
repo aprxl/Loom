@@ -7,6 +7,7 @@
 //! (`verify`), which the optimizer's tests check after every pass.
 
 mod alias;
+mod cells;
 mod cfg;
 mod fold;
 mod gvn;
@@ -39,6 +40,8 @@ const PASSES: &[Pass] = &[
     // What inlining used up the last call of isn't worth the rest's time.
     ("prune", prune),
     ("sccp", sccp::sccp),
+    // What a counted loop leaves in the frame (`xs.push` in `for i in 0..n`).
+    ("cells", cells::cells),
     ("gvn", gvn::gvn),
     // What GVN found (a load of memory a `zero` wrote) may decide a branch.
     ("sccp", sccp::sccp),

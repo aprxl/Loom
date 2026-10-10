@@ -1,0 +1,13 @@
+// passes: inline, prune, sccp, cells
+// fns: main
+//
+// The loop pushes once a trip, from empty, below 7: afterwards the list's
+// length (the word at offset 8 of its header) is 7, which the optimizer
+// says by storing it where the loop exits.
+use std.io.print
+
+fn main() {
+    var xs: List[i32] = List()
+    for i in 0..7 { xs.push(i as i32) }
+    print("{xs[3]}")
+}

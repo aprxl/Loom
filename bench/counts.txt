@@ -5,11 +5,11 @@ fib          20     109449
 mandelbrot   40     725756
 sieve        100000 1408038
 spectral_norm 40     844379
-fannkuch     7      771838
+fannkuch     7      771841
 binary_trees 8      1544450
-richards     10000  525764
+richards     10000  505733
 word_freq    40000  1769602
-sort         20000  6450818
+sort         20000  6450809
 streams      30000  1100062
 chip8        30000  696959
 maps         20000  4399787

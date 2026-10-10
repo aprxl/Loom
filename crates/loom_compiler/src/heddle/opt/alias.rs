@@ -19,6 +19,12 @@
 
 use crate::heddle::{Func, InstKind, Value};
 
+/// The words of a list's header that `mem.grow(header, ..)` writes: the
+/// buffer's address and the capacity, not the length.
+pub fn grow_writes(header: Value) -> [Access; 2] {
+    [Access { ptr: header, off: 0, size: 8 }, Access { ptr: header, off: 16, size: 8 }]
+}
+
 /// Where an address points.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Root {
@@ -90,6 +96,9 @@ impl Alias {
                     | K::Index { .. }
                     | K::Bounds { .. } => Vec::new(),
                     K::Store { val, .. } => vec![*val],
+                    // Writes the header it's given (words 0 and 2) and
+                    // keeps no address: the header doesn't escape.
+                    K::Native { name: "mem.grow", args, .. } => args[1..].to_vec(),
                     other => crate::heddle::inst_uses(other).collect(),
                 };
                 let passed = match &inst.kind {

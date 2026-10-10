@@ -269,6 +269,9 @@ fn writes_of(f: &Func, blocks: impl Iterator<Item = usize>) -> LoopWrites {
                     if let InstKind::FreeBuf { header, off, .. } = inst.kind {
                         w.writes.push(Access { ptr: header, off: i64::from(off), size: 24 });
                     }
+                    if let InstKind::Native { name: "mem.grow", args, .. } = &inst.kind {
+                        w.writes.extend(super::alias::grow_writes(args[0]));
+                    }
                 }
                 _ => {}
             }
@@ -821,6 +824,14 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool], 
                 g.forget_stable(|alias, k| survives_call(alias, k, summary, args));
                 for (k, v) in g.kexprs.drain().collect::<Vec<_>>() {
                     g.undo.push(Undo::KExpr(k, Some(v)));
+                }
+            }
+            // Making room in a list writes two words of its header, and
+            // moves its buffer: what's known of the rest stays known.
+            Role::Clobber if let InstKind::Native { name: "mem.grow", args, .. } = &kind => {
+                for access in super::alias::grow_writes(args[0]) {
+                    g.forget(|alias, k| !alias.may_alias(access, k.access()));
+                    g.forget_stable(|alias, k| !alias.may_alias(access, k.access()));
                 }
             }
             Role::Clobber => {

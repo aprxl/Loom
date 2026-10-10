@@ -1,0 +1,10 @@
+// Indexing at exactly the length after a counted loop of pushes unravels,
+// whatever the optimizer knows of the length.
+use std.io.print
+
+fn main() {
+    var xs: List[i32] = List()
+    for i in 0..6 { xs.push(i as i32) }
+    print("{xs[5]}")
+    print("{xs[6]}")
+}

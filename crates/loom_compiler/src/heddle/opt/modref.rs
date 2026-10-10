@@ -142,6 +142,19 @@ fn summarize(f: &Func, alias: &Alias, all: &[Vec<Writes>]) -> Vec<Writes> {
                     args.clone()
                 }
                 K::Native { name, args, .. } if quiet(name) => args.clone(),
+                // Words 0 and 2 of the header it's given.
+                K::Native { name: "mem.grow", args, .. } => {
+                    if let Some((k, o)) = from(args[0]) {
+                        match o {
+                            Some(o) => {
+                                out[k].add(o, 8);
+                                out[k].add(o + 16, 8);
+                            }
+                            None => out[k] = Writes::Any,
+                        }
+                    }
+                    vec![args[0]]
+                }
                 // Reading, and deriving addresses, write nothing.
                 K::Load { .. } | K::Offset { .. } | K::Index { .. } | K::Elem { .. } | K::Bounds { .. } => {
                     crate::heddle::inst_uses(&inst.kind).collect()

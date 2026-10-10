@@ -137,6 +137,10 @@ fn licm_func(f: &mut Func) {
                     }
                     InstKind::Native { name, .. } if super::gvn::PURE_NATIVES.contains(name) => {}
                     InstKind::Native { name, .. } if super::gvn::QUIET_NATIVES.contains(name) => {}
+                    InstKind::Native { name: "mem.grow", args, .. } => {
+                        writes.extend(super::alias::grow_writes(args[0]));
+                        calls = true;
+                    }
                     InstKind::Call { .. } | InstKind::CallInd { .. } | InstKind::Native { .. } => calls = true,
                     InstKind::FreeBuf { .. } => calls = true,
                     _ => {}
