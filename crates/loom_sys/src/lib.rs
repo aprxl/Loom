@@ -6,10 +6,16 @@
 //! [`Location`] they happened at.
 
 pub mod interrupt;
+pub mod srcmap;
 pub mod term;
 
 use std::cell::RefCell;
 use std::rc::Rc;
+
+/// Source of the Lua runtime (`rt`), embedded at build time: the compiler
+/// writes it at the head of every Lua bundle, and the Lua host loads it for
+/// its sandbox and its tests.
+pub const RT_CORE: &str = include_str!("../../../runtime/rt/core.lua");
 
 /// Where a program's output goes.
 #[derive(Clone, Debug)]

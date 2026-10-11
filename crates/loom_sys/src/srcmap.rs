@@ -1,4 +1,5 @@
-//! Source maps: which Loom line each line of a bundle came from.
+//! Source maps: which Loom line each line of a bundle came from (the compiler
+//! writes them; the Lua host reads them).
 //!
 //! The compiler writes one next to every bundle (`out.lua.map`), and the
 //! host reads it to turn a Lua error position (`bundle.lua:123:`) into a
@@ -29,7 +30,7 @@ pub struct Mapping {
     pub column: u32,
 }
 
-pub use loom_sys::Location;
+pub use crate::Location;
 
 impl SourceMap {
     pub fn to_text(&self) -> String {

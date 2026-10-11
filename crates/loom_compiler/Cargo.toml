@@ -15,6 +15,7 @@ lua55 = ["loom_host/lua55"]
 loom_syntax.workspace = true
 loom_isa.workspace = true
 loom_host.workspace = true
+loom_sys.workspace = true
 indexmap.workspace = true
 
 [lints]
@@ -22,5 +23,4 @@ workspace = true
 
 [dev-dependencies]
 mlua.workspace = true
-loom_sys.workspace = true
 loom_vm.workspace = true

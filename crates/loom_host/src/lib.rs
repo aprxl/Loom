@@ -11,7 +11,7 @@
 
 pub mod consteval;
 pub mod run;
-pub mod srcmap;
+pub use loom_sys::srcmap;
 pub use loom_sys::term;
 
 pub use run::{Host, Outcome, Output, TestRun, run_bundle, run_tests};
@@ -32,8 +32,7 @@ pub const LUA_VERSION: &str = "Lua 5.4";
 #[cfg(feature = "lua55")]
 pub const LUA_VERSION: &str = "Lua 5.5";
 
-/// Source of the runtime core chunk, embedded at build time.
-pub const RT_CORE: &str = include_str!("../../../runtime/rt/core.lua");
+pub use loom_sys::RT_CORE;
 
 /// A fresh Lua state with the Loom runtime loaded.
 #[derive(Debug)]
