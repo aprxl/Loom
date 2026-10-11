@@ -234,6 +234,8 @@ struct Emitter<'m> {
     /// The last `mov`: where the code ended after it, and its destination
     /// and source. Forgotten where a block or a trampoline starts.
     last_mov: Option<(usize, u16, u16)>,
+    /// Where the block being emitted starts in `code`.
+    block_start: usize,
 }
 
 fn emit_func(
@@ -369,11 +371,13 @@ fn emit_func(
         last_line: None,
         site: None,
         last_mov: None,
+        block_start: 0,
     };
     let mut block_at = vec![0usize; f.blocks.len()];
     e.prologue();
     for (i, &b) in order.iter().enumerate() {
         block_at[b] = e.code.len();
+        e.block_start = e.code.len();
         e.last_mov = None;
         if let Err(error) = e.block(b, i, &fused) {
             return Ok(Err(error));
@@ -384,6 +388,7 @@ fn emit_func(
     // not on where the trampoline is.
     for k in 0..e.tramps.len() {
         e.tramp_at.push(e.code.len());
+        e.block_start = e.code.len();
         e.last_mov = None;
         let (from, edge) = e.tramps[k].clone();
         let span = f.blocks[order[from]].term_span;
@@ -1553,7 +1558,13 @@ impl Emitter<'_> {
                 self.fixups.push(Fixup { at, to: label, short: false });
             }
             Some(k) => {
-                let w = branch_word(k, holds, fold, self);
+                let mut w = branch_word(k, holds, fold, self);
+                let mut at = at;
+                if let Some(fused) = self.fuse_increment(w) {
+                    self.code.pop();
+                    w = fused;
+                    at = self.code.len();
+                }
                 self.put(span, w);
                 self.fixups.push(Fixup { at, to: label, short: true });
             }
@@ -1567,6 +1578,39 @@ impl Emitter<'_> {
             self.edge_moves(else_, span);
             self.jump_to(place, else_.block.0 as usize, span, false);
         }
+    }
+
+    /// When the last word emitted is `a += 1` (wrapping, `u64`, `i64` or
+    /// `i32`) in this block, and `branch` is `a < limit` (a register or a
+    /// constant), the one op that does both.
+    fn fuse_increment(&self, branch: u64) -> Option<u64> {
+        if self.code.len() <= self.block_start {
+            return None;
+        }
+        let add = *self.code.last()?;
+        let (reg, signed32) = match Op::from_u16(add as u16)? {
+            Op::AddWKU64 | Op::AddWKI64
+                if loom_isa::word::a(add) == loom_isa::word::b(add) && loom_isa::word::c_i16(add) == 1 =>
+            {
+                (loom_isa::word::a(add), false)
+            }
+            Op::AddWKI32 if loom_isa::word::a(add) == loom_isa::word::b(add) && loom_isa::word::c_i16(add) == 1 => {
+                (loom_isa::word::a(add), true)
+            }
+            _ => return None,
+        };
+        let add_unsigned = Op::from_u16(add as u16) == Some(Op::AddWKU64);
+        let fused = match (Op::from_u16(branch as u16)?, signed32, add_unsigned) {
+            (Op::JLtU, false, true) => Op::AddJLtU,
+            (Op::JLtS, false, false) => Op::AddJLtS,
+            (Op::JLtS, true, false) => Op::AddJLtS32,
+            (Op::JLtUK, false, true) => Op::AddJLtUK,
+            (Op::JLtSK, false, false) => Op::AddJLtSK,
+            (Op::JLtSK, true, false) => Op::AddJLtSK32,
+            _ => return None,
+        };
+        // The compared register is the one incremented.
+        (loom_isa::word::a(branch) == reg).then(|| word(fused, reg as u16, loom_isa::word::b(branch) as u16, 0))
     }
 
     /// Emits block `b`'s terminator.

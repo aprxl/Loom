@@ -215,6 +215,13 @@ native's index (`loom_isa::verify`).
 
 ### 2.1 No fused increment-and-branch. *Verified (ISA read, §8.4 promises it).*
 
+*Done (2026-10-11): `addjlt.{u,s,s32}` and `addjltk.{u,s,s32}` (wrapping
+`+= 1` at `u64`/`i64`/`i32`, then `a < b`), fused in `codegen.rs`'s
+`branch` when the add is the block's last word. Dispatches down 5-8% on
+sieve, fannkuch, spectral_norm, chip8 and maps; A/B geomean +2.0% (fannkuch
+-8%, spectral_norm -10%). The trapping adds (`addk.u64` before `jeqk`) and
+`u32` loops are not fused.*
+
 design §8.4: "`i += 1`, a compare and the back-edge become `forrange`". The
 op table has no such op (`op.rs`: nothing like `forrange`, `incjlt`, `addj`),
 and `codegen.rs:fusions` only fuses a compare into its branch. Every counted

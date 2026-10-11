@@ -449,6 +449,15 @@ ops! {
     JLeUK = "jlek.u", AKJ;
     JGtUK = "jgtk.u", AKJ;
     JGeUK = "jgek.u", AKJ;
+    // `a += 1` (wrapping, at the width in the name) and branch to `c` when
+    // `a` is below register `b` (or the constant `b`): a counted loop's
+    // increment and back edge in one
+    AddJLtU = "addjlt.u", ABJ;
+    AddJLtS = "addjlt.s", ABJ;
+    AddJLtS32 = "addjlt.s32", ABJ;
+    AddJLtUK = "addjltk.u", AKJ;
+    AddJLtSK = "addjltk.s", AKJ;
+    AddJLtSK32 = "addjltk.s32", AKJ;
     // jumps
     Jmp = "jmp", J;
     Loop = "loop", J;

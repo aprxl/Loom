@@ -901,6 +901,48 @@ impl<'i> Machine<'i> {
                     Op::JGtUK => branch_k!(|x: u64, k: u64| x > k),
                     Op::JGeUK => branch_k!(|x: u64, k: u64| x >= k),
 
+                    Op::AddJLtU => {
+                        let x = r!(a(w)).wrapping_add(1);
+                        set!(a(w), x);
+                        if x < r!(b(w)) {
+                            cjump!(c_i16(w));
+                        }
+                    }
+                    Op::AddJLtS => {
+                        let x = r!(a(w)).wrapping_add(1);
+                        set!(a(w), x);
+                        if (x as i64) < (r!(b(w)) as i64) {
+                            cjump!(c_i16(w));
+                        }
+                    }
+                    Op::AddJLtS32 => {
+                        let x = ints::wrap(r!(a(w)).wrapping_add(1), ints::I32);
+                        set!(a(w), x);
+                        if (x as i64) < (r!(b(w)) as i64) {
+                            cjump!(c_i16(w));
+                        }
+                    }
+                    Op::AddJLtUK => {
+                        let x = r!(a(w)).wrapping_add(1);
+                        set!(a(w), x);
+                        if x < b(w) as u16 as i16 as i64 as u64 {
+                            cjump!(c_i16(w));
+                        }
+                    }
+                    Op::AddJLtSK => {
+                        let x = r!(a(w)).wrapping_add(1);
+                        set!(a(w), x);
+                        if (x as i64) < b(w) as u16 as i16 as i64 {
+                            cjump!(c_i16(w));
+                        }
+                    }
+                    Op::AddJLtSK32 => {
+                        let x = ints::wrap(r!(a(w)).wrapping_add(1), ints::I32);
+                        set!(a(w), x);
+                        if (x as i64) < b(w) as u16 as i16 as i64 {
+                            cjump!(c_i16(w));
+                        }
+                    }
                     Op::Jmp => jump!(bc_i32(w) as isize),
                     Op::Loop => {
                         tick!();
