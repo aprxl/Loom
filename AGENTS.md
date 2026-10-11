@@ -183,13 +183,13 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
     cells, GVN, ipcp, ranges, LICM and cleanup at `-O2` (`-O0` runs none);
     a pass's snapshots in `tests/opt`; `LOOM_PASSES` and `LOOM_PASS_TIMES`.
     87% of bounds and 62% of overflow checks gone (`check_counts.rs`),
-    compiling at 1.5× `-O0` (`tests/compile_time.rs`, ignored). Not met: the
-    speed gate, 2.42× against 2.5× (bench/RESULTS.md says where the time
-    is). Deferred passes: specialize lambdas, SROA, self tail calls.
+    compiling at 1.5× `-O0` (`tests/compile_time.rs`, ignored). Speed gate
+    met: 2.74× PUC Lua (bench/RESULTS.md; design/vm-review-v3.md has the
+    run-time review its changes came from). Deferred passes: specialize
+    lambdas, SROA, self tail calls.
 
-Next: V3's speed gate is open (close it at 2.42×, restate it, or fund the
-start-up and native work). Then V4 compile-time code on Treadle, V5
-threads, V6 spools, V7 Lua interop, V8 speed, V9 Treadle by default.
+Next: V4 compile-time code on Treadle, V5 threads, V6 spools, V7 Lua
+interop, V8 speed, V9 Treadle by default.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and

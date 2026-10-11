@@ -1,11 +1,11 @@
 # Treadle: Loom's own VM
 
-> **Status: V3 is built but for its speed gate** (2026-10-10): the
+> **Status: V3 is built** (2026-10-11): the
 > optimizer runs at `-O2` (`-O0` turns it off), takes away 87% of the
 > bounds checks and 62% of the overflow checks a run executes, and costs
-> 1.5× of `-O0` to compile; Treadle is 2.42× as fast as PUC Lua 5.4 on
-> `bench/` (geomean) against the gate's 2.5×. The rest is hashing, strings
-> and natives (V8), so the speed gate is open. The decisions in
+> 1.5× of `-O0` to compile; Treadle is 2.74× as fast as PUC Lua 5.4 on
+> `bench/` (geomean) against the gate's 2.5× (design/vm-review-v3.md).
+> The decisions in
 > [section 3](#3-decisions) were settled on 2026-09-29.
 
 Loom runs today by compiling to Lua 5.4 (see [lua-backend](lua-backend.md)).
@@ -1461,9 +1461,9 @@ bound a `for` loop's own items once for all iterations, and on Lua a
 `defer` that unravelled while a loop closed its generator was swallowed (P3)
 and `close` handed `none` to the burst before it.
 
-### V3: the optimizer (about 8k) — built, the speed gate not met
+### V3: the optimizer (about 8k) — built
 
-Where it stands (2026-10-10): items 1–6 hold; 7 is 2.42× against 2.5×.
+Where it stands (2026-10-11): items 1–7 hold; 7 is 2.74× against 2.5×.
 `crates/loom/tests/check_counts.rs` holds item 4, `tests/compile_time.rs`
 (ignored, `--release`) measures item 6, and RESULTS.md has the numbers.
 

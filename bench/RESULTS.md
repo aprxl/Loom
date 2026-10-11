@@ -3,6 +3,39 @@
 Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
+## V3, after the run-time review (2026-10-11)
+
+Same machine, best of five (`python bench/run.py --runs 5`). The changes of
+design/vm-review-v3.md: LTO, one codegen unit and no unwinding, the
+dispatch loop's `pc` in a register (a closure had taken its address), a
+fused increment-and-branch for counted loops, the heap's free objects in
+lists through themselves, values formatted straight into their sink, and
+`sqrt`/`abs` as ops. Tried and dropped, for no gain against a ±2% noise:
+natives returning 8 bytes, `ticks` as a local, casts without an extension
+word, `target-cpu=native` (1.8% slower), and a branchy ordering of record
+fields (fewer instructions, the same time: the comparisons mispredict).
+
+| Benchmark | PUC Lua 5.4, idiomatic | Treadle | Treadle vs Lua 5.4 |
+|---|---|---|---|
+| `fib` | 0.086 s | **0.040 s** | 2.14× |
+| `sieve` | 0.358 s | **0.121 s** | 2.96× |
+| `mandelbrot` | 0.135 s | **0.065 s** | 2.08× |
+| `nbody` | 0.534 s | **0.287 s** | 1.86× |
+| `spectral_norm` | 0.156 s | **0.063 s** | 2.47× |
+| `fannkuch` | 1.475 s | **0.752 s** | 1.96× |
+| `binary_trees` | 2.723 s | **0.640 s** | 4.26× |
+| `richards` | 0.180 s | **0.059 s** | 3.06× |
+| `word_freq` | 0.239 s | **0.214 s** | 1.12× |
+| `maps` | 0.125 s | **0.085 s** | 1.48× |
+| `sort` | 0.317 s | **0.102 s** | 3.10× |
+| `streams` | 0.919 s | **0.076 s** | 12.15× |
+| `chip8` | 0.109 s | **0.058 s** | 1.89× |
+| `lexer` | 1.474 s | **0.195 s** | 7.57× |
+
+Geometric mean 2.74×, lowest 1.12× (`word_freq`): **V3's speed gate (2.5×)
+is met.** Against the build before the review, interleaved best-of-5 A/Bs
+put the geomean at +11.9%.
+
 ## V3 (2026-10-10)
 
 The optimizer (design/vm.md §7). Same machine and build as V1 and V2, best

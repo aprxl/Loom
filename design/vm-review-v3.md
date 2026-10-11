@@ -22,6 +22,16 @@ a measurement.
 
 ## 0. Ranking
 
+**Status (2026-10-11).** Done and kept, each by an interleaved A/B: the
+release profile and the `pc` fix (+8.5% together), the fused
+increment-and-branch (§2.1, +2.0%), intrusive free lists (§4, +1.6 to +3%
+on the allocation-heavy ones), formatting straight into the sink (§3.1,
+maps -18%), and `sqrt`/`abs` ops (§2.3, nbody -4%). Tried and dropped:
+the 8-byte natives ABI and the unchecked natives table (§1.4, -1.7%),
+`ticks` as a local (§1.3, 0%), casts without an extension word (§2.2,
++0.2%), `target-cpu=native` (§1.1, -1.8%), and branchy field ordering
+(fewer instructions, the same time). Not tried: §3.2, §3.3, §5, §6.
+
 | # | Item | Hits | Effort | Risk |
 |---|---|---|---|---|
 | 1 | `[profile.release]` is the default: no LTO, 16 codegen units, unwinding panics (§1.1) | everything | S | low |
