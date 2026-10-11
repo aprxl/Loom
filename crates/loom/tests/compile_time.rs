@@ -92,3 +92,57 @@ fn optimizer_compile_time() {
         println!("  {name:36} -O2 {:>9.2?}", t[0][1]);
     }
 }
+
+/// The best of `RUNS` times of the compile-time step alone
+/// (`lower::compile_time`: constants, `const` expressions and `const
+/// assert`s run as jobs), or `None` if the file doesn't type-check. A file
+/// whose jobs fail still counts: the time to its diagnostics is the point.
+fn const_code_time(path: &Path) -> Option<Duration> {
+    let text = std::fs::read_to_string(path).ok()?;
+    let mut db = SourceDb::new();
+    let file = db.add(path.display().to_string(), text);
+    let resolved = resolve(&mut db, file, &FsLoader::new(path));
+    if resolved.has_errors() {
+        return None;
+    }
+    let typed = typeck::check_for(&resolved.program, Target::VM);
+    if typed.has_errors() {
+        return None;
+    }
+    let mut best = Duration::MAX;
+    for _ in 0..RUNS {
+        let start = Instant::now();
+        let _ = loom_compiler::lower::compile_time(&db, &resolved.program, &typed, false);
+        best = best.min(start.elapsed());
+    }
+    Some(best)
+}
+
+/// What compile-time code costs (design/vm.md §17, V4 passing item 5): the
+/// time `lower::compile_time` takes per file. The Lua sandbox's numbers are
+/// in `bench/RESULTS.md`; V4's Treadle must be at least as fast on the
+/// compile-time-heavy files and on the total.
+#[test]
+#[ignore = "timing: run with --release -- --ignored --nocapture"]
+fn const_code_compile_time() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut rows = Vec::new();
+    for dir in ["tests/run", "tests/fail", "examples"] {
+        for path in sources(&root.join(dir)) {
+            // `tests/fail` is only the fixtures about compile-time code.
+            let name = path.file_name().expect("a file").to_string_lossy().into_owned();
+            if dir == "tests/fail" && !(name.starts_with("const") || name.starts_with("endless")) {
+                continue;
+            }
+            if let Some(t) = const_code_time(&path) {
+                rows.push((format!("{dir}/{name}"), t));
+            }
+        }
+    }
+    let total: Duration = rows.iter().map(|r| r.1).sum();
+    println!("{} files, compile-time code {total:.2?} in all", rows.len());
+    rows.sort_by_key(|r| std::cmp::Reverse(r.1));
+    for (name, t) in rows.iter().take(12) {
+        println!("  {name:44} {t:>9.2?}");
+    }
+}

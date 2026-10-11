@@ -220,3 +220,27 @@ register hints.
 Treadle's instructions per iteration of mandelbrot's inner loop: 18, of
 which the optimizer should remove about a third (shared `x * x` and `y * y`,
 constants hoisted out of the loop, the overflow check on `i += 1`).
+
+## V4 baseline: compile-time code on the Lua sandbox (2026-10-11)
+
+Taken before V4 moved compile-time code onto Treadle (design/vm.md §17), so
+its item 5 ("compile at least as fast") has something to compare against.
+`lower::compile_time` alone, best of 5, release build, same machine as
+above: `cargo test --release -p loom --test compile_time -- --ignored
+--nocapture const_code`.
+
+125 files (`tests/run`, `examples`, and `tests/fail`'s const and endless
+fixtures that type-check): **495.19 ms in all.**
+
+| File | Time |
+|---|---|
+| `tests/fail/const_budget.loom` | 345.14 ms (the budget runs out, K0102) |
+| `tests/run/const_eval.loom` | 115.18 ms |
+| `tests/run/long_expressions.loom` | 2.79 ms |
+| `examples/lexer.loom` | 2.45 ms |
+| `examples/chip8.loom` | 1.92 ms |
+| `tests/run/const_params.loom` | 1.57 ms |
+| `tests/fail/const_eval.loom` | 1.58 ms |
+
+Everything else is under 2 ms: starting the sandbox's Lua VM and loading
+`RT_CORE` is most of that.
