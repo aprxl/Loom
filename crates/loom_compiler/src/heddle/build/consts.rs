@@ -8,15 +8,35 @@
 //! done (`const_exit`), so the run ends with nothing allocated. A constant
 //! that's a view (`[T]`, `str`) gets its own copy of what it views, which
 //! may be a temporary of its init: freed then too.
+//!
+//! The flag word has four states: 0, not computed; 1, computed; 2, being
+//! computed (a read in that state is a cycle: K0107); and 3, a job of
+//! compile-time evaluation failed while it was being computed (the host
+//! sets it, so later jobs that need it stop quietly instead of reporting
+//! the same failure again). An init that finds 2 or 3 unravels with one of
+//! the markers below, which the host tells apart from a real message.
 
 use loom_syntax::source::Span;
 
+use super::text::Msg;
 use super::value::Val;
 use super::{Builder, FnKey};
 use crate::heddle::{Cmp, InstKind, IntOp, Mem, Term, VTy, Value};
 use crate::hir::{DefId, DefKind};
 use crate::ty::{Ty, TyKind};
 use crate::typeck::{BodyId, Instance, Seq};
+
+/// The message of the unravel an init makes when its constant is being
+/// computed already, followed by the offset of its flag word in the data.
+pub const CYCLE: &str = "\u{1f}LOOMC\u{1f}";
+/// The message of the unravel an init makes when computing its constant
+/// failed before, which has been reported.
+pub const GAVE_UP: &str = "\u{1f}LOOMS\u{1f}";
+
+/// The states of a constant's flag word.
+pub const FRESH: u64 = 0;
+pub const DONE: u64 = 1;
+pub const COMPUTING: u64 = 2;
 
 /// A constant: a typed one, or a `const` expression in a body.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -47,7 +67,7 @@ impl<'a> Builder<'a> {
 
     /// Where constant `key` is in the data: the offset of its flag word,
     /// with its value 8 bytes on.
-    fn const_global(&mut self, key: ConstKey, span: Span) -> Option<(u32, Ty)> {
+    pub(super) fn const_global(&mut self, key: ConstKey, span: Span) -> Option<(u32, Ty)> {
         if let Some(&g) = self.globals.get(&key) {
             return Some(g);
         }
@@ -78,10 +98,10 @@ impl<'a> Builder<'a> {
         let (off, ty) = self.const_global(key, span)?;
         let at = self.emit1(InstKind::Global(off), VTy::Ptr);
         let flag = self.load(Mem::W64, at, 0, VTy::Int);
-        let zero = self.iconst(0);
-        let fresh = self.ucmp(Cmp::Eq, flag, zero);
+        let done = self.iconst(DONE);
+        let ready_now = self.ucmp(Cmp::Eq, flag, done);
         let (init, ready) = (self.new_block(), self.new_block());
-        self.br(fresh, init, ready);
+        self.br(ready_now, ready, init);
         self.enter(init);
         let func = self.func_id(FnKey::ConstInit(key));
         let value = self.offset(at, 8);
@@ -102,6 +122,28 @@ impl<'a> Builder<'a> {
         self.f.scan = self.scan(body, value);
         let dst = self.new_value(VTy::Ptr);
         self.f.blocks[0].params.push(dst);
+        // Computing it again while it's being computed is a cycle, and a
+        // constant whose computing failed is left alone.
+        let (off, _) = self.const_global(key, span)?;
+        let flag_at = self.offset(dst, -8);
+        let flag = self.load(Mem::W64, flag_at, 0, VTy::Int);
+        let fresh = self.iconst(FRESH);
+        let is_fresh = self.ucmp(Cmp::Eq, flag, fresh);
+        let (go, stuck) = (self.new_block(), self.new_block());
+        self.br(is_fresh, go, stuck);
+        self.enter(stuck);
+        let computing = self.iconst(COMPUTING);
+        let cycle = self.ucmp(Cmp::Eq, flag, computing);
+        let (is_cycle, gave_up) = (self.new_block(), self.new_block());
+        self.br(cycle, is_cycle, gave_up);
+        self.enter(is_cycle);
+        let slot = self.iconst(u64::from(off));
+        self.unravel_msg(&[Msg::Text(CYCLE), Msg::Int(slot)], span)?;
+        self.enter(gave_up);
+        self.unravel_msg(&[Msg::Text(GAVE_UP)], span)?;
+        self.enter(go);
+        let computing = self.iconst(COMPUTING);
+        self.store(Mem::W64, flag_at, 0, computing);
         let depth = self.open_scope();
         let mut v = self.expr(value)?;
         if let Some((size, align)) = self.const_view(ty, span)? {
@@ -117,8 +159,8 @@ impl<'a> Builder<'a> {
         }
         self.move_to(dst, 0, v, ty, span)?;
         let flag = self.offset(dst, -8);
-        let one = self.iconst(1);
-        self.store(Mem::W64, flag, 0, one);
+        let done = self.iconst(DONE);
+        self.store(Mem::W64, flag, 0, done);
         self.close_scope(depth);
         if self.live() {
             self.terminate(Term::Ret(Vec::new()));
@@ -159,8 +201,8 @@ impl<'a> Builder<'a> {
             }
             let at = self.emit1(InstKind::Global(off), VTy::Ptr);
             let flag = self.load(Mem::W64, at, 0, VTy::Int);
-            let zero = self.iconst(0);
-            let made = self.ucmp(Cmp::Ne, flag, zero);
+            let done = self.iconst(DONE);
+            let made = self.ucmp(Cmp::Eq, flag, done);
             let (yes, done) = (self.new_block(), self.new_block());
             self.br(made, yes, done);
             self.enter(yes);
