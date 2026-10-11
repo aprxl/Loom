@@ -12,8 +12,8 @@ path = "src/main.rs"
 
 [features]
 default = ["lua54"]
-lua54 = ["loom_compiler/lua54", "loom_host/lua54"]
-lua55 = ["loom_compiler/lua55", "loom_host/lua55"]
+lua54 = ["loom_host/lua54"]
+lua55 = ["loom_host/lua55"]
 # Treadle with its run-time checks on (design/vm.md §5.6).
 vm-checked = ["loom_vm/checked"]
 # Treadle counting what it dispatches, for bench/counts.txt.

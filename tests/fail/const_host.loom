@@ -1,0 +1,45 @@
+// Compile-time code can't reach the machine it runs on: output, the
+// environment, files, time and the terminal are each refused (K0104), where
+// a run on a sandboxed host would only fake them.
+
+use std.env
+use std.fs
+use std.io.print
+use std.term
+use std.time
+
+fn say() -> i32 {
+    print("while compiling")
+    1
+}
+
+fn nap() -> i32 {
+    time.sleep(time.ms(1))
+    2
+}
+
+fn home() -> i32 {
+    let _ = env.get("HOME")
+    3
+}
+
+fn raw() -> i32 {
+    term.raw_mode(true)
+    4
+}
+
+fn keys() -> i32 = term.poll_keys("ab") as i32
+
+fn read() -> i32 {
+    let _ = fs.read_text("/nope")
+    5
+}
+
+const SAYS: i32 = say()                          //~ K0104
+const NAPS: i32 = nap()                          //~ K0104
+const HOME: i32 = home()                         //~ K0104
+const RAW: i32 = raw()                           //~ K0104
+const KEYS: i32 = keys()                         //~ K0104
+const READS: i32 = read()                        //~ K0104
+
+fn main() {}

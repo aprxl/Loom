@@ -13,7 +13,7 @@ use crate::{codegen, heddle, lower};
 
 /// What codegen's failure says: over a limit of Treadle's (U0103), or a
 /// program it can't run yet (U0102).
-fn codegen_diagnostics(error: codegen::CodegenError) -> Vec<Diagnostic> {
+pub(crate) fn codegen_diagnostics(error: codegen::CodegenError) -> Vec<Diagnostic> {
     vec![match error {
         codegen::CodegenError::Limit(message) => Diagnostic::error(codes::U0103, message)
             .note("the Lua backend has no such limit: `loom run` without `--backend vm`"),

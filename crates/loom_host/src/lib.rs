@@ -1,15 +1,14 @@
 //! The one owner of the bundled Lua VM.
 //!
 //! Everything that executes Lua goes through this crate: `loom run` (via the
-//! hidden `lua-host` subcommand), the test harness, and compile-time `const`
-//! evaluation. Exactly one of the `lua54` / `lua55` features is enabled.
+//! hidden `lua-host` subcommand) and the test harness. Compile-time `const`
+//! evaluation runs on Treadle (`loom_compiler::consteval`). Exactly one of
+//! the `lua54` / `lua55` features is enabled.
 //!
 //! [`run`] runs a compiled bundle (or its tests) and classifies how it
 //! ended; [`srcmap`] maps bundle lines back to Loom source; [`term`] is the
-//! terminal `std.term` talks to; [`consteval`] runs compile-time code in a
-//! sandbox. Still to come (see `design/lua-backend.md`): Ctrl-C handling.
+//! terminal `std.term` talks to. Still to come (see `design/lua-backend.md`): Ctrl-C handling.
 
-pub mod consteval;
 pub mod run;
 pub use loom_sys::srcmap;
 pub use loom_sys::term;

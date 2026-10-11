@@ -6,16 +6,11 @@ edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
-[features]
-default = ["lua54"]
-lua54 = ["loom_host/lua54"]
-lua55 = ["loom_host/lua55"]
-
 [dependencies]
 loom_syntax.workspace = true
 loom_isa.workspace = true
-loom_host.workspace = true
 loom_sys.workspace = true
+loom_vm.workspace = true
 indexmap.workspace = true
 
 [lints]
@@ -23,4 +18,5 @@ workspace = true
 
 [dev-dependencies]
 mlua.workspace = true
-loom_vm.workspace = true
+# The runtime's tests (`rt_int`, `rt_methods`) run its Lua in a VM.
+loom_host = { workspace = true, features = ["lua54"] }

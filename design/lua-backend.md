@@ -24,7 +24,7 @@ a runtime check doesn't go in.
 
 ```
 SourceDb → lex → Tokens → parse → AST → resolve/desugar → HIR
-  → typeck(Instance) → THIR ⇄ const eval (Rust fold | sandboxed Lua)
+  → typeck(Instance) → THIR ⇄ const eval (Rust fold | Treadle)
   → flow::Cfg → analyses → FlowFacts
   → lower → LIR → lir_verify → luagen → Bundle { lua, source map }
 ```
@@ -478,33 +478,33 @@ once). What a sandboxed run prints doesn't depend on the machine.
 
 ## Compile-time code
 
-Compile-time code (see `06-compile-time.md`) runs in a sandboxed Lua VM,
-through the normal backend (`lower/consteval.rs`, `loom_host::consteval`):
+Compile-time code (see `06-compile-time.md`) doesn't run on Lua at all: it
+runs on Treadle, in the compiler's own process, whichever backend the program
+is for (`consteval.rs`, `heddle/build/jobs.rs`; design/vm.md §17, V4):
 
-- **One more lowering.** Before the real bundle, the program is lowered
-  into a bundle that returns *jobs* rather than `main`: one per typed
-  constant, per `const` expression, and per `const assert` (at the top of a
-  module, in a warp, or in a body). A job returns nothing, or the message of
-  the assert it checks when that's false. `loom build`, `run`, `test` and
-  `check` all run the jobs; `test` and `check` include the tests' own.
-- **Constants are lazy.** `C` computes each constant from its `CI`
-  initializer the first time it's read (`rt.lazy`), so there's no order to
-  work out, and a constant that reads itself (through any number of
-  functions) is caught: K0107. A `const` expression in a function body is a
-  constant of its own (`C.K<body>_<id>`), so `const fib(20)` in a loop is
-  computed once.
-- **The sandbox** has no host I/O: std's `io`, `env`, `fs`, `time` and
-  `term` externs fail with K0104. Unravelling is K0103. All jobs share a
-  budget of 100M Lua instructions (coroutines count too: the hook is
-  global), 1 GiB of memory, and 20 seconds, for work inside Lua's C
-  functions that instructions don't show: K0102. After a job
-  fails, the constants it was computing are marked failed, and jobs that
-  need them are skipped rather than reporting the same failure again.
-- **Values aren't written into the bundle.** The real bundle computes each
-  constant again the first time the program reads it. That gives the same
-  value, because compile-time code can't depend on anything but itself, and
-  the sandbox already proved it can't fail. Serializing the values into the
-  bundle is an optimization, left for Loom's own interpreter.
+- **Jobs.** Typeck records which bodies have a `const` expression. The
+  Heddle builder walks those bodies (and the typed constants, read or not)
+  for *jobs*: one per typed constant, per `const` expression, and per
+  `const assert` (at the top of a module, in a warp, or in a body). Only
+  what the jobs reach is built. `loom build`, `run`, `test` and `check` all
+  run them; `test` and `check` include the tests' own. A Lua-target program
+  is checked with 63-bit `usize`, and its jobs run with it.
+- **Constants are lazy.** A constant's flag word in the VM's data says
+  whether it's computed, being computed, or failed. Reading one while it's
+  being computed is a cycle, K0107. A `const` expression in a function body
+  is a constant of its own, so `const fib(20)` in a loop is computed once.
+  The Lua bundle does the same with `C` and `rt.lazy`.
+- **The sandbox** has no host: std's `io`, `env`, `fs`, `time` and `term`
+  natives end a job with K0104. Unravelling is K0103. All jobs share a
+  budget of 100M ticks (loop iterations and calls), 1 GiB of memory and 20
+  seconds: K0102. After a job fails, the constants it was computing are
+  marked failed, and jobs that need them stop quietly rather than reporting
+  the same failure again.
+- **Values aren't written into the bundle yet.** The real bundle computes
+  each constant again the first time the program reads it. That gives the
+  same value, because compile-time code can't depend on anything but
+  itself, and it already ran without failing. Writing the values into the
+  bundle as literals is V4's next step.
 - **Checked while type-checking:** compile-time code can't read the locals
   around it (K0105), and `return`, `break`, `continue`, `?`, `yield` and
   `pull` can't leave it (K0106), exactly like a `defer`'s body.

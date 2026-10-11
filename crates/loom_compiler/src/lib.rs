@@ -14,6 +14,7 @@
 //! `lir_verify`. See `design/lua-backend.md` for the decisions they implement.
 
 pub mod codegen;
+pub mod consteval;
 mod fxhash;
 pub mod heddle;
 pub mod hir;

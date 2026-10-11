@@ -40,11 +40,11 @@ A plain `assert(...)` inside compile-time code is a different thing. It unravels
 
 ## The sandbox and its limits
 
-Compile-time code runs in a sandboxed Lua VM, through the same backend as the program. Every limit is a compile error with a `K` code.
+Compile-time code runs in a sandbox: on Treadle, Loom's own VM, inside the compiler, whichever backend the program is for. Every limit is a compile error with a `K` code.
 
 ### Budget: K0102
 
-All compile-time code shares one budget: 100 million Lua VM steps, 1 GiB of memory, and 20 seconds (for work inside Lua's own functions, such as building huge strings, which takes few steps). A loop that never ends stops with [K0102](diag:K0102) instead of hanging the compiler.
+All compile-time code shares one budget: 100 million steps (loop iterations and calls), 1 GiB of memory, and 20 seconds. A loop that never ends stops with [K0102](diag:K0102) instead of hanging the compiler.
 
 @sample ct_err_budget
 
@@ -88,9 +88,9 @@ A constant is one value that every use copies, so it can't hold something that c
 
 Two things are decided by a small evaluator in the compiler itself, not by the sandbox: what a `const` argument, a `const if` condition or a `const for` sequence is, and array lengths and gauge bounds. It handles literals, constants, `const` parameters, arithmetic, comparisons, `and`/`or`/`not`, an array's `.len()`, a few integer methods, and [reflection](page:reflection). A top-level `const assert` that it can decide is reported without running the sandbox. When it can't work something out, you get [K0109](diag:K0109) or [K0110](diag:K0110) (see the next page), or [U0102](diag:U0102) for an array length or a type.
 
-## How the Lua backend does it
+## How it runs
 
-The compiler first builds a second Lua program whose "jobs" are the constants, `const` expressions and `const assert`s, and runs it in the sandbox. Then it builds the real program, which computes each constant again the first time it's read. The value is the same, because compile-time code can't depend on anything but itself, and the sandbox already proved it can't fail. Writing the computed values into the program instead is an optimization left for later.
+The compiler builds the "jobs": the constants, `const` expressions and `const assert`s. Only what they reach is built, as a program for Treadle, which it runs in its own process. Then it builds the real program, which computes each constant again the first time it's read. The value is the same, because compile-time code can't depend on anything but itself, and it already ran without failing. Writing the computed values into the program instead is an optimization left for later.
 
 `loom build`, `run`, `test` and `check` all run the compile-time jobs.
 

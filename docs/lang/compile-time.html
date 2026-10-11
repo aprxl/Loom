@@ -142,9 +142,9 @@
 </div>
 <p>A plain <code>assert(...)</code> inside compile-time code is a different thing. It unravels like any other code, and the unravel is a compile error (<a href="diagnostics.html#K0103">K0103</a>, below). Use <code>const assert</code> when you mean to check something while compiling.</p>
 <h2 id="the-sandbox-and-its-limits">The sandbox and its limits</h2>
-<p>Compile-time code runs in a sandboxed Lua VM, through the same backend as the program. Every limit is a compile error with a <code>K</code> code.</p>
+<p>Compile-time code runs in a sandbox: on Treadle, Loom's own VM, inside the compiler, whichever backend the program is for. Every limit is a compile error with a <code>K</code> code.</p>
 <h3 id="budget-k0102">Budget: K0102</h3>
-<p>All compile-time code shares one budget: 100 million Lua VM steps, 1 GiB of memory, and 20 seconds (for work inside Lua's own functions, such as building huge strings, which takes few steps). A loop that never ends stops with <a href="diagnostics.html#K0102">K0102</a> instead of hanging the compiler.</p>
+<p>All compile-time code shares one budget: 100 million steps (loop iterations and calls), 1 GiB of memory, and 20 seconds. A loop that never ends stops with <a href="diagnostics.html#K0102">K0102</a> instead of hanging the compiler.</p>
 <div class="sample" id="sample-ct_err_budget">
 <div class="sample-head"><span class="file">samples/ct_err_budget.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0102">K0102</a></span></div>
 <pre class="code"><code><span class="c">// Compile-time code runs under a step budget, so a loop that never</span>
@@ -164,7 +164,8 @@
 3 | const FOREVER: u32 = {
   |       ^^^^^^^ while computing `FOREVER`
   |
-  = note: compile-time code may take 100000000 Lua steps in all; this may never stop
+  = note: stopped at ct_err_budget.loom:5:5
+  = note: compile-time code may take 100000000 steps in all; this may never stop
 
 <span class="err">error: ct_err_budget.loom failed to compile (1 error)</span></code></pre></div>
 </div>
@@ -319,8 +320,8 @@
 </div>
 <h3 id="the-constant-folder">The constant folder</h3>
 <p>Two things are decided by a small evaluator in the compiler itself, not by the sandbox: what a <code>const</code> argument, a <code>const if</code> condition or a <code>const for</code> sequence is, and array lengths and gauge bounds. It handles literals, constants, <code>const</code> parameters, arithmetic, comparisons, <code>and</code>/<code>or</code>/<code>not</code>, an array's <code>.len()</code>, a few integer methods, and <a href="reflection.html">reflection</a>. A top-level <code>const assert</code> that it can decide is reported without running the sandbox. When it can't work something out, you get <a href="diagnostics.html#K0109">K0109</a> or <a href="diagnostics.html#K0110">K0110</a> (see the next page), or <a href="diagnostics.html#U0102">U0102</a> for an array length or a type.</p>
-<h2 id="how-the-lua-backend-does-it">How the Lua backend does it</h2>
-<p>The compiler first builds a second Lua program whose "jobs" are the constants, <code>const</code> expressions and <code>const assert</code>s, and runs it in the sandbox. Then it builds the real program, which computes each constant again the first time it's read. The value is the same, because compile-time code can't depend on anything but itself, and the sandbox already proved it can't fail. Writing the computed values into the program instead is an optimization left for later.</p>
+<h2 id="how-it-runs">How it runs</h2>
+<p>The compiler builds the "jobs": the constants, <code>const</code> expressions and <code>const assert</code>s. Only what they reach is built, as a program for Treadle, which it runs in its own process. Then it builds the real program, which computes each constant again the first time it's read. The value is the same, because compile-time code can't depend on anything but itself, and it already ran without failing. Writing the computed values into the program instead is an optimization left for later.</p>
 <p><code>loom build</code>, <code>run</code>, <code>test</code> and <code>check</code> all run the compile-time jobs.</p>
 <h2 id="not-supported-yet">Not supported yet</h2>
 <p>Types computed by <code>const fn</code>s are not built (<a href="reflection.html">reflection</a> is). <code>embed</code> and <code>embed_text</code> don't exist, and neither does <code>bolt.loom</code>. See <a href="not-yet.html">Not supported yet</a>.</p>
