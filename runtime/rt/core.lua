@@ -210,6 +210,226 @@ function rt.shr(d, a, n)
   return a >> n
 end
 
+-- ================================================================ specialized operations
+
+-- The operations above take the type's descriptor on every call and look
+-- inside it. The generated code (design/vm-review-v4.md) instead makes, once
+-- at the start of the bundle, one closure for each (operation, type) it uses
+-- (`rt.spec`): the bounds are upvalues, and the choice of how to check is
+-- made then rather than on every call. Each must do exactly what the
+-- operation of the same name does (`rt_int.rs` checks both against the
+-- oracle). An unravel is raised one level up, from the closure: where the
+-- generated code called it.
+
+local spec = {}
+
+function spec.add(d)
+  local lo, hi = d.lo, d.hi
+  if d.exact then
+    return function(a, b)
+      local r = a + b
+      if r > hi or r < lo then error(MARK .. "arithmetic overflow", 2) end
+      return r
+    end
+  elseif d.u64 then
+    return function(a, b)
+      local r = a + b
+      if ult(r, a) then error(MARK .. "arithmetic overflow", 2) end
+      return r
+    end
+  elseif d.signed then
+    return function(a, b)
+      local r = a + b
+      if ((a ~ r) & (b ~ r)) < 0 then error(MARK .. "arithmetic overflow", 2) end
+      return r
+    end
+  end
+  return function(a, b) -- usize (u63): the sum passed 2^63
+    local r = a + b
+    if r < 0 then error(MARK .. "arithmetic overflow", 2) end
+    return r
+  end
+end
+
+function spec.sub(d)
+  local lo, hi = d.lo, d.hi
+  if d.exact then
+    return function(a, b)
+      local r = a - b
+      if r > hi or r < lo then error(MARK .. "arithmetic overflow", 2) end
+      return r
+    end
+  elseif d.u64 then
+    return function(a, b)
+      if ult(a, b) then error(MARK .. "arithmetic overflow", 2) end
+      return a - b
+    end
+  elseif d.signed then
+    return function(a, b)
+      local r = a - b
+      if ((a ~ b) & (a ~ r)) < 0 then error(MARK .. "arithmetic overflow", 2) end
+      return r
+    end
+  end
+  return function(a, b)
+    local r = a - b
+    if r < 0 then error(MARK .. "arithmetic overflow", 2) end
+    return r
+  end
+end
+
+function spec.mul(d)
+  local lo, hi = d.lo, d.hi
+  -- Up to 32 bits the product fits a Lua integer, or (an unsigned 32-bit
+  -- one past 2^63) wraps to a negative, which is below `lo` too.
+  if d.bits <= 32 then
+    return function(a, b)
+      local r = a * b
+      if r > hi or r < lo then error(MARK .. "arithmetic overflow", 2) end
+      return r
+    end
+  end
+  return function(a, b)
+    local r, o = mul_raw(d, a, b)
+    if o then error(MARK .. "arithmetic overflow", 2) end
+    return r
+  end
+end
+
+-- `+%`, `-%`, `*%`: the Lua result, wrapped into the type.
+function spec.add_wrap(d)
+  local bits, mask, hi = d.bits, d.mask, d.hi
+  if bits == 64 then
+    return function(a, b) return a + b end
+  elseif d.signed then
+    local modulus = 1 << bits
+    return function(a, b)
+      local r = (a + b) & mask
+      if r > hi then r = r - modulus end
+      return r
+    end
+  end
+  return function(a, b) return (a + b) & mask end
+end
+
+function spec.sub_wrap(d)
+  local bits, mask, hi = d.bits, d.mask, d.hi
+  if bits == 64 then
+    return function(a, b) return a - b end
+  elseif d.signed then
+    local modulus = 1 << bits
+    return function(a, b)
+      local r = (a - b) & mask
+      if r > hi then r = r - modulus end
+      return r
+    end
+  end
+  return function(a, b) return (a - b) & mask end
+end
+
+function spec.mul_wrap(d)
+  local bits, mask, hi = d.bits, d.mask, d.hi
+  if bits == 64 then
+    return function(a, b) return a * b end
+  elseif d.signed then
+    local modulus = 1 << bits
+    return function(a, b)
+      local r = (a * b) & mask
+      if r > hi then r = r - modulus end
+      return r
+    end
+  end
+  return function(a, b) return (a * b) & mask end
+end
+
+function spec.div(d)
+  local lo = d.lo
+  if d.u64 then
+    return function(a, b)
+      if b == 0 then error(MARK .. "division by zero", 2) end
+      return udiv(a, b)
+    end
+  elseif not d.signed then
+    return function(a, b)
+      if b == 0 then error(MARK .. "division by zero", 2) end
+      return a // b
+    end
+  end
+  return function(a, b)
+    if b == 0 then error(MARK .. "division by zero", 2) end
+    if b == -1 and a == lo then error(MARK .. "arithmetic overflow", 2) end
+    local q = a // b
+    if q < 0 and q * b ~= a then q = q + 1 end
+    return q
+  end
+end
+
+function spec.rem(d)
+  if d.u64 then
+    return function(a, b)
+      if b == 0 then error(MARK .. "division by zero", 2) end
+      return a - udiv(a, b) * b
+    end
+  elseif not d.signed then
+    return function(a, b)
+      if b == 0 then error(MARK .. "division by zero", 2) end
+      return a % b
+    end
+  end
+  -- Lua's `%` has the sign of the divisor, the remainder of a truncating
+  -- division that of the dividend: when they differ, take one divisor off.
+  return function(a, b)
+    if b == 0 then error(MARK .. "division by zero", 2) end
+    local r = a % b
+    if r ~= 0 and (r ~ a) < 0 then r = r - b end
+    return r
+  end
+end
+
+function spec.shl(d)
+  local bits, mask, hi = d.bits, d.mask, d.hi
+  if bits == 64 then
+    return function(a, n)
+      if n < 0 or n >= 64 then error(MARK .. "shift amount out of range", 2) end
+      return a << n
+    end
+  elseif d.signed then
+    local modulus = 1 << bits
+    return function(a, n)
+      if n < 0 or n >= bits then error(MARK .. "shift amount out of range", 2) end
+      local r = (a << n) & mask
+      if r > hi then r = r - modulus end
+      return r
+    end
+  end
+  return function(a, n)
+    if n < 0 or n >= bits then error(MARK .. "shift amount out of range", 2) end
+    return (a << n) & mask
+  end
+end
+
+function spec.shr(d)
+  local bits = d.bits
+  if d.signed then
+    return function(a, n)
+      if n < 0 or n >= bits then error(MARK .. "shift amount out of range", 2) end
+      if a < 0 then return ~((~a) >> n) end
+      return a >> n
+    end
+  end
+  return function(a, n)
+    if n < 0 or n >= bits then error(MARK .. "shift amount out of range", 2) end
+    return a >> n
+  end
+end
+
+--- The closure for operation `name` (one of `add`, `sub`, `mul`, their
+--- `_wrap` forms, `div`, `rem`, `shl`, `shr`) on integer type `d`, which
+--- takes the operands only.
+function rt.spec(name, d)
+  return spec[name](d)
+end
+
 -- ================================================================ conversions
 
 -- Whether `v`, a value of integer type `s`, is a value of type `d`.
@@ -456,6 +676,12 @@ end
 function rt.idx(i, n)
   if i >= n then error(sformat("%sindex %d is out of bounds (len %d)", MARK, i, n), 2) end
   return i + 1
+end
+
+--- Unravels for index `i` past length `n`: the generated code checks
+--- `i >= n` itself (no call per index) and calls this when it is.
+function rt.oob(i, n)
+  error(sformat("%sindex %d is out of bounds (len %d)", MARK, i, n), 2)
 end
 
 -- `v.(c)`: `v`, which must be the case with tag `tag` (`name` is `.Case`).

@@ -283,8 +283,10 @@ impl Printer {
                     self.write(" ");
                     // A runtime helper isn't tail-called: one that unravels
                     // would report at the caller, its frame gone.
+                    // (`O[n]` is an operation made for a type: the same.)
                     let helper = matches!(v, Expr::Call(callee, _)
-                        if matches!(&**callee, Expr::Field(base, _) if matches!(&**base, Expr::Name(n) if n == "rt")));
+                        if matches!(&**callee, Expr::Field(base, _) if matches!(&**base, Expr::Name(n) if n == "rt"))
+                            || matches!(&**callee, Expr::Index(base, _) if matches!(&**base, Expr::Name(n) if n == "O")));
                     if helper {
                         self.write("(");
                     }

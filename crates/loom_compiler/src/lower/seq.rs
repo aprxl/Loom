@@ -8,7 +8,7 @@
 //! also turns the 0-based index into a Lua one), except when the index's type
 //! can't reach past the end of an array: a `u4` into `[u8; 16]`.
 
-use super::lir::{Expr, StmtKind, TableKey};
+use super::lir::{Expr, Stmt, StmtKind, TableKey};
 use super::{Dest, Lowerer};
 use crate::hir::{self, ExprKind, GenericArg, PatKind};
 use crate::ty::{Ty, TyKind};
@@ -84,12 +84,22 @@ impl Lowerer<'_> {
         }
         let b = if matches!(seq, Seq::Array(..)) { b } else { self.spill_place(b) };
         let i = self.lower_expr(index);
-        let checked = match seq {
-            Seq::Array(_, n) if self.index_fits(self.ty_of(index), n) => Expr::bin("+", i, Expr::Int(1)),
-            Seq::Array(_, n) => Expr::rt("idx", vec![i, Expr::Int(n as i64)]),
-            Seq::List(_) | Seq::Slice(_) => Expr::rt("idx", vec![i, Expr::field(b.clone(), "n")]),
+        let at = match seq {
+            Seq::Array(_, n) if self.index_fits(self.ty_of(index), n) => self.spill(Expr::bin("+", i, Expr::Int(1))),
+            // The check is a statement: no call to make, and the index is
+            // one more than the value (Lua's tables start at 1).
+            _ => {
+                let n = match seq {
+                    Seq::Array(_, n) => Expr::Int(n as i64),
+                    Seq::List(_) | Seq::Slice(_) => Expr::field(b.clone(), "n"),
+                };
+                let at = if matches!(i, Expr::Int(_)) { i } else { self.spill_always(i) };
+                let out_of_range = Expr::bin(">=", at.clone(), n.clone());
+                let raise = Stmt { kind: StmtKind::Call(Expr::rt("oob", vec![at.clone(), n])), span: None };
+                self.push(StmtKind::If(vec![(out_of_range, vec![raise])], None));
+                Expr::bin("+", at, Expr::Int(1))
+            }
         };
-        let at = self.spill(checked);
         match seq {
             Seq::Slice(_) => Expr::index(Expr::field(b.clone(), "t"), Expr::bin("+", Expr::field(b, "o"), at)),
             _ => Expr::index(b, at),

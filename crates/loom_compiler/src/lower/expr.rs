@@ -553,29 +553,48 @@ impl Lowerer<'_> {
             return if float == FloatTy::F32 { Expr::rt("f32", vec![v]) } else { v };
         }
         let d = self.desc(op_ty, lhs.span);
-        let rt_op = |name: &str| Expr::rt(name, vec![d.clone(), a.clone(), b.clone()]);
-        match op {
-            B::Add => rt_op("add"),
-            B::Sub => rt_op("sub"),
-            B::Mul => rt_op("mul"),
-            B::AddWrap => rt_op("add_wrap"),
-            B::SubWrap => rt_op("sub_wrap"),
-            B::MulWrap => rt_op("mul_wrap"),
-            B::AddSat => rt_op("add_sat"),
-            B::SubSat => rt_op("sub_sat"),
-            B::MulSat => rt_op("mul_sat"),
-            B::AddChecked => rt_op("add_chk"),
-            B::SubChecked => rt_op("sub_chk"),
-            B::MulChecked => rt_op("mul_chk"),
-            B::Div => rt_op("div"),
-            B::Rem => rt_op("rem"),
-            B::Shl => rt_op("shl"),
-            B::Shr => rt_op("shr"),
-            B::BitAnd => Expr::bin("&", a, b),
-            B::BitOr => Expr::bin("|", a, b),
-            B::BitXor => Expr::bin("~", a, b),
-            _ => Expr::Nil,
+        let name = match op {
+            B::Add => "add",
+            B::Sub => "sub",
+            B::Mul => "mul",
+            B::AddWrap => "add_wrap",
+            B::SubWrap => "sub_wrap",
+            B::MulWrap => "mul_wrap",
+            B::AddSat => "add_sat",
+            B::SubSat => "sub_sat",
+            B::MulSat => "mul_sat",
+            B::AddChecked => "add_chk",
+            B::SubChecked => "sub_chk",
+            B::MulChecked => "mul_chk",
+            B::Div => "div",
+            B::Rem => "rem",
+            B::Shl => "shl",
+            B::Shr => "shr",
+            B::BitAnd => return Expr::bin("&", a, b),
+            B::BitOr => return Expr::bin("|", a, b),
+            B::BitXor => return Expr::bin("~", a, b),
+            _ => return Expr::Nil,
+        };
+        self.op_call(name, d, a, b)
+    }
+
+    /// The operation `name` of the runtime on integers of the type whose
+    /// descriptor is `d`, applied to `a` and `b`. The common ones call a
+    /// closure made for the type once (`O[n]`, see `rt.spec`); the rest
+    /// call `rt.<name>(d, a, b)`.
+    pub(super) fn op_call(&mut self, name: &'static str, d: Expr, a: Expr, b: Expr) -> Expr {
+        const SPECIALIZED: [&str; 10] =
+            ["add", "sub", "mul", "add_wrap", "sub_wrap", "mul_wrap", "div", "rem", "shl", "shr"];
+        if SPECIALIZED.contains(&name)
+            && let Expr::Index(_, k) = &d
+            && let Expr::Int(k) = k.as_ref()
+        {
+            let key = ((*k - 1) as usize, name);
+            self.ops.entry(key).or_insert(());
+            let n = self.ops.get_index_of(&key).expect("just made");
+            return Expr::call(Expr::index(Expr::name("O"), Expr::Int(n as i64 + 1)), vec![a, b]);
         }
+        Expr::rt(name, vec![d, a, b])
     }
 
     /// The type several operands are compared at: the widest of their
@@ -1353,7 +1372,7 @@ impl Lowerer<'_> {
                 let step = Stmt {
                     kind: StmtKind::Assign(
                         vec![ctl.clone()],
-                        vec![Expr::rt("add_wrap", vec![d.clone(), ctl.clone(), Expr::Int(1)])],
+                        vec![self.op_call("add_wrap", d.clone(), ctl.clone(), Expr::Int(1))],
                     ),
                     span: self.span,
                 };
@@ -1367,7 +1386,7 @@ impl Lowerer<'_> {
                 }
                 if hi.is_none() {
                     full.push(Stmt {
-                        kind: StmtKind::Assign(vec![ctl.clone()], vec![Expr::rt("add", vec![d, ctl, Expr::Int(1)])]),
+                        kind: StmtKind::Assign(vec![ctl.clone()], vec![self.op_call("add", d, ctl, Expr::Int(1))]),
                         span: self.span,
                     });
                 } else {
@@ -1663,7 +1682,7 @@ impl Lowerer<'_> {
                 return a;
             }
         };
-        Expr::rt(name, vec![d, a, b])
+        self.op_call(name, d, a, b)
     }
 }
 

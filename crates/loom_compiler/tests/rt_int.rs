@@ -32,7 +32,19 @@ impl Rt {
     /// Calls `rt.<name>(args…)`, turning a Loom unravel into `Out::Trap`.
     fn call(&self, name: &str, ty: IntTy, args: impl mlua::IntoLuaMulti) -> Out {
         let f: Function = self.rt.get(name).unwrap_or_else(|_| panic!("rt.{name}"));
-        match f.call::<Value>(args) {
+        self.outcome(name, ty, f.call::<Value>(args))
+    }
+
+    /// Calls the closure `rt.spec(name, d)` makes with the operands only:
+    /// what the generated code calls.
+    fn call_spec(&self, name: &str, ty: IntTy, d: &Table, args: impl mlua::IntoLuaMulti) -> Out {
+        let make: Function = self.rt.get("spec").expect("rt.spec");
+        let f: Function = make.call((name, d.clone())).unwrap_or_else(|e| panic!("spec {name}: {e}"));
+        self.outcome(name, ty, f.call::<Value>(args))
+    }
+
+    fn outcome(&self, name: &str, ty: IntTy, result: mlua::Result<Value>) -> Out {
+        match result {
             Ok(Value::Integer(v)) => Out::Value(from_lua(ty, v)),
             Ok(Value::Nil) => Out::Nil,
             Ok(other) => panic!("rt.{name} returned {other:?}"),
@@ -129,6 +141,11 @@ fn arithmetic_matches_the_oracle() {
                         let want =
                             if which == "_wrap" { Out::Value(ty.wrap(wrapped)) } else { policy(ty, exact, which) };
                         assert_eq!(got, want, "{name} {} {a} {b}", ty_name(ty));
+                        // The closure the generated code uses agrees.
+                        if matches!(which, "" | "_wrap") {
+                            let spec = rt.call_spec(&name, ty, &d, (to_lua(a), to_lua(b)));
+                            assert_eq!(spec, want, "spec {name} {} {a} {b}", ty_name(ty));
+                        }
                         cases += 1;
                     }
                 }
@@ -136,7 +153,19 @@ fn arithmetic_matches_the_oracle() {
                 assert_eq!(rt.call("div", ty, (d.clone(), to_lua(a), to_lua(b))), div, "div {} {a} {b}", ty_name(ty));
                 let rem = if b == 0 { Out::Trap } else { Out::Value(a % b) };
                 assert_eq!(rt.call("rem", ty, (d.clone(), to_lua(a), to_lua(b))), rem, "rem {} {a} {b}", ty_name(ty));
-                cases += 2;
+                assert_eq!(
+                    rt.call_spec("div", ty, &d, (to_lua(a), to_lua(b))),
+                    div,
+                    "spec div {} {a} {b}",
+                    ty_name(ty)
+                );
+                assert_eq!(
+                    rt.call_spec("rem", ty, &d, (to_lua(a), to_lua(b))),
+                    rem,
+                    "spec rem {} {a} {b}",
+                    ty_name(ty)
+                );
+                cases += 4;
             }
             let neg = if ty.signed { ty.checked(-a).map_or(Out::Trap, Out::Value) } else { Out::Value(0) };
             if ty.signed {
@@ -150,7 +179,9 @@ fn arithmetic_matches_the_oracle() {
                 let shr = if in_range { Out::Value(a >> n) } else { Out::Trap };
                 assert_eq!(rt.call("shl", ty, (d.clone(), to_lua(a), n)), shl, "shl {} {a} {n}", ty_name(ty));
                 assert_eq!(rt.call("shr", ty, (d.clone(), to_lua(a), n)), shr, "shr {} {a} {n}", ty_name(ty));
-                cases += 2;
+                assert_eq!(rt.call_spec("shl", ty, &d, (to_lua(a), n)), shl, "spec shl {} {a} {n}", ty_name(ty));
+                assert_eq!(rt.call_spec("shr", ty, &d, (to_lua(a), n)), shr, "spec shr {} {a} {n}", ty_name(ty));
+                cases += 4;
             }
             cases += 2;
         }
