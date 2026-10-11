@@ -2111,6 +2111,17 @@ impl Emitter<'_> {
                     }
                 }
             }
+            // `sqrt` and `abs` are ops of their own: `float.math`'s `imm` is
+            // the operation times two, plus one for `f32`.
+            K::Native { name: "float.math", imm: imm @ (0 | 1 | 6 | 7), args } if inst.results.len() == 1 => {
+                let op = match imm {
+                    0 => Op::AbsF64,
+                    1 => Op::AbsF32,
+                    6 => Op::SqrtF64,
+                    _ => Op::SqrtF32,
+                };
+                self.put(span, word(op, dst, self.r(args[0]), 0));
+            }
             K::Native { name, imm, args } => {
                 // At once: an argument may sit where another goes.
                 let moves = args.iter().enumerate().map(|(i, &a)| (self.scratch + i as u16, self.r(a))).collect();

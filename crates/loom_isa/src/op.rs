@@ -476,6 +476,10 @@ ops! {
     DivF32 = "div.f32", ABC;
     RemF32 = "rem.f32", ABC;
     NegF32 = "neg.f32", AB;
+    SqrtF64 = "sqrt.f64", AB;
+    SqrtF32 = "sqrt.f32", AB;
+    AbsF64 = "abs.f64", AB;
+    AbsF32 = "abs.f32", AB;
     // conversions
     CastT = "cast", ABX;
     CastW = "cast%", ABX;

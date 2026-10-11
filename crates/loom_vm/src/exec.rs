@@ -972,6 +972,11 @@ impl<'i> Machine<'i> {
                     Op::RemF32 => f32s!(|x: f32, y: f32| x % y),
                     Op::NegF32 => un!(|x| u64::from((-f32::from_bits(x as u32)).to_bits())),
 
+                    Op::SqrtF64 => un!(|x| f64::from_bits(x).sqrt().to_bits()),
+                    Op::SqrtF32 => un!(|x| u64::from(f32::from_bits(x as u32).sqrt().to_bits())),
+                    Op::AbsF64 => un!(|x| f64::from_bits(x).abs().to_bits()),
+                    Op::AbsF32 => un!(|x| u64::from(f32::from_bits(x as u32).abs().to_bits())),
+
                     Op::CastT => {
                         let (to, from) = unpack_cast(ext!()).expect("the verifier checked every cast");
                         match ints::cast_t(r!(b(w)), to, from) {
