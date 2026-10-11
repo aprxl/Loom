@@ -75,6 +75,9 @@ pub struct Jobs {
     pub module: Module,
     pub jobs: Vec<Job>,
     pub slots: Vec<ConstSlot>,
+    /// The function that frees what the constants own, when something does:
+    /// run it once they're read back, as `main`'s end does for a program.
+    pub exit: Option<FuncId>,
 }
 
 /// Builds the jobs of the program `typed` was checked from; `tests`: the
@@ -202,10 +205,15 @@ pub fn build_jobs(p: &Program, typed: &Typed, tests: bool) -> Result<Option<Jobs
             ConstSlot { offset, name, span, key: *key, ty }
         })
         .collect();
-    let roots: Vec<FuncId> = jobs.iter().map(|j| j.func).collect();
+    let mut roots: Vec<FuncId> = jobs.iter().map(|j| j.func).collect();
+    // What the constants own is dropped at the end, as a program's is.
+    let types: Vec<crate::ty::Ty> = b.globals.values().map(|&(_, ty)| ty).collect();
+    let owning = types.into_iter().any(|ty| b.const_owns(ty));
+    let exit = owning.then(|| b.const_exit_id());
+    roots.extend(exit);
     let mut module = b.finish(roots[0])?;
     module.roots = roots;
-    Ok(Some(Jobs { module, jobs, slots }))
+    Ok(Some(Jobs { module, jobs, slots, exit }))
 }
 
 /// Every `const` expression in the code `kind` holds, by its id: a

@@ -157,6 +157,15 @@ pub fn evaluate(db: &SourceDb, p: &Program, typed: &Typed, tests: bool) -> Resul
             baked.consts.insert(slot.key, BakedConst { ty: slot.ty, val });
         }
     }
+    // What the constants own is freed as a program's is at its end, and the
+    // checked build says if that wasn't everything.
+    if let Some(exit) = jobs.exit {
+        let ended = vm.call(exit.0, &[]);
+        let leaked = vm.ended(ended);
+        if !matches!(leaked, Outcome::Finished) {
+            return Err(vec![internal(jobs.jobs[0].span, &leaked)]);
+        }
+    }
     Ok(baked)
 }
 

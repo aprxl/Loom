@@ -111,18 +111,24 @@ impl<'a> Builder<'a> {
         let Some(info) = self.tables().calls.get(&call.id).cloned() else {
             return self.internal(span, "a `const assert` that wasn't checked");
         };
+        // What working out the condition makes (a copy of a constant that
+        // owns memory) is freed before anything is decided.
+        let depth = self.open_scope();
         let cond = match info.args.first() {
             Some(ArgSource::Arg(i)) => self.value(&args[*i].value)?[0],
             _ => return self.unsupported(span, "this `assert`"),
         };
+        self.close_scope(depth);
         let (ok, fail) = (self.new_block(), self.new_block());
         self.br(cond, ok, fail);
         self.enter(fail);
+        let depth = self.open_scope();
         let msg = self.msg_sink();
         if let Some(ArgSource::Arg(i)) = info.args.get(1) {
             let pieces = self.pieces(&args[*i].value)?;
             self.write_pieces(msg, pieces)?;
         }
+        self.close_scope(depth);
         let failed = self.iconst(1);
         self.terminate(Term::Ret(vec![failed]));
         self.enter(ok);
