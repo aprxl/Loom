@@ -11,6 +11,12 @@
 //! results go (the frame itself, unless the frame started a new stack
 //! segment and the caller's window is in the one before).
 //!
+//! Nothing in the loop may take the address of `pc` or `fp`: a closure that
+//! reads either captures it by reference, and LLVM then keeps it in a stack
+//! slot for the whole function (every dispatch a store and a load of it).
+//! Read them into a local first (see `Resume`). Check with `--emit llvm-ir`:
+//! `loom_treadle_execute` has no `%pc` alloca.
+//!
 //! Every register index, jump target and call window was checked by the
 //! verifier before the loop starts, so the loop reads registers and code
 //! without bounds checks. Rare work (traps, growing the stack) is out of
@@ -1205,13 +1211,16 @@ impl<'i> Machine<'i> {
                                 env.seg_end = end;
                             }
                             None => {
-                                let f = env.in_flight.take();
-                                return Err(f.unwrap_or_else(|| {
-                                    fault!(
-                                        Trap::Crash("loom internal: `resume` with nothing unwinding".into()),
-                                        here!()
-                                    )
-                                }));
+                                // Not in a closure: one that reads `pc` takes
+                                // its address, and `pc` then lives in memory
+                                // through the whole loop.
+                                let at = here!();
+                                return Err(match env.in_flight.take() {
+                                    Some(f) => f,
+                                    None => {
+                                        fault!(Trap::Crash("loom internal: `resume` with nothing unwinding".into()), at)
+                                    }
+                                });
                             }
                         }
                     }
