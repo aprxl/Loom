@@ -22,6 +22,7 @@
 //! does.
 
 mod any;
+mod bake;
 mod builtin;
 mod call;
 mod cleanup;
@@ -280,9 +281,18 @@ pub(super) struct Builder<'a> {
     /// The `const assert` calls found as jobs, by their body and the id of
     /// the `const` expression.
     asserts: HashMap<(BodyId, HirId), &'a crate::hir::Expr>,
-    /// The program's data as it starts: constants (zero until computed)
-    /// and vtables.
+    /// The program's data as it starts: constants (zero until computed, or
+    /// baked in) and vtables.
     data: Vec<u64>,
+    /// What compile-time code computed, to write into the data (see
+    /// `bake.rs`).
+    baked: Option<&'a crate::baked::Baked>,
+    /// The constants that were, which are never computed or freed.
+    baked_keys: HashSet<consts::ConstKey>,
+    /// Words of `data` that hold a pointer into it.
+    relocs: Vec<u32>,
+    /// Word ranges of `data` that are baked values.
+    plain: Vec<(u32, u32)>,
     /// Each weft method called through `any`: its slot in every vtable.
     dyn_slots: IndexMap<crate::hir::DefId, u32>,
     /// The number of each type made into an `any`.
@@ -299,7 +309,14 @@ pub(super) struct Builder<'a> {
 /// Builds the Heddle of the program that starts at `main`. `typed` must be
 /// checked for Treadle's target and have no errors.
 pub fn build(p: &Program, typed: &Typed) -> Result<Module, Vec<Diagnostic>> {
+    build_with(p, typed, &crate::baked::Baked::default())
+}
+
+/// [`build`], with the constants compile-time code computed written into
+/// the data rather than computed when the program reads them.
+pub fn build_with(p: &Program, typed: &Typed, baked: &crate::baked::Baked) -> Result<Module, Vec<Diagnostic>> {
     let mut b = Builder::new(p, typed);
+    b.baked = Some(baked);
     let Some(main) = b.find_main() else { return Err(b.diags) };
     b.main_span = Some(p.def(typed.results.instance(main).def).span);
     let fails = typed.results.sigs.get(&main).is_some_and(|s| matches!(typed.tcx.kind(s.ret), TyKind::Result(..)));
@@ -307,7 +324,7 @@ pub fn build(p: &Program, typed: &Typed) -> Result<Module, Vec<Diagnostic>> {
     b.drain();
     // Constants that own memory: dropped once `main` is done, by an entry
     // that calls it and then them.
-    let consts: Vec<Ty> = b.globals.values().map(|&(_, t)| t).collect();
+    let consts: Vec<Ty> = b.globals.iter().filter(|(k, _)| !b.is_baked(k)).map(|(_, &(_, t))| t).collect();
     let owning = consts.into_iter().any(|t| b.const_owns(t));
     if owning && !fails {
         entry = b.func_id(FnKey::Main(main));
@@ -360,7 +377,18 @@ pub fn frames(p: &Program, typed: &Typed) -> Result<HashMap<BodyId, (u64, u64)>,
 /// and the tests' names with their entries, in order.
 #[allow(clippy::type_complexity)]
 pub fn build_tests(p: &Program, typed: &Typed) -> Result<(Module, Vec<(String, FuncId)>), Vec<Diagnostic>> {
+    build_tests_with(p, typed, &crate::baked::Baked::default())
+}
+
+/// [`build_tests`], with baked constants (see [`build_with`]).
+#[allow(clippy::type_complexity)]
+pub fn build_tests_with(
+    p: &Program,
+    typed: &Typed,
+    baked: &crate::baked::Baked,
+) -> Result<(Module, Vec<(String, FuncId)>), Vec<Diagnostic>> {
     let mut b = Builder::new(p, typed);
+    b.baked = Some(baked);
     let tests = p.root.map(|root| p.module(root).tests.clone()).unwrap_or_default();
     let mut entries = Vec::new();
     for def in tests {
@@ -376,6 +404,8 @@ pub fn build_tests(p: &Program, typed: &Typed) -> Result<(Module, Vec<(String, F
                 strings: Vec::new(),
                 fmts: Vec::new(),
                 data: Vec::new(),
+                relocs: Vec::new(),
+                plain: Vec::new(),
                 entry: FuncId(0),
                 roots: Vec::new(),
             },
@@ -408,6 +438,10 @@ impl<'a> Builder<'a> {
             const_exprs: HashMap::new(),
             asserts: HashMap::new(),
             data: Vec::new(),
+            baked: None,
+            baked_keys: HashSet::new(),
+            relocs: Vec::new(),
+            plain: Vec::new(),
             dyn_slots: IndexMap::new(),
             type_ids: IndexMap::new(),
             vtable_at: HashMap::new(),
@@ -440,6 +474,8 @@ impl<'a> Builder<'a> {
             strings: self.strings.into_keys().collect(),
             fmts: self.fmts.into_keys().collect(),
             data: self.data,
+            relocs: self.relocs,
+            plain: self.plain,
             entry,
             roots: Vec::new(),
         };

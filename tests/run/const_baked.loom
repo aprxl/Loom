@@ -1,0 +1,74 @@
+// Constants compile-time code computed are baked into the program: the
+// values here must come out exactly as if the program computed them itself,
+// at their edges (the most and least of each width, the awkward floats,
+// text that isn't ASCII, empty things, optionals in each of their layouts).
+
+use std.io.print
+
+warp Point { x: i32, y: i32 }
+warp Named { name: String, tags: List[u8], at: Point }
+warp Pair(u8, str)
+
+const SMALL: u8 = 200
+const NEG: i16 = -300
+const MIN: i64 = i64.MIN
+const MAX: u64 = u64.MAX
+const ODD: u24 = 16777215
+const FLAG: bool = true
+const LETTER: char = 'é'
+const ZERO: f64 = -0.0
+const THIRD: f32 = 0.33333334
+const HUGE: f64 = 1.7976931348623157e308
+const TEXT: str = "héllo, wörld ✓"
+const OWNED: String = "owned"
+const PAIR: (u8, str) = (7, "seven")
+const GRID: [u16; 4] = [1, 2, 3, 40000]
+const NAMES: List[String] = ["ada", "grace", "linus"]
+const NONE: ?i32 = none
+const SOME: ?i32 = some(5)
+const BOXED: ?String = some("in a niche")
+const NO_STRING: ?String = none
+const NESTED: ??i32 = some(none)
+const DEEPER: ??i32 = some(some(-7))
+const UNIT_SOME: ?() = some(())
+const ORIGIN: Point = Point(x: -1, y: 2)
+const WHO: Named = Named(name: "lin", tags: [1, 2], at: Point(x: 3, y: 4))
+const TUP: Pair = Pair(9, "nine")
+const EMPTY: List[u32] = []
+const BLANK: String = ""
+const FLAGS: [bool; 3] = [true, false, true]
+const TABLE: [u32; 16] = {
+    var t = [0u32; 16]
+    var i = 0
+    while i < 16 {
+        var c = i as u32
+        var k = 0
+        while k < 8 {
+            c = if c & 1 == 1 { 0xEDB8_8320 ~ (c >> 1) } else { c >> 1 }
+            k += 1
+        }
+        t[i] = c
+        i += 1
+    }
+    t
+}
+
+fn main() {
+    print("{SMALL} {NEG} {MIN} {MAX} {ODD}")
+    print("{FLAG} {LETTER} {ZERO} {THIRD} {HUGE}")
+    print("{TEXT} {OWNED} {PAIR} {GRID}")
+    print("{NAMES} {NONE} {SOME} {BOXED} {NO_STRING}")
+    print("{NESTED} {DEEPER} {UNIT_SOME:?}")
+    print("{ORIGIN.x} {ORIGIN.y} {WHO.name} {WHO.tags} {WHO.at.x} {WHO.at.y}")
+    print("{TUP.0} {TUP.1} {EMPTY} [{BLANK}] {FLAGS}")
+    print("{TABLE}")
+    // Reading a baked constant that owns memory gives a copy of its own.
+    var names = NAMES
+    names.push("extra")
+    var owned = OWNED
+    owned.push_str("!")
+    print("{names} {NAMES} {owned} {OWNED}")
+    var table = TABLE
+    table[0] = 99
+    print("{table[0]} {TABLE[0]} {TABLE.len()}")
+}

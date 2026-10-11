@@ -9,7 +9,7 @@ use loom_syntax::source::SourceDb;
 use crate::heddle::opt::Level;
 use crate::hir::Program;
 use crate::typeck::Typed;
-use crate::{codegen, heddle, lower};
+use crate::{codegen, heddle};
 
 /// What codegen's failure says: over a limit of Treadle's (U0103), or a
 /// program it can't run yet (U0102).
@@ -47,8 +47,8 @@ pub fn compile_tests(
     typed: &Typed,
     level: Level,
 ) -> Result<(Compiled, Vec<(String, u32)>), Vec<Diagnostic>> {
-    lower::compile_time(db, p, typed, true)?;
-    let (heddle, tests) = heddle::build_tests(p, typed)?;
+    let baked = crate::consteval::evaluate(db, p, typed, true)?;
+    let (heddle, tests) = heddle::build_tests_with(p, typed, &baked)?;
     let heddle = optimized(heddle, level)?;
     let tests = tests.into_iter().map(|(name, f)| (name, f.0)).collect();
     if heddle.funcs.is_empty() {
@@ -77,9 +77,9 @@ pub fn compile_at(db: &SourceDb, p: &Program, typed: &Typed, level: Level) -> Re
         *since = std::time::Instant::now();
     };
     let mut t = std::time::Instant::now();
-    lower::compile_time(db, p, typed, false)?;
+    let baked = crate::consteval::evaluate(db, p, typed, false)?;
     lap("const code", &mut t);
-    let built = heddle::build(p, typed)?;
+    let built = heddle::build_with(p, typed, &baked)?;
     lap("build", &mut t);
     let heddle = optimized(built, level)?;
     lap("optimize", &mut t);

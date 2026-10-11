@@ -133,7 +133,14 @@ fn prune(module: &mut Module) {
     for r in &module.roots {
         reach(r.0 as usize, &mut live, &mut work);
     }
-    for &w in &module.data {
+    // The words that may be function numbers: not what's baked in.
+    let mut plain = module.plain.iter().copied().peekable();
+    for (i, &w) in module.data.iter().enumerate() {
+        let i = i as u32;
+        while plain.next_if(|&(_, end)| end <= i).is_some() {}
+        if plain.peek().is_some_and(|&(start, _)| start <= i) {
+            continue;
+        }
         if let Ok(w) = usize::try_from(w) {
             reach(w, &mut live, &mut work);
         }

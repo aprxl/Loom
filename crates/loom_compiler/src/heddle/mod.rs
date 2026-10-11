@@ -28,7 +28,7 @@ mod verify;
 pub(crate) use build::rewrite;
 pub use build::{
     COMPUTING, CYCLE, ConstKey, ConstSlot, DONE, FAILED, GAVE_UP, Job, JobKind, Jobs, build, build_jobs, build_tests,
-    frames,
+    build_tests_with, build_with, frames,
 };
 pub use print::print;
 pub(crate) use verify::uses as inst_uses;
@@ -496,6 +496,12 @@ pub struct Module {
     pub fmts: Vec<FmtItem>,
     /// What the program's data starts as ([`InstKind::Global`]).
     pub data: Vec<u64>,
+    /// Words of `data` that hold a pointer into it, as a byte offset (see
+    /// `loom_isa::Image::relocs`).
+    pub relocs: Vec<u32>,
+    /// Ranges of words of `data` that are plain values (constants baked in),
+    /// not function numbers as a vtable's are: `[start, end)`.
+    pub plain: Vec<(u32, u32)>,
     /// The function to run.
     pub entry: FuncId,
     /// Functions something outside the module calls, besides the entry (a

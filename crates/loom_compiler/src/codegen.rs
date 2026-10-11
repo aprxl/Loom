@@ -106,6 +106,7 @@ pub fn generate(db: &SourceDb, module: &Module) -> Result<Image, CodegenError> {
         strings: module.strings.clone(),
         fmts: module.fmts.clone(),
         data: module.data.clone(),
+        relocs: module.relocs.clone(),
         entry: Some(module.entry.0),
         ..Image::default()
     };

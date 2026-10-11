@@ -84,6 +84,7 @@ impl<'a> Builder<'a> {
         let words = 1 + size.div_ceil(8) as usize;
         self.data.extend(std::iter::repeat_n(0, words));
         self.globals.insert(key, (off, ty));
+        self.bake_const(key, off, ty);
         Some((off, ty))
     }
 
@@ -97,6 +98,9 @@ impl<'a> Builder<'a> {
     /// Reads constant `key`: computed the first time.
     pub(super) fn read_const(&mut self, key: ConstKey, span: Span) -> Option<Val> {
         let (off, ty) = self.const_global(key, span)?;
+        if self.is_baked(&key) {
+            return self.read_baked(key, off, ty, span);
+        }
         let at = self.emit1(InstKind::Global(off), VTy::Ptr);
         let flag = self.load(Mem::W64, at, 0, VTy::Int);
         let done = self.iconst(DONE);
@@ -198,7 +202,9 @@ impl<'a> Builder<'a> {
     /// Drops what each computed constant owns: once `main` is done.
     pub(super) fn const_exit(&mut self) -> Option<Vec<VTy>> {
         self.f.span = None;
-        let globals: Vec<(u32, Ty)> = self.globals.values().copied().collect();
+        // What's baked in is in the data, and never freed.
+        let globals: Vec<(u32, Ty)> =
+            self.globals.iter().filter(|(k, _)| !self.baked_keys.contains(*k)).map(|(_, &g)| g).collect();
         for (off, ty) in globals {
             let span = self.here();
             let view = self.const_view(ty, span).flatten();

@@ -14,6 +14,8 @@ fn generate(func: Func) -> Result<loom_isa::Image, CodegenError> {
         data: Vec::new(),
         entry: FuncId(0),
         roots: Vec::new(),
+        relocs: Vec::new(),
+        plain: Vec::new(),
     };
     loom_compiler::heddle::verify(&module).expect("valid Heddle");
     codegen::generate(&SourceDb::new(), &module)
