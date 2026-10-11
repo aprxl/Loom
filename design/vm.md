@@ -1524,8 +1524,17 @@ halves that share a readback: *running* jobs, and *baking* their values.
      can report K0104 with it. Open: `NativeSig` has no host flag today
      (the host natives are a group in `loom_vm/host.rs`); add one to the
      table so the refusal is data, not a list of names.
-   - Readback: `Vm::read(addr, len) -> &[u8]` for the data and heap, and
-     `Vm::data_base()`, so a caller can walk a value by its layout.
+   - Readback: `Vm::data()`, `data_addr()`, `rodata_range()` and an
+     `unsafe read(addr, len)`, so a caller can walk a value by its layout.
+   - *Built* (2026-10-11): `Config { limits: Limits { steps, time, memory },
+     refuse_host }`; `Outcome::OverBudget { budget, location }` and
+     `Outcome::Refused { native, location }`. The checks sit in the tick
+     counter's cold path, which now persists across `Vm::call`s (a
+     budget is for all the jobs, and many short jobs would otherwise never
+     reach a check). The first budget trap unwinds, so what the program
+     owns is freed; if the program is still running a chunk of ticks
+     later (a `defer` that never ends), the next check aborts it. The
+     dispatch loop is unchanged: an A/B of `bench/` is within noise.
 2. **Move `srcmap` and `RT_CORE` out of `loom_host`**, as one mechanical
    commit. They are the other reasons `loom_compiler` depends on it. The
    `lua54`/`lua55` features move with them (the `lua55` gate must still

@@ -3,7 +3,9 @@
 //! `std.term`), as the Lua host gives them.
 //!
 //! A sandboxed run (the fixture tests) sees no environment, keeps its files
-//! in memory (starting empty), never waits, and has no terminal.
+//! in memory (starting empty), never waits, and has no terminal. Compile-time
+//! code is refused all of them (`Config::refuse_host`): each native starts
+//! with `host_check`.
 
 #![allow(unsafe_code)]
 
@@ -37,6 +39,7 @@ fn text(ctx: &Ctx, ptr: u64, len: u64) -> Result<String, Trap> {
 
 /// `env.get(name, dst)`: a `?String` at `dst` (all zero for `none`).
 fn env_get(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.host_check("env.get")?;
     let name = text(ctx, args[0], args[1])?;
     let value = if ctx.sandbox { None } else { std::env::var(name).ok() };
     match value {
@@ -52,6 +55,7 @@ fn env_get(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 /// `env.args(dst)`: a `List[String]` at `dst`: the program's name, then
 /// its arguments.
 fn env_args(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.host_check("env.args")?;
     let all = ctx.args.clone();
     let n = all.len() as u64;
     let buf = ctx.heap.alloc(n * 24, 8)?;
@@ -75,6 +79,7 @@ fn exit(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 
 /// `time.sleep(nanos)`.
 fn sleep(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.host_check("time.sleep")?;
     if ctx.sandbox {
         return Ok(());
     }
@@ -96,6 +101,7 @@ fn sleep(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 
 /// `term.raw_mode(on)`.
 fn raw_mode(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.host_check("term.raw_mode")?;
     if ctx.sandbox {
         return Ok(());
     }
@@ -105,6 +111,7 @@ fn raw_mode(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 
 /// `term.poll_keys(keymap)`: a bit for each of its keys held down.
 fn poll_keys(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.host_check("term.poll_keys")?;
     if ctx.sandbox {
         args[0] = 0;
         return Ok(());
@@ -159,6 +166,7 @@ const MAX_OPEN: usize = 64;
 /// `fs.append(path, dst)`: opens (makes) the file to add to: how it went;
 /// for `Other`, the message is at `dst`.
 fn fs_append(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.host_check("fs.append")?;
     let path = text(ctx, args[0], args[1])?;
     args[0] = match append(ctx, &path, b"") {
         Ok(()) => FINE,
@@ -169,6 +177,7 @@ fn fs_append(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 
 /// `fs.write_line(path, line, dst)`: adds the line and a newline.
 fn fs_write_line(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.host_check("fs.write_line")?;
     let path = text(ctx, args[0], args[1])?;
     let mut line = text(ctx, args[2], args[3])?.into_bytes();
     line.push(b'\n');
@@ -182,6 +191,7 @@ fn fs_write_line(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 /// `fs.read(path, dst)`: the file's bytes, at `dst` (as a `String`, or a
 /// `List[u8]`: the same header); or how it failed.
 fn fs_read(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.host_check("fs.read")?;
     let path = text(ctx, args[0], args[1])?;
     let read = if ctx.sandbox {
         ctx.files.get(&path).cloned().ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))

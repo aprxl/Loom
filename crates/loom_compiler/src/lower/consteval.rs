@@ -157,6 +157,8 @@ fn internal(span: Span, outcome: &Outcome) -> Diagnostic {
         Outcome::Finished => "it finished".into(),
         Outcome::Exit(code) => format!("it called `process.exit({code})`"),
         Outcome::Interrupted => "it was interrupted".into(),
+        // Only a Treadle run with limits gives these (V4).
+        Outcome::OverBudget { .. } | Outcome::Refused { .. } => "it was stopped".into(),
     };
     Diagnostic::error(codes::K0103, format!("compile-time code failed inside Loom: {message}"))
         .primary(span, "while running this")

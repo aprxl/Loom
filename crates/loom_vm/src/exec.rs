@@ -49,8 +49,8 @@ use crate::{Config, Fault, Trap, crash_message};
 /// How many frames of each end of a trace are kept (see `trace_at`).
 pub(crate) const TRACE_ENDS: usize = 64;
 
-/// Loop iterations and calls between checks for Ctrl-C.
-const TICKS: i32 = 1 << 16;
+/// Loop iterations and calls between checks for Ctrl-C and budgets.
+const TICKS: i32 = crate::TICKS as i32;
 
 /// For the negated float comparisons: whether `x < y` (or `x <= y`, with
 /// `or_equal`) is false, which it is when either is NaN too.
@@ -82,10 +82,21 @@ struct Env<'e, 'i> {
     entry_results: usize,
     /// The end of the stack segment in use.
     seg_end: *mut u64,
-    /// Instructions until the next check for an interrupt.
+    /// Loop iterations and calls until the next check for an interrupt or
+    /// a budget.
     ticks: i32,
+    /// Where `ticks` goes when the call ends, so the count carries over to
+    /// the next call of the same machine: many short jobs add up to a
+    /// budget as one long one does.
+    ticks_out: &'e mut i32,
     /// What's unwinding the stack, while landing pads run.
     in_flight: Option<Fault>,
+}
+
+impl Drop for Env<'_, '_> {
+    fn drop(&mut self) {
+        *self.ticks_out = self.ticks;
+    }
 }
 
 #[derive(Debug)]
@@ -101,6 +112,8 @@ pub(crate) struct Machine<'i> {
     stack_limit: usize,
     /// Kept between calls from outside.
     stack: Option<Stack>,
+    /// What's left of the tick counter between calls.
+    ticks: i32,
 }
 
 impl<'i> Machine<'i> {
@@ -130,11 +143,18 @@ impl<'i> Machine<'i> {
             ctx: {
                 let mut ctx = Ctx::new(image, host);
                 ctx.interrupt = config.interrupt.clone();
+                ctx.set_limits(&config.limits, config.refuse_host);
                 ctx
             },
             stack_limit: config.stack_limit,
             stack: None,
+            ticks: TICKS,
         })
+    }
+
+    /// The program's data, as it is now.
+    pub fn data(&self) -> &[u64] {
+        &self.data
     }
 
     /// Calls function `entry` with `args` (one per parameter register) and
@@ -215,7 +235,8 @@ impl<'i> Machine<'i> {
             data_range,
             entry_results: start.results,
             seg_end,
-            ticks: TICKS,
+            ticks: self.ticks,
+            ticks_out: &mut self.ticks,
             in_flight: None,
         };
         // Only `pc` and `fp` (and each instruction's word) stay in registers
@@ -322,9 +343,10 @@ impl<'i> Machine<'i> {
                         env.ticks -= 1;
                         if env.ticks < 0 {
                             env.ticks = TICKS;
-                            // Once: the unwinding runs `defer`s to the end.
-                            if env.ctx.interrupted() {
-                                throw!(Trap::Interrupt);
+                            // An interrupt is reported once, so the
+                            // unwinding runs `defer`s to the end.
+                            if let Some(trap) = env.ctx.checkpoint() {
+                                throw!(trap);
                             }
                         }
                     }};
@@ -1279,7 +1301,7 @@ impl<'i> Machine<'i> {
             // instruction, or out through its callers'. An internal error
             // doesn't unwind: nothing about the state can be trusted.
             let at = here!();
-            if matches!(trap, Trap::Crash(_) | Trap::Failed(_)) {
+            if matches!(trap, Trap::Crash(_) | Trap::Failed(_) | Trap::Budget { abort: true, .. }) {
                 return Err(fault!(trap, at));
             }
             let (trace, skipped) = trace_at(env.image, env.code_base, fp, at);

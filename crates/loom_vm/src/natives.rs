@@ -49,6 +49,11 @@ pub(crate) struct Ctx<'i> {
     /// The program was interrupted, and is unwinding: once, so its `defer`s
     /// run to the end.
     pub stopping: bool,
+    /// What compile-time code has left to use (see [`crate::Limits`]).
+    meter: Option<Meter>,
+    /// Natives that touch the machine end the run (see
+    /// [`crate::Config::refuse_host`]).
+    pub refuse_host: bool,
     /// With `checked`: the value stack, set before each native runs, so a
     /// native can check memory on it.
     pub stack: *const crate::stack::Stack,
@@ -61,6 +66,16 @@ pub(crate) struct Ctx<'i> {
     /// How many times each instruction ran, by word of the image's code
     /// (with `stats`; empty otherwise).
     pub pc_counts: Vec<u64>,
+}
+
+/// What compile-time code has left of its budgets.
+#[derive(Debug)]
+struct Meter {
+    /// Ticks left, counted in chunks of [`crate::TICKS`].
+    steps: Option<u64>,
+    deadline: Option<std::time::Instant>,
+    /// The budget that ran out, once one has.
+    over: Option<loom_sys::Budget>,
 }
 
 /// How much output is kept before it's written.
@@ -94,12 +109,74 @@ impl<'i> Ctx<'i> {
             open_files: std::collections::HashMap::new(),
             interrupt: None,
             stopping: false,
+            meter: None,
+            refuse_host: false,
             stack: std::ptr::null(),
             data_range: (0, 0),
             dispatched: 0,
             op_counts: if cfg!(feature = "stats") { vec![0; Op::ALL.len()] } else { Vec::new() },
             pc_counts: if cfg!(feature = "stats") { vec![0; image.code.len()] } else { Vec::new() },
         }
+    }
+
+    /// Sets what the program may use up, and whether it may touch the
+    /// machine. The time starts now.
+    pub fn set_limits(&mut self, limits: &crate::Limits, refuse_host: bool) {
+        self.refuse_host = refuse_host;
+        if let Some(bytes) = limits.memory {
+            self.heap.set_limit(bytes);
+        }
+        if limits.steps.is_some() || limits.time.is_some() {
+            self.meter = Some(Meter {
+                steps: limits.steps,
+                deadline: limits.time.and_then(|t| std::time::Instant::now().checked_add(t)),
+                over: None,
+            });
+        }
+    }
+
+    /// The budget the program has used up, if it has used one up.
+    pub fn over_budget(&self) -> Option<loom_sys::Budget> {
+        self.meter.as_ref().and_then(|m| m.over)
+    }
+
+    /// The check every [`crate::TICKS`] loop iterations and calls: whether
+    /// the program should stop now, and with what. Out of the dispatch
+    /// loop's way.
+    #[cold]
+    #[inline(never)]
+    pub fn checkpoint(&mut self) -> Option<Trap> {
+        if self.interrupted() {
+            return Some(Trap::Interrupt);
+        }
+        let m = self.meter.as_mut()?;
+        // Out of a budget before: it's unwinding, and still running a
+        // whole chunk of ticks later.
+        if let Some(budget) = m.over {
+            return Some(Trap::Budget { budget, abort: true });
+        }
+        let mut over = None;
+        if let Some(steps) = &mut m.steps {
+            match steps.checked_sub(crate::TICKS) {
+                Some(left) => *steps = left,
+                None => {
+                    *steps = 0;
+                    over = Some(loom_sys::Budget::Steps);
+                }
+            }
+        }
+        if over.is_none() && m.deadline.is_some_and(|d| std::time::Instant::now() >= d) {
+            over = Some(loom_sys::Budget::Time);
+        }
+        m.over = over;
+        over.map(|budget| Trap::Budget { budget, abort: false })
+    }
+
+    /// For a native that touches the machine: the error that refuses it, if
+    /// this run may not use it.
+    #[inline]
+    pub fn host_check(&self, native: &'static str) -> Result<(), Trap> {
+        if self.refuse_host { Err(Trap::Refused(native)) } else { Ok(()) }
     }
 
     /// Whether the program should stop now: it was interrupted and isn't
@@ -194,7 +271,10 @@ impl<'i> Ctx<'i> {
     /// Appends `bytes` to sink `h`.
     fn put(&mut self, h: u64, bytes: &[u8]) -> Result<(), Trap> {
         match h {
-            0 => self.write(bytes),
+            0 => {
+                self.host_check("out")?;
+                self.write(bytes)
+            }
             1 => self.msg.extend_from_slice(bytes),
             _ => match self.bufs.get_mut(h as usize - 2) {
                 Some(buf) => buf.extend_from_slice(bytes),
@@ -254,6 +334,7 @@ impl<'i> Ctx<'i> {
         };
         match h {
             0 => {
+                self.host_check("out")?;
                 let from = self.out.len();
                 fmt::write(&mut self.out, item, value);
                 self.written(from);
@@ -317,6 +398,7 @@ fn out_str(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     // SAFETY: `out.str` is passed a text value, which writing doesn't
     // touch: it's a literal or a heap object, not the output buffer.
     let text: *const [u8] = unsafe { ctx.text(args[0], args[1])? };
+    ctx.host_check("out")?;
     ctx.write(unsafe { &*text });
     Ok(())
 }

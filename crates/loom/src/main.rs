@@ -606,7 +606,8 @@ fn exit_code(outcome: &Outcome) -> ExitCode {
         Outcome::Finished => 0,
         Outcome::Unravel { .. } => EXIT_UNRAVEL,
         Outcome::Failed { .. } => EXIT_FAILED,
-        Outcome::Crash { .. } => EXIT_INTERNAL,
+        // Only compile-time code, run with limits and refusals, ends so.
+        Outcome::Crash { .. } | Outcome::OverBudget { .. } | Outcome::Refused { .. } => EXIT_INTERNAL,
         Outcome::Exit(code) => *code,
         Outcome::Interrupted => EXIT_INTERRUPTED,
     })
@@ -623,6 +624,10 @@ fn describe(outcome: &Outcome) -> Option<String> {
         Outcome::Failed { message } => format!("error: {message}\n"),
         Outcome::Crash { message, location } => format!(
             "internal error: {message}\n{}  = note: this is a bug in Loom, not in your program\n",
+            location_text(location.as_ref())
+        ),
+        Outcome::OverBudget { location, .. } | Outcome::Refused { location, .. } => format!(
+            "internal error: a run was stopped by compile-time limits\n{}  = note: this is a bug in Loom, not in your program\n",
             location_text(location.as_ref())
         ),
     })

@@ -46,6 +46,17 @@ pub struct Location {
     pub column: u32,
 }
 
+/// What compile-time code may use up (design/vm.md §9.5, §17: V4).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Budget {
+    /// Loop iterations and calls (the VM's ticks).
+    Steps,
+    /// Wall-clock time.
+    Time,
+    /// Bytes allocated at once.
+    Memory,
+}
+
 /// How a run ended.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Outcome {
@@ -66,6 +77,19 @@ pub enum Outcome {
     /// Something that isn't the program's fault: a bug in Loom itself.
     Crash {
         message: String,
+        location: Option<Location>,
+    },
+    /// Compile-time code used more than its budget, where it was stopped.
+    OverBudget {
+        budget: Budget,
+        location: Option<Location>,
+    },
+    /// Compile-time code reached something that touches the machine
+    /// (output, the environment, files, time, the terminal): `native` says
+    /// which family (`out`, `env`, `fs`, `time`, `term`) and, where it
+    /// matters, which one (`env.get`).
+    Refused {
+        native: String,
         location: Option<Location>,
     },
 }

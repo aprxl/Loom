@@ -27,7 +27,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use loom_isa::{CRASHES, Image, IntSpec};
-use loom_sys::{Host, Location, Outcome};
+use loom_sys::{Budget, Host, Location, Outcome};
 
 /// How a run may use the machine.
 #[derive(Clone, Debug)]
@@ -38,13 +38,44 @@ pub struct Config {
     /// Set from outside (Ctrl-C) to stop the program at its next loop
     /// iteration or call.
     pub interrupt: Option<Arc<AtomicBool>>,
+    /// What the program may use up: none, unless it's compile-time code.
+    pub limits: Limits,
+    /// Compile-time code: the natives that touch the machine (output, the
+    /// environment, files, time, the terminal) end the run with
+    /// [`Outcome::Refused`] instead of working (or being faked, as in a
+    /// sandboxed run).
+    pub refuse_host: bool,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Config { stack_limit: 256 << 20, interrupt: None }
+        Config { stack_limit: 256 << 20, interrupt: None, limits: Limits::default(), refuse_host: false }
     }
 }
+
+/// What a run may use up before it's stopped with [`Outcome::OverBudget`]
+/// (design/vm.md §9.5). All are checked where Ctrl-C is, every [`TICKS`]
+/// loop iterations and calls, so the hot path pays nothing for them, and
+/// each is exact only to that: a run overshoots by up to 65 536 ticks, and
+/// by the time those take.
+///
+/// The counts persist across calls of one [`Vm`]: the budget is for all the
+/// jobs of one compile, not for each.
+///
+/// [`TICKS`]: crate::TICKS
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Limits {
+    /// Loop iterations and calls in all (counted in chunks of 65 536).
+    pub steps: Option<u64>,
+    /// Wall-clock time from when the [`Vm`] is made.
+    pub time: Option<std::time::Duration>,
+    /// Bytes allocated at once: past it, an allocation ends the run.
+    pub memory: Option<u64>,
+}
+
+/// Loop iterations and calls between the checks for Ctrl-C and budgets: the
+/// unit [`Limits::steps`] is counted in.
+pub const TICKS: u64 = 1 << 16;
 
 /// Why a program stopped early.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -65,6 +96,17 @@ pub(crate) enum Trap {
     OutOfMemory,
     StackOverflow,
     Interrupt,
+    /// Compile-time code used up `budget`. The first time it unwinds (what
+    /// the program owns is freed and its `defer`s run); if it's still
+    /// running at the next check (a `defer` that never ends), `abort` is
+    /// set, and nothing more runs.
+    Budget {
+        budget: Budget,
+        abort: bool,
+    },
+    /// Compile-time code reached a native that touches the machine (see
+    /// [`Config::refuse_host`]): the native's name, or its family's.
+    Refused(&'static str),
     /// `process.exit(code)`: unwinds as an unravel does, then ends the run.
     Exit(u8),
     Unravel(String),
@@ -87,6 +129,8 @@ impl Trap {
             Trap::OutOfMemory => "out of memory".into(),
             Trap::StackOverflow => "stack overflow: too many calls inside each other".into(),
             Trap::Interrupt => "interrupted (Ctrl-C)".into(),
+            Trap::Budget { .. } => "compile-time code used more than its budget".into(),
+            Trap::Refused(native) => format!("`{native}` can't run at compile time"),
             Trap::Exit(code) => format!("exit {code}"),
             Trap::Unravel(message) | Trap::Failed(message) | Trap::Crash(message) => message.clone(),
         }
@@ -127,6 +171,9 @@ pub struct Vm<'i> {
     /// Where frames of the trace were left out: how many come before the
     /// gap, and how many calls it stands for.
     gap: Option<(usize, usize)>,
+    /// A memory limit was set: running out of memory is running out of
+    /// budget.
+    memory_limited: bool,
 }
 
 impl<'i> Vm<'i> {
@@ -137,7 +184,7 @@ impl<'i> Vm<'i> {
         }
         let machine =
             exec::Machine::load(image, host, config).map_err(|message| Outcome::Crash { message, location: None })?;
-        Ok(Vm { image, machine, trace: Vec::new(), gap: None })
+        Ok(Vm { image, machine, trace: Vec::new(), gap: None, memory_limited: config.limits.memory.is_some() })
     }
 
     /// The frames the last unravel happened in, innermost first: each
@@ -174,7 +221,10 @@ impl<'i> Vm<'i> {
             Ok(_) => Outcome::Finished,
             Err(outcome) => outcome,
         };
-        if matches!(outcome, Outcome::Crash { .. }) {
+        // An internal error, or a run cut off for its budget (which isn't
+        // unwound if it kept running): nothing about its state can be
+        // trusted.
+        if matches!(outcome, Outcome::Crash { .. } | Outcome::OverBudget { .. }) {
             return outcome;
         }
         self.leaks().unwrap_or(outcome)
@@ -207,10 +257,51 @@ impl<'i> Vm<'i> {
         cfg!(feature = "stats").then_some(self.machine.ctx.pc_counts.as_slice())
     }
 
+    /// The program's data as it is now: the image's, plus what running
+    /// changed (a constant's flag and value, once computed). Word `i` is at
+    /// address [`data_addr`](Self::data_addr) `+ 8 * i`.
+    pub fn data(&self) -> &[u64] {
+        self.machine.data()
+    }
+
+    /// The address of the first word of [`data`](Self::data), which is what
+    /// a pointer into the data holds (`gaddr` yields it plus an offset).
+    pub fn data_addr(&self) -> u64 {
+        self.machine.data().as_ptr() as u64
+    }
+
+    /// The text literals of the image: where they are in memory, so a
+    /// `str` pointing into them can be told from one in the heap.
+    pub fn rodata_range(&self) -> (u64, u64) {
+        self.machine.ctx.rodata_range()
+    }
+
+    /// Reads `len` bytes at `addr`.
+    ///
+    /// # Safety
+    ///
+    /// `addr` must be an address the program holds: of its data, one of the
+    /// image's text literals, or a live object of at least `len` bytes (a
+    /// pointer read out of a value of a type whose layout says it points
+    /// there, and that the program hasn't freed). The result is only valid
+    /// until the next call of this [`Vm`].
+    #[allow(unsafe_code)]
+    pub unsafe fn read(&self, addr: u64, len: usize) -> &[u8] {
+        if len == 0 {
+            return &[];
+        }
+        // SAFETY: the caller promises it.
+        unsafe { std::slice::from_raw_parts(addr as *const u8, len) }
+    }
+
     /// Calls function `func` with `args`, one register each, and gives its
     /// results; or how it ended when it didn't return. Output is flushed
     /// before this returns.
     pub fn call(&mut self, func: u32, args: &[u64]) -> Result<Vec<u64>, Outcome> {
+        // A run that has used up its budget runs nothing more.
+        if let Some(budget) = self.machine.ctx.over_budget() {
+            return Err(Outcome::OverBudget { budget, location: None });
+        }
         let result = self.machine.call(func as usize, args);
         self.machine.ctx.flush();
         // Raw mode left on (an unravel on the way out) is turned off.
@@ -240,6 +331,9 @@ impl<'i> Vm<'i> {
                 Trap::Failed(message) => Outcome::Failed { message },
                 Trap::Exit(code) => Outcome::Exit(code),
                 Trap::Interrupt => Outcome::Interrupted,
+                Trap::Budget { budget, .. } => Outcome::OverBudget { budget, location },
+                Trap::OutOfMemory if self.memory_limited => Outcome::OverBudget { budget: Budget::Memory, location },
+                Trap::Refused(native) => Outcome::Refused { native: native.into(), location },
                 trap => Outcome::Unravel { message: trap.message(), location },
             }
         })

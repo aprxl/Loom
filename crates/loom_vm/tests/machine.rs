@@ -8,8 +8,8 @@ use std::sync::atomic::AtomicBool;
 use loom_isa::image::Pad;
 use loom_isa::word::{word, word_i32};
 use loom_isa::{FmtItem, Func, Image, IntSpec, Line, NO_SITE, Op, ValueKind};
-use loom_sys::{Host, Location, Outcome};
-use loom_vm::{Config, run};
+use loom_sys::{Budget, Host, Location, Outcome};
+use loom_vm::{Config, Limits, Vm, run};
 
 /// Functions as (name, frame, params, results, code), laid out one after
 /// another. The first is the entry.
@@ -406,4 +406,138 @@ fn the_checked_build_catches_leaks_and_bad_frees() {
     past.extend([word(Op::Ld64, 1, 0, 16), word(Op::Ret, 0, 0, 0)]);
     let (outcome, _) = exec(&image(vec![("main", 3, 0, 0, past)]), &Config::default());
     assert!(matches!(&outcome, Outcome::Crash { message, .. } if message.contains("bad memory access")), "{outcome:?}");
+}
+
+// Budgets, refusals and readback: what compile-time code runs under
+// (design/vm.md §9.5, §17: V4).
+
+fn limited(limits: Limits) -> Config {
+    Config { limits, ..Config::default() }
+}
+
+#[test]
+fn a_step_budget_stops_an_endless_loop() {
+    let code = vec![word_i32(Op::Loop, 0, 0)];
+    let config = limited(Limits { steps: Some(1 << 20), ..Limits::default() });
+    let (outcome, _) = exec(&image(vec![("main", 1, 0, 0, code)]), &config);
+    assert!(matches!(outcome, Outcome::OverBudget { budget: Budget::Steps, .. }), "{outcome:?}");
+}
+
+#[test]
+fn a_time_budget_stops_an_endless_loop() {
+    let code = vec![word_i32(Op::Loop, 0, 0)];
+    let config = limited(Limits { time: Some(std::time::Duration::from_millis(50)), ..Limits::default() });
+    let start = std::time::Instant::now();
+    let (outcome, _) = exec(&image(vec![("main", 1, 0, 0, code)]), &config);
+    assert!(matches!(outcome, Outcome::OverBudget { budget: Budget::Time, .. }), "{outcome:?}");
+    assert!(start.elapsed() < std::time::Duration::from_secs(5));
+}
+
+/// `spin(n)`: loops `n` times.
+fn spin() -> (&'static str, u16, u16, u16, Vec<u64>) {
+    // r0: n, r1: 0, r2: 1.
+    let code = vec![
+        word_i32(Op::Ldi, 1, 0),
+        word(Op::JEq, 0, 1, 4),
+        word_i32(Op::Ldi, 2, 1),
+        word(Op::SubTI64, 0, 0, 2),
+        word_i32(Op::Loop, 0, -3),
+        word(Op::Ret, 0, 0, 0),
+    ];
+    ("spin", 3, 1, 0, code)
+}
+
+#[test]
+fn steps_add_up_across_calls() {
+    // Each call is well under one chunk of ticks (65 536), so none of them
+    // would reach a check on its own: together they pass the budget, which
+    // is two chunks, within one chunk of it.
+    let img = image(vec![("main", 1, 0, 0, vec![word(Op::Ret, 0, 0, 0)]), spin()]);
+    let config = limited(Limits { steps: Some(2 * loom_vm::TICKS), ..Limits::default() });
+    let mut vm = Vm::new(&img, Host::captured(Rc::new(RefCell::new(Vec::new()))), &config).expect("loads");
+    let mut failed_at = None;
+    for call in 1..=20 {
+        match vm.call(1, &[20_000]) {
+            Ok(_) => {}
+            Err(outcome) => {
+                assert!(matches!(outcome, Outcome::OverBudget { budget: Budget::Steps, .. }), "{outcome:?}");
+                failed_at = Some(call);
+                break;
+            }
+        }
+    }
+    // 20 000 ticks a call: past 2 chunks (131 072) in the 7th, and the
+    // third check, which is where it stops, is in the 10th.
+    let at = failed_at.expect("the budget ran out");
+    assert!((7..=10).contains(&at), "stopped in call {at}");
+    // Once out, nothing more runs.
+    assert!(matches!(vm.call(1, &[1]), Err(Outcome::OverBudget { budget: Budget::Steps, .. })));
+}
+
+#[test]
+fn without_limits_steps_are_free() {
+    let img = image(vec![("main", 1, 0, 0, vec![word(Op::Ret, 0, 0, 0)]), spin()]);
+    let mut vm = Vm::new(&img, Host::captured(Rc::new(RefCell::new(Vec::new()))), &Config::default()).expect("loads");
+    for _ in 0..50 {
+        vm.call(1, &[100_000]).expect("finishes");
+    }
+}
+
+#[test]
+fn a_memory_budget_stops_allocation() {
+    // 1 MiB at a time, never freed.
+    let code = vec![
+        word_i32(Op::Ldi, 0, 1 << 20),
+        word_i32(Op::Ldi, 1, 8),
+        word(Op::CallN, 0, ALLOC, 0),
+        word_i32(Op::Loop, 0, -3),
+    ];
+    let config = limited(Limits { memory: Some(64 << 20), ..Limits::default() });
+    let (outcome, _) = exec(&image(vec![("main", 2, 0, 0, code)]), &config);
+    assert!(matches!(outcome, Outcome::OverBudget { budget: Budget::Memory, .. }), "{outcome:?}");
+}
+
+#[test]
+fn a_defer_that_never_ends_is_aborted() {
+    // The first check over budget unwinds to the pad, which loops forever:
+    // the next check stops it for good.
+    let code =
+        vec![word_i32(Op::Loop, 0, 0), word(Op::Ret, 0, 0, 0), word_i32(Op::Loop, 0, 0), word(Op::Resume, 0, 0, 0)];
+    let mut img = image(vec![("main", 1, 0, 0, code)]);
+    img.funcs[0].pads = vec![Pad { start: 0, end: 1, pad: 2 }];
+    let config = limited(Limits { steps: Some(1 << 16), ..Limits::default() });
+    let (outcome, _) = exec(&img, &config);
+    assert!(matches!(outcome, Outcome::OverBudget { budget: Budget::Steps, .. }), "{outcome:?}");
+}
+
+#[test]
+fn compile_time_code_is_refused_the_machine() {
+    let refusing = Config { refuse_host: true, ..Config::default() };
+    // Output.
+    let (outcome, out) = exec(&image(vec![main_printing(25), fib()]), &refusing);
+    assert_eq!(out, "");
+    assert!(matches!(&outcome, Outcome::Refused { native, .. } if native == "out"), "{outcome:?}");
+    // A host native (`time.sleep`), which a sandboxed run only fakes.
+    let mut img =
+        image(vec![("main", 1, 0, 0, vec![word_i32(Op::Ldi, 0, 5), word(Op::CallN, 0, 8, 0), word(Op::Ret, 0, 0, 0)])]);
+    img.natives.push("time.sleep".into());
+    let (outcome, _) = exec(&img, &refusing);
+    assert!(
+        matches!(&outcome, Outcome::Refused { native, location: Some(_) } if native == "time.sleep"),
+        "{outcome:?}"
+    );
+    let (outcome, _) = exec(&img, &Config::default());
+    assert_eq!(outcome, Outcome::Finished);
+}
+
+#[test]
+fn the_data_can_be_read_back() {
+    let mut img = image(vec![("main", 1, 0, 0, vec![word(Op::Ret, 0, 0, 0)])]);
+    img.data = vec![7, 0x0102_0304_0506_0708];
+    let vm = Vm::new(&img, Host::captured(Rc::new(RefCell::new(Vec::new()))), &Config::default()).expect("loads");
+    assert_eq!(vm.data(), &[7, 0x0102_0304_0506_0708]);
+    // SAFETY: the address is the data's second word.
+    #[allow(unsafe_code)]
+    let bytes = unsafe { vm.read(vm.data_addr() + 8, 8) };
+    assert_eq!(bytes, &0x0102_0304_0506_0708u64.to_le_bytes());
 }

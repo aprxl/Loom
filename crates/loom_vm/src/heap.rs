@@ -52,6 +52,9 @@ fn class_of(size: u64) -> (usize, u64) {
 pub(crate) struct Heap {
     /// Bytes allocated and not yet freed.
     live: u64,
+    /// The most `live` may be: [`LIMIT`], or what compile-time code is
+    /// given.
+    limit: u64,
     /// With `checked`: every live object, by address, with its size.
     objects: BTreeMap<u64, u64>,
     /// Each size class's free objects, as a list through the objects
@@ -67,7 +70,7 @@ pub(crate) struct Heap {
 
 impl Default for Heap {
     fn default() -> Heap {
-        Heap { live: 0, objects: BTreeMap::new(), free: [0; CLASSES], next: 0, end: 0, pages: Vec::new() }
+        Heap { live: 0, limit: LIMIT, objects: BTreeMap::new(), free: [0; CLASSES], next: 0, end: 0, pages: Vec::new() }
     }
 }
 
@@ -83,6 +86,12 @@ impl Drop for Heap {
 }
 
 impl Heap {
+    /// Allows `bytes` to be live at once (at most [`LIMIT`]): for
+    /// compile-time code, before it allocates anything.
+    pub fn set_limit(&mut self, bytes: u64) {
+        self.limit = bytes.min(LIMIT);
+    }
+
     fn layout(size: u64, align: u64) -> Option<Layout> {
         Layout::from_size_align(usize::try_from(size).ok()?, usize::try_from(align.max(1)).ok()?).ok()
     }
@@ -101,7 +110,7 @@ impl Heap {
         if size == 0 {
             return Ok(align.max(1));
         }
-        if size > LIMIT - self.live {
+        if size > self.limit - self.live {
             return Err(Trap::OutOfMemory);
         }
         let ptr = if Self::is_small(size, align) { self.alloc_small(size)? } else { Self::alloc_big(size, align)? };
@@ -190,7 +199,7 @@ impl Heap {
             self.free(ptr, old, align)?;
             return Ok(align.max(1));
         }
-        if new > old && new - old > LIMIT - self.live {
+        if new > old && new - old > self.limit - self.live {
             return Err(Trap::OutOfMemory);
         }
         if cfg!(feature = "checked") && self.objects.get(&ptr) != Some(&old) {
@@ -198,7 +207,7 @@ impl Heap {
         }
         // Still the same class: it fits where it is.
         if Self::is_small(old, align) && Self::is_small(new, align) && class_of(old).1 == class_of(new).1 {
-            if new > old && new - old > LIMIT - self.live {
+            if new > old && new - old > self.limit - self.live {
                 return Err(Trap::OutOfMemory);
             }
             self.live = self.live - old + new;
