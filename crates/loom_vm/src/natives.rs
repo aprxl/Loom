@@ -249,7 +249,12 @@ impl<'i> Ctx<'i> {
     /// `ptr` and `len` must be a text value the compiler built: the address
     /// and length of text that lives at least as long as `self`.
     pub unsafe fn text(&self, ptr: u64, len: u64) -> Result<&[u8], Trap> {
-        if cfg!(feature = "checked") && len > 0 {
+        // An empty text may have any address (a header's, zeroed, even):
+        // never make a slice of it.
+        if len == 0 {
+            return Ok(&[]);
+        }
+        if cfg!(feature = "checked") {
             let range = self.rodata.as_ptr_range();
             let (start, end) = (range.start as u64, range.end as u64);
             let literal = ptr >= start && ptr.checked_add(len).is_some_and(|e| e <= end);

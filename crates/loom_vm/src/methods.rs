@@ -541,15 +541,29 @@ fn map_find_str(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 #[unsafe(export_name = "loom_treadle_map_find_int")]
 fn map_find_int(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let word = args[1];
-    let (koff, bytes, esize) = (args[2] & 0xFFFF, (args[2] >> 16) & 0xFFFF, args[2] >> 32);
-    debug_assert!(bytes <= 8, "a one-word key is at most 8 bytes");
+    // A one-word key is 1, 2, 4 or 8 bytes (an integer's storage); any other
+    // size is read the long way, and never past a word.
+    let (koff, bytes, esize) = (args[2] & 0xFFFF, ((args[2] >> 16) & 0xFFFF).min(8), args[2] >> 32);
     let mask = if bytes >= 8 { u64::MAX } else { (1u64 << (bytes * 8)) - 1 };
     let h = key_hash(word);
+    let wanted = word & mask;
     let e = probe(args[0], h, esize, |entry| {
+        let at = (entry + koff) as *const u8;
         // SAFETY: an entry's key is `bytes` bytes at its offset.
-        let mut v = [0u8; 8];
-        unsafe { std::ptr::copy_nonoverlapping((entry + koff) as *const u8, v.as_mut_ptr(), bytes as usize) };
-        u64::from_le_bytes(v) == word & mask
+        let key = unsafe {
+            match bytes {
+                1 => u64::from(at.read()),
+                2 => u64::from((at as *const u16).read_unaligned()),
+                4 => u64::from((at as *const u32).read_unaligned()),
+                8 => (at as *const u64).read_unaligned(),
+                n => {
+                    let mut v = [0u8; 8];
+                    std::ptr::copy_nonoverlapping(at, v.as_mut_ptr(), n as usize);
+                    u64::from_le_bytes(v)
+                }
+            }
+        };
+        key == wanted
     });
     args[0] = e;
     args[1] = h;
