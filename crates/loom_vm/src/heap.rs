@@ -48,19 +48,27 @@ fn class_of(size: u64) -> (usize, u64) {
     (16 + (p as usize - 8) * 4 + (k as usize - 1), (1 << p) + k * step)
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct Heap {
     /// Bytes allocated and not yet freed.
     live: u64,
     /// With `checked`: every live object, by address, with its size.
     objects: BTreeMap<u64, u64>,
-    /// Each size class's free objects.
-    free: Vec<Vec<u64>>,
+    /// Each size class's free objects, as a list through the objects
+    /// themselves (the first word of a free one is the next's address, 0
+    /// at the end): every object is at least 16 bytes.
+    free: [u64; CLASSES],
     /// Where the page being carved from is free, to its end.
     next: u64,
     end: u64,
     /// Every page, to give back when the heap goes.
     pages: Vec<u64>,
+}
+
+impl Default for Heap {
+    fn default() -> Heap {
+        Heap { live: 0, objects: BTreeMap::new(), free: [0; CLASSES], next: 0, end: 0, pages: Vec::new() }
+    }
 }
 
 impl Drop for Heap {
@@ -106,11 +114,12 @@ impl Heap {
 
     fn alloc_small(&mut self, size: u64) -> Result<u64, Trap> {
         let (class, bytes) = class_of(size);
-        if self.free.len() < CLASSES {
-            self.free.resize_with(CLASSES, Vec::new);
-        }
-        if let Some(p) = self.free[class].pop() {
-            return Ok(p);
+        let head = self.free[class];
+        if head != 0 {
+            // SAFETY: a free object of this class: at least 16 bytes the
+            // heap owns, whose first word is the next one (see `free`).
+            self.free[class] = unsafe { (head as *const u64).read() };
+            return Ok(head);
         }
         if self.end - self.next < bytes {
             let layout = Layout::from_size_align(PAGE as usize, SMALL_ALIGN as usize).expect("a valid layout");
@@ -152,7 +161,10 @@ impl Heap {
         }
         if Self::is_small(size, align) {
             let (class, _) = class_of(size);
-            self.free[class].push(ptr);
+            // SAFETY: `ptr` is a live object of this class (at least 16
+            // bytes, 16-aligned) being given back: nothing reads it now.
+            unsafe { (ptr as *mut u64).write(self.free[class]) };
+            self.free[class] = ptr;
         } else {
             let layout = Self::layout(size, align).ok_or_else(|| Trap::Crash("freeing with a bad layout".into()))?;
             // SAFETY: `ptr` was allocated with this layout (the compiler
