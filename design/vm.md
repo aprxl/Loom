@@ -1415,7 +1415,7 @@ losing a function's frame (fixtures `unravel_after_block`,
 backends. `process.exit(n)` and Ctrl-C unwind the program (its `defer`s
 run) before it exits with `n` or 130.
 
-### V2: shuttles (about 3k)
+### V2: shuttles (about 3k) — done
 
 Frontend first: D5's typing (calling a shuttle function gives its frame type,
 erased where it has to be), `f.Frame.size`, and projections (`~> mut T`,
