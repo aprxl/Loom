@@ -1,0 +1,19 @@
+// Compile-time code in a default value (a field's, a parameter's) is
+// checked where the default is used, and run like any other: a false
+// `const assert` there is an error, not something that goes unnoticed.
+
+use std.io.print
+
+warp Cfg {
+    limit: u32 = {
+        const assert(1 == 2, "in a field default")       //~ K0101
+        4
+    }
+}
+
+fn g(x: i32 = { const assert(1 + 1 == 3, "in a parameter default"); 1 }) -> i32 = x   //~ K0101
+
+fn main() {
+    print(Cfg().limit)
+    print(g())
+}

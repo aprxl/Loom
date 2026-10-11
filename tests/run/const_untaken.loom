@@ -1,0 +1,19 @@
+// A branch `const if` doesn't take isn't checked, so what compile-time code
+// it holds doesn't run: its `const assert` isn't a failure, and doesn't
+// even need to be true.
+
+use std.io.print
+
+fn fib(n: u32) -> u32 = if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+
+fn f() -> u32 {
+    const if false {
+        const assert(false, "never checked")
+        const fib(1_000_000_000)
+    }
+    const fib(6)
+}
+
+fn main() {
+    print(f())
+}

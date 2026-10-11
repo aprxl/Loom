@@ -1577,6 +1577,21 @@ halves that share a readback: *running* jobs, and *baking* their values.
      byte strings as `\ddd`, a `nil` constant (not a table field), and
      nesting deep enough to hit the parser's C-stack limit (such a
      constant stays lazy). Everything stays inside 5.4 ∩ 5.5.
+   *Built* (2026-10-11, steps 2–4): the jobs are found from what typeck
+   recorded (`Results::const_exprs`, the exact `(body, expression)` pairs it
+   checked, so a branch `const if` doesn't take has none) and from the
+   reachable typed constants, read or not; `heddle::build_jobs` builds only
+   what they reach, as one module whose roots are the jobs; `consteval.rs`
+   runs it on a VM with `refuse_host` and a 100 M tick, 1 GiB and 20 s
+   budget. Cycles and failures go through the flag word's four states and
+   marker unravels. A job image is `-O0`: `-O2` wasn't faster. The program is
+   still built separately afterwards, so its image is what it was; reusing
+   the job module is left to step 5, where baked values make it matter.
+   `loom_compiler` depends on `loom_vm`, and on `loom_host` only for its
+   tests. The numbers are in `bench/RESULTS.md`: 239 ms against 495 ms over
+   the corpus, and the heaviest file uses 5.8 M of the 100 M ticks.
+   Open for step 5: the job VM never runs `ConstExit`, so what constants
+   allocate (big objects) is only freed with the process.
 6. **Docs**: this section, §5.1, §10.16, `design/lua-backend.md`'s
    constants, `docs/`, and AGENTS.md's status.
 

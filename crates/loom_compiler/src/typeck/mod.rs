@@ -163,10 +163,12 @@ pub struct Results {
     /// `const` items (`const assert(…)` at the top of a module or in a
     /// warp) left for the sandbox to run, in the order they were checked.
     pub const_blocks: Vec<BodyId>,
-    /// The bodies that have a `const` expression, in the order they were
-    /// checked (one may be there more than once): where compile-time code
-    /// is found without lowering the whole program (V4).
-    pub const_bodies: Vec<BodyId>,
+    /// Each `const` expression checked, by the body it was checked in and
+    /// its id, in the order they were checked (one may be there more than
+    /// once: a `const for` checks its body for each item). A `const` in a
+    /// branch that isn't taken isn't here, and one in a field's or a
+    /// parameter's default is, in the body that used the default.
+    pub const_exprs: Vec<(BodyId, crate::hir::HirId)>,
     /// What each instance checked for particular types (or values) is, for
     /// messages: `` `zeros` with `n = 4` ``, `` `Ring[u32, 4]` ``.
     pub instance_names: HashMap<BodyId, String>,

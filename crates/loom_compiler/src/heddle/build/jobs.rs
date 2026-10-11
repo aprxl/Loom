@@ -19,13 +19,14 @@
 use std::collections::HashMap;
 
 use loom_syntax::Diagnostic;
+use loom_syntax::diag::codes;
 use loom_syntax::source::Span;
 
 use super::consts::ConstKey;
 use super::scan::{Node, children};
 use super::{Builder, FnKey};
 use crate::heddle::{FuncId, Module};
-use crate::hir::{self, DefId, DefKind, ExprKind, Program, StmtKind};
+use crate::hir::{self, DefId, DefKind, ExprKind, HirId, Program, StmtKind};
 use crate::typeck::{BodyId, Typed, assert_args};
 
 /// What a job does.
@@ -105,39 +106,58 @@ pub fn build_jobs(p: &Program, typed: &Typed, tests: bool) -> Result<Option<Jobs
         jobs.push(Job { kind: JobKind::Const { def, slot }, span, body: id, func });
     }
 
-    // `const` expressions and `const assert`s, in the bodies that have them.
-    let mut found: Vec<(BodyId, &hir::Expr)> = Vec::new();
-    let mut seen: Vec<BodyId> = Vec::new();
-    for &id in &results.const_bodies {
-        if seen.contains(&id) {
-            continue;
+    // `const` expressions and `const assert`s: those typeck checked, each by
+    // the body it was checked in. Typeck gives ids, and finding what they
+    // are means looking at the code that holds them: first the bodies they
+    // were checked in, and if one's not there (a field's or a parameter's
+    // default is checked in the body that used it), at everything.
+    let mut wanted: Vec<(BodyId, HirId)> = Vec::new();
+    for &(body, id) in &results.const_exprs {
+        if !wanted.contains(&(body, id)) {
+            wanted.push((body, id));
         }
-        seen.push(id);
-        let def = results.instance(id).def;
+    }
+    let mut index: HashMap<HirId, &hir::Expr> = HashMap::new();
+    let mut walked: Vec<DefId> = Vec::new();
+    for &(body, _) in &wanted {
+        let def = results.instance(body).def;
+        if !walked.contains(&def) {
+            walked.push(def);
+            index_consts(&p.def(def).kind, &mut index);
+        }
+    }
+    if wanted.iter().any(|(_, id)| !index.contains_key(id)) {
+        for def in &p.defs {
+            index_consts(&def.kind, &mut index);
+        }
+    }
+    let mut found: Vec<(BodyId, &hir::Expr)> = Vec::new();
+    for (body, id) in wanted {
+        let def = results.instance(body).def;
         if !tests && is_test(def) {
             continue;
         }
-        let mut exprs = Vec::new();
-        match &p.def(def).kind {
-            DefKind::Fn(f) => {
-                exprs.extend(f.body.as_ref());
-                exprs.extend(f.params.iter().filter_map(|param| param.default.as_ref()));
-            }
-            DefKind::Const(c) => exprs.push(&c.value),
-            _ => {}
-        }
-        for e in exprs {
-            consts_in(e, &mut |c| found.push((id, c)));
+        match index.get(&id) {
+            Some(&e) => found.push((body, e)),
+            None => b.diags.push(
+                Diagnostic::error(codes::U0102, "internal error: compile-time code was checked but can't be found")
+                    .primary(p.def(def).span, "while looking for what runs while compiling in this")
+                    .note("this is a bug in Loom, not in your program"),
+            ),
         }
     }
     // `const` items at the top of a module or in a warp.
     for &id in &results.const_blocks {
         let def = results.instance(id).def;
         if let DefKind::ConstBlock(e) = &p.def(def).kind {
-            consts_in(e, &mut |c| found.push((id, c)));
+            found.push((id, e));
         }
     }
+    let mut done: std::collections::HashSet<(BodyId, HirId)> = std::collections::HashSet::new();
     for (id, e) in found {
+        if !done.insert((id, e.id)) {
+            continue;
+        }
         let ExprKind::Const(inner) = &e.kind else { continue };
         b.main_span.get_or_insert(e.span);
         if let Some(args) = assert_args(p, inner) {
@@ -183,6 +203,29 @@ pub fn build_jobs(p: &Program, typed: &Typed, tests: bool) -> Result<Option<Jobs
     let mut module = b.finish(roots[0])?;
     module.roots = roots;
     Ok(Some(Jobs { module, jobs, slots }))
+}
+
+/// Every `const` expression in the code `kind` holds, by its id: a
+/// function's body and parameters' defaults, a constant's value, a
+/// `const` block, a field's default, a gauge's predicate.
+fn index_consts<'e>(kind: &'e DefKind, index: &mut HashMap<HirId, &'e hir::Expr>) {
+    let mut roots: Vec<&'e hir::Expr> = Vec::new();
+    match kind {
+        DefKind::Fn(f) => {
+            roots.extend(f.body.as_ref());
+            roots.extend(f.params.iter().filter_map(|param| param.default.as_ref()));
+        }
+        DefKind::Const(c) => roots.push(&c.value),
+        DefKind::ConstBlock(e) => roots.push(e),
+        DefKind::Field(f) => roots.extend(f.default.as_ref()),
+        DefKind::Type(t) => roots.extend(t.gauge.as_ref()),
+        _ => {}
+    }
+    for root in roots {
+        consts_in(root, &mut |c| {
+            index.insert(c.id, c);
+        });
+    }
 }
 
 /// Calls `found` with each `const` expression in `e`, outermost first and

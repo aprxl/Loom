@@ -116,9 +116,14 @@ impl<'a> Builder<'a> {
     /// The init function of constant `key`: computes its value at the
     /// address it's given, and marks it computed.
     pub(super) fn const_init(&mut self, key: ConstKey) -> Option<Vec<VTy>> {
-        let (body, value) = self.const_source(key)?;
+        let Some((body, value)) = self.const_source(key) else {
+            let span = self.here();
+            return self.internal(span, "a constant's code isn't known");
+        };
         let span = value.span;
-        let ty = self.const_ty(key)?;
+        let Some(ty) = self.const_ty(key) else {
+            return self.internal(span, "a constant's type isn't known");
+        };
         self.f.body = body;
         self.f.scan = self.scan(body, value);
         let dst = self.new_value(VTy::Ptr);

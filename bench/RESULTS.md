@@ -244,3 +244,38 @@ fixtures that type-check): **495.19 ms in all.**
 
 Everything else is under 2 ms: starting the sandbox's Lua VM and loading
 `RT_CORE` is most of that.
+
+## V4 step 3: compile-time code on Treadle (2026-10-11)
+
+Same measurement as the baseline above (`cargo test --release -p loom --test
+compile_time -- --ignored --nocapture const_code`), with compile-time code
+run as jobs of one `-O0` image in an in-process Treadle VM.
+
+125 files: **238.72 ms in all**, against 495.19 ms on the Lua sandbox.
+
+| File | Lua sandbox | Treadle |
+|---|---|---|
+| `tests/fail/const_budget.loom` (the budget runs out, K0102) | 345.14 ms | 231.05 ms |
+| `tests/run/const_eval.loom` | 115.18 ms | 3.92 ms |
+| `examples/lexer.loom` | 2.45 ms | 1.58 ms |
+
+Everything else is under 0.4 ms: there's no Lua VM to start, and programs
+without compile-time code build nothing for it.
+
+- **The budget.** 100 M ticks (loop iterations and calls), 1 GiB, 20 s, as
+  before. The most any `tests/run` or `examples` file uses is 5.8 M ticks
+  (`const_heavy.loom`, which is made to be heavy; `const_eval.loom` uses
+  0.66 M): at least 17× headroom. `LOOM_CONST_STATS=1 loom check f.loom`
+  prints a file's. The budget fixture takes 231 ms to spend it: about 2.3 ns a
+  tick at `-O0`.
+- **`-O0` or `-O2` for the job image.** `loom check` of `const_budget`,
+  `const_eval`, `chip8` and `const_params`: 242/241, 16/19, 41/41 and 11/11 ms
+  at `-O0`/`-O2`. The images are tiny, so `-O0`.
+- **Against the old build as an oracle** (the Lua-sandbox `loom` at the
+  baseline commit), the full text of every diagnostic over `tests/fail`, the
+  compile-time doc samples, `tests/run/const*` and `examples` is the same but
+  for: a note naming the instruction the budget stopped at (new); the K0104
+  note's location being the call in the function rather than the constant's
+  line; `read_text` showing as `std.fs.read` (one native serves both); and
+  the old build *panicking* when the budget ran out (an mlua hook error in
+  the release build).

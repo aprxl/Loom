@@ -292,10 +292,8 @@ impl Checker<'_> {
             ExprKind::Pull => self.check_pull(span),
             ExprKind::Unsafe { .. } => self.unsupported(span, "`unsafe` blocks"),
             ExprKind::Const(inner) => {
-                if let Some(body) = self.cur_body
-                    && self.r.const_bodies.last() != Some(&body)
-                {
-                    self.r.const_bodies.push(body);
+                if let Some(body) = self.cur_body {
+                    self.r.const_exprs.push((body, e.id));
                 }
                 self.check_const_expr(span, inner, expected)
             }

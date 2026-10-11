@@ -99,11 +99,18 @@ impl<'a> Builder<'a> {
     /// condition holds; otherwise 1, with its message (empty if it has
     /// none) in the message sink. The message is only worked out then.
     pub(super) fn assert_job(&mut self, body: BodyId, e: HirId) -> Option<Vec<VTy>> {
-        let call = *self.asserts.get(&(body, e))?;
-        let args = crate::typeck::assert_args(self.p, call)?;
-        self.f.scan = self.scan(body, call);
-        let info = self.tables().calls.get(&call.id).cloned()?;
+        let Some(&call) = self.asserts.get(&(body, e)) else {
+            let span = self.here();
+            return self.internal(span, "a `const assert` to check isn't known");
+        };
         let span = call.span;
+        let Some(args) = crate::typeck::assert_args(self.p, call) else {
+            return self.internal(span, "a `const assert` isn't a call of `assert`");
+        };
+        self.f.scan = self.scan(body, call);
+        let Some(info) = self.tables().calls.get(&call.id).cloned() else {
+            return self.internal(span, "a `const assert` that wasn't checked");
+        };
         let cond = match info.args.first() {
             Some(ArgSource::Arg(i)) => self.value(&args[*i].value)?[0],
             _ => return self.unsupported(span, "this `assert`"),
