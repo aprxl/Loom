@@ -33,11 +33,13 @@ fn reg(value: Value) -> u64 {
 pub fn show(out: &mut Vec<u8>, kind: ValueKind, value: Value, debug: bool) {
     let r = reg(value);
     match kind {
-        ValueKind::Int(spec) => out.extend_from_slice(int_text(r, spec).as_bytes()),
-        ValueKind::F64 => out.extend_from_slice(float_text(f64::from_bits(r), false, debug).as_bytes()),
-        ValueKind::F32 => {
-            out.extend_from_slice(float_text(f64::from(f32::from_bits(r as u32)), true, debug).as_bytes())
+        ValueKind::Int(spec) => {
+            let mut digits = [0u8; 20];
+            let text = if spec.signed { itoa_i64(r as i64, &mut digits) } else { itoa_u64(r, &mut digits) };
+            out.extend_from_slice(text);
         }
+        ValueKind::F64 => float_into(out, f64::from_bits(r), false, debug),
+        ValueKind::F32 => float_into(out, f64::from(f32::from_bits(r as u32)), true, debug),
         ValueKind::Bool => out.extend_from_slice(if r != 0 { b"true" } else { b"false" }),
         ValueKind::Char => {
             let c = char::from_u32(r as u32).unwrap_or(char::REPLACEMENT_CHARACTER);
@@ -65,19 +67,46 @@ pub fn show(out: &mut Vec<u8>, kind: ValueKind, value: Value, debug: bool) {
     }
 }
 
-fn int_text(r: u64, spec: IntSpec) -> String {
-    if spec.signed { (r as i64).to_string() } else { r.to_string() }
+/// `v` in decimal, in the end of `buf`: the digits' bytes.
+fn itoa_u64(v: u64, buf: &mut [u8; 20]) -> &[u8] {
+    let at = digits_at(v, buf);
+    &buf[at..]
+}
+
+/// Writes `v`'s digits at the end of `buf`: where they start.
+fn digits_at(mut v: u64, buf: &mut [u8; 20]) -> usize {
+    let mut at = buf.len();
+    loop {
+        at -= 1;
+        buf[at] = b'0' + (v % 10) as u8;
+        v /= 10;
+        if v == 0 {
+            return at;
+        }
+    }
+}
+
+/// `v` in decimal: `-` and the digits, in a buffer of 20 bytes (`i64::MIN`
+/// is 19 digits and the sign).
+fn itoa_i64(v: i64, buf: &mut [u8; 20]) -> &[u8] {
+    let mut at = digits_at(v.unsigned_abs(), buf);
+    if v < 0 {
+        at -= 1;
+        buf[at] = b'-';
+    }
+    &buf[at..]
 }
 
 /// Rust's Display for a float, and in the debug form `.0` after a whole
 /// number. `single` is for an `f32`, shown with the digits that read back
 /// as the same `f32`.
-fn float_text(v: f64, single: bool, debug: bool) -> String {
-    let mut s = if single { (v as f32).to_string() } else { v.to_string() };
-    if debug && !s.bytes().any(|b| b == b'.' || b.is_ascii_alphabetic()) {
-        s.push_str(".0");
+fn float_into(out: &mut Vec<u8>, v: f64, single: bool, debug: bool) {
+    use std::io::Write as _;
+    let start = out.len();
+    let _ = if single { write!(out, "{}", v as f32) } else { write!(out, "{v}") };
+    if debug && !out[start..].iter().any(|&b| b == b'.' || b.is_ascii_alphabetic()) {
+        out.extend_from_slice(b".0");
     }
-    s
 }
 
 /// Text inside quotes in the debug form: the quote, `\` and control

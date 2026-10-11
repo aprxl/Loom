@@ -239,17 +239,39 @@ impl<'i> Ctx<'i> {
         Ok(())
     }
 
-    fn format(&self, into: &mut Vec<u8>, item: u16, args: &[u64]) -> Result<(), Trap> {
-        let item = &self.fmts[usize::from(item)];
+    /// Formats `args` as format item `item` says, onto the end of sink
+    /// `h`: written where it goes, with no buffer of its own.
+    fn format_into(&mut self, h: u64, item: u16, args: &[u64]) -> Result<(), Trap> {
+        let fmts = self.fmts;
+        let item = &fmts[usize::from(item)];
         let value = match args {
             // SAFETY: a two-register value to format is text (the verifier
-            // matched the native to the item's kind).
-            [ptr, len] => Value::Text(unsafe { self.text(*ptr, *len)? }),
+            // matched the native to the item's kind): a literal or a heap
+            // object, never a buffer of the context's.
+            [ptr, len] => Value::Text(unsafe { &*(self.text(*ptr, *len)? as *const [u8]) }),
             [r] => Value::Reg(*r),
             _ => Value::Reg(0),
         };
-        fmt::write(into, item, value);
+        match h {
+            0 => {
+                let from = self.out.len();
+                fmt::write(&mut self.out, item, value);
+                self.written(from);
+            }
+            1 => fmt::write(&mut self.msg, item, value),
+            _ => match self.bufs.get_mut(h as usize - 2) {
+                Some(buf) => fmt::write(buf, item, value),
+                None => return Err(Trap::Crash(format!("loom internal: no sink {h}"))),
+            },
+        }
         Ok(())
+    }
+
+    /// Output was appended to `out` from `from`: flushes where `write` does.
+    fn written(&mut self, from: usize) {
+        if (self.line_buffered && self.out[from..].contains(&b'\n')) || self.out.len() >= OUT_BUFFER {
+            self.flush();
+        }
     }
 }
 
@@ -300,10 +322,7 @@ fn out_str(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 }
 
 fn out_fmt(ctx: &mut Ctx, args: &mut [u64], item: u16) -> Result<(), Trap> {
-    let mut buf = Vec::new();
-    ctx.format(&mut buf, item, args)?;
-    ctx.write(&buf);
-    Ok(())
+    ctx.format_into(0, item, args)
 }
 
 /// `msg.begin()`: a new message. Building one can run the program's code (a
@@ -322,10 +341,7 @@ fn msg_str(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 }
 
 fn msg_fmt(ctx: &mut Ctx, args: &mut [u64], item: u16) -> Result<(), Trap> {
-    let mut buf = std::mem::take(&mut ctx.msg);
-    let done = ctx.format(&mut buf, item, args);
-    ctx.msg = buf;
-    done
+    ctx.format_into(1, item, args)
 }
 
 fn msg_unravel(ctx: &mut Ctx, _: &mut [u64], _: u16) -> Result<(), Trap> {
@@ -430,9 +446,7 @@ fn sink_str(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 
 /// `sink.fmt(sink, value)` and `sink.fmt2(sink, text address, length)`.
 fn sink_fmt(ctx: &mut Ctx, args: &mut [u64], item: u16) -> Result<(), Trap> {
-    let mut buf = Vec::new();
-    ctx.format(&mut buf, item, &args[1..])?;
-    ctx.put(args[0], &buf)
+    ctx.format_into(args[0], item, &args[1..])
 }
 
 /// `sink.push() -> sink`: a new buffer.
