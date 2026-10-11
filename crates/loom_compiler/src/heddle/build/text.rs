@@ -19,9 +19,9 @@ use loom_syntax::source::Span;
 use super::value::Val;
 use super::{Builder, Glue, parse_spec, value_kind};
 use crate::heddle::{InstKind, Mem, Term, VTy, Value};
-use crate::hir::{self, DefId, ExprKind, TemplatePart};
+use crate::hir::{self, DefId, ExprKind, HirId, TemplatePart};
 use crate::ty::{Ty, TyKind};
-use crate::typeck::{ArgSource, Call};
+use crate::typeck::{ArgSource, BodyId, Call};
 
 /// The program's output.
 pub(super) const OUT: u64 = 0;
@@ -93,6 +93,35 @@ impl<'a> Builder<'a> {
                 None => self.unsupported(span, &format!("`{path}` on Treadle")),
             },
         }
+    }
+
+    /// The function of a `const assert` job (see `jobs.rs`): 0 when its
+    /// condition holds; otherwise 1, with its message (empty if it has
+    /// none) in the message sink. The message is only worked out then.
+    pub(super) fn assert_job(&mut self, body: BodyId, e: HirId) -> Option<Vec<VTy>> {
+        let call = *self.asserts.get(&(body, e))?;
+        let args = crate::typeck::assert_args(self.p, call)?;
+        self.f.scan = self.scan(body, call);
+        let info = self.tables().calls.get(&call.id).cloned()?;
+        let span = call.span;
+        let cond = match info.args.first() {
+            Some(ArgSource::Arg(i)) => self.value(&args[*i].value)?[0],
+            _ => return self.unsupported(span, "this `assert`"),
+        };
+        let (ok, fail) = (self.new_block(), self.new_block());
+        self.br(cond, ok, fail);
+        self.enter(fail);
+        let msg = self.msg_sink();
+        if let Some(ArgSource::Arg(i)) = info.args.get(1) {
+            let pieces = self.pieces(&args[*i].value)?;
+            self.write_pieces(msg, pieces)?;
+        }
+        let failed = self.iconst(1);
+        self.terminate(Term::Ret(vec![failed]));
+        self.enter(ok);
+        let held = self.iconst(0);
+        self.terminate(Term::Ret(vec![held]));
+        Some(vec![VTy::Int])
     }
 
     /// The pieces of the argument for parameter `k` of the extern `def`.

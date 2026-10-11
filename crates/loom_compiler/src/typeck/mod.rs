@@ -163,6 +163,10 @@ pub struct Results {
     /// `const` items (`const assert(…)` at the top of a module or in a
     /// warp) left for the sandbox to run, in the order they were checked.
     pub const_blocks: Vec<BodyId>,
+    /// The bodies that have a `const` expression, in the order they were
+    /// checked (one may be there more than once): where compile-time code
+    /// is found without lowering the whole program (V4).
+    pub const_bodies: Vec<BodyId>,
     /// What each instance checked for particular types (or values) is, for
     /// messages: `` `zeros` with `n = 4` ``, `` `Ring[u32, 4]` ``.
     pub instance_names: HashMap<BodyId, String>,

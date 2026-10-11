@@ -291,7 +291,14 @@ impl Checker<'_> {
             ExprKind::Yield { place, value } => self.check_yield(value, *place, span),
             ExprKind::Pull => self.check_pull(span),
             ExprKind::Unsafe { .. } => self.unsupported(span, "`unsafe` blocks"),
-            ExprKind::Const(inner) => self.check_const_expr(span, inner, expected),
+            ExprKind::Const(inner) => {
+                if let Some(body) = self.cur_body
+                    && self.r.const_bodies.last() != Some(&body)
+                {
+                    self.r.const_bodies.push(body);
+                }
+                self.check_const_expr(span, inner, expected)
+            }
             ExprKind::Lambda { params, body } => self.check_lambda(e, params, body, expected),
             ExprKind::Loom { .. } | ExprKind::Thread(_) => self.unsupported(span, "`loom` and `thread`"),
             ExprKind::Call { callee, args } => self.check_call(e, callee, args, expected),

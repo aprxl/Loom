@@ -34,6 +34,7 @@ mod gauge;
 mod glue;
 mod hash;
 mod host;
+mod jobs;
 mod lambda;
 mod map;
 mod methods;
@@ -65,6 +66,9 @@ use crate::typeck::{Body, BodyId, Instance, Typed};
 use repr::{Part, Repr};
 use value::{Storage, Val};
 
+pub use consts::{COMPUTING, CYCLE, DONE, FAILED, GAVE_UP};
+pub use jobs::{ConstSlot, Job, JobKind, Jobs, build_jobs};
+
 /// A Loom value in registers: one Heddle value per scalar part.
 type Vals = Vec<Value>;
 
@@ -87,6 +91,8 @@ enum FnKey {
     Step(stream::Step),
     /// Computes a constant with a type (see `consts.rs`).
     ConstInit(consts::ConstKey),
+    /// Checks a `const assert`, by its body and expression (see `jobs.rs`).
+    Assert(BodyId, crate::hir::HirId),
     /// Drops what the constants own, when `main` is done.
     ConstExit,
     /// Shows a value of a type in an `any`, given its address.
@@ -271,6 +277,9 @@ pub(super) struct Builder<'a> {
     globals: IndexMap<consts::ConstKey, (u32, Ty)>,
     /// The `const` expressions read, by their body and id.
     const_exprs: HashMap<(BodyId, HirId), &'a crate::hir::Expr>,
+    /// The `const assert` calls found as jobs, by their body and the id of
+    /// the `const` expression.
+    asserts: HashMap<(BodyId, HirId), &'a crate::hir::Expr>,
     /// The program's data as it starts: constants (zero until computed)
     /// and vtables.
     data: Vec<u64>,
@@ -397,6 +406,7 @@ impl<'a> Builder<'a> {
             lambdas: HashMap::new(),
             globals: IndexMap::new(),
             const_exprs: HashMap::new(),
+            asserts: HashMap::new(),
             data: Vec::new(),
             dyn_slots: IndexMap::new(),
             type_ids: IndexMap::new(),
@@ -576,6 +586,7 @@ impl<'a> Builder<'a> {
             FnKey::Step(step) => format!("stream.{}", self.step_name(step)),
             FnKey::ConstInit(consts::ConstKey::Def(def)) => format!("{}.init", self.p.def_path(def)),
             FnKey::ConstInit(consts::ConstKey::Expr(body, e)) => format!("{}.const{}", self.body_name(body), e.0),
+            FnKey::Assert(body, e) => format!("{}.assert{}", self.body_name(body), e.0),
             FnKey::ConstExit => "consts.drop".to_string(),
             FnKey::AnyShow(ty, debug) => {
                 format!("{}[{}].any", if debug { "debug" } else { "show" }, self.tcx().display(self.p, ty))
@@ -612,7 +623,7 @@ impl<'a> Builder<'a> {
         let body = match key {
             FnKey::Body(id) | FnKey::Main(id) | FnKey::Lambda(id, _) | FnKey::Thunk(id) => id,
             FnKey::Glue(..) | FnKey::Step(_) | FnKey::ConstInit(_) | FnKey::ConstExit | FnKey::AnyShow(..) => BodyId(0),
-            FnKey::Dyn(id) | FnKey::ShuttleStep(id) => id,
+            FnKey::Dyn(id) | FnKey::ShuttleStep(id) | FnKey::Assert(id, _) => id,
             FnKey::GaugeCheck(_) | FnKey::ShuttleDrive | FnKey::ShuttleRelease => BodyId(0),
         };
         self.f = FnState { body, ..FnState::default() };
@@ -634,6 +645,7 @@ impl<'a> Builder<'a> {
             FnKey::Thunk(id) => self.thunk_func(id, span),
             FnKey::Step(step) => self.step_func(step),
             FnKey::ConstInit(def) => self.const_init(def),
+            FnKey::Assert(id, e) => self.assert_job(id, e),
             FnKey::ConstExit => self.const_exit(),
             FnKey::AnyShow(ty, debug) => self.any_show_func(ty, debug),
             FnKey::Dyn(id) => self.dyn_func(id, span),
@@ -697,7 +709,14 @@ impl<'a> Builder<'a> {
             | FnKey::ShuttleDrive
             | FnKey::ShuttleRelease => self.main_span.expect("set before anything is built"),
             FnKey::ConstInit(consts::ConstKey::Def(def)) | FnKey::GaugeCheck(def) => self.p.def(def).span,
-            FnKey::ConstInit(consts::ConstKey::Expr(..)) => self.main_span.expect("set before anything is built"),
+            FnKey::ConstInit(consts::ConstKey::Expr(body, e)) => match self.const_exprs.get(&(body, e)) {
+                Some(inner) => inner.span,
+                None => self.main_span.expect("set before anything is built"),
+            },
+            FnKey::Assert(body, e) => match self.asserts.get(&(body, e)) {
+                Some(call) => call.span,
+                None => self.main_span.expect("set before anything is built"),
+            },
         }
     }
 

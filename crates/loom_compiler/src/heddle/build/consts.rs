@@ -37,6 +37,7 @@ pub const GAVE_UP: &str = "\u{1f}LOOMS\u{1f}";
 pub const FRESH: u64 = 0;
 pub const DONE: u64 = 1;
 pub const COMPUTING: u64 = 2;
+pub const FAILED: u64 = 3;
 
 /// A constant: a typed one, or a `const` expression in a body.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
