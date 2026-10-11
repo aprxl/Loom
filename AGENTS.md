@@ -188,8 +188,17 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
     run-time review its changes came from). Deferred passes: specialize
     lambdas, SROA, self tail calls.
 
-Next: V4 compile-time code on Treadle, V5 threads, V6 spools, V7 Lua
-interop, V8 speed, V9 Treadle by default.
+26. Treadle V4, compile-time code (design/vm.md §17), in progress: constants,
+    `const` expressions and `const assert`s run as jobs of one image on an
+    in-process Treadle VM, for both backends (`consteval.rs`,
+    `heddle/build/jobs.rs`), under a budget (100M ticks, 1 GiB, 20 s) with
+    the host refused (K0104). The Lua sandbox is gone and `loom_compiler`
+    depends on `loom_host` only in tests: 239 ms against 495 ms over the
+    corpus. Still to do: baking the values into the image and the Lua
+    bundle, and `target` from the target being built.
+
+Next: the rest of V4, V5 threads, V6 spools, V7 Lua interop, V8 speed, V9
+Treadle by default.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and
