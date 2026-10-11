@@ -5,11 +5,19 @@ use std::fmt::Write as _;
 use crate::word::{a, b, bc_i32, bc_u32, c, c_i16, opcode, unpack_cast};
 use crate::{Form, Image, IntSpec, Op};
 
-/// Every function of `image`, one instruction per line.
+/// Every function of `image`, one instruction per line, then its data: a
+/// word to a line, with `->` on a word that's a pointer into the data.
 pub fn disassemble(image: &Image) -> String {
     let mut out = String::new();
     for i in 0..image.funcs.len() {
         out.push_str(&disassemble_func(image, i, None));
+    }
+    if !image.data.is_empty() {
+        let _ = writeln!(out, "data ({} words):", image.data.len());
+        for (i, word) in image.data.iter().enumerate() {
+            let arrow = if image.relocs.contains(&(i as u32)) { "-> data+" } else { "" };
+            let _ = writeln!(out, "  {:5}  {arrow}{word:#x}", i * 8);
+        }
     }
     out
 }

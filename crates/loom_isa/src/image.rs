@@ -97,6 +97,11 @@ pub struct Image {
     /// What the program's data starts as, in 8-byte words: vtables,
     /// constants and their flags. `gaddr` gives addresses in it.
     pub data: Vec<u64>,
+    /// Words of `data` that hold a pointer into `data` itself, as a byte
+    /// offset from its start (constants baked in by the compiler: a string's
+    /// bytes, a list's buffer). The loader turns each into the address it
+    /// is, so none depends on where the data is.
+    pub relocs: Vec<u32>,
     /// The function to run: `main`.
     pub entry: Option<u32>,
 }

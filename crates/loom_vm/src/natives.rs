@@ -253,7 +253,10 @@ impl<'i> Ctx<'i> {
             let range = self.rodata.as_ptr_range();
             let (start, end) = (range.start as u64, range.end as u64);
             let literal = ptr >= start && ptr.checked_add(len).is_some_and(|e| e <= end);
-            if !literal && !self.heap.holds(ptr, len) {
+            // Text baked into the program's data, as a constant's is.
+            let (lo, hi) = self.data_range;
+            let baked = ptr >= lo && ptr.checked_add(len).is_some_and(|e| e <= hi);
+            if !literal && !baked && !self.heap.holds(ptr, len) {
                 return Err(Trap::Crash(format!("text at {ptr:#x} ({len} bytes) isn't a live string")));
             }
         }

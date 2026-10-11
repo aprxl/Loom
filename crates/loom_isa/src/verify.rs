@@ -59,6 +59,16 @@ pub fn verify(image: &Image) -> Result<(), VerifyError> {
     if image.entry.is_some_and(|e| e as usize >= image.funcs.len()) {
         return Err(whole("the entry function doesn't exist".into()));
     }
+    let bytes = image.data.len() as u64 * 8;
+    for &r in &image.relocs {
+        match image.data.get(r as usize) {
+            None => return Err(whole(format!("relocation of word {r}, which is past the data"))),
+            Some(&to) if to > bytes => {
+                return Err(whole(format!("word {r} points at data+{to}, past the data's {bytes} bytes")));
+            }
+            Some(_) => {}
+        }
+    }
     for name in &image.natives {
         if native(name).is_none() {
             return Err(whole(format!("unknown native `{name}`")));
@@ -334,8 +344,24 @@ mod tests {
             natives: vec!["out.fmt".into()],
             files: vec![],
             data: vec![0; 2],
+            relocs: vec![],
             entry: Some(0),
         }
+    }
+
+    #[test]
+    fn relocations_stay_inside_the_data() {
+        let mut img = image(vec![ret()]);
+        img.relocs = vec![1];
+        assert!(verify(&img).is_ok());
+        // To the end of the data is a pointer to nothing past it: fine.
+        img.data[1] = 16;
+        assert!(verify(&img).is_ok());
+        img.data[1] = 17;
+        assert!(verify(&img).is_err());
+        img.data[1] = 0;
+        img.relocs = vec![2];
+        assert!(verify(&img).is_err());
     }
 
     fn ret() -> u64 {

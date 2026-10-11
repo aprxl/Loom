@@ -134,11 +134,18 @@ impl<'i> Machine<'i> {
                 results: usize::from(f.results),
             })
             .collect();
+        let mut data = image.data.clone().into_boxed_slice();
+        // Pointers into the data are offsets in the image: addresses now.
+        let base = data.as_ptr() as u64;
+        for &r in &image.relocs {
+            // Verified: inside the data, and an offset within it.
+            data[r as usize] += base;
+        }
         Ok(Machine {
             image,
             code: &image.code,
             funcs,
-            data: image.data.clone().into_boxed_slice(),
+            data,
             natives,
             ctx: {
                 let mut ctx = Ctx::new(image, host);

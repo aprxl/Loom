@@ -290,6 +290,29 @@ fn the_data_area_holds_the_image_data() {
 }
 
 #[test]
+fn a_pointer_into_the_data_is_relocated() {
+    // Word 0 holds the text "hi!!" (a baked string's bytes); word 1 holds
+    // its pointer, as an offset: the loader makes it an address. The length
+    // is 2. Under `checked`, `out.str` reads text from the data.
+    let mut code = vec![word_i32(Op::Gaddr, 2, 8), word(Op::Ld64, 0, 2, 0), word_i32(Op::Ldi, 1, 2)];
+    code.push(word(Op::CallN, 0, OUT_STR, 0));
+    code.push(word(Op::Ret, 0, 0, 0));
+    let mut img = image(vec![("main", 3, 0, 0, code)]);
+    img.data = vec![u64::from_le_bytes(*b"hi!!    "), 0];
+    img.relocs = vec![1];
+    let (outcome, out) = exec(&img, &Config::default());
+    assert_eq!((outcome, out.as_str()), (Outcome::Finished, "hi"));
+    // A relocation outside the data, or to past its end, is refused.
+    img.relocs = vec![2];
+    let (outcome, _) = exec(&img, &Config::default());
+    assert!(matches!(&outcome, Outcome::Crash { message, .. } if message.contains("relocation")), "{outcome:?}");
+    img.relocs = vec![1];
+    img.data[1] = 17;
+    let (outcome, _) = exec(&img, &Config::default());
+    assert!(matches!(&outcome, Outcome::Crash { message, .. } if message.contains("past the data")), "{outcome:?}");
+}
+
+#[test]
 fn bounds_unravel_past_the_end() {
     let code =
         vec![word_i32(Op::Ldi, 0, 5), word_i32(Op::Ldi, 1, 3), word(Op::Bounds, 0, 1, 0), word(Op::Ret, 0, 0, 0)];
