@@ -279,3 +279,30 @@ without compile-time code build nothing for it.
   line; `read_text` showing as `std.fs.read` (one native serves both); and
   the old build *panicking* when the budget ran out (an mlua hook error in
   the release build).
+
+## V4 step 5: baking (2026-10-11)
+
+What compile-time code computed is data in the image (with relocations)
+and a literal in the Lua bundle.
+
+- **Compile time.** Reading values back and running `ConstExit` (with a leak
+  check under the checked build) on top of step 3: 131 files, 254.29 ms in
+  all (const_eval.loom 4.39 ms). The Lua sandbox was 495 ms.
+- **Run time** (pre-V4 build against this one, best of 9, wall clock with
+  compilation): `word_freq` 0.210 s to 0.200 s, `chip8` 3% faster, and
+  nothing else moved beyond noise (geometric mean 0.995 over the suite).
+  Dispatch counts (`bench/counts.txt`): `word_freq` 9.3% fewer
+  instructions, `chip8` 26 fewer, `spectral_norm` 2.
+- **`richards` is layout-sensitive.** Its instruction stream and its
+  dispatch count are the same before and after, yet clean builds of
+  commits that differ only in the compiler's code run it 0.838 s, 0.881 s
+  and 0.929 s (at 20x its size). Two experiments (pages of the VM's heap
+  aligned to 4 KiB; the program's data aligned to a cache line) moved it
+  by -8% and +8% with no consistent cause, and were dropped. It's the
+  indirect-call dispatch through `any`'s vtable meeting where the binary's
+  code and data land; V8's dispatch experiments (design/vm.md D2) are
+  where that gets looked at properly.
+- **The generator** (20 000 seeds, each with constants and the functions
+  that build the same values) agrees but for one seed, which is a
+  pre-existing disagreement about dropping a generator that holds another
+  (it reproduces on the pre-V4 build).
