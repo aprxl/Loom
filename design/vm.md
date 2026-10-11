@@ -5,6 +5,9 @@
 > bounds checks and 62% of the overflow checks a run executes, and costs
 > 1.5× of `-O0` to compile; Treadle is 2.74× as fast as PUC Lua 5.4 on
 > `bench/` (geomean) against the gate's 2.5× (design/vm-review-v3.md).
+> **V4 is built** (2026-10-11): compile-time code runs on Treadle, in the
+> compiler's process, for both backends, and what it computed is baked into
+> the image and the Lua bundle (§17).
 > The decisions in
 > [section 3](#3-decisions) were settled on 2026-09-29.
 
@@ -200,9 +203,10 @@ one choice pays off everywhere:
 | `target.endian` | the host's | the host's |
 | `target.os`, `target.arch` | the build host's | the build host's |
 
-`target` becomes a parameter of type checking (today it's fixed), so
+`target` is a parameter of type checking (`typeck::check_for`), so
 compile-time code sees the target being built. A Lua-target build does its
-`usize` arithmetic in 63 bits even when Treadle is the evaluator (V4).
+`usize` arithmetic in 63 bits even though Treadle is the evaluator (V4, built;
+`usize_is_the_targets` in `crates/loom/tests/const_baked.rs`).
 
 ### 5.2 Layout
 
@@ -260,7 +264,7 @@ warp Token { span: Span, case Ident(String), case Int(u64), case Eof }
 - **The heap**: the buffers of lists, strings and maps, boxed `any`s, `^T` on
   the heap, the environments of escaping closures, boxed shuttles and
   streams.
-- **The image**: string literals, constants (from V4), vtables and type
+- **The image**: string literals, constants (baked since V4), vtables and type
   descriptors. It's read-only and never freed. That's `@static`.
 
 ### 5.4 Ownership: moves, copies and drops
@@ -405,7 +409,7 @@ The second is trust in our own compiler, and the compiler has known gaps
 | `for`, per `IterSource` | `Seq`: a counted loop over the buffer, the item an address or a loaded scalar, copied only if it's kept. `Range`: a counted loop. `Woven`: calls to `next`. `MapPairs`, `SetItems`: the entry list. `Shuttle`, `Burst`: steps (§10.14) |
 | templates | writes into the destination, piece by piece (the standard output buffer, a `Fmt`, a `String`), never a temporary string when the destination can take the pieces |
 | lambdas | a function and an environment: the enclosing frame's captured slots for a lambda that can't escape, or a heap box for `^(…)` |
-| constants | V1: a data slot computed on first read, as `rt.lazy` does. From V4: data in the image |
+| constants | a data slot. Since V4, what compile-time code computed is written into it (and what it points to follows, with relocations); what couldn't be baked is computed on first read, as `rt.lazy` does |
 | reflection | `v.(f)` is a field offset and `v is .(c)` a tag compare. Everything else was folded by the type checker |
 | coercions | `ToAny` builds the 24-byte `any`, `ToUnion` writes the tag, `ToSlice` makes a pointer and a length, `ToStream` makes a stream state (§10.13) |
 
@@ -797,7 +801,7 @@ calls count down a tick counter kept in `Env`. When it runs out, one cold functi
 interrupt a program:
 
 - Ctrl-C, a flag the signal handler sets;
-- the compile-time step budget (K0102, from V4);
+- the compile-time step budget (K0102, since V4);
 - the time limit;
 - preemption between threads (V5).
 
@@ -1084,7 +1088,9 @@ also end with nothing leaked.
 
 ### 10.16 Compile-time code and reflection
 
-V1 keeps the Lua sandbox, and V4 moves compile-time code onto Treadle (§17).
+Compile-time code runs on Treadle, in the compiler's process, for both
+backends (V4, §17): `consteval.rs` runs the jobs `heddle::build_jobs` finds,
+and `baked.rs` reads what they computed back for the backends to write.
 Everything the type checker folds stays folded. `T.size`, `T.align` and
 `f.offset` get their answers from `ty::layout`, on both targets. On the Lua
 target that's the layout Treadle would use: a number no Lua code depends on.
@@ -1485,7 +1491,7 @@ Passing:
    no example takes more than 200 ms.
 7. Speed: the V3 row of §16.
 
-### V4: compile-time code on Treadle (about 2k)
+### V4: compile-time code on Treadle (about 2k) — done
 
 In:
 
@@ -1613,6 +1619,38 @@ halves that share a readback: *running* jobs, and *baking* their values.
    that build the same values, and checks they show identically.
 6. **Docs**: this section, §5.1, §10.16, `design/lua-backend.md`'s
    constants, `docs/`, and AGENTS.md's status.
+
+**Met on 2026-10-11.** Each passing item and what shows it:
+
+1. *The K fixtures give the same diagnostics.* Every `tests/fail` fixture and
+   the compile-time doc samples, and the full text of each diagnostic diffed
+   against the last build with the Lua sandbox over `tests/fail`,
+   `tests/run/const*`, the samples and `examples/` (what differs is
+   explained in `bench/RESULTS.md`). Probes of a `const assert` in an untaken
+   branch, in a field's and a parameter's default, and inside `const for`
+   are fixtures or agree with the old build.
+2. *`loom_compiler` doesn't depend on `loom_host`.* It's a dev-dependency,
+   for `rt_int` and `rt_methods`, which run the runtime's Lua.
+3. *A table and a list of strings are data and literals.*
+   `a_table_and_a_list_of_strings_are_data_not_computed`: no `.init`
+   function, no `CI.` initializer, the table's words in the data and
+   `C.WORDS_…` assigned; `tests/run/const_baked`'s output is the pre-V4
+   build's.
+4. *Building twice gives the same bytes.*
+   `building_twice_in_a_process_gives_the_same_bytes` (with the heap moved
+   between) and `building_in_two_processes_gives_the_same_bytes` (bundle,
+   map and the bytecode listing, relocations and data included).
+5. *At least as fast.* 254 ms against 495 ms over the corpus
+   (`bench/RESULTS.md`).
+
+Beyond them: the program generator (20 000 seeds) gives each program
+constants and the functions that build the same values, and none shows
+differently on either backend at either level; the checked build runs
+`ConstExit` on the job VM and calls a leak an internal error; and run time
+didn't move beyond noise (`word_freq` is 5% faster, 9% fewer instructions).
+Left for later, on purpose: building the program from the job build's
+module rather than again (the compile-time ratio doesn't need it), and the
+sums, maps and sets that stay computed when read.
 
 Verification beyond the passing list:
 
@@ -1864,7 +1902,7 @@ the lexer's (`tests/examples/lexer.out`), and `tests/run/frame_size` pins
 | scalar `mut` arguments copied back through extra returns | an address, kept in a register by the callee and written back on every way out |
 | `{true, v}` for results | two registers |
 | `<close>` variables for `defer` | landing pads |
-| `rt.lazy` constants | data in the image (V4) |
+| `rt.lazy` constants | data in the image (V4: baked where the type allows) |
 | coroutines | frames inside values |
 | descriptors walked at run time for `==` and `{x}` | generated glue, and vtables for `any` |
 | `rt.same_len` on every loop over a list | a pointer and a length loaded once, guarded only where the checker can't prove it |

@@ -188,7 +188,7 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
     run-time review its changes came from). Deferred passes: specialize
     lambdas, SROA, self tail calls.
 
-26. Treadle V4, compile-time code (design/vm.md §17), in progress: constants,
+26. Treadle V4, compile-time code (design/vm.md §17): constants,
     `const` expressions and `const assert`s run as jobs of one image on an
     in-process Treadle VM, for both backends (`consteval.rs`,
     `heddle/build/jobs.rs`), under a budget (100M ticks, 1 GiB, 20 s) with
@@ -196,12 +196,13 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
     depends on `loom_host` only in tests: 239 ms against 495 ms over the
     corpus. The values computed are baked: data in the image (with
     relocations) and literals in the Lua bundle, for numbers, text,
-    tuples, arrays, lists, records and optionals (`baked.rs`). Still to do:
-    `target` from the target being built, and reusing the job build for the
-    program's.
+    tuples, arrays, lists, records and optionals (`baked.rs`); `target` is
+    the target being built. Building twice gives the same bytes. Left on
+    purpose: building the program from the job build's module, and baking
+    maps, sets and sums (they're computed when read).
 
-Next: the rest of V4, V5 threads, V6 spools, V7 Lua interop, V8 speed, V9
-Treadle by default.
+Next: V5 threads, V6 spools, V7 Lua interop, V8 speed, V9 Treadle by
+default.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and

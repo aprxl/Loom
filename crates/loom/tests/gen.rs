@@ -35,6 +35,7 @@ use loom_syntax::diag::render_plain;
 // ---------------------------------------------------------------- randomness
 
 /// SplitMix64: small, and the same everywhere.
+#[derive(Clone)]
 struct Rng(u64);
 
 impl Rng {
@@ -133,6 +134,10 @@ struct Var {
 
 struct Gen {
     rng: Rng,
+    /// Where the constants' random numbers come from: not `rng`, so that
+    /// each seed makes the program it did before they were added, and what
+    /// was checked with them stays checked.
+    const_rng: Rng,
     /// The record's `a` and `b`, the sum's `x` and `y`.
     a: Int,
     b: Int,
@@ -157,6 +162,7 @@ impl Gen {
         let b = Self::int_of(&mut rng);
         Gen {
             rng,
+            const_rng: Rng(seed ^ 0x00C0_FFEE_5EED_0001),
             a,
             b,
             funcs: Vec::new(),
@@ -1062,6 +1068,8 @@ impl Gen {
         // text: `main` says if they show differently.
         self.scopes = vec![Vec::new()];
         let mut checks = Vec::new();
+        let main_rng = std::mem::replace(&mut self.rng, self.const_rng.clone());
+        let next = self.next;
         for k in 0..self.rng.below(4) {
             let ty = match self.rng.below(8) {
                 0 => Ty::Int(self.int()),
@@ -1079,6 +1087,8 @@ impl Gen {
                 "    if \"{{KC_{k}:?}}\" != \"{{mk_{k}():?}}\" {{ print(\"CONST MISMATCH {k}\") }}\n    print(\"{{KC_{k}:?}}\")\n"
             ));
         }
+        self.rng = main_rng;
+        self.next = next;
         head.push_str("fn main() {\n");
         self.scopes = vec![Vec::new()];
         let n = 10 + self.rng.below(20) as u32;
