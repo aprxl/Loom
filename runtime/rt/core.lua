@@ -423,6 +423,43 @@ function spec.shr(d)
   end
 end
 
+-- `v as T` for a source type `s`: the range test chosen once.
+function spec.cast(d, s)
+  local lo, hi, name = d.lo, d.hi, d.name
+  if s.u64 then
+    if d.u64 then return function(v) return v end end
+    return function(v)
+      if v < 0 or v > hi then error(MARK .. "value out of range for `" .. name .. "`", 2) end
+      return v
+    end
+  elseif d.u64 then
+    return function(v)
+      if v < 0 then error(MARK .. "value out of range for `" .. name .. "`", 2) end
+      return v
+    end
+  end
+  return function(v)
+    if v < lo or v > hi then error(MARK .. "value out of range for `" .. name .. "`", 2) end
+    return v
+  end
+end
+
+-- `v as% T`: the wrap into the type.
+function spec.cast_wrap(d, s)
+  local bits, mask, hi = d.bits, d.mask, d.hi
+  if bits == 64 then
+    return function(v) return v end
+  elseif d.signed then
+    local modulus = 1 << bits
+    return function(v)
+      local r = v & mask
+      if r > hi then r = r - modulus end
+      return r
+    end
+  end
+  return function(v) return v & mask end
+end
+
 -- A copy of a value of type `d`: its copier (see `rt.copier`), or, for a
 -- type whose values aren't copied (a scalar), a function that returns it.
 function spec.copy(d)
@@ -432,8 +469,8 @@ end
 --- The closure for operation `name` (one of `add`, `sub`, `mul`, their
 --- `_wrap` forms, `div`, `rem`, `shl`, `shr`) on integer type `d`, which
 --- takes the operands only.
-function rt.spec(name, d)
-  return spec[name](d)
+function rt.spec(name, d, s)
+  return spec[name](d, s)
 end
 
 -- ================================================================ conversions
@@ -2220,6 +2257,56 @@ end
 --- `m[k] = v`.
 function rt.map_set(dk, m, k, v)
   map_put(dk, m, k, v)
+end
+
+-- The operations on a map, specialized to its key type (`rt.spec`): for an
+-- integer, text, char, bool or enum key the key is its own hash, so the
+-- hash isn't worked out by looking at the descriptor on every call.
+function spec.plain(dk)
+  local kind = dk.kind
+  return kind == "int" or kind == "str" or kind == "char" or kind == "bool" or kind == "enum"
+end
+
+function spec.map_has(dk)
+  if spec.plain(dk) then
+    return function(m, k)
+      return m.idx[k] ~= nil
+    end
+  end
+  return function(m, k)
+    return m.idx[hkey(dk, k)] ~= nil
+  end
+end
+
+function spec.map_at(dk)
+  if spec.plain(dk) then
+    return function(m, k)
+      local i = m.idx[k]
+      if i == nil then error(sformat("%skey not found: %s", MARK, show(dk, k, true)), 2) end
+      return m.vals[i]
+    end
+  end
+  return function(m, k)
+    return rt.map_at(dk, m, k)
+  end
+end
+
+function spec.map_set(dk)
+  if spec.plain(dk) then
+    return function(m, k, v)
+      local i = m.idx[k]
+      if i ~= nil then
+        m.vals[i] = v
+        return
+      end
+      local n = m.top + 1
+      m.keys[n], m.hks[n], m.idx[k], m.top, m.n = k, k, n, n, m.n + 1
+      m.vals[n] = v
+    end
+  end
+  return function(m, k, v)
+    map_put(dk, m, k, v)
+  end
 end
 
 --- `m[k]`: the value itself (a place), unravelling if there's none.

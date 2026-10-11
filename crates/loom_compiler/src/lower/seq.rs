@@ -106,6 +106,20 @@ impl Lowerer<'_> {
         }
     }
 
+    /// A map operation (`map_at`, `map_set`, `map_has`) on keys of the type
+    /// whose descriptor is `dk`: a closure made for the key type, which for
+    /// an integer, text, `char`, `bool` or enum key uses the key itself as
+    /// its hash.
+    pub(super) fn map_op(&mut self, name: &'static str, dk: Expr, mut args: Vec<Expr>) -> Expr {
+        match Self::desc_index(&dk) {
+            Some(k) => self.spec_call(name, k, usize::MAX, args),
+            None => {
+                args.insert(0, dk);
+                Expr::rt(name, args)
+            }
+        }
+    }
+
     /// The bounds of `a..b` as a start and an exclusive end: `0` for no
     /// start, `nil` for no end.
     fn range_bounds(&mut self, lo: Option<&hir::Expr>, hi: Option<&hir::Expr>, inclusive: bool) -> (Expr, Expr) {
@@ -213,7 +227,7 @@ impl Lowerer<'_> {
         let m = if self.is_place(base) { self.lower_place(base) } else { self.lower_expr(base) };
         let m = self.spill(m);
         let key = self.lower_expr(key);
-        Expr::rt("map_at", vec![dk, m, key])
+        self.map_op("map_at", dk, vec![m, key])
     }
 
     /// `m[key] = value`, and `m[key] op= value`.
@@ -236,13 +250,14 @@ impl Lowerer<'_> {
         let new = match op {
             loom_syntax::ast::AssignOp::Assign => self.lower_owned(value),
             loom_syntax::ast::AssignOp::Compound(bin) => {
-                let current = Expr::rt("map_at", vec![dk.clone(), m.clone(), key.clone()]);
+                let current = self.map_op("map_at", dk.clone(), vec![m.clone(), key.clone()]);
                 let current = self.spill_always(current);
                 let operand = self.lower_expr(value);
                 self.apply(bin, current, operand, v, span)
             }
         };
-        self.push(StmtKind::Call(Expr::rt("map_set", vec![dk, m, key, new])));
+        let set = self.map_op("map_set", dk, vec![m, key, new]);
+        self.push(StmtKind::Call(set));
     }
 
     /// `List()`: an empty list.

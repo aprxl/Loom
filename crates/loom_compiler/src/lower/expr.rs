@@ -595,12 +595,30 @@ impl Lowerer<'_> {
         if let Expr::Index(_, k) = &d
             && let Expr::Int(k) = k.as_ref()
         {
-            let key = ((*k - 1) as usize, "copy");
-            self.ops.entry(key).or_insert(());
-            let n = self.ops.get_index_of(&key).expect("just made");
-            return Expr::call(Expr::index(Expr::name("O"), Expr::Int(n as i64 + 1)), vec![v]);
+            return self.spec_call("copy", (*k - 1) as usize, usize::MAX, vec![v]);
         }
         Expr::rt("copy", vec![d, v])
+    }
+
+    /// `O[n](args…)`, `O[n]` being `rt.spec(name, T[desc])` (and the source
+    /// type's `T[source]` for a conversion): made once at the start of the
+    /// bundle for each (type, operation) used.
+    pub(super) fn spec_call(&mut self, name: &'static str, desc: usize, source: usize, args: Vec<Expr>) -> Expr {
+        let key = (desc, source, name);
+        self.ops.entry(key).or_insert(());
+        let n = self.ops.get_index_of(&key).expect("just made");
+        Expr::call(Expr::index(Expr::name("O"), Expr::Int(n as i64 + 1)), args)
+    }
+
+    /// The index of descriptor `d` (`T[k]`), if it's one.
+    pub(super) fn desc_index(d: &Expr) -> Option<usize> {
+        match d {
+            Expr::Index(_, k) => match k.as_ref() {
+                Expr::Int(k) => Some((*k - 1) as usize),
+                _ => None,
+            },
+            _ => None,
+        }
     }
 
     /// The operation `name` of the runtime on integers of the type whose
@@ -614,10 +632,7 @@ impl Lowerer<'_> {
             && let Expr::Index(_, k) = &d
             && let Expr::Int(k) = k.as_ref()
         {
-            let key = ((*k - 1) as usize, name);
-            self.ops.entry(key).or_insert(());
-            let n = self.ops.get_index_of(&key).expect("just made");
-            return Expr::call(Expr::index(Expr::name("O"), Expr::Int(n as i64 + 1)), vec![a, b]);
+            return self.spec_call(name, (*k - 1) as usize, usize::MAX, vec![a, b]);
         }
         Expr::rt(name, vec![d, a, b])
     }
@@ -771,6 +786,11 @@ impl Lowerer<'_> {
                     CastKind::Sat => "cast_sat",
                     CastKind::Opt => "cast_chk",
                 };
+                if matches!(name, "cast" | "cast_wrap")
+                    && let (Some(to), Some(from)) = (Self::desc_index(&d), Self::desc_index(&sd))
+                {
+                    return self.spec_call(name, to, from, vec![v]);
+                }
                 Expr::rt(name, vec![d, sd, v])
             }
             (TyKind::Int(s), TyKind::Float(f)) => {
@@ -987,6 +1007,12 @@ impl Lowerer<'_> {
         descs.extend(params);
         // A length is a field of the table (an array, a list, a slice view
         // all keep it in `n`): no call, and no descriptor to pass.
+        if runtime && outs.is_empty() && descs.len() == 4 && self.p.def_path(def) == "std.map.Map.has" {
+            let k = descs.pop().unwrap_or(Expr::Nil);
+            let m = descs.pop().unwrap_or(Expr::Nil);
+            let dk = descs.swap_remove(0);
+            return self.map_op("map_has", dk, vec![m, k]);
+        }
         if runtime && outs.is_empty() && descs.len() == 2 {
             match self.p.def_path(def).as_str() {
                 "std.slice.Slice.len" => return Expr::field(descs.pop().unwrap_or(Expr::Nil), "n"),

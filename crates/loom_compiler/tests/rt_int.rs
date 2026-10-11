@@ -43,6 +43,13 @@ impl Rt {
         self.outcome(name, ty, f.call::<Value>(args))
     }
 
+    /// A conversion's closure, `rt.spec(name, to, from)`, called with the value.
+    fn call_cast_spec(&self, name: &str, ty: IntTy, to: &Table, from: &Table, v: i64) -> Out {
+        let make: Function = self.rt.get("spec").expect("rt.spec");
+        let f: Function = make.call((name, to.clone(), from.clone())).unwrap_or_else(|e| panic!("spec {name}: {e}"));
+        self.outcome(name, ty, f.call::<Value>(v))
+    }
+
     fn outcome(&self, name: &str, ty: IntTy, result: mlua::Result<Value>) -> Out {
         match result {
             Ok(Value::Integer(v)) => Out::Value(from_lua(ty, v)),
@@ -205,6 +212,11 @@ fn casts_match_the_oracle() {
                 let name = format!("{} -> {} {v}", ty_name(from), ty_name(to));
                 assert_eq!(rt.call("cast", to, args()), if fits { Out::Value(v) } else { Out::Trap }, "as {name}");
                 assert_eq!(rt.call("cast_wrap", to, args()), Out::Value(to.wrap(v)), "as% {name}");
+                // The closures the generated code uses agree.
+                let spec = rt.call_cast_spec("cast", to, &d, &s, to_lua(v));
+                assert_eq!(spec, if fits { Out::Value(v) } else { Out::Trap }, "spec as {name}");
+                let spec = rt.call_cast_spec("cast_wrap", to, &d, &s, to_lua(v));
+                assert_eq!(spec, Out::Value(to.wrap(v)), "spec as% {name}");
                 assert_eq!(rt.call("cast_sat", to, args()), Out::Value(to.saturate(v)), "as| {name}");
                 assert_eq!(rt.call("cast_chk", to, args()), if fits { Out::Value(v) } else { Out::Nil }, "as? {name}");
             }

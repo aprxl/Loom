@@ -185,7 +185,7 @@ struct Lowerer<'a> {
     /// The operations specialized to a type (`rt.spec`): each is `O[n]`, made
     /// once at the start of the bundle from the descriptor `T[k]`. By
     /// descriptor number and operation, in order.
-    ops: IndexMap<(usize, &'static str), ()>,
+    ops: IndexMap<(usize, usize, &'static str), ()>,
     externs: IndexMap<String, usize>,
     /// Vtables, by type and wefts, with the type's descriptor.
     vtables: IndexMap<(Ty, Vec<DefId>), Expr>,
@@ -793,11 +793,14 @@ impl<'a> Lowerer<'a> {
         }
         // The operations specialized to a type, from its descriptor.
         let ops = std::mem::take(&mut self.ops);
-        for (n, ((desc, name), ())) in ops.iter().enumerate() {
-            let make = Expr::rt(
-                "spec",
-                vec![Expr::Str(name.as_bytes().to_vec()), Expr::index(Expr::name("T"), Expr::Int(*desc as i64 + 1))],
-            );
+        for (n, ((desc, source, name), ())) in ops.iter().enumerate() {
+            let mut args =
+                vec![Expr::Str(name.as_bytes().to_vec()), Expr::index(Expr::name("T"), Expr::Int(*desc as i64 + 1))];
+            // A conversion also takes the descriptor of the type it's from.
+            if *source != usize::MAX {
+                args.push(Expr::index(Expr::name("T"), Expr::Int(*source as i64 + 1)));
+            }
+            let make = Expr::rt("spec", args);
             let target = Expr::index(Expr::name("O"), Expr::Int(n as i64 + 1));
             printer.stmt(&Stmt { kind: StmtKind::Assign(vec![target], vec![make]), span: None });
         }

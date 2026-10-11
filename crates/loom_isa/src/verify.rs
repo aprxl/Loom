@@ -18,10 +18,9 @@
 //! What a register *means* isn't checked: that's the compiler's job, and the
 //! checked build's.
 
-use std::collections::HashSet;
 use std::fmt;
 
-use crate::natives::{NativeImm, native};
+use crate::natives::{NativeImm, NativeSig, native};
 use crate::word::{a, b, bc_i32, bc_u32, c, c_i16, opcode, unpack_cast};
 use crate::{CRASHES, Form, Image, IntSpec, LINK_SLOTS, Op};
 
@@ -69,18 +68,21 @@ pub fn verify(image: &Image) -> Result<(), VerifyError> {
             Some(_) => {}
         }
     }
+    // Each native's signature, found once: a call names it by number.
+    let mut sigs = Vec::with_capacity(image.natives.len());
     for name in &image.natives {
-        if native(name).is_none() {
-            return Err(whole(format!("unknown native `{name}`")));
+        match native(name) {
+            Some(sig) => sigs.push(sig),
+            None => return Err(whole(format!("unknown native `{name}`"))),
         }
     }
     for i in 0..image.funcs.len() {
-        verify_func(image, i)?;
+        verify_func(image, i, &sigs)?;
     }
     Ok(())
 }
 
-fn verify_func(image: &Image, index: usize) -> Result<(), VerifyError> {
+fn verify_func(image: &Image, index: usize, sigs: &[&NativeSig]) -> Result<(), VerifyError> {
     let f = &image.funcs[index];
     let code = &image.code[f.entry as usize..(f.entry + f.len) as usize];
     let frame = usize::from(f.frame);
@@ -89,7 +91,7 @@ fn verify_func(image: &Image, index: usize) -> Result<(), VerifyError> {
         return Err(err(0, "parameters or results don't fit the frame".into()));
     }
     // Where instructions start, for checking jumps.
-    let mut starts = HashSet::new();
+    let mut starts = vec![false; code.len() + 1];
     let mut pc = 0;
     let mut last = None;
     while pc < code.len() {
@@ -98,7 +100,7 @@ fn verify_func(image: &Image, index: usize) -> Result<(), VerifyError> {
         if pc + words > code.len() {
             return Err(err(pc, "the extension word is past the end".into()));
         }
-        starts.insert(pc);
+        starts[pc] = true;
         last = Some(op);
         pc += words;
     }
@@ -114,7 +116,7 @@ fn verify_func(image: &Image, index: usize) -> Result<(), VerifyError> {
             |r: usize| if r < frame { Ok(()) } else { Err(err(pc, format!("register r{r} is outside the frame"))) };
         let target = |off: isize| {
             let t = pc as isize + off;
-            if t >= 0 && starts.contains(&(t as usize)) {
+            if t >= 0 && starts.get(t as usize).copied().unwrap_or(false) {
                 Ok(())
             } else {
                 Err(err(pc, format!("jump to {t}, which isn't an instruction")))
@@ -205,7 +207,7 @@ fn verify_func(image: &Image, index: usize) -> Result<(), VerifyError> {
             }
             Form::Native => {
                 let name = image.natives.get(b(w)).ok_or_else(|| err(pc, "no such native".into()))?;
-                let sig = native(name).expect("checked in verify");
+                let sig = sigs[b(w)];
                 if a(w) + usize::from(sig.args.max(sig.results)) > frame {
                     return Err(err(pc, format!("`{name}`'s arguments don't fit the frame")));
                 }
@@ -308,7 +310,10 @@ fn verify_func(image: &Image, index: usize) -> Result<(), VerifyError> {
     let mut last_end = 0;
     for p in &f.pads {
         let inside = p.start < p.end && p.end as usize <= code.len() && p.start >= last_end;
-        if !inside || !starts.contains(&(p.pad as usize)) || !starts.contains(&(p.start as usize)) {
+        if !inside
+            || !starts.get(p.pad as usize).copied().unwrap_or(false)
+            || !starts.get(p.start as usize).copied().unwrap_or(false)
+        {
             return Err(err(p.start as usize, format!("bad landing pad {}..{} → {}", p.start, p.end, p.pad)));
         }
         last_end = p.end;
