@@ -90,7 +90,7 @@ Two things are decided by a small evaluator in the compiler itself, not by the s
 
 ## How it runs
 
-The compiler builds the "jobs": the constants, `const` expressions and `const assert`s. Only what they reach is built, as a program for Treadle, which it runs in its own process. Then it builds the real program, which computes each constant again the first time it's read. The value is the same, because compile-time code can't depend on anything but itself, and it already ran without failing. Writing the computed values into the program instead is an optimization left for later.
+The compiler builds the "jobs": the constants, `const` expressions and `const assert`s. Only what they reach is built, as a program for Treadle, which it runs in its own process. Then it builds the real program with what the jobs computed written into it: a constant that is a number, text, a tuple, an array, a list, a record or an optional of those (not too big) is data in the program, or a literal in the Lua bundle, and nothing computes it when the program runs. A constant of another type (a map, a sum) is computed when it's first read, as it would be anyway.
 
 `loom build`, `run`, `test` and `check` all run the compile-time jobs.
 

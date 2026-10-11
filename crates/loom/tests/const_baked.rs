@@ -125,3 +125,132 @@ fn constants_are_read_back_by_type() {
     assert!(!got.contains_key("LATER"));
     assert!(!got.contains_key("DISC"));
 }
+
+/// A program with a table and a list of text, which are data (V4's passing
+/// item 3): neither is computed by the program that runs.
+const TABLES: &str = r#"
+use std.io.print
+
+const CRC_TABLE: [u32; 256] = {
+    var t = [0u32; 256]
+    var i = 0
+    while i < 256 {
+        var c = i as u32
+        var k = 0
+        while k < 8 {
+            c = if c & 1 == 1 { 0xEDB8_8320 ~ (c >> 1) } else { c >> 1 }
+            k += 1
+        }
+        t[i] = c
+        i += 1
+    }
+    t
+}
+const WORDS: List[String] = ["alpha", "beta", "gamma"]
+const LIMIT: u32 = 12 * 1000
+
+fn main() {
+    print("{CRC_TABLE[255]} {WORDS} {LIMIT}")
+}
+"#;
+
+fn compile_tables() -> (SourceDb, loom_compiler::hir::Program, typeck::Typed) {
+    // The same path each time, so what's compared isn't where it was.
+    let path = std::env::temp_dir().join(format!("loom-tables-{}.loom", std::process::id()));
+    std::fs::write(&path, TABLES).expect("a temporary file");
+    let mut db = SourceDb::new();
+    let file = db.add(path.display().to_string(), TABLES.to_string());
+    let resolved = resolve(&mut db, file, &FsLoader::new(&path));
+    assert!(!resolved.has_errors());
+    let typed = typeck::check_for(&resolved.program, Target::VM);
+    assert!(!typed.has_errors());
+    (db, resolved.program, typed)
+}
+
+#[test]
+fn a_table_and_a_list_of_strings_are_data_not_computed() {
+    let (db, program, typed) = compile_tables();
+    // Treadle: no function computes a constant, and the image's data has
+    // the table's words.
+    let compiled = loom_compiler::treadle::compile_at(&db, &program, &typed, loom_compiler::heddle::opt::Level::O0)
+        .expect("compiles");
+    let inits: Vec<&str> =
+        compiled.heddle.funcs.iter().map(|f| f.name.as_str()).filter(|n| n.ends_with(".init")).collect();
+    assert!(inits.is_empty(), "constants computed by the program: {inits:?}");
+    let bytes: Vec<u8> = compiled.image.data.iter().flat_map(|w| w.to_le_bytes()).collect();
+    let entry = 0x7707_3096u32.to_le_bytes();
+    assert!(bytes.windows(4).any(|w| w == entry), "the table's second entry is in the data");
+    assert!(!compiled.image.relocs.is_empty(), "the list points into the data");
+    // Lua: the bundle assigns the literals, and has no initializer.
+    let lua_typed = typeck::check_for(&program, Target::LUA);
+    let bundle = loom_compiler::lower::lower(&db, &program, &lua_typed).expect("lowers");
+    assert!(!bundle.lua.contains("CI."), "an initializer in the bundle");
+    assert!(bundle.lua.contains("1996959894"), "the table's second entry is a literal");
+    assert!(bundle.lua.contains("C.WORDS_"), "the list is assigned");
+}
+
+/// Building twice gives the same image and bundle (V4's passing item 4),
+/// with other allocations in between so no address could be what's the same.
+#[test]
+fn building_twice_in_a_process_gives_the_same_bytes() {
+    let build = || {
+        let (db, program, typed) = compile_tables();
+        let image = loom_compiler::treadle::compile(&db, &program, &typed).expect("compiles").image;
+        let lua_typed = typeck::check_for(&program, Target::LUA);
+        let bundle = loom_compiler::lower::lower(&db, &program, &lua_typed).expect("lowers");
+        (image, bundle.lua, bundle.map.to_text())
+    };
+    let first = build();
+    // Move the heap about.
+    let junk: Vec<Vec<u8>> = (0..300).map(|i| vec![i as u8; 1 + (i * 37) % 4099]).collect();
+    std::mem::forget(junk);
+    let second = build();
+    assert_eq!(first.1, second.1, "the bundle changed");
+    assert_eq!(first.2, second.2, "the source map changed");
+    assert_eq!(first.0, second.0, "the image changed");
+}
+
+/// The same, across processes: the bundle and the listing of the image.
+#[test]
+fn building_in_two_processes_gives_the_same_bytes() {
+    let dir = std::env::temp_dir().join(format!("loom-twice-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a directory");
+    let source = dir.join("tables.loom");
+    std::fs::write(&source, TABLES).expect("a file");
+    let run = |args: &[&str]| {
+        let out = std::process::Command::new(env!("CARGO_BIN_EXE_loom")).args(args).output().expect("runs loom");
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        out.stdout
+    };
+    let src = source.to_str().expect("utf-8");
+    let listing_a = run(&["build", "--emit", "bytecode", src]);
+    let listing_b = run(&["build", "--emit", "bytecode", src]);
+    assert_eq!(listing_a, listing_b, "the image's listing changed");
+    let (a, b) = (dir.join("a.lua"), dir.join("b.lua"));
+    run(&["build", src, "-o", a.to_str().expect("utf-8")]);
+    run(&["build", src, "-o", b.to_str().expect("utf-8")]);
+    assert_eq!(std::fs::read(&a).expect("a bundle"), std::fs::read(&b).expect("a bundle"));
+    assert_eq!(
+        std::fs::read(dir.join("a.lua.map")).expect("a map"),
+        std::fs::read(dir.join("b.lua.map")).expect("a map")
+    );
+    let text = String::from_utf8_lossy(&listing_a);
+    assert!(text.contains("-> data+"), "the listing shows the relocations");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// `usize` is 64 bits on Treadle and 63 on the Lua target, and what
+/// compile-time code computed with it is read back as that.
+#[test]
+fn usize_is_the_targets() {
+    // `target` is the target being built: what the constants see.
+    let source = "const BIG: usize = usize.MAX\nconst SBIG: isize = isize.MIN\nconst BITS: u64 = target.pointer_bits as u64\nfn main() {}\n";
+    let vm = read_back(source, Target::VM);
+    assert_eq!(vm["BIG"], BakedVal::Int(u64::MAX.into()));
+    assert_eq!(vm["SBIG"], BakedVal::Int(i64::MIN.into()));
+    assert_eq!(vm["BITS"], BakedVal::Int(64));
+    let lua = read_back(source, Target::LUA);
+    assert_eq!(lua["BIG"], BakedVal::Int(((1u128 << 63) - 1) as i128));
+    assert_eq!(lua["SBIG"], BakedVal::Int(-(1i128 << 62)));
+    assert_eq!(lua["BITS"], BakedVal::Int(63));
+}

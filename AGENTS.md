@@ -194,8 +194,11 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
     `heddle/build/jobs.rs`), under a budget (100M ticks, 1 GiB, 20 s) with
     the host refused (K0104). The Lua sandbox is gone and `loom_compiler`
     depends on `loom_host` only in tests: 239 ms against 495 ms over the
-    corpus. Still to do: baking the values into the image and the Lua
-    bundle, and `target` from the target being built.
+    corpus. The values computed are baked: data in the image (with
+    relocations) and literals in the Lua bundle, for numbers, text,
+    tuples, arrays, lists, records and optionals (`baked.rs`). Still to do:
+    `target` from the target being built, and reusing the job build for the
+    program's.
 
 Next: the rest of V4, V5 threads, V6 spools, V7 Lua interop, V8 speed, V9
 Treadle by default.

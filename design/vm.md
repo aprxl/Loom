@@ -1590,8 +1590,27 @@ halves that share a readback: *running* jobs, and *baking* their values.
    `loom_compiler` depends on `loom_vm`, and on `loom_host` only for its
    tests. The numbers are in `bench/RESULTS.md`: 239 ms against 495 ms over
    the corpus, and the heaviest file uses 5.8 M of the 100 M ticks.
-   Open for step 5: the job VM never runs `ConstExit`, so what constants
-   allocate (big objects) is only freed with the process.
+   After the jobs, `ConstExit` runs on the job VM, and under the checked
+   build a leak is an internal error: that found a copy of a constant a
+   `const assert` made and didn't free.
+   *Baked* (2026-10-11, step 5): `baked.rs` reads each computed constant
+   back through its type's layout into a tree (`BakedVal`: numbers, text,
+   elements, fields, some/none; no address in it). Treadle: `bake.rs`
+   writes it into the slot (flag done) and buffers after it, with
+   `Image::relocs` for each pointer, which the loader turns into an
+   address (`verify` checks them, `prune` skips what's baked, the checked
+   build reads text from the data); `read_const` has no flag to test and
+   a number is an immediate, `const_exit` leaves it alone, and a read of
+   one that owns memory is a copy as before. Lua: `lower/baked.rs`, as
+   `C.name = <literal>`. What's read: numbers, `bool`, `char`, `()`, `str`,
+   `String`, tuples, arrays, `List`, records, tuple warps and `?T`; maps,
+   sets, sums, slices, `any` and functions are computed when read. Checked
+   by `tests/run/const_baked` (the edges of each type, with the output of
+   the pre-V4 build), `crates/loom/tests/const_baked.rs` (the tree read
+   back; no `.init` and no `CI.` for a CRC table and a list of strings;
+   the same bytes twice in a process and across two), and the program
+   generator, which makes each program a few constants and the functions
+   that build the same values, and checks they show identically.
 6. **Docs**: this section, §5.1, §10.16, `design/lua-backend.md`'s
    constants, `docs/`, and AGENTS.md's status.
 

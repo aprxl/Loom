@@ -500,11 +500,18 @@ is for (`consteval.rs`, `heddle/build/jobs.rs`; design/vm.md §17, V4):
   seconds: K0102. After a job fails, the constants it was computing are
   marked failed, and jobs that need them stop quietly rather than reporting
   the same failure again.
-- **Values aren't written into the bundle yet.** The real bundle computes
-  each constant again the first time the program reads it. That gives the
-  same value, because compile-time code can't depend on anything but
-  itself, and it already ran without failing. Writing the values into the
-  bundle as literals is V4's next step.
+- **Values are written into the bundle** (`lower/baked.rs`). After the jobs
+  run, each constant they computed is read back from the VM by its type
+  (`baked.rs`): numbers, `bool`, `char`, `()`, `str`, `String`, tuples,
+  arrays, `List`, records, tuple warps and `?T`, when they're no deeper
+  than 32, no more than 64k values and 16 MiB. Such a constant is `C.name =
+  <literal>` rather than a function that computes it when read, and a
+  number is written where it's read. The literal has the shape the
+  program's own code makes of that type: strings are Lua strings, arrays
+  and lists `{n = N, [1] = …}`, records keyed by field name, tuple warps by
+  position, `none` is `nil` (and `C` has no entry), and `some(v)` is `v`
+  (`{v}` for `()` and optionals). Maps, sets, sums, slices and the like are
+  still computed when read.
 - **Checked while type-checking:** compile-time code can't read the locals
   around it (K0105), and `return`, `break`, `continue`, `?`, `yield` and
   `pull` can't leave it (K0106), exactly like a `defer`'s body.

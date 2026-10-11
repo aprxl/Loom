@@ -1058,10 +1058,32 @@ impl Gen {
         for _ in 0..self.rng.below(4) {
             head.push_str(&self.shuttle());
         }
+        // Constants (baked in, V4), each also made by a function from the same
+        // text: `main` says if they show differently.
+        self.scopes = vec![Vec::new()];
+        let mut checks = Vec::new();
+        for k in 0..self.rng.below(4) {
+            let ty = match self.rng.below(8) {
+                0 => Ty::Int(self.int()),
+                1 => Ty::Bool,
+                2 => Ty::F64,
+                3 => Ty::Rec,
+                4 => Ty::List(self.int()),
+                5 => Ty::Opt(self.int()),
+                6 => Ty::Str,
+                _ => Ty::StrList,
+            };
+            let (text, name) = (self.expr(ty, 0), self.ty_name(ty));
+            let _ = write!(head, "const KC_{k}: {name} = {text}\n\nfn mk_{k}() -> {name} {{\n    {text}\n}}\n\n");
+            checks.push(format!(
+                "    if \"{{KC_{k}:?}}\" != \"{{mk_{k}():?}}\" {{ print(\"CONST MISMATCH {k}\") }}\n    print(\"{{KC_{k}:?}}\")\n"
+            ));
+        }
         head.push_str("fn main() {\n");
         self.scopes = vec![Vec::new()];
         let n = 10 + self.rng.below(20) as u32;
-        let main = self.stmts(n, 3, 1);
+        let mut main = checks;
+        main.extend(self.stmts(n, 3, 1));
         (head, main, "}\n".into())
     }
 }
@@ -1131,11 +1153,17 @@ fn problem(text: &str) -> Option<String> {
         Ok(r) => r,
         Err(e) => return Some(format!("doesn't compile (a generator bug):\n{e}")),
     };
+    if lua.0.contains("CONST MISMATCH") {
+        return Some(format!("a constant isn't what its function makes (Lua)\n{}", lua.0));
+    }
     for level in [Level::O2, Level::O0] {
         let vm = match run_vm(text, level) {
             Ok(r) => r,
             Err(e) => return Some(format!("doesn't compile for Treadle at {level:?}:\n{e}")),
         };
+        if vm.0.contains("CONST MISMATCH") {
+            return Some(format!("a constant isn't what its function makes (Treadle at {level:?})\n{}", vm.0));
+        }
         if lua != vm {
             return Some(format!(
                 "the backends disagree\n--- Lua ({})\n{}--- Treadle at {level:?} ({})\n{}",
