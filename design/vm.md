@@ -1497,6 +1497,94 @@ In:
   the Lua bundle instead of initializers.
 - `target` facts come from the target being built.
 
+**Plan** (decided 2026-10-11, in commit order; each commit passes the gates).
+
+What the code looks like today: `lower::compile_time` runs every constant,
+`const` expression and `const assert` as a job in the Lua sandbox
+(`loom_host::consteval::run_jobs`) and gets back only pass, fail or a
+category; the compiler's own values for const generics, `const if`/`for` and
+array sizes come from the Rust folder (`typeck/gauge.rs`, `unroll.rs`), not
+from jobs. On Treadle a constant is a lazy data slot (a flag word, then the
+value; `heddle/build/consts.rs`) computed on first read. So V4 has two
+halves that share a readback: *running* jobs, and *baking* their values.
+
+0. **Baseline first.** Before anything is removed, record the sandbox's
+   compile times for `const_eval`, `const_params`, `derive_json`,
+   `examples/compile_time.loom` and `endless_work` in RESULTS.md. Pass 5
+   compares against them, and they can't be measured afterwards.
+1. **VM: budgets, refusal, readback** (`loom_vm`, `loom_isa`).
+   - The tick check (§9.5) already runs every 65 536 backward jumps and
+     calls. Add a step budget and a deadline to it, and a heap cap through
+     `Trap::OutOfMemory`; no hot-path cost. A new `Trap::Budget`.
+     Ticks count calls and back edges, not instructions, so K0102's step
+     number is re-calibrated: `const_budget.loom` and `endless_work.loom` must
+     still fail, and every `tests/run` constant must pass with 10× headroom.
+   - A host native reached under `Host { sandbox: true }` traps with
+     `Trap::HostRefused(name)`, carrying the native's name, so the compiler
+     can report K0104 with it. Open: `NativeSig` has no host flag today
+     (the host natives are a group in `loom_vm/host.rs`); add one to the
+     table so the refusal is data, not a list of names.
+   - Readback: `Vm::read(addr, len) -> &[u8]` for the data and heap, and
+     `Vm::data_base()`, so a caller can walk a value by its layout.
+2. **Move `srcmap` and `RT_CORE` out of `loom_host`**, as one mechanical
+   commit. They are the other reasons `loom_compiler` depends on it. The
+   `lua54`/`lua55` features move with them (the `lua55` gate must still
+   pass).
+3. **Run jobs on Treadle, constants still lazy.** One image holds every job
+   (`Module.roots` is the job init functions, so only what they reach is
+   built), one `Vm`, a `Vm::call` per job; `Vm::new` verifies the whole
+   image once. A job that exhausts the budget skips the rest, as today.
+   The job build takes a `Target`: a Lua-target build evaluates `usize` in 63
+   bits (§5.1). `OS`, `ARCH` and `ENDIAN` stay the build host's, as §5.1
+   says; `pointer_bits` already comes from `Target`. `-O0` or `-O2` for job
+   images is picked by measuring against step 0. Then `lower/consteval.rs`
+   and `loom_host/src/consteval.rs` go, and `loom_compiler` stops depending
+   on `loom_host`. Passing 1, 2 and 5 are checked here.
+4. **Cycles and the checked build.** A constant's flag word becomes
+   three-state: 0 untouched, 2 in progress, 1 done. Reading a 2 unravels with
+   the cycle message (K0107), as `rt.lazy`'s CYCLE marker does on Lua, rather
+   than overflowing the stack. After a job VM's results are read, run
+   `ConstExit` on it so `vm-checked` doesn't report every constant as a leak.
+5. **Bake.** After the jobs run, read each baked constant back *by type*
+   (`ty::layout`) into canonical bytes in a fixed order. A raw heap address
+   is never copied (ASLR would break pass 4): a pointer becomes an offset
+   into the data plus an entry in a relocation list, which `Machine::load`
+   patches once at load.
+   - *Closed set*: scalars, `str`/`String`, arrays, lists, tuples,
+     optionals, and warps and cases of those. Everything else (maps and
+     sets until their hashing and iteration order are shown to match,
+     `any`, lambdas, shuttles) keeps its lazy slot on both backends. A
+     constant that isn't baked is never wrong, only slower.
+   - *Ownership*: baked data is never freed. `ConstExit` and drop glue skip
+     it, `.copy()` still allocates a heap copy, and the checked build's
+     shadow map marks the data region valid. Open: what `read_const` hands
+     out for a non-`Copy` baked value (it copies today, `consts.rs:92`),
+     and whether a baked list can be read without a copy.
+   - *Heddle*: a baked scalar is an immediate, so SCCP, ranges and GVN fold
+     it; a baked aggregate is a `Global` address with no flag test.
+   - *Lua*: a baked value is a literal in the bundle. Pitfalls, each a
+     fixture: `-9223372036854775808` (write `math.mininteger`), `-0.0`,
+     NaN and infinities, `1` against `1.0` and exact float round-trip,
+     byte strings as `\ddd`, a `nil` constant (not a table field), and
+     nesting deep enough to hit the parser's C-stack limit (such a
+     constant stays lazy). Everything stays inside 5.4 ∩ 5.5.
+6. **Docs**: this section, §5.1, §10.16, `design/lua-backend.md`'s
+   constants, `docs/`, and AGENTS.md's status.
+
+Verification beyond the passing list:
+
+- Pass 4 is checked across two separate `loom build` processes, comparing
+  bundle bytes and an image listing (`Image` has no serialization; add a
+  deterministic listing if `loom_isa`'s doesn't cover the data). One process
+  comparing with `PartialEq` can't see address leakage.
+- `gen.rs` gets a differential mode: each program emits a constant and the
+  same expression in a run-time function, and the two must agree, on Lua,
+  `-O0` and `-O2`. With Lua no longer computing its own constants, this is
+  the check on baking.
+- Fixtures: a constant cycle, K0104 naming the native, a budget that passes
+  just under, a baked `i64::MIN`, `-0.0`, NaN, a string with every byte value,
+  a constant of constants, and one of each type outside the closed set.
+
 Passing:
 
 1. Every K fixture gives the same diagnostics as before.
