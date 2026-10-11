@@ -748,9 +748,20 @@ impl Lowerer<'_> {
                 };
                 Expr::rt(name, vec![d, sd, v])
             }
-            (TyKind::Int(_), TyKind::Float(f)) => {
-                let sd = self.desc(source, span);
-                Expr::rt(if f == FloatTy::F32 { "itof32" } else { "itof" }, vec![sd, v])
+            (TyKind::Int(s), TyKind::Float(f)) => {
+                // A Lua integer is a float by adding 0.0 (rounded once, as
+                // the runtime does); only a u64's bit pattern needs more. An
+                // f32 is that, rounded to 24 bits, while the integer is
+                // exact in an f64.
+                let exact = !(s.bits == 64 && !s.signed);
+                match f {
+                    FloatTy::F64 if exact => Expr::bin("+", v, Expr::Float(0.0)),
+                    FloatTy::F32 if exact && s.bits <= 52 => Expr::rt("f32", vec![Expr::bin("+", v, Expr::Float(0.0))]),
+                    _ => {
+                        let sd = self.desc(source, span);
+                        Expr::rt(if f == FloatTy::F32 { "itof32" } else { "itof" }, vec![sd, v])
+                    }
+                }
             }
             (TyKind::Float(_), TyKind::Int(_)) => {
                 let d = self.desc(target, span);
@@ -1191,6 +1202,26 @@ impl Lowerer<'_> {
         self.span = Some(stmt.span);
         match &stmt.kind {
             HirStmt::Let { pat, init, .. } => {
+                // `let (a, b) = (x, y)` of plain values is `local a, b = x, y`:
+                // no table made to take apart.
+                if let (PatKind::Tuple(pats), ExprKind::Tuple(items)) = (&pat.kind, &init.kind)
+                    && pats.len() == items.len()
+                    && !items.is_empty()
+                    && pats.iter().all(|p| matches!(p.kind, PatKind::Bind(_)))
+                    && items.iter().all(|item| !self.is_table(self.ty_of(item)))
+                {
+                    let refs: Vec<&hir::Expr> = items.iter().collect();
+                    let vals = self.lower_operands(&refs);
+                    let names = pats
+                        .iter()
+                        .filter_map(|p| match p.kind {
+                            PatKind::Bind(local) => Some(self.local_name(local)),
+                            _ => None,
+                        })
+                        .collect();
+                    self.push(StmtKind::Local(names, vals));
+                    return;
+                }
                 let v = self.lower_owned(init);
                 self.bind_irrefutable(pat, v);
             }
@@ -1585,6 +1616,22 @@ impl Lowerer<'_> {
                 let place = self.lower_place(target);
                 let result = self.apply(bin, place.clone(), v, ty, target.span);
                 self.push(StmtKind::Assign(vec![place], vec![result]));
+            }
+            (ExprKind::Tuple(targets), AssignOp::Assign)
+                if let ExprKind::Tuple(items) = &value.kind
+                    && targets.len() == items.len()
+                    && targets.iter().all(|t| {
+                        matches!(&t.kind, ExprKind::Local(l) if !self.overwrites(*l)) && !self.is_table(self.ty_of(t))
+                    })
+                    && items.iter().all(|item| !self.is_table(self.ty_of(item))) =>
+            {
+                // Of plain values to plain locals, one multiple assignment:
+                // Lua computes every value before it assigns any, so
+                // `(a, b) = (b, a)` swaps, with no table made.
+                let refs: Vec<&hir::Expr> = items.iter().collect();
+                let vals = self.lower_operands(&refs);
+                let places: Vec<Expr> = targets.iter().map(|t| self.lower_place(t)).collect();
+                self.push(StmtKind::Assign(places, vals));
             }
             (ExprKind::Tuple(_), AssignOp::Assign) => {
                 // Every value is computed before anything is assigned, so

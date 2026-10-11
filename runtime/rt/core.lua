@@ -718,7 +718,34 @@ end
 
 --- A deep copy of a value that's a table, following its descriptor. Loom
 --- values are copied when assigned (for `Copy` types), but Lua shares tables.
+-- The kinds whose values are never mutated in place: a copy of one is itself.
+local flat_kinds = {
+  int = true, float = true, bool = true, char = true, str = true, unit = true,
+  enum = true, opaque = true,
+}
+
+-- A function that copies a record of flat fields, made once per descriptor
+-- (`{x = v.x, y = v.y}`: no walk of the descriptor, no kind tests), or nil.
+local function flat_copier(d)
+  local parts = {}
+  for _, f in ipairs(d.fields) do
+    if not flat_kinds[f[3].kind] then return nil end
+    local key = f[1]
+    if math.type(key) == "integer" then
+      key = "[" .. key .. "]"
+    else
+      key = "[" .. string.format("%q", key) .. "]"
+    end
+    parts[#parts + 1] = key .. "=v" .. key
+  end
+  local chunk = load("return function(v) return {" .. table.concat(parts, ",") .. "} end")
+  return chunk and chunk()
+end
+
 local function copy(d, v)
+  -- A record of flat fields has a copier of its own (`false`: it has none).
+  local cp = d.cp
+  if cp then return cp(v) end
   local kind = d.kind
   if kind == "tuple" then
     local t = {}
@@ -727,6 +754,11 @@ local function copy(d, v)
     end
     return t
   elseif kind == "record" then
+    if cp == nil then
+      cp = flat_copier(d) or false
+      d.cp = cp
+      if cp then return cp(v) end
+    end
     local t = {}
     for _, f in ipairs(d.fields) do
       t[f[1]] = copy(f[3], v[f[1]])

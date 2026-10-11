@@ -142,13 +142,13 @@ impl Lowerer<'_> {
             Seq::Array(_, n) => (s, Expr::Int(1), Expr::Int(n as i64)),
             Seq::List(_) => {
                 let n = self.spill_always(Expr::field(s.clone(), "n"));
-                guard = Some(Expr::rt("same_len", vec![s.clone(), n.clone()]));
+                guard = Some((s.clone(), n.clone()));
                 (s, Expr::Int(1), n)
             }
             Seq::Slice(_) => {
                 let t = self.spill_always(Expr::field(s.clone(), "t"));
                 let len = self.spill_always(Expr::field(t.clone(), "n"));
-                guard = Some(Expr::rt("same_len", vec![t.clone(), len]));
+                guard = Some((t.clone(), len));
                 let o = self.spill_always(Expr::field(s.clone(), "o"));
                 let hi = Expr::bin("+", o.clone(), Expr::field(s, "n"));
                 (t, Expr::bin("+", o, Expr::Int(1)), hi)
@@ -161,8 +161,12 @@ impl Lowerer<'_> {
             _ => None,
         };
         let mut body_stmts = self.nested(|this| {
-            if let Some(guard) = guard {
-                this.push(StmtKind::Call(guard));
+            // Checked here, not in a call per element: only a change of the
+            // length calls the runtime, which says so.
+            if let Some((s, n)) = guard {
+                let changed = Expr::bin("~=", Expr::field(s.clone(), "n"), n.clone());
+                let raise = Stmt { kind: StmtKind::Call(Expr::rt("same_len", vec![s, n])), span: None };
+                this.push(StmtKind::If(vec![(changed, vec![raise])], None));
             }
             match alias {
                 Some(local) => {
