@@ -35,7 +35,7 @@ impl Lowerer<'_> {
         }
     }
 
-    fn table_key(key: &Key) -> TableKey {
+    pub(super) fn table_key(key: &Key) -> TableKey {
         match key {
             Key::Name(n) => TableKey::Name(n.clone()),
             Key::Pos(i) => TableKey::Index(*i as i64),
@@ -491,7 +491,11 @@ impl Lowerer<'_> {
         }
         match self.typed.results.untyped_consts.get(&def) {
             Some(&value) => self.int_value(value, ty),
-            None => Expr::field(Expr::name("C"), &self.def_name(def)),
+            None => match self.baked_scalar(crate::heddle::ConstKey::Def(def)) {
+                // A number computed while compiling is written where it's read.
+                Some(lit) => lit,
+                None => Expr::field(Expr::name("C"), &self.def_name(def)),
+            },
         }
     }
 

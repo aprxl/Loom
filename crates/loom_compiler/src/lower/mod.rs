@@ -20,6 +20,7 @@
 //! function. Next to the Lua text, a source map records the Loom line of
 //! every Lua line that starts a statement.
 
+mod baked;
 mod closure;
 mod consteval;
 mod expr;
@@ -95,8 +96,9 @@ pub const RUNTIME_WARPS: &[&str] = &[
 /// Lowers a type-checked program, which starts at `main`, after running its
 /// compile-time code. `typed` must have no errors. Its tests are left out.
 pub fn lower(db: &SourceDb, p: &Program, typed: &Typed) -> Result<Bundle, Vec<Diagnostic>> {
-    crate::consteval::evaluate(db, p, typed, false)?;
+    let baked = crate::consteval::evaluate(db, p, typed, false)?;
     let mut l = Lowerer::new(p, typed);
+    l.baked = Some(&baked);
     let main = l.find_main();
     // A missing `main` is reported after what's wrong with the rest.
     let no_main = std::mem::take(&mut l.diags);
@@ -112,8 +114,9 @@ pub fn lower(db: &SourceDb, p: &Program, typed: &Typed) -> Result<Bundle, Vec<Di
 /// Lowers a type-checked program for `loom test`: the bundle returns the
 /// root module's tests rather than `main`.
 pub fn lower_tests(db: &SourceDb, p: &Program, typed: &Typed) -> Result<Bundle, Vec<Diagnostic>> {
-    crate::consteval::evaluate(db, p, typed, true)?;
+    let baked = crate::consteval::evaluate(db, p, typed, true)?;
     let mut l = Lowerer::new(p, typed);
+    l.baked = Some(&baked);
     l.lower_all(true);
     let tests = p.root.map(|root| p.module(root).tests.clone()).unwrap_or_default();
     let tests = tests.into_iter().map(|def| (def, l.fail_desc(def))).collect();
@@ -188,6 +191,9 @@ struct Lowerer<'a> {
     consts: Vec<Stmt>,
     /// The `const` expressions lowered, by their name in `C`.
     const_keys: std::collections::HashSet<String>,
+    /// What compile-time code computed: written as literals, not computed
+    /// again (see `baked.rs`).
+    baked: Option<&'a crate::baked::Baked>,
 
     // Per-body state.
     /// The body being lowered: where its types and decisions are recorded.
@@ -234,6 +240,7 @@ impl<'a> Lowerer<'a> {
             fns: Vec::new(),
             consts: Vec::new(),
             const_keys: std::collections::HashSet::new(),
+            baked: None,
             cur: BodyId(0),
             out: Vec::new(),
             next_temp: 0,
@@ -666,9 +673,17 @@ impl<'a> Lowerer<'a> {
                     && !self.typed.results.untyped_floats.contains_key(&def) =>
             {
                 let span = d.span;
-                let body = self.body(span, |this| this.lower_into(&c.value, &Dest::Return));
                 let key = self.def_name(def);
-                self.const_init(&key, body, span);
+                // What compile-time code computed is written as it is.
+                match self.baked_literal(crate::heddle::ConstKey::Def(def)) {
+                    // `none`: what `C` has no entry for reads as nil.
+                    Some(Expr::Nil) => {}
+                    Some(lit) => self.const_value_stmt(&key, lit, span),
+                    None => {
+                        let body = self.body(span, |this| this.lower_into(&c.value, &Dest::Return));
+                        self.const_init(&key, body, span);
+                    }
+                }
             }
             _ => {}
         }

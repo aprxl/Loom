@@ -21,12 +21,29 @@ impl Lowerer<'_> {
         if assert_args(self.p, inner).is_some() {
             return Expr::Nil;
         }
+        let id = crate::heddle::ConstKey::Expr(self.cur, e.id);
+        // A number computed while compiling is written where it's read.
+        if let Some(lit) = self.baked_scalar(id) {
+            return lit;
+        }
         let key = format!("K{}_{}", self.cur.0, e.id.0);
         if self.const_keys.insert(key.clone()) {
-            let body = self.body(e.span, |this| this.lower_into(inner, &Dest::Return));
-            self.const_init(&key, body, e.span);
+            match self.baked_literal(id) {
+                Some(Expr::Nil) => {}
+                Some(lit) => self.const_value_stmt(&key, lit, e.span),
+                None => {
+                    let body = self.body(e.span, |this| this.lower_into(inner, &Dest::Return));
+                    self.const_init(&key, body, e.span);
+                }
+            }
         }
         Expr::field(Expr::name("C"), &key)
+    }
+
+    /// `C.key = literal`: constant `key`, computed while compiling.
+    pub(super) fn const_value_stmt(&mut self, key: &str, value: Expr, span: Span) {
+        let target = Expr::field(Expr::name("C"), key);
+        self.consts.push(Stmt { kind: StmtKind::Assign(vec![target], vec![value]), span: Some(span) });
     }
 
     /// `CI.key = function() … end`: how constant `key` is computed.
