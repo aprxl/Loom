@@ -306,3 +306,31 @@ and a literal in the Lua bundle.
   that build the same values) agrees but for one seed, which is a
   pre-existing disagreement about dropping a generator that holds another
   (it reproduces on the pre-V4 build).
+
+## The Lua backend, after the V4 review (2026-10-11)
+
+`loom run` (the default backend), best of 3, against the same programs at the
+start of the review (design/vm-review-v4.md). Idiomatic Lua and Treadle for
+scale.
+
+| Benchmark | Start | Now | Speed-up | Idiomatic Lua | Treadle |
+|---|---|---|---|---|---|
+| `fib` | 0.564 s | 0.262 s | 2.15× | 0.086 s | 0.036 s |
+| `sieve` | 2.111 s | 0.816 s | 2.59× | 0.345 s | 0.118 s |
+| `mandelbrot` | 0.877 s | 0.253 s | 3.47× | 0.119 s | 0.063 s |
+| `nbody` | 2.269 s | 1.498 s | 1.51× | 0.520 s | 0.280 s |
+| `spectral_norm` | 2.367 s | 1.040 s | 2.28× | 0.148 s | 0.061 s |
+| `fannkuch` | 14.483 s | 5.823 s | 2.49× | 1.454 s | 0.807 s |
+| `richards` | 2.603 s | 1.296 s | 2.01× | 0.182 s | 0.053 s |
+| `sort` | 1.135 s | 0.564 s | 2.01× | 0.328 s | 0.099 s |
+| `maps` | 0.369 s | 0.254 s | 1.46× | 0.121 s | 0.080 s |
+| `word_freq` | 2.965 s | 1.271 s | 2.33× | 0.241 s | 0.204 s |
+| `chip8` | 0.745 s | 0.395 s | 1.89× | 0.098 s | 0.053 s |
+
+Geometric mean **2.14×**. Generated Lua is still 2 to 6 times idiomatic
+Lua; what's left is mostly bounds checks and loads an optimizer would
+remove (§3 of the review).
+
+Treadle against the build before the review's natives: a text-heavy
+program (split, replace, upper-casing, lines and chars over 4 MB) 0.452 s
+to 0.286 s; the benchmark suite within noise.
