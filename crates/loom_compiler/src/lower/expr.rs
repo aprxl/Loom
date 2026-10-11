@@ -28,6 +28,15 @@ const MAX_ARGS: usize = 64;
 
 /// `rt.cat(pieces…)`, in groups of at most [`MAX_ARGS`].
 fn cat(mut pieces: Vec<Expr>) -> Expr {
+    // A few pieces are one concatenation in the generated code (`a .. b ..
+    // c`: one allocation, no call, no table); more go through the runtime.
+    if pieces.len() <= 32 {
+        return pieces
+            .into_iter()
+            .rev()
+            .reduce(|rest, piece| Expr::bin("..", piece, rest))
+            .unwrap_or_else(|| Expr::Str(Vec::new()));
+    }
     while pieces.len() > MAX_ARGS {
         pieces = pieces.chunks(MAX_ARGS).map(|group| Expr::rt("cat", group.to_vec())).collect();
     }
@@ -136,7 +145,7 @@ impl Lowerer<'_> {
         let ty = self.ty_of(e);
         if self.copies_into_owner(e, ty) {
             let d = self.desc(ty, e.span);
-            return Expr::rt("copy", vec![d, v]);
+            return self.copy_call(d, v);
         }
         v
     }
@@ -578,6 +587,22 @@ impl Lowerer<'_> {
         self.op_call(name, d, a, b)
     }
 
+    /// A copy of `v`, a value of the type whose descriptor is `d`: a call
+    /// of the copier made for the type once, at the start of the bundle
+    /// (`rt.spec("copy", d)`, see `rt.copier`), which is a constructor of
+    /// the right shape rather than a walk of the descriptor.
+    pub(super) fn copy_call(&mut self, d: Expr, v: Expr) -> Expr {
+        if let Expr::Index(_, k) = &d
+            && let Expr::Int(k) = k.as_ref()
+        {
+            let key = ((*k - 1) as usize, "copy");
+            self.ops.entry(key).or_insert(());
+            let n = self.ops.get_index_of(&key).expect("just made");
+            return Expr::call(Expr::index(Expr::name("O"), Expr::Int(n as i64 + 1)), vec![v]);
+        }
+        Expr::rt("copy", vec![d, v])
+    }
+
     /// The operation `name` of the runtime on integers of the type whose
     /// descriptor is `d`, applied to `a` and `b`. The common ones call a
     /// closure made for the type once (`O[n]`, see `rt.spec`); the rest
@@ -960,6 +985,18 @@ impl Lowerer<'_> {
             }
         }
         descs.extend(params);
+        // A length is a field of the table (an array, a list, a slice view
+        // all keep it in `n`): no call, and no descriptor to pass.
+        if runtime && outs.is_empty() && descs.len() == 2 {
+            match self.p.def_path(def).as_str() {
+                "std.slice.Slice.len" => return Expr::field(descs.pop().unwrap_or(Expr::Nil), "n"),
+                "std.slice.Slice.is_empty" => {
+                    let n = Expr::field(descs.pop().unwrap_or(Expr::Nil), "n");
+                    return Expr::bin("==", n, Expr::Int(0));
+                }
+                _ => {}
+            }
+        }
         let call_expr = Expr::call(target, descs);
 
         if outs.is_empty() {
@@ -1668,7 +1705,8 @@ impl Lowerer<'_> {
         let part = |this: &mut Self| {
             if copies && this.is_table(ty) {
                 let d = this.desc(ty, target.span);
-                this.spill_always(Expr::rt("copy", vec![d, v.clone()]))
+                let copied = this.copy_call(d, v.clone());
+                this.spill_always(copied)
             } else {
                 v.clone()
             }

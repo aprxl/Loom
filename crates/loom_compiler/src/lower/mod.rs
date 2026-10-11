@@ -704,7 +704,7 @@ impl<'a> Lowerer<'a> {
             if sig.mode == loom_syntax::ast::ParamMode::Read && self.is_table(sig.ty) {
                 let name = Expr::name(self.local_name(param.local));
                 let d = self.desc(sig.ty, span);
-                let copy = Expr::rt("copy", vec![d, name.clone()]);
+                let copy = self.copy_call(d, name.clone());
                 out.push(Stmt { kind: StmtKind::Assign(vec![name], vec![copy]), span: None });
             }
         }

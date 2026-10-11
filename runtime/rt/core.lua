@@ -423,6 +423,12 @@ function spec.shr(d)
   end
 end
 
+-- A copy of a value of type `d`: its copier (see `rt.copier`), or, for a
+-- type whose values aren't copied (a scalar), a function that returns it.
+function spec.copy(d)
+  return rt.copier(d) or function(v) return v end
+end
+
 --- The closure for operation `name` (one of `add`, `sub`, `mul`, their
 --- `_wrap` forms, `div`, `rem`, `shl`, `shr`) on integer type `d`, which
 --- takes the operands only.
@@ -724,28 +730,18 @@ local flat_kinds = {
   enum = true, opaque = true,
 }
 
--- A function that copies a record of flat fields, made once per descriptor
--- (`{x = v.x, y = v.y}`: no walk of the descriptor, no kind tests), or nil.
-local function flat_copier(d)
-  local parts = {}
-  for _, f in ipairs(d.fields) do
-    if not flat_kinds[f[3].kind] then return nil end
-    local key = f[1]
-    if math.type(key) == "integer" then
-      key = "[" .. key .. "]"
-    else
-      key = "[" .. string.format("%q", key) .. "]"
-    end
-    parts[#parts + 1] = key .. "=v" .. key
-  end
-  local chunk = load("return function(v) return {" .. table.concat(parts, ",") .. "} end")
-  return chunk and chunk()
-end
+-- The deep copy of a value of descriptor `d`, which a value that's a table
+-- is given when it's stored somewhere that owns it. `copy` below is what
+-- the generated code calls; it uses a copier made once for each descriptor
+-- (`d.cp`): `false` when a copy is the value itself, else a function. A
+-- record or a tuple's is a constructor (`{x = v.x, pos = u1(v.pos)}`), with
+-- no walk of the descriptor and no tests of kinds; the rest go through
+-- `copy_walk`, which finds the copiers of what's inside.
+local copy
+do -- (a block: the chunk is near Lua's limit of 200 locals)
+local copier_of, make_copier
 
-local function copy(d, v)
-  -- A record of flat fields has a copier of its own (`false`: it has none).
-  local cp = d.cp
-  if cp then return cp(v) end
+local function copy_walk(d, v)
   local kind = d.kind
   if kind == "tuple" then
     local t = {}
@@ -754,11 +750,6 @@ local function copy(d, v)
     end
     return t
   elseif kind == "record" then
-    if cp == nil then
-      cp = flat_copier(d) or false
-      d.cp = cp
-      if cp then return cp(v) end
-    end
     local t = {}
     for _, f in ipairs(d.fields) do
       t[f[1]] = copy(f[3], v[f[1]])
@@ -784,8 +775,15 @@ local function copy(d, v)
   elseif kind == "seq" then
     local n, elem = v.n, d.elem
     local t = { n = n }
-    for i = 1, n do
-      t[i] = copy(elem, v[i])
+    local c = copier_of(elem)
+    if c then
+      for i = 1, n do
+        t[i] = c(v[i])
+      end
+    else
+      for i = 1, n do
+        t[i] = v[i]
+      end
     end
     return t
   elseif kind == "map" or kind == "set" then
@@ -801,11 +799,120 @@ local function copy(d, v)
   end
   return v
 end
+
+copier_of = function(d)
+  local c = d.cp
+  if c == nil then
+    -- A descriptor can contain itself: until this one's is made, what
+    -- needs it walks.
+    d.cp = function(v) return copy_walk(d, v) end
+    c = make_copier(d)
+    d.cp = c
+  end
+  return c
+end
+
+-- Appends to `parts` what makes each field of `fields` (each `{key, name,
+-- descriptor}`, `keys` its keys) copied in a table constructor, and the
+-- copiers of what's inside to `up` (the constructor's upvalues).
+local function field_parts(fields, keys, up, parts)
+  for i, key in ipairs(keys) do
+    local c = copier_of(fields[i][3])
+    local k
+    if math.type(key) == "integer" then k = "[" .. key .. "]" else k = "[" .. string.format("%q", key) .. "]" end
+    if c then
+      up[#up + 1] = c
+      parts[#parts + 1] = k .. "=u" .. #up .. "(v" .. k .. ")"
+    else
+      parts[#parts + 1] = k .. "=v" .. k
+    end
+  end
+end
+
+-- The function that `body` (the source of a function of `v`, using the
+-- upvalues `u1...`) is, with its upvalues `up`.
+local function build(body, up)
+  local names = {}
+  for i = 1, #up do names[i] = "u" .. i end
+  local source = (#up > 0 and ("local " .. table.concat(names, ",") .. " = ...\n") or "")
+    .. "return function(v)\n" .. body .. "\nend"
+  return load(source)(table.unpack(up))
+end
+
+-- A function that makes a table with each field of `fields` copied.
+local function constructor(fields, keys)
+  local up, parts = {}, {}
+  field_parts(fields, keys, up, parts)
+  return build("return {" .. table.concat(parts, ",") .. "}", up)
+end
+
+-- A sum: the same, for the case its tag says (and the fields every case
+-- has).
+local function sum_constructor(d)
+  local up, body = {}, {}
+  local shared_keys = {}
+  for i, f in ipairs(d.shared) do shared_keys[i] = f[1] end
+  for tag, case in pairs(d.cases) do
+    local fields, keys = {}, {}
+    for i, f in ipairs(case.fields or {}) do
+      fields[i] = f
+      keys[i] = f[1]
+    end
+    local parts = { "tag=" .. tag }
+    field_parts(fields, keys, up, parts)
+    field_parts(d.shared, shared_keys, up, parts)
+    body[#body + 1] = "if v.tag == " .. tag .. " then return {" .. table.concat(parts, ",") .. "} end"
+  end
+  body[#body + 1] = "return v"
+  return build(table.concat(body, "\n"), up)
+end
+
+make_copier = function(d)
+  local kind = d.kind
+  if flat_kinds[kind] or kind == "any" then
+    return false
+  elseif kind == "record" then
+    local keys = {}
+    for i, f in ipairs(d.fields) do keys[i] = f[1] end
+    return constructor(d.fields, keys)
+  elseif kind == "tuple" then
+    local fields, keys = {}, {}
+    for i, item in ipairs(d.items) do
+      fields[i] = { i, nil, item }
+      keys[i] = i
+    end
+    return constructor(fields, keys)
+  elseif kind == "sum" then
+    return sum_constructor(d)
+  end
+  return function(v) return copy_walk(d, v) end
+end
+
+copy = function(d, v)
+  local c = d.cp
+  if c == nil then c = copier_of(d) end
+  if c then return c(v) end
+  return v
+end
+
+--- The function that copies values of descriptor `d` (false for a type
+--- whose values are never changed in place).
+function rt.copier(d)
+  return copier_of(d)
+end
+end
 rt.copy = copy
 
 --- `n` copies of `v`.
 function rt.filled(d, v, n)
   local t = { n = n }
+  if flat_kinds[d.kind] then
+    -- Numbers, text, booleans: a value nothing changes in place.
+    for i = 1, n do
+      t[i] = v
+    end
+    return t
+  end
   for i = 1, n do
     t[i] = copy(d, v)
   end
@@ -2575,12 +2682,26 @@ ext["std.string.Str.split"] = function(s, sep)
   return out
 end
 
+-- The bytes of the UTF-8 encoding of code point `c`.
+local function utf8_width(c)
+  if c < 0x80 then return 1 end
+  if c < 0x800 then return 2 end
+  if c < 0x10000 then return 3 end
+  return 4
+end
+
 ext["std.string.Str.chars"] = function(s)
   local at, n = 1, #s
+  local byte, codepoint = string.byte, utf8.codepoint
   return function()
     if at > n then return nil end
-    local c = utf8.codepoint(s, at)
-    at = at + #utf8char(c)
+    local c = byte(s, at)
+    if c < 0x80 then
+      at = at + 1
+      return true, c
+    end
+    c = codepoint(s, at)
+    at = at + utf8_width(c)
     return true, c
   end
 end
@@ -2747,7 +2868,7 @@ ext["std.string.Char.digit"] = function(c)
 end
 
 ext["std.string.Char.len_utf8"] = function(c)
-  return #utf8char(c)
+  return utf8_width(c)
 end
 
 -- Integers get their type's descriptor first.

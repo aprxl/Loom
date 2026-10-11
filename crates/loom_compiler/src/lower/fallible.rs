@@ -89,7 +89,7 @@ impl Lowerer<'_> {
         };
         if self.copies_into_owner(inner, inner_ty) {
             let d = self.desc(inner_ty, e.span);
-            return Expr::rt("copy", vec![d, v]);
+            return self.copy_call(d, v);
         }
         v
     }
@@ -175,7 +175,7 @@ impl Lowerer<'_> {
                 this.copies_into_owner(left, ty) || (this.is_table(ty) && this.is_copy(ty) && info.unwrap.is_some());
             if owning && copies {
                 let d = this.desc(ty, e.span);
-                v = Expr::rt("copy", vec![d, v]);
+                v = this.copy_call(d, v);
             }
             v = match info.wrap {
                 Some(Coercion::ToOptional) if this.opt_boxed(ty) => Expr::Table(vec![v]),

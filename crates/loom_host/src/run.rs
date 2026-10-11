@@ -33,6 +33,44 @@ const INTERRUPT_MARK: &str = "\u{1f}interrupt";
 /// the process.
 pub const RUN_MEMORY_LIMIT: usize = 8 << 30;
 
+thread_local! {
+    /// What the program has printed that isn't written yet (a file or a
+    /// pipe: one write for many lines, as Treadle's output does).
+    static STDOUT_BUFFER: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+    /// Whether stdout is a terminal, which sees each line as it's printed.
+    static STDOUT_TERMINAL: bool = std::io::IsTerminal::is_terminal(&std::io::stdout());
+}
+
+/// How much output is kept before it's written.
+const STDOUT_LIMIT: usize = 32 * 1024;
+
+/// Prints `bytes`, buffered unless stdout is a terminal.
+fn stdout_write(bytes: &[u8]) {
+    let terminal = STDOUT_TERMINAL.with(|t| *t);
+    STDOUT_BUFFER.with(|buffer| {
+        let mut buffer = buffer.borrow_mut();
+        buffer.extend_from_slice(bytes);
+        if terminal || buffer.len() >= STDOUT_LIMIT {
+            write_stdout(&mut buffer);
+        }
+    });
+}
+
+fn write_stdout(buffer: &mut Vec<u8>) {
+    if !buffer.is_empty() {
+        let mut out = std::io::stdout().lock();
+        let _ = out.write_all(buffer);
+        let _ = out.flush();
+        buffer.clear();
+    }
+}
+
+/// Writes what's buffered: before anything that waits, reads from the
+/// terminal or ends the run, so what's printed is seen when it should be.
+pub(crate) fn flush_stdout() {
+    STDOUT_BUFFER.with(|buffer| write_stdout(&mut buffer.borrow_mut()));
+}
+
 /// Runs `bundle`, mapping error positions through `map`.
 pub fn run_bundle(bundle: &str, map: Option<&SourceMap>, host: Host) -> Outcome {
     let lua = Lua::new();
@@ -48,7 +86,7 @@ pub fn run_bundle(bundle: &str, map: Option<&SourceMap>, host: Host) -> Outcome 
     drop(watch);
     term.borrow_mut().restore();
     if stdout {
-        let _ = std::io::stdout().flush();
+        flush_stdout();
     }
     outcome(result, map)
 }
@@ -229,9 +267,7 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
     let output = host.output;
     let write = lua.create_function(move |_, s: mlua::String| {
         match &output {
-            Output::Stdout => {
-                let _ = std::io::stdout().write_all(&s.as_bytes());
-            }
+            Output::Stdout => stdout_write(&s.as_bytes()),
             Output::Capture(buffer) => buffer.borrow_mut().extend_from_slice(&s.as_bytes()),
         }
         Ok(())
@@ -247,6 +283,7 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
         if sandbox {
             return Ok(());
         }
+        flush_stdout();
         // In slices, so Ctrl-C ends a long sleep, which then unwinds.
         let slice = std::time::Duration::from_millis(50);
         let end = std::time::Instant::now().checked_add(std::time::Duration::from_nanos(nanos.max(0) as u64));
@@ -273,6 +310,9 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
     // runtime unravels with. A sandboxed run has no terminal and no keys held.
     let raw_term = term.clone();
     let raw_mode = lua.create_function(move |_, on: bool| {
+        if !sandbox {
+            flush_stdout();
+        }
         Ok(if sandbox { None } else { raw_term.borrow_mut().raw_mode(on).err() })
     })?;
     table.set("raw_mode", raw_mode)?;
@@ -280,6 +320,7 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
         if sandbox {
             return Ok((Some(0), None));
         }
+        flush_stdout();
         Ok(match term.borrow_mut().poll_keys(&keymap) {
             Ok(bits) => (Some(bits), None),
             Err(message) => (None, Some(message)),

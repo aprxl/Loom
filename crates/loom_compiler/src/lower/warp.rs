@@ -168,7 +168,7 @@ impl Lowerer<'_> {
         if self.copies_into_owner(e, ty) {
             let v = self.lower_raw(e);
             let d = self.desc(ty, e.span);
-            let copied = Expr::rt("copy", vec![d, v]);
+            let copied = self.copy_call(d, v);
             return self.coerce(e, copied);
         }
         self.lower_expr(e)
@@ -415,7 +415,7 @@ impl Lowerer<'_> {
             let value = match ty {
                 Some(ty) if this.is_table(ty) && this.is_copy(ty) => {
                     let d = this.desc(ty, pat.span);
-                    Expr::rt("copy", vec![d, value])
+                    this.copy_call(d, value)
                 }
                 _ => value,
             };
