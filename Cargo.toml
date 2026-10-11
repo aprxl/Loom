@@ -43,3 +43,12 @@ opt-level = 1
 # The interpreter runs every fixture: keep it fast in debug builds too.
 [profile.dev.package.loom_vm]
 opt-level = 3
+
+# The `loom` binary: one codegen unit and LTO so the interpreter's loop and
+# the natives it calls are compiled together (loom_isa's `unpack_cast` was a
+# call in the loop), and no unwinding: nothing catches a panic, and landing
+# pads cost the loop code size (design/vm-review-v3.md §1.1).
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
