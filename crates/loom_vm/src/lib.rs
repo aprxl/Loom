@@ -264,6 +264,24 @@ impl<'i> Vm<'i> {
         self.machine.data()
     }
 
+    /// Sets word `index` of [`data`](Self::data): how compile-time
+    /// evaluation marks a constant whose computing failed.
+    pub fn set_data(&mut self, index: usize, value: u64) {
+        self.machine.set_data(index, value);
+    }
+
+    /// How many loop iterations and calls have run so far, to the nearest
+    /// [`TICKS`]: counted only when [`Limits`] are set.
+    pub fn steps_used(&self) -> u64 {
+        self.machine.ctx.steps_spent()
+    }
+
+    /// The message built by the last call's `msg.*` natives: an unravel's,
+    /// or a failed `const assert`'s.
+    pub fn message(&self) -> &[u8] {
+        self.machine.ctx.message()
+    }
+
     /// The address of the first word of [`data`](Self::data), which is what
     /// a pointer into the data holds (`gaddr` yields it plus an offset).
     pub fn data_addr(&self) -> u64 {

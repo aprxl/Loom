@@ -157,6 +157,11 @@ impl<'i> Machine<'i> {
         &self.data
     }
 
+    /// Sets word `index` of the data.
+    pub fn set_data(&mut self, index: usize, value: u64) {
+        self.data[index] = value;
+    }
+
     /// Calls function `entry` with `args` (one per parameter register) and
     /// gives its results.
     pub fn call(&mut self, entry: usize, args: &[u64]) -> Result<Vec<u64>, Fault> {

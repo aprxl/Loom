@@ -73,6 +73,8 @@ pub(crate) struct Ctx<'i> {
 struct Meter {
     /// Ticks left, counted in chunks of [`crate::TICKS`].
     steps: Option<u64>,
+    /// Ticks used, in the same chunks.
+    spent: u64,
     deadline: Option<std::time::Instant>,
     /// The budget that ran out, once one has.
     over: Option<loom_sys::Budget>,
@@ -129,10 +131,17 @@ impl<'i> Ctx<'i> {
         if limits.steps.is_some() || limits.time.is_some() {
             self.meter = Some(Meter {
                 steps: limits.steps,
+                spent: 0,
                 deadline: limits.time.and_then(|t| std::time::Instant::now().checked_add(t)),
                 over: None,
             });
         }
+    }
+
+    /// How many ticks have been checked off, in chunks of [`crate::TICKS`]
+    /// (with limits set: otherwise 0).
+    pub fn steps_spent(&self) -> u64 {
+        self.meter.as_ref().map_or(0, |m| m.spent)
     }
 
     /// The budget the program has used up, if it has used one up.
@@ -156,6 +165,7 @@ impl<'i> Ctx<'i> {
             return Some(Trap::Budget { budget, abort: true });
         }
         let mut over = None;
+        m.spent += crate::TICKS;
         if let Some(steps) = &mut m.steps {
             match steps.checked_sub(crate::TICKS) {
                 Some(left) => *steps = left,
@@ -196,6 +206,12 @@ impl<'i> Ctx<'i> {
         while let Some(buf) = self.bufs.pop() {
             self.recycle(buf);
         }
+    }
+
+    /// The message an unravel (or a `const assert`) built, as of the last
+    /// call.
+    pub fn message(&self) -> &[u8] {
+        &self.msg
     }
 
     /// Where the image's text is.
