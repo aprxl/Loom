@@ -41,7 +41,7 @@ pub const FAILED: u64 = 3;
 
 /// A constant: a typed one, or a `const` expression in a body.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(super) enum ConstKey {
+pub enum ConstKey {
     Def(DefId),
     Expr(BodyId, crate::hir::HirId),
 }

@@ -62,6 +62,9 @@ pub struct ConstSlot {
     /// `` `LIMIT` `` or "this `const` expression".
     pub name: String,
     pub span: Span,
+    pub key: ConstKey,
+    /// The type of its value, which is 8 bytes past `offset`.
+    pub ty: crate::ty::Ty,
 }
 
 /// The module that runs a program's compile-time code, with its jobs in the
@@ -190,13 +193,13 @@ pub fn build_jobs(p: &Program, typed: &Typed, tests: bool) -> Result<Option<Jobs
     let slots = b
         .globals
         .iter()
-        .map(|(key, &(offset, _))| {
+        .map(|(key, &(offset, ty))| {
             let span = spans.get(key).copied().unwrap_or_else(|| b.main_span.expect("set above"));
             let name = match key {
                 ConstKey::Def(def) => format!("`{}`", p.def(*def).name),
                 ConstKey::Expr(..) => "this `const` expression".to_string(),
             };
-            ConstSlot { offset, name, span }
+            ConstSlot { offset, name, span, key: *key, ty }
         })
         .collect();
     let roots: Vec<FuncId> = jobs.iter().map(|j| j.func).collect();

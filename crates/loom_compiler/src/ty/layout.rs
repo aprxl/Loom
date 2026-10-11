@@ -136,6 +136,11 @@ fn builtin(path: &str) -> Option<Builtin> {
     })
 }
 
+/// Whether `path` names a warp of std that the runtime lays out.
+pub fn is_builtin(path: &str) -> bool {
+    builtin(path).is_some()
+}
+
 enum Builtin {
     Header(u64),
     Atomic,

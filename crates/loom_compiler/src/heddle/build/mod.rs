@@ -66,7 +66,7 @@ use crate::typeck::{Body, BodyId, Instance, Typed};
 use repr::{Part, Repr};
 use value::{Storage, Val};
 
-pub use consts::{COMPUTING, CYCLE, DONE, FAILED, GAVE_UP};
+pub use consts::{COMPUTING, CYCLE, ConstKey, DONE, FAILED, GAVE_UP};
 pub use jobs::{ConstSlot, Job, JobKind, Jobs, build_jobs};
 
 /// A Loom value in registers: one Heddle value per scalar part.

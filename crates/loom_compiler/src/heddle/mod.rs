@@ -27,7 +27,8 @@ mod verify;
 
 pub(crate) use build::rewrite;
 pub use build::{
-    COMPUTING, CYCLE, ConstSlot, DONE, FAILED, GAVE_UP, Job, JobKind, Jobs, build, build_jobs, build_tests, frames,
+    COMPUTING, CYCLE, ConstKey, ConstSlot, DONE, FAILED, GAVE_UP, Job, JobKind, Jobs, build, build_jobs, build_tests,
+    frames,
 };
 pub use print::print;
 pub(crate) use verify::uses as inst_uses;

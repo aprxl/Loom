@@ -30,6 +30,7 @@ use loom_syntax::source::{SourceDb, Span};
 use loom_sys::{Budget, Host, Location, Outcome};
 use loom_vm::{Config, Limits, Vm};
 
+use crate::baked::{Baked, BakedConst, Reader};
 use crate::heddle::{self, ConstSlot, Job, JobKind, Jobs};
 use crate::hir::Program;
 use crate::typeck::Typed;
@@ -44,9 +45,10 @@ pub const MEMORY_LIMIT: u64 = 1 << 30;
 /// How much stack compile-time code gets: deep recursion is an unravel.
 const STACK_LIMIT: usize = 32 << 20;
 
-/// Runs the program's compile-time code. `tests`: the tests' too.
-pub fn evaluate(db: &SourceDb, p: &Program, typed: &Typed, tests: bool) -> Result<(), Vec<Diagnostic>> {
-    let Some(jobs) = heddle::build_jobs(p, typed, tests)? else { return Ok(()) };
+/// Runs the program's compile-time code. `tests`: the tests' too. What it
+/// computed that can be baked into the program is given back.
+pub fn evaluate(db: &SourceDb, p: &Program, typed: &Typed, tests: bool) -> Result<Baked, Vec<Diagnostic>> {
+    let Some(jobs) = heddle::build_jobs(p, typed, tests)? else { return Ok(Baked::default()) };
     let image = crate::codegen::generate(db, &jobs.module).map_err(crate::treadle::codegen_diagnostics)?;
     let config = Config {
         stack_limit: STACK_LIMIT,
@@ -140,7 +142,22 @@ pub fn evaluate(db: &SourceDb, p: &Program, typed: &Typed, tests: bool) -> Resul
     }
     // In source order, rather than the order the jobs ran in.
     diags.sort_by_key(|d| d.labels.first().map(|l| (l.span.file, l.span.lo)));
-    if diags.is_empty() { Ok(()) } else { Err(diags) }
+    if !diags.is_empty() {
+        return Err(diags);
+    }
+    // What every job computed, read back by type.
+    let mut baked = Baked::default();
+    let mut reader = Reader::new(p, typed);
+    for slot in &jobs.slots {
+        if vm.data()[slot.offset as usize / 8] != heddle::DONE {
+            continue;
+        }
+        let addr = vm.data_addr() + u64::from(slot.offset) + 8;
+        if let Some(val) = reader.read(&vm, slot.ty, addr) {
+            baked.consts.insert(slot.key, BakedConst { ty: slot.ty, val });
+        }
+    }
+    Ok(baked)
 }
 
 /// What a job was doing, for the label of its diagnostics.

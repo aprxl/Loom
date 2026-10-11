@@ -127,7 +127,7 @@ pub fn lower_tests(db: &SourceDb, p: &Program, typed: &Typed) -> Result<Bundle, 
 /// with `tests`) and reports what fails, for backends other than Lua,
 /// which run it the same way (design/vm.md: V4 moves it onto Treadle).
 pub fn compile_time(db: &SourceDb, p: &Program, typed: &Typed, tests: bool) -> Result<(), Vec<Diagnostic>> {
-    crate::consteval::evaluate(db, p, typed, tests)
+    crate::consteval::evaluate(db, p, typed, tests).map(|_| ())
 }
 
 /// Runs the compile-time code of a type-checked program (its tests' too)
