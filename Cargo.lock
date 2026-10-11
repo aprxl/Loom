@@ -401,6 +401,7 @@ version = "0.1.0"
 dependencies = [
  "loom_isa",
  "loom_sys",
+ "memchr",
 ]
 
 [[package]]

@@ -51,6 +51,15 @@ fn text<'c>(ctx: &'c Ctx, ptr: u64, len: u64) -> Result<&'c [u8], Trap> {
     unsafe { ctx.text(ptr, len) }
 }
 
+/// The text at `ptr`, as a slice that doesn't borrow `ctx`, for a native
+/// that then allocates (a string of its own): it never frees or moves what
+/// it reads, so the text is there until it returns.
+fn text_raw<'t>(ctx: &Ctx, ptr: u64, len: u64) -> Result<&'t [u8], Trap> {
+    let t: *const [u8] = text(ctx, ptr, len)?;
+    // SAFETY: as above: a literal, or a heap object no one frees meanwhile.
+    Ok(unsafe { &*t })
+}
+
 fn is_space(b: u8) -> bool {
     b == b' ' || (9..=13).contains(&b)
 }
@@ -60,7 +69,7 @@ fn position(hay: &[u8], needle: &[u8]) -> Option<usize> {
     if needle.is_empty() {
         return Some(0);
     }
-    hay.windows(needle.len()).position(|w| w == needle)
+    memchr::memmem::find(hay, needle)
 }
 
 /// `str.char_count(s)`.
@@ -114,59 +123,79 @@ fn trim(ctx: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
 /// `str.case(s, dst)`: a `String` of `s` with its ASCII letters in upper
 /// case (`imm` 0) or lower case (1).
 fn case(ctx: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
-    let mut s = text(ctx, args[0], args[1])?.to_vec();
-    if imm == 0 {
-        s.make_ascii_uppercase();
-    } else {
-        s.make_ascii_lowercase();
-    }
-    ctx.new_string(&s, args[2])
+    let s = text_raw(ctx, args[0], args[1])?;
+    ctx.new_string_with(s.len(), args[2], |out| {
+        out.copy_from_slice(s);
+        if imm == 0 {
+            out.make_ascii_uppercase();
+        } else {
+            out.make_ascii_lowercase();
+        }
+    })
 }
 
 /// `str.replace(s, from, to, dst)`: every `from` replaced.
 fn replace(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    let s = text(ctx, args[0], args[1])?;
-    let from = text(ctx, args[2], args[3])?;
-    let to = text(ctx, args[4], args[5])?;
-    let mut out = Vec::with_capacity(s.len());
+    let s = text_raw(ctx, args[0], args[1])?;
+    let from = text_raw(ctx, args[2], args[3])?;
+    let to = text_raw(ctx, args[4], args[5])?;
     if from.is_empty() {
         // `to` before every character, and at the end, as Rust's does.
-        for &b in s {
-            if b & 0xC0 != 0x80 {
-                out.extend_from_slice(to);
+        let chars = s.iter().filter(|&&b| b & 0xC0 != 0x80).count();
+        let len = s.len() + (chars + 1) * to.len();
+        return ctx.new_string_with(len, args[6], |out| {
+            let mut at = 0;
+            for &b in s {
+                if b & 0xC0 != 0x80 {
+                    out[at..at + to.len()].copy_from_slice(to);
+                    at += to.len();
+                }
+                out[at] = b;
+                at += 1;
             }
-            out.push(b);
-        }
-        out.extend_from_slice(to);
-    } else {
-        let mut rest = s;
-        while let Some(at) = position(rest, from) {
-            out.extend_from_slice(&rest[..at]);
-            out.extend_from_slice(to);
-            rest = &rest[at + from.len()..];
-        }
-        out.extend_from_slice(rest);
+            out[at..].copy_from_slice(to);
+        });
     }
-    ctx.new_string(&out, args[6])
+    // Counted first, so the result is made once at its size.
+    let finder = memchr::memmem::Finder::new(from);
+    let count = finder.find_iter(s).count();
+    let len = s.len() - count * from.len() + count * to.len();
+    ctx.new_string_with(len, args[6], |out| {
+        let (mut at, mut last) = (0, 0);
+        for m in finder.find_iter(s) {
+            out[at..at + (m - last)].copy_from_slice(&s[last..m]);
+            at += m - last;
+            out[at..at + to.len()].copy_from_slice(to);
+            at += to.len();
+            last = m + from.len();
+        }
+        out[at..].copy_from_slice(&s[last..]);
+    })
 }
 
 /// `str.repeat(s, n, dst)`.
 fn repeat(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    let s = text(ctx, args[0], args[1])?;
+    let s = text_raw(ctx, args[0], args[1])?;
     let n = args[2];
     let len = s.len() as u64;
     if len > 0 && n > crate::heap::LIMIT / len {
         return Err(Trap::Unravel(format!("out of memory: the string would be {n} times {len} bytes")));
     }
-    let out = s.repeat(n as usize);
-    ctx.new_string(&out, args[3])
+    if s.is_empty() || n == 0 {
+        return ctx.new_string(&[], args[3]);
+    }
+    ctx.new_string_with(s.len() * n as usize, args[3], |out| {
+        for chunk in out.chunks_exact_mut(s.len()) {
+            chunk.copy_from_slice(s);
+        }
+    })
 }
 
 /// `str.split(s, sep, dst)`: a `List[String]` of the pieces between each
 /// `sep` (or of each character, for an empty one).
 fn split(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    let s = text(ctx, args[0], args[1])?.to_vec();
-    let sep = text(ctx, args[2], args[3])?.to_vec();
+    let s = text_raw(ctx, args[0], args[1])?;
+    let sep = text_raw(ctx, args[2], args[3])?;
     let pieces: Vec<&[u8]> = if sep.is_empty() {
         let mut out = Vec::new();
         let mut start = 0;
@@ -179,12 +208,12 @@ fn split(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
         out
     } else {
         let mut out = Vec::new();
-        let mut rest = &s[..];
-        while let Some(at) = position(rest, &sep) {
-            out.push(&rest[..at]);
-            rest = &rest[at + sep.len()..];
+        let mut last = 0;
+        for at in memchr::memmem::find_iter(s, sep) {
+            out.push(&s[last..at]);
+            last = at + sep.len();
         }
-        out.push(rest);
+        out.push(&s[last..]);
         out
     };
     let n = pieces.len() as u64;
@@ -354,6 +383,17 @@ fn append(ctx: &mut Ctx, header: u64, more: &[u8]) -> Result<(), Trap> {
 /// `string.push_char(header, c)`.
 fn push_char(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     debug_assert!(char::from_u32(args[1] as u32).is_some(), "a `char` is a valid code point");
+    // An ASCII character is one byte, written in place when there's room.
+    if args[1] < 0x80 {
+        let (buf, len, cap) = read_header(args[0]);
+        if len < cap {
+            // SAFETY: the buffer has `cap` bytes, and `len` is below it.
+            unsafe { ((buf + len) as *mut u8).write(args[1] as u8) };
+            write_header(args[0], buf, len + 1, cap);
+            return Ok(());
+        }
+        return append(ctx, args[0], &[args[1] as u8]);
+    }
     let c = char::from_u32(args[1] as u32).unwrap_or('\u{FFFD}');
     let mut b = [0; 4];
     append(ctx, args[0], c.encode_utf8(&mut b).as_bytes())
@@ -361,8 +401,16 @@ fn push_char(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 
 /// `string.push_str(header, s)`.
 fn push_str(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    let more = text(ctx, args[1], args[2])?.to_vec();
-    append(ctx, args[0], &more)
+    let more = text_raw(ctx, args[1], args[2])?;
+    // Growing may move the buffer: text that's in it (`s.push_str(s_view)`)
+    // is copied first. Anything else can't move.
+    let (buf, _, cap) = read_header(args[0]);
+    let lo = more.as_ptr() as u64;
+    if !more.is_empty() && lo < buf + cap && lo + more.len() as u64 > buf {
+        let copy = more.to_vec();
+        return append(ctx, args[0], &copy);
+    }
+    append(ctx, args[0], more)
 }
 
 /// `string.pop(header)`: (the last `char`, whether there was one).
@@ -576,15 +624,17 @@ fn map_find_int(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 #[allow(unsafe_code)]
 #[unsafe(export_name = "loom_treadle_concat")]
 fn concat(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    let n = (args.len() - 1) / 2;
-    let mut len = 0;
-    for k in 0..n {
-        len += text(ctx, args[2 * k], args[2 * k + 1])?.len() as u64;
+    // Two, three or four pieces: each looked at once.
+    let n = ((args.len() - 1) / 2).min(4);
+    let mut pieces: [&[u8]; 4] = [&[]; 4];
+    let mut len = 0u64;
+    for (k, piece) in pieces.iter_mut().enumerate().take(n) {
+        *piece = text_raw(ctx, args[2 * k], args[2 * k + 1])?;
+        len += piece.len() as u64;
     }
     let buf = ctx.heap.alloc(len, 1)?;
     let mut at = buf;
-    for k in 0..n {
-        let piece = text(ctx, args[2 * k], args[2 * k + 1])?;
+    for piece in &pieces[..n] {
         // SAFETY: `buf` is a new object of `len` bytes, the pieces' total,
         // and no piece is in it.
         unsafe { std::ptr::copy_nonoverlapping(piece.as_ptr(), at as *mut u8, piece.len()) };
@@ -609,6 +659,14 @@ fn str_hash(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 fn next_char(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let s = text(ctx, args[0], args[1])?;
     let at = args[2] as usize;
+    // Most text is ASCII: one byte, no decoding.
+    if let Some(&b) = s.get(at)
+        && b < 0x80
+    {
+        args[0] = u64::from(b);
+        args[1] = at as u64 + 1;
+        return Ok(());
+    }
     let rest = &s[at.min(s.len())..];
     let width = match rest.first() {
         Some(&b) if b < 0x80 => 1,
@@ -630,7 +688,7 @@ fn next_line(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let s = text(ctx, args[0], args[1])?;
     let at = args[2] as usize;
     let rest = &s[at.min(s.len())..];
-    let (mut len, next) = match rest.iter().position(|&b| b == b'\n') {
+    let (mut len, next) = match memchr::memchr(b'\n', rest) {
         Some(nl) => (nl, at + nl + 1),
         None => (rest.len(), s.len() + 1),
     };

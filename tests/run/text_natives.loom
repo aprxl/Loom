@@ -1,0 +1,52 @@
+// The text natives at their edges: what each does with nothing, with
+// overlaps, with text that isn't ASCII, and when a string has to grow.
+
+use std.io.print
+
+fn main() {
+    // split
+    print("{"".split("")} {"héllo".split("")} {"a,b,,c".split(",")} {",a,".split(",")}")
+    print("{"aXXbXXXc".split("XX")} {"abc".split("abc")} {"abc".split("zz")} {"".split(",")}")
+
+    // replace
+    print("{"aaa".replace("aa", "b")} {"abab".replace("ab", "")} {"é".replace("", "-")}")
+    print("{"".replace("", "x")} {"hello".replace("l", "LL")} {"hello".replace("z", "!")}")
+    print("{"a.b.c".replace(".", "")} {"xyxy".replace("xy", "yx")} {"aaaa".replace("a", "aa")}")
+
+    // repeat and case
+    print("[{"ab".repeat(3)}] [{"ab".repeat(0)}] [{"".repeat(9)}] [{"é".repeat(2)}]")
+    print("{"Hello, Wörld! 123".to_upper()} {"Hello, WÖRLD! 123".to_lower()}")
+
+    // find
+    print("{"hello".find("l")} {"hello".find("lo")} {"hello".find("")} {"hello".find("z")} {"".find("a")}")
+    print("{"aaa".find("aa")} {"héllo".find("llo")} {"abc".find("abcd")}")
+
+    // lines, with \r\n, a missing last newline, and empty lines
+    var n = 0
+    for line in "one\r\ntwo\n\nthree".lines() {
+        print("{n}: [{line}]")
+        n += 1
+    }
+    for line in "".lines() { print("never {line}") }
+    for line in "x\n".lines() { print("[{line}]") }
+
+    // growing: ASCII, non-ASCII, and past the capacity
+    var s = String()
+    for i in 0..40 {
+        s.push(if i % 7 == 0 { 'é' } else { 'a' })
+    }
+    print("{s} {s.len()}")
+    var t = "ab".to_string()
+    for _ in 0..20 { t.push_str("héllo ") }
+    t.push_str("-end")
+    print("{t} {t.len()}")
+    var u = "x".to_string()
+    for _ in 0..300 { u.push_str("yz") }
+    print("{u.len()} {u.chars().count()}")
+
+    // chars of text that isn't ASCII
+    var total = 0u32
+    for c in "aé✓😀z".chars() { total += c as u32 }
+    print("{total}")
+    print("{"aé✓😀z".chars().count()} {"aé✓😀z".len()}")
+}

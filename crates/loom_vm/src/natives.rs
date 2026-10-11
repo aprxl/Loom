@@ -324,6 +324,25 @@ impl<'i> Ctx<'i> {
         }
     }
 
+    /// Writes a `String` of `len` bytes at `dst`, which `fill` writes in
+    /// place: no buffer of its own to copy from.
+    pub(crate) fn new_string_with(&mut self, len: usize, dst: u64, fill: impl FnOnce(&mut [u8])) -> Result<(), Trap> {
+        let ptr = self.heap.alloc(len as u64, 1)?;
+        // SAFETY: `ptr` is a new object of `len` bytes (or, for none, never
+        // read), which nothing else refers to; `dst` is where the compiler
+        // wants the string: three words of memory it owns.
+        unsafe {
+            if len > 0 {
+                fill(std::slice::from_raw_parts_mut(ptr as *mut u8, len));
+            }
+            let d = dst as *mut u64;
+            d.write(ptr);
+            d.add(1).write(len as u64);
+            d.add(2).write(len as u64);
+        }
+        Ok(())
+    }
+
     /// Writes a `String` holding `text` at `dst`.
     pub(crate) fn new_string(&mut self, text: &[u8], dst: u64) -> Result<(), Trap> {
         let len = text.len() as u64;
