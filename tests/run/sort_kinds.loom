@@ -1,0 +1,48 @@
+// Sorting by each kind of key: numbers (a u64 past 2^63 among them), text,
+// floats, chars, tuples, records with records inside, and `Ord` written by
+// hand. Stable: equal keys stay in order.
+
+use std.io.print
+
+warp Point: Eq, Ord, Show { x: i32, y: i32 }
+warp Item: Eq, Ord, Show { at: Point, name: String, weight: u64 }
+warp Rank: Show { n: u8 }
+weave Eq into Rank {
+    fn eq(self, other: Rank) -> bool = self.n == other.n
+}
+weave Ord into Rank {
+    fn lt(self, other: Rank) -> bool = self.n > other.n
+}
+
+fn main() {
+    var big: List[u64] = [5, 18446744073709551615, 0, 9223372036854775808, 9223372036854775807, 3]
+    big.sort()
+    print("{big}")
+    var ints: List[i64] = [3, -7, 0, 9223372036854775807, -9223372036854775808, -1]
+    ints.sort()
+    print("{ints}")
+    var words: List[String] = ["pear", "apple", "fig", "Apple", "", "é", "zebra", "apple"]
+    words.sort()
+    print("{words}")
+    var floats: List[f64] = [2.5, -1.0, 0.0, 1e300, -1e300, 0.1]
+    floats.sort()
+    print("{floats}")
+    var chars: List[char] = ['z', 'a', 'é', 'Z', '0']
+    chars.sort()
+    print("{chars}")
+    var pairs: List[(i32, str)] = [(2, "b"), (1, "z"), (2, "a"), (1, "a")]
+    pairs.sort()
+    print("{pairs}")
+    var items: List[Item] = [
+        Item(at: Point(x: 1, y: 2), name: "b", weight: 5),
+        Item(at: Point(x: 1, y: 1), name: "z", weight: 18446744073709551615),
+        Item(at: Point(x: 0, y: 9), name: "a", weight: 1),
+        Item(at: Point(x: 1, y: 1), name: "z", weight: 2),
+        Item(at: Point(x: 1, y: 1), name: "y", weight: 9223372036854775808),
+    ]
+    items.sort()
+    for it in items { print("{it}") }
+    var ranks: List[Rank] = [Rank(n: 3), Rank(n: 9), Rank(n: 1), Rank(n: 9)]
+    ranks.sort()
+    print("{ranks}")
+}

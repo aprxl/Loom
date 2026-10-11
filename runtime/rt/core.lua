@@ -1106,6 +1106,95 @@ cmp = function(d, a, b)
 end
 rt.cmp = cmp
 
+-- A comparison function for each descriptor, made once (`rt.comparer`):
+-- what `cmp` does for it, with the descriptor's walk decided then. A record
+-- or tuple's is generated source that compares the fields in turn, the
+-- comparisons of what's inside its upvalues. Used where one comparison is
+-- made many times: sorting.
+do
+  local scalar_kinds = { int = true, float = true, str = true, char = true, enum = true }
+  local comparer, make_comparer
+
+  -- Appends to `lines` the test of each field of `fields` (each `{key, name,
+  -- descriptor}`, `keys` its keys), and to `up` the functions it calls.
+  local function field_tests(fields, keys, up, lines)
+    for i, key in ipairs(keys) do
+      local fd = fields[i][3]
+      local k
+      if math.type(key) == "integer" then k = "[" .. key .. "]" else k = "[" .. string.format("%q", key) .. "]" end
+      if scalar_kinds[fd.kind] and not fd.lt and not fd.u64 then
+        lines[#lines + 1] = "do local x, y = a" .. k .. ", b" .. k
+          .. " if x < y then return -1 elseif y < x then return 1 end end"
+      elseif fd.kind == "int" and fd.u64 and not fd.lt then
+        up[#up + 1] = ult
+        lines[#lines + 1] = "do local x, y = a" .. k .. ", b" .. k
+          .. " if x ~= y then if u" .. #up .. "(x, y) then return -1 end return 1 end end"
+      else
+        up[#up + 1] = comparer(fd)
+        lines[#lines + 1] = "do local r = u" .. #up .. "(a" .. k .. ", b" .. k .. ") if r ~= 0 then return r end end"
+      end
+    end
+  end
+
+  local function build(lines, up)
+    local names = {}
+    for i = 1, #up do names[i] = "u" .. i end
+    local source = (#up > 0 and ("local " .. table.concat(names, ",") .. " = ...\n") or "")
+      .. "return function(a, b)\n" .. table.concat(lines, "\n") .. "\nreturn 0\nend"
+    return load(source)(table.unpack(up))
+  end
+
+  make_comparer = function(d)
+    local kind = d.kind
+    if d.lt then
+      return function(a, b) return cmp(d, a, b) end
+    elseif kind == "record" then
+      local keys = {}
+      for i, f in ipairs(d.fields) do keys[i] = f[1] end
+      local up, lines = {}, {}
+      field_tests(d.fields, keys, up, lines)
+      return build(lines, up)
+    elseif kind == "tuple" then
+      local fields, keys = {}, {}
+      for i, item in ipairs(d.items) do
+        fields[i] = { i, nil, item }
+        keys[i] = i
+      end
+      local up, lines = {}, {}
+      field_tests(fields, keys, up, lines)
+      return build(lines, up)
+    elseif kind == "int" and d.u64 then
+      return function(a, b)
+        if a == b then return 0 end
+        return ult(a, b) and -1 or 1
+      end
+    elseif scalar_kinds[kind] then
+      return function(a, b)
+        if a < b then return -1 end
+        if b < a then return 1 end
+        return 0
+      end
+    end
+    return function(a, b) return cmp(d, a, b) end
+  end
+
+  comparer = function(d)
+    local c = d.cf
+    if c == nil then
+      -- A descriptor can contain itself: until this one's is made, what
+      -- needs it goes through `cmp`.
+      d.cf = function(a, b) return cmp(d, a, b) end
+      c = make_comparer(d)
+      d.cf = c
+    end
+    return c
+  end
+
+  function rt.comparer(d)
+    return comparer(d)
+  end
+end
+
 -- ================================================================ formatting
 
 local function unsigned_decimal(v)
@@ -1637,6 +1726,7 @@ end
 --- A stable merge sort (`table.sort` isn't stable, and can't take nils).
 ext["std.slice.Slice.sort"] = function(d, s)
   local t, o, n = parts(s)
+  local compare = rt.comparer(d)
   local items, buf = {}, {}
   for i = 1, n do
     items[i] = t[o + i]
@@ -1648,7 +1738,7 @@ ext["std.slice.Slice.sort"] = function(d, s)
       local hi = math.min(lo + 2 * width, n + 1)
       local i, j, k = lo, mid, lo
       while i < mid and j < hi do
-        if cmp(d, items[j], items[i]) < 0 then
+        if compare(items[j], items[i]) < 0 then
           buf[k] = items[j]
           j = j + 1
         else
