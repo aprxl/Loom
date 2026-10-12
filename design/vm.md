@@ -1165,10 +1165,11 @@ A **loom group** is the set of threads a block started. Its rules:
   here unravelled`, at the `thread` expression is allowed on Treadle's
   report and not on the Lua backend's (P8; neither emits it yet). A `join` of a thread that finished
   normally, in a group that hasn't failed, just takes the value.
-- **Deadlock**: when the queue is empty and tasks are parked, the task whose
-  park emptied the queue unravels with `deadlock: every thread is waiting`,
-  listing what each parked task waits on. It propagates as any unravel,
-  failing its group.
+- **Deadlock**: when the queue is empty and tasks are parked, the program's
+  own task unravels with `deadlock: every thread is waiting`, where it
+  waits (a `join`, or a loom's end). It propagates as any unravel, so the
+  loom cancels the parked threads on the way out and they run their
+  `defer`s.
 - **Owning**: the group owns its task objects and their results. A `Spun`
   has no drop glue; `join` moves the result out, and leaving the block drops
   the results nobody took and frees the tasks. Parked tasks' stacks are freed
@@ -1182,8 +1183,9 @@ A **loom group** is the set of threads a block started. Its rules:
   `sched_yield`, and the `send`, `recv` and `lock` that park. It runs `defer`s
   and drops. It can be seen by nobody: `mend` doesn't catch it, and its own
   loom blocks cancel and wait for their threads on the way out, waits that
-  aren't points themselves (a cancelled thread whose loom ends waits for its
-  children, and goes on to its next point). With several workers a running
+  aren't points themselves. A cancelled thread whose loom ends leaves it as
+  if early: its own threads are cancelled, then waited for, and it goes on
+  to its next point. With several workers a running
   thread notices a cancel at its next point too; I/O calls that don't park
   (`print`, `fs`) aren't points.
 - A `defer` that unravels in a thread being cancelled replaces the cancel

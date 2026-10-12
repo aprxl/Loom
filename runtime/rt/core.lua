@@ -1895,6 +1895,19 @@ local function suspend()
   if cur.main and cur.sdepth == 0 then
     while true do
       if rhead > rtail then
+        -- Nothing can run: the program's own task unravels where it waits,
+        -- no longer in anyone's list.
+        local on = MAIN.waiting_on
+        if on then
+          for i, w in ipairs(on.waiters) do
+            if w == MAIN then
+              table.remove(on.waiters, i)
+              break
+            end
+          end
+          MAIN.waiting_on = nil
+        end
+        MAIN.waiting = false
         error(MARK .. "deadlock: every thread is waiting", 0)
       end
       local t = ready[rhead]
@@ -2038,7 +2051,7 @@ end
 local loom_guard = {
   __close = function(c, err)
     local g = c[1]
-    if g.done and err == nil then
+    if g.done and err == nil and not current.cancelled then
       if g.failure then return abort(g) end
       wait_all(g)
       if g.failure then return abort(g) end

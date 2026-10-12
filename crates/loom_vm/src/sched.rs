@@ -358,7 +358,11 @@ impl Sched {
     /// is cancelled (but a normal end only when one failed), and waited for.
     pub fn leave(&mut self, g: u64, mode_: u64) -> Result<Step, Trap> {
         let g = self.group_index(g)?;
-        if mode_ != mode::NORMAL || self.groups[g].failure.is_some() {
+        // A cancelled task leaves its loom as if early: its threads are
+        // cancelled too, or they could wait for ever on what only the
+        // cancelled task would do.
+        let cancelled = self.tasks[self.current].cancelled;
+        if mode_ != mode::NORMAL || cancelled || self.groups[g].failure.is_some() {
             self.cancel_all(g, self.current);
         }
         match self.unfinished(g) {
