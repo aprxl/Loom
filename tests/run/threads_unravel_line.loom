@@ -1,0 +1,19 @@
+// The report of a thread's unravel is where the parent sees it, whether or
+// not the unravel was the thread's last call.
+
+use std.io.print
+
+fn boom(n: i32) -> i32 {
+    if n > 0 {
+        unravel("boom {n}")
+    }
+    n
+}
+
+fn main() {
+    loom {
+        let b = thread boom(1)
+        print("joining")
+        print("{b.join()}")
+    }
+}

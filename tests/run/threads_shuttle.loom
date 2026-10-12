@@ -1,0 +1,30 @@
+// A thread can drive a generator, and the generator can park the thread:
+// the park goes through the shuttle's driver to the scheduler.
+
+use std.io.print
+use std.sync.sched_yield
+
+fn count(name: str, n: i32) ~> i32 {
+    for i in 0..n {
+        print("{name} yields {i}")
+        sched_yield()
+        yield i
+    }
+}
+
+fn drive(name: str) -> i32 {
+    var sum = 0
+    for v in count(name, 3) {
+        sum += v
+    }
+    sum
+}
+
+fn main() {
+    let r = loom {
+        let a = thread drive("a")
+        let b = thread drive("b")
+        a.join() * 10 + b.join()
+    }
+    print("r {r}")
+}

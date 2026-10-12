@@ -1159,9 +1159,11 @@ A **loom group** is the set of threads a block started. Its rules:
   not an unravel with a note.
 - **The parent observes the group at `join` and at the end of the block** (any
   path). If the group has failed it cancels what's left, waits for every
-  thread, then unravels with the recorded failure and a note, `the thread
-  started here unravelled`, whose span is the `thread` expression (the same
-  text and span on both backends). A `join` of a thread that finished
+  thread, then unravels with the recorded message, reported where the parent
+  observed it (the `join`, or the end of the block): both backends give that
+  line, whatever shape the thread's code had. Treadle's report also adds a
+  note, `the thread started here unravelled`, at the `thread` expression;
+  the Lua backend's doesn't (P8). A `join` of a thread that finished
   normally, in a group that hasn't failed, just takes the value.
 - **Deadlock**: when the queue is empty and tasks are parked, the task whose
   park emptied the queue unravels with `deadlock: every thread is waiting`,
@@ -1176,13 +1178,14 @@ A **loom group** is the set of threads a block started. Its rules:
   Leaving by falling off the end waits without cancelling, and joins what
   nobody joined.
 - **A cancel is not an error.** The thread unwinds from its park point or its
-  next cancellation point (`yield`, `pull`, `join`, `sched_yield`, send,
-  recv, lock, and the host's I/O natives), running `defer`s and drops. It can
-  be seen by nobody: `mend` doesn't catch it, and its own loom blocks cancel
-  and wait for their threads on the way out. Dropped values are dropped.
-- With one worker a cancelled task is always at a park point, so the points
-  past the park ones matter only with several workers, where they're how a
-  running thread notices.
+  next cancellation point: a shuttle's `yield` or `pull`, `join`,
+  `sched_yield`, and the `send`, `recv` and `lock` that park. It runs `defer`s
+  and drops. It can be seen by nobody: `mend` doesn't catch it, and its own
+  loom blocks cancel and wait for their threads on the way out, waits that
+  aren't points themselves (a cancelled thread whose loom ends waits for its
+  children, and goes on to its next point). With several workers a running
+  thread notices a cancel at its next point too; I/O calls that don't park
+  (`print`, `fs`) aren't points.
 - A `defer` that unravels in a thread being cancelled replaces the cancel
   with that unravel, as a landing pad does for any unwind (§9.4). It fails
   the group like any unravel.
@@ -1201,7 +1204,9 @@ moved: `take`; otherwise read).
   it is **copied into the thread's environment** when it's `Copy` or a
   borrow, and moved when it's `take`. A copied borrow's root has to outlive
   the loom, checked as M0106 checks `captured_roots`; otherwise it's an error.
-- **Not yet:** a thread can't move a captured variable (a `take` capture is
+- **Not yet:** a lambda that contains a `thread` can still leave its loom
+  (only `Spun` itself is tracked, not function types holding one), a thread
+  can't move a captured variable (a `take` capture is
   M0102 today, "copy it", worded for lambdas), and a handle joined on only
   some paths releases what it held on all of them.
 - **A `Spun[T]` holds** the read and `mut` captures it took by reference,
@@ -1336,6 +1341,7 @@ On Treadle:
 | P5 | formatting numbers (the review's F2–F4) | one table of cases, Rust's formatting where the spec is silent | fixed to match |
 | P6 | `usize` (D3) | 64 bits | 63 bits |
 | P7 | how deep recursion goes before `stack overflow` | memory-bound (256 MiB of stack by default) | Lua's limits |
+| P8 | the note on a thread's unravel (§11.2) | `the thread started here unravelled`, at the `thread` expression | none. Allowed to differ |
 | P8 | which unravel wins when two things in a statement could unravel | the first in evaluation order | the same |
 | P9 | a `Map` or `Set` key with a hand-written `eq` or `hash` | uses them | structural. Fixed to match where it can be |
 

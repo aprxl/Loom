@@ -1967,6 +1967,9 @@ local function thread_main(t, fn)
     else
       local g = t.group
       if not g.failure then
+        -- Where it was raised is the thread's: the parent reports it where
+        -- it sees it (design/vm.md §11.2), whatever shape the code had.
+        if type(r) == "string" then r = r:gsub("^bundle:%d+: ", "") end
         g.failure = r
         for i = 1, g.n do
           if g.tasks[i] ~= t then cancel(g.tasks[i]) end
@@ -1985,7 +1988,7 @@ function rt.loom()
 end
 
 function rt.spawn(g, fn)
-  local t = { group = g, waiters = {}, done = false }
+  local t = { group = g, waiters = {}, done = false, sdepth = 0 }
   g.n = g.n + 1
   g.tasks[g.n] = t
   if g.failure then
@@ -2090,10 +2093,12 @@ local function finish(sh)
 end
 
 function rt.out(v)
+  if current.cancelled then error(CANCEL, 0) end
   co_yield(true, v)
 end
 
 function rt.pull(boxed)
+  if current.cancelled then error(CANCEL, 0) end
   local has, v = co_yield(false)
   if not has then return nil end
   if boxed then return { v } end

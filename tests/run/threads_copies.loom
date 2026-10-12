@@ -1,0 +1,27 @@
+// What doesn't outlive the loom (a loop variable, a local of an inner
+// block) is copied into the thread when it's spawned: the parent changing
+// its own copy afterwards isn't seen. What does outlive it is shared.
+
+use std.io.print
+use std.sync.sched_yield
+
+warp Point {
+    x: i32
+    y: i32
+}
+
+fn main() {
+    loom {
+        for i in 0..2 {
+            var n = i
+            var p = Point(i, i)
+            thread {
+                sched_yield()
+                print("{i} {n} {p.x}")
+            }
+            n += 10
+            p.x += 10
+        }
+        ()
+    }
+}

@@ -251,6 +251,9 @@ pub struct Body {
     /// Expressions whose value moves out of a local (or part of it): which
     /// local. A fallback `defer` on it is off from there.
     pub moves: HashMap<HirId, LocalId>,
+    /// For each `thread`: the locals it gets copies of, because they don't
+    /// outlive its loom (a loop variable, a lambda's parameter).
+    pub thread_copies: HashMap<HirId, Vec<LocalId>>,
     /// Patterns that test for a gauge (`x is Cents`, `c: Cents =>`): which.
     pub gauge_tests: HashMap<HirId, Ty>,
     /// Uses of `const` generic parameters (`N`): their values here.

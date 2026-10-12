@@ -146,7 +146,7 @@ struct MoveCx {
     lambda_caps: HashMap<HirId, Vec<LocalId>>,
     /// For each `thread` body being gone through: how deep it starts, and
     /// the outer locals it changes.
-    writes: Vec<(u32, Vec<LocalId>)>,
+    writes: Vec<(u32, Vec<(LocalId, Span)>)>,
     /// For each `loom` block being gone through: the scope depth of its
     /// block. A local declared at it or outside is captured by reference;
     /// a narrower one (a loop variable, a lambda's parameter) is copied.
@@ -452,9 +452,47 @@ impl Checker<'_> {
                 cx.fn_base = saved_base;
                 cx.flow = saved;
                 let by_ref = cx.looms.last().copied().unwrap_or(0);
-                let held = |l: &LocalId| cx.scope_of.get(l).is_some_and(|&s| s <= by_ref);
-                let writes: Vec<LocalId> = written.iter().copied().filter(held).collect();
-                let reads = caps.iter().copied().filter(held).filter(|l| !writes.contains(l)).collect();
+                let held = |cx: &MoveCx, l: &LocalId| cx.scope_of.get(l).is_some_and(|&s| s <= by_ref);
+                let writes: Vec<LocalId> = written.iter().map(|w| w.0).filter(|l| held(cx, l)).collect();
+                let reads = caps.iter().copied().filter(|l| held(cx, l)).filter(|l| !writes.contains(l)).collect();
+                // What doesn't outlive the loom is copied into the thread:
+                // a `Copy` value, or a borrow of what does.
+                let mut copies = Vec::new();
+                let narrower: Vec<LocalId> = caps.iter().copied().filter(|l| !held(cx, l)).collect();
+                for l in narrower {
+                    let name = self.p.local(l).name.clone();
+                    let changed = written.iter().find(|w| w.0 == l).map(|w| w.1);
+                    let borrow =
+                        cx.borrowed.contains_key(&l) || cx.parts_of.contains_key(&l) || cx.borrows.contains_key(&l);
+                    let ty = self.b.local_ty.get(&l).copied();
+                    let copyable = borrow || ty.is_some_and(|t| self.is_copy(t));
+                    if let Some(at) = changed {
+                        self.report(
+                            cx,
+                            Diagnostic::error(
+                                codes::C0405,
+                                format!("`{name}` doesn't outlive the loom, so a thread gets a copy of it"),
+                            )
+                            .primary(at, "this changes the thread's copy, which nobody sees")
+                            .help("declare it outside the `loom`, or return the new value from the thread"),
+                        );
+                    } else if !copyable {
+                        self.report(
+                            cx,
+                            Diagnostic::error(
+                                codes::C0405,
+                                format!("a thread can't keep `{name}`, which doesn't outlive the loom"),
+                            )
+                            .primary(e.span, "this thread uses it")
+                            .help(
+                                "declare it outside the `loom`, or copy it (`x.copy()`) inside the thread's expression",
+                            ),
+                        );
+                    } else {
+                        copies.push(l);
+                    }
+                }
+                self.b.thread_copies.insert(e.id, copies);
                 cx.lambda_caps.insert(e.id, caps);
                 cx.live.push(LiveThread { span: e.span, reads, writes, handle: None });
             }
@@ -1341,8 +1379,8 @@ impl Checker<'_> {
         self.thread_conflict(cx, owner, true, at);
         let declared = cx.depth_of.get(&owner).copied();
         for (depth, written) in cx.writes.iter_mut() {
-            if declared.is_some_and(|d| d < *depth) && !written.contains(&owner) {
-                written.push(owner);
+            if declared.is_some_and(|d| d < *depth) && !written.iter().any(|(w, _)| *w == owner) {
+                written.push((owner, at));
             }
         }
         if let Some(&(_, over)) = cx.locked.iter().find(|(x, _)| *x == owner || *x == l) {

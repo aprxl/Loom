@@ -84,3 +84,23 @@ fn handle_kept_outside() {
         kept = some(thread 1)               //~ C0404
     }
 }
+
+fn a_thread_changes_its_copy() {
+    loom {
+        for i in 0..2 {
+            var n = i
+            thread { n += 1 }               //~ C0405
+            ()
+        }
+    }
+}
+
+fn a_thread_cant_keep_an_owned_local() {
+    loom {
+        for i in 0..2 {
+            let xs: List[i32] = [i, i]
+            let t = thread { xs.len() }     //~ C0405
+            t.join()
+        }
+    }
+}

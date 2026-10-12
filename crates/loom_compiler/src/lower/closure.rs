@@ -48,7 +48,33 @@ impl Lowerer<'_> {
         let stmts =
             self.body(body.span, |this| this.lower_into(body, if valueless { &Dest::Discard } else { &Dest::Return }));
         self.mend_labels = saved_mends;
-        Expr::rt("spawn", vec![Expr::name(group), Expr::Function(Vec::new(), stmts)])
+        let thread = Expr::Function(Vec::new(), stmts);
+        // What doesn't outlive the loom is copied at the spawn: the closure
+        // is made by a function whose parameters are those locals.
+        let copies = self.tables().thread_copies.get(&e.id).cloned().unwrap_or_default();
+        let thread = if copies.is_empty() {
+            thread
+        } else {
+            let names: Vec<String> = copies.iter().map(|&l| self.local_name(l)).collect();
+            let mut args = Vec::new();
+            for &l in &copies {
+                let value = match self.aliases.get(&l) {
+                    Some(place) => place.clone(),
+                    None => Expr::Name(self.local_name(l)),
+                };
+                let ty = self.tables().local_ty.get(&l).copied().unwrap_or(self.typed.tcx.error);
+                args.push(if self.is_table(ty) && self.is_copy(ty) {
+                    let d = self.desc(ty, e.span);
+                    self.copy_call(d, value)
+                } else {
+                    value
+                });
+            }
+            let maker =
+                Expr::Function(names, vec![Stmt { kind: StmtKind::Return(Some(thread)), span: Some(body.span) }]);
+            Expr::call(maker, args)
+        };
+        Expr::rt("spawn", vec![Expr::name(group), thread])
     }
 
     /// `loom { … }`: a group for the threads, and a `<close>` guard that

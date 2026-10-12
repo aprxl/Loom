@@ -1,0 +1,46 @@
+// A loom inside a thread: falling off the end waits for an unjoined child
+// that parks, and a thread cancelled while its own loom has a parked child
+// cancels and waits for that child on the way out.
+
+use std.io.print
+use std.sync.sched_yield
+
+fn child(name: str) -> i32 {
+    defer print("{name} cleanup")
+    print("{name} start")
+    sched_yield()
+    print("{name} finished")
+    1
+}
+
+fn falls_off() -> i32 {
+    loom {
+        thread child("fall")
+        ()
+    }
+    print("falls_off done")
+    5
+}
+
+fn cancelled() -> i32 {
+    loom {
+        thread child("held")
+        sched_yield()
+        print("cancelled: unreachable")
+        ()
+    }
+    0
+}
+
+fn boom() {
+    unravel("boom")
+}
+
+fn main() {
+    loom {
+        let a = thread falls_off()
+        let b = thread cancelled()
+        thread boom()
+        a.join() + b.join()
+    }
+}
