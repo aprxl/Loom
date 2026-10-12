@@ -31,6 +31,7 @@
 <li><a href="const-params.html">Const parameters and control flow</a></li>
 <li><a href="reflection.html">Reflection</a></li>
 <li><a href="tests.html">Tests</a></li>
+<li><a href="threads.html">Threads</a></li>
 <li><a href="not-yet.html">Not supported yet</a></li>
 </ul>
 </nav>
@@ -147,6 +148,14 @@
 <tr id="M0105"><td><code>M0105</code></td><td>a borrow is used after what it borrows changed</td><td><a href="ownership.html#sample-own_err_borrow">Moves, once and defer</a></td></tr>
 <tr id="M0106"><td><code>M0106</code></td><td>a borrow outlives what it borrows</td><td><a href="ownership.html#sample-own_err_escape">Moves, once and defer</a></td></tr>
 </tbody></table>
+<h2 id="group-C04xx">C04xx: threads (design/vm.md §11.3)</h2>
+<table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
+<tr id="C0401"><td><code>C0401</code></td><td>a variable is changed by more than one thread</td><td><a href="threads.html#sample-threads_err">Threads</a></td></tr>
+<tr id="C0402"><td><code>C0402</code></td><td>a variable is used while a thread has it</td><td></td></tr>
+<tr id="C0403"><td><code>C0403</code></td><td><code>thread</code> outside a <code>loom</code> block</td><td></td></tr>
+<tr id="C0404"><td><code>C0404</code></td><td>a thread handle outlives its <code>loom</code> block</td><td></td></tr>
+<tr id="C0405"><td><code>C0405</code></td><td>a thread can't keep a variable that doesn't outlive its loom</td><td></td></tr>
+</tbody></table>
 <h2 id="group-P01xx">P01xx: patterns</h2>
 <table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
 <tr id="P0101"><td><code>P0101</code></td><td>match isn't exhaustive</td><td><a href="types.html#sample-types_err_match">Warps, wefts and weaves</a></td></tr>
@@ -158,7 +167,7 @@
 <tr id="U0102"><td><code>U0102</code></td><td>not implemented yet</td><td><a href="not-yet.html#sample-nyet_spools">Not supported yet</a></td></tr>
 <tr id="U0103"><td><code>U0103</code></td><td>over one of Treadle's limits</td><td></td></tr>
 </tbody></table>
-<p>The letters R (regions), C (concurrency), I (interop) are set aside for features that aren't built yet. No code uses them.</p>
+<p>The letters R (regions), I (interop) are set aside for features that aren't built yet. No code uses them.</p>
 </main>
 </div>
 </body>

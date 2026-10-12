@@ -1,0 +1,27 @@
+// The same, with the loom left early: the failure is raised after the
+// threads are cancelled and waited for, in place of the `return`.
+
+use std.io.print
+use std.sync.sched_yield
+
+fn slow() {
+    defer print("slow cleanup")
+    sched_yield()
+    print("slow finished")
+}
+
+fn boom() -> i32 {
+    unravel("boom")
+}
+
+fn leave() -> i32 {
+    loom {
+        thread slow()
+        thread boom()
+        return 1
+    }
+}
+
+fn main() {
+    print("{leave()}")
+}

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Threads · Loom</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a class="current" href="../lang/index.html">Language</a></li>
+<li><a href="../std/index.html">Standard library</a></li>
+<li><a href="../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Language</h3>
+<ul>
+<li><a href="index.html">Overview</a></li>
+<li><a href="start.html">Getting started</a></li>
+<li><a href="values.html">Values and control flow</a></li>
+<li><a href="types.html">Warps, wefts and weaves</a></li>
+<li><a href="generics.html">Generics and <code>any</code></a></li>
+<li><a href="collections.html">Collections and streams</a></li>
+<li><a href="errors.html">Optionals and errors</a></li>
+<li><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
+<li><a href="gauges.html">Gauges</a></li>
+<li><a href="shuttles.html">Shuttles</a></li>
+<li><a href="compile-time.html">Compile-time code</a></li>
+<li><a href="const-params.html">Const parameters and control flow</a></li>
+<li><a href="reflection.html">Reflection</a></li>
+<li><a href="tests.html">Tests</a></li>
+<li><a class="current" href="threads.html">Threads</a></li>
+<li><a href="not-yet.html">Not supported yet</a></li>
+</ul>
+</nav>
+<main>
+<div class="crumb"><a href="index.html">Language</a> / Threads</div>
+<h1>Threads</h1>
+<p class="summary">Loom blocks, threads that can't outlive them, and what they may share.</p>
+<p>A <strong>loom block</strong> is a scope where threads run, and every one of them is done before the block ends. <code>thread e</code> starts <code>e</code> as a thread of the innermost loom around it, and gives a <code>Spun[T]</code> for the <code>T</code> it computes. <code>h.join()</code> waits for it and gives the <code>T</code>.</p>
+<div class="sample" id="sample-threads_basic">
+<div class="sample-head"><span class="file">samples/threads_basic.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.sync.sched_yield
+
+<span class="k">fn</span> square(n: i32) -&gt; i32 = n * n
+
+<span class="k">fn</span> worker(name: str, steps: i32) {
+    <span class="k">for</span> i <span class="k">in</span> <span class="n">0</span>..steps {
+        print(<span class="s">"{</span>name<span class="s">} {</span>i<span class="s">}"</span>)
+        sched_yield()                    <span class="c">// let the others take a turn</span>
+    }
+}
+
+<span class="k">fn</span> main() {
+    <span class="c">// `thread` starts a thread; `join` waits for its result. The block's</span>
+    <span class="c">// value is its last expression's.</span>
+    <span class="k">let</span> total = <span class="k">loom</span> {
+        <span class="k">let</span> a = <span class="k">thread</span> square(<span class="n">3</span>)
+        <span class="k">let</span> b = <span class="k">thread</span> square(<span class="n">4</span>)
+        a.join() + b.join()
+    }
+    print(<span class="s">"total {</span>total<span class="s">}"</span>)
+
+    <span class="c">// A thread runs as soon as it's started, until it finishes or</span>
+    <span class="c">// yields. Nobody joined these: the block's end waits for them.</span>
+    <span class="k">loom</span> {
+        <span class="k">thread</span> worker(<span class="s">"a"</span>, <span class="n">2</span>)
+        <span class="k">thread</span> worker(<span class="s">"b"</span>, <span class="n">2</span>)
+        print(<span class="s">"started"</span>)
+        ()                               <span class="c">// not a handle: it can't leave the block</span>
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>total 25
+a 0
+b 0
+started
+a 1
+b 1</code></pre></div>
+</div>
+<h2 id="what-a-thread-runs">What a thread runs</h2>
+<p>A thread runs as soon as it's started, until it finishes or <strong>parks</strong>: waits in a <code>join</code>, or calls <code>sched_yield()</code>, which sends it to the back of the queue. Then another one runs, and the one that started it goes on. Nothing is preempted, so a program's output is the same on every run, and on both backends. (This is the schedule with one worker. Several workers at once come later.)</p>
+<p>A thread nobody joined is joined where the block ends. The block's value is its last expression's: a <code>thread</code> there would be a handle, which can't leave the block (<a href="diagnostics.html#C0404">C0404</a>), so end the block with <code>()</code>, or join it.</p>
+<h2 id="what-a-thread-may-share">What a thread may share</h2>
+<p>Threads borrow local variables directly, with no copies and no <code>Arc</code>, because nothing outlives its loom. The checker keeps that safe:</p>
+<ul><li>What's declared <strong>outside</strong> the loom is shared. A thread may read it; if it changes it, no other thread may touch it, nor the parent, until it's joined (<a href="diagnostics.html#C0401">C0401</a>, <a href="diagnostics.html#C0402">C0402</a>).</li><li>What's declared <strong>inside</strong> the loom block (a loop variable, a local of the block, the parameter of a lambda around the <code>thread</code>) is <strong>copied</strong> into the thread when it starts: it may be gone by the time the thread runs. A thread can't change its copy (<a href="diagnostics.html#C0405">C0405</a>), and a variable that isn't <code>Copy</code> can't be given to it that way.</li><li><code>thread</code> is only allowed inside a <code>loom</code> (<a href="diagnostics.html#C0403">C0403</a>), and the loom is the innermost one around it, also from inside a lambda or another thread.</li></ul>
+<div class="sample" id="sample-threads_share">
+<div class="sample-head"><span class="file">samples/threads_share.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fn</span> main() {
+    <span class="c">// What's declared outside the loom is shared: a thread reads it, or</span>
+    <span class="c">// changes it when no one else touches it until it's joined.</span>
+    <span class="k">var</span> count = <span class="n">0</span>
+    <span class="k">let</span> words = [<span class="s">"red"</span>, <span class="s">"green"</span>, <span class="s">"blue"</span>]
+    <span class="k">loom</span> {
+        <span class="k">let</span> t = <span class="k">thread</span> { count = words.len() }
+        t.join()
+    }
+    print(<span class="s">"count {</span>count<span class="s">}"</span>)
+
+    <span class="c">// A thread started in a loop gets a copy of what the loop declares.</span>
+    <span class="k">let</span> lens = <span class="k">loom</span> {
+        <span class="k">var</span> out: <span class="t">List</span>[usize] = []
+        <span class="k">for</span> w <span class="k">in</span> words {
+            <span class="k">let</span> t = <span class="k">thread</span> w.len()
+            out.push(t.join())
+        }
+        out
+    }
+    print(<span class="s">"{</span>lens<span class="s">}"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>count 3
+[3, 5, 4]</code></pre></div>
+</div>
+<p>The race detector is the type checker:</p>
+<div class="sample" id="sample-threads_err">
+<div class="sample-head"><span class="file">samples/threads_err.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#C0401">C0401</a></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fn</span> main() {
+    <span class="k">var</span> hits = <span class="n">0</span>
+    <span class="k">loom</span> {
+        <span class="k">thread</span> { hits += <span class="n">1</span> }
+        <span class="k">thread</span> { hits += <span class="n">1</span> }
+        ()
+    }
+    print(hits)
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[C0401]: `hits` is changed by more than one thread</span>
+<span class="loc">  --&gt; threads_err.loom:7:18</span>
+  |
+6 |         thread { hits += 1 }
+  |         -------------------- another thread changes it
+7 |         thread { hits += 1 }
+  |                  ^^^^ changed here
+  |
+  = help: use `Atomic`, or produce a value per thread and combine them
+
+<span class="err">error: threads_err.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<h2 id="when-something-goes-wrong">When something goes wrong</h2>
+<p>A thread that unravels fails its loom: the other threads are <strong>cancelled</strong>, and the parent unravels with the thread's message where it sees it, at the <code>join</code> or where the block ends, after everything has stopped. A cancelled thread unwinds from where it waits (<code>join</code>, <code>sched_yield</code>, a <code>yield</code> or <code>pull</code>), running its <code>defer</code>s, and nobody sees the cancel: <code>mend</code> doesn't catch it. The same goes for leaving the block early with <code>?</code>, <code>return</code> or <code>break</code>, for <code>process.exit</code> in a thread, and for Ctrl-C.</p>
+<p>A thread started in a loom that has already failed never runs.</p>
+<h2 id="rules">Rules</h2>
+<ul><li>A loom block's own <code>defer</code>s run when its block ends, before it waits for its threads.</li><li>Results nobody joined are dropped where the loom ends.</li><li>A <code>Spun</code> is joined once; a second <code>join</code> unravels (a <code>once</code> result makes the handle <code>once</code>, so it's <a href="diagnostics.html#L0301">L0301</a> to lose it).</li><li><code>yield</code> and <code>pull</code> can't be inside a loom block yet (<a href="diagnostics.html#U0102">U0102</a>).</li><li>Compile-time code can't start threads (<a href="diagnostics.html#K0104">K0104</a>).</li></ul>
+<div class="pager">
+<a href="tests.html">&larr; Tests</a>
+<a href="not-yet.html">Not supported yet &rarr;</a>
+</div>
+</main>
+</div>
+</body>
+</html>

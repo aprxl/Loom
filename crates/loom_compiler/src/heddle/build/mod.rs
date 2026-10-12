@@ -310,6 +310,9 @@ pub(super) struct Builder<'a> {
     lambdas: HashMap<(BodyId, crate::hir::HirId), lambda::LambdaInfo<'a>>,
     /// The threads made so far, by the body that made them.
     threads: HashMap<(BodyId, crate::hir::HirId), thread::ThreadInfo<'a>>,
+    /// Whether the program has a `thread` anywhere: only then can a thread
+    /// be cancelled, so only then are cancellation points emitted.
+    has_threads: bool,
     /// Each shuttle function's frame, once its step is built.
     frames: HashMap<BodyId, super::frame::FrameLayout>,
     f: FnState<'a>,
@@ -444,6 +447,7 @@ impl<'a> Builder<'a> {
             main_span: None,
             lambdas: HashMap::new(),
             threads: HashMap::new(),
+            has_threads: typed.results.bodies.iter().any(|b| !b.thread_copies.is_empty()),
             globals: IndexMap::new(),
             const_exprs: HashMap::new(),
             asserts: HashMap::new(),

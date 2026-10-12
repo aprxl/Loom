@@ -209,7 +209,17 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
     purpose: building the program from the job build's module, and baking
     maps, sets and sums (they're computed when read).
 
-Next: V5 threads, V6 spools, V7 Lua interop, V8 speed, V9 Treadle by
+27. Treadle V5, threads (design/vm.md §11), in progress. Done: `loom`,
+    `thread`, `Spun[T]`, `join`, `sched_yield` and the capture rules
+    (C0401–C0405) on both backends; the reference schedule (a thread runs
+    at once, until it parks; the spawner waits at the front, woken tasks
+    go to the back), cancel, failure and exit/Ctrl-C through a loom; one
+    worker only. The Lua backend runs threads as coroutines (`rt.spawn`),
+    Treadle switches tasks inside the dispatch loop (`loom_vm::sched`).
+    Left: `Atomic`, `Mutex`, `Pipe`, `loom for` with `#disjoint`/`chunks_mut`,
+    several workers, and `examples/parallel.loom`.
+
+Next: V5's rest, V6 spools, V7 Lua interop, V8 speed, V9 Treadle by
 default.
 
 Keep these green:

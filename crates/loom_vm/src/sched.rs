@@ -53,22 +53,6 @@ pub(crate) enum TaskOp {
     Cancelled,
 }
 
-impl TaskOp {
-    pub fn named(name: &str) -> Option<TaskOp> {
-        Some(match name {
-            "task.spawn" => TaskOp::Spawn,
-            "task.join" => TaskOp::Join,
-            "task.yield" => TaskOp::Yield,
-            "loom.new" => TaskOp::LoomNew,
-            "loom.leave" => TaskOp::LoomLeave,
-            "loom.leftover" => TaskOp::LoomLeftover,
-            "loom.free" => TaskOp::LoomFree,
-            "task.cancelled" => TaskOp::Cancelled,
-            _ => return None,
-        })
-    }
-}
-
 /// How a loom block's end was reached: `loom.leave`'s and `loom.free`'s
 /// second argument.
 pub(crate) mod mode {
@@ -103,6 +87,9 @@ pub(crate) struct Task {
     pub failed: bool,
     /// Parked where a cancel is noticed (`join`, `sched_yield`).
     pub cancellable: bool,
+    /// Parked at an instruction it runs again when it's woken (its saved
+    /// `pc` is the instruction's own), rather than going on after it.
+    pub reexec: bool,
     pub waiting: bool,
     pub waiting_on: Option<usize>,
     /// Tasks waiting for this one to finish.
@@ -134,6 +121,7 @@ impl Task {
             cancelled: false,
             failed: false,
             cancellable: false,
+            reexec: false,
             waiting: false,
             waiting_on: None,
             waiters: Vec::new(),
@@ -249,17 +237,19 @@ impl Sched {
     }
 
     /// What the task that just got the processor has to do before it goes
-    /// on: a cancel it was parked for, or a deadlock.
-    pub fn arrival(&mut self) -> Option<Trap> {
+    /// on: a cancel it was parked for, or a deadlock. And whether it was
+    /// parked at the instruction itself (its `pc` is before it).
+    pub fn arrival(&mut self) -> Option<(Trap, bool)> {
         let cur = self.current;
         let t = &mut self.tasks[cur];
         let was_parked = std::mem::take(&mut t.cancellable);
+        let again = std::mem::take(&mut t.reexec);
         if cur == 0
             && let Some(trap) = self.pending.take()
         {
-            return Some(trap);
+            return Some((trap, again));
         }
-        (was_parked && t.cancelled).then_some(Trap::Cancel)
+        (was_parked && t.cancelled).then_some((Trap::Cancel, again))
     }
 
     /// The next task to run, when the running one parks or ends. `None`
@@ -297,6 +287,7 @@ impl Sched {
         t.waiting = true;
         t.waiting_on = Some(on);
         t.cancellable = cancellable;
+        t.reexec = true;
         self.tasks[on].waiters.push(cur);
         Step::Park { again: true }
     }

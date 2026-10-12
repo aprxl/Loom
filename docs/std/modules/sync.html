@@ -63,6 +63,30 @@
 </div>
 <p class="item-doc">A value that one thread at a time can lock and use.</p>
 </div>
+<div class="item" id="Spun">
+<div class="item-head">
+<span class="sig">warp <strong>Spun</strong>[T]</span>
+<span class="badge builtin">builtin</span>
+</div>
+<p class="item-doc">A thread started in a <code>loom</code> block: what <code>thread e</code> gives. It's <code>Copy</code> unless its result is <code>once</code>. A thread nobody joined is joined where the block ends.</p>
+<div class="members">
+<div class="member" id="Spun.join">
+<div class="member-head">
+<span class="sig">fn join(take self) -&gt; T</span>
+
+</div>
+<p class="member-doc">Waits for the thread and gives its result. If a thread of the block unravelled, this unravels with its message instead. A thread is joined once: a second <code>join</code> unravels.</p>
+</div>
+</div>
+</div>
+<h2>Functions</h2>
+<div class="item" id="sched_yield">
+<div class="item-head">
+<span class="sig">fn <strong>sched_yield</strong>()</span>
+<span class="badge extern">extern</span>
+</div>
+<p class="item-doc">Lets the other threads that can run go first: the running thread goes to the back of the queue.</p>
+</div>
 </main>
 </div>
 </body>

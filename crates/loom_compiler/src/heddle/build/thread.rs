@@ -101,6 +101,14 @@ impl<'a> Builder<'a> {
         self.emit(InstKind::Native { name: "loom.free", imm: 0, args: vec![g, mode] }, &[]);
     }
 
+    /// A `yield` or `pull`, where a cancelled thread stops (design/vm.md
+    /// §11.2): unwinds if the running thread has been cancelled.
+    pub(super) fn cancel_point(&mut self) {
+        if self.has_threads {
+            self.emit(InstKind::Native { name: "task.cancelled", imm: 0, args: Vec::new() }, &[]);
+        }
+    }
+
     /// `thread body`: makes its environment, and starts the task. The value
     /// is the handle.
     pub(super) fn thread_expr(&mut self, e: &'a hir::Expr, group: Option<LocalId>, body: &'a hir::Expr) -> Option<Val> {

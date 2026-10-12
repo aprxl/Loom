@@ -1161,9 +1161,9 @@ A **loom group** is the set of threads a block started. Its rules:
   path). If the group has failed it cancels what's left, waits for every
   thread, then unravels with the recorded message, reported where the parent
   observed it (the `join`, or the end of the block): both backends give that
-  line, whatever shape the thread's code had. Treadle's report also adds a
-  note, `the thread started here unravelled`, at the `thread` expression;
-  the Lua backend's doesn't (P8). A `join` of a thread that finished
+  line, whatever shape the thread's code had. A note, `the thread started
+  here unravelled`, at the `thread` expression is allowed on Treadle's
+  report and not on the Lua backend's (P8; neither emits it yet). A `join` of a thread that finished
   normally, in a group that hasn't failed, just takes the value.
 - **Deadlock**: when the queue is empty and tasks are parked, the task whose
   park emptied the queue unravels with `deadlock: every thread is waiting`,

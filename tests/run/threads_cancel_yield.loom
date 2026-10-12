@@ -1,0 +1,43 @@
+// A cancelled thread that's still running (its loom's end doesn't notice
+// a cancel) stops at the next `yield` of a generator it drives.
+
+use std.io.print
+use std.sync.sched_yield
+
+fn items(n: i32) ~> i32 {
+    for i in 0..n {
+        yield i
+    }
+}
+
+fn slow() {
+    defer print("slow cleanup")
+    sched_yield()
+    print("slow finished")
+}
+
+fn falls_off() -> i32 {
+    loom {
+        thread slow()
+        ()
+    }
+    print("after loom")
+    var sum = 0
+    for v in items(3) {
+        print("item {v}")
+        sum += v
+    }
+    sum
+}
+
+fn boom() -> i32 {
+    unravel("boom")
+}
+
+fn main() {
+    loom {
+        let a = thread falls_off()
+        let b = thread boom()
+        a.join() + b.join()
+    }
+}

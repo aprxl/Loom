@@ -489,6 +489,15 @@ MODULES = [
      "doc": "A value that threads can read and update without locks."},
     {"kind": "warp", "name": "Mutex", "suffix": "[T]", "builtin": True,
      "doc": "A value that one thread at a time can lock and use."},
+    {"kind": "warp", "name": "Spun", "suffix": "[T]", "builtin": True,
+     "doc": "A thread started in a `loom` block: what `thread e` gives. It's `Copy` unless its result is `once`. A thread nobody joined is joined where the block ends.",
+     "methods": [
+       {"sig": "fn join(take self) -> T", "doc": "Waits for the thread and gives its result. If a thread of the block unravelled, this unravels with its message instead. A thread is joined once: a second `join` unravels."},
+     ]},
+  ],
+  "functions": [
+    {"name": "sched_yield", "suffix": "()", "extern": True,
+     "doc": "Lets the other threads that can run go first: the running thread goes to the back of the queue."},
   ],
 },
 

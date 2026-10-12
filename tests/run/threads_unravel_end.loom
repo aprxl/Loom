@@ -1,0 +1,17 @@
+// A failure nobody joined is raised where the loom ends, after the threads
+// are waited for.
+
+use std.io.print
+
+fn boom() -> i32 {
+    unravel("boom")
+}
+
+fn main() {
+    loom {
+        thread boom()
+        print("in block")
+        ()
+    }
+    print("not reached")
+}

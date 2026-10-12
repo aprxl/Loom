@@ -637,3 +637,103 @@ fn main() {
     }
     let _ = std::fs::remove_file(&path);
 }
+
+#[test]
+fn process_exit_in_a_thread_cancels_the_rest_and_exits_on_both_backends() {
+    let path = temp_source(
+        "thread_exit",
+        "use std.io.print
+use std.process
+use std.sync.sched_yield
+
+fn parked() {
+    defer print(\"parked cleanup\")
+    sched_yield()
+    print(\"parked finished\")
+}
+
+fn quitter() {
+    defer print(\"quitter cleanup\")
+    process.exit(3)
+}
+
+fn main() {
+    defer print(\"main's defer\")
+    loom {
+        thread parked()
+        thread quitter()
+        ()
+    }
+    print(\"not reached\")
+}
+",
+    );
+    let file = path.to_str().expect("utf-8 path");
+    for (backend, level) in [("lua", "-O2"), ("vm", "-O2"), ("vm", "-O0")] {
+        let out = Command::new(env!("CARGO_BIN_EXE_loom"))
+            .args(["--color", "never", level, "run", "--backend", backend, file])
+            .output()
+            .expect("the loom binary runs");
+        assert_eq!(out.status.code(), Some(3), "{backend} {level}: {}", text(&out.stderr));
+        assert_eq!(
+            text(&out.stdout),
+            "quitter cleanup
+parked cleanup
+main's defer
+",
+            "{backend} {level}"
+        );
+        assert_eq!(text(&out.stderr), "", "{backend} {level}");
+    }
+}
+
+#[test]
+fn ctrl_c_in_a_thread_unwinds_every_task_and_exits_130_on_both_backends() {
+    let path = temp_source(
+        "thread_interrupt",
+        "use std.io.print
+use std.sync.sched_yield
+
+fn parked() {
+    defer print(\"parked cleanup\")
+    sched_yield()
+    print(\"parked finished\")
+}
+
+fn spin() {
+    defer print(\"spin cleanup\")
+    var n = 0u64
+    while true { n +%= 1 }
+}
+
+fn main() {
+    defer print(\"main's defer\")
+    print(\"spinning\")
+    loom {
+        thread parked()
+        thread spin()
+        ()
+    }
+}
+",
+    );
+    let file = path.to_str().expect("utf-8 path");
+    for (backend, level) in [("lua", "-O2"), ("vm", "-O2"), ("vm", "-O0")] {
+        let out = Command::new(env!("CARGO_BIN_EXE_loom"))
+            .args(["--color", "never", level, "run", "--backend", backend, file])
+            .env("LOOM_INTERRUPT_AFTER_MS", "200")
+            .output()
+            .expect("the loom binary runs");
+        assert_eq!(out.status.code(), Some(130), "{backend} {level}: {}", text(&out.stderr));
+        assert_eq!(
+            text(&out.stdout),
+            "spinning
+spin cleanup
+parked cleanup
+main's defer
+",
+            "{backend} {level}"
+        );
+        assert_eq!(text(&out.stderr), "interrupted (Ctrl-C)\n", "{backend} {level}");
+    }
+}

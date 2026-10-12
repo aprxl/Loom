@@ -7,11 +7,11 @@ Anything not built stops with a `U` code, and most stop with [U0102](diag:U0102)
 
 ## Next in line
 
-These are planned next, in this order: the rest of Loom's own VM, Treadle (designed in `design/vm.md`), then threads and spools. Treadle already runs everything but compile-time code: `loom run --backend vm file.loom`. A program over one of its limits (a frame of more than 65 535 registers, say) stops with [U0103](diag:U0103).
+These are planned next, in this order: the rest of threads, then spools and the rest of Loom's own VM, Treadle (designed in `design/vm.md`). Treadle already runs everything: `loom run --backend vm file.loom`. A program over one of its limits (a frame of more than 65 535 registers, say) stops with [U0103](diag:U0103).
 
 ### Threads
 
-`loom { }` blocks, `thread`, `loom for`, `.join()`, and the types for sharing between threads, `Atomic[T]` and `Mutex[T]`. The two types are declared in [std.sync](std:sync) and can't be built yet.
+[Threads](page:threads) run, one at a time: `loom { }`, `thread`, `.join()` and `sched_yield()`. Not yet: `loom for`, `Atomic[T]` and `Mutex[T]` (declared in [std.sync](std:sync), with no methods), `Pipe`, several worker threads at once, `loom(given: pool)`, a `thread` that moves a variable into itself, and `yield` or `pull` inside a `loom` block ([U0102](diag:U0102)).
 
 @sample nyet_threads
 

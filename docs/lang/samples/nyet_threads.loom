@@ -1,16 +1,10 @@
-fn slow_sum(xs: [i32]) -> i32 {
-    var total = 0
-    for x in xs { total += x }
-    total
-}
+use std.io.print
 
 fn main() {
-    let left = [1, 2, 3]
-    let right = [4, 5, 6]
-    let (a, b) = loom {
-        let x = thread slow_sum(left)
-        let y = thread slow_sum(right)
-        (x.join(), y.join())
+    let xs = [1, 2, 3]
+    // One thread for each iteration: not yet.
+    loom for x in xs {
+        print(x)
     }
 }
 //@ check-fail U0102

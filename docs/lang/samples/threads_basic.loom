@@ -1,0 +1,32 @@
+use std.io.print
+use std.sync.sched_yield
+
+fn square(n: i32) -> i32 = n * n
+
+fn worker(name: str, steps: i32) {
+    for i in 0..steps {
+        print("{name} {i}")
+        sched_yield()                    // let the others take a turn
+    }
+}
+
+fn main() {
+    // `thread` starts a thread; `join` waits for its result. The block's
+    // value is its last expression's.
+    let total = loom {
+        let a = thread square(3)
+        let b = thread square(4)
+        a.join() + b.join()
+    }
+    print("total {total}")
+
+    // A thread runs as soon as it's started, until it finishes or
+    // yields. Nobody joined these: the block's end waits for them.
+    loom {
+        thread worker("a", 2)
+        thread worker("b", 2)
+        print("started")
+        ()                               // not a handle: it can't leave the block
+    }
+}
+//@ run

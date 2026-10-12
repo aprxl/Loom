@@ -412,12 +412,6 @@ impl<'i> Ctx<'i> {
 /// A native: its context, its argument registers, and its immediate.
 pub(crate) type NativeFn = fn(&mut Ctx, &mut [u64], u16) -> Result<(), Trap>;
 
-/// A task operation (`task.*`, `loom.*`) is run by the dispatch loop, which
-/// can switch tasks. Reaching this is a bug.
-fn task_op_as_native(_: &mut Ctx, _: &mut [u64], _: u16) -> Result<(), Trap> {
-    Err(Trap::Crash("loom internal: a task operation called as a native".into()))
-}
-
 /// The native named `name`, and how many registers it reads or writes.
 pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
     let f: NativeFn = match name {
@@ -447,8 +441,15 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
         "mem.grow" => mem_grow,
         "mem.move" => mem_move,
         "mem.calloc" => mem_calloc,
-        // Handled by the interpreter itself: they switch tasks.
-        n if crate::sched::TaskOp::named(n).is_some() => task_op_as_native,
+        // Handled by the interpreter itself, which they ask: they switch tasks.
+        "task.spawn" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::Spawn)),
+        "task.join" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::Join)),
+        "task.yield" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::Yield)),
+        "loom.new" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::LoomNew)),
+        "loom.leave" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::LoomLeave)),
+        "loom.leftover" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::LoomLeftover)),
+        "loom.free" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::LoomFree)),
+        "task.cancelled" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::Cancelled)),
         _ => crate::methods::resolve(name).or_else(|| crate::host::resolve(name))?,
     };
     let sig = native(name)?;

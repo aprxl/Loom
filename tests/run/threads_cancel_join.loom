@@ -1,0 +1,27 @@
+// A thread cancelled while it waits at a `join` (here for a child it
+// spawned into the outer loom) unwinds from there: its `defer` runs.
+
+use std.io.print
+use std.sync.sched_yield
+
+fn child() -> i32 {
+    sched_yield()
+    sched_yield()
+    7
+}
+
+fn boom() -> i32 {
+    unravel("boom")
+}
+
+fn main() {
+    loom {
+        let t = thread {
+            defer print("t cleanup")
+            let kid = thread child()
+            kid.join()
+        }
+        let b = thread boom()
+        t.join() + b.join()
+    }
+}

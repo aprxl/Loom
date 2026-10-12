@@ -229,6 +229,7 @@ impl<'a> Builder<'a> {
     /// driver.
     pub(super) fn yield_place(&mut self, value: &'a hir::Expr, span: Span) -> Option<Val> {
         self.f.span = Some(span);
+        self.cancel_point();
         let out = self.f.shuttle.as_ref()?.out?;
         let (place, _) = self.place_or_temp(value)?;
         let ptr = self.place_addr(&place, span)?;
@@ -333,6 +334,7 @@ impl<'a> Builder<'a> {
     /// `yield v`: moved to where the driver wants it, then suspended.
     pub(super) fn yield_expr(&mut self, value: &'a hir::Expr, span: Span) -> Option<Val> {
         self.f.span = Some(span);
+        self.cancel_point();
         if self.inline_gen().is_some() {
             return self.inline_yield(value, span);
         }
@@ -386,6 +388,7 @@ impl<'a> Builder<'a> {
     /// `some` of it, or `none` (no input: the shuttle is closed).
     pub(super) fn pull_expr(&mut self, e: &'a hir::Expr, span: Span) -> Option<Val> {
         self.f.span = Some(span);
+        self.cancel_point();
         let opt = self.ty_of(e);
         let sb = self.f.shuttle.as_ref()?;
         let u = sb.pulls?;

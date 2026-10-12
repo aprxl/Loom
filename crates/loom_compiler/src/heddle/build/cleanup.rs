@@ -265,6 +265,9 @@ impl<'a> Builder<'a> {
                 }
             }
             CleanupKind::Defer { body, tables, flag, span } => {
+                // User code: a loom left inside it is left early, even when
+                // the scope's end is what runs this.
+                let saved_closing = std::mem::replace(&mut self.f.closing, false);
                 let saved_body = std::mem::replace(&mut self.f.body, *tables);
                 let saved_span = self.f.span.replace(*span);
                 let run = match flag {
@@ -291,6 +294,7 @@ impl<'a> Builder<'a> {
                 }
                 self.f.span = saved_span;
                 self.f.body = saved_body;
+                self.f.closing = saved_closing;
             }
             CleanupKind::Life(n) => {
                 self.emit(InstKind::Life { slot: *n, end: true }, &[]);

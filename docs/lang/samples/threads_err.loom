@@ -1,0 +1,12 @@
+use std.io.print
+
+fn main() {
+    var hits = 0
+    loom {
+        thread { hits += 1 }
+        thread { hits += 1 }
+        ()
+    }
+    print(hits)
+}
+//@ check-fail C0401

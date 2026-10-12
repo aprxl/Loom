@@ -97,6 +97,10 @@ pub(crate) enum Trap {
     OutOfMemory,
     StackOverflow,
     Interrupt,
+    /// Not a failure: a task operation (`task.*`, `loom.*`), which a native
+    /// can't do (it switches tasks). The dispatch loop's trap path runs it,
+    /// out of the way of the calls that don't need it.
+    Task(crate::sched::TaskOp),
     /// A thread is being cancelled: its loom is leaving early. It unwinds
     /// like an unravel, runs `defer`s and drops, and is seen by nobody.
     Cancel,
@@ -134,6 +138,7 @@ impl Trap {
             Trap::StackOverflow => "stack overflow: too many calls inside each other".into(),
             Trap::Interrupt => "interrupted (Ctrl-C)".into(),
             Trap::Cancel => "loom internal: a cancelled thread's unwind reached the host".into(),
+            Trap::Task(_) => "loom internal: a task operation reached the host".into(),
             Trap::Budget { .. } => "compile-time code used more than its budget".into(),
             Trap::Refused(native) => format!("`{native}` can't run at compile time"),
             Trap::Exit(code) => format!("exit {code}"),

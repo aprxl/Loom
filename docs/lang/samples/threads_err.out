@@ -1,0 +1,11 @@
+error[C0401]: `hits` is changed by more than one thread
+  --> docs/lang/samples/threads_err.loom:7:18
+  |
+6 |         thread { hits += 1 }
+  |         -------------------- another thread changes it
+7 |         thread { hits += 1 }
+  |                  ^^^^ changed here
+  |
+  = help: use `Atomic`, or produce a value per thread and combine them
+
+error: docs/lang/samples/threads_err.loom failed to type-check (1 error)

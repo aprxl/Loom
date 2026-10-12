@@ -1,0 +1,25 @@
+use std.io.print
+
+fn main() {
+    // What's declared outside the loom is shared: a thread reads it, or
+    // changes it when no one else touches it until it's joined.
+    var count = 0
+    let words = ["red", "green", "blue"]
+    loom {
+        let t = thread { count = words.len() }
+        t.join()
+    }
+    print("count {count}")
+
+    // A thread started in a loop gets a copy of what the loop declares.
+    let lens = loom {
+        var out: List[usize] = []
+        for w in words {
+            let t = thread w.len()
+            out.push(t.join())
+        }
+        out
+    }
+    print("{lens}")
+}
+//@ run
