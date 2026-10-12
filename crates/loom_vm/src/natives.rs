@@ -57,6 +57,10 @@ pub(crate) struct Ctx<'i> {
     /// With `checked`: the value stack, set before each native runs, so a
     /// native can check memory on it.
     pub stack: *const crate::stack::Stack,
+    /// With `checked`: the stacks of the threads that aren't running, which
+    /// the running one may touch (its parent's frames, through what it
+    /// captured).
+    pub task_ranges: Vec<(u64, u64)>,
     /// With `checked`: where the program's data is, which a native may read.
     pub data_range: (u64, u64),
     /// How many instructions have been dispatched (with `stats`).
@@ -114,6 +118,7 @@ impl<'i> Ctx<'i> {
             meter: None,
             refuse_host: false,
             stack: std::ptr::null(),
+            task_ranges: Vec::new(),
             data_range: (0, 0),
             dispatched: 0,
             op_counts: if cfg!(feature = "stats") { vec![0; Op::ALL.len()] } else { Vec::new() },
@@ -231,7 +236,12 @@ impl<'i> Ctx<'i> {
     fn owns(&self, addr: u64, len: u64) -> bool {
         // SAFETY: `stack` is set to the live stack before a native runs
         // (in the checked build, the only one that calls this).
-        self.heap.holds(addr, len) || (!self.stack.is_null() && unsafe { (*self.stack).holds(addr, len) })
+        self.heap.holds(addr, len)
+            || (!self.stack.is_null() && unsafe { (*self.stack).holds(addr, len) })
+            || self
+                .task_ranges
+                .iter()
+                .any(|&(start, end)| addr >= start && addr.checked_add(len).is_some_and(|stop| stop <= end))
     }
 
     /// With `checked`: whether `len` bytes at `addr` can be read: what
@@ -402,6 +412,12 @@ impl<'i> Ctx<'i> {
 /// A native: its context, its argument registers, and its immediate.
 pub(crate) type NativeFn = fn(&mut Ctx, &mut [u64], u16) -> Result<(), Trap>;
 
+/// A task operation (`task.*`, `loom.*`) is run by the dispatch loop, which
+/// can switch tasks. Reaching this is a bug.
+fn task_op_as_native(_: &mut Ctx, _: &mut [u64], _: u16) -> Result<(), Trap> {
+    Err(Trap::Crash("loom internal: a task operation called as a native".into()))
+}
+
 /// The native named `name`, and how many registers it reads or writes.
 pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
     let f: NativeFn = match name {
@@ -431,6 +447,8 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
         "mem.grow" => mem_grow,
         "mem.move" => mem_move,
         "mem.calloc" => mem_calloc,
+        // Handled by the interpreter itself: they switch tasks.
+        n if crate::sched::TaskOp::named(n).is_some() => task_op_as_native,
         _ => crate::methods::resolve(name).or_else(|| crate::host::resolve(name))?,
     };
     let sig = native(name)?;

@@ -146,7 +146,7 @@ impl<'a> Builder<'a> {
             }
             TyKind::Adt(def, _) => match self.p.def_path(def).as_str() {
                 "std.slice.Slice" => Some(view_parts()),
-                "std.fmt.Fmt" => scalar(VTy::Int, Mem::W64),
+                "std.fmt.Fmt" | "std.sync.Spun" => scalar(VTy::Int, Mem::W64),
                 _ if self.is_builtin(def) => None,
                 _ => {
                     let info = self.warp_info(ty)?;

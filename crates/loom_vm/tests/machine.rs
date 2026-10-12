@@ -564,3 +564,148 @@ fn the_data_can_be_read_back() {
     let bytes = unsafe { vm.read(vm.data_addr() + 8, 8) };
     assert_eq!(bytes, &0x0102_0304_0506_0708u64.to_le_bytes());
 }
+
+// ------------------------------------------------------------ threads
+
+/// The natives the thread tests use, in the order `threads_image` adds them
+/// after the image's own eight.
+mod nat {
+    pub const SPAWN: u16 = 8;
+    pub const JOIN: u16 = 9;
+    pub const YIELD: u16 = 10;
+    pub const LOOM_NEW: u16 = 11;
+    pub const LOOM_LEAVE: u16 = 12;
+    pub const LOOM_FREE: u16 = 13;
+}
+
+fn threads_image(funcs: Vec<(&str, u16, u16, u16, Vec<u64>)>) -> Image {
+    let mut img = image(funcs);
+    for name in ["task.spawn", "task.join", "task.yield", "loom.new", "loom.leave", "loom.free"] {
+        img.natives.push(name.into());
+    }
+    img
+}
+
+/// A thread's function: takes `(result address, env)`, and runs `body` with
+/// both in r0 and r1.
+fn thread_fn(frame: u16, mut body: Vec<u64>) -> (&'static str, u16, u16, u16, Vec<u64>) {
+    body.push(word(Op::Ret, 0, 0, 0));
+    ("thread", frame, 2, 0, body)
+}
+
+/// Starts function `entry` as a thread of the group in `group`, leaving
+/// its handle in `handle`. Uses six registers from `at`.
+fn spawn(code: &mut Vec<u64>, group: u16, entry: i32, result_bytes: i32, at: u16, handle: u16) {
+    code.push(word(Op::Mov, at, group, 0));
+    code.push(word_i32(Op::Ldi, at + 1, entry));
+    code.push(word_i32(Op::Ldi, at + 2, 0));
+    code.push(word_i32(Op::Ldi, at + 3, 0));
+    code.push(word_i32(Op::Ldi, at + 4, 0));
+    code.push(word_i32(Op::Ldi, at + 5, result_bytes));
+    code.push(word(Op::CallN, at, nat::SPAWN, 0));
+    if handle != at {
+        code.push(word(Op::Mov, handle, at, 0));
+    }
+}
+
+/// Prints the word at register `r`, and a newline.
+fn print_word(code: &mut Vec<u64>, r: u16, scratch: u16) {
+    code.push(word(Op::Mov, scratch + 2, r, 0));
+    code.push(word(Op::CallN, scratch + 2, 0, 0));
+    code.push(word_i32(Op::Ldstr, scratch, 0));
+    code.push(word_i32(Op::Ldi, scratch + 1, 1));
+    code.push(word(Op::CallN, scratch, 1, 0));
+}
+
+/// Ends the loom in `group`, normally: waits for its threads and frees it.
+fn end_loom(code: &mut Vec<u64>, group: u16, at: u16) {
+    code.push(word(Op::Mov, at, group, 0));
+    code.push(word_i32(Op::Ldi, at + 1, 0));
+    code.push(word(Op::CallN, at, nat::LOOM_LEAVE, 0));
+    code.push(word(Op::CallN, at, nat::LOOM_FREE, 0));
+}
+
+#[test]
+fn a_thread_gives_its_result_to_join() {
+    // thread: *result = 42
+    let thread = thread_fn(3, vec![word_i32(Op::Ldi, 2, 42), word(Op::St64, 0, 2, 0)]);
+    let mut main = vec![word(Op::CallN, 0, nat::LOOM_NEW, 0)];
+    spawn(&mut main, 0, 1, 8, 1, 7);
+    // join(handle, &r10): the destination is r10's address.
+    main.push(word(Op::Mov, 8, 7, 0));
+    main.push(word_i32(Op::Lea, 9, 10 * 8));
+    main.push(word(Op::CallN, 8, nat::JOIN, 0));
+    print_word(&mut main, 10, 11);
+    end_loom(&mut main, 0, 14);
+    main.push(word(Op::Ret, 0, 0, 0));
+    let img = threads_image(vec![("main", 20, 0, 0, main), thread]);
+    let (outcome, out) = exec(&img, &Config::default());
+    assert_eq!((outcome, out.as_str()), (Outcome::Finished, "42\n"));
+}
+
+#[test]
+fn threads_that_yield_take_turns() {
+    // thread: print 1, yield, print 2 (the same text, a count, each time).
+    let mut body = vec![word_i32(Op::Ldi, 2, 1)];
+    body.push(word(Op::Mov, 5, 2, 0));
+    body.push(word(Op::CallN, 5, 0, 0));
+    body.push(word(Op::CallN, 3, nat::YIELD, 0));
+    body.push(word_i32(Op::Ldi, 2, 2));
+    body.push(word(Op::Mov, 5, 2, 0));
+    body.push(word(Op::CallN, 5, 0, 0));
+    let thread = thread_fn(8, body);
+    let mut main = vec![word(Op::CallN, 0, nat::LOOM_NEW, 0)];
+    spawn(&mut main, 0, 1, 0, 1, 7);
+    spawn(&mut main, 0, 1, 0, 1, 8);
+    end_loom(&mut main, 0, 9);
+    main.push(word(Op::Ret, 0, 0, 0));
+    let img = threads_image(vec![("main", 16, 0, 0, main), thread]);
+    let (outcome, out) = exec(&img, &Config::default());
+    // Each `out.fmt` prints the number with no newline: 1 1 2 2.
+    assert_eq!((outcome, out.as_str()), (Outcome::Finished, "1122"));
+}
+
+#[test]
+fn a_thread_that_unravels_unravels_its_parent_at_join() {
+    // thread: 100 + 100 as an `i8` overflows.
+    let thread = thread_fn(4, vec![word_i32(Op::Ldi, 2, 100), word(Op::AddTI8, 2, 2, 2)]);
+    let mut main = vec![word(Op::CallN, 0, nat::LOOM_NEW, 0)];
+    spawn(&mut main, 0, 1, 0, 1, 7);
+    main.push(word(Op::Mov, 8, 7, 0));
+    main.push(word_i32(Op::Lea, 9, 10 * 8));
+    main.push(word(Op::CallN, 8, nat::JOIN, 0));
+    end_loom(&mut main, 0, 14);
+    main.push(word(Op::Ret, 0, 0, 0));
+    let img = threads_image(vec![("main", 20, 0, 0, main), thread]);
+    let (outcome, out) = exec(&img, &Config::default());
+    let Outcome::Unravel { message, .. } = outcome else { panic!("{outcome:?}") };
+    assert_eq!((message.as_str(), out.as_str()), ("arithmetic overflow", ""));
+}
+
+#[test]
+fn a_failure_cancels_the_threads_that_are_parked() {
+    // parked: yield, then print 9 (cancelled before it can).
+    let parked = thread_fn(
+        8,
+        vec![
+            word(Op::CallN, 3, nat::YIELD, 0),
+            word_i32(Op::Ldi, 2, 9),
+            word(Op::Mov, 5, 2, 0),
+            word(Op::CallN, 5, 0, 0),
+        ],
+    );
+    let failing =
+        ("failing", 4, 2, 0, vec![word_i32(Op::Ldi, 2, 100), word(Op::AddTI8, 2, 2, 2), word(Op::Ret, 0, 0, 0)]);
+    let mut main = vec![word(Op::CallN, 0, nat::LOOM_NEW, 0)];
+    spawn(&mut main, 0, 1, 0, 1, 7); // parked: yields at once
+    spawn(&mut main, 0, 2, 0, 1, 9); // failing: fails at once
+    main.push(word(Op::Mov, 11, 7, 0));
+    main.push(word_i32(Op::Lea, 12, 14 * 8));
+    main.push(word(Op::CallN, 11, nat::JOIN, 0)); // joins the parked one: sees the failure
+    end_loom(&mut main, 0, 16);
+    main.push(word(Op::Ret, 0, 0, 0));
+    let img = threads_image(vec![("main", 24, 0, 0, main), parked, failing]);
+    let (outcome, out) = exec(&img, &Config::default());
+    let Outcome::Unravel { message, .. } = outcome else { panic!("{outcome:?}") };
+    assert_eq!((message.as_str(), out.as_str()), ("arithmetic overflow", ""), "9 is never printed");
+}

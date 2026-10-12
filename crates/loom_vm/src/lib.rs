@@ -21,6 +21,7 @@ mod host;
 mod ints;
 mod methods;
 mod natives;
+mod sched;
 mod stack;
 
 use std::sync::Arc;
@@ -96,6 +97,9 @@ pub(crate) enum Trap {
     OutOfMemory,
     StackOverflow,
     Interrupt,
+    /// A thread is being cancelled: its loom is leaving early. It unwinds
+    /// like an unravel, runs `defer`s and drops, and is seen by nobody.
+    Cancel,
     /// Compile-time code used up `budget`. The first time it unwinds (what
     /// the program owns is freed and its `defer`s run); if it's still
     /// running at the next check (a `defer` that never ends), `abort` is
@@ -129,6 +133,7 @@ impl Trap {
             Trap::OutOfMemory => "out of memory".into(),
             Trap::StackOverflow => "stack overflow: too many calls inside each other".into(),
             Trap::Interrupt => "interrupted (Ctrl-C)".into(),
+            Trap::Cancel => "loom internal: a cancelled thread's unwind reached the host".into(),
             Trap::Budget { .. } => "compile-time code used more than its budget".into(),
             Trap::Refused(native) => format!("`{native}` can't run at compile time"),
             Trap::Exit(code) => format!("exit {code}"),

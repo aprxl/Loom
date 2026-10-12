@@ -21,19 +21,33 @@ pub(crate) struct Stack {
     /// The bytes of every segment, and how many there may be.
     bytes: usize,
     limit: usize,
+    /// How many slots the first segment holds, at least.
+    first: usize,
 }
 
 impl Stack {
     /// A stack of at most `limit` bytes whose first segment holds `need`
     /// slots.
     pub fn new(limit: usize, need: usize) -> Result<Stack, Trap> {
-        let mut stack = Stack { segments: Vec::new(), current: 0, bytes: 0, limit };
+        Stack::task(limit, need, SEGMENT)
+    }
+
+    /// A thread's stack: a first segment of `first` slots (or `need`, if
+    /// that's more), so starting one is cheap. Later ones are the usual size.
+    pub fn task(limit: usize, need: usize, first: usize) -> Result<Stack, Trap> {
+        let mut stack = Stack { segments: Vec::new(), current: 0, bytes: 0, limit, first };
         stack.allocate(need)?;
         Ok(stack)
     }
 
+    /// No segments at all: what a task's stack is while another's is in use.
+    pub fn empty() -> Stack {
+        Stack { segments: Vec::new(), current: 0, bytes: 0, limit: 0, first: SEGMENT }
+    }
+
     fn allocate(&mut self, need: usize) -> Result<(), Trap> {
-        let slots = need.max(SEGMENT.min(self.limit / 8));
+        let usual = if self.segments.is_empty() { self.first } else { SEGMENT };
+        let slots = need.max(usual.min(self.limit / 8));
         let bytes = slots.checked_mul(8).ok_or(Trap::StackOverflow)?;
         if self.bytes + bytes > self.limit {
             return Err(Trap::StackOverflow);
@@ -81,6 +95,14 @@ impl Stack {
     pub fn shrink(&mut self) -> *mut u64 {
         self.current -= 1;
         self.bounds().1
+    }
+
+    /// The address range of each segment in use.
+    pub fn ranges(&self) -> impl Iterator<Item = (u64, u64)> + '_ {
+        self.segments[..self.segments.len().min(self.current + 1)].iter().map(|s| {
+            let r = s.as_ptr_range();
+            (r.start as u64, r.end as u64)
+        })
     }
 
     /// Whether `len` bytes at `addr` are inside a segment in use.

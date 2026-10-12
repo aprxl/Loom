@@ -1,0 +1,42 @@
+// What threads share and give back: a write through a by-reference
+// capture is seen by the parent after the join, a result nobody joined is
+// dropped when the loom ends (the checked build catches a leak), and a
+// parked thread still sees what it captured after the parent has used more
+// registers.
+
+use std.io.print
+use std.sync.sched_yield
+
+fn make(n: i32) -> String {
+    sched_yield()
+    "made {n}"
+}
+
+fn main() {
+    var x = 0
+    loom {
+        let t = thread { x = 5 }
+        t.join()
+    }
+    print("x {x}")
+
+    loom {
+        thread make(1)
+        let t = thread make(2)
+        print(t.join())
+        ()
+    }
+
+    let base = [1, 2, 3]
+    let total = loom {
+        let a = thread {
+            sched_yield()
+            base.len()
+        }
+        let (p, q, r, s) = (1, 2, 3, 4)
+        let (u, v, w) = (p * 2, q * 2, r * 2)
+        print("{p + q + r + s + u + v + w}")
+        a.join()
+    }
+    print("total {total}")
+}

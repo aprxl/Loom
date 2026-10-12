@@ -58,6 +58,8 @@ pub(super) enum CleanupKind<'a> {
     /// which lent a place for the statement, then drops it; unwinding, it
     /// only drops it (see `shuttle.rs`).
     Lend { slot: u32, ty: Ty },
+    /// Ends the loom block whose group is in this slot (see `thread.rs`).
+    Loom { slot: u32 },
 }
 
 #[derive(Clone, Debug)]
@@ -156,7 +158,9 @@ impl<'a> Builder<'a> {
         debug_assert_eq!(self.f.scopes.len(), depth);
         let start = self.f.scopes.pop().unwrap_or(0);
         if self.live() {
+            let saved = std::mem::replace(&mut self.f.closing, true);
             self.run_cleanups(start);
+            self.f.closing = saved;
         }
         self.f.cleanups.truncate(start);
     }
@@ -293,6 +297,7 @@ impl<'a> Builder<'a> {
             }
             CleanupKind::FreeShuttle(b) => self.free_shuttle_box(*b),
             CleanupKind::Lend { slot, ty } => self.finish_lend(*slot, *ty),
+            CleanupKind::Loom { slot } => self.emit_loom_end(*slot),
             CleanupKind::Free { at, size } => {
                 let (n, a) = (self.iconst(*size), self.iconst(8));
                 self.emit(InstKind::Native { name: "mem.free", imm: 0, args: vec![*at, n, a] }, &[]);

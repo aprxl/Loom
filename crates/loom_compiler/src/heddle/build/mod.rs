@@ -46,6 +46,7 @@ mod seq;
 mod shuttle;
 mod stream;
 mod text;
+mod thread;
 mod value;
 mod warp;
 
@@ -86,6 +87,9 @@ enum FnKey {
     Main(BodyId),
     /// A lambda, made in that body, by its expression.
     Lambda(BodyId, crate::hir::HirId),
+    /// A thread, made in that body, by its expression: runs as a task, with
+    /// `(result address, environment)` (see `thread.rs`).
+    Thread(BodyId, crate::hir::HirId),
     /// A function instance as a value: takes an environment it ignores.
     Thunk(BodyId),
     /// The step function of a kind of stream (see `stream.rs`).
@@ -240,6 +244,9 @@ struct FnState<'a> {
     temps: HashMap<Value, u32>,
     /// While a landing pad is built.
     in_pad: u32,
+    /// While a scope's cleanups are emitted at its normal end (falling off
+    /// it), rather than for leaving early.
+    closing: bool,
     /// The slots drops are registered for, with their types: zeroed when
     /// the function starts.
     owned_slots: Vec<(u32, Ty)>,
@@ -301,6 +308,8 @@ pub(super) struct Builder<'a> {
     vtable_at: HashMap<(Ty, Vec<crate::hir::DefId>), u32>,
     /// The lambdas made so far, by the body that made them.
     lambdas: HashMap<(BodyId, crate::hir::HirId), lambda::LambdaInfo<'a>>,
+    /// The threads made so far, by the body that made them.
+    threads: HashMap<(BodyId, crate::hir::HirId), thread::ThreadInfo<'a>>,
     /// Each shuttle function's frame, once its step is built.
     frames: HashMap<BodyId, super::frame::FrameLayout>,
     f: FnState<'a>,
@@ -434,6 +443,7 @@ impl<'a> Builder<'a> {
             drops: HashMap::new(),
             main_span: None,
             lambdas: HashMap::new(),
+            threads: HashMap::new(),
             globals: IndexMap::new(),
             const_exprs: HashMap::new(),
             asserts: HashMap::new(),
@@ -618,6 +628,7 @@ impl<'a> Builder<'a> {
             FnKey::Body(id) => self.body_name(id),
             FnKey::Main(id) => format!("{}.entry", self.body_name(id)),
             FnKey::Lambda(id, _) => format!("{}.{{lambda}}", self.body_name(id)),
+            FnKey::Thread(id, _) => format!("{}.{{thread}}", self.body_name(id)),
             FnKey::Thunk(id) => format!("{}.value", self.body_name(id)),
             FnKey::Step(step) => format!("stream.{}", self.step_name(step)),
             FnKey::ConstInit(consts::ConstKey::Def(def)) => format!("{}.init", self.p.def_path(def)),
@@ -657,7 +668,7 @@ impl<'a> Builder<'a> {
         let fid = self.ids[&key];
         let name = self.key_name(key);
         let body = match key {
-            FnKey::Body(id) | FnKey::Main(id) | FnKey::Lambda(id, _) | FnKey::Thunk(id) => id,
+            FnKey::Body(id) | FnKey::Main(id) | FnKey::Lambda(id, _) | FnKey::Thread(id, _) | FnKey::Thunk(id) => id,
             FnKey::Glue(..) | FnKey::Step(_) | FnKey::ConstInit(_) | FnKey::ConstExit | FnKey::AnyShow(..) => BodyId(0),
             FnKey::Dyn(id) | FnKey::ShuttleStep(id) | FnKey::Assert(id, _) => id,
             FnKey::GaugeCheck(_) | FnKey::ShuttleDrive | FnKey::ShuttleRelease => BodyId(0),
@@ -678,6 +689,7 @@ impl<'a> Builder<'a> {
             FnKey::Body(id) => self.body_func(id),
             FnKey::Main(id) => self.main_entry(id),
             FnKey::Lambda(id, e) => self.lambda_func(id, e),
+            FnKey::Thread(id, e) => self.thread_func(id, e),
             FnKey::Thunk(id) => self.thunk_func(id, span),
             FnKey::Step(step) => self.step_func(step),
             FnKey::ConstInit(def) => self.const_init(def),
@@ -734,6 +746,10 @@ impl<'a> Builder<'a> {
                 self.p.def(self.typed.results.instance(id).def).span
             }
             FnKey::Lambda(id, e) => match self.lambdas.get(&(id, e)) {
+                Some(info) => info.expr.span,
+                None => self.p.def(self.typed.results.instance(id).def).span,
+            },
+            FnKey::Thread(id, e) => match self.threads.get(&(id, e)) {
                 Some(info) => info.expr.span,
                 None => self.p.def(self.typed.results.instance(id).def).span,
             },

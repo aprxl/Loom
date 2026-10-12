@@ -2,13 +2,3 @@
 # per line, the milestone of design/vm.md that brings what it needs, and the
 # first thing it stops on. The fixture harness fails when one of these
 # passes, so take it out when it does: this list only gets shorter.
-threads_basic      V5: `loom` and `thread` (Heddle says U0102)
-threads_unravel    V5
-threads_leave      V5
-threads_nested     V5
-threads_twice      V5
-threads_shuttle        V5
-threads_nested_park    V5
-threads_unravel_line   V5
-threads_copies         V5
-threads_defer_order    V5

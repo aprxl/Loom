@@ -38,6 +38,8 @@
 use loom_isa::word::{a, b, bc_i32, bc_u32, c, c_i16, unpack_cast};
 use loom_isa::{Image, LINK_SLOTS, Op};
 
+use crate::sched::{Sched, Step, TaskOp};
+
 use crate::heap::Heap;
 use loom_sys::Host;
 
@@ -91,6 +93,12 @@ struct Env<'e, 'i> {
     ticks_out: &'e mut i32,
     /// What's unwinding the stack, while landing pads run.
     in_flight: Option<Fault>,
+    /// The threads of the program (design/vm.md §11).
+    sched: &'e mut Sched,
+    /// Which of the natives are task operations.
+    task_ops: &'e [Option<TaskOp>],
+    /// How big a thread's stack may grow.
+    stack_limit: usize,
 }
 
 impl Drop for Env<'_, '_> {
@@ -114,6 +122,9 @@ pub(crate) struct Machine<'i> {
     stack: Option<Stack>,
     /// What's left of the tick counter between calls.
     ticks: i32,
+    sched: Sched,
+    /// For each native: the task operation it names, if it does.
+    task_ops: Vec<Option<TaskOp>>,
 }
 
 impl<'i> Machine<'i> {
@@ -141,7 +152,10 @@ impl<'i> Machine<'i> {
             // Verified: inside the data, and an offset within it.
             data[r as usize] += base;
         }
+        let task_ops = image.natives.iter().map(|name| TaskOp::named(name)).collect();
         Ok(Machine {
+            task_ops,
+            sched: Sched::new(),
             image,
             code: &image.code,
             funcs,
@@ -233,6 +247,7 @@ impl<'i> Machine<'i> {
             let r = self.data.as_mut_ptr_range();
             (r.start as u64, r.end as u64)
         };
+        self.sched.reset();
         self.ctx.stopping = false;
         self.ctx.data_range = data_range;
         self.ctx.reset_sinks();
@@ -250,6 +265,9 @@ impl<'i> Machine<'i> {
             ticks: self.ticks,
             ticks_out: &mut self.ticks,
             in_flight: None,
+            sched: &mut self.sched,
+            task_ops: &self.task_ops,
+            stack_limit: self.stack_limit,
         };
         // Only `pc` and `fp` (and each instruction's word) stay in registers
         // through the loop; the rest is read from `env` where it's needed.
@@ -417,7 +435,15 @@ impl<'i> Machine<'i> {
                     ($addr:expr, $len:expr) => {{
                         if cfg!(feature = "checked") {
                             let (addr, len) = ($addr, $len as u64);
-                            if !valid(&env.ctx.heap, env.stack, env.ctx.rodata_range(), env.data_range, addr, len) {
+                            if !valid(
+                                &env.ctx.heap,
+                                env.stack,
+                                &env.ctx.task_ranges,
+                                env.ctx.rodata_range(),
+                                env.data_range,
+                                addr,
+                                len,
+                            ) {
                                 return Err(fault!(
                                     Trap::Crash(format!(
                                         "loom internal: a bad memory access: {len} bytes at {addr:#x}"
@@ -1065,6 +1091,97 @@ impl<'i> Machine<'i> {
                         // SAFETY: the verifier checked that the native's
                         // registers are inside the frame.
                         let args = unsafe { std::slice::from_raw_parts_mut(fp.add(a(w)), regs) };
+                        if let Some(task_op) = env.task_ops[b(w)] {
+                            // SAFETY: `CallN` is one word, and `pc` is after it.
+                            let at = unsafe { pc.sub(1) };
+                            let step = match task_op {
+                                TaskOp::Spawn => {
+                                    if env.ctx.refuse_host {
+                                        throw!(Trap::Refused("task.spawn"));
+                                    }
+                                    let index = args[1] as usize;
+                                    if index >= env.nfuncs {
+                                        return Err(fault!(no_function(index), here!()));
+                                    }
+                                    // SAFETY: just checked.
+                                    let callee = unsafe { &*env.funcs.add(index) };
+                                    let entry = (callee.entry, callee.frame, callee.params);
+                                    let spawned = env.sched.spawn(
+                                        &mut env.ctx.heap,
+                                        env.stack_limit,
+                                        entry,
+                                        args[0],
+                                        args[2],
+                                        args[3],
+                                        args[4],
+                                        args[5],
+                                    );
+                                    match spawned {
+                                        Ok((handle, step)) => {
+                                            args[0] = handle;
+                                            step
+                                        }
+                                        Err(trap) => throw!(trap),
+                                    }
+                                }
+                                TaskOp::Join => match env.sched.join(args[0], args[1]) {
+                                    Ok(step) => step,
+                                    Err(trap) => throw!(trap),
+                                },
+                                TaskOp::Yield => match env.sched.sched_yield() {
+                                    Ok(step) => step,
+                                    Err(trap) => throw!(trap),
+                                },
+                                TaskOp::LoomNew => {
+                                    args[0] = env.sched.loom_new();
+                                    Step::Next
+                                }
+                                TaskOp::LoomLeave => match env.sched.leave(args[0], args[1]) {
+                                    Ok(step) => step,
+                                    Err(trap) => throw!(trap),
+                                },
+                                TaskOp::LoomLeftover => match env.sched.leftover(args[0]) {
+                                    Ok((function, address)) => {
+                                        args[0] = function;
+                                        args[1] = address;
+                                        Step::Next
+                                    }
+                                    Err(trap) => throw!(trap),
+                                },
+                                TaskOp::LoomFree => match env.sched.free(&mut env.ctx.heap, args[0], args[1]) {
+                                    Ok(()) => Step::Next,
+                                    Err(trap) => throw!(trap),
+                                },
+                                TaskOp::Cancelled => {
+                                    if env.sched.is_cancelled() {
+                                        throw!(Trap::Cancel);
+                                    }
+                                    Step::Next
+                                }
+                            };
+                            let next = match step {
+                                Step::Next => continue 'run,
+                                Step::Park { again } => {
+                                    if again {
+                                        pc = at;
+                                    }
+                                    env.sched.next_ready()
+                                }
+                                Step::Start(new) => new,
+                            };
+                            let (npc, nfp, nend) =
+                                env.sched.switch(next, pc, fp, env.seg_end, &mut env.in_flight, env.stack);
+                            if cfg!(feature = "checked") {
+                                env.ctx.task_ranges = env.sched.ranges();
+                            }
+                            pc = npc;
+                            fp = nfp;
+                            env.seg_end = nend;
+                            if let Some(trap) = env.sched.arrival() {
+                                throw!(trap);
+                            }
+                            continue 'run;
+                        }
                         if cfg!(feature = "checked") {
                             env.ctx.stack = &*env.stack;
                         }
@@ -1098,6 +1215,19 @@ impl<'i> Machine<'i> {
                                 env.seg_end = leave_segment(env.stack, fp, dst, n);
                             }
                             if back.is_null() {
+                                if env.sched.current != 0 {
+                                    // A thread's end: its result is written
+                                    // already. Another task runs.
+                                    let ((npc, nfp, nend), freed) = end_task(env, None);
+                                    pc = npc;
+                                    fp = nfp;
+                                    env.seg_end = nend;
+                                    let arrived = env.sched.arrival();
+                                    if let Some(trap) = freed.or(arrived) {
+                                        throw!(trap);
+                                    }
+                                    continue 'run;
+                                }
                                 // Back to the host: the entry's results are in
                                 // its first registers.
                                 return Ok(std::slice::from_raw_parts(fp, env.entry_results).to_vec());
@@ -1296,6 +1426,20 @@ impl<'i> Machine<'i> {
                                 // its address, and `pc` then lives in memory
                                 // through the whole loop.
                                 let at = here!();
+                                if env.sched.current != 0 {
+                                    // A thread's unwind is over: it failed
+                                    // (or was cancelled), and another runs.
+                                    let trap = env.in_flight.take().map(|f| f.trap);
+                                    let ((npc, nfp, nend), freed) = end_task(env, trap);
+                                    pc = npc;
+                                    fp = nfp;
+                                    env.seg_end = nend;
+                                    let arrived = env.sched.arrival();
+                                    if let Some(trap) = freed.or(arrived) {
+                                        throw!(trap);
+                                    }
+                                    continue 'run;
+                                }
                                 return Err(match env.in_flight.take() {
                                     Some(f) => f,
                                     None => {
@@ -1312,22 +1456,68 @@ impl<'i> Machine<'i> {
             // Unwinds with `trap`: to this function's landing pad for this
             // instruction, or out through its callers'. An internal error
             // doesn't unwind: nothing about the state can be trusted.
-            let at = here!();
-            if matches!(trap, Trap::Crash(_) | Trap::Failed(_) | Trap::Budget { abort: true, .. }) {
-                return Err(fault!(trap, at));
-            }
-            let (trace, skipped) = trace_at(env.image, env.code_base, fp, at);
-            env.in_flight = Some(Fault { trap, pc: trace.first().copied().unwrap_or(at_index!(at)), trace, skipped });
-            match unwind(env.image, env.code_base, env.stack, fp, at, false) {
-                Some((to, frame, end)) => {
-                    pc = to;
-                    fp = frame;
-                    env.seg_end = end;
+            let mut trap = trap;
+            loop {
+                let at = here!();
+                if matches!(trap, Trap::Crash(_) | Trap::Failed(_) | Trap::Budget { abort: true, .. }) {
+                    return Err(fault!(trap, at));
                 }
-                None => return Err(env.in_flight.take().expect("set just above")),
+                let (trace, skipped) = trace_at(env.image, env.code_base, fp, at);
+                env.in_flight =
+                    Some(Fault { trap, pc: trace.first().copied().unwrap_or(at_index!(at)), trace, skipped });
+                match unwind(env.image, env.code_base, env.stack, fp, at, false) {
+                    Some((to, frame, end)) => {
+                        pc = to;
+                        fp = frame;
+                        env.seg_end = end;
+                        break;
+                    }
+                    None => {
+                        let fault = env.in_flight.take().expect("set just above");
+                        if env.sched.current == 0 {
+                            return Err(fault);
+                        }
+                        // A thread ended by a trap: another task runs, and
+                        // may have a cancel to take first.
+                        let ((npc, nfp, nend), freed) = end_task(env, Some(fault.trap));
+                        pc = npc;
+                        fp = nfp;
+                        env.seg_end = nend;
+                        let arrived = env.sched.arrival();
+                        match freed.or(arrived) {
+                            Some(t) => trap = t,
+                            None => break,
+                        }
+                    }
+                }
             }
         }
     }
+}
+
+/// The running thread ended, by returning or (with its `trap`) by unwinding:
+/// the group is told, whoever waited for it wakes, and the next task runs.
+/// The registers it left. (A heap error freeing what the thread held is
+/// raised in whoever runs next.)
+#[cold]
+#[inline(never)]
+fn end_task(env: &mut Env, trap: Option<Trap>) -> ((*const u64, *mut u64, *mut u64), Option<Trap>) {
+    let cur = env.sched.current;
+    let freed = env.sched.finish(&mut env.ctx.heap, trap);
+    let next = env.sched.next_ready();
+    let (pc, fp, end) = env.sched.switch(
+        next,
+        std::ptr::null(),
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        &mut env.in_flight,
+        env.stack,
+    );
+    env.sched.drop_stack(cur);
+    if cfg!(feature = "checked") {
+        env.ctx.task_ranges = env.sched.ranges();
+    }
+    ((pc, fp, end), freed.err())
 }
 
 /// The start of the instruction the word before `pc` is part of: its
@@ -1476,8 +1666,21 @@ fn trace_at(image: &Image, code_base: *const u64, mut fp: *mut u64, at: *const u
 
 /// Whether `len` bytes at `addr` are all memory the program may touch: a
 /// live object, the stack in use, the image's text or the program's data.
-fn valid(heap: &Heap, stack: &Stack, rodata: (u64, u64), data: (u64, u64), addr: u64, len: u64) -> bool {
+fn valid(
+    heap: &Heap,
+    stack: &Stack,
+    tasks: &[(u64, u64)],
+    rodata: (u64, u64),
+    data: (u64, u64),
+    addr: u64,
+    len: u64,
+) -> bool {
     let Some(end) = addr.checked_add(len) else { return false };
     let inside = |(start, stop): (u64, u64)| addr >= start && end <= stop;
-    len == 0 || heap.holds(addr, len) || stack.holds(addr, len) || inside(rodata) || inside(data)
+    len == 0
+        || heap.holds(addr, len)
+        || stack.holds(addr, len)
+        || tasks.iter().any(|&r| inside(r))
+        || inside(rodata)
+        || inside(data)
 }

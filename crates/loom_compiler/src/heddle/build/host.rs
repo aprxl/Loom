@@ -57,6 +57,10 @@ impl<'a> Builder<'a> {
                 self.terminate(crate::heddle::Term::Crash(1));
                 None
             }
+            "std.sync.sched_yield" => {
+                self.native("task.yield", Vec::new(), 0);
+                Some(Val::Regs(Vec::new()))
+            }
             "std.time.sleep" => {
                 // A `Duration` is its nanoseconds.
                 let (v, ty) = arg(self, 0)?;

@@ -133,6 +133,27 @@ pub const NATIVES: &[NativeSig] = &[
     sig("msg.fmt", 1, 0, NativeImm::Fmt),
     sig("msg.fmt2", 2, 0, NativeImm::Fmt),
     sig("msg.unravel", 0, 0, NativeImm::None),
+    // Threads (design/vm.md §11), which the interpreter runs itself since
+    // they switch tasks. `task.spawn(group, entry, env, env bytes, drop
+    // function, result bytes) -> handle` starts `entry(result address, env)`
+    // as a task of the loom `group` at once; `task.join(handle, dest)` waits
+    // for it and copies its result to `dest`; `task.yield` goes to the back
+    // of the queue.
+    sig("task.spawn", 6, 1, NativeImm::None),
+    sig("task.join", 2, 0, NativeImm::None),
+    sig("task.yield", 0, 0, NativeImm::None),
+    // `loom.new() -> group`. `loom.leave(group, mode)` waits for the group's
+    // threads (cancelling them first unless the end is a normal one), where
+    // mode is 0 for falling off the end, 1 for leaving early, 2 for an
+    // unwind. `loom.leftover(group) -> (drop function, address)` gives each
+    // result nobody took that needs dropping, then (0, 0).
+    // `loom.free(group, mode)` ends the group and raises its failure.
+    sig("loom.new", 0, 1, NativeImm::None),
+    sig("loom.leave", 2, 0, NativeImm::None),
+    sig("loom.leftover", 1, 2, NativeImm::None),
+    sig("loom.free", 2, 0, NativeImm::None),
+    // Unwinds with a cancel if the running thread has been cancelled.
+    sig("task.cancelled", 0, 0, NativeImm::None),
 ];
 
 /// The signature of the native named `name`.

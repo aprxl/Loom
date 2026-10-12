@@ -48,6 +48,7 @@ pub(super) fn writes_body(path: &str) -> bool {
         || super::methods::writes_body(path)
         || super::stream::writes_body(path)
         || super::shuttle::writes_body(path)
+        || super::thread::writes_body(path)
         || path.starts_with("std.map.Map.")
         || path.starts_with("std.set.Set.")
         || matches!(path, "std.fs.File.append" | "std.fs.File.write_line")
@@ -86,6 +87,10 @@ impl<'a> Builder<'a> {
         }
         if super::shuttle::writes_body(&path) {
             self.shuttle_method(&path, &args, &tys, sret, span)?;
+            return Some(abi.results);
+        }
+        if super::thread::writes_body(&path) {
+            self.spun_join(&args[0], tys[0], ret, sret, span)?;
             return Some(abi.results);
         }
         if path.starts_with("std.map.Map.") || path.starts_with("std.set.Set.") {
