@@ -288,6 +288,10 @@ impl Checker<'_> {
                 self.tcx.never
             }
             ExprKind::Fail(value) => self.check_fail(e, value),
+            // A shuttle suspended inside a loom would hold its group: not yet.
+            ExprKind::Yield { .. } | ExprKind::Pull if self.looms > 0 => {
+                self.unsupported(span, "`yield` and `pull` inside a `loom` block")
+            }
             ExprKind::Yield { place, value } => self.check_yield(value, *place, span),
             ExprKind::Pull => self.check_pull(span),
             ExprKind::Unsafe { .. } => self.unsupported(span, "`unsafe` blocks"),
@@ -298,8 +302,8 @@ impl Checker<'_> {
                 self.check_const_expr(span, inner, expected)
             }
             ExprKind::Lambda { params, body } => self.check_lambda(e, params, body, expected),
-            ExprKind::Loom { args, body } => self.check_loom(args, body, expected),
-            ExprKind::Thread(body) => self.check_thread(e, body),
+            ExprKind::Loom { args, body, .. } => self.check_loom(args, body, expected),
+            ExprKind::Thread { body, .. } => self.check_thread(e, body),
             ExprKind::Call { callee, args } => self.check_call(e, callee, args, expected),
             ExprKind::Index { base, args } => self.check_index(e, base, args),
             ExprKind::Field { base, field } => self.check_field(e, base, field),

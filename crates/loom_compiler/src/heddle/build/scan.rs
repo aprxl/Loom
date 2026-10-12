@@ -92,11 +92,11 @@ pub(super) fn children(e: &hir::Expr) -> Vec<Node<'_>> {
             out.push(x(cond));
             stmts(body, &mut out);
         }
-        ExprKind::Loom { args, body } => {
+        ExprKind::Loom { args, body, .. } => {
             out.extend(args.iter().map(|a| x(&a.value)));
             stmts(body, &mut out);
         }
-        ExprKind::Thread(v)
+        ExprKind::Thread { body: v, .. }
         | ExprKind::Fail(v)
         | ExprKind::Const(v)
         | ExprKind::Try(v)
@@ -286,6 +286,22 @@ impl Scanner<'_, '_> {
                 }
                 return;
             }
+            // A thread is a function of its own, like a lambda: it captures
+            // what it uses, and its loom's group.
+            ExprKind::Thread { group, body } => {
+                self.open.push((HashSet::new(), Vec::new()));
+                if let Some(g) = group {
+                    self.use_local(*g);
+                }
+                self.expr(body);
+                let (_, uses) = self.open.pop().unwrap_or_default();
+                self.scan.captures.insert(e.id, uses.clone());
+                for l in uses {
+                    self.use_local(l);
+                }
+                return;
+            }
+            ExprKind::Loom { group, .. } => self.declare(*group),
             ExprKind::Call { callee, args } => self.call(e, callee, args),
             ExprKind::Yield { place: Some(_), value } => self.needs_address(value),
             ExprKind::DotBlock { subject, .. } if self.tables().dot_blocks.get(&e.id) == Some(&true) => {

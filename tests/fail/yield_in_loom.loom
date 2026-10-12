@@ -1,0 +1,8 @@
+// A shuttle suspended inside a loom would hold the loom's group: not yet.
+
+fn gen() ~> i32 {
+    loom {
+        yield 1                             //~ U0102
+        ()
+    }
+}

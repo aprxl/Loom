@@ -1,0 +1,20 @@
+// A `defer` in the loom block runs when the block ends, before the loom
+// waits for its threads: the threads can't be relying on it.
+
+use std.io.print
+use std.sync.sched_yield
+
+fn main() {
+    let shared = 7
+    loom {
+        defer print("block defer")
+        thread {
+            print("thread start")
+            sched_yield()
+            print("thread sees {shared}")
+        }
+        print("block end")
+        ()
+    }
+    print("after")
+}

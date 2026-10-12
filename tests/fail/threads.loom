@@ -104,3 +104,38 @@ fn a_thread_cant_keep_an_owned_local() {
         }
     }
 }
+
+fn a_loom_level_owned_local() {
+    loom {
+        let xs: List[i32] = [1, 2]
+        let t = thread { xs.len() }         //~ C0405
+        t.join()
+    }
+}
+
+fn a_loom_level_copy_is_fine() {
+    loom {
+        let k = 3
+        let t = thread { k + 1 }
+        print(t.join())
+    }
+}
+
+fn a_borrow_of_a_loom_local() {
+    loom {
+        let names: List[str] = ["a", "b"]
+        for n in names {
+            let t = thread { n.len() }      //~ C0405
+            t.join()
+        }
+    }
+}
+
+fn a_borrow_of_what_outlives_the_loom_is_fine(names: List[str]) {
+    loom {
+        for n in names {
+            let t = thread { n.len() }
+            print(t.join())
+        }
+    }
+}

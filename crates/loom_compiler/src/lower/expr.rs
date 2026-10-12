@@ -304,7 +304,7 @@ impl Lowerer<'_> {
         }
         match &e.kind {
             ExprKind::Lambda { params, body } => self.lambda(e, params, body),
-            ExprKind::Thread(body) => self.thread(e, body),
+            ExprKind::Thread { body, .. } => self.thread(e, body),
             ExprKind::Lit(lit) => self.lit(lit, false, ty),
             ExprKind::Template(parts) => self.template(parts),
             ExprKind::Local(local) => match self.aliases.get(local) {

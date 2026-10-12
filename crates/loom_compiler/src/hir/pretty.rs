@@ -470,7 +470,7 @@ impl Printer<'_> {
                 let label = self.loop_label(e.id);
                 format!("(loop {label} {})", self.block(body))
             }
-            ExprKind::Loom { args, body } => {
+            ExprKind::Loom { args, body, .. } => {
                 let mut s = String::from("(loom");
                 for a in args {
                     let a = self.arg(a);
@@ -479,7 +479,7 @@ impl Printer<'_> {
                 }
                 format!("{s} {})", self.block(body))
             }
-            ExprKind::Thread(e) => format!("(thread {})", self.expr(e)),
+            ExprKind::Thread { body, .. } => format!("(thread {})", self.expr(body)),
             ExprKind::Break { target, value } => {
                 let label = self.loop_label(*target);
                 match value {

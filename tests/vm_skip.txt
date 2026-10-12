@@ -11,3 +11,4 @@ threads_shuttle        V5
 threads_nested_park    V5
 threads_unravel_line   V5
 threads_copies         V5
+threads_defer_order    V5

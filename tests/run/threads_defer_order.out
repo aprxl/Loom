@@ -1,0 +1,5 @@
+thread start
+block end
+block defer
+thread sees 7
+after

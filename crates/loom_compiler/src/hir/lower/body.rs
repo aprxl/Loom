@@ -170,9 +170,16 @@ impl Resolver<'_> {
             }
             E::Loom { args, body } => {
                 let args = self.lower_args(args);
-                ExprKind::Loom { args, body: self.lower_block(body) }
+                let group = self.new_local("<loom>", span, false, LocalKind::Group);
+                self.fx.looms.push(group);
+                let body = self.lower_block(body);
+                self.fx.looms.pop();
+                ExprKind::Loom { args, body, group }
             }
-            E::Thread(body) => ExprKind::Thread(self.lower_closure_like(body)),
+            E::Thread(body) => {
+                let group = self.fx.looms.last().copied();
+                ExprKind::Thread { group, body: self.lower_closure_like(body) }
+            }
             E::Break { label, value } => match self.loop_target(label.as_ref(), span, "break") {
                 Some(target) => ExprKind::Break { target, value: value.as_ref().map(|v| self.boxed(v)) },
                 None => ExprKind::Error,
@@ -454,7 +461,8 @@ impl Resolver<'_> {
     /// shuttles, but it still sees `self` and the enclosing locals.
     fn lower_closure_like(&mut self, body: &ast::Expr) -> Box<Expr> {
         let self_local = self.fx.self_local;
-        let saved = std::mem::replace(&mut self.fx, super::FnCtx { self_local, ..Default::default() });
+        let looms = self.fx.looms.clone();
+        let saved = std::mem::replace(&mut self.fx, super::FnCtx { self_local, looms, ..Default::default() });
         let body = self.lower_plain(body);
         self.fx = saved;
         Box::new(body)

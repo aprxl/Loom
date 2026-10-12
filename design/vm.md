@@ -1196,15 +1196,22 @@ A thread body is closure-like. What it captures is read, `mut` or `take`,
 decided by what the body does with it (assigned or passed `mut`: `mut`;
 moved: `take`; otherwise read).
 
-- **By reference only what outlives the loom.** A local declared at the loom
-  block's level or outside it is captured by reference, into the parent's
-  frame. A narrower one (a loop variable, an inner block's local, a parameter
-  of the lambda around the `thread`, like `p` in `paths.map(p => thread
-  count_file(p))`) lives in a slot that's gone or reused after the spawn, so
-  it is **copied into the thread's environment** when it's `Copy` or a
-  borrow, and moved when it's `take`. A copied borrow's root has to outlive
-  the loom, checked as M0106 checks `captured_roots`; otherwise it's an error.
-- **Not yet:** a lambda that contains a `thread` can still leave its loom
+- **By reference only what is declared outside the loom block.** Such a
+  local is captured by reference, into the parent's frame. Any other (a
+  local of the block itself, a loop variable, an inner block's local, a
+  parameter of the lambda around the `thread`, like `p` in `paths.map(p =>
+  thread count_file(p))`) is gone or reused by the time the threads are
+  done: the block's own locals are dropped before its guard waits. So it's
+  **copied into the thread's environment** when it's `Copy` or a borrow, and
+  moved when it's `take`; a thread can't change such a copy (C0405). A copied
+  borrow's root has to outlive the loom, and is checked from what the move
+  checker tracks (`borrows`, loop items, bound parts); a block's `defer`
+  runs before the guard waits, so a thread can't rely on it.
+- **Not yet:** a copied `str` or slice whose backing the checker doesn't
+  track (a stream's items, a lambda parameter) isn't checked against the
+  loom, and `yield` and `pull` inside a loom block are U0102 (a suspended
+  shuttle would hold the group). A lambda that contains a `thread` can still
+  leave its loom
   (only `Spun` itself is tracked, not function types holding one), a thread
   can't move a captured variable (a `take` capture is
   M0102 today, "copy it", worded for lambdas), and a handle joined on only

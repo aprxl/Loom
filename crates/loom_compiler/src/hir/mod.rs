@@ -369,6 +369,8 @@ pub enum LocalKind {
     /// A binding in a `match` arm, `is`, `for` or `mend e =>`.
     Pattern,
     LambdaParam,
+    /// A `loom` block's group of threads.
+    Group,
     /// A parameter made for a hole lambda: `_` in `xs.map(_ * 2)`.
     Hole,
 }
@@ -571,8 +573,15 @@ pub enum ExprKind {
     Loom {
         args: Vec<Arg>,
         body: Block,
+        /// The block's group of threads: a local of its own, so lambdas and
+        /// threads inside carry it like any captured variable.
+        group: LocalId,
     },
-    Thread(Box<Expr>),
+    Thread {
+        /// The innermost enclosing loom's group, if there is one.
+        group: Option<LocalId>,
+        body: Box<Expr>,
+    },
     /// `target` is the [`HirId`] of the loop.
     Break {
         target: HirId,

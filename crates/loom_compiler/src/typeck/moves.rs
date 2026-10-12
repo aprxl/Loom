@@ -179,6 +179,8 @@ struct MoveCx {
     scope_of: HashMap<LocalId, usize>,
     /// The locals each local's lambda (or a stream holding one) captures.
     captures_of: HashMap<LocalId, Vec<LocalId>>,
+    /// The locals each loop item is borrowed from.
+    item_roots: HashMap<LocalId, Vec<LocalId>>,
     reported: HashSet<(&'static str, Span)>,
 }
 
@@ -353,6 +355,9 @@ impl Checker<'_> {
                     self.borrowed_roots(cx, iter, &mut over);
                 }
                 let locked = cx.locked.len();
+                for local in pat_locals(pat) {
+                    cx.item_roots.insert(local, over.clone());
+                }
                 cx.locked.extend(over.into_iter().map(|l| (l, iter.span)));
                 cx.loops.push((e.id, cx.scopes.len()));
                 self.mv_loop(cx, |this, cx| {
@@ -437,65 +442,7 @@ impl Checker<'_> {
             }
             // A function of its own, like a lambda's body: it holds what it
             // captures by reference until it's joined.
-            ExprKind::Thread(body) => {
-                let saved = cx.flow.clone();
-                let saved_base = std::mem::replace(&mut cx.fn_base, cx.scopes.len());
-                cx.depth += 1;
-                cx.in_defer.push(false);
-                cx.captures.push((cx.depth, Vec::new()));
-                cx.writes.push((cx.depth, Vec::new()));
-                self.mv(cx, body, true);
-                let (_, caps) = cx.captures.pop().unwrap_or_default();
-                let (_, written) = cx.writes.pop().unwrap_or_default();
-                cx.in_defer.pop();
-                cx.depth -= 1;
-                cx.fn_base = saved_base;
-                cx.flow = saved;
-                let by_ref = cx.looms.last().copied().unwrap_or(0);
-                let held = |cx: &MoveCx, l: &LocalId| cx.scope_of.get(l).is_some_and(|&s| s <= by_ref);
-                let writes: Vec<LocalId> = written.iter().map(|w| w.0).filter(|l| held(cx, l)).collect();
-                let reads = caps.iter().copied().filter(|l| held(cx, l)).filter(|l| !writes.contains(l)).collect();
-                // What doesn't outlive the loom is copied into the thread:
-                // a `Copy` value, or a borrow of what does.
-                let mut copies = Vec::new();
-                let narrower: Vec<LocalId> = caps.iter().copied().filter(|l| !held(cx, l)).collect();
-                for l in narrower {
-                    let name = self.p.local(l).name.clone();
-                    let changed = written.iter().find(|w| w.0 == l).map(|w| w.1);
-                    let borrow =
-                        cx.borrowed.contains_key(&l) || cx.parts_of.contains_key(&l) || cx.borrows.contains_key(&l);
-                    let ty = self.b.local_ty.get(&l).copied();
-                    let copyable = borrow || ty.is_some_and(|t| self.is_copy(t));
-                    if let Some(at) = changed {
-                        self.report(
-                            cx,
-                            Diagnostic::error(
-                                codes::C0405,
-                                format!("`{name}` doesn't outlive the loom, so a thread gets a copy of it"),
-                            )
-                            .primary(at, "this changes the thread's copy, which nobody sees")
-                            .help("declare it outside the `loom`, or return the new value from the thread"),
-                        );
-                    } else if !copyable {
-                        self.report(
-                            cx,
-                            Diagnostic::error(
-                                codes::C0405,
-                                format!("a thread can't keep `{name}`, which doesn't outlive the loom"),
-                            )
-                            .primary(e.span, "this thread uses it")
-                            .help(
-                                "declare it outside the `loom`, or copy it (`x.copy()`) inside the thread's expression",
-                            ),
-                        );
-                    } else {
-                        copies.push(l);
-                    }
-                }
-                self.b.thread_copies.insert(e.id, copies);
-                cx.lambda_caps.insert(e.id, caps);
-                cx.live.push(LiveThread { span: e.span, reads, writes, handle: None });
-            }
+            ExprKind::Thread { body, .. } => self.mv_thread(cx, e, body),
             ExprKind::Try(inner) => {
                 self.mv(cx, inner, owning);
                 // A `?` with no `mend` around it may leave the function.
@@ -595,6 +542,84 @@ impl Checker<'_> {
         }
     }
 
+    /// `thread body`: see the rules in design/vm.md §11.3. (A method of its
+    /// own, so the frame of `mv`, which recurses, stays small.)
+    #[inline(never)]
+    fn mv_thread(&mut self, cx: &mut MoveCx, e: &Expr, body: &Expr) {
+        let saved = cx.flow.clone();
+        let saved_base = std::mem::replace(&mut cx.fn_base, cx.scopes.len());
+        cx.depth += 1;
+        cx.in_defer.push(false);
+        cx.captures.push((cx.depth, Vec::new()));
+        cx.writes.push((cx.depth, Vec::new()));
+        self.mv(cx, body, true);
+        let (_, caps) = cx.captures.pop().unwrap_or_default();
+        let (_, written) = cx.writes.pop().unwrap_or_default();
+        cx.in_defer.pop();
+        cx.depth -= 1;
+        cx.fn_base = saved_base;
+        cx.flow = saved;
+        // Only what's declared outside the loom block is shared: the
+        // block's own locals are dropped before its guard waits.
+        let by_ref = cx.looms.last().copied().unwrap_or(0);
+        let held = |cx: &MoveCx, l: &LocalId| cx.scope_of.get(l).is_some_and(|&s| s < by_ref);
+        let writes: Vec<LocalId> = written.iter().map(|w| w.0).filter(|l| held(cx, l)).collect();
+        let reads = caps.iter().copied().filter(|l| held(cx, l)).filter(|l| !writes.contains(l)).collect();
+        // What doesn't outlive the loom is copied into the thread:
+        // a `Copy` value, or a borrow of what does.
+        let mut copies = Vec::new();
+        let narrower: Vec<LocalId> = caps.iter().copied().filter(|l| !held(cx, l)).collect();
+        for l in narrower {
+            let name = self.p.local(l).name.clone();
+            let changed = written.iter().find(|w| w.0 == l).map(|w| w.1);
+            let borrow = cx.borrowed.contains_key(&l) || cx.parts_of.contains_key(&l) || cx.borrows.contains_key(&l);
+            let ty = self.b.local_ty.get(&l).copied();
+            let copyable = borrow || ty.is_some_and(|t| self.is_copy(t));
+            // What a copied borrow borrows has to outlive the loom.
+            let mut roots: Vec<LocalId> = cx.item_roots.get(&l).cloned().unwrap_or_default();
+            roots.extend(cx.borrows.get(&l).into_iter().flatten().copied());
+            roots.extend(cx.parts_of.get(&l).copied());
+            let inside = roots.into_iter().find(|r| !held(cx, r) && cx.scope_of.contains_key(r));
+            if let Some(root) = inside {
+                let root = self.p.local(root).name.clone();
+                self.report(
+                    cx,
+                    Diagnostic::error(
+                        codes::C0405,
+                        format!("a thread can't keep `{name}`, which borrows `{root}`: it doesn't outlive the loom"),
+                    )
+                    .primary(e.span, "this thread uses it")
+                    .help("declare what it borrows outside the `loom`"),
+                );
+            } else if let Some(at) = changed {
+                self.report(
+                    cx,
+                    Diagnostic::error(
+                        codes::C0405,
+                        format!("`{name}` doesn't outlive the loom, so a thread gets a copy of it"),
+                    )
+                    .primary(at, "this changes the thread's copy, which nobody sees")
+                    .help("declare it outside the `loom`, or return the new value from the thread"),
+                );
+            } else if !copyable {
+                self.report(
+                    cx,
+                    Diagnostic::error(
+                        codes::C0405,
+                        format!("a thread can't keep `{name}`, which doesn't outlive the loom"),
+                    )
+                    .primary(e.span, "this thread uses it")
+                    .help("declare it outside the `loom`, or copy it (`x.copy()`) inside the thread's expression"),
+                );
+            } else {
+                copies.push(l);
+            }
+        }
+        self.b.thread_copies.insert(e.id, copies);
+        cx.lambda_caps.insert(e.id, caps);
+        cx.live.push(LiveThread { span: e.span, reads, writes, handle: None });
+    }
+
     fn mv_block(&mut self, cx: &mut MoveCx, block: &Block, owning: bool) {
         let Some((last, rest)) = block.stmts.split_last() else { return };
         let held = cx.held.len();
@@ -620,7 +645,7 @@ impl Checker<'_> {
                 let live = cx.live.len();
                 self.mv(cx, init, true);
                 // `let a = thread …`: `a` joins it.
-                if let (ExprKind::Thread(_), PatKind::Bind(l), true) = (&init.kind, &pat.kind, cx.live.len() > live)
+                if let (ExprKind::Thread { .. }, PatKind::Bind(l), true) = (&init.kind, &pat.kind, cx.live.len() > live)
                     && let Some(t) = cx.live.last_mut()
                 {
                     t.handle = Some(*l);

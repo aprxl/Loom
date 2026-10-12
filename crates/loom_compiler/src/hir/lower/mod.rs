@@ -119,6 +119,9 @@ struct FnCtx {
     loops: Vec<LoopFrame>,
     /// Hole-lambda parameters being collected, innermost last.
     hole_frames: Vec<Vec<LocalId>>,
+    /// The groups of the `loom` blocks around, innermost last. A lambda or a
+    /// thread inside one sees them.
+    looms: Vec<LocalId>,
 }
 
 struct Resolver<'a> {
