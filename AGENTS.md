@@ -28,6 +28,14 @@ Read your own diff before committing. One logical change per commit.
   find code and retrieve facts. A plain `grep` is fine when it's cheaper than
   spawning one. Keep to 2–3 agents at a time.
 
+## Priorities
+
+Treadle (the VM) is the main focus. The Lua backend is a secondary feature:
+keep it up to date and correct (it's the default for `loom run` and the
+oracle the fixtures and the generator compare against), so a new language
+feature lands on both, but don't spend time making it faster or cleverer.
+Speed work, reviews and design effort go to Treadle.
+
 ## Toolchain
 
 - Rust stable ≥ 1.98, edition 2024, host `x86_64-pc-windows-msvc`.
