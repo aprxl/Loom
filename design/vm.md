@@ -1111,22 +1111,138 @@ which isn't in this plan.
 **Frontend work comes first**, because the type checker has none of it:
 `loom` blocks, `thread`, `Spun[T]`, `join`, `loom for`, `sched_yield`, the
 capture rules and C04xx, `#disjoint` projections (`chunks_mut`), and
-`Atomic`, `Mutex` and `Pipe`. The Lua backend gets the eager lowering its
-plan describes: a `thread` runs to the end as soon as it's spawned. That's
-exactly Treadle's schedule with one worker, so the two backends stay
-comparable.
+`Atomic`, `Mutex` and `Pipe`.
 
-On Treadle:
+### 11.1 The reference schedule
 
-- **A Loom thread is a task**: its own value stack and control stack, in VM
-  memory. Workers are OS threads, one per core by default (`LOOM_THREADS`
-  changes it), each with a work-stealing deque. A task's whole state is data,
-  so parking one means saving three words, and its worker picks up another.
-  These are green threads with no OS stack switching.
-- **`thread e`** makes a task that runs `e` as a closure whose environment
-  points into the parent's frame. That's safe for the reason 05-concurrency.md
-  gives: the loom block waits for every thread before its frame can go away,
-  and stack segments never move.
+Both backends implement one schedule exactly, so a thread fixture prints the
+same on both. It is what Treadle does with one worker:
+
+- **`thread e` starts the task at once**, on the spawner's worker. The
+  spawner waits (it is put at the front of the ready queue) until the new
+  task finishes or parks.
+- **A task parks** at `join` of an unfinished thread, `sched_yield()` (it goes
+  to the back of the queue), `Pipe.send` into a full pipe, `Pipe.recv` from an
+  empty one, and a contended `Mutex.lock`. Nothing else parks, and nothing is
+  preempted: a task runs until it finishes or parks.
+- **Waking appends** the woken task to the back of the ready queue. The waker
+  carries on.
+- **When the running task parks or finishes**, the front of the queue runs. An
+  empty queue with parked tasks left is a deadlock: an unravel naming the
+  parked tasks (a `Pipe` nobody will ever fill).
+
+On Lua the threads are coroutines under a small scheduler that follows these
+rules. Two things to keep true:
+
+- A `coroutine.yield` made by a shuttle goes to its driver, so the
+  scheduler's yields carry a tag, and a shuttle driver passes a tagged yield
+  on up. When the chain's bottom is the main program, which isn't a
+  coroutine, the driver runs the queue itself until its own task is ready
+  again.
+- Every Lua frame between a park and the scheduler must be yieldable.
+  `pcall` is, but a C function calling back (`table.sort` with a comparator,
+  `string.gsub` with a function that reaches user code) isn't. `loomrt` sorts
+  with its own merge sort and its `gsub` callbacks are pure, so nothing
+  reaches one today; a new use of either with user code inside is a bug.
+
+### 11.2 Failure and cancel
+
+A **loom group** is the set of threads a block started. Its rules:
+
+- A thread that unravels records its failure in the group (the first one, in
+  the order they happened, wins) and **cancels the group's other unfinished
+  threads at once**. A thread **spawned into a failed group** starts
+  cancelled and never runs; joining it observes the failure.
+- **An exit or an interrupt in a thread fails the group the same way**
+  (`process.exit(n)`, Ctrl-C): the rest are cancelled, everything is waited
+  for, and the parent then exits or is interrupted again with the same code,
+  not an unravel with a note.
+- **The parent observes the group at `join` and at the end of the block** (any
+  path). If the group has failed it cancels what's left, waits for every
+  thread, then unravels with the recorded failure and a note, `the thread
+  started here unravelled`, whose span is the `thread` expression (the same
+  text and span on both backends). A `join` of a thread that finished
+  normally, in a group that hasn't failed, just takes the value.
+- **Deadlock**: when the queue is empty and tasks are parked, the task whose
+  park emptied the queue unravels with `deadlock: every thread is waiting`,
+  listing what each parked task waits on. It propagates as any unravel,
+  failing its group.
+- **Owning**: the group owns its task objects and their results. A `Spun`
+  has no drop glue; `join` moves the result out, and leaving the block drops
+  the results nobody took and frees the tasks. Parked tasks' stacks are freed
+  too, however the run ends (V1's leak check covers them).
+- **Leaving early** (`?`, `return`, `break`, an unravel of the parent) cancels
+  the unfinished threads, waits for them, and then goes on with the exit.
+  Leaving by falling off the end waits without cancelling, and joins what
+  nobody joined.
+- **A cancel is not an error.** The thread unwinds from its park point or its
+  next cancellation point (`yield`, `pull`, `join`, `sched_yield`, send,
+  recv, lock, and the host's I/O natives), running `defer`s and drops. It can
+  be seen by nobody: `mend` doesn't catch it, and its own loom blocks cancel
+  and wait for their threads on the way out. Dropped values are dropped.
+- With one worker a cancelled task is always at a park point, so the points
+  past the park ones matter only with several workers, where they're how a
+  running thread notices.
+- A `defer` that unravels in a thread being cancelled replaces the cancel
+  with that unravel, as a landing pad does for any unwind (§9.4). It fails
+  the group like any unravel.
+
+### 11.3 Capture rules (C04xx)
+
+A thread body is closure-like. What it captures is read, `mut` or `take`,
+decided by what the body does with it (assigned or passed `mut`: `mut`;
+moved: `take`; otherwise read).
+
+- **By reference only what outlives the loom.** A local declared at the loom
+  block's level or outside it is captured by reference, into the parent's
+  frame. A narrower one (a loop variable, an inner block's local, a parameter
+  of the lambda around the `thread`, like `p` in `paths.map(p => thread
+  count_file(p))`) lives in a slot that's gone or reused after the spawn, so
+  it is **copied into the thread's environment** when it's `Copy` or a
+  borrow, and moved when it's `take`. A copied borrow's root has to outlive
+  the loom, checked as M0106 checks `captured_roots`; otherwise it's an error.
+- **A `Spun[T]` holds** the read and `mut` captures it took by reference,
+  until it's joined, the way a stream holds the lambdas it was built from:
+  `join` takes the handle, and a handle nobody joined holds them until the
+  block ends. A `take` capture is a move at the spawn, not a hold. That's
+  what C0402 is checked against.
+- **The group is a hidden capture.** A `thread` reaches its loom lexically,
+  as a pointer in the closure's environment, not through a "current loom of
+  this task" lookup. That's right when the `thread` sits inside a lambda
+  (`map`), inside another thread's body, or in a lambda made in one loom and
+  called in another. So C0403 is checked lexically through lambda bodies, and
+  a lambda containing a `thread` is bound to its loom like a `Spun` is.
+- **`loom for` is one thread per iteration** in the reference schedule.
+  Chunking (§11.4) applies only with several workers.
+
+| Code | What |
+|---|---|
+| C0401 | a captured local is written by more than one thread (two threads, or the iterations of a `loom for`) |
+| C0402 | the parent uses a local a live thread holds `mut`, or writes one a live thread reads |
+| C0403 | `thread` outside any `loom` block |
+| C0404 | a `Spun` handle, or a lambda containing a `thread`, leaves its loom: returned, stored in a variable declared outside it, or captured by a thread of an outer loom. (Before the region checker lands in V6 this is the second-class rule of shuttles with borrowed parameters.) |
+| C0405 | a handle whose result is `once` is never joined |
+
+Arena pointers across threads (R0101/R0102) wait for V6.
+
+### 11.4 On Treadle
+
+- **A Loom thread is a task**: its own value stack, in VM memory (there's no
+  separate control stack, §9.2). The VM is split three ways: a shared
+  `Program` (image, code, data, natives: `Send + Sync`, with an `unsafe impl`
+  and a `// SAFETY:` comment for its raw pointers), a `Task` (value stack,
+  `pc`, `fp`, segment end, ticks, the unwind in flight, a cancel flag), and a
+  `Worker` (heap cache, output). Workers are OS threads, one per core by
+  default (`LOOM_THREADS` changes it), each with a work-stealing deque. A
+  task's whole state is data, so parking one means saving three words, and
+  its worker picks up another. These are green threads with no OS stack
+  switching. A thread's first stack segment is small (or taken from the
+  worker's pool of freed ones), so spawning doesn't allocate 1 MiB.
+- **`thread e`** makes a task that runs `e` as a closure. Its environment
+  points into the parent's frame for the locals that outlive the loom (§11.3),
+  which is safe for the reason 05-concurrency.md gives: the loom block waits
+  for every thread before its frame can go away, and stack segments never
+  move. The rest is copied into it.
 - **`join`** takes the result if the thread has finished, and parks until it
   has otherwise. A thread that unravelled makes `join` unravel in the joiner,
   with a note giving the thread's location.
@@ -1148,11 +1264,10 @@ On Treadle:
   it's empty park the task.
 - **Memory**: per-worker allocator caches, and frees from other threads go
   back to the page's owner (§5.5).
-- **Determinism**: with one worker, a spawned task runs to its end first and
-  there's no preemption: the same order as the Lua backend's eager threads.
-  The fixture harness uses one worker for any fixture that prints from
-  threads. Dedicated tests run with many workers and check only what's
-  deterministic.
+- **Determinism**: with one worker this is the reference schedule (§11.1),
+  the same as the Lua backend's. The fixture harness uses one worker for any
+  fixture that prints from threads. Dedicated tests run with many workers and
+  check only what's deterministic.
 
 ---
 
