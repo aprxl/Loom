@@ -1,0 +1,36 @@
+// Threads in lambdas and in other threads find their loom lexically; a
+// thread can have looms of its own; a handle is joined once.
+
+use std.io.print
+use std.sync.sched_yield
+
+fn leaf(n: i32) -> i32 {
+    sched_yield()
+    n * 10
+}
+
+fn pair(n: i32) -> i32 {
+    // A loom inside a thread: its own group, waited for before `pair` returns.
+    loom {
+        let a = thread leaf(n)
+        let b = thread leaf(n + 1)
+        a.join() + b.join()
+    }
+}
+
+fn main() {
+    let total = loom {
+        let outer = [1, 3].map(n => thread pair(n))
+        // A thread spawned by a thread joins the outer loom, since it has none.
+        let inner = thread {
+            let x = thread leaf(5)
+            x.join() + 1
+        }
+        var sum = inner.join()
+        for h in outer {
+            sum += h.join()
+        }
+        sum
+    }
+    print("total {total}")
+}

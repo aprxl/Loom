@@ -7,3 +7,15 @@ pub warp Atomic[T]
 /// A value that one thread at a time can lock and use.
 #builtin
 pub warp Mutex[T]
+
+/// A thread started in a `loom` block. `join` waits for its result: a
+/// thread nobody joined is joined where the block ends.
+#builtin
+pub warp Spun[T] {
+    pub fn join(take self) -> T
+}
+
+extern "lua" {
+    /// Lets the other ready threads run first.
+    pub fn sched_yield()
+}

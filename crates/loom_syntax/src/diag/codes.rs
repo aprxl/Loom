@@ -123,6 +123,12 @@ codes! {
     M0105 = "a borrow is used after what it borrows changed";
     M0106 = "a borrow outlives what it borrows";
 
+    // C04xx: threads (design/vm.md §11.3)
+    C0401 = "a variable is changed by more than one thread";
+    C0402 = "a variable is used while a thread has it";
+    C0403 = "`thread` outside a `loom` block";
+    C0404 = "a thread handle outlives its `loom` block";
+
     // P01xx: patterns
     P0101 = "match isn't exhaustive";
     P0102 = "refutable pattern in a binding";

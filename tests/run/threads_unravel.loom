@@ -1,0 +1,29 @@
+// A thread that unravels fails its loom: the other threads are cancelled at
+// their park points (their `defer`s run, nothing after them does), a thread
+// spawned after that never runs, and the parent unravels with the thread's
+// message where it joins.
+
+use std.io.print
+use std.sync.sched_yield
+
+fn slow(name: str) -> i32 {
+    defer print("{name} cleanup")
+    print("{name} start")
+    sched_yield()
+    print("{name} finished")
+    7
+}
+
+fn boom() -> i32 {
+    unravel("boom")
+}
+
+fn main() {
+    let r = loom {
+        let a = thread slow("a")
+        let b = thread boom()
+        let c = thread slow("c")
+        a.join() + b.join() + c.join()
+    }
+    print("not reached {r}")
+}

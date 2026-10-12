@@ -1,0 +1,86 @@
+// A thread holds what it captures by reference until it's joined: nobody
+// else may change what it reads, or touch what it changes.
+
+use std.io.print
+use std.sync.Spun
+
+fn two_writers() {
+    var hits = 0
+    loom {
+        thread { hits += 1 }
+        thread { hits += 1 }                //~ C0401
+        ()
+    }
+    print(hits)
+}
+
+fn parent_reads_what_a_thread_writes() {
+    var total = 0
+    loom {
+        let t = thread { total += 1 }
+        print(total)                        //~ C0402
+        t.join()
+    }
+}
+
+fn parent_writes_what_a_thread_reads() {
+    var n = 5
+    loom {
+        let t = thread { n + 1 }
+        n += 1                              //~ C0402
+        t.join()
+    }
+}
+
+fn a_reader_beside_a_writer() {
+    var n = 5
+    loom {
+        thread { n += 1 }
+        thread { print(n) }                 //~ C0402
+        ()
+    }
+}
+
+fn joined_first_is_fine() {
+    var total = 0
+    loom {
+        let t = thread { total += 1 }
+        t.join()
+        print(total)
+    }
+}
+
+fn readers_share() {
+    let n = 5
+    loom {
+        let a = thread { n + 1 }
+        let b = thread { n + 2 }
+        print(a.join() + b.join())
+        print(n)
+    }
+}
+
+fn a_loop_variable_is_copied() {
+    loom {
+        for i in 0..3 {
+            thread { print(i) }
+        }
+    }
+}
+
+fn outside_a_loom() {
+    let t = thread 1                        //~ C0403
+}
+
+fn handle_as_the_value() {
+    let h = loom {
+        thread 1                            //~ C0404
+    }
+}
+
+fn handle_kept_outside() {
+    var kept: ?Spun[i32] = none
+    loom {
+        kept = some(thread 1)               //~ C0404
+    }
+}

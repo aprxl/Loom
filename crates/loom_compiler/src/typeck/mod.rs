@@ -42,6 +42,7 @@ mod seq;
 mod shuttle;
 #[cfg(test)]
 mod tests;
+mod thread;
 mod unroll;
 mod usefulness;
 mod warp;
@@ -512,6 +513,7 @@ struct Std {
     stream: Option<DefId>,
     shuttle: Option<DefId>,
     burst: Option<DefId>,
+    spun: Option<DefId>,
 }
 
 /// Where the enclosing loop's `break`s go.
@@ -577,6 +579,8 @@ struct Checker<'p> {
 
     /// Checking a call argument directly: where a `String` may be viewed as a `str`.
     in_argument: bool,
+    /// How many `loom` blocks enclose what is being checked, in this body.
+    looms: u32,
     /// The warp whose members are being checked: what `Self` means.
     self_ty: Option<Ty>,
     /// The `self` of the method being checked.
@@ -647,6 +651,7 @@ impl<'p> Checker<'p> {
             stream: find("std.iter", "Stream"),
             shuttle: find("std.iter", "Shuttle"),
             burst: find("std.iter", "Burst"),
+            spun: find("std.sync", "Spun"),
         };
         Checker {
             p,
@@ -675,6 +680,7 @@ impl<'p> Checker<'p> {
             projections: Vec::new(),
             pending_shows: Vec::new(),
             in_argument: false,
+            looms: 0,
             self_ty: None,
             self_local: None,
             subjects: Vec::new(),
@@ -804,7 +810,9 @@ impl<'p> Checker<'p> {
         let tables = std::mem::take(&mut self.r.bodies[id.0 as usize]);
         let saved = std::mem::replace(&mut self.b, tables);
         let saved_id = self.cur_body.replace(id);
+        let saved_looms = std::mem::take(&mut self.looms);
         let out = f(self);
+        self.looms = saved_looms;
         self.cur_body = saved_id;
         self.r.bodies[id.0 as usize] = std::mem::replace(&mut self.b, saved);
         out

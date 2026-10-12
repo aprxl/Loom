@@ -322,6 +322,9 @@ impl Checker<'_> {
             TyKind::Adt(def, _) if Some(def) == self.std.string => false,
             // A slice is a view: copying it copies the view.
             TyKind::Adt(def, _) if Some(def) == self.std.slice => true,
+            // A thread's handle refers to a task its loom owns. Only one
+            // that holds a `once` result is used exactly once.
+            TyKind::Adt(def, args) if Some(def) == self.std.spun => !args.first().is_some_and(|&t| self.is_once(t)),
             TyKind::Adt(..) => match self.r.adts.get(&ty) {
                 Some(info) => info.copy,
                 None => self.adt_info(ty).is_some_and(|i| i.copy),

@@ -304,6 +304,7 @@ impl Lowerer<'_> {
         }
         match &e.kind {
             ExprKind::Lambda { params, body } => self.lambda(e, params, body),
+            ExprKind::Thread(body) => self.thread(e, body),
             ExprKind::Lit(lit) => self.lit(lit, false, ty),
             ExprKind::Template(parts) => self.template(parts),
             ExprKind::Local(local) => match self.aliases.get(local) {
@@ -333,6 +334,7 @@ impl Lowerer<'_> {
                 Expr::Table(self.lower_owned_operands(&items))
             }
             ExprKind::Block(_)
+            | ExprKind::Loom { .. }
             | ExprKind::If { .. }
             | ExprKind::Match { .. }
             | ExprKind::Loop { .. }
@@ -1067,6 +1069,7 @@ impl Lowerer<'_> {
         let control = matches!(
             e.kind,
             ExprKind::Block(_)
+                | ExprKind::Loom { .. }
                 | ExprKind::If { .. }
                 | ExprKind::Match { .. }
                 | ExprKind::Loop { .. }
@@ -1124,6 +1127,7 @@ impl Lowerer<'_> {
                 let body = self.nested(|this| this.block_into(block, dest));
                 self.push(StmtKind::Do(body));
             }
+            ExprKind::Loom { body, .. } => self.loom_block(body, dest),
             // `const if`: only the branch taken.
             ExprKind::If { then, else_, deferred: Some(_), .. } => {
                 match (self.tables().const_ifs.get(&e.id).copied(), else_) {

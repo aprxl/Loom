@@ -1,0 +1,11 @@
+// A handle gives its result once.
+
+use std.io.print
+
+fn main() {
+    loom {
+        let t = thread 5
+        print("{t.join()}")
+        print("{t.join()}")
+    }
+}

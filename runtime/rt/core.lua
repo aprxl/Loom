@@ -1838,6 +1838,227 @@ function rt.iter_stream(next, it, boxed, copy_out)
   end
 end
 
+local co_create, co_resume, co_yield = coroutine.create, coroutine.resume, coroutine.yield
+local co_status, co_close = coroutine.status, coroutine.close
+
+-- Ctrl-C reaches a coroutine only through a hook of its own: the host is
+-- told of each shuttle's, and holds it (here) until it's done.
+local watch_thread = host and host.watch_thread
+local unwatch_thread = host and host.unwatch_thread
+local watched = {}
+
+-- ================================================================ threads
+-- design/vm.md §11. A thread is a task: a coroutine run by the reference
+-- schedule, which is what Treadle does with one worker. `thread e` runs the
+-- task at once, until it finishes or parks, and the spawner carries on
+-- (a plain nested `resume`). A task parks at `join`, `sched_yield` and the
+-- waits of `Pipe` and `Mutex`; waking one appends it to the ready queue.
+-- The main program isn't a coroutine: when it parks it runs the queue
+-- itself, until it comes up in it.
+--
+-- A group is a loom block's `{tasks, n, failure, done}`, a Lua local the
+-- block's threads reach as an upvalue, so `thread` finds its loom lexically.
+
+local PARK = {}                      -- what a parked task yields
+local CANCEL = MARK .. "\31cancel"   -- what a cancelled task unwinds with
+local MAIN = { main = true, sdepth = 0 }
+local current = MAIN
+local ready, rhead, rtail = {}, 1, 0
+
+local function enqueue(t)
+  rtail = rtail + 1
+  ready[rtail] = t
+end
+
+--- Makes `t` ready again, if it was waiting.
+local function wake(t)
+  if t.waiting then
+    t.waiting = false
+    t.waiting_on = nil
+    enqueue(t)
+  end
+end
+
+--- Whoever runs `t` carries on when it parks or finishes.
+local function run(t)
+  local prev = current
+  current = t
+  local ok, err = co_resume(t.co)
+  current = prev
+  if not ok then error(err, 0) end -- the body catches everything: a bug
+end
+
+--- Stops the running task (its waiting is already recorded) until it is
+--- woken, which is when it comes up in the ready queue.
+local function suspend()
+  local cur = current
+  if cur.main and cur.sdepth == 0 then
+    while true do
+      if rhead > rtail then
+        error(MARK .. "deadlock: every thread is waiting", 0)
+      end
+      local t = ready[rhead]
+      ready[rhead] = nil
+      rhead = rhead + 1
+      if t == MAIN then return end
+      run(t)
+    end
+  end
+  co_yield(PARK)
+end
+
+--- `suspend`, and a cancelled task goes no further.
+local function park()
+  suspend()
+  if current.cancelled then error(CANCEL, 0) end
+end
+
+--- Waits for `t` to finish. Not a cancellation point: a task leaving a loom
+--- waits for its threads on the way out of a cancel too.
+local function wait_for(t)
+  local cur = current
+  while not t.done do
+    cur.waiting = true
+    cur.waiting_on = t
+    t.waiters[#t.waiters + 1] = cur
+    suspend()
+  end
+end
+
+local function cancel(t)
+  if t.done or t.cancelled then return end
+  t.cancelled = true
+  local on = t.waiting_on
+  if on then
+    for i, w in ipairs(on.waiters) do
+      if w == t then
+        table.remove(on.waiters, i)
+        break
+      end
+    end
+  end
+  wake(t)
+end
+
+local function cancel_all(g)
+  for i = 1, g.n do cancel(g.tasks[i]) end
+end
+
+local function wait_all(g)
+  for i = 1, g.n do wait_for(g.tasks[i]) end
+end
+
+--- The group has failed: what's left is cancelled and waited for, and then
+--- the parent unravels with the failure.
+local function abort(g)
+  cancel_all(g)
+  wait_all(g)
+  error(g.failure, 0)
+end
+
+local function thread_main(t, fn)
+  return function()
+    local ok, r = pcall(fn)
+    t.done = true
+    if ok then
+      t.result = r
+    elseif r == CANCEL then
+      t.cancelled = true
+    else
+      local g = t.group
+      if not g.failure then
+        g.failure = r
+        for i = 1, g.n do
+          if g.tasks[i] ~= t then cancel(g.tasks[i]) end
+        end
+      end
+    end
+    if t.watched then unwatch_thread(t.co) end
+    local ws = t.waiters
+    t.waiters = {}
+    for i = 1, #ws do wake(ws[i]) end
+  end
+end
+
+function rt.loom()
+  return { tasks = {}, n = 0, failure = nil, done = false }
+end
+
+function rt.spawn(g, fn)
+  local t = { group = g, waiters = {}, done = false }
+  g.n = g.n + 1
+  g.tasks[g.n] = t
+  if g.failure then
+    -- spawned into a failed group: it starts cancelled and never runs
+    t.done, t.cancelled = true, true
+    return t
+  end
+  t.co = co_create(thread_main(t, fn))
+  if watch_thread then
+    t.watched = true
+    watch_thread(t.co)
+  end
+  run(t)
+  return t
+end
+
+function rt.join(h)
+  local cur = current
+  if cur.cancelled then error(CANCEL, 0) end
+  local g = h.group
+  if h.taken then error(MARK .. "this thread was joined already", 2) end
+  while true do
+    if g.failure then return abort(g) end
+    if h.done then break end
+    cur.waiting = true
+    cur.waiting_on = h
+    h.waiters[#h.waiters + 1] = cur
+    park()
+  end
+  local r = h.result
+  h.result = nil
+  h.taken = true
+  return r
+end
+
+function rt.sched_yield()
+  local cur = current
+  if cur.cancelled then error(CANCEL, 0) end
+  enqueue(cur)
+  park()
+end
+
+-- A loom block's guard, a `<close>` local: when the block ends, the threads
+-- are waited for. Falling off the end only waits (and then raises a
+-- failure); leaving by `return`, `break`, `?` or an unravel cancels first.
+-- A failure in flight in the parent beats a thread's.
+local loom_guard = {
+  __close = function(c, err)
+    local g = c[1]
+    if g.done and err == nil then
+      if g.failure then return abort(g) end
+      wait_all(g)
+      if g.failure then return abort(g) end
+      return
+    end
+    cancel_all(g)
+    wait_all(g)
+    if err == nil and g.failure then error(g.failure, 0) end
+  end,
+}
+
+function rt.loom_guard(g)
+  return setmetatable({ g }, loom_guard)
+end
+
+rt.ext["std.sync.Spun.join"] = function(_, h)
+  return rt.join(h)
+end
+
+rt.ext["std.sync.sched_yield"] = function()
+  rt.sched_yield()
+end
+
 -- Shuttles. A shuttle is `{co, ...}`: a coroutine running the function's
 -- body, which `yield v` suspends with `true, v` and `pull` with `false`.
 -- The driver resumes a pending `pull` with `true, input` for a push, or
@@ -1849,14 +2070,6 @@ end
 -- burst, having run it. An unravel inside the shuttle closes its coroutine,
 -- which runs its pending `defer`s, and carries on in the driver.
 
-local co_create, co_resume, co_yield = coroutine.create, coroutine.resume, coroutine.yield
-local co_status, co_close = coroutine.status, coroutine.close
-
--- Ctrl-C reaches a coroutine only through a hook of its own: the host is
--- told of each shuttle's, and holds it (here) until it's done.
-local watch_thread = host and host.watch_thread
-local unwatch_thread = host and host.unwatch_thread
-local watched = {}
 
 function rt.shuttle(body)
   local co = co_create(body)
@@ -1889,7 +2102,18 @@ end
 
 -- Resumes `sh` with `...`: gives "out" and the value, "pull", or "done".
 local function resume(sh, ...)
+  local cur = current
+  cur.sdepth = cur.sdepth + 1
   local ok, is_out, v = co_resume(sh.co, ...)
+  cur.sdepth = cur.sdepth - 1
+  -- A park inside the body is the task's: it parks where the driver is,
+  -- and the body goes on when the task is woken.
+  while ok and is_out == PARK do
+    suspend()
+    cur.sdepth = cur.sdepth + 1
+    ok, is_out, v = co_resume(sh.co)
+    cur.sdepth = cur.sdepth - 1
+  end
   if not ok then
     finish(sh)
     co_close(sh.co)

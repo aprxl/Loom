@@ -1,0 +1,46 @@
+// Threads under the reference schedule (design/vm.md §11.1): a thread runs
+// as soon as it's spawned, until it finishes or parks; `sched_yield` sends
+// the running thread to the back of the queue.
+
+use std.io.print
+use std.sync.sched_yield
+
+fn square(n: i32) -> i32 = n * n
+
+fn worker(name: str, n: i32) {
+    for i in 0..n {
+        print("{name} {i}")
+        sched_yield()
+    }
+}
+
+fn main() {
+    // Results come back through `join`, in whatever order.
+    let total = loom {
+        let a = thread square(3)
+        let b = thread square(4)
+        b.join() + a.join()
+    }
+    print("total {total}")
+
+    // Threads that park take turns; nobody joined them, so the block's end does.
+    loom {
+        thread worker("a", 3)
+        thread worker("b", 2)
+        print("spawned")
+        ()
+    }
+    print("done")
+
+    // A thread borrows what outlives the loom, and a loop variable is copied.
+    let base = 100
+    let sums = loom {
+        let hs = [1, 2, 3].map(i => thread base + i)
+        var out: List[i32] = []
+        for h in hs {
+            out.push(h.join())
+        }
+        out
+    }
+    print("{sums}")
+}

@@ -69,6 +69,7 @@ const EXTERNS: &[&str] = &[
     "std.fs.read_text",
     "std.process.exit",
     "std.time.sleep",
+    "std.sync.sched_yield",
     "std.term.raw_mode",
     "std.term.poll_keys",
 ];
@@ -91,6 +92,7 @@ pub const RUNTIME_WARPS: &[&str] = &[
     "std.map.Map",
     "std.set.Set",
     "std.fs.File",
+    "std.sync.Spun",
 ];
 
 /// Lowers a type-checked program, which starts at `main`, after running its
@@ -221,6 +223,8 @@ struct Lowerer<'a> {
     /// The `defer`s in the Lua function being lowered: each is a `<close>`
     /// local, which has to stay a local.
     defers: usize,
+    /// The groups of the `loom` blocks around what is being lowered, innermost last.
+    looms: Vec<String>,
     /// Gauges whose checking functions are needed, in the order first used.
     gauges_used: IndexSet<DefId>,
     reported: HashSet<String>,
@@ -258,6 +262,7 @@ impl<'a> Lowerer<'a> {
             aliases: HashMap::new(),
             live_flags: HashMap::new(),
             defers: 0,
+            looms: Vec::new(),
             gauges_used: IndexSet::new(),
             reported: HashSet::new(),
             frames: None,
@@ -462,7 +467,7 @@ impl<'a> Lowerer<'a> {
             TyKind::Adt(def, _)
                 if matches!(
                     self.p.def_path(*def).as_str(),
-                    "std.iter.Stream" | "std.iter.Shuttle" | "std.iter.Burst"
+                    "std.iter.Stream" | "std.iter.Shuttle" | "std.iter.Burst" | "std.sync.Spun"
                 ) =>
             {
                 Expr::field(Expr::name("rt"), "opaque")

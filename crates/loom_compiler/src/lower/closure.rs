@@ -30,6 +30,63 @@ impl Lowerer<'_> {
         Expr::Function(names, stmts)
     }
 
+    /// `thread e`: a function of its own, which the runtime runs as a task of
+    /// the innermost loom's group. The group is a Lua local, so a thread in a
+    /// lambda, or in another thread, still finds its own loom.
+    pub(super) fn thread(&mut self, e: &hir::Expr, body: &hir::Expr) -> Expr {
+        let Some(group) = self.looms.last().cloned() else {
+            self.unsupported(e.span, "`thread` outside a `loom` block");
+            return Expr::Nil;
+        };
+        let valueless = match self.tcx().kind(self.ty_of(e)) {
+            TyKind::Adt(_, args) => {
+                args.first().is_none_or(|&t| matches!(self.tcx().kind(t), TyKind::Unit | TyKind::Never))
+            }
+            _ => true,
+        };
+        let saved_mends = std::mem::take(&mut self.mend_labels);
+        let stmts =
+            self.body(body.span, |this| this.lower_into(body, if valueless { &Dest::Discard } else { &Dest::Return }));
+        self.mend_labels = saved_mends;
+        Expr::rt("spawn", vec![Expr::name(group), Expr::Function(Vec::new(), stmts)])
+    }
+
+    /// `loom { … }`: a group for the threads, and a `<close>` guard that
+    /// waits for them when the block ends however it ends. The block's value
+    /// is worked out first and delivered after the guard has closed.
+    pub(super) fn loom_block(&mut self, body: &Block, dest: &Dest) {
+        let value = match dest {
+            Dest::Discard => None,
+            _ => {
+                let t = self.new_temp();
+                self.push(StmtKind::Local(vec![t.clone()], Vec::new()));
+                Some(t)
+            }
+        };
+        let group = self.new_temp();
+        let guard = self.new_temp();
+        let inner = self.nested(|this| {
+            this.push(StmtKind::Local(vec![group.clone()], vec![Expr::rt("loom", Vec::new())]));
+            this.defers += 1;
+            if this.defers == super::MAX_DEFERS + 1 {
+                this.unsupported(
+                    body.span,
+                    &format!("more than {} `defer`s and `loom`s in one function", super::MAX_DEFERS),
+                );
+            }
+            this.push(StmtKind::LocalClose(guard.clone(), Expr::rt("loom_guard", vec![Expr::name(group.clone())])));
+            this.looms.push(group.clone());
+            let into = value.clone().map_or(Dest::Discard, Dest::Assign);
+            this.block_into(body, &into);
+            this.looms.pop();
+            this.push(StmtKind::Assign(vec![Expr::field(Expr::name(group.clone()), "done")], vec![Expr::Bool(true)]));
+        });
+        self.push(StmtKind::Do(inner));
+        if let Some(t) = value {
+            self.deliver(Expr::Name(t), dest);
+        }
+    }
+
     /// A function used as a value: `F.name`, or the runtime's function.
     pub(super) fn fn_value(&mut self, id: BodyId, span: Span) -> Expr {
         let def = self.typed.results.instance(id).def;

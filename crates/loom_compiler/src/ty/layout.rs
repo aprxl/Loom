@@ -131,7 +131,7 @@ fn builtin(path: &str) -> Option<Builtin> {
         "std.map.Map" | "std.set.Set" => Builtin::Header(6),
         "std.iter.Stream" | "std.iter.Shuttle" | "std.iter.Burst" => Builtin::Header(2),
         "std.sync.Atomic" => Builtin::Atomic,
-        "std.fmt.Fmt" => Builtin::Handle,
+        "std.fmt.Fmt" | "std.sync.Spun" => Builtin::Handle,
         _ => return None,
     })
 }

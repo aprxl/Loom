@@ -1201,6 +1201,9 @@ moved: `take`; otherwise read).
   it is **copied into the thread's environment** when it's `Copy` or a
   borrow, and moved when it's `take`. A copied borrow's root has to outlive
   the loom, checked as M0106 checks `captured_roots`; otherwise it's an error.
+- **Not yet:** a thread can't move a captured variable (a `take` capture is
+  M0102 today, "copy it", worded for lambdas), and a handle joined on only
+  some paths releases what it held on all of them.
 - **A `Spun[T]` holds** the read and `mut` captures it took by reference,
   until it's joined, the way a stream holds the lambdas it was built from:
   `join` takes the handle, and a handle nobody joined holds them until the
@@ -1221,9 +1224,10 @@ moved: `take`; otherwise read).
 | C0402 | the parent uses a local a live thread holds `mut`, or writes one a live thread reads |
 | C0403 | `thread` outside any `loom` block |
 | C0404 | a `Spun` handle, or a lambda containing a `thread`, leaves its loom: returned, stored in a variable declared outside it, or captured by a thread of an outer loom. (Before the region checker lands in V6 this is the second-class rule of shuttles with borrowed parameters.) |
-| C0405 | a handle whose result is `once` is never joined |
 
-Arena pointers across threads (R0101/R0102) wait for V6.
+A `Spun[T]` is `once` when `T` is, so a handle whose result you'd lose is
+L0301 like any loose end. Arena pointers across threads (R0101/R0102) wait
+for V6.
 
 ### 11.4 On Treadle
 

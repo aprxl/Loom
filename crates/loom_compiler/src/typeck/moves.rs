@@ -111,6 +111,17 @@ enum Root {
     Temp,
 }
 
+/// A thread spawned in a loom whose handle hasn't been joined: the locals
+/// it holds by reference (design/vm.md §11.3).
+struct LiveThread {
+    /// The `thread` expression.
+    span: Span,
+    reads: Vec<LocalId>,
+    writes: Vec<LocalId>,
+    /// The variable holding its `Spun`, if it was bound to one.
+    handle: Option<LocalId>,
+}
+
 #[derive(Default)]
 struct MoveCx {
     flow: Flow,
@@ -133,6 +144,15 @@ struct MoveCx {
     captures: Vec<(u32, Vec<LocalId>)>,
     /// The outer locals each lambda uses, by the lambda's id.
     lambda_caps: HashMap<HirId, Vec<LocalId>>,
+    /// For each `thread` body being gone through: how deep it starts, and
+    /// the outer locals it changes.
+    writes: Vec<(u32, Vec<LocalId>)>,
+    /// For each `loom` block being gone through: the scope depth of its
+    /// block. A local declared at it or outside is captured by reference;
+    /// a narrower one (a loop variable, a lambda's parameter) is copied.
+    looms: Vec<usize>,
+    /// The threads of the looms being gone through that aren't joined yet.
+    live: Vec<LiveThread>,
     /// Locals holding a borrow (a slice, a stream, a function value), and
     /// the locals they borrow.
     borrows: HashMap<LocalId, Vec<LocalId>>,
@@ -374,6 +394,9 @@ impl Checker<'_> {
                 if let Some(v) = value {
                     self.mv(cx, v, true);
                     self.check_escape(cx, v, Escape::Out);
+                    if !cx.looms.is_empty() && self.value_is_handle(v) {
+                        self.handle_escapes(cx, v.span, "returned");
+                    }
                 }
                 self.leave_function(cx, e.span, "this returns");
                 cx.flow.dead = true;
@@ -402,6 +425,38 @@ impl Checker<'_> {
                 cx.depth -= 1;
                 cx.fn_base = saved_base;
                 cx.flow = saved;
+            }
+            // Its threads are joined before it ends, so what they hold is
+            // free again after it.
+            ExprKind::Loom { body, .. } => {
+                let live = cx.live.len();
+                cx.looms.push(cx.scopes.len() + 1);
+                self.mv_block(cx, body, owning);
+                cx.looms.pop();
+                cx.live.truncate(live);
+            }
+            // A function of its own, like a lambda's body: it holds what it
+            // captures by reference until it's joined.
+            ExprKind::Thread(body) => {
+                let saved = cx.flow.clone();
+                let saved_base = std::mem::replace(&mut cx.fn_base, cx.scopes.len());
+                cx.depth += 1;
+                cx.in_defer.push(false);
+                cx.captures.push((cx.depth, Vec::new()));
+                cx.writes.push((cx.depth, Vec::new()));
+                self.mv(cx, body, true);
+                let (_, caps) = cx.captures.pop().unwrap_or_default();
+                let (_, written) = cx.writes.pop().unwrap_or_default();
+                cx.in_defer.pop();
+                cx.depth -= 1;
+                cx.fn_base = saved_base;
+                cx.flow = saved;
+                let by_ref = cx.looms.last().copied().unwrap_or(0);
+                let held = |l: &LocalId| cx.scope_of.get(l).is_some_and(|&s| s <= by_ref);
+                let writes: Vec<LocalId> = written.iter().copied().filter(held).collect();
+                let reads = caps.iter().copied().filter(held).filter(|l| !writes.contains(l)).collect();
+                cx.lambda_caps.insert(e.id, caps);
+                cx.live.push(LiveThread { span: e.span, reads, writes, handle: None });
             }
             ExprKind::Try(inner) => {
                 self.mv(cx, inner, owning);
@@ -462,6 +517,13 @@ impl Checker<'_> {
             }
             ExprKind::Assign { target, op, value } => {
                 self.mv(cx, value, *op == AssignOp::Assign);
+                // A handle can't be kept in a variable that outlives its loom.
+                if let (Some(&by_ref), true) = (cx.looms.last(), self.value_is_handle(value))
+                    && let Some((Root::Local(l), _)) = self.place_of(cx, target)
+                    && cx.scope_of.get(&l).is_some_and(|&s| s < by_ref)
+                {
+                    self.handle_escapes(cx, target.span, "kept in a variable declared outside it");
+                }
                 if *op == AssignOp::Assign {
                     self.check_assigned_escape(cx, target, value);
                 }
@@ -489,8 +551,6 @@ impl Checker<'_> {
             | ExprKind::Assoc { .. }
             | ExprKind::BuiltinCase(_)
             | ExprKind::Intrinsic(_)
-            | ExprKind::Loom { .. }
-            | ExprKind::Thread(_)
             | ExprKind::Pull
             | ExprKind::Deref(_)
             | ExprKind::Error => {}
@@ -519,7 +579,14 @@ impl Checker<'_> {
     fn mv_stmt_inner(&mut self, cx: &mut MoveCx, stmt: &crate::hir::Stmt, owning: bool) {
         match &stmt.kind {
             HirStmt::Let { pat, init, .. } => {
+                let live = cx.live.len();
                 self.mv(cx, init, true);
+                // `let a = thread …`: `a` joins it.
+                if let (ExprKind::Thread(_), PatKind::Bind(l), true) = (&init.kind, &pat.kind, cx.live.len() > live)
+                    && let Some(t) = cx.live.last_mut()
+                {
+                    t.handle = Some(*l);
+                }
                 // `let _ = tx` throws it away; `let Tx(moves) = tx` ties it off.
                 if matches!(pat.kind, PatKind::Wild) {
                     self.dropped(cx, init);
@@ -776,7 +843,13 @@ impl Checker<'_> {
         let Root::Local(local) = root else { return };
         self.check_use(cx, local, &path, e.span);
         self.check_borrow(cx, local, e.span);
+        self.thread_conflict(cx, cx.parts_of.get(&local).copied().unwrap_or(local), false, e.span);
         capture(cx, local);
+        // A thread's handle given to something (`a.join()`): it's joined, and
+        // what it held is free.
+        if owning && path.is_empty() {
+            cx.live.retain(|t| t.handle != Some(local));
+        }
         if !owning || self.is_copy_expr(e) {
             return;
         }
@@ -862,6 +935,10 @@ impl Checker<'_> {
             cx.flow.moved.push((owner, Vec::new(), at));
         }
         cx.flow.moved.push((local, path.to_vec(), at));
+        // A thread's handle given up (`a.join()`): what it held is free.
+        if path.is_empty() {
+            cx.live.retain(|t| t.handle != Some(local));
+        }
         self.changes(cx, owner, at);
         // Moved away (or, for part of it, taken apart): used up.
         cx.flow.loose.retain(|&l| l != owner && l != local);
@@ -1197,6 +1274,63 @@ impl Checker<'_> {
         }
     }
 
+    /// Whether the value of `e` holds a thread's `Spun`.
+    fn value_is_handle(&mut self, e: &Expr) -> bool {
+        let ty = self.b.expr_ty.get(&e.id).copied();
+        ty.is_some_and(|t| self.mentions_spun(t))
+    }
+
+    fn handle_escapes(&mut self, cx: &mut MoveCx, at: Span, how: &str) {
+        if cx.flow.dead {
+            return;
+        }
+        self.report(
+            cx,
+            Diagnostic::error(codes::C0404, "a thread's handle can't leave its `loom` block")
+                .primary(at, format!("{how} here"))
+                .note("the threads are done when the block ends"),
+        );
+    }
+
+    /// `local` is read (or changed, with `write`) at `at`: a thread spawned
+    /// earlier that's still going holds it. A thread may change what no other
+    /// holds, and the rest only read what only they read.
+    fn thread_conflict(&mut self, cx: &mut MoveCx, local: LocalId, write: bool, at: Span) {
+        if cx.flow.dead || cx.live.is_empty() {
+            return;
+        }
+        let in_thread = !cx.writes.is_empty();
+        let found = cx.live.iter().find_map(|t| {
+            if t.writes.contains(&local) {
+                Some((t.span, true))
+            } else if write && t.reads.contains(&local) {
+                Some((t.span, false))
+            } else {
+                None
+            }
+        });
+        let Some((thread, changes)) = found else { return };
+        // `hits += 1` reads and changes: say it once.
+        if self.diags.iter().any(|d| d.code.id.starts_with("C04") && d.labels.iter().any(|l| l.primary && l.span == at))
+        {
+            return;
+        }
+        let name = self.p.local(local).name.clone();
+        let diag = if write && changes && in_thread {
+            Diagnostic::error(codes::C0401, format!("`{name}` is changed by more than one thread"))
+                .primary(at, "changed here")
+                .secondary(thread, "another thread changes it")
+                .help("use `Atomic`, or produce a value per thread and combine them")
+        } else {
+            let (what, held) = if changes { ("used", "changes") } else { ("changed", "reads") };
+            Diagnostic::error(codes::C0402, format!("`{name}` is {what} while a thread {held} it"))
+                .primary(at, format!("{what} here"))
+                .secondary(thread, format!("this thread {held} it, and hasn't been joined"))
+                .help("`join` the thread first, or give it its own copy")
+        };
+        self.report(cx, diag);
+    }
+
     /// `l` moves or changes at `at`: the borrows of it made before go stale,
     /// and a loop going over it can't let that happen.
     fn changes(&mut self, cx: &mut MoveCx, l: LocalId, at: Span) {
@@ -1204,6 +1338,13 @@ impl Checker<'_> {
             return;
         }
         let owner = cx.parts_of.get(&l).copied().unwrap_or(l);
+        self.thread_conflict(cx, owner, true, at);
+        let declared = cx.depth_of.get(&owner).copied();
+        for (depth, written) in cx.writes.iter_mut() {
+            if declared.is_some_and(|d| d < *depth) && !written.contains(&owner) {
+                written.push(owner);
+            }
+        }
         if let Some(&(_, over)) = cx.locked.iter().find(|(x, _)| *x == owner || *x == l) {
             let name = self.p.local(owner).name.clone();
             self.report(

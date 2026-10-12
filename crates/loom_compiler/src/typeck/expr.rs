@@ -298,7 +298,8 @@ impl Checker<'_> {
                 self.check_const_expr(span, inner, expected)
             }
             ExprKind::Lambda { params, body } => self.check_lambda(e, params, body, expected),
-            ExprKind::Loom { .. } | ExprKind::Thread(_) => self.unsupported(span, "`loom` and `thread`"),
+            ExprKind::Loom { args, body } => self.check_loom(args, body, expected),
+            ExprKind::Thread(body) => self.check_thread(e, body),
             ExprKind::Call { callee, args } => self.check_call(e, callee, args, expected),
             ExprKind::Index { base, args } => self.check_index(e, base, args),
             ExprKind::Field { base, field } => self.check_field(e, base, field),
