@@ -45,18 +45,31 @@ impl Checker<'_> {
     pub(super) fn check_sync_new(&mut self, call: &Expr, ty: Ty, args: &[Arg]) -> Option<Ty> {
         let TyKind::Adt(def, targs) = self.tcx.kind(ty).clone() else { return None };
         let atomic = Some(def) == self.std.atomic;
-        if !atomic && Some(def) != self.std.mutex {
+        let pipe = Some(def) == self.std.pipe;
+        if !atomic && !pipe && Some(def) != self.std.mutex {
             return None;
         }
         let t = targs.first().copied()?;
         if args.len() != 1 || args[0].label.is_some() {
             let span = args.first().map_or(call.span, |a| a.span);
-            let (name, example) = if atomic { ("Atomic", "Atomic[u64](0)") } else { ("Mutex", "Mutex[u64](0)") };
-            self.error(codes::T0104, span, format!("`{name}[T]` is made from one value"), format!("write `{example}`"));
+            let (name, example, what) = match (atomic, pipe) {
+                (true, _) => ("Atomic", "Atomic[u64](0)", "one value"),
+                (_, true) => ("Pipe", "Pipe[u64](4)", "its capacity"),
+                _ => ("Mutex", "Mutex[u64](0)", "one value"),
+            };
+            self.error(codes::T0104, span, format!("`{name}[T]` is made from {what}"), format!("write `{example}`"));
             self.check_args_alone(args);
             return Some(self.tcx.error);
         }
-        self.check_coerce(&args[0].value, t);
+        // A pipe is made from its capacity; the others from their value.
+        let want = if pipe { self.tcx.usize } else { t };
+        self.check_coerce(&args[0].value, want);
+        if pipe {
+            let resolved = self.resolve(t);
+            if self.is_once(resolved) {
+                self.unsupported(call.span, "a `Pipe` of a `once` type");
+            }
+        }
         self.b.sync_new.insert(call.id);
         if atomic {
             self.atomic_holds(t, args[0].span);

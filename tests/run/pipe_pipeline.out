@@ -1,0 +1,12 @@
+send 1
+send 2
+got 1
+word w1
+send 3
+got 2
+send 4
+word w2
+got 3
+word w3
+got 4
+word w4

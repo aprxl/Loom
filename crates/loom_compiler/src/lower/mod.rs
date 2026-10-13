@@ -95,6 +95,7 @@ pub const RUNTIME_WARPS: &[&str] = &[
     "std.sync.Spun",
     "std.sync.Atomic",
     "std.sync.Mutex",
+    "std.sync.Pipe",
 ];
 
 /// Lowers a type-checked program, which starts at `main`, after running its
@@ -474,6 +475,7 @@ impl<'a> Lowerer<'a> {
                         | "std.iter.Burst"
                         | "std.sync.Spun"
                         | "std.sync.Atomic"
+                        | "std.sync.Pipe"
                         | "std.sync.Mutex"
                 ) =>
             {

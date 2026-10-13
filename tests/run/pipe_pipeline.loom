@@ -1,0 +1,30 @@
+// A producer, a stage and the parent, linked by pipes of capacity 1 and 2:
+// each waits when the next one is behind, and `close` ends the loop that
+// receives.
+
+use std.io.print
+use std.sync.Pipe
+
+fn main() {
+    let jobs = Pipe[i32](1)
+    let words = Pipe[String](2)
+    loom {
+        thread {
+            for i in 1..=4 {
+                print("send {i}")
+                jobs.send(i)
+            }
+            jobs.close()
+        }
+        thread {
+            while jobs.recv() is some(n) {
+                print("got {n}")
+                words.send("w{n}")
+            }
+            words.close()
+        }
+        while words.recv() is some(w) {
+            print("word {w}")
+        }
+    }
+}

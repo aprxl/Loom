@@ -1,0 +1,11 @@
+// Sending into a closed pipe unravels, and so does a pipe of no room.
+
+use std.io.print
+use std.sync.Pipe
+
+fn main() {
+    let p = Pipe[i32](1)
+    p.close()
+    print("sending")
+    p.send(1)
+}

@@ -38,7 +38,7 @@
 use loom_isa::word::{a, b, bc_i32, bc_u32, c, c_i16, unpack_cast};
 use loom_isa::{Image, LINK_SLOTS, Op};
 
-use crate::sched::{Sched, Step, TaskOp};
+use crate::sched::{Sched, Step, Taken, TaskOp};
 
 use crate::heap::Heap;
 use loom_sys::Host;
@@ -1514,9 +1514,53 @@ fn run_task_op(env: &mut Env, op: TaskOp, args: &mut [u64], pc: *const u64, fp: 
             }
             step
         }
+        TaskOp::PipeNew => {
+            args[0] = env.sched.pipe_new(&mut env.ctx.heap, args[0], args[1], args[2])?;
+            Step::Next
+        }
+        TaskOp::PipeSend => match env.sched.pipe_send(args[0])? {
+            Ok(slot) => {
+                let elem = env.sched.pipe_elem(args[0])?;
+                crate::natives::copy_bytes(env.ctx, slot, args[1], elem)?;
+                Step::Next
+            }
+            Err(park) => park,
+        },
+        TaskOp::PipeRecv => match env.sched.pipe_recv(args[0])? {
+            Taken::Item(from) => {
+                let elem = env.sched.pipe_elem(args[0])?;
+                crate::natives::copy_bytes(env.ctx, args[1], from, elem)?;
+                args[0] = 1;
+                Step::Next
+            }
+            Taken::Closed => {
+                args[0] = 0;
+                Step::Next
+            }
+            Taken::Park(park) => park,
+        },
+        TaskOp::PipeClose => {
+            env.sched.pipe_close(args[0])?;
+            Step::Next
+        }
+        TaskOp::PipeLeftover => {
+            let (function, address) = env.sched.pipe_leftover(args[0])?;
+            args[0] = function;
+            args[1] = address;
+            Step::Next
+        }
+        TaskOp::PipeFree => {
+            env.sched.pipe_free(&mut env.ctx.heap, args[0])?;
+            Step::Next
+        }
         TaskOp::MutexUnlock => {
-            crate::natives::write_word(env.ctx, args[0], 0)?;
-            env.sched.mutex_unlock(args[0]);
+            // Only the holder gives it back (a statement's cleanup can run
+            // twice, once for each way out).
+            let word = crate::natives::read_word(env.ctx, args[0])?;
+            if word == env.sched.current as u64 + 1 {
+                crate::natives::write_word(env.ctx, args[0], 0)?;
+                env.sched.mutex_unlock(args[0]);
+            }
             Step::Next
         }
     };

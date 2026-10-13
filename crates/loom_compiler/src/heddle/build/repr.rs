@@ -203,7 +203,7 @@ impl<'a> Builder<'a> {
                     _ => false,
                 },
                 "std.string.String" | "std.list.List" | "std.map.Map" | "std.set.Set" | "std.iter.Stream" => true,
-                "std.iter.Shuttle" | "std.iter.Burst" | "std.fs.File" => true,
+                "std.iter.Shuttle" | "std.iter.Burst" | "std.fs.File" | "std.sync.Pipe" => true,
                 _ if self.is_builtin(def) => false,
                 _ => match self.warp_info(ty) {
                     Some(info) => info.field_tys().into_iter().any(|t| self.needs_drop(t)),

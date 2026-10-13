@@ -317,7 +317,9 @@ impl Lowerer<'_> {
             // `Atomic[T](value)`: its value in a table.
             ExprKind::Call { args, .. } if self.tables().sync_new.contains(&e.id) => {
                 let value = self.lower_owned(&args[0].value);
-                Expr::Table(vec![value])
+                let pipe =
+                    matches!(self.tcx().kind(ty), TyKind::Adt(def, _) if self.p.def_path(*def) == "std.sync.Pipe");
+                if pipe { Expr::rt("pipe_new", vec![value]) } else { Expr::Table(vec![value]) }
             }
             ExprKind::Call { .. } if self.tables().new_lists.contains(&e.id) => match self.coll(ty) {
                 Some(Coll::Map(..)) => Expr::rt("map_new", Vec::new()),

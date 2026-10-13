@@ -521,6 +521,7 @@ struct Std {
     spun: Option<DefId>,
     atomic: Option<DefId>,
     mutex: Option<DefId>,
+    pipe: Option<DefId>,
 }
 
 /// Where the enclosing loop's `break`s go.
@@ -661,6 +662,7 @@ impl<'p> Checker<'p> {
             spun: find("std.sync", "Spun"),
             atomic: find("std.sync", "Atomic"),
             mutex: find("std.sync", "Mutex"),
+            pipe: find("std.sync", "Pipe"),
         };
         Checker {
             p,

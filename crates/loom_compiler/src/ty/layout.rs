@@ -132,6 +132,7 @@ fn builtin(path: &str) -> Option<Builtin> {
         "std.iter.Stream" | "std.iter.Shuttle" | "std.iter.Burst" => Builtin::Header(2),
         "std.sync.Atomic" => Builtin::Atomic,
         "std.sync.Mutex" => Builtin::Mutex,
+        "std.sync.Pipe" => Builtin::Header(1),
         "std.fmt.Fmt" | "std.sync.Spun" => Builtin::Handle,
         _ => return None,
     })

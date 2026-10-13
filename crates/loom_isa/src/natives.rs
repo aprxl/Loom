@@ -160,6 +160,18 @@ pub const NATIVES: &[NativeSig] = &[
     // `task.*` ones: they switch tasks.)
     sig("mutex.lock", 1, 0, NativeImm::None),
     sig("mutex.unlock", 1, 0, NativeImm::None),
+    // `Pipe[T]` (std.sync): `pipe.new(capacity, element size, drop function)
+    // -> handle` (0 is no drop); `pipe.send(handle, item address)` and
+    // `pipe.recv(handle, destination) -> whether it got one` wait, as the
+    // task operations do; `pipe.close(handle)`; `pipe.leftover(handle) ->
+    // (drop function, address)` for each item nobody received that needs
+    // dropping, then (0, 0); `pipe.free(handle)`.
+    sig("pipe.new", 3, 1, NativeImm::None),
+    sig("pipe.send", 2, 0, NativeImm::None),
+    sig("pipe.recv", 2, 1, NativeImm::None),
+    sig("pipe.close", 1, 0, NativeImm::None),
+    sig("pipe.leftover", 1, 2, NativeImm::None),
+    sig("pipe.free", 1, 0, NativeImm::None),
     // `Atomic[T]` (std.sync), on the integer at an address, whose type is
     // the `IntSpec` last (packed, as the checked arithmetic's is). A bool
     // is a `u8`. `atomic.cas(addr, expected, desired, spec) -> (swapped,

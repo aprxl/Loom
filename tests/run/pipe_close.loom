@@ -1,0 +1,32 @@
+// A closed pipe still gives what's in it, then `none`. Closing wakes the
+// threads that wait on it, and a pipe of optionals gives `some(none)`.
+
+use std.io.print
+use std.sync.Pipe
+
+fn main() {
+    let p = Pipe[i32](4)
+    p.send(1)
+    p.send(2)
+    p.close()
+    p.close()
+    print("{p.recv()} {p.recv()} {p.recv()}")
+
+    let q = Pipe[?i32](2)
+    q.send(none)
+    q.send(some(5))
+    q.close()
+    print("{q.recv()} {q.recv()} {q.recv()}")
+
+    let waiting = Pipe[i32](1)
+    loom {
+        thread {
+            print("waiting: {waiting.recv()}")
+        }
+        thread {
+            print("closing")
+            waiting.close()
+        }
+        ()
+    }
+}

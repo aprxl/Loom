@@ -417,6 +417,21 @@ pub(crate) type NativeFn = fn(&mut Ctx, &mut [u64], u16) -> Result<(), Trap>;
 // so that nothing is reordered or kept in a register around them, and
 // several workers can make them real atomic operations in this one place.
 
+/// Copies `n` bytes (an item of a pipe), checked in the checked build.
+pub(crate) fn copy_bytes(ctx: &Ctx, dst: u64, src: u64, n: u64) -> Result<(), Trap> {
+    if n == 0 {
+        return Ok(());
+    }
+    if cfg!(feature = "checked") && !(ctx.owns(dst, n) && ctx.readable(src, n)) {
+        return Err(Trap::Crash(format!("loom internal: copying {n} bytes from {src:#x} to {dst:#x}")));
+    }
+    // SAFETY: the compiler passes an item's address and a slot of a pipe's
+    // buffer, `n` bytes each, which don't overlap (a pipe's buffer is its
+    // own allocation); the checked build checked they're live.
+    unsafe { std::ptr::copy_nonoverlapping(src as *const u8, dst as *mut u8, n as usize) };
+    Ok(())
+}
+
 /// The word at `addr` (a mutex's lock word), checked in the checked build.
 pub(crate) fn read_word(ctx: &Ctx, addr: u64) -> Result<u64, Trap> {
     atomic_read(ctx, addr, loom_isa::IntSpec { bits: 64, signed: false, size: false })
@@ -561,6 +576,12 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
         "loom.leftover" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::LoomLeftover)),
         "loom.free" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::LoomFree)),
         "task.cancelled" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::Cancelled)),
+        "pipe.new" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::PipeNew)),
+        "pipe.send" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::PipeSend)),
+        "pipe.recv" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::PipeRecv)),
+        "pipe.close" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::PipeClose)),
+        "pipe.leftover" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::PipeLeftover)),
+        "pipe.free" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::PipeFree)),
         "mutex.lock" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::MutexLock)),
         "mutex.unlock" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::MutexUnlock)),
         "atomic.load" => atomic_load,

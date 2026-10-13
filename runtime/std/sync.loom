@@ -53,3 +53,22 @@ extern "lua" {
     /// goes to the back of the queue.
     pub fn sched_yield()
 }
+
+/// A bounded queue: threads send items into it and receive them from it,
+/// in order. It holds `capacity` items at most (made with `Pipe[T](capacity)`,
+/// which is at least 1). Every method takes `self` to read, so threads
+/// share one. A pipe nobody will fill, with a thread waiting to receive
+/// from it, is a deadlock.
+#builtin
+pub warp Pipe[T] {
+    /// Puts `item` in, waiting while the pipe is full. Unravels if it's
+    /// closed (before or while it waits).
+    pub fn send(self, take item: T)
+    /// Takes the oldest item, waiting while the pipe is empty. `none` once
+    /// it's closed and there's nothing left.
+    pub fn recv(self) -> ?T
+    /// Closes the pipe: what's in it can still be received, nothing more
+    /// can be sent, and the threads that wait on it wake. Closing it again
+    /// does nothing.
+    pub fn close(self)
+}

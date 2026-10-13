@@ -41,6 +41,12 @@ A `Mutex[T]` holds a `T` that one thread at a time uses. `m.lock()` is the value
 
 The lock is taken after the right-hand side of an assignment is worked out, so a thread holds it for the shortest time. A thread that locks what it holds already unravels.
 
+## Passing items: `Pipe`
+
+A `Pipe[T](capacity)` is a bounded queue. `send` puts an item in and waits while the pipe is full; `recv` takes the oldest and waits while it's empty, giving `none` once the pipe is closed and drained. `close` ends it: what's in it can still be received, and the threads waiting on it wake. A thread that waits for a pipe nobody will fill is a deadlock, which unravels the parent where it waits (after cancelling what's left).
+
+@sample threads_pipe
+
 ## When something goes wrong
 
 A thread that unravels fails its loom: the other threads are **cancelled**, and the parent unravels with the thread's message where it sees it, at the `join` or where the block ends, after everything has stopped. A cancelled thread unwinds from where it waits (`join`, `sched_yield`, a `yield` or `pull`), running its `defer`s, and nobody sees the cancel: `mend` doesn't catch it. The same goes for leaving the block early with `?`, `return` or `break`, for `process.exit` in a thread, and for Ctrl-C.

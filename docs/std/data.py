@@ -505,6 +505,13 @@ MODULES = [
      "methods": [
        {"sig": "fn join(take self) -> T", "doc": "Waits for the thread and gives its result. If a thread of the block unravelled, this unravels with its message instead. A thread is joined once: a second `join` unravels."},
      ]},
+    {"kind": "warp", "name": "Pipe", "suffix": "[T]", "builtin": True,
+     "doc": "A bounded queue: threads send items into it and receive them from it, in order. It holds `capacity` items at most (made with `Pipe[T](capacity)`, which is at least 1). Every method takes `self` to read, so threads share one. A pipe nobody will fill, with a thread waiting to receive from it, is a deadlock.",
+     "methods": [
+       {"sig": "fn send(self, take item: T)", "doc": "Puts `item` in, waiting while the pipe is full. Unravels if it's closed (before or while it waits)."},
+       {"sig": "fn recv(self) -> ?T", "doc": "Takes the oldest item, waiting while the pipe is empty. `none` once it's closed and there's nothing left."},
+       {"sig": "fn close(self)", "doc": "Closes the pipe: what's in it can still be received, nothing more can be sent, and the threads that wait on it wake. Closing it again does nothing."},
+     ]},
   ],
   "functions": [
     {"name": "sched_yield", "suffix": "()", "extern": True,

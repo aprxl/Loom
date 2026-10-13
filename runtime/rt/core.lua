@@ -2053,7 +2053,14 @@ local loom_guard = {
     local g = c[1]
     if g.done and err == nil and not current.cancelled then
       if g.failure then return abort(g) end
-      wait_all(g)
+      -- Waiting can unravel (a deadlock): then this is an unwind, which
+      -- cancels what's left and waits for it before it goes on.
+      local ok, e = pcall(wait_all, g)
+      if not ok then
+        cancel_all(g)
+        wait_all(g)
+        error(e, 0)
+      end
       if g.failure then return abort(g) end
       return
     end
@@ -2233,6 +2240,7 @@ end
 local unlocks = {
   __close = function(g)
     local m = g[1]
+    if m.holder ~= current then return end
     m.holder = nil
     local w = m.waiters and table.remove(m.waiters, 1)
     if w then
@@ -2241,6 +2249,72 @@ local unlocks = {
     end
   end,
 }
+
+-- `Pipe[T]` is a ring of `cap` items from `head`, `n` of them, and the
+-- threads waiting to send (when it's full) or receive (when it's empty), in
+-- the order they came. A woken thread looks again: it may have lost.
+function rt.pipe_new(cap)
+  if cap == 0 then error(MARK .. "a pipe holds at least one item", 2) end
+  local p = { cap = cap, head = 1, n = 0, closed = false, items = {}, senders = {}, receivers = {} }
+  p.sending = { waiters = p.senders }
+  p.receiving = { waiters = p.receivers }
+  return p
+end
+
+local function pipe_wake(list)
+  local w = table.remove(list, 1)
+  if w then
+    w.waiting_on = nil
+    wake(w)
+  end
+end
+
+local function pipe_wait(on, list)
+  local cur = current
+  cur.waiting = true
+  cur.waiting_on = on
+  list[#list + 1] = cur
+  park()
+end
+
+ext["std.sync.Pipe.send"] = function(_, p, item)
+  while true do
+    if p.closed then error(MARK .. "send on a closed pipe", 2) end
+    if p.n < p.cap then break end
+    pipe_wait(p.sending, p.senders)
+  end
+  p.items[(p.head - 1 + p.n) % p.cap + 1] = item
+  p.n = p.n + 1
+  pipe_wake(p.receivers)
+end
+
+ext["std.sync.Pipe.recv"] = function(d, p)
+  while true do
+    if p.n > 0 then
+      local x = p.items[p.head]
+      p.items[p.head] = nil
+      p.head = p.head % p.cap + 1
+      p.n = p.n - 1
+      pipe_wake(p.senders)
+      return some(d, x)
+    end
+    if p.closed then return nil end
+    pipe_wait(p.receiving, p.receivers)
+  end
+end
+
+ext["std.sync.Pipe.close"] = function(_, p)
+  p.closed = true
+  local all = {}
+  for _, w in ipairs(p.senders) do all[#all + 1] = w end
+  for _, w in ipairs(p.receivers) do all[#all + 1] = w end
+  p.senders, p.receivers = {}, {}
+  p.sending.waiters, p.receiving.waiters = p.senders, p.receivers
+  for _, w in ipairs(all) do
+    w.waiting_on = nil
+    wake(w)
+  end
+end
 
 ext["std.sync.Mutex.lock"] = function(_, m)
   return rt.shuttle(function()

@@ -1,0 +1,27 @@
+use std.io.print
+use std.sync.Pipe
+
+fn main() {
+    let jobs = Pipe[i32](2)
+    let results = Pipe[String](2)
+    loom {
+        // A producer, and a worker that turns what it gets into text.
+        thread {
+            for n in 1..=4 {
+                jobs.send(n)
+            }
+            jobs.close()
+        }
+        thread {
+            while jobs.recv() is some(n) {
+                results.send("job {n}")
+            }
+            results.close()
+        }
+        // The parent reads until the worker closes the results.
+        while results.recv() is some(r) {
+            print(r)
+        }
+    }
+}
+//@ run

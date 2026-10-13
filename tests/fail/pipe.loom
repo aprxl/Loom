@@ -1,0 +1,11 @@
+// A pipe is made from its capacity, and holds items that aren't `once`.
+
+use std.sync.Pipe
+
+fn main() {
+    let a = Pipe[i32](2)
+    let b = Pipe[i32]()                      //~ T0104
+    let c = Pipe[i32]("two")                 //~ T0101
+    a.send("text")                           //~ T0101
+    let d: ?i32 = a.recv()
+}

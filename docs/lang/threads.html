@@ -211,6 +211,41 @@ true 0, false 1</code></pre></div>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>total 60, log 3 entries</code></pre></div>
 </div>
 <p>The lock is taken after the right-hand side of an assignment is worked out, so a thread holds it for the shortest time. A thread that locks what it holds already unravels.</p>
+<h2 id="passing-items-pipe">Passing items: <code>Pipe</code></h2>
+<p>A <code>Pipe[T](capacity)</code> is a bounded queue. <code>send</code> puts an item in and waits while the pipe is full; <code>recv</code> takes the oldest and waits while it's empty, giving <code>none</code> once the pipe is closed and drained. <code>close</code> ends it: what's in it can still be received, and the threads waiting on it wake. A thread that waits for a pipe nobody will fill is a deadlock, which unravels the parent where it waits (after cancelling what's left).</p>
+<div class="sample" id="sample-threads_pipe">
+<div class="sample-head"><span class="file">samples/threads_pipe.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.sync.<span class="t">Pipe</span>
+
+<span class="k">fn</span> main() {
+    <span class="k">let</span> jobs = <span class="t">Pipe</span>[i32](<span class="n">2</span>)
+    <span class="k">let</span> results = <span class="t">Pipe</span>[<span class="t">String</span>](<span class="n">2</span>)
+    <span class="k">loom</span> {
+        <span class="c">// A producer, and a worker that turns what it gets into text.</span>
+        <span class="k">thread</span> {
+            <span class="k">for</span> n <span class="k">in</span> <span class="n">1</span>..=<span class="n">4</span> {
+                jobs.send(n)
+            }
+            jobs.close()
+        }
+        <span class="k">thread</span> {
+            <span class="k">while</span> jobs.recv() <span class="k">is</span> <span class="k">some</span>(n) {
+                results.send(<span class="s">"job {</span>n<span class="s">}"</span>)
+            }
+            results.close()
+        }
+        <span class="c">// The parent reads until the worker closes the results.</span>
+        <span class="k">while</span> results.recv() <span class="k">is</span> <span class="k">some</span>(r) {
+            print(r)
+        }
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>job 1
+job 2
+job 3
+job 4</code></pre></div>
+</div>
 <h2 id="when-something-goes-wrong">When something goes wrong</h2>
 <p>A thread that unravels fails its loom: the other threads are <strong>cancelled</strong>, and the parent unravels with the thread's message where it sees it, at the <code>join</code> or where the block ends, after everything has stopped. A cancelled thread unwinds from where it waits (<code>join</code>, <code>sched_yield</code>, a <code>yield</code> or <code>pull</code>), running its <code>defer</code>s, and nobody sees the cancel: <code>mend</code> doesn't catch it. The same goes for leaving the block early with <code>?</code>, <code>return</code> or <code>break</code>, for <code>process.exit</code> in a thread, and for Ctrl-C.</p>
 <p>A thread started in a loom that has already failed never runs.</p>

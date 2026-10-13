@@ -85,7 +85,14 @@ impl<'a> Builder<'a> {
         let at = self.slot_addr(slot);
         let g = self.load(Mem::W64, at, 0, VTy::Int);
         let mode = self.iconst(mode);
+        // The wait can unravel (a deadlock): then the loom's end is an
+        // unwind, which cancels what's left and waits for it. This
+        // cleanup isn't live while it runs, so it's put back for the wait.
+        let again = (self.f.in_pad == 0).then(|| self.add_cleanup(CleanupKind::Loom { slot }));
         self.emit(InstKind::Native { name: "loom.leave", imm: 0, args: vec![g, mode] }, &[]);
+        if again.is_some() {
+            self.f.cleanups.pop();
+        }
         // `loop { (f, p) = loom.leftover(g); if f == 0 { break }; f(p) }`
         let (head, body, done) = (self.new_block(), self.new_block(), self.new_block());
         self.jump(head);
@@ -179,7 +186,7 @@ impl<'a> Builder<'a> {
         }
     }
 
-    fn is_valueless(&self, ty: Ty) -> bool {
+    pub(super) fn is_valueless(&self, ty: Ty) -> bool {
         matches!(self.tcx().kind(ty), TyKind::Unit | TyKind::Never)
     }
 

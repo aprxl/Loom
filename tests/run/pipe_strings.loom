@@ -1,0 +1,28 @@
+// Items nobody received are dropped with the pipe (the checked build would
+// catch a leak), and so is one a cancelled sender was waiting to put in.
+
+use std.io.print
+use std.sync.Pipe
+
+fn boom() -> i32 {
+    unravel("boom")
+}
+
+fn main() {
+    let unread = Pipe[String](3)
+    unread.send("a".to_string())
+    unread.send("bb".to_string())
+    print("{unread.recv()}")
+
+    let full = Pipe[String](1)
+    loom {
+        thread {
+            defer print("sender cleanup")
+            full.send("first".to_string())
+            full.send("second".to_string())
+            print("not reached")
+        }
+        thread boom()
+        ()
+    }
+}

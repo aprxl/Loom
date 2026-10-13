@@ -53,6 +53,12 @@ pub(crate) enum TaskOp {
     Cancelled,
     MutexLock,
     MutexUnlock,
+    PipeNew,
+    PipeSend,
+    PipeRecv,
+    PipeClose,
+    PipeLeftover,
+    PipeFree,
 }
 
 /// The list a waiting task is in: a task's waiters, or the tasks waiting
@@ -61,6 +67,38 @@ pub(crate) enum TaskOp {
 pub(crate) enum Wait {
     Task(usize),
     Mutex(u64),
+    /// The senders of a pipe, by its slot.
+    Send(usize),
+    /// The receivers of a pipe.
+    Recv(usize),
+}
+
+/// A pipe: a ring of `cap` items of `elem` bytes in the VM's heap, and who
+/// waits to put one in or take one out.
+#[derive(Debug, Default)]
+struct Pipe {
+    live: bool,
+    epoch: u32,
+    cap: u64,
+    elem: u64,
+    drop_fn: u32,
+    buf: u64,
+    head: u64,
+    len: u64,
+    closed: bool,
+    senders: VecDeque<usize>,
+    receivers: VecDeque<usize>,
+}
+
+/// What `pipe.recv` found.
+pub(crate) enum Taken {
+    /// An item, at this address of the ring: copy it before anything else
+    /// runs.
+    Item(u64),
+    /// Closed, and nothing is left.
+    Closed,
+    /// Empty: the task waits.
+    Park(Step),
 }
 
 /// How a loom block's end was reached: `loom.leave`'s and `loom.free`'s
@@ -168,6 +206,8 @@ pub(crate) struct Sched {
     ready: VecDeque<usize>,
     /// The tasks waiting for each locked mutex, by its address.
     lockers: std::collections::BTreeMap<u64, VecDeque<usize>>,
+    pipes: Vec<Pipe>,
+    free_pipes: Vec<usize>,
     /// Raised in the main task when it next runs (a deadlock).
     pending: Option<Trap>,
 }
@@ -193,6 +233,8 @@ impl Sched {
             current: 0,
             ready: VecDeque::new(),
             lockers: std::collections::BTreeMap::new(),
+            pipes: Vec::new(),
+            free_pipes: Vec::new(),
             pending: None,
         }
     }
@@ -207,6 +249,8 @@ impl Sched {
         self.current = 0;
         self.ready.clear();
         self.lockers.clear();
+        self.pipes.clear();
+        self.free_pipes.clear();
         self.pending = None;
     }
 
@@ -310,6 +354,8 @@ impl Sched {
         match list {
             Wait::Task(on) => self.tasks[on].waiters.push(cur),
             Wait::Mutex(addr) => self.lockers.entry(addr).or_default().push_back(cur),
+            Wait::Send(p) => self.pipes[p].senders.push_back(cur),
+            Wait::Recv(p) => self.pipes[p].receivers.push_back(cur),
         }
         Step::Park { again: true }
     }
@@ -326,6 +372,8 @@ impl Sched {
                     }
                 }
             }
+            Wait::Send(p) => self.pipes[p].senders.retain(|&w| w != t),
+            Wait::Recv(p) => self.pipes[p].receivers.retain(|&w| w != t),
         }
     }
 
@@ -517,6 +565,124 @@ impl Sched {
             self.tasks[t].waiting_on = None;
             self.wake(t);
         }
+    }
+
+    // ------------------------------------------------------------ pipes
+
+    fn pipe_index(&self, h: u64) -> Result<usize, Trap> {
+        let (i, epoch) = ((h & 0xFFFF_FFFF) as usize, (h >> 32) as u32);
+        match self.pipes.get(i) {
+            // (Handles start at epoch 1, so none is 0.)
+            Some(p) if p.live && p.epoch + 1 == epoch => Ok(i),
+            _ => Err(stale("pipe")),
+        }
+    }
+
+    /// A pipe of `cap` items of `elem` bytes; its handle.
+    pub fn pipe_new(&mut self, heap: &mut Heap, cap: u64, elem: u64, drop_fn: u64) -> Result<u64, Trap> {
+        if cap == 0 {
+            return Err(Trap::Unravel("a pipe holds at least one item".into()));
+        }
+        let bytes = cap.checked_mul(elem).ok_or(Trap::OutOfMemory)?;
+        let buf = if bytes > 0 { heap.alloc(bytes, 8)? } else { 0 };
+        let pipe = Pipe { live: true, cap, elem, drop_fn: drop_fn as u32, buf, ..Pipe::default() };
+        let i = match self.free_pipes.pop() {
+            Some(i) => {
+                let epoch = self.pipes[i].epoch.wrapping_add(1);
+                self.pipes[i] = Pipe { epoch, ..pipe };
+                i
+            }
+            None => {
+                self.pipes.push(pipe);
+                self.pipes.len() - 1
+            }
+        };
+        Ok(handle(i, self.pipes[i].epoch + 1))
+    }
+
+    /// The size of the pipe's items.
+    pub fn pipe_elem(&self, h: u64) -> Result<u64, Trap> {
+        Ok(self.pipes[self.pipe_index(h)?].elem)
+    }
+
+    /// `pipe.send`: the address to copy the item to, or the task waits (a
+    /// full pipe), or it unravels (a closed one). The first receiver wakes.
+    pub fn pipe_send(&mut self, h: u64) -> Result<Result<u64, Step>, Trap> {
+        let i = self.pipe_index(h)?;
+        if self.pipes[i].closed {
+            return Err(Trap::Unravel("send on a closed pipe".into()));
+        }
+        if self.pipes[i].len >= self.pipes[i].cap {
+            return Ok(Err(self.park_in(Wait::Send(i), true)));
+        }
+        let p = &mut self.pipes[i];
+        let at = p.buf + ((p.head + p.len) % p.cap) * p.elem;
+        p.len += 1;
+        if let Some(r) = p.receivers.pop_front() {
+            self.tasks[r].waiting_on = None;
+            self.wake(r);
+        }
+        Ok(Ok(at))
+    }
+
+    /// `pipe.recv`: the item at the front, or closed, or the task waits.
+    pub fn pipe_recv(&mut self, h: u64) -> Result<Taken, Trap> {
+        let i = self.pipe_index(h)?;
+        let p = &mut self.pipes[i];
+        if p.len > 0 {
+            let at = p.buf + p.head * p.elem;
+            p.head = (p.head + 1) % p.cap;
+            p.len -= 1;
+            if let Some(s) = p.senders.pop_front() {
+                self.tasks[s].waiting_on = None;
+                self.wake(s);
+            }
+            return Ok(Taken::Item(at));
+        }
+        if p.closed {
+            return Ok(Taken::Closed);
+        }
+        Ok(Taken::Park(self.park_in(Wait::Recv(i), true)))
+    }
+
+    /// `pipe.close`: every task waiting on it wakes, to find it closed.
+    pub fn pipe_close(&mut self, h: u64) -> Result<(), Trap> {
+        let i = self.pipe_index(h)?;
+        self.pipes[i].closed = true;
+        let senders: Vec<usize> = self.pipes[i].senders.drain(..).collect();
+        let receivers: Vec<usize> = self.pipes[i].receivers.drain(..).collect();
+        for t in senders.into_iter().chain(receivers) {
+            self.tasks[t].waiting_on = None;
+            self.wake(t);
+        }
+        Ok(())
+    }
+
+    /// The next item nobody received, that needs dropping: its drop
+    /// function and address, or `(0, 0)`. It's taken out of the ring.
+    pub fn pipe_leftover(&mut self, h: u64) -> Result<(u64, u64), Trap> {
+        let i = self.pipe_index(h)?;
+        let p = &mut self.pipes[i];
+        if p.drop_fn == 0 || p.len == 0 {
+            return Ok((0, 0));
+        }
+        let at = p.buf + p.head * p.elem;
+        p.head = (p.head + 1) % p.cap;
+        p.len -= 1;
+        Ok((u64::from(p.drop_fn), at))
+    }
+
+    /// `pipe.free`: the pipe's storage goes back.
+    pub fn pipe_free(&mut self, heap: &mut Heap, h: u64) -> Result<(), Trap> {
+        let i = self.pipe_index(h)?;
+        let p = std::mem::take(&mut self.pipes[i]);
+        self.pipes[i].epoch = p.epoch;
+        self.free_pipes.push(i);
+        let bytes = p.cap * p.elem;
+        if bytes > 0 {
+            heap.free(p.buf, bytes, 8)?;
+        }
+        Ok(())
     }
 
     /// Whether the running task has been cancelled.

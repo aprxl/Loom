@@ -91,7 +91,11 @@ impl<'a> Builder<'a> {
             return Some(abi.results);
         }
         if super::sync::writes_body(&path) {
-            self.atomic_method(&path, &args, &tys, span)?;
+            if path.starts_with("std.sync.Pipe.") {
+                self.pipe_method(&path, &args, &tys, ret, span)?;
+            } else {
+                self.atomic_method(&path, &args, &tys, span)?;
+            }
             return Some(abi.results);
         }
         if super::thread::writes_body(&path) {

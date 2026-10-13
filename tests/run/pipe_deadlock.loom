@@ -1,0 +1,19 @@
+// A thread waiting to receive from a pipe nobody will send to is a
+// deadlock: the program's task unravels where it waits, and the thread is
+// cancelled on the way out (its `defer` runs).
+
+use std.io.print
+use std.sync.Pipe
+
+fn main() {
+    let p = Pipe[i32](1)
+    loom {
+        thread {
+            defer print("receiver cleanup")
+            print("receiving")
+            print("{p.recv()}")
+        }
+        ()
+    }
+    print("not reached")
+}
