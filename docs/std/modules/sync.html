@@ -106,6 +106,15 @@
 <span class="badge builtin">builtin</span>
 </div>
 <p class="item-doc">A value that one thread at a time can lock and use.</p>
+<div class="members">
+<div class="member" id="Mutex.lock">
+<div class="member-head">
+<span class="sig">fn lock(self) ~&gt; mut T</span>
+
+</div>
+<p class="member-doc">The value, for the statement it's in: the lock is taken where <code>lock()</code> is evaluated (waiting, in turn, while another thread has it) and given back when the statement ends, however it ends. <code>total.lock() += n</code> changes it. A thread that locks a mutex it has locked already unravels.</p>
+</div>
+</div>
 </div>
 <div class="item" id="Spun">
 <div class="item-head">

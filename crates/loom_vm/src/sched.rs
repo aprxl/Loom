@@ -51,6 +51,16 @@ pub(crate) enum TaskOp {
     LoomLeftover,
     LoomFree,
     Cancelled,
+    MutexLock,
+    MutexUnlock,
+}
+
+/// The list a waiting task is in: a task's waiters, or the tasks waiting
+/// for the mutex at an address, in the order they came.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Wait {
+    Task(usize),
+    Mutex(u64),
 }
 
 /// How a loom block's end was reached: `loom.leave`'s and `loom.free`'s
@@ -91,7 +101,7 @@ pub(crate) struct Task {
     /// `pc` is the instruction's own), rather than going on after it.
     pub reexec: bool,
     pub waiting: bool,
-    pub waiting_on: Option<usize>,
+    pub waiting_on: Option<Wait>,
     /// Tasks waiting for this one to finish.
     pub waiters: Vec<usize>,
     pub group: usize,
@@ -156,6 +166,8 @@ pub(crate) struct Sched {
     /// The running task: 0 is the program's own.
     pub current: usize,
     ready: VecDeque<usize>,
+    /// The tasks waiting for each locked mutex, by its address.
+    lockers: std::collections::BTreeMap<u64, VecDeque<usize>>,
     /// Raised in the main task when it next runs (a deadlock).
     pending: Option<Trap>,
 }
@@ -180,6 +192,7 @@ impl Sched {
             free_groups: Vec::new(),
             current: 0,
             ready: VecDeque::new(),
+            lockers: std::collections::BTreeMap::new(),
             pending: None,
         }
     }
@@ -193,6 +206,7 @@ impl Sched {
         self.free_groups.clear();
         self.current = 0;
         self.ready.clear();
+        self.lockers.clear();
         self.pending = None;
     }
 
@@ -263,7 +277,7 @@ impl Sched {
         let main = &mut self.tasks[0];
         main.waiting = false;
         if let Some(on) = main.waiting_on.take() {
-            self.tasks[on].waiters.retain(|&w| w != 0);
+            self.leave_list(on, 0);
         }
         self.pending = Some(Trap::Unravel("deadlock: every thread is waiting".into()));
         0
@@ -280,16 +294,39 @@ impl Sched {
         }
     }
 
-    /// The running task waits for `on`.
+    /// The running task waits for task `on`.
     fn park_on(&mut self, on: usize, cancellable: bool) -> Step {
+        self.park_in(Wait::Task(on), cancellable)
+    }
+
+    /// The running task waits in `list`, at the back.
+    fn park_in(&mut self, list: Wait, cancellable: bool) -> Step {
         let cur = self.current;
         let t = &mut self.tasks[cur];
         t.waiting = true;
-        t.waiting_on = Some(on);
+        t.waiting_on = Some(list);
         t.cancellable = cancellable;
         t.reexec = true;
-        self.tasks[on].waiters.push(cur);
+        match list {
+            Wait::Task(on) => self.tasks[on].waiters.push(cur),
+            Wait::Mutex(addr) => self.lockers.entry(addr).or_default().push_back(cur),
+        }
         Step::Park { again: true }
+    }
+
+    /// Takes `t` out of `list`.
+    fn leave_list(&mut self, list: Wait, t: usize) {
+        match list {
+            Wait::Task(on) => self.tasks[on].waiters.retain(|&w| w != t),
+            Wait::Mutex(addr) => {
+                if let Some(q) = self.lockers.get_mut(&addr) {
+                    q.retain(|&w| w != t);
+                    if q.is_empty() {
+                        self.lockers.remove(&addr);
+                    }
+                }
+            }
+        }
     }
 
     fn cancel(&mut self, t: usize) {
@@ -301,7 +338,7 @@ impl Sched {
             task.cancelled = true;
         }
         if let Some(on) = self.tasks[t].waiting_on {
-            self.tasks[on].waiters.retain(|&w| w != t);
+            self.leave_list(on, t);
         }
         self.wake(t);
     }
@@ -453,6 +490,33 @@ impl Sched {
         self.tasks[cur].cancellable = true;
         self.ready.push_back(cur);
         Ok(Step::Park { again: false })
+    }
+
+    /// `mutex.lock(addr)`, the lock word at `addr` being `word`: 0 when it's
+    /// free, else the holder's task index and one. Gives the word it should
+    /// have now, when the lock was taken.
+    pub fn mutex_lock(&mut self, addr: u64, word: u64) -> Result<(Step, Option<u64>), Trap> {
+        let me = self.current as u64 + 1;
+        if word == 0 {
+            return Ok((Step::Next, Some(me)));
+        }
+        if word == me {
+            return Err(Trap::Unravel("this thread holds the lock already".into()));
+        }
+        // Held by another: it waits at the back, and tries again when woken.
+        Ok((self.park_in(Wait::Mutex(addr), true), None))
+    }
+
+    /// `mutex.unlock(addr)`: the first of the tasks waiting for it wakes.
+    pub fn mutex_unlock(&mut self, addr: u64) {
+        let first = self.lockers.get_mut(&addr).and_then(VecDeque::pop_front);
+        if self.lockers.get(&addr).is_some_and(VecDeque::is_empty) {
+            self.lockers.remove(&addr);
+        }
+        if let Some(t) = first {
+            self.tasks[t].waiting_on = None;
+            self.wake(t);
+        }
     }
 
     /// Whether the running task has been cancelled.

@@ -131,6 +131,7 @@ fn builtin(path: &str) -> Option<Builtin> {
         "std.map.Map" | "std.set.Set" => Builtin::Header(6),
         "std.iter.Stream" | "std.iter.Shuttle" | "std.iter.Burst" => Builtin::Header(2),
         "std.sync.Atomic" => Builtin::Atomic,
+        "std.sync.Mutex" => Builtin::Mutex,
         "std.fmt.Fmt" | "std.sync.Spun" => Builtin::Handle,
         _ => return None,
     })
@@ -144,6 +145,8 @@ pub fn is_builtin(path: &str) -> bool {
 enum Builtin {
     Header(u64),
     Atomic,
+    /// A lock word, then the value.
+    Mutex,
     /// A number the runtime gives out: any 8 bytes, 0 included.
     Handle,
 }
@@ -242,6 +245,12 @@ impl<'a> Layouts<'a> {
                 match builtin(&self.p.def_path(def)) {
                     Some(Builtin::Header(words)) => Layout::header(words),
                     Some(Builtin::Atomic) => self.of(*args.first()?)?.clone(),
+                    Some(Builtin::Mutex) => {
+                        let value = self.of(*args.first()?)?.clone();
+                        let align = value.align.max(8);
+                        let size = (8 + value.size).div_ceil(align) * align;
+                        Layout { size, align, niche: None, shape: Shape::Opaque }
+                    }
                     Some(Builtin::Handle) => Layout::scalar(8, None),
                     None => {
                         let info = self.info(ty, def)?;

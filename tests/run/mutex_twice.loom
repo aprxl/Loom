@@ -1,0 +1,9 @@
+// A thread that locks what it has locked already unravels.
+
+use std.io.print
+use std.sync.Mutex
+
+fn main() {
+    let m = Mutex[i32](1)
+    print("{m.lock()} {m.lock()}")
+}

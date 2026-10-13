@@ -245,6 +245,11 @@ impl<'a> Builder<'a> {
         let span = e.span;
         let crate::hir::ExprKind::Call { callee, args } = &e.kind else { return None };
         let info = self.tables().calls.get(&e.id)?.clone();
+        // A mutex's `lock` is no shuttle: the lock, and a cleanup.
+        if self.p.def_path(self.typed.results.instance(info.callee).def) == "std.sync.Mutex.lock" {
+            let _ = (callee, args);
+            return self.mutex_lock(e);
+        }
         let sig = self.typed.results.sigs.get(&info.callee)?.clone();
         let abi = self.body_abi(info.callee, span)?;
         let modes: Vec<ParamMode> = sig.params.iter().map(|p| p.mode).collect();

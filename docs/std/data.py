@@ -496,7 +496,10 @@ MODULES = [
        {"sig": "fn sub(self, n: T) -> T where T: Integer", "doc": "Subtracts `n`, and gives the value before. Unravels if the result doesn't fit, leaving the value as it was."},
      ]},
     {"kind": "warp", "name": "Mutex", "suffix": "[T]", "builtin": True,
-     "doc": "A value that one thread at a time can lock and use."},
+     "doc": "A value that one thread at a time can lock and use.",
+     "methods": [
+       {"sig": "fn lock(self) ~> mut T", "doc": "The value, for the statement it's in: the lock is taken where `lock()` is evaluated (waiting, in turn, while another thread has it) and given back when the statement ends, however it ends. `total.lock() += n` changes it. A thread that locks a mutex it has locked already unravels."},
+     ]},
     {"kind": "warp", "name": "Spun", "suffix": "[T]", "builtin": True,
      "doc": "A thread started in a `loom` block: what `thread e` gives. It's `Copy` unless its result is `once`. A thread nobody joined is joined where the block ends.",
      "methods": [

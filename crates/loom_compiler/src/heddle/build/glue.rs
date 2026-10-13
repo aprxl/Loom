@@ -124,6 +124,8 @@ impl<'a> Builder<'a> {
                 "std.string.String" | "std.fs.File" => self.free_buffer(ptr, 1, 1),
                 "std.iter.Stream" => self.drop_stream(ptr),
                 "std.iter.Shuttle" | "std.iter.Burst" => self.drop_shuttle(ptr),
+                // The value is after the lock word.
+                "std.sync.Mutex" => self.drop_field(ptr, 8, args[0]),
                 "std.map.Map" | "std.set.Set" => {
                     let c = self.coll_of(ty)?;
                     self.drop_coll(&c, ptr);

@@ -1,0 +1,27 @@
+// `lock()` is the value for the statement it's in. Here the statement waits
+// (in `nap`) while it holds the lock, so the others wait for it, and get it
+// in the order they asked.
+
+use std.io.print
+use std.sync.Mutex
+use std.sync.sched_yield
+
+fn nap(id: i32) -> i32 {
+    sched_yield()
+    id
+}
+
+fn main() {
+    let m = Mutex[i32](100)
+    loom {
+        for id in 0..3 {
+            thread {
+                print("{id} asks")
+                print("{id} had {m.lock()}, napped {nap(id)}")
+                m.lock() += 1
+            }
+        }
+        ()
+    }
+    print("m {m.lock()}")
+}

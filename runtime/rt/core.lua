@@ -2185,16 +2185,69 @@ end
 -- A projection lends one place for a statement: run to its first `yield`,
 -- which gives the place as `{table, key}`, and on to its end once the
 -- statement is done.
+-- A lent place is a `<close>` local of the statement's block: leaving it
+-- any way (an unravel too) closes the projection, which runs the `defer`s
+-- it has reached, as dropping a shuttle does.
+local lent_place = {
+  __close = function(place, err)
+    local sh = place.sh
+    if sh.done then return end
+    finish(sh)
+    local ok, e = co_close(sh.co)
+    if not ok and err == nil then error(e, 0) end
+  end,
+}
+
 function rt.lend(sh)
   local what, place = resume(sh)
   if what ~= "out" then error(MARK .. "a projection ended without lending a place", 2) end
   place.sh = sh
-  return place
+  return setmetatable(place, lent_place)
 end
 
 function rt.lend_end(place)
   if place.sh.done then return end
   if resume(place.sh) == "out" then error(MARK .. "a projection lent more than one place", 2) end
+end
+
+-- `Mutex[T]` is `{value, holder, waiters}`: the thread that has it, and the
+-- ones waiting for it, first first. `lock()` is a projection: the value's
+-- place for a statement, held until the projection ends or is closed.
+local function mutex_acquire(m)
+  local cur = current
+  if m.holder == cur then error(MARK .. "this thread holds the lock already", 0) end
+  local ws = m.waiters
+  if not ws then
+    ws = {}
+    m.waiters = ws
+  end
+  while m.holder ~= nil do
+    cur.waiting = true
+    cur.waiting_on = m
+    ws[#ws + 1] = cur
+    park()
+  end
+  m.holder = cur
+end
+
+local unlocks = {
+  __close = function(g)
+    local m = g[1]
+    m.holder = nil
+    local w = m.waiters and table.remove(m.waiters, 1)
+    if w then
+      w.waiting_on = nil
+      wake(w)
+    end
+  end,
+}
+
+ext["std.sync.Mutex.lock"] = function(_, m)
+  return rt.shuttle(function()
+    mutex_acquire(m)
+    local held <close> = setmetatable({ m }, unlocks)
+    co_yield(true, { m, 1 })
+  end)
 end
 
 -- The next item of burst `b`: `true, item`, or nothing once it's over.

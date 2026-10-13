@@ -154,6 +154,12 @@ pub const NATIVES: &[NativeSig] = &[
     sig("loom.free", 2, 0, NativeImm::None),
     // Unwinds with a cancel if the running thread has been cancelled.
     sig("task.cancelled", 0, 0, NativeImm::None),
+    // `Mutex[T]`: `mutex.lock(addr)` takes the lock word at `addr` for the
+    // running thread, waiting while another has it; `mutex.unlock(addr)`
+    // gives it back and wakes the first waiter. (Interpreter-run, like the
+    // `task.*` ones: they switch tasks.)
+    sig("mutex.lock", 1, 0, NativeImm::None),
+    sig("mutex.unlock", 1, 0, NativeImm::None),
     // `Atomic[T]` (std.sync), on the integer at an address, whose type is
     // the `IntSpec` last (packed, as the checked arithmetic's is). A bool
     // is a `u8`. `atomic.cas(addr, expected, desired, spec) -> (swapped,

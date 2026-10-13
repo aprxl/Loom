@@ -44,19 +44,23 @@ impl Checker<'_> {
     /// `None` when `ty` isn't a type of `std.sync` with a constructor.
     pub(super) fn check_sync_new(&mut self, call: &Expr, ty: Ty, args: &[Arg]) -> Option<Ty> {
         let TyKind::Adt(def, targs) = self.tcx.kind(ty).clone() else { return None };
-        if Some(def) != self.std.atomic {
+        let atomic = Some(def) == self.std.atomic;
+        if !atomic && Some(def) != self.std.mutex {
             return None;
         }
         let t = targs.first().copied()?;
         if args.len() != 1 || args[0].label.is_some() {
             let span = args.first().map_or(call.span, |a| a.span);
-            self.error(codes::T0104, span, "`Atomic[T]` is made from one value", "write `Atomic[u64](0)`");
+            let (name, example) = if atomic { ("Atomic", "Atomic[u64](0)") } else { ("Mutex", "Mutex[u64](0)") };
+            self.error(codes::T0104, span, format!("`{name}[T]` is made from one value"), format!("write `{example}`"));
             self.check_args_alone(args);
             return Some(self.tcx.error);
         }
         self.check_coerce(&args[0].value, t);
         self.b.sync_new.insert(call.id);
-        self.atomic_holds(t, args[0].span);
+        if atomic {
+            self.atomic_holds(t, args[0].span);
+        }
         Some(ty)
     }
 

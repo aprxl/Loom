@@ -1,0 +1,20 @@
+// A statement that unravels while it holds the lock gives it back, so a
+// `defer` that locks it doesn't wait for ever.
+
+use std.io.print
+use std.sync.Mutex
+
+fn boom() -> i32 {
+    unravel("boom")
+}
+
+fn main() {
+    let m = Mutex[i32](7)
+    defer print("m is {m.lock()}")
+    loom {
+        thread {
+            print("{m.lock()} {boom()}")
+        }
+        ()
+    }
+}

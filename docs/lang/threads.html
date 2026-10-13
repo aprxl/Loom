@@ -181,6 +181,36 @@ hits 6
 true 0, false 1</code></pre></div>
 </div>
 <p>A thread that spins on <code>load()</code> waiting for another doesn't let it run (nothing is preempted yet): put a <code>sched_yield()</code> in the loop.</p>
+<h2 id="sharing-what-needs-a-lock-mutex">Sharing what needs a lock: <code>Mutex</code></h2>
+<p>A <code>Mutex[T]</code> holds a <code>T</code> that one thread at a time uses. <code>m.lock()</code> is the value, for the statement it's in: the lock is taken where it's evaluated, and given back when the statement ends, however it ends (an unravel too). Threads that find it taken wait for it, in the order they came.</p>
+<div class="sample" id="sample-threads_mutex">
+<div class="sample-head"><span class="file">samples/threads_mutex.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.sync.<span class="t">Mutex</span>
+<span class="k">use</span> std.sync.sched_yield
+
+<span class="k">fn</span> pause(id: i32) -&gt; i32 {
+    sched_yield()
+    id
+}
+
+<span class="k">fn</span> main() {
+    <span class="k">let</span> total = <span class="t">Mutex</span>[i32](<span class="n">0</span>)
+    <span class="k">let</span> log = <span class="t">Mutex</span>[<span class="t">List</span>[i32]]([])
+    <span class="k">loom</span> {
+        <span class="k">for</span> id <span class="k">in</span> <span class="n">1</span>..=<span class="n">3</span> {
+            <span class="k">thread</span> {
+                total.lock() += id * <span class="n">10</span>          <span class="c">// locked for this statement</span>
+                log.lock().push(pause(id))       <span class="c">// locked while `pause` waits</span>
+            }
+        }
+        ()
+    }
+    print(<span class="s">"total {</span>total.lock()<span class="s">}, log {</span>log.lock().len()<span class="s">} entries"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>total 60, log 3 entries</code></pre></div>
+</div>
+<p>The lock is taken after the right-hand side of an assignment is worked out, so a thread holds it for the shortest time. A thread that locks what it holds already unravels.</p>
 <h2 id="when-something-goes-wrong">When something goes wrong</h2>
 <p>A thread that unravels fails its loom: the other threads are <strong>cancelled</strong>, and the parent unravels with the thread's message where it sees it, at the <code>join</code> or where the block ends, after everything has stopped. A cancelled thread unwinds from where it waits (<code>join</code>, <code>sched_yield</code>, a <code>yield</code> or <code>pull</code>), running its <code>defer</code>s, and nobody sees the cancel: <code>mend</code> doesn't catch it. The same goes for leaving the block early with <code>?</code>, <code>return</code> or <code>break</code>, for <code>process.exit</code> in a thread, and for Ctrl-C.</p>
 <p>A thread started in a loom that has already failed never runs.</p>

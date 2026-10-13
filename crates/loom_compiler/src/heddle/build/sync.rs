@@ -10,7 +10,7 @@ use loom_syntax::source::Span;
 
 use super::value::Val;
 use super::{Builder, int_spec};
-use crate::heddle::{InstKind, Term, VTy, Value};
+use crate::heddle::{InstKind, Mem, Term, VTy, Value};
 use crate::hir;
 use crate::ty::{Ty, TyKind};
 
@@ -27,8 +27,54 @@ impl<'a> Builder<'a> {
         let Some(arg) = args.first() else { return self.internal(span, "an atomic made from nothing") };
         let value = self.expr(&arg.value)?;
         let at = self.temp(ty, span)?;
-        self.store_val(at, 0, t, &value, span)?;
+        // A mutex has its lock word first (free), then the value.
+        let off = if self.is_mutex(ty) { 8 } else { 0 };
+        if off != 0 {
+            let free = self.iconst(0);
+            self.store(Mem::W64, at, 0, free);
+        }
+        // What the value owns is the mutex's now.
+        self.move_to(at, off, value, t, span)?;
         Some(Val::Mem(at))
+    }
+
+    fn is_mutex(&self, ty: Ty) -> bool {
+        matches!(self.tcx().kind(self.tcx().degauge(ty)), TyKind::Adt(def, _)
+            if self.p.def_path(*def) == "std.sync.Mutex")
+    }
+
+    /// `m.lock()`: takes the lock (waiting while another thread has it),
+    /// and is the value's place until the statement ends, however it ends:
+    /// a cleanup gives the lock back.
+    pub(super) fn mutex_lock(&mut self, e: &'a hir::Expr) -> Option<(super::value::Place, Ty)> {
+        let span = e.span;
+        let hir::ExprKind::Call { callee, args } = &e.kind else { return None };
+        let info = self.tables().calls.get(&e.id)?.clone();
+        let sig = self.typed.results.sigs.get(&info.callee)?.clone();
+        let modes: Vec<loom_syntax::ast::ParamMode> = sig.params.iter().map(|p| p.mode).collect();
+        let recv_ty = self.plain_ty(sig.params.first()?.ty);
+        let t = self.atomic_elem(recv_ty, span)?;
+        let worked = self.call_args(callee, args, &info, &modes, Some(recv_ty))?;
+        let at = match worked.into_iter().next()? {
+            super::call::Arg::Place(place) => self.place_addr(&place, span)?,
+            super::call::Arg::Val(v, ty) => self.addr_of(v, ty, span)?,
+        };
+        self.emit(InstKind::Native { name: "mutex.lock", imm: 0, args: vec![at] }, &[]);
+        // The mutex's address, kept in memory for the cleanup, which an
+        // unwind runs from a landing pad (they read only memory).
+        let slot = self.raw_slot(8, 8);
+        let slot_at = self.slot_addr(slot);
+        self.store(Mem::W64, slot_at, 0, at);
+        self.add_cleanup(super::cleanup::CleanupKind::Unlock { slot });
+        let value = self.offset(at, 8);
+        Some((super::value::Place::At { ptr: value, off: 0 }, t))
+    }
+
+    /// Gives back the lock of the mutex whose address is in `slot`.
+    pub(super) fn emit_unlock(&mut self, slot: u32) {
+        let at = self.slot_addr(slot);
+        let m = self.load(Mem::W64, at, 0, VTy::Ptr);
+        self.emit(InstKind::Native { name: "mutex.unlock", imm: 0, args: vec![m] }, &[]);
     }
 
     /// The `T` of an `Atomic[T]`.

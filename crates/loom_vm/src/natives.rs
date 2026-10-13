@@ -417,6 +417,16 @@ pub(crate) type NativeFn = fn(&mut Ctx, &mut [u64], u16) -> Result<(), Trap>;
 // so that nothing is reordered or kept in a register around them, and
 // several workers can make them real atomic operations in this one place.
 
+/// The word at `addr` (a mutex's lock word), checked in the checked build.
+pub(crate) fn read_word(ctx: &Ctx, addr: u64) -> Result<u64, Trap> {
+    atomic_read(ctx, addr, loom_isa::IntSpec { bits: 64, signed: false, size: false })
+}
+
+/// Sets the word at `addr`.
+pub(crate) fn write_word(ctx: &Ctx, addr: u64, v: u64) -> Result<(), Trap> {
+    atomic_write(ctx, addr, loom_isa::IntSpec { bits: 64, signed: false, size: false }, v)
+}
+
 /// The integer of `spec` at `addr`, as a register holds it.
 fn atomic_read(ctx: &Ctx, addr: u64, spec: loom_isa::IntSpec) -> Result<u64, Trap> {
     let n = u64::from(spec.bits) / 8;
@@ -551,6 +561,8 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
         "loom.leftover" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::LoomLeftover)),
         "loom.free" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::LoomFree)),
         "task.cancelled" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::Cancelled)),
+        "mutex.lock" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::MutexLock)),
+        "mutex.unlock" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::MutexUnlock)),
         "atomic.load" => atomic_load,
         "atomic.store" => atomic_store,
         "atomic.swap" => atomic_swap,

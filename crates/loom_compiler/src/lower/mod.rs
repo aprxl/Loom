@@ -94,6 +94,7 @@ pub const RUNTIME_WARPS: &[&str] = &[
     "std.fs.File",
     "std.sync.Spun",
     "std.sync.Atomic",
+    "std.sync.Mutex",
 ];
 
 /// Lowers a type-checked program, which starts at `main`, after running its
@@ -468,7 +469,12 @@ impl<'a> Lowerer<'a> {
             TyKind::Adt(def, _)
                 if matches!(
                     self.p.def_path(*def).as_str(),
-                    "std.iter.Stream" | "std.iter.Shuttle" | "std.iter.Burst" | "std.sync.Spun" | "std.sync.Atomic"
+                    "std.iter.Stream"
+                        | "std.iter.Shuttle"
+                        | "std.iter.Burst"
+                        | "std.sync.Spun"
+                        | "std.sync.Atomic"
+                        | "std.sync.Mutex"
                 ) =>
             {
                 Expr::field(Expr::name("rt"), "opaque")
@@ -774,7 +780,12 @@ impl<'a> Lowerer<'a> {
         let saved_loops = std::mem::take(&mut self.loops);
         let saved_defers = std::mem::take(&mut self.defers);
         let saved_span = self.span.replace(span);
+        // What this body lends ends with it, not with the statement of the
+        // enclosing function that made the closure.
+        let saved_lends = std::mem::take(&mut self.lend_ends);
         f(self);
+        self.finish_lends(0);
+        self.lend_ends = saved_lends;
         self.span = saved_span;
         self.defers = saved_defers;
         self.loops = saved_loops;

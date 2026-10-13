@@ -1265,7 +1265,17 @@ impl Lowerer<'_> {
     pub(super) fn lend_place(&mut self, e: &hir::Expr) -> Expr {
         let ExprKind::Call { callee, args } = &e.kind else { return Expr::Nil };
         let sh = self.call(e, callee, args);
-        let r = self.spill_always(Expr::rt("lend", vec![sh]));
+        // A `<close>` local, so that an unwind closes the projection too.
+        let name = self.new_temp();
+        self.push(StmtKind::LocalClose(name.clone(), Expr::rt("lend", vec![sh])));
+        self.defers += 1;
+        if self.defers == super::MAX_DEFERS + 1 {
+            self.unsupported(
+                e.span,
+                &format!("more than {} `defer`s and projections in one function", super::MAX_DEFERS),
+            );
+        }
+        let r = Expr::name(name);
         self.lend_ends.push(r.clone());
         Expr::index(Expr::index(r.clone(), Expr::Int(1)), Expr::index(r, Expr::Int(2)))
     }
@@ -1647,6 +1657,9 @@ impl Lowerer<'_> {
         }
         if self.tables().lends.contains_key(&target.id) {
             let v = if op == AssignOp::Assign { self.lower_owned(value) } else { self.lower_expr(value) };
+            // The value is worked out before the place is lent (a mutex is
+            // locked after it): as on Treadle.
+            let v = if has_call(&v) { self.spill_always(v) } else { v };
             let place = self.lower_place(target);
             let result = match op {
                 AssignOp::Assign => v,

@@ -1,0 +1,32 @@
+// A thread waiting for a lock is cancelled with the rest when a thread of
+// its loom fails: its `defer` runs, and the one holding the lock gives it
+// back on its way out.
+
+use std.io.print
+use std.sync.Mutex
+use std.sync.sched_yield
+
+fn nap() -> i32 {
+    sched_yield()
+    1
+}
+
+fn boom() -> i32 {
+    unravel("boom")
+}
+
+fn main() {
+    let m = Mutex[i32](0)
+    loom {
+        thread {
+            defer print("holder cleanup")
+            print("holder has {m.lock()} and naps {nap()}")
+        }
+        thread {
+            defer print("waiter cleanup")
+            print("waiter has {m.lock()}")
+        }
+        thread boom()
+        ()
+    }
+}

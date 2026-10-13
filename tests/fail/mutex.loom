@@ -1,0 +1,12 @@
+// A mutex is made from its value, and locked for a statement.
+
+use std.sync.Mutex
+
+fn main() {
+    let a = Mutex[i32](1)
+    a.lock() += 1
+    let b = Mutex[i32]()                     //~ T0104
+    let c = Mutex[i32]("x")                  //~ T0101
+    let n: i32 = a.lock()
+    let d = Mutex[String]("s".to_string())
+}

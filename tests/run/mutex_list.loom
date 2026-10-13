@@ -1,0 +1,25 @@
+// A mutex owns its value: a list the threads add to, and a string, are
+// dropped with it (the checked build would catch a leak).
+
+use std.io.print
+use std.sync.Mutex
+use std.sync.sched_yield
+
+fn main() {
+    let log = Mutex[List[i32]]([])
+    let name = Mutex[String]("log".to_string())
+    loom {
+        for id in 0..3 {
+            thread {
+                log.lock().push(id)
+                sched_yield()
+                log.lock().push(id * 10)
+            }
+        }
+        ()
+    }
+    let seen = log.lock().len()
+    print("{seen} {name.lock().len()}")
+    let first = log.lock()[0]
+    print("{first}")
+}

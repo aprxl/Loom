@@ -520,6 +520,7 @@ struct Std {
     burst: Option<DefId>,
     spun: Option<DefId>,
     atomic: Option<DefId>,
+    mutex: Option<DefId>,
 }
 
 /// Where the enclosing loop's `break`s go.
@@ -659,6 +660,7 @@ impl<'p> Checker<'p> {
             burst: find("std.iter", "Burst"),
             spun: find("std.sync", "Spun"),
             atomic: find("std.sync", "Atomic"),
+            mutex: find("std.sync", "Mutex"),
         };
         Checker {
             p,

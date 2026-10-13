@@ -1506,6 +1506,19 @@ fn run_task_op(env: &mut Env, op: TaskOp, args: &mut [u64], pc: *const u64, fp: 
             }
             Step::Next
         }
+        TaskOp::MutexLock => {
+            let word = crate::natives::read_word(env.ctx, args[0])?;
+            let (step, taken) = env.sched.mutex_lock(args[0], word)?;
+            if let Some(word) = taken {
+                crate::natives::write_word(env.ctx, args[0], word)?;
+            }
+            step
+        }
+        TaskOp::MutexUnlock => {
+            crate::natives::write_word(env.ctx, args[0], 0)?;
+            env.sched.mutex_unlock(args[0]);
+            Step::Next
+        }
     };
     let (resume, next) = match step {
         Step::Next => return Ok(Moved::No),

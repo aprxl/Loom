@@ -33,6 +33,14 @@ An `Atomic[T]` (`T` an integer of 8 to 64 bits, or `bool`) is changed through me
 
 A thread that spins on `load()` waiting for another doesn't let it run (nothing is preempted yet): put a `sched_yield()` in the loop.
 
+## Sharing what needs a lock: `Mutex`
+
+A `Mutex[T]` holds a `T` that one thread at a time uses. `m.lock()` is the value, for the statement it's in: the lock is taken where it's evaluated, and given back when the statement ends, however it ends (an unravel too). Threads that find it taken wait for it, in the order they came.
+
+@sample threads_mutex
+
+The lock is taken after the right-hand side of an assignment is worked out, so a thread holds it for the shortest time. A thread that locks what it holds already unravels.
+
 ## When something goes wrong
 
 A thread that unravels fails its loom: the other threads are **cancelled**, and the parent unravels with the thread's message where it sees it, at the `join` or where the block ends, after everything has stopped. A cancelled thread unwinds from where it waits (`join`, `sched_yield`, a `yield` or `pull`), running its `defer`s, and nobody sees the cancel: `mend` doesn't catch it. The same goes for leaving the block early with `?`, `return` or `break`, for `process.exit` in a thread, and for Ctrl-C.

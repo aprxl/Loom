@@ -197,6 +197,11 @@ impl<'a> Builder<'a> {
             TyKind::Any(_) => true,
             TyKind::Adt(def, _) => match self.p.def_path(def).as_str() {
                 "std.slice.Slice" | "std.fmt.Fmt" => false,
+                // A mutex owns its value.
+                "std.sync.Mutex" => match self.tcx().kind(ty).clone() {
+                    TyKind::Adt(_, args) => args.first().is_some_and(|&t| self.needs_drop(t)),
+                    _ => false,
+                },
                 "std.string.String" | "std.list.List" | "std.map.Map" | "std.set.Set" | "std.iter.Stream" => true,
                 "std.iter.Shuttle" | "std.iter.Burst" | "std.fs.File" => true,
                 _ if self.is_builtin(def) => false,

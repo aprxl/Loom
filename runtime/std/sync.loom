@@ -28,7 +28,14 @@ pub warp Atomic[T] {
 
 /// A value that one thread at a time can lock and use.
 #builtin
-pub warp Mutex[T]
+pub warp Mutex[T] {
+    /// The value, for the statement it's in: the lock is taken where
+    /// `lock()` is evaluated (waiting, in turn, while another thread has
+    /// it) and given back when the statement ends, however it ends.
+    /// `total.lock() += n` changes it. A thread that locks a mutex it has
+    /// locked already unravels.
+    pub fn lock(self) ~> mut T
+}
 
 /// A thread started in a `loom` block: what `thread e` gives. It's `Copy`
 /// unless its result is `once`. A thread nobody joined is joined where the

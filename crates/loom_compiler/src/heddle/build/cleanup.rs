@@ -60,6 +60,9 @@ pub(super) enum CleanupKind<'a> {
     Lend { slot: u32, ty: Ty },
     /// Ends the loom block whose group is in this slot (see `thread.rs`).
     Loom { slot: u32 },
+    /// Gives back the lock of the mutex whose address is in this slot (see
+    /// `sync.rs`).
+    Unlock { slot: u32 },
 }
 
 #[derive(Clone, Debug)]
@@ -302,6 +305,7 @@ impl<'a> Builder<'a> {
             CleanupKind::FreeShuttle(b) => self.free_shuttle_box(*b),
             CleanupKind::Lend { slot, ty } => self.finish_lend(*slot, *ty),
             CleanupKind::Loom { slot } => self.emit_loom_end(*slot),
+            CleanupKind::Unlock { slot } => self.emit_unlock(*slot),
             CleanupKind::Free { at, size } => {
                 let (n, a) = (self.iconst(*size), self.iconst(8));
                 self.emit(InstKind::Native { name: "mem.free", imm: 0, args: vec![*at, n, a] }, &[]);
