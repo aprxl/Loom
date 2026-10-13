@@ -243,7 +243,8 @@ impl<'a> Builder<'a> {
     pub(super) fn moved_from(&mut self, val: &Val, ty: Ty) {
         let Val::Mem(src) = *val else { return };
         self.temp_gone(src);
-        if let Some(id) = self.f.temps.remove(&src) {
+        if let Some(id) = self.f.temps.get(&src).copied().filter(|_| !self.f.viewed.contains(&src)) {
+            self.f.temps.remove(&src);
             self.kill_cleanup(id);
         } else if self.needs_drop(ty)
             && let Some((size, _)) = self.size_align(ty)

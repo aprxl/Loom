@@ -243,6 +243,10 @@ struct FnState<'a> {
     /// Temporaries in memory that own something, by address: their
     /// cleanups.
     temps: HashMap<Value, u32>,
+    /// Addresses a pattern's binding is a view of: moving out of the
+    /// binding zeroes what's there, and leaves the temporary there (if it
+    /// is one) to be dropped, which a branch that moved it must not stop.
+    viewed: std::collections::HashSet<Value>,
     /// While a landing pad is built.
     in_pad: u32,
     /// While a scope's cleanups are emitted at its normal end (falling off

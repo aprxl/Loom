@@ -936,14 +936,17 @@ impl<'a> Builder<'a> {
         let (head, body_b, exit) = (self.new_block(), self.new_block(), self.new_block());
         self.jump(head);
         self.switch_to(head);
-        // The condition's temporaries are dropped before either way on.
+        // What the condition made (its temporaries, and what `is` bound,
+        // which the body uses) is dropped at the end of each iteration, and
+        // where the loop is left. A `break` or `continue` leaves its scope
+        // too, so it's outside the scopes the loop's own.
+        let scopes = self.f.scopes.len();
         let depth = self.open_scope();
+        let start = self.scope_start(depth);
         let ok = self.branch(cond, body_b, exit).is_some();
         self.f.cur = None;
-        self.close_scope(depth);
         if ok {
             self.enter(body_b);
-            let scopes = self.f.scopes.len();
             self.f.loops.push(LoopCtx {
                 id: e.id,
                 brk: exit,
@@ -957,12 +960,17 @@ impl<'a> Builder<'a> {
                 && self.block_into(body, &join).is_some()
                 && self.live()
             {
+                self.run_cleanups(start);
                 self.jump(head);
             }
             self.f.loops.pop();
         }
         self.seal(head);
         self.enter(exit);
+        // On the way out through the false edge they're dropped here (a
+        // `break` dropped them already: a slot that's been dropped holds
+        // nothing, so this does nothing for it).
+        self.close_scope(depth);
     }
 
     /// `a..b` as a value: its ends, and flags saying it has a high end

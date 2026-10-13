@@ -268,6 +268,7 @@ impl<'a> Builder<'a> {
         let ty = self.local_ty(l);
         match (how, &v) {
             (Binding::View, &Val::Mem(ptr)) if self.needs_drop(ty) => {
+                self.f.viewed.insert(ptr);
                 self.bind_ref(l, ptr);
                 Some(())
             }

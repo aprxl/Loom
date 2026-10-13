@@ -1,0 +1,52 @@
+// What a `while` condition makes is dropped each time round and where the
+// loop ends, however it ends: a temporary string, and what `is` binds
+// (the checked build catches a leak).
+
+use std.io.print
+
+fn first_long(take words: List[String]) -> String {
+    var rest = words
+    while rest.pop() is some(w) {
+        if w.len() > 2 {
+            return w
+        }
+    }
+    "none".to_string()
+}
+
+// Moving out of what `is` bound, in one branch, leaves the other to drop it.
+fn maybe(take xs: List[String], c: bool) -> String {
+    var r = xs
+    if r.pop() is some(w) {
+        if c {
+            return w
+        }
+    }
+    "n".to_string()
+}
+
+fn main() {
+    var n = 0
+    while "ab".to_string().len() + n < 4 {
+        n += 1
+    }
+    print("{n}")
+
+    var xs: List[String] = ["a".to_string(), "bb".to_string(), "ccc".to_string(), "dd".to_string()]
+    var seen = 0
+    while xs.pop() is some(s) {
+        seen += 1
+        if s.len() == 2 {
+            continue
+        }
+        if s.len() == 3 {
+            break
+        }
+    }
+    print("{seen} {xs.len()}")
+
+    print(first_long(["x".to_string(), "yyyy".to_string(), "z".to_string()]))
+    print(first_long(["x".to_string()]))
+    print(maybe(["a".to_string()], false))
+    print(maybe(["a".to_string()], true))
+}
