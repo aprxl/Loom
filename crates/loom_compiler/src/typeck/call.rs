@@ -87,6 +87,9 @@ impl Checker<'_> {
                 if matches!(self.seq(ty), Some(Seq::List(_))) || self.coll_parts(ty).is_some() || string {
                     return self.check_new_list(call, ty, expected, args);
                 }
+                if let Some(made) = self.check_sync_new(call, ty, args) {
+                    return made;
+                }
                 match self.adt_info(ty) {
                     Some(info) => self.construct(call.id, &info, None, Some(args), call.span),
                     None if self.tcx.is_error(ty) => self.tcx.error,

@@ -93,6 +93,7 @@ pub const RUNTIME_WARPS: &[&str] = &[
     "std.set.Set",
     "std.fs.File",
     "std.sync.Spun",
+    "std.sync.Atomic",
 ];
 
 /// Lowers a type-checked program, which starts at `main`, after running its
@@ -467,7 +468,7 @@ impl<'a> Lowerer<'a> {
             TyKind::Adt(def, _)
                 if matches!(
                     self.p.def_path(*def).as_str(),
-                    "std.iter.Stream" | "std.iter.Shuttle" | "std.iter.Burst" | "std.sync.Spun"
+                    "std.iter.Stream" | "std.iter.Shuttle" | "std.iter.Burst" | "std.sync.Spun" | "std.sync.Atomic"
                 ) =>
             {
                 Expr::field(Expr::name("rt"), "opaque")

@@ -412,6 +412,107 @@ impl<'i> Ctx<'i> {
 /// A native: its context, its argument registers, and its immediate.
 pub(crate) type NativeFn = fn(&mut Ctx, &mut [u64], u16) -> Result<(), Trap>;
 
+// ---- `Atomic[T]`: with one worker, a task runs until it parks, so these
+// are plain reads and writes of the integer at the address; they're natives
+// so that nothing is reordered or kept in a register around them, and
+// several workers can make them real atomic operations in this one place.
+
+/// The integer of `spec` at `addr`, as a register holds it.
+fn atomic_read(ctx: &Ctx, addr: u64, spec: loom_isa::IntSpec) -> Result<u64, Trap> {
+    let n = u64::from(spec.bits) / 8;
+    if !matches!(n, 1 | 2 | 4 | 8) || !addr.is_multiple_of(n) {
+        return Err(Trap::Crash("loom internal: a bad atomic".into()));
+    }
+    if cfg!(feature = "checked") && !ctx.owns(addr, n) {
+        return Err(Trap::Crash(format!("loom internal: an atomic at {addr:#x} that isn't live")));
+    }
+    // SAFETY: `addr` is the address of an `Atomic[T]` the program made (a
+    // slot or an object, aligned: checked above), `n` bytes of it.
+    let raw = unsafe {
+        match n {
+            1 => u64::from(*(addr as *const u8)),
+            2 => u64::from(*(addr as *const u16)),
+            4 => u64::from(*(addr as *const u32)),
+            _ => *(addr as *const u64),
+        }
+    };
+    Ok(if spec.signed {
+        let shift = 64 - 8 * n as u32;
+        (((raw << shift) as i64) >> shift) as u64
+    } else {
+        raw
+    })
+}
+
+/// Writes the low bytes of `v`, which `atomic_read` gives back.
+fn atomic_write(ctx: &Ctx, addr: u64, spec: loom_isa::IntSpec, v: u64) -> Result<(), Trap> {
+    atomic_read(ctx, addr, spec)?;
+    let n = u64::from(spec.bits) / 8;
+    // SAFETY: as in `atomic_read`, which just checked.
+    unsafe {
+        match n {
+            1 => *(addr as *mut u8) = v as u8,
+            2 => *(addr as *mut u16) = v as u16,
+            4 => *(addr as *mut u32) = v as u32,
+            _ => *(addr as *mut u64) = v,
+        }
+    }
+    Ok(())
+}
+
+fn atomic_spec(word: u64) -> Result<loom_isa::IntSpec, Trap> {
+    loom_isa::IntSpec::unpack(word).ok_or_else(|| Trap::Crash("loom internal: a bad atomic".into()))
+}
+
+/// `atomic.load(addr, spec) -> value`
+fn atomic_load(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    args[0] = atomic_read(ctx, args[0], atomic_spec(args[1])?)?;
+    Ok(())
+}
+
+/// `atomic.store(addr, value, spec)`
+fn atomic_store(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    atomic_write(ctx, args[0], atomic_spec(args[2])?, args[1])
+}
+
+/// `atomic.swap(addr, value, spec) -> before`
+fn atomic_swap(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let spec = atomic_spec(args[2])?;
+    let before = atomic_read(ctx, args[0], spec)?;
+    atomic_write(ctx, args[0], spec, args[1])?;
+    args[0] = before;
+    Ok(())
+}
+
+/// `atomic.cas(addr, expected, desired, spec) -> (swapped, found)`
+fn atomic_cas(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let spec = atomic_spec(args[3])?;
+    let found = atomic_read(ctx, args[0], spec)?;
+    let swapped = found == args[1];
+    if swapped {
+        atomic_write(ctx, args[0], spec, args[2])?;
+    }
+    args[0] = u64::from(swapped);
+    args[1] = found;
+    Ok(())
+}
+
+/// `atomic.add(addr, n, spec) -> before`, and `sub`.
+fn atomic_add(
+    ctx: &mut Ctx,
+    args: &mut [u64],
+    op: fn(u64, u64, loom_isa::IntSpec) -> Result<u64, crate::ints::IntErr>,
+) -> Result<(), Trap> {
+    let spec = atomic_spec(args[2])?;
+    let before = atomic_read(ctx, args[0], spec)?;
+    match op(before, args[1], spec) {
+        Ok(after) => atomic_write(ctx, args[0], spec, after)?,
+        Err(_) => return Err(Trap::Overflow),
+    }
+    args[0] = before;
+    Ok(())
+}
+
 /// The native named `name`, and how many registers it reads or writes.
 pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
     let f: NativeFn = match name {
@@ -450,6 +551,12 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
         "loom.leftover" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::LoomLeftover)),
         "loom.free" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::LoomFree)),
         "task.cancelled" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::Cancelled)),
+        "atomic.load" => atomic_load,
+        "atomic.store" => atomic_store,
+        "atomic.swap" => atomic_swap,
+        "atomic.cas" => atomic_cas,
+        "atomic.add" => |ctx, a, _| atomic_add(ctx, a, crate::ints::add_t),
+        "atomic.sub" => |ctx, a, _| atomic_add(ctx, a, crate::ints::sub_t),
         _ => crate::methods::resolve(name).or_else(|| crate::host::resolve(name))?,
     };
     let sig = native(name)?;

@@ -11,7 +11,7 @@ These are planned next, in this order: the rest of threads, then spools and the 
 
 ### Threads
 
-[Threads](page:threads) run, one at a time: `loom { }`, `thread`, `.join()` and `sched_yield()`. Not yet: `loom for`, `Atomic[T]` and `Mutex[T]` (declared in [std.sync](std:sync), with no methods), `Pipe`, several worker threads at once, `loom(given: pool)`, a `thread` that moves a variable into itself, and `yield` or `pull` inside a `loom` block ([U0102](diag:U0102)).
+[Threads](page:threads) run, one at a time: `loom { }`, `thread`, `.join()` and `sched_yield()`. Not yet: `loom for`, `Mutex[T]` and `Pipe` (see [std.sync](std:sync)), several worker threads at once, `loom(given: pool)`, a `thread` that moves a variable into itself, and `yield` or `pull` inside a `loom` block ([U0102](diag:U0102)).
 
 @sample nyet_threads
 

@@ -1,8 +1,30 @@
 // Sharing between threads.
 
-/// A value that threads can read and update without locks.
+/// A value that threads can read and update without locks. `T` is an
+/// integer of 8, 16, 32 or 64 bits (`usize`, `isize` too), or `bool`.
+/// Every operation is sequentially consistent, and they all take `self` to
+/// read, so threads share one the way they share any other value.
+///
+/// With one worker thread runs until it waits, so a loop that spins on
+/// `load()` never lets another thread run: call `sched_yield()` in it.
 #builtin
-pub warp Atomic[T]
+pub warp Atomic[T] {
+    /// The value now.
+    pub fn load(self) -> T
+    /// Sets the value.
+    pub fn store(self, value: T)
+    /// Sets the value, and gives the one it replaced.
+    pub fn swap(self, value: T) -> T
+    /// Sets the value to `desired` if it's `expected`. Gives whether it
+    /// did, and the value that was there.
+    pub fn compare_exchange(self, expected: T, desired: T) -> (bool, T)
+    /// Adds `n`, and gives the value before. Unravels if the sum doesn't
+    /// fit, leaving the value as it was.
+    pub fn add(self, n: T) -> T where T: Integer
+    /// Subtracts `n`, and gives the value before. Unravels if the result
+    /// doesn't fit, leaving the value as it was.
+    pub fn sub(self, n: T) -> T where T: Integer
+}
 
 /// A value that one thread at a time can lock and use.
 #builtin

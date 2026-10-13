@@ -154,6 +154,17 @@ pub const NATIVES: &[NativeSig] = &[
     sig("loom.free", 2, 0, NativeImm::None),
     // Unwinds with a cancel if the running thread has been cancelled.
     sig("task.cancelled", 0, 0, NativeImm::None),
+    // `Atomic[T]` (std.sync), on the integer at an address, whose type is
+    // the `IntSpec` last (packed, as the checked arithmetic's is). A bool
+    // is a `u8`. `atomic.cas(addr, expected, desired, spec) -> (swapped,
+    // found)`. `atomic.add` and `atomic.sub` give the value before, and
+    // unravel on overflow, changing nothing.
+    sig("atomic.load", 2, 1, NativeImm::None),
+    sig("atomic.store", 3, 0, NativeImm::None),
+    sig("atomic.swap", 3, 1, NativeImm::None),
+    sig("atomic.cas", 4, 2, NativeImm::None),
+    sig("atomic.add", 3, 1, NativeImm::None),
+    sig("atomic.sub", 3, 1, NativeImm::None),
 ];
 
 /// The signature of the native named `name`.

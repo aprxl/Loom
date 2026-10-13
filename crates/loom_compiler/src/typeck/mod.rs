@@ -241,6 +241,8 @@ pub struct Body {
     pub fails: HashMap<HirId, (Ty, ErrConv)>,
     /// `List()` calls: empty lists.
     pub new_lists: HashSet<HirId>,
+    /// `Atomic[T](value)` calls (and the other types of `std.sync`).
+    pub sync_new: HashSet<HirId>,
     /// Calls of function values: lambdas, and functions passed around.
     pub closure_calls: HashSet<HirId>,
     /// Functions used as values (`xs.filter(is_prime)`): which instance.
@@ -517,6 +519,7 @@ struct Std {
     shuttle: Option<DefId>,
     burst: Option<DefId>,
     spun: Option<DefId>,
+    atomic: Option<DefId>,
 }
 
 /// Where the enclosing loop's `break`s go.
@@ -655,6 +658,7 @@ impl<'p> Checker<'p> {
             shuttle: find("std.iter", "Shuttle"),
             burst: find("std.iter", "Burst"),
             spun: find("std.sync", "Spun"),
+            atomic: find("std.sync", "Atomic"),
         };
         Checker {
             p,

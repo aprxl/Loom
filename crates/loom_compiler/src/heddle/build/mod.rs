@@ -45,6 +45,7 @@ mod scan;
 mod seq;
 mod shuttle;
 mod stream;
+mod sync;
 mod text;
 mod thread;
 mod value;

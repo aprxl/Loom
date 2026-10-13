@@ -25,6 +25,14 @@ The race detector is the type checker:
 
 @sample threads_err
 
+## Sharing what changes: `Atomic`
+
+An `Atomic[T]` (`T` an integer of 8 to 64 bits, or `bool`) is changed through methods that only take `self` to read, so any number of threads can use one at once, with no [C0401](diag:C0401). Every operation is a whole step: `add` gives the value before, `compare_exchange` says whether it swapped.
+
+@sample threads_atomic
+
+A thread that spins on `load()` waiting for another doesn't let it run (nothing is preempted yet): put a `sched_yield()` in the loop.
+
 ## When something goes wrong
 
 A thread that unravels fails its loom: the other threads are **cancelled**, and the parent unravels with the thread's message where it sees it, at the `join` or where the block ends, after everything has stopped. A cancelled thread unwinds from where it waits (`join`, `sched_yield`, a `yield` or `pull`), running its `defer`s, and nobody sees the cancel: `mend` doesn't catch it. The same goes for leaving the block early with `?`, `return` or `break`, for `process.exit` in a thread, and for Ctrl-C.

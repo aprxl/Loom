@@ -15,6 +15,7 @@ use super::Checker;
 use super::infer::VarKind;
 use crate::hir::{Arg, Block, Expr};
 use crate::ty::{Ty, TyKind};
+use loom_syntax::source::Span;
 
 impl Checker<'_> {
     pub(super) fn check_loom(&mut self, args: &[Arg], body: &Block, expected: Option<Ty>) -> Ty {
@@ -37,6 +38,41 @@ impl Checker<'_> {
             );
         }
         ty
+    }
+
+    /// `Atomic[T](value)`: the value is a `T`, which an atomic can hold.
+    /// `None` when `ty` isn't a type of `std.sync` with a constructor.
+    pub(super) fn check_sync_new(&mut self, call: &Expr, ty: Ty, args: &[Arg]) -> Option<Ty> {
+        let TyKind::Adt(def, targs) = self.tcx.kind(ty).clone() else { return None };
+        if Some(def) != self.std.atomic {
+            return None;
+        }
+        let t = targs.first().copied()?;
+        if args.len() != 1 || args[0].label.is_some() {
+            let span = args.first().map_or(call.span, |a| a.span);
+            self.error(codes::T0104, span, "`Atomic[T]` is made from one value", "write `Atomic[u64](0)`");
+            self.check_args_alone(args);
+            return Some(self.tcx.error);
+        }
+        self.check_coerce(&args[0].value, t);
+        self.b.sync_new.insert(call.id);
+        self.atomic_holds(t, args[0].span);
+        Some(ty)
+    }
+
+    /// Reports an `Atomic` of something but an integer of 8, 16, 32 or 64
+    /// bits, or `bool`.
+    pub(super) fn atomic_holds(&mut self, t: Ty, span: Span) {
+        let t = self.resolve(t);
+        let fine = match self.tcx.kind(t) {
+            TyKind::Int(i) => matches!(i.bits, 8 | 16 | 32 | 64),
+            TyKind::Bool | TyKind::IntVar(_) | TyKind::Var(_) | TyKind::Error => true,
+            _ => false,
+        };
+        if !fine {
+            let shown = self.show(t);
+            self.unsupported(span, &format!("`Atomic[{shown}]`: only integers of 8, 16, 32 or 64 bits, and `bool`"));
+        }
     }
 
     /// Whether a value of `ty` holds a `Spun` somewhere.

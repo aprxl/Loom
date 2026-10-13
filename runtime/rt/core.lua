@@ -2075,6 +2075,43 @@ rt.ext["std.sync.sched_yield"] = function()
   rt.sched_yield()
 end
 
+-- `Atomic[T]` is `{value}`. With one worker nothing else runs between these
+-- steps, so they're plain: sequentially consistent by being one at a time.
+local atomic = rt.ext
+atomic["std.sync.Atomic.load"] = function(_, a)
+  return a[1]
+end
+atomic["std.sync.Atomic.store"] = function(_, a, v)
+  a[1] = v
+end
+atomic["std.sync.Atomic.swap"] = function(_, a, v)
+  local before = a[1]
+  a[1] = v
+  return before
+end
+atomic["std.sync.Atomic.compare_exchange"] = function(_, a, expected, desired)
+  local found = a[1]
+  if found == expected then
+    a[1] = desired
+    return { true, found }
+  end
+  return { false, found }
+end
+atomic["std.sync.Atomic.add"] = function(d, a, n)
+  local before = a[1]
+  local r, over = add_raw(d, before, n)
+  if over then error(MARK .. "arithmetic overflow", 2) end
+  a[1] = r
+  return before
+end
+atomic["std.sync.Atomic.sub"] = function(d, a, n)
+  local before = a[1]
+  local r, over = sub_raw(d, before, n)
+  if over then error(MARK .. "arithmetic overflow", 2) end
+  a[1] = r
+  return before
+end
+
 -- Shuttles. A shuttle is `{co, ...}`: a coroutine running the function's
 -- body, which `yield v` suspends with `true, v` and `pull` with `false`.
 -- The driver resumes a pending `pull` with `true, input` for a push, or

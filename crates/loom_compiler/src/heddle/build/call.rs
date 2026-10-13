@@ -39,6 +39,9 @@ impl<'a> Builder<'a> {
         if tables.new_lists.contains(&e.id) {
             return self.new_empty(e);
         }
+        if tables.sync_new.contains(&e.id) {
+            return self.sync_new(e, args, ty);
+        }
         if let ExprKind::BuiltinCase(kw) = callee.kind {
             return self.builtin_case(e, kw, args);
         }

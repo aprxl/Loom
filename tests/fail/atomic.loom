@@ -1,0 +1,12 @@
+// An atomic holds an integer of 8, 16, 32 or 64 bits, or a `bool`.
+
+use std.sync.Atomic
+
+fn main() {
+    let a = Atomic[String]("x".to_string())          //~ U0102
+    let b = Atomic[u12](1)                           //~ U0102
+    let c = Atomic[u16](1)
+    let d = Atomic[bool](true)
+    let e = Atomic[i32](1, 2)                        //~ T0104
+    let f = Atomic[u32]("text")                      //~ T0101
+}

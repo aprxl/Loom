@@ -486,7 +486,15 @@ MODULES = [
   "summary": "Sharing between threads.",
   "types": [
     {"kind": "warp", "name": "Atomic", "suffix": "[T]", "builtin": True,
-     "doc": "A value that threads can read and update without locks."},
+     "doc": "A value that threads can read and update without locks. `T` is an integer of 8, 16, 32 or 64 bits (`usize`, `isize` too), or `bool`. Every operation is sequentially consistent, and they all take `self` to read, so threads share one the way they share any other value. With one worker thread runs until it waits, so a loop that spins on `load()` never lets another thread run: call `sched_yield()` in it.",
+     "methods": [
+       {"sig": "fn load(self) -> T", "doc": "The value now."},
+       {"sig": "fn store(self, value: T)", "doc": "Sets the value."},
+       {"sig": "fn swap(self, value: T) -> T", "doc": "Sets the value, and gives the one it replaced."},
+       {"sig": "fn compare_exchange(self, expected: T, desired: T) -> (bool, T)", "doc": "Sets the value to `desired` if it's `expected`. Gives whether it did, and the value that was there."},
+       {"sig": "fn add(self, n: T) -> T where T: Integer", "doc": "Adds `n`, and gives the value before. Unravels if the sum doesn't fit, leaving the value as it was."},
+       {"sig": "fn sub(self, n: T) -> T where T: Integer", "doc": "Subtracts `n`, and gives the value before. Unravels if the result doesn't fit, leaving the value as it was."},
+     ]},
     {"kind": "warp", "name": "Mutex", "suffix": "[T]", "builtin": True,
      "doc": "A value that one thread at a time can lock and use."},
     {"kind": "warp", "name": "Spun", "suffix": "[T]", "builtin": True,

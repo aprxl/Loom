@@ -1,0 +1,27 @@
+use std.io.print
+use std.sync.Atomic
+use std.sync.sched_yield
+
+fn main() {
+    let hits = Atomic[u32](0)
+    loom {
+        for id in 0..3 {
+            thread {
+                for _ in 0..2 {
+                    let before = hits.add(1)
+                    print("thread {id} saw {before}")
+                    sched_yield()
+                }
+            }
+        }
+        ()
+    }
+    print("hits {hits.load()}")
+
+    // Only one of two racers gets to set it.
+    let winner = Atomic[i32](0)
+    let (a, b) = winner.compare_exchange(0, 1)
+    let (c, d) = winner.compare_exchange(0, 2)
+    print("{a} {b}, {c} {d}")
+}
+//@ run

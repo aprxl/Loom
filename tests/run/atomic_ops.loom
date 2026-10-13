@@ -1,0 +1,20 @@
+// `swap` and `compare_exchange` give the value that was there; `add` and
+// `sub` give the value before, and an overflow unravels with the value as
+// it was.
+
+use std.io.print
+use std.sync.Atomic
+
+fn main() {
+    let small = Atomic[u8](250)
+    defer print("small is {small.load()}")
+    let n = Atomic[i64](10)
+    print("{n.swap(20)} {n.load()}")
+    print("{n.compare_exchange(20, 30)} {n.compare_exchange(20, 40)} {n.load()}")
+    print("{n.sub(5)} {n.add(-1)} {n.load()}")
+    print("{small.add(3)} {small.load()}")
+    let flag = Atomic(true)
+    print("{flag.swap(false)} {flag.load()}")
+    small.add(10)
+    print("not reached")
+}

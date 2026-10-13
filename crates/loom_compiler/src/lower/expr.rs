@@ -314,6 +314,11 @@ impl Lowerer<'_> {
             ExprKind::Array(items) => self.array_lit(items),
             ExprKind::ArrayRepeat { value, count } => self.array_repeat(e, value, count),
             ExprKind::Index { base, args } => self.index(base, args),
+            // `Atomic[T](value)`: its value in a table.
+            ExprKind::Call { args, .. } if self.tables().sync_new.contains(&e.id) => {
+                let value = self.lower_owned(&args[0].value);
+                Expr::Table(vec![value])
+            }
             ExprKind::Call { .. } if self.tables().new_lists.contains(&e.id) => match self.coll(ty) {
                 Some(Coll::Map(..)) => Expr::rt("map_new", Vec::new()),
                 Some(Coll::Set(_)) => Expr::rt("set_new", Vec::new()),

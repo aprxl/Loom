@@ -141,6 +141,46 @@ b 1</code></pre></div>
 
 <span class="err">error: threads_err.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
+<h2 id="sharing-what-changes-atomic">Sharing what changes: <code>Atomic</code></h2>
+<p>An <code>Atomic[T]</code> (<code>T</code> an integer of 8 to 64 bits, or <code>bool</code>) is changed through methods that only take <code>self</code> to read, so any number of threads can use one at once, with no <a href="diagnostics.html#C0401">C0401</a>. Every operation is a whole step: <code>add</code> gives the value before, <code>compare_exchange</code> says whether it swapped.</p>
+<div class="sample" id="sample-threads_atomic">
+<div class="sample-head"><span class="file">samples/threads_atomic.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.sync.<span class="t">Atomic</span>
+<span class="k">use</span> std.sync.sched_yield
+
+<span class="k">fn</span> main() {
+    <span class="k">let</span> hits = <span class="t">Atomic</span>[u32](<span class="n">0</span>)
+    <span class="k">loom</span> {
+        <span class="k">for</span> id <span class="k">in</span> <span class="n">0</span>..<span class="n">3</span> {
+            <span class="k">thread</span> {
+                <span class="k">for</span> _ <span class="k">in</span> <span class="n">0</span>..<span class="n">2</span> {
+                    <span class="k">let</span> before = hits.add(<span class="n">1</span>)
+                    print(<span class="s">"thread {</span>id<span class="s">} saw {</span>before<span class="s">}"</span>)
+                    sched_yield()
+                }
+            }
+        }
+        ()
+    }
+    print(<span class="s">"hits {</span>hits.load()<span class="s">}"</span>)
+
+    <span class="c">// Only one of two racers gets to set it.</span>
+    <span class="k">let</span> winner = <span class="t">Atomic</span>[i32](<span class="n">0</span>)
+    <span class="k">let</span> (a, b) = winner.compare_exchange(<span class="n">0</span>, <span class="n">1</span>)
+    <span class="k">let</span> (c, d) = winner.compare_exchange(<span class="n">0</span>, <span class="n">2</span>)
+    print(<span class="s">"{</span>a<span class="s">} {</span>b<span class="s">}, {</span>c<span class="s">} {</span>d<span class="s">}"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>thread 0 saw 0
+thread 1 saw 1
+thread 2 saw 2
+thread 0 saw 3
+thread 1 saw 4
+thread 2 saw 5
+hits 6
+true 0, false 1</code></pre></div>
+</div>
+<p>A thread that spins on <code>load()</code> waiting for another doesn't let it run (nothing is preempted yet): put a <code>sched_yield()</code> in the loop.</p>
 <h2 id="when-something-goes-wrong">When something goes wrong</h2>
 <p>A thread that unravels fails its loom: the other threads are <strong>cancelled</strong>, and the parent unravels with the thread's message where it sees it, at the <code>join</code> or where the block ends, after everything has stopped. A cancelled thread unwinds from where it waits (<code>join</code>, <code>sched_yield</code>, a <code>yield</code> or <code>pull</code>), running its <code>defer</code>s, and nobody sees the cancel: <code>mend</code> doesn't catch it. The same goes for leaving the block early with <code>?</code>, <code>return</code> or <code>break</code>, for <code>process.exit</code> in a thread, and for Ctrl-C.</p>
 <p>A thread started in a loom that has already failed never runs.</p>

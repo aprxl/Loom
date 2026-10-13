@@ -1,0 +1,28 @@
+// Threads share an `Atomic` the way they share any value they only read:
+// its methods take `self`. They interleave at `sched_yield`, so what each
+// one saw of the counter is the same on every run.
+
+use std.io.print
+use std.sync.Atomic
+use std.sync.sched_yield
+
+fn main() {
+    let hits = Atomic[u32](0)
+    let done = Atomic(false)
+    loom {
+        for id in 0..3 {
+            thread {
+                for _ in 0..2 {
+                    let before = hits.add(1)
+                    print("thread {id} saw {before}")
+                    sched_yield()
+                }
+                if id == 2 {
+                    done.store(true)
+                }
+            }
+        }
+        ()
+    }
+    print("hits {hits.load()}, done {done.load()}")
+}

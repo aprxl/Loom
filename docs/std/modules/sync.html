@@ -54,7 +54,51 @@
 <span class="sig">warp <strong>Atomic</strong>[T]</span>
 <span class="badge builtin">builtin</span>
 </div>
-<p class="item-doc">A value that threads can read and update without locks.</p>
+<p class="item-doc">A value that threads can read and update without locks. <code>T</code> is an integer of 8, 16, 32 or 64 bits (<code>usize</code>, <code>isize</code> too), or <code>bool</code>. Every operation is sequentially consistent, and they all take <code>self</code> to read, so threads share one the way they share any other value. With one worker thread runs until it waits, so a loop that spins on <code>load()</code> never lets another thread run: call <code>sched_yield()</code> in it.</p>
+<div class="members">
+<div class="member" id="Atomic.load">
+<div class="member-head">
+<span class="sig">fn load(self) -&gt; T</span>
+
+</div>
+<p class="member-doc">The value now.</p>
+</div>
+<div class="member" id="Atomic.store">
+<div class="member-head">
+<span class="sig">fn store(self, value: T)</span>
+
+</div>
+<p class="member-doc">Sets the value.</p>
+</div>
+<div class="member" id="Atomic.swap">
+<div class="member-head">
+<span class="sig">fn swap(self, value: T) -&gt; T</span>
+
+</div>
+<p class="member-doc">Sets the value, and gives the one it replaced.</p>
+</div>
+<div class="member" id="Atomic.compare_exchange">
+<div class="member-head">
+<span class="sig">fn compare_exchange(self, expected: T, desired: T) -&gt; (bool, T)</span>
+
+</div>
+<p class="member-doc">Sets the value to <code>desired</code> if it's <code>expected</code>. Gives whether it did, and the value that was there.</p>
+</div>
+<div class="member" id="Atomic.add">
+<div class="member-head">
+<span class="sig">fn add(self, n: T) -&gt; T where T: Integer</span>
+
+</div>
+<p class="member-doc">Adds <code>n</code>, and gives the value before. Unravels if the sum doesn't fit, leaving the value as it was.</p>
+</div>
+<div class="member" id="Atomic.sub">
+<div class="member-head">
+<span class="sig">fn sub(self, n: T) -&gt; T where T: Integer</span>
+
+</div>
+<p class="member-doc">Subtracts <code>n</code>, and gives the value before. Unravels if the result doesn't fit, leaving the value as it was.</p>
+</div>
+</div>
 </div>
 <div class="item" id="Mutex">
 <div class="item-head">

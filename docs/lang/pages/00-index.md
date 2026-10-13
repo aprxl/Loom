@@ -28,8 +28,8 @@ The design itself is in the repository: `README.md` and `design/*.md`. Where the
 | `const` parameters, `const if`, `const for`, `target` | works | [Const parameters and control flow](page:const-params) |
 | Reflection, and default methods that derive from a type's shape | works | [Reflection](page:reflection) |
 | Tests and `loom test` | works | [Tests](page:tests) |
-| Threads: `loom`, `thread`, `join`, `sched_yield`, cancel and failure, one at a time | works | [Threads](page:threads) |
-| `loom for`, `Atomic`, `Mutex`, `Pipe`, several threads at once | not yet | [Not supported yet](page:not-yet) |
+| Threads: `loom`, `thread`, `join`, `sched_yield`, `Atomic`, cancel and failure, one at a time | works | [Threads](page:threads) |
+| `loom for`, `Mutex`, `Pipe`, several threads at once | not yet | [Not supported yet](page:not-yet) |
 | Spools, region pointers, `given`, `ref warp` | not yet | [Not supported yet](page:not-yet) |
 | `unsafe`, raw pointers, `extern "C"`, `std.sys`, reading standard input | not yet | [Not supported yet](page:not-yet) |
 
