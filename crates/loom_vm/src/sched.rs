@@ -26,6 +26,16 @@ use crate::Trap;
 use crate::heap::Heap;
 use crate::stack::Stack;
 
+/// What belongs to the running task, which a switch swaps with the one that
+/// gets the processor: the unwind in flight, its stack, and what the natives
+/// are building.
+pub(crate) struct Running<'a> {
+    pub in_flight: &'a mut Option<crate::Fault>,
+    pub stack: &'a mut Stack,
+    pub msg: &'a mut Vec<u8>,
+    pub bufs: &'a mut Vec<Vec<u8>>,
+}
+
 /// What a task operation asks the dispatch loop to do next.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Step {
@@ -287,10 +297,9 @@ impl Sched {
         pc: *const u64,
         fp: *mut u64,
         seg_end: *mut u64,
-        in_flight: &mut Option<crate::Fault>,
-        stack: &mut Stack,
-        native: (&mut Vec<u8>, &mut Vec<Vec<u8>>),
+        run: Running,
     ) -> (*const u64, *mut u64, *mut u64) {
+        let Running { in_flight, stack, msg, bufs } = run;
         let cur = self.current;
         if next == cur {
             return (pc, fp, seg_end);
@@ -302,14 +311,14 @@ impl Sched {
             t.seg_end = seg_end;
             std::mem::swap(&mut t.in_flight, in_flight);
             std::mem::swap(&mut t.stack, stack);
-            std::mem::swap(&mut t.msg, native.0);
-            std::mem::swap(&mut t.bufs, native.1);
+            std::mem::swap(&mut t.msg, msg);
+            std::mem::swap(&mut t.bufs, bufs);
         }
         let t = &mut self.tasks[next];
         std::mem::swap(&mut t.stack, stack);
         std::mem::swap(&mut t.in_flight, in_flight);
-        std::mem::swap(&mut t.msg, native.0);
-        std::mem::swap(&mut t.bufs, native.1);
+        std::mem::swap(&mut t.msg, msg);
+        std::mem::swap(&mut t.bufs, bufs);
         self.current = next;
         (t.pc, t.fp, t.seg_end)
     }

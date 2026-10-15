@@ -38,7 +38,7 @@
 use loom_isa::word::{a, b, bc_i32, bc_u32, c, c_i16, unpack_cast};
 use loom_isa::{Image, LINK_SLOTS, Op};
 
-use crate::sched::{Sched, Step, Taken, TaskOp};
+use crate::sched::{Running, Sched, Step, Taken, TaskOp};
 
 use crate::heap::Heap;
 use loom_sys::Host;
@@ -1570,8 +1570,9 @@ fn run_task_op(env: &mut Env, op: TaskOp, args: &mut [u64], pc: *const u64, fp: 
         Step::Park { again } => (if again { at } else { pc }, env.sched.next_ready()),
         Step::Start(new) => (pc, new),
     };
-    let native = env.ctx.task_state();
-    let (npc, nfp, nend) = env.sched.switch(next, resume, fp, env.seg_end, &mut env.in_flight, env.stack, native);
+    let (msg, bufs) = env.ctx.task_state();
+    let run = Running { in_flight: &mut env.in_flight, stack: env.stack, msg, bufs };
+    let (npc, nfp, nend) = env.sched.switch(next, resume, fp, env.seg_end, run);
     if cfg!(feature = "checked") {
         env.ctx.task_ranges = env.sched.ranges();
     }
@@ -1605,16 +1606,9 @@ fn end_task(env: &mut Env, trap: Option<Trap>) -> ((*const u64, *mut u64, *mut u
     let cur = env.sched.current;
     let freed = env.sched.finish(&mut env.ctx.heap, trap);
     let next = env.sched.next_ready();
-    let native = env.ctx.task_state();
-    let (pc, fp, end) = env.sched.switch(
-        next,
-        std::ptr::null(),
-        std::ptr::null_mut(),
-        std::ptr::null_mut(),
-        &mut env.in_flight,
-        env.stack,
-        native,
-    );
+    let (msg, bufs) = env.ctx.task_state();
+    let run = Running { in_flight: &mut env.in_flight, stack: env.stack, msg, bufs };
+    let (pc, fp, end) = env.sched.switch(next, std::ptr::null(), std::ptr::null_mut(), std::ptr::null_mut(), run);
     env.sched.drop_stack(cur);
     if cfg!(feature = "checked") {
         env.ctx.task_ranges = env.sched.ranges();
