@@ -402,6 +402,17 @@ fn compile_vm(path: &Path, color: ColorMode, level: Level) -> Result<treadle::Co
 }
 
 /// `loom run --backend vm`: compile for Treadle and run the program here.
+/// How many workers run a program's threads on Treadle: `LOOM_THREADS`, or
+/// one for each core. `LOOM_THREADS=1` gives the reference schedule
+/// (design/vm.md §11.1), the one the Lua backend always runs.
+fn worker_count() -> usize {
+    std::env::var("LOOM_THREADS")
+        .ok()
+        .and_then(|n| n.parse().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, usize::from))
+}
+
 fn run_vm(path: &Path, args: &[String], color: ColorMode, level: Level) -> ExitCode {
     let run = || -> Result<ExitCode, ExitCode> {
         let compiled = compile_vm(path, color, level)?;
@@ -409,7 +420,11 @@ fn run_vm(path: &Path, args: &[String], color: ColorMode, level: Level) -> ExitC
         let host = Host { output: Output::Stdout, sandbox: false, args };
         let mut trace = Vec::new();
         let mut gap = None;
-        let config = loom_vm::Config { interrupt: Some(loom_sys::interrupt::install()), ..loom_vm::Config::default() };
+        let config = loom_vm::Config {
+            interrupt: Some(loom_sys::interrupt::install()),
+            workers: worker_count(),
+            ..loom_vm::Config::default()
+        };
         let outcome = match (compiled.image.entry, loom_vm::Vm::new(&compiled.image, host, &config)) {
             (Some(entry), Ok(mut vm)) => {
                 let result = vm.call(entry, &[]);
@@ -557,7 +572,11 @@ fn test_vm(path: &Path, color: ColorMode, level: Level) -> ExitCode {
         for (name, func) in tests {
             let buffer = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
             let host = Host::captured(buffer.clone());
-            let outcome = match loom_vm::Vm::new(&compiled.image, host, &loom_vm::Config::default()) {
+            let outcome = match loom_vm::Vm::new(
+                &compiled.image,
+                host,
+                &loom_vm::Config { workers: worker_count(), ..loom_vm::Config::default() },
+            ) {
                 Ok(mut vm) => {
                     let result = vm.call(func, &[]);
                     vm.ended(result)

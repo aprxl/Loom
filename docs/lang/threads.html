@@ -81,7 +81,7 @@ a 1
 b 1</code></pre></div>
 </div>
 <h2 id="what-a-thread-runs">What a thread runs</h2>
-<p>A thread runs as soon as it's started, until it finishes or <strong>parks</strong>: waits in a <code>join</code>, or calls <code>sched_yield()</code>, which sends it to the back of the queue. Then another one runs, and the one that started it goes on. Nothing is preempted, so a program's output is the same on every run, and on both backends. (This is the schedule with one worker. Several workers at once come later.)</p>
+<p>A thread runs as soon as it's started, until it finishes or <strong>parks</strong>: waits in a <code>join</code>, or calls <code>sched_yield()</code>, which sends it to the back of the queue. Then another one runs, and the one that started it goes on. Nothing is preempted, so a program's output is the same on every run, and on both backends. (This is the schedule with one worker, which <code>LOOM_THREADS=1</code> asks Treadle for and the Lua backend always runs. With several workers, Treadle's default, threads run side by side: what a program prints from inside threads can come in any order, and the rules below are what make its results the same.)</p>
 <p>A thread nobody joined is joined where the block ends. The block's value is its last expression's: a <code>thread</code> there would be a handle, which can't leave the block (<a href="diagnostics.html#C0404">C0404</a>), so end the block with <code>()</code>, or join it.</p>
 <h2 id="what-a-thread-may-share">What a thread may share</h2>
 <p>Threads borrow local variables directly, with no copies and no <code>Arc</code>, because nothing outlives its loom. The checker keeps that safe:</p>

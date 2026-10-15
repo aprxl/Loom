@@ -13,6 +13,54 @@ use crate::Trap;
 /// Slots in a segment, unless a frame needs more.
 const SEGMENT: usize = 1 << 17;
 
+/// With `checked`: every segment of every stack, by address with its end,
+/// so that a thread's access to its parent's frame (on a stack another
+/// worker is running) is known to be in a stack.
+#[cfg(feature = "checked")]
+static SEGMENTS: std::sync::Mutex<std::collections::BTreeMap<u64, u64>> =
+    std::sync::Mutex::new(std::collections::BTreeMap::new());
+
+/// With `checked`: whether `len` bytes at `addr` are inside a segment of
+/// some stack.
+#[cfg(feature = "checked")]
+pub(crate) fn in_some_stack(addr: u64, len: u64) -> bool {
+    let all = SEGMENTS.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    match all.range(..=addr).next_back() {
+        Some((_, &end)) => addr.checked_add(len).is_some_and(|stop| stop <= end),
+        None => false,
+    }
+}
+
+#[cfg(not(feature = "checked"))]
+pub(crate) fn in_some_stack(_: u64, _: u64) -> bool {
+    false
+}
+
+#[cfg(feature = "checked")]
+fn register(segment: &[u64]) {
+    let r = segment.as_ptr_range();
+    SEGMENTS.lock().unwrap_or_else(std::sync::PoisonError::into_inner).insert(r.start as u64, r.end as u64);
+}
+
+#[cfg(feature = "checked")]
+fn unregister(segment: &[u64]) {
+    SEGMENTS.lock().unwrap_or_else(std::sync::PoisonError::into_inner).remove(&(segment.as_ptr() as u64));
+}
+
+#[cfg(not(feature = "checked"))]
+fn register(_: &[u64]) {}
+
+#[cfg(not(feature = "checked"))]
+fn unregister(_: &[u64]) {}
+
+impl Drop for Stack {
+    fn drop(&mut self) {
+        for segment in &self.segments {
+            unregister(segment);
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct Stack {
     segments: Vec<Box<[u64]>>,
@@ -53,7 +101,9 @@ impl Stack {
             return Err(Trap::StackOverflow);
         }
         self.bytes += bytes;
-        self.segments.push(vec![0; slots].into_boxed_slice());
+        let segment = vec![0; slots].into_boxed_slice();
+        register(&segment);
+        self.segments.push(segment);
         Ok(())
     }
 
@@ -81,6 +131,7 @@ impl Stack {
             // Too small for this frame: drop it (and those kept after it)
             // to make room for a bigger one.
             for old in self.segments.drain(next..) {
+                unregister(&old);
                 self.bytes -= old.len() * 8;
             }
         }
@@ -95,14 +146,6 @@ impl Stack {
     pub fn shrink(&mut self) -> *mut u64 {
         self.current -= 1;
         self.bounds().1
-    }
-
-    /// The address range of each segment in use.
-    pub fn ranges(&self) -> impl Iterator<Item = (u64, u64)> + '_ {
-        self.segments[..self.segments.len().min(self.current + 1)].iter().map(|s| {
-            let r = s.as_ptr_range();
-            (r.start as u64, r.end as u64)
-        })
     }
 
     /// Whether `len` bytes at `addr` are inside a segment in use.

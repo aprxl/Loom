@@ -63,6 +63,10 @@ pub(crate) enum TaskOp {
     Cancelled,
     MutexLock,
     MutexUnlock,
+    /// `const.begin`: who computes a constant that isn't done.
+    ConstBegin,
+    /// A worker with no task: waits for one (never made by bytecode).
+    Idle,
     PipeNew,
     PipeSend,
     PipeRecv,
@@ -231,11 +235,17 @@ pub(crate) struct Sched {
     ready: VecDeque<usize>,
     /// The tasks waiting for each locked mutex, by its address.
     lockers: std::collections::BTreeMap<u64, VecDeque<usize>>,
+    /// Which task computes each constant (by its flag's address), with
+    /// several workers.
+    pub consts: std::collections::BTreeMap<u64, usize>,
     pipes: Vec<Pipe>,
     free_pipes: Vec<usize>,
     /// Raised in the main task when it next runs (a deadlock).
     pending: Option<Trap>,
 }
+
+/// The task of a worker that has none.
+pub(crate) const IDLE: usize = usize::MAX;
 
 /// A handle: the slot and how many times it has been used.
 fn handle(index: usize, epoch: u32) -> u64 {
@@ -258,6 +268,7 @@ impl Sched {
             current: 0,
             ready: VecDeque::new(),
             lockers: std::collections::BTreeMap::new(),
+            consts: std::collections::BTreeMap::new(),
             pipes: Vec::new(),
             free_pipes: Vec::new(),
             pending: None,
@@ -274,53 +285,51 @@ impl Sched {
         self.current = 0;
         self.ready.clear();
         self.lockers.clear();
+        self.consts.clear();
         self.pipes.clear();
         self.free_pipes.clear();
         self.pending = None;
     }
 
-    /// The memory of the stacks of the tasks that aren't running (the
-    /// running one's is the interpreter's): what a thread may touch of
-    /// its parent's frames.
-    pub fn ranges(&self) -> Vec<(u64, u64)> {
-        self.tasks.iter().filter(|t| t.live).flat_map(|t| t.stack.ranges()).collect()
-    }
-
     // ------------------------------------------------------------ switching
 
-    /// Saves the running task's registers and stack, and makes `next` the
-    /// running one, with the registers it left: the new `pc`, `fp` and
-    /// segment end.
-    pub fn switch(
-        &mut self,
-        next: usize,
-        pc: *const u64,
-        fp: *mut u64,
-        seg_end: *mut u64,
-        run: Running,
-    ) -> (*const u64, *mut u64, *mut u64) {
-        let Running { in_flight, stack, msg, bufs } = run;
+    /// Saves the running task's registers and stack in its slot (nothing,
+    /// for a worker that has none).
+    pub fn save(&mut self, pc: *const u64, fp: *mut u64, seg_end: *mut u64, run: &mut Running) {
         let cur = self.current;
-        if next == cur {
-            return (pc, fp, seg_end);
+        if cur == IDLE {
+            return;
         }
-        {
-            let t = &mut self.tasks[cur];
-            t.pc = pc;
-            t.fp = fp;
-            t.seg_end = seg_end;
-            std::mem::swap(&mut t.in_flight, in_flight);
-            std::mem::swap(&mut t.stack, stack);
-            std::mem::swap(&mut t.msg, msg);
-            std::mem::swap(&mut t.bufs, bufs);
-        }
+        let t = &mut self.tasks[cur];
+        t.pc = pc;
+        t.fp = fp;
+        t.seg_end = seg_end;
+        std::mem::swap(&mut t.in_flight, run.in_flight);
+        std::mem::swap(&mut t.stack, run.stack);
+        std::mem::swap(&mut t.msg, run.msg);
+        std::mem::swap(&mut t.bufs, run.bufs);
+    }
+
+    /// Makes `next` the running task, with the registers it left: the new
+    /// `pc`, `fp` and segment end.
+    pub fn load(&mut self, next: usize, run: &mut Running) -> (*const u64, *mut u64, *mut u64) {
         let t = &mut self.tasks[next];
-        std::mem::swap(&mut t.stack, stack);
-        std::mem::swap(&mut t.in_flight, in_flight);
-        std::mem::swap(&mut t.msg, msg);
-        std::mem::swap(&mut t.bufs, bufs);
+        std::mem::swap(&mut t.stack, run.stack);
+        std::mem::swap(&mut t.in_flight, run.in_flight);
+        std::mem::swap(&mut t.msg, run.msg);
+        std::mem::swap(&mut t.bufs, run.bufs);
         self.current = next;
         (t.pc, t.fp, t.seg_end)
+    }
+
+    /// The next task that's ready, if there is one.
+    pub fn pop_ready(&mut self) -> Option<usize> {
+        self.ready.pop_front()
+    }
+
+    /// How many tasks are ready.
+    pub fn ready_len(&self) -> usize {
+        self.ready.len()
     }
 
     /// What the task that just got the processor has to do before it goes
@@ -345,15 +354,20 @@ impl Sched {
         if let Some(next) = self.ready.pop_front() {
             return next;
         }
-        // Nothing can run: every task waits for another. The program's own
-        // task is told, where it waits.
+        self.declare_deadlock();
+        self.ready.pop_front().unwrap_or(0)
+    }
+
+    /// Nothing can run: every task waits for another. The program's own
+    /// task is told, where it waits, and made ready.
+    pub fn declare_deadlock(&mut self) {
         let main = &mut self.tasks[0];
         main.waiting = false;
         if let Some(on) = main.waiting_on.take() {
             self.leave_list(on, 0);
         }
         self.pending = Some(Trap::Unravel("deadlock: every thread is waiting".into()));
-        0
+        self.ready.push_front(0);
     }
 
     // ------------------------------------------------------------ waiting

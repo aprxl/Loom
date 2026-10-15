@@ -672,6 +672,7 @@ fn main() {
     for (backend, level) in [("lua", "-O2"), ("vm", "-O2"), ("vm", "-O0")] {
         let out = Command::new(env!("CARGO_BIN_EXE_loom"))
             .args(["--color", "never", level, "run", "--backend", backend, file])
+            .env("LOOM_THREADS", "1")
             .output()
             .expect("the loom binary runs");
         assert_eq!(out.status.code(), Some(3), "{backend} {level}: {}", text(&out.stderr));
@@ -684,6 +685,22 @@ main's defer
             "{backend} {level}"
         );
         assert_eq!(text(&out.stderr), "", "{backend} {level}");
+    }
+    // With several workers the cleanups come in any order (and the parked
+    // thread may have finished before it was cancelled), but the exit code
+    // is the same, and the ones that must run do.
+    for workers in ["2", "4"] {
+        let out = Command::new(env!("CARGO_BIN_EXE_loom"))
+            .args(["--color", "never", "run", "--backend", "vm", file])
+            .env("LOOM_THREADS", workers)
+            .output()
+            .expect("the loom binary runs");
+        assert_eq!(out.status.code(), Some(3), "{workers} workers: {}", text(&out.stderr));
+        let stdout = text(&out.stdout);
+        let lines: Vec<&str> = stdout.lines().collect();
+        assert!(lines.contains(&"quitter cleanup"), "{workers} workers: {lines:?}");
+        assert!(lines.contains(&"main's defer"), "{workers} workers: {lines:?}");
+        assert!(!lines.contains(&"not reached"), "{workers} workers: {lines:?}");
     }
 }
 
@@ -722,6 +739,7 @@ fn main() {
         let out = Command::new(env!("CARGO_BIN_EXE_loom"))
             .args(["--color", "never", level, "run", "--backend", backend, file])
             .env("LOOM_INTERRUPT_AFTER_MS", "200")
+            .env("LOOM_THREADS", "1")
             .output()
             .expect("the loom binary runs");
         assert_eq!(out.status.code(), Some(130), "{backend} {level}: {}", text(&out.stderr));
@@ -735,5 +753,22 @@ main's defer
             "{backend} {level}"
         );
         assert_eq!(text(&out.stderr), "interrupted (Ctrl-C)\n", "{backend} {level}");
+    }
+    // Several workers: the spinning thread runs beside the others, and the
+    // interrupt unwinds every task all the same.
+    for workers in ["2", "4"] {
+        let out = Command::new(env!("CARGO_BIN_EXE_loom"))
+            .args(["--color", "never", "run", "--backend", "vm", file])
+            .env("LOOM_INTERRUPT_AFTER_MS", "200")
+            .env("LOOM_THREADS", workers)
+            .output()
+            .expect("the loom binary runs");
+        assert_eq!(out.status.code(), Some(130), "{workers} workers: {}", text(&out.stderr));
+        let stdout = text(&out.stdout);
+        let lines: Vec<&str> = stdout.lines().collect();
+        for must in ["spinning", "spin cleanup", "parked cleanup", "main's defer"] {
+            assert!(lines.contains(&must), "{workers} workers: {lines:?}");
+        }
+        assert_eq!(text(&out.stderr), "interrupted (Ctrl-C)\n", "{workers} workers");
     }
 }

@@ -26,6 +26,9 @@ pub(crate) struct Ctx<'i> {
     sink: Output,
     /// Flush at each newline: the output is a terminal.
     line_buffered: bool,
+    /// A worker of a pool is running a native, so `out` is its partial line
+    /// (see [`Local`]) and flushing is for it to do on the way out.
+    split: bool,
     /// The message of an unravel being built (`msg.*`, sink 1).
     msg: Vec<u8>,
     /// Sinks 2 and up: text being built (`sink.push`).
@@ -60,7 +63,6 @@ pub(crate) struct Ctx<'i> {
     /// With `checked`: the stacks of the threads that aren't running, which
     /// the running one may touch (its parent's frames, through what it
     /// captured).
-    pub task_ranges: Vec<(u64, u64)>,
     /// With `checked`: where the program's data is, which a native may read.
     pub data_range: (u64, u64),
     /// How many instructions have been dispatched (with `stats`).
@@ -106,6 +108,7 @@ impl<'i> Ctx<'i> {
             line_buffered,
             msg: Vec::new(),
             bufs: Vec::new(),
+            split: false,
             spare: Vec::new(),
             heap: Heap::default(),
             sandbox: host.sandbox,
@@ -118,7 +121,6 @@ impl<'i> Ctx<'i> {
             meter: None,
             refuse_host: false,
             stack: std::ptr::null(),
-            task_ranges: Vec::new(),
             data_range: (0, 0),
             dispatched: 0,
             op_counts: if cfg!(feature = "stats") { vec![0; Op::ALL.len()] } else { Vec::new() },
@@ -225,6 +227,36 @@ impl<'i> Ctx<'i> {
         (r.start as u64, r.end as u64)
     }
 
+    /// A worker of a pool is about to run a native: what it builds is its
+    /// own, and its output goes to its line, so lines of different
+    /// workers stay whole.
+    pub(crate) fn enter(&mut self, l: &mut Local) {
+        std::mem::swap(&mut self.msg, &mut l.msg);
+        std::mem::swap(&mut self.bufs, &mut l.bufs);
+        std::mem::swap(&mut self.out, &mut l.out);
+        self.split = true;
+    }
+
+    /// The native ran: what is whole lines of the worker's output goes on
+    /// the shared output.
+    pub(crate) fn exit(&mut self, l: &mut Local) {
+        std::mem::swap(&mut self.msg, &mut l.msg);
+        std::mem::swap(&mut self.bufs, &mut l.bufs);
+        std::mem::swap(&mut self.out, &mut l.out);
+        self.split = false;
+        if let Some(i) = l.out.iter().rposition(|&b| b == b'\n') {
+            self.out.extend(l.out.drain(..=i));
+            if self.line_buffered || self.out.len() >= OUT_BUFFER {
+                self.flush();
+            }
+        }
+    }
+
+    /// Puts `bytes` (a worker's last, unfinished line) on the output.
+    pub(crate) fn append_out(&mut self, bytes: &mut Vec<u8>) {
+        self.out.append(bytes);
+    }
+
     /// What the running task's natives are building (its unravel message,
     /// and the templates it has under way), which a task switch swaps.
     pub(crate) fn task_state(&mut self) -> (&mut Vec<u8>, &mut Vec<Vec<u8>>) {
@@ -248,10 +280,7 @@ impl<'i> Ctx<'i> {
         // (in the checked build, the only one that calls this).
         self.heap.holds(addr, len)
             || (!self.stack.is_null() && unsafe { (*self.stack).holds(addr, len) })
-            || self
-                .task_ranges
-                .iter()
-                .any(|&(start, end)| addr >= start && addr.checked_add(len).is_some_and(|stop| stop <= end))
+            || crate::stack::in_some_stack(addr, len)
     }
 
     /// With `checked`: whether `len` bytes at `addr` can be read: what
@@ -298,7 +327,7 @@ impl<'i> Ctx<'i> {
 
     /// Hands buffered output to the host.
     pub fn flush(&mut self) {
-        if self.out.is_empty() {
+        if self.split || self.out.is_empty() {
             return;
         }
         match &self.sink {
@@ -419,6 +448,16 @@ impl<'i> Ctx<'i> {
     }
 }
 
+/// What a worker of a pool has of its own, which a native it runs works on
+/// in the context's place: the message and sinks of the task it runs, and
+/// its output line (not yet whole).
+#[derive(Debug, Default)]
+pub(crate) struct Local {
+    pub msg: Vec<u8>,
+    pub bufs: Vec<Vec<u8>>,
+    pub out: Vec<u8>,
+}
+
 /// A native: its context, its argument registers, and its immediate.
 pub(crate) type NativeFn = fn(&mut Ctx, &mut [u64], u16) -> Result<(), Trap>;
 
@@ -445,6 +484,17 @@ pub(crate) fn copy_bytes(ctx: &Ctx, dst: u64, src: u64, n: u64) -> Result<(), Tr
 /// The word at `addr` (a mutex's lock word), checked in the checked build.
 pub(crate) fn read_word(ctx: &Ctx, addr: u64) -> Result<u64, Trap> {
     atomic_read(ctx, addr, loom_isa::IntSpec { bits: 64, signed: false, size: false })
+}
+
+/// The word at `addr`, which is in the program's data (a constant's flag).
+pub(crate) fn data_word(ctx: &Ctx, addr: u64) -> Result<u64, Trap> {
+    let (lo, hi) = ctx.data_range;
+    if addr < lo || addr.checked_add(8).is_none_or(|end| end > hi) || !addr.is_multiple_of(8) {
+        return Err(Trap::Crash(format!("loom internal: {addr:#x} isn't a word of the program's data")));
+    }
+    // SAFETY: inside the data, aligned (checked above); the data lives as
+    // long as the run, and what it holds is changed only with the lock.
+    Ok(unsafe { *(addr as *const u64) })
 }
 
 /// Sets the word at `addr`.
@@ -593,6 +643,7 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
         "pipe.leftover" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::PipeLeftover)),
         "pipe.free" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::PipeFree)),
         "mutex.lock" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::MutexLock)),
+        "const.begin" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::ConstBegin)),
         "mutex.unlock" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::MutexUnlock)),
         "atomic.load" => atomic_load,
         "atomic.store" => atomic_store,

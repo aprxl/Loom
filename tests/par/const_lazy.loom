@@ -1,0 +1,19 @@
+// A constant that isn't computed until it's read, read by many threads at
+// once: it's computed once, and every thread sees all of it.
+
+use std.io.print
+use std.sync.Atomic
+
+const TABLE: Map[i64, i64] = [1: 10, 2: 20, 3: 30, 4: 40]
+
+fn main() {
+    let total = Atomic[i64](0)
+    loom for i in 0..64 {
+        let mut s = 0i64
+        for k in 1..=4 {
+            s += TABLE[k]
+        }
+        total.add(s + i)
+    }
+    print("total {total.load()}")
+}

@@ -177,6 +177,10 @@ pub const NATIVES: &[NativeSig] = &[
     // is a `u8`. `atomic.cas(addr, expected, desired, spec) -> (swapped,
     // found)`. `atomic.add` and `atomic.sub` give the value before, and
     // unravel on overflow, changing nothing.
+    // `const.begin(flag address) -> 1 | 0 | 2`: a constant that isn't
+    // computed yet is claimed by the first to ask (1, which then computes
+    // it); 0 if it's done, 2 if another is computing it.
+    sig("const.begin", 1, 1, NativeImm::None),
     sig("atomic.load", 2, 1, NativeImm::None),
     sig("atomic.store", 3, 0, NativeImm::None),
     sig("atomic.swap", 3, 1, NativeImm::None),

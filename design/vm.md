@@ -1295,6 +1295,19 @@ for V6.
   the same as the Lua backend's. The fixture harness uses one worker for any
   fixture that prints from threads. Dedicated tests run with many workers and
   check only what's deterministic.
+- **As built** (the first several-worker version): `loom_vm::pool`. The
+  workers are OS threads (the host's is worker 0) around one lock that
+  guards the scheduler and the context: task operations and natives run
+  with it held (so allocation, `Atomic`, `Mutex` and `Pipe` state need
+  nothing finer), the dispatch loops run without it. A worker with no task
+  waits on a condition; the last to go idle with the program's own task
+  waiting declares the deadlock; the first fault, or the program's task
+  ending, stops them all. A native works on the worker's own message,
+  sinks and output line (`natives::Local`), so templates and `print` lines
+  stay whole. A constant that isn't baked is claimed by the first task to
+  read it (`const.begin`), and the others wait. `LOOM_THREADS` sets the
+  count (default: one per core). Not yet: per-worker heaps and deques, which
+  the scaling gates in §17 decide.
 
 ---
 

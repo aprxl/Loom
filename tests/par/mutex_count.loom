@@ -1,0 +1,14 @@
+// Threads change one value under its lock: no update is lost.
+
+use std.io.print
+use std.sync.Mutex
+
+fn main() {
+    let m = Mutex[i64](0)
+    loom for i in 1..=50 {
+        for k in 0..20 {
+            m.lock() += i * k
+        }
+    }
+    print("m {m.lock()}")
+}

@@ -21,6 +21,7 @@ mod host;
 mod ints;
 mod methods;
 mod natives;
+mod pool;
 mod sched;
 mod stack;
 
@@ -46,11 +47,15 @@ pub struct Config {
     /// [`Outcome::Refused`] instead of working (or being faked, as in a
     /// sandboxed run).
     pub refuse_host: bool,
+    /// How many workers run the program's threads (design/vm.md §11): 1
+    /// runs them one at a time, in the order of the reference schedule.
+    /// Several are started only for a program that has threads.
+    pub workers: usize,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Config { stack_limit: 256 << 20, interrupt: None, limits: Limits::default(), refuse_host: false }
+        Config { stack_limit: 256 << 20, interrupt: None, limits: Limits::default(), refuse_host: false, workers: 1 }
     }
 }
 
@@ -101,6 +106,8 @@ pub(crate) enum Trap {
     /// can't do (it switches tasks). The dispatch loop's trap path runs it,
     /// out of the way of the calls that don't need it.
     Task(crate::sched::TaskOp),
+    /// Another worker ended the program: this one stops (never reported).
+    Halt,
     /// A thread is being cancelled: its loom is leaving early. It unwinds
     /// like an unravel, runs `defer`s and drops, and is seen by nobody.
     Cancel,
@@ -138,6 +145,7 @@ impl Trap {
             Trap::StackOverflow => "stack overflow: too many calls inside each other".into(),
             Trap::Interrupt => "interrupted (Ctrl-C)".into(),
             Trap::Cancel => "loom internal: a cancelled thread's unwind reached the host".into(),
+            Trap::Halt => "loom internal: a worker stopped, and its stop was reported".into(),
             Trap::Task(_) => "loom internal: a task operation reached the host".into(),
             Trap::Budget { .. } => "compile-time code used more than its budget".into(),
             Trap::Refused(native) => format!("`{native}` can't run at compile time"),

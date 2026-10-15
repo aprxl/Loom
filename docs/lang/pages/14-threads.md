@@ -7,7 +7,7 @@ A **loom block** is a scope where threads run, and every one of them is done bef
 
 ## What a thread runs
 
-A thread runs as soon as it's started, until it finishes or **parks**: waits in a `join`, or calls `sched_yield()`, which sends it to the back of the queue. Then another one runs, and the one that started it goes on. Nothing is preempted, so a program's output is the same on every run, and on both backends. (This is the schedule with one worker. Several workers at once come later.)
+A thread runs as soon as it's started, until it finishes or **parks**: waits in a `join`, or calls `sched_yield()`, which sends it to the back of the queue. Then another one runs, and the one that started it goes on. Nothing is preempted, so a program's output is the same on every run, and on both backends. (This is the schedule with one worker, which `LOOM_THREADS=1` asks Treadle for and the Lua backend always runs. With several workers, Treadle's default, threads run side by side: what a program prints from inside threads can come in any order, and the rules below are what make its results the same.)
 
 A thread nobody joined is joined where the block ends. The block's value is its last expression's: a `thread` there would be a handle, which can't leave the block ([C0404](diag:C0404)), so end the block with `()`, or join it.
 

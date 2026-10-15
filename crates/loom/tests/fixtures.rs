@@ -133,13 +133,22 @@ fn run_on_vm(path: &Path, level: Level) -> Result<Option<String>, String> {
         return if not_yet { Err(text) } else { Ok(Some(format!("didn't compile for Treadle:\n{text}"))) };
     };
     let buffer = Rc::new(RefCell::new(Vec::new()));
-    let config = loom_vm::Config { stack_limit: 64 << 20, ..loom_vm::Config::default() };
+    let workers = std::env::var("LOOM_TEST_WORKERS").ok().and_then(|w| w.parse().ok()).unwrap_or(1);
+    let config = loom_vm::Config { stack_limit: 64 << 20, workers, ..loom_vm::Config::default() };
     let outcome = loom_vm::run(&image, Host::captured(buffer.clone()), &config);
     let out = String::from_utf8_lossy(&buffer.borrow()).into_owned();
     let vm_out = path.with_extension("vm.out");
     let expected =
         std::fs::read_to_string(if vm_out.exists() { vm_out } else { path.with_extension("out") }).unwrap_or_default();
-    if out != expected {
+    // With several workers the threads' lines come in any order: the same
+    // lines, then.
+    let sorted = |text: &str| {
+        let mut lines: Vec<String> = text.lines().map(str::to_owned).collect();
+        lines.sort();
+        lines
+    };
+    let same = if workers > 1 { sorted(&out) == sorted(&expected) } else { out == expected };
+    if !same {
         return Ok(Some(format!(
             "output differs on Treadle at {level:?} (it ended with {outcome:?})\n--- expected\n{expected}--- got\n{out}"
         )));
@@ -342,4 +351,64 @@ fn fail_corpus() {
         paths.len(),
         failures.join("\n\n")
     );
+}
+
+/// `tests/par`: programs whose output doesn't depend on the order the
+/// threads run in, on Treadle with several workers (design/vm.md §11.4).
+/// Each runs a few times at each count: a lost update, a torn message or a
+/// wake that never comes shows up as a wrong total or a hang.
+#[test]
+fn par_corpus() {
+    let mut failures = Vec::new();
+    for path in corpus("par") {
+        let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("?").to_string();
+        let expected = std::fs::read_to_string(path.with_extension("out")).unwrap_or_default();
+        for level in [Level::O2, Level::O0] {
+            let (db, diags, image) = compile_vm(&path, level);
+            let Some(image) = image else {
+                failures.push(format!("{name}: didn't compile:\n{}", rendered(&db, &diags)));
+                continue;
+            };
+            for workers in [2, 4, 8] {
+                for _ in 0..5 {
+                    let buffer = Rc::new(RefCell::new(Vec::new()));
+                    let config = loom_vm::Config { stack_limit: 64 << 20, workers, ..loom_vm::Config::default() };
+                    let outcome = loom_vm::run(&image, Host::captured(buffer.clone()), &config);
+                    let out = String::from_utf8_lossy(&buffer.borrow()).into_owned();
+                    if out != expected || !matches!(outcome, Outcome::Finished) {
+                        failures.push(format!(
+                            "{name} at {level:?}, {workers} workers: ended with {outcome:?}\n--- expected\n{expected}--- got\n{out}"
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{} par runs failed:\n{}", failures.len(), failures.join("\n"));
+}
+
+/// The `tests/par` programs again and again, on many workers: a race that
+/// shows once in a thousand runs. `cargo test -- --ignored par_stress`.
+#[test]
+#[ignore = "slow: run with --ignored"]
+fn par_stress() {
+    let mut failures = Vec::new();
+    for path in corpus("par") {
+        let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("?").to_string();
+        let expected = std::fs::read_to_string(path.with_extension("out")).unwrap_or_default();
+        let (_, _, image) = compile_vm(&path, Level::O2);
+        let image = image.expect("compiles");
+        for run in 0..1000 {
+            let workers = [2, 4, 8, 16][run % 4];
+            let buffer = Rc::new(RefCell::new(Vec::new()));
+            let config = loom_vm::Config { stack_limit: 64 << 20, workers, ..loom_vm::Config::default() };
+            let outcome = loom_vm::run(&image, Host::captured(buffer.clone()), &config);
+            let out = String::from_utf8_lossy(&buffer.borrow()).into_owned();
+            if out != expected || !matches!(outcome, Outcome::Finished) {
+                failures.push(format!("{name} run {run} on {workers} workers: {outcome:?}\n{out}"));
+                break;
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

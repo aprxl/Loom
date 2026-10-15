@@ -213,11 +213,17 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
     `thread`, `Spun[T]`, `join`, `sched_yield` and the capture rules
     (C0401–C0405) on both backends; the reference schedule (a thread runs
     at once, until it parks; the spawner waits at the front, woken tasks
-    go to the back), cancel, failure and exit/Ctrl-C through a loom; one
-    worker only. The Lua backend runs threads as coroutines (`rt.spawn`),
-    Treadle switches tasks inside the dispatch loop (`loom_vm::sched`).
-    Left: `Atomic`, `Mutex`, `Pipe`, `loom for` with `#disjoint`/`chunks_mut`,
-    several workers, and `examples/parallel.loom`.
+    go to the back), cancel, failure and exit/Ctrl-C through a loom;
+    `Atomic`, `Mutex`, `Pipe`, `loom for` with `#disjoint`/`chunks_mut`.
+    The Lua backend runs threads as coroutines (`rt.spawn`), Treadle
+    switches tasks inside the dispatch loop (`loom_vm::sched`) and runs
+    them on several workers (`loom_vm::pool`: one lock for the scheduler
+    and the natives, the dispatch loops run without it; `LOOM_THREADS`,
+    one worker per core by default, `LOOM_THREADS=1` is the reference
+    schedule; `tests/par` checks what's deterministic at 2/4/8 workers,
+    `par_stress` is the `--ignored` 1000-run version). Left: scaling
+    numbers (per-worker heaps and deques if the gates miss), and the
+    rest of `examples/parallel.loom`.
 
 Next: V5's rest, V6 spools, V7 Lua interop, V8 speed, V9 Treadle by
 default.

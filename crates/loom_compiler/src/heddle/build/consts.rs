@@ -102,12 +102,22 @@ impl<'a> Builder<'a> {
             return self.read_baked(key, off, ty, span);
         }
         let at = self.emit1(InstKind::Global(off), VTy::Ptr);
+        // With several workers, one computes it and the others wait for it
+        // (`const.begin` says which this is: 1 computes, 0 it's done, 2
+        // another is computing it, so look again).
+        let (head, init, run, ready) = (self.new_block(), self.new_block(), self.new_block(), self.new_block());
+        self.jump(head);
+        self.enter(head);
         let flag = self.load(Mem::W64, at, 0, VTy::Int);
         let done = self.iconst(DONE);
         let ready_now = self.ucmp(Cmp::Eq, flag, done);
-        let (init, ready) = (self.new_block(), self.new_block());
         self.br(ready_now, ready, init);
         self.enter(init);
+        let claim = self.emit1(InstKind::Native { name: "const.begin", imm: 0, args: vec![at] }, VTy::Int);
+        let one = self.iconst(1);
+        let mine = self.ucmp(Cmp::Eq, claim, one);
+        self.br(mine, run, head);
+        self.enter(run);
         let func = self.func_id(FnKey::ConstInit(key));
         let value = self.offset(at, 8);
         self.emit(InstKind::Call { func, args: vec![value] }, &[]);

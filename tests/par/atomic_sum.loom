@@ -1,0 +1,24 @@
+// Many threads add to one atomic, and spin on their own work between adds:
+// the total is the same on any number of workers.
+
+use std.io.print
+use std.sync.Atomic
+
+fn work(n: u64) -> u64 {
+    var acc: u64 = 0
+    for k in 0..n {
+        acc = acc + k % 7
+    }
+    acc
+}
+
+fn main() {
+    let total = Atomic[u64](0)
+    let hits = Atomic[u64](0)
+    loom for i in 0..64 {
+        let w = work(2000 + i as u64)
+        total.add(w)
+        hits.add(1)
+    }
+    print("hits {hits.load()} total {total.load()}")
+}

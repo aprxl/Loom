@@ -1,0 +1,27 @@
+// Producers and a consumer linked by a pipe: every value arrives once.
+
+use std.io.print
+use std.sync.Pipe
+use std.sync.Atomic
+
+fn main() {
+    let p = Pipe[i64](3)
+    let done = Atomic[u64](0)
+    var sum: i64 = 0
+    loom {
+        for who in 0..4 {
+            thread {
+                for k in 0..100 {
+                    p.send(who * 1000 + k)
+                }
+                if done.add(1) == 3 {
+                    p.close()
+                }
+            }
+        }
+        while p.recv() is some(v) {
+            sum += v
+        }
+    }
+    print("sum {sum}")
+}
