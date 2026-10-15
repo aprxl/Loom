@@ -1,0 +1,12 @@
+// Starting and joining threads: what `loom for` over many tiny items costs.
+
+use std.io.print
+use std.sync.Atomic
+
+fn main() {
+    let total = Atomic[u64](0)
+    loom for i in 0..200000 {
+        total.add(i as u64)
+    }
+    print("total {total.load()}")
+}

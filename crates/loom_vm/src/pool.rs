@@ -21,8 +21,10 @@ use crate::Fault;
 /// What the lock guards, besides the scheduler and the context.
 #[derive(Debug, Default)]
 pub(crate) struct PoolState {
-    /// Workers waiting for a task to be ready.
+    /// Workers with no task: the spinning and the sleeping.
     pub idle: usize,
+    /// Those of them that wait on the condition.
+    pub sleepers: usize,
     /// How the program ended: the first to say wins.
     pub outcome: Option<Result<Vec<u64>, Fault>>,
 }
@@ -35,11 +37,19 @@ pub(crate) struct Pool {
     /// The program is over (it ended, or something failed): every worker
     /// stops at its next check, which is at the next tick or wait.
     over: AtomicBool,
+    /// A task became ready since a spinning worker last looked.
+    hint: AtomicBool,
 }
 
 impl Pool {
     pub fn new(workers: usize) -> Pool {
-        Pool { state: Mutex::new(PoolState::default()), cv: Condvar::new(), workers, over: AtomicBool::new(false) }
+        Pool {
+            state: Mutex::new(PoolState::default()),
+            cv: Condvar::new(),
+            workers,
+            over: AtomicBool::new(false),
+            hint: AtomicBool::new(false),
+        }
     }
 
     /// Takes the lock, and with it the scheduler and the context.
@@ -52,8 +62,24 @@ impl Pool {
         self.cv.wait(guard).unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    pub fn wake_one(&self) {
-        self.cv.notify_one();
+    /// A task is ready: the workers that spin see it, and a sleeper is woken
+    /// if there is one (a notify with nobody asleep still costs a system
+    /// call).
+    pub fn wake_one(&self, state: &PoolState) {
+        self.hint.store(true, Ordering::Release);
+        if state.sleepers > 0 {
+            self.cv.notify_one();
+        }
+    }
+
+    /// Whether a task was made ready since `clear_hint`.
+    pub fn hinted(&self) -> bool {
+        self.hint.load(Ordering::Acquire)
+    }
+
+    /// Called with the lock held, before a worker starts to spin.
+    pub fn clear_hint(&self) {
+        self.hint.store(false, Ordering::Relaxed);
     }
 
     pub fn is_over(&self) -> bool {

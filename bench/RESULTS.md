@@ -334,3 +334,22 @@ remove (§3 of the review).
 Treadle against the build before the review's natives: a text-heavy
 program (split, replace, upper-casing, lines and chars over 4 MB) 0.452 s
 to 0.286 s; the benchmark suite within noise.
+
+## V5: several workers
+
+`bench/par_mandelbrot.loom` (800 rows, one `loom for` iteration each), best of
+3, release build, 16 logical cores (8 physical), `LOOM_THREADS=n`:
+
+| workers | seconds | speedup |
+|--------:|--------:|--------:|
+| 1 | 0.444 | 1.0× |
+| 2 | 0.236 | 1.9× |
+| 4 | 0.124 | 3.6× |
+| 8 | 0.070 | 6.3× (0.79 per worker) |
+| 16 | 0.052 | 8.5× |
+
+`bench/par_spawn.loom` (200 000 empty iterations: a spawn and a join each):
+0.35 µs each on one worker, 0.8 µs on 2, 1.2 µs on 4, 2.7 µs on 8 (every
+spawn and every wake goes through the pool's one lock; per-worker deques are
+the next step if that matters). The single-thread benchmarks are unchanged
+by the pool (A/B against the commit before it, within 2%).

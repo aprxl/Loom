@@ -1,0 +1,35 @@
+// Mandelbrot rows computed by `loom for`: the scaling benchmark of
+// design/vm.md §11 (LOOM_THREADS=n picks the workers).
+
+use std.io.print
+use std.sync.Atomic
+
+fn row(y: i32, n: i32) -> u64 {
+    var inside: u64 = 0
+    for x in 0..n {
+        let cr = 2.0 * (x as f64) / (n as f64) - 1.5
+        let ci = 2.0 * (y as f64) / (n as f64) - 1.0
+        var zr = 0.0
+        var zi = 0.0
+        var k = 0
+        while zr * zr + zi * zi <= 4.0 and k < 200 {
+            let t = zr * zr - zi * zi + cr
+            zi = 2.0 * zr * zi + ci
+            zr = t
+            k += 1
+        }
+        if k == 200 {
+            inside += 1
+        }
+    }
+    inside
+}
+
+fn main() {
+    let n = 800
+    let total = Atomic[u64](0)
+    loom for y in 0..n {
+        total.add(row(y, n))
+    }
+    print("inside {total.load()}")
+}

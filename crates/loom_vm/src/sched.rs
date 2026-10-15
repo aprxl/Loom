@@ -238,6 +238,9 @@ pub(crate) struct Sched {
     /// Which task computes each constant (by its flag's address), with
     /// several workers.
     pub consts: std::collections::BTreeMap<u64, usize>,
+    /// A new thread runs at once (the reference schedule, one worker), and
+    /// not when a worker is free.
+    pub eager: bool,
     pipes: Vec<Pipe>,
     free_pipes: Vec<usize>,
     /// Raised in the main task when it next runs (a deadlock).
@@ -269,6 +272,7 @@ impl Sched {
             ready: VecDeque::new(),
             lockers: std::collections::BTreeMap::new(),
             consts: std::collections::BTreeMap::new(),
+            eager: true,
             pipes: Vec::new(),
             free_pipes: Vec::new(),
             pending: None,
@@ -824,6 +828,12 @@ impl Sched {
         self.groups[g].tasks.push(index);
         let h = handle(index, self.tasks[index].epoch);
         if failed {
+            return Ok((h, Step::Next));
+        }
+        if !self.eager {
+            // With several workers the spawner carries on, and a worker with
+            // nothing to do takes the new task.
+            self.ready.push_back(index);
             return Ok((h, Step::Next));
         }
         // The spawner waits at the front, and carries on when the new task
