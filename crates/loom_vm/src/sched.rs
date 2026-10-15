@@ -127,6 +127,12 @@ pub(crate) struct Task {
     pub fp: *mut u64,
     pub seg_end: *mut u64,
     pub in_flight: Option<crate::Fault>,
+    /// What a native was building when the task stopped: an unravel's
+    /// message, and the text of the templates being made (`sink.*`). Each
+    /// task's own, or a template that waits in the middle of being built
+    /// would hand its buffer to whatever runs.
+    pub msg: Vec<u8>,
+    pub bufs: Vec<Vec<u8>>,
     pub done: bool,
     /// Its result was taken by `join` or by the loom's leftover loop.
     pub taken: bool,
@@ -169,6 +175,8 @@ impl Task {
             fp: std::ptr::null_mut(),
             seg_end: std::ptr::null_mut(),
             in_flight: None,
+            msg: Vec::new(),
+            bufs: Vec::new(),
             done: false,
             taken: false,
             cancelled: false,
@@ -281,6 +289,7 @@ impl Sched {
         seg_end: *mut u64,
         in_flight: &mut Option<crate::Fault>,
         stack: &mut Stack,
+        native: (&mut Vec<u8>, &mut Vec<Vec<u8>>),
     ) -> (*const u64, *mut u64, *mut u64) {
         let cur = self.current;
         if next == cur {
@@ -293,10 +302,14 @@ impl Sched {
             t.seg_end = seg_end;
             std::mem::swap(&mut t.in_flight, in_flight);
             std::mem::swap(&mut t.stack, stack);
+            std::mem::swap(&mut t.msg, native.0);
+            std::mem::swap(&mut t.bufs, native.1);
         }
         let t = &mut self.tasks[next];
         std::mem::swap(&mut t.stack, stack);
         std::mem::swap(&mut t.in_flight, in_flight);
+        std::mem::swap(&mut t.msg, native.0);
+        std::mem::swap(&mut t.bufs, native.1);
         self.current = next;
         (t.pc, t.fp, t.seg_end)
     }

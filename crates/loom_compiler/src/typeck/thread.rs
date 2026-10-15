@@ -120,6 +120,8 @@ impl Checker<'_> {
         // What the body evaluates to, and what its `return`s give, are the
         // thread's result.
         let ty = self.check_expr(body, None);
+        // A body that never ends (it unravels) has no value to give: `()`.
+        let ty = if matches!(self.tcx.kind(self.resolve(ty)), TyKind::Never) { self.tcx.unit } else { ty };
         if !self.unify(ret, ty) {
             self.mismatch(body.span, ret, ty);
         }

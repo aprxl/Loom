@@ -225,6 +225,12 @@ impl<'i> Ctx<'i> {
         (r.start as u64, r.end as u64)
     }
 
+    /// What the running task's natives are building (its unravel message,
+    /// and the templates it has under way), which a task switch swaps.
+    pub(crate) fn task_state(&mut self) -> (&mut Vec<u8>, &mut Vec<Vec<u8>>) {
+        (&mut self.msg, &mut self.bufs)
+    }
+
     /// The address of text literal `index`, which the verifier has checked.
     pub fn string_ptr(&self, index: usize) -> u64 {
         let (start, _) = self.strings[index];

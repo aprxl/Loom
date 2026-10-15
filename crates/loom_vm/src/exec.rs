@@ -1570,7 +1570,8 @@ fn run_task_op(env: &mut Env, op: TaskOp, args: &mut [u64], pc: *const u64, fp: 
         Step::Park { again } => (if again { at } else { pc }, env.sched.next_ready()),
         Step::Start(new) => (pc, new),
     };
-    let (npc, nfp, nend) = env.sched.switch(next, resume, fp, env.seg_end, &mut env.in_flight, env.stack);
+    let native = env.ctx.task_state();
+    let (npc, nfp, nend) = env.sched.switch(next, resume, fp, env.seg_end, &mut env.in_flight, env.stack, native);
     if cfg!(feature = "checked") {
         env.ctx.task_ranges = env.sched.ranges();
     }
@@ -1604,6 +1605,7 @@ fn end_task(env: &mut Env, trap: Option<Trap>) -> ((*const u64, *mut u64, *mut u
     let cur = env.sched.current;
     let freed = env.sched.finish(&mut env.ctx.heap, trap);
     let next = env.sched.next_ready();
+    let native = env.ctx.task_state();
     let (pc, fp, end) = env.sched.switch(
         next,
         std::ptr::null(),
@@ -1611,6 +1613,7 @@ fn end_task(env: &mut Env, trap: Option<Trap>) -> ((*const u64, *mut u64, *mut u
         std::ptr::null_mut(),
         &mut env.in_flight,
         env.stack,
+        native,
     );
     env.sched.drop_stack(cur);
     if cfg!(feature = "checked") {

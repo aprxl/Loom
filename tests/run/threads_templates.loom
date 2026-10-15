@@ -1,0 +1,58 @@
+// A template that waits in the middle of being built is the thread's own:
+// another thread's template doesn't take its text, or its unravel message.
+
+use std.io.print
+use std.sync.sched_yield
+
+fn slow(n: i32) -> i32 {
+    sched_yield()
+    n
+}
+
+fn build(tag: str, a: i32, b: i32) -> String {
+    "{tag}:a{slow(a)}b{slow(b)}c"
+}
+
+fn main() {
+    shows()
+    loom {
+        let x = thread build("x", 1, 2)
+        let y = thread build("y", 3, 4)
+        let s = x.join()
+        let t = y.join()
+        print("{s} {t}")
+    }
+    loom {
+        thread {
+            unravel("first {slow(1)} {slow(2)}")
+        }
+        thread {
+            let s = "second {slow(3)} {slow(4)}"
+            print(s)
+        }
+        ()
+    }
+}
+
+// A hand-written `show` that waits while its template is half built.
+warp Napper { n: i32 }
+
+weave Show into Napper {
+    fn show(self, mut f: Fmt) {
+        f.put("nap ")
+        sched_yield()
+        f.put(self.n)
+    }
+}
+
+fn shows() {
+    loom {
+        let a = thread "{Napper(1)}!".len()
+        let b = thread "[{Napper(22)}]".len()
+        thread {
+            let s = "{Napper(3)} and {Napper(4)}"
+            print(s)
+        }
+        print("{a.join()} {b.join()}")
+    }
+}
