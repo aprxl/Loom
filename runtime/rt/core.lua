@@ -2680,6 +2680,10 @@ ext["std.slice.Slice.chunks"] = function(_, s, size)
   end
 end
 
+-- The pieces are views of the list itself, which is what lets a thread
+-- change its own.
+ext["std.slice.Slice.chunks_mut"] = ext["std.slice.Slice.chunks"]
+
 ext["std.slice.Slice.windows"] = function(_, s, size)
   if size == 0 then error(MARK .. "windows of 0 elements", 2) end
   local t, o, n = parts(s)

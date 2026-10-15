@@ -1,0 +1,26 @@
+// `chunks_mut` gives pieces of a list that don't overlap: a `loom for`
+// over them changes the list from several threads at once, and the parent
+// has it back when the loop ends.
+
+use std.io.print
+use std.sync.sched_yield
+
+fn main() {
+    var grid = List.filled(0, 12)
+    let width = 4
+    loom for (row, mut line) in grid.chunks_mut(width).indexed() {
+        for col in 0..width {
+            line[col] = row * 10 + col
+            sched_yield()
+        }
+    }
+    print("{grid}")
+
+    // The last piece may be shorter, and a method that changes a piece
+    // works on it too.
+    var odd = List.filled(1, 7)
+    loom for (_, mut piece) in odd.chunks_mut(3).indexed() {
+        piece.fill(piece.len() as i32)
+    }
+    print("{odd}")
+}

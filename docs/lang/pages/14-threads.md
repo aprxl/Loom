@@ -16,7 +16,7 @@ A thread nobody joined is joined where the block ends. The block's value is its 
 Threads borrow local variables directly, with no copies and no `Arc`, because nothing outlives its loom. The checker keeps that safe:
 
 - What's declared **outside** the loom is shared. A thread may read it; if it changes it, no other thread may touch it, nor the parent, until it's joined ([C0401](diag:C0401), [C0402](diag:C0402)).
-- What's declared **inside** the loom block (a loop variable, a local of the block, the parameter of a lambda around the `thread`) is **copied** into the thread when it starts: it may be gone by the time the thread runs. A thread can't change its copy ([C0405](diag:C0405)), and a variable that isn't `Copy` can't be given to it that way.
+- What's declared **inside** the loom block (a loop variable, a local of the block, the parameter of a lambda around the `thread`) is **copied** into the thread when it starts: it may be gone by the time the thread runs. A thread can't change its copy ([C0405](diag:C0405)). A variable that owns what it holds (a `String`, a `List`) **moves** into the thread instead, and the parent can't use it after.
 - `thread` is only allowed inside a `loom` ([C0403](diag:C0403)), and the loom is the innermost one around it, also from inside a lambda or another thread.
 
 @sample threads_share
@@ -24,6 +24,20 @@ Threads borrow local variables directly, with no copies and no `Arc`, because no
 The race detector is the type checker:
 
 @sample threads_err
+
+## One thread for each item: `loom for`
+
+`loom for x in items { … }` is a loom that starts a thread for each item. The parent goes through `items` (so it's a list, a range, a stream), and each iteration runs as a thread of its own. An item that owns memory moves into its thread; one that's a view of what outlives the loop is copied.
+
+@sample threads_for
+
+Each iteration is a thread that ends with its body, so nothing in it can leave the loop or the function: `break`, `return`, a `continue` of an outer loop, and a `?` with no `mend` are [C0406](diag:C0406). `continue` ends the iteration. A variable the iterations change is [C0401](diag:C0401), as for any threads: use an `Atomic`, or a `Mutex`.
+
+## Changing pieces of a list: `chunks_mut`
+
+`xs.chunks_mut(n)` gives views of `n` elements at a time, which can be changed, and don't overlap. A `loom for` over them has each thread change its own piece, with no `Atomic` and no lock: the list is the parent's again when the loop ends. Pieces that might overlap (a view made another way) are [C0401](diag:C0401) when two threads change them.
+
+@sample threads_rows
 
 ## Sharing what changes: `Atomic`
 

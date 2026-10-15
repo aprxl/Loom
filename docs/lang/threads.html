@@ -85,7 +85,7 @@ b 1</code></pre></div>
 <p>A thread nobody joined is joined where the block ends. The block's value is its last expression's: a <code>thread</code> there would be a handle, which can't leave the block (<a href="diagnostics.html#C0404">C0404</a>), so end the block with <code>()</code>, or join it.</p>
 <h2 id="what-a-thread-may-share">What a thread may share</h2>
 <p>Threads borrow local variables directly, with no copies and no <code>Arc</code>, because nothing outlives its loom. The checker keeps that safe:</p>
-<ul><li>What's declared <strong>outside</strong> the loom is shared. A thread may read it; if it changes it, no other thread may touch it, nor the parent, until it's joined (<a href="diagnostics.html#C0401">C0401</a>, <a href="diagnostics.html#C0402">C0402</a>).</li><li>What's declared <strong>inside</strong> the loom block (a loop variable, a local of the block, the parameter of a lambda around the <code>thread</code>) is <strong>copied</strong> into the thread when it starts: it may be gone by the time the thread runs. A thread can't change its copy (<a href="diagnostics.html#C0405">C0405</a>), and a variable that isn't <code>Copy</code> can't be given to it that way.</li><li><code>thread</code> is only allowed inside a <code>loom</code> (<a href="diagnostics.html#C0403">C0403</a>), and the loom is the innermost one around it, also from inside a lambda or another thread.</li></ul>
+<ul><li>What's declared <strong>outside</strong> the loom is shared. A thread may read it; if it changes it, no other thread may touch it, nor the parent, until it's joined (<a href="diagnostics.html#C0401">C0401</a>, <a href="diagnostics.html#C0402">C0402</a>).</li><li>What's declared <strong>inside</strong> the loom block (a loop variable, a local of the block, the parameter of a lambda around the <code>thread</code>) is <strong>copied</strong> into the thread when it starts: it may be gone by the time the thread runs. A thread can't change its copy (<a href="diagnostics.html#C0405">C0405</a>). A variable that owns what it holds (a <code>String</code>, a <code>List</code>) <strong>moves</strong> into the thread instead, and the parent can't use it after.</li><li><code>thread</code> is only allowed inside a <code>loom</code> (<a href="diagnostics.html#C0403">C0403</a>), and the loom is the innermost one around it, also from inside a lambda or another thread.</li></ul>
 <div class="sample" id="sample-threads_share">
 <div class="sample-head"><span class="file">samples/threads_share.loom</span><span class="tag ok">runs</span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -140,6 +140,52 @@ b 1</code></pre></div>
   = help: use `Atomic`, or produce a value per thread and combine them
 
 <span class="err">error: threads_err.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<h2 id="one-thread-for-each-item-loom-for">One thread for each item: <code>loom for</code></h2>
+<p><code>loom for x in items { … }</code> is a loom that starts a thread for each item. The parent goes through <code>items</code> (so it's a list, a range, a stream), and each iteration runs as a thread of its own. An item that owns memory moves into its thread; one that's a view of what outlives the loop is copied.</p>
+<div class="sample" id="sample-threads_for">
+<div class="sample-head"><span class="file">samples/threads_for.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.sync.<span class="t">Atomic</span>
+
+<span class="k">fn</span> main() {
+    <span class="c">// One thread for each item; the loop ends when they're all done.</span>
+    <span class="k">let</span> squares = <span class="t">Atomic</span>[u64](<span class="n">0</span>)
+    <span class="k">loom</span> <span class="k">for</span> n <span class="k">in</span> <span class="n">1</span>..=<span class="n">5</span> {
+        squares.add(n * n)
+    }
+    print(<span class="s">"sum of squares {</span>squares.load()<span class="s">}"</span>)
+
+    <span class="c">// An item that owns what it holds moves into its thread.</span>
+    <span class="k">let</span> words = [<span class="s">"red"</span>, <span class="s">"green"</span>, <span class="s">"blue"</span>]
+    <span class="k">let</span> letters = <span class="t">Atomic</span>[usize](<span class="n">0</span>)
+    <span class="k">loom</span> <span class="k">for</span> shout <span class="k">in</span> words.map(w =&gt; w.to_upper()) {
+        letters.add(shout.len())
+    }
+    print(<span class="s">"letters {</span>letters.load()<span class="s">}"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>sum of squares 55
+letters 12</code></pre></div>
+</div>
+<p>Each iteration is a thread that ends with its body, so nothing in it can leave the loop or the function: <code>break</code>, <code>return</code>, a <code>continue</code> of an outer loop, and a <code>?</code> with no <code>mend</code> are <a href="diagnostics.html#C0406">C0406</a>. <code>continue</code> ends the iteration. A variable the iterations change is <a href="diagnostics.html#C0401">C0401</a>, as for any threads: use an <code>Atomic</code>, or a <code>Mutex</code>.</p>
+<h2 id="changing-pieces-of-a-list-chunks-mut">Changing pieces of a list: <code>chunks_mut</code></h2>
+<p><code>xs.chunks_mut(n)</code> gives views of <code>n</code> elements at a time, which can be changed, and don't overlap. A <code>loom for</code> over them has each thread change its own piece, with no <code>Atomic</code> and no lock: the list is the parent's again when the loop ends. Pieces that might overlap (a view made another way) are <a href="diagnostics.html#C0401">C0401</a> when two threads change them.</p>
+<div class="sample" id="sample-threads_rows">
+<div class="sample-head"><span class="file">samples/threads_rows.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fn</span> main() {
+    <span class="k">var</span> grid = <span class="t">List</span>.filled(<span class="n">0</span>, <span class="n">12</span>)
+    <span class="k">let</span> width = <span class="n">4</span>
+    <span class="c">// One thread for each row: each changes only its own piece.</span>
+    <span class="k">loom</span> <span class="k">for</span> (row, <span class="k">mut</span> line) <span class="k">in</span> grid.chunks_mut(width).indexed() {
+        <span class="k">for</span> col <span class="k">in</span> <span class="n">0</span>..width {
+            line[col] = row * <span class="n">10</span> + col
+        }
+    }
+    print(<span class="s">"{</span>grid<span class="s">}"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>[0, 1, 2, 3, 10, 11, 12, 13, 20, 21, 22, 23]</code></pre></div>
 </div>
 <h2 id="sharing-what-changes-atomic">Sharing what changes: <code>Atomic</code></h2>
 <p>An <code>Atomic[T]</code> (<code>T</code> an integer of 8 to 64 bits, or <code>bool</code>) is changed through methods that only take <code>self</code> to read, so any number of threads can use one at once, with no <a href="diagnostics.html#C0401">C0401</a>. Every operation is a whole step: <code>add</code> gives the value before, <code>compare_exchange</code> says whether it swapped.</p>

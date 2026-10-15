@@ -51,7 +51,15 @@ impl Lowerer<'_> {
         let thread = Expr::Function(Vec::new(), stmts);
         // What doesn't outlive the loom is copied at the spawn: the closure
         // is made by a function whose parameters are those locals.
-        let copies = self.tables().thread_copies.get(&e.id).cloned().unwrap_or_default();
+        let mut copies = self.tables().thread_copies.get(&e.id).cloned().unwrap_or_default();
+        // What moves in is given at the spawn like a copy; and it's gone from
+        // the parent, so a fallback `defer` on it has nothing to do.
+        for l in self.tables().thread_moves.get(&e.id).cloned().unwrap_or_default() {
+            for flag in self.live_flags.get(&l).cloned().unwrap_or_default() {
+                self.push(StmtKind::Assign(vec![Expr::name(flag)], vec![Expr::Bool(false)]));
+            }
+            copies.push(l);
+        }
         let thread = if copies.is_empty() {
             thread
         } else {

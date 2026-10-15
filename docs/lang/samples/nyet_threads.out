@@ -1,11 +1,9 @@
-error[U0102]: not implemented yet: `loom for`
-  --> docs/lang/samples/nyet_threads.loom:6:5
-  |  
-6 | /     loom for x in xs {
-7 | |         print(x)
-8 | |     }
-  | \-----^ not supported by this compiler yet
-  |  
+error[U0102]: not implemented yet: `loom(given: …)`
+  --> docs/lang/samples/nyet_threads.loom:5:10
+  |
+5 |     loom(given: pool) {
+  |          ^^^^^^^^^^^ not supported by this compiler yet
+  |
   = note: the type checker grows one milestone at a time; see design/lua-backend.md
 
 error: docs/lang/samples/nyet_threads.loom failed to type-check (1 error)

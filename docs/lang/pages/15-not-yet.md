@@ -11,7 +11,7 @@ These are planned next, in this order: the rest of threads, then spools and the 
 
 ### Threads
 
-[Threads](page:threads) run, one at a time: `loom { }`, `thread`, `.join()` and `sched_yield()`. Not yet: `loom for` (one thread for each iteration, with `#disjoint` projections such as `chunks_mut`), several worker threads at once, `loom(given: pool)`, a `thread` that moves a variable into itself, and `yield` or `pull` inside a `loom` block ([U0102](diag:U0102)).
+[Threads](page:threads) run, one at a time: `loom { }`, `thread`, `.join()` and `sched_yield()`. Not yet: several worker threads at once, `loom(given: pool)`, and `yield` or `pull` inside a `loom` block ([U0102](diag:U0102)).
 
 @sample nyet_threads
 

@@ -122,6 +122,9 @@ struct FnCtx {
     /// The groups of the `loom` blocks around, innermost last. A lambda or a
     /// thread inside one sees them.
     looms: Vec<LocalId>,
+    /// This is the body of a `loom for`, which is a thread per item: a
+    /// `continue` of it ends the thread, and nothing else leaves it.
+    in_loom_for: bool,
 }
 
 struct Resolver<'a> {

@@ -303,7 +303,7 @@ impl Checker<'_> {
             }
             ExprKind::Lambda { params, body } => self.check_lambda(e, params, body, expected),
             ExprKind::Loom { args, body, .. } => self.check_loom(args, body, expected),
-            ExprKind::Thread { body, .. } => self.check_thread(e, body),
+            ExprKind::Thread { body, item, .. } => self.check_thread(e, body, *item),
             ExprKind::Call { callee, args } => self.check_call(e, callee, args, expected),
             ExprKind::Index { base, args } => self.check_index(e, base, args),
             ExprKind::Field { base, field } => self.check_field(e, base, field),

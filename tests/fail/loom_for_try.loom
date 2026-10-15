@@ -1,0 +1,31 @@
+// `?` in an iteration of a `loom for` has nowhere to go but out of its
+// thread: it needs a `mend` in the body.
+
+fn parse(s: str) -> i32 ! str {
+    if s.len() == 0 {
+        fail "empty"
+    }
+    s.len() as i32
+}
+
+fn tries(xs: List[str]) -> i32 ! str {
+    loom for s in xs {
+        let n = parse(s)?                    //~ C0406
+    }
+    0
+}
+
+fn handled(xs: List[str]) {
+    loom for s in xs {
+        let n = parse(s) mend e => 0
+    }
+}
+
+fn races() {
+    var hits = 0
+    loom for x in [1, 2, 3] {
+        hits += x                            //~ C0401
+    }
+}
+
+fn main() {}

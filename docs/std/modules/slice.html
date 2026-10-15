@@ -168,6 +168,13 @@
 </div>
 <p class="member-doc">Views of <code>n</code> elements at a time, one after another; the last may be shorter. Unravels if <code>n</code> is 0.</p>
 </div>
+<div class="member" id="Slice.chunks_mut">
+<div class="member-head">
+<span class="sig">fn chunks_mut(mut self, n: usize) -&gt; Stream[[T]]</span>
+
+</div>
+<p class="member-doc">Views of <code>n</code> elements at a time, one after another, which can be changed (<code>line[i] = x</code>). They don't overlap, so in a <code>loom for</code> each thread may change its own piece. The last may be shorter. Unravels if <code>n</code> is 0.</p>
+</div>
 <div class="member" id="Slice.windows">
 <div class="member-head">
 <span class="sig">fn windows(self, n: usize) -&gt; Stream[[T]]</span>

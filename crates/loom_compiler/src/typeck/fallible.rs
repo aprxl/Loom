@@ -178,6 +178,14 @@ impl Checker<'_> {
                 }
             },
             Some(TyKind::Error) => None,
+            _ if self.in_item => {
+                self.diags.push(
+                    Diagnostic::error(codes::C0406, "`?` can't leave an iteration of a `loom for`")
+                        .primary(span, "each iteration is a thread of its own, which ends with its body")
+                        .help("handle it in the body: put it inside the left of a `mend`"),
+                );
+                None
+            }
             _ => {
                 self.diags.push(
                     Diagnostic::error(codes::T0101, "`?` has nowhere to go")

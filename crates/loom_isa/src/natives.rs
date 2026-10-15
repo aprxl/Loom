@@ -135,11 +135,11 @@ pub const NATIVES: &[NativeSig] = &[
     sig("msg.unravel", 0, 0, NativeImm::None),
     // Threads (design/vm.md §11), which the interpreter runs itself since
     // they switch tasks. `task.spawn(group, entry, env, env bytes, drop
-    // function, result bytes) -> handle` starts `entry(result address, env)`
+    // function, result bytes, env drop function) -> handle` starts `entry(result address, env)`
     // as a task of the loom `group` at once; `task.join(handle, dest)` waits
     // for it and copies its result to `dest`; `task.yield` goes to the back
     // of the queue.
-    sig("task.spawn", 6, 1, NativeImm::None),
+    sig("task.spawn", 7, 1, NativeImm::None),
     sig("task.join", 2, 0, NativeImm::None),
     sig("task.yield", 0, 0, NativeImm::None),
     // `loom.new() -> group`. `loom.leave(group, mode)` waits for the group's

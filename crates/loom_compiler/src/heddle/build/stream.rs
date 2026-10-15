@@ -145,6 +145,7 @@ pub(super) fn writes_body(path: &str) -> bool {
                 | "std.string.Str.lines"
                 | "std.string.Str.words"
                 | "std.slice.Slice.chunks"
+                | "std.slice.Slice.chunks_mut"
                 | "std.slice.Slice.windows"
         )
 }
@@ -1098,7 +1099,7 @@ impl<'a> Builder<'a> {
             self.stream_at(sret?, step, b);
             return self.ret_written();
         }
-        if let "chunks" | "windows" = name
+        if let "chunks" | "chunks_mut" | "windows" = name
             && path.starts_with("std.slice.")
         {
             let (buf, len) = self.view_of(&args[0], tys[0], span)?;
@@ -1108,7 +1109,7 @@ impl<'a> Builder<'a> {
             let (fail, ok) = (self.new_block(), self.new_block());
             self.br(bad, fail, ok);
             self.enter(fail);
-            let msg: &'static str = if name == "chunks" { "chunks of 0 elements" } else { "windows of 0 elements" };
+            let msg: &'static str = if name == "windows" { "windows of 0 elements" } else { "chunks of 0 elements" };
             self.unravel_msg(&[Msg::Text(msg)], span)?;
             self.enter(ok);
             let elem = self.seq_of(tys[0])?.elem();

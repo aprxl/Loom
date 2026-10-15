@@ -99,7 +99,7 @@ fn a_thread_cant_keep_an_owned_local() {
     loom {
         for i in 0..2 {
             let xs: List[i32] = [i, i]
-            let t = thread { xs.len() }     //~ C0405
+            let t = thread { xs.len() }     // moved in: it's the thread's
             t.join()
         }
     }
@@ -108,7 +108,7 @@ fn a_thread_cant_keep_an_owned_local() {
 fn a_loom_level_owned_local() {
     loom {
         let xs: List[i32] = [1, 2]
-        let t = thread { xs.len() }         //~ C0405
+        let t = thread { xs.len() }         // moved in: it's the thread's
         t.join()
     }
 }

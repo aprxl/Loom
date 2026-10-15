@@ -1,0 +1,20 @@
+use std.io.print
+use std.sync.Atomic
+
+fn main() {
+    // One thread for each item; the loop ends when they're all done.
+    let squares = Atomic[u64](0)
+    loom for n in 1..=5 {
+        squares.add(n * n)
+    }
+    print("sum of squares {squares.load()}")
+
+    // An item that owns what it holds moves into its thread.
+    let words = ["red", "green", "blue"]
+    let letters = Atomic[usize](0)
+    loom for shout in words.map(w => w.to_upper()) {
+        letters.add(shout.len())
+    }
+    print("letters {letters.load()}")
+}
+//@ run

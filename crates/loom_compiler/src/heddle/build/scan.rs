@@ -288,7 +288,7 @@ impl Scanner<'_, '_> {
             }
             // A thread is a function of its own, like a lambda: it captures
             // what it uses, and its loom's group.
-            ExprKind::Thread { group, body } => {
+            ExprKind::Thread { group, body, .. } => {
                 self.open.push((HashSet::new(), Vec::new()));
                 if let Some(g) = group {
                     self.use_local(*g);

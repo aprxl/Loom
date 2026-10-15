@@ -1205,23 +1205,30 @@ moved: `take`; otherwise read).
   thread count_file(p))`) is gone or reused by the time the threads are
   done: the block's own locals are dropped before its guard waits. So it's
   **copied into the thread's environment** when it's `Copy` or a borrow, and
-  moved when it's `take`; a thread can't change such a copy (C0405). A copied
+  **moved** into it when it owns what it holds (the parent can't use it
+  after, M0101; the thread drops it, and a thread that never ran, spawned
+  into a failed loom, has it dropped by its group); a thread can't change
+  such a copy (C0405). A copied
   borrow's root has to outlive the loom, and is checked from what the move
   checker tracks (`borrows`, loop items, bound parts); a block's `defer`
   runs before the guard waits, so a thread can't rely on it.
+- **`loom for pat in iter { body }`** is `loom { for pat in iter { thread {
+  body } }; () }` (desugared in HIR, so both backends have it): the parent
+  goes through the iterator, and each item's thread starts at once, which is
+  one thread per iteration on the reference schedule. An iteration's value
+  is `()`, and it can't leave itself: `break`, `return`, a `continue` of an
+  outer loop and a `?` with no `mend` are C0406; `continue` ends it.
 - **Not yet:** a copied `str` or slice whose backing the checker doesn't
   track (a stream's items, a lambda parameter) isn't checked against the
   loom, and `yield` and `pull` inside a loom block are U0102 (a suspended
   shuttle would hold the group). A lambda that contains a `thread` can still
-  leave its loom
-  (only `Spun` itself is tracked, not function types holding one), a thread
-  can't move a captured variable (a `take` capture is
-  M0102 today, "copy it", worded for lambdas), and a handle joined on only
-  some paths releases what it held on all of them.
+  leave its loom (only `Spun` itself is tracked, not function types holding
+  one), and a handle joined on only some paths releases what it held on all
+  of them.
 - **A `Spun[T]` holds** the read and `mut` captures it took by reference,
   until it's joined, the way a stream holds the lambdas it was built from:
   `join` takes the handle, and a handle nobody joined holds them until the
-  block ends. A `take` capture is a move at the spawn, not a hold. That's
+  block ends. What moves into a thread is a move at the spawn, not a hold. That's
   what C0402 is checked against.
 - **The group is a hidden capture.** A `thread` reaches its loom lexically,
   as a pointer in the closure's environment, not through a "current loom of
@@ -1238,6 +1245,8 @@ moved: `take`; otherwise read).
 | C0402 | the parent uses a local a live thread holds `mut`, or writes one a live thread reads |
 | C0403 | `thread` outside any `loom` block |
 | C0404 | a `Spun` handle, or a lambda containing a `thread`, leaves its loom: returned, stored in a variable declared outside it, or captured by a thread of an outer loom. (Before the region checker lands in V6 this is the second-class rule of shuttles with borrowed parameters.) |
+| C0405 | a thread changes a copy of a variable that doesn't outlive its loom, or keeps a borrow of one that doesn't |
+| C0406 | an iteration of a `loom for` leaves itself: `break`, `return`, a `continue` of an outer loop, a `?` with no `mend` |
 
 A `Spun[T]` is `once` when `T` is, so a handle whose result you'd lose is
 L0301 like any loose end. Arena pointers across threads (R0101/R0102) wait

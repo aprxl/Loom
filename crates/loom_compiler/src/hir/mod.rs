@@ -581,6 +581,9 @@ pub enum ExprKind {
         /// The innermost enclosing loom's group, if there is one.
         group: Option<LocalId>,
         body: Box<Expr>,
+        /// An iteration of a `loom for` (which lowers to a thread per
+        /// item): its value is `()`, and it can't leave itself.
+        item: bool,
     },
     /// `target` is the [`HirId`] of the loop.
     Break {

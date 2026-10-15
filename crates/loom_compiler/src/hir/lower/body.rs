@@ -145,6 +145,10 @@ impl Resolver<'_> {
                 let arms = arms.iter().map(|arm| self.lower_arm(arm)).collect();
                 ExprKind::Match { scrutinee, arms }
             }
+            E::For { label, pat, iter, body, is_const: false, is_loom: true } => {
+                let _ = label;
+                return self.lower_loom_for(pat, iter, body, span);
+            }
             E::For { label, pat, iter, body, is_const, is_loom } => {
                 let iter = self.boxed(iter);
                 let id = self.next_hir_id();
@@ -178,7 +182,16 @@ impl Resolver<'_> {
             }
             E::Thread(body) => {
                 let group = self.fx.looms.last().copied();
-                ExprKind::Thread { group, body: self.lower_closure_like(body) }
+                ExprKind::Thread { group, body: self.lower_closure_like(body), item: false }
+            }
+            // The body of a `loom for` is a thread: `continue` ends it, and
+            // a `break` or a `continue` of something outside can't leave.
+            E::Continue { label: None } if self.fx.in_loom_for && self.fx.loops.is_empty() => ExprKind::Return(None),
+            E::Break { label, .. } if self.fx.in_loom_for && self.outside_loom_for(label.as_ref()) => {
+                self.leaves_iteration(span, "break")
+            }
+            E::Continue { label } if self.fx.in_loom_for && self.outside_loom_for(label.as_ref()) => {
+                self.leaves_iteration(span, "continue")
             }
             E::Break { label, value } => match self.loop_target(label.as_ref(), span, "break") {
                 Some(target) => ExprKind::Break { target, value: value.as_ref().map(|v| self.boxed(v)) },
@@ -188,6 +201,7 @@ impl Resolver<'_> {
                 Some(target) => ExprKind::Continue { target },
                 None => ExprKind::Error,
             },
+            E::Return(_) if self.fx.in_loom_for => self.leaves_iteration(span, "return"),
             E::Return(value) => ExprKind::Return(value.as_ref().map(|v| self.boxed(v))),
             E::Fail(value) => ExprKind::Fail(self.boxed(value)),
             E::Yield { place, value } => {
@@ -526,6 +540,81 @@ impl Resolver<'_> {
                 .note("a lambda is its own function: `break` and `continue` can't leave it"),
         );
         None
+    }
+
+    /// `loom for pat in iter { body }` is `loom { for pat in iter { thread
+    /// { body } }; () }`: the parent drives the iterator, and each item
+    /// goes to a thread of its own (design/vm.md §11.3).
+    fn lower_loom_for(&mut self, pat: &ast::Pat, iter: &ast::Expr, body: &ast::Block, span: Span) -> Expr {
+        let group = self.new_local("<loom>", span, false, LocalKind::Group);
+        self.fx.looms.push(group);
+        let iter = self.boxed(iter);
+        let for_id = self.next_hir_id();
+        self.push_rib(RibKind::Normal);
+        let pat = self.lower_pat_binding(pat, LocalKind::Pattern, false);
+        // The body is a thread's own function: nothing in it can leave it.
+        let self_local = self.fx.self_local;
+        let looms = self.fx.looms.clone();
+        let saved = std::mem::replace(
+            &mut self.fx,
+            super::FnCtx { self_local, looms, in_loom_for: true, ..Default::default() },
+        );
+        let block = self.lower_block(body);
+        self.fx = saved;
+        self.pop_rib();
+        self.fx.looms.pop();
+        let body_span = block.span;
+        // `{ body }; ()`: what the body's last expression is isn't its value.
+        let id = self.next_hir_id();
+        let user = Expr { id, kind: ExprKind::Block(block), span: body_span };
+        let id = self.next_hir_id();
+        let unit = Expr { id, kind: ExprKind::Tuple(Vec::new()), span: body_span };
+        let id = self.next_hir_id();
+        let wrapped = Block {
+            stmts: vec![
+                Stmt { kind: StmtKind::Expr(user), span: body_span },
+                Stmt { kind: StmtKind::Expr(unit), span: body_span },
+            ],
+            span: body_span,
+        };
+        let body_expr = Expr { id, kind: ExprKind::Block(wrapped), span: body_span };
+        let id = self.next_hir_id();
+        let thread = Expr {
+            id,
+            kind: ExprKind::Thread { group: Some(group), body: Box::new(body_expr), item: true },
+            span: body_span,
+        };
+        let inner = Block { stmts: vec![Stmt { kind: StmtKind::Expr(thread), span: body_span }], span: body_span };
+        let kind = ExprKind::For { pat: Box::new(pat), iter, body: inner, is_const: false, is_loom: false };
+        let for_expr = Expr { id: for_id, kind, span };
+        let id = self.next_hir_id();
+        let unit = Expr { id, kind: ExprKind::Tuple(Vec::new()), span };
+        let block = Block {
+            stmts: vec![Stmt { kind: StmtKind::Expr(for_expr), span }, Stmt { kind: StmtKind::Expr(unit), span }],
+            span,
+        };
+        let id = self.next_hir_id();
+        Expr { id, kind: ExprKind::Loom { args: Vec::new(), body: block, group }, span }
+    }
+
+    /// Whether a `break` or `continue` (with `label`) aims outside the loops
+    /// of the body of a `loom for`.
+    fn outside_loom_for(&self, label: Option<&Ident>) -> bool {
+        match label {
+            Some(l) => !self.fx.loops.iter().any(|f| f.label.as_deref() == Some(&l.name)),
+            None => self.fx.loops.is_empty(),
+        }
+    }
+
+    /// Something that would leave the iteration of a `loom for`: each one
+    /// is a thread, which ends where its body does.
+    fn leaves_iteration(&mut self, span: Span, what: &str) -> ExprKind {
+        self.report(
+            Diagnostic::error(codes::C0406, format!("`{what}` can't leave an iteration of a `loom for`"))
+                .primary(span, "each iteration is a thread of its own")
+                .help("end the iteration with `continue`, or handle it in the body"),
+        );
+        ExprKind::Error
     }
 
     fn require_shuttle(&mut self, span: Span, what: &str) {

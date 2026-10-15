@@ -152,6 +152,11 @@ pub(crate) struct Task {
     pub env_bytes: u64,
     /// The function that drops a result nobody took, or 0.
     pub drop_fn: u32,
+    /// The function that drops what its environment owns, if the task never
+    /// ran (it was spawned into a failed loom), or 0.
+    pub env_drop: u32,
+    /// It was spawned into a failed group: it never ran.
+    pub unrun: bool,
     pub epoch: u32,
     live: bool,
 }
@@ -179,6 +184,8 @@ impl Task {
             env: 0,
             env_bytes: 0,
             drop_fn: 0,
+            env_drop: 0,
+            unrun: false,
             epoch: 0,
             live: false,
         }
@@ -465,6 +472,12 @@ impl Sched {
         for i in 0..self.groups[g].tasks.len() {
             let t = self.groups[g].tasks[i];
             let task = &mut self.tasks[t];
+            // A task that never ran owns what it was given.
+            if task.unrun && task.env_drop != 0 {
+                let function = u64::from(task.env_drop);
+                task.env_drop = 0;
+                return Ok((function, task.env));
+            }
             if task.done && !task.taken && !task.cancelled && !task.failed && task.drop_fn != 0 {
                 task.taken = true;
                 return Ok((u64::from(task.drop_fn), task.result));
@@ -484,6 +497,10 @@ impl Sched {
             let task = &mut self.tasks[t];
             if task.result_bytes > 0 {
                 heap.free(task.result, task.result_bytes, 8)?;
+            }
+            // The environment of a task that never ran.
+            if task.env_bytes > 0 {
+                heap.free(task.env, task.env_bytes, 8)?;
             }
             *task = Task { epoch: task.epoch.wrapping_add(1), ..Task::empty() };
             self.free_tasks.push(t);
@@ -703,6 +720,7 @@ impl Sched {
         env_bytes: u64,
         drop_fn: u64,
         result_bytes: u64,
+        env_drop: u64,
     ) -> Result<(u64, Step), Trap> {
         let g = self.group_index(g)?;
         let (code, frame, params) = entry;
@@ -727,10 +745,16 @@ impl Sched {
         };
         if failed {
             // Spawned into a failed group: it starts cancelled and never
-            // runs.
+            // runs. What it was to own is dropped by the loom's leftover
+            // loop (its environment goes then), or freed at once.
             task.done = true;
             task.cancelled = true;
-            Self::release_env(heap, &mut task)?;
+            if env_drop != 0 && env_bytes > 0 {
+                task.unrun = true;
+                task.env_drop = env_drop as u32;
+            } else {
+                Self::release_env(heap, &mut task)?;
+            }
         } else {
             let mut stack = Stack::task(limit, loom_isa::LINK_SLOTS + frame, FIRST_SEGMENT)?;
             let (base, seg_end) = stack.bounds();

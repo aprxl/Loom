@@ -349,7 +349,7 @@ impl<'a> Builder<'a> {
             ExprKind::Yield { value, .. } => self.yield_place(value, span),
             ExprKind::Pull => self.pull_expr(e, span),
             ExprKind::Loom { args, body, group } => self.loom_expr(e, args, body, *group, ty),
-            ExprKind::Thread { group, body } => self.thread_expr(e, *group, body),
+            ExprKind::Thread { group, body, .. } => self.thread_expr(e, *group, body),
             _ => self.unsupported(span, "this expression"),
         }
     }

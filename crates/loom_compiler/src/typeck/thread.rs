@@ -82,7 +82,7 @@ impl Checker<'_> {
     pub(super) fn atomic_holds(&mut self, t: Ty, span: Span) {
         let t = self.resolve(t);
         let fine = match self.tcx.kind(t) {
-            TyKind::Int(i) => matches!(i.bits, 8 | 16 | 32 | 64),
+            TyKind::Int(i) => i.size || matches!(i.bits, 8 | 16 | 32 | 64),
             TyKind::Bool | TyKind::IntVar(_) | TyKind::Var(_) | TyKind::Error => true,
             _ => false,
         };
@@ -104,17 +104,19 @@ impl Checker<'_> {
         }
     }
 
-    pub(super) fn check_thread(&mut self, e: &Expr, body: &Expr) -> Ty {
+    pub(super) fn check_thread(&mut self, e: &Expr, body: &Expr, item: bool) -> Ty {
         if self.looms == 0 {
             self.error(codes::C0403, e.span, "`thread` can only be used inside a `loom` block", "not inside a loom");
         }
-        let ret = self.new_var(VarKind::Type);
+        // An iteration of a `loom for` has no value.
+        let ret = if item { self.tcx.unit } else { self.new_var(VarKind::Type) };
         // The body is a function of its own, as a lambda's is.
         let saved_ret = self.ret.replace(ret);
         let saved_loops = std::mem::take(&mut self.loops);
         let saved_mends = std::mem::take(&mut self.mends);
         let saved_argument = std::mem::replace(&mut self.in_argument, false);
         let saved_defer = self.fence.take();
+        let saved_item = std::mem::replace(&mut self.in_item, item);
         // What the body evaluates to, and what its `return`s give, are the
         // thread's result.
         let ty = self.check_expr(body, None);
@@ -122,6 +124,7 @@ impl Checker<'_> {
             self.mismatch(body.span, ret, ty);
         }
         self.fence = saved_defer;
+        self.in_item = saved_item;
         self.in_argument = saved_argument;
         self.mends = saved_mends;
         self.loops = saved_loops;

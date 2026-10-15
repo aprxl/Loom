@@ -91,6 +91,8 @@ enum FnKey {
     /// A thread, made in that body, by its expression: runs as a task, with
     /// `(result address, environment)` (see `thread.rs`).
     Thread(BodyId, crate::hir::HirId),
+    /// Drops what a thread's environment owns (a thread that never ran).
+    EnvDrop(BodyId, crate::hir::HirId),
     /// A function instance as a value: takes an environment it ignores.
     Thunk(BodyId),
     /// The step function of a kind of stream (see `stream.rs`).
@@ -638,6 +640,7 @@ impl<'a> Builder<'a> {
             FnKey::Main(id) => format!("{}.entry", self.body_name(id)),
             FnKey::Lambda(id, _) => format!("{}.{{lambda}}", self.body_name(id)),
             FnKey::Thread(id, _) => format!("{}.{{thread}}", self.body_name(id)),
+            FnKey::EnvDrop(id, _) => format!("{}.{{thread}}.drop", self.body_name(id)),
             FnKey::Thunk(id) => format!("{}.value", self.body_name(id)),
             FnKey::Step(step) => format!("stream.{}", self.step_name(step)),
             FnKey::ConstInit(consts::ConstKey::Def(def)) => format!("{}.init", self.p.def_path(def)),
@@ -677,7 +680,12 @@ impl<'a> Builder<'a> {
         let fid = self.ids[&key];
         let name = self.key_name(key);
         let body = match key {
-            FnKey::Body(id) | FnKey::Main(id) | FnKey::Lambda(id, _) | FnKey::Thread(id, _) | FnKey::Thunk(id) => id,
+            FnKey::Body(id)
+            | FnKey::Main(id)
+            | FnKey::Lambda(id, _)
+            | FnKey::Thread(id, _)
+            | FnKey::EnvDrop(id, _)
+            | FnKey::Thunk(id) => id,
             FnKey::Glue(..) | FnKey::Step(_) | FnKey::ConstInit(_) | FnKey::ConstExit | FnKey::AnyShow(..) => BodyId(0),
             FnKey::Dyn(id) | FnKey::ShuttleStep(id) | FnKey::Assert(id, _) => id,
             FnKey::GaugeCheck(_) | FnKey::ShuttleDrive | FnKey::ShuttleRelease => BodyId(0),
@@ -699,6 +707,7 @@ impl<'a> Builder<'a> {
             FnKey::Main(id) => self.main_entry(id),
             FnKey::Lambda(id, e) => self.lambda_func(id, e),
             FnKey::Thread(id, e) => self.thread_func(id, e),
+            FnKey::EnvDrop(id, e) => self.env_drop_func(id, e),
             FnKey::Thunk(id) => self.thunk_func(id, span),
             FnKey::Step(step) => self.step_func(step),
             FnKey::ConstInit(def) => self.const_init(def),
@@ -758,7 +767,7 @@ impl<'a> Builder<'a> {
                 Some(info) => info.expr.span,
                 None => self.p.def(self.typed.results.instance(id).def).span,
             },
-            FnKey::Thread(id, e) => match self.threads.get(&(id, e)) {
+            FnKey::Thread(id, e) | FnKey::EnvDrop(id, e) => match self.threads.get(&(id, e)) {
                 Some(info) => info.expr.span,
                 None => self.p.def(self.typed.results.instance(id).def).span,
             },

@@ -1,0 +1,14 @@
+use std.io.print
+
+fn main() {
+    var grid = List.filled(0, 12)
+    let width = 4
+    // One thread for each row: each changes only its own piece.
+    loom for (row, mut line) in grid.chunks_mut(width).indexed() {
+        for col in 0..width {
+            line[col] = row * 10 + col
+        }
+    }
+    print("{grid}")
+}
+//@ run

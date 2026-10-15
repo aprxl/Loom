@@ -44,26 +44,23 @@
 <h2 id="next-in-line">Next in line</h2>
 <p>These are planned next, in this order: the rest of threads, then spools and the rest of Loom's own VM, Treadle (designed in <code>design/vm.md</code>). Treadle already runs everything: <code>loom run --backend vm file.loom</code>. A program over one of its limits (a frame of more than 65 535 registers, say) stops with <a href="diagnostics.html#U0103">U0103</a>.</p>
 <h3 id="threads">Threads</h3>
-<p><a href="threads.html">Threads</a> run, one at a time: <code>loom { }</code>, <code>thread</code>, <code>.join()</code> and <code>sched_yield()</code>. Not yet: <code>loom for</code> (one thread for each iteration, with <code>#disjoint</code> projections such as <code>chunks_mut</code>), several worker threads at once, <code>loom(given: pool)</code>, a <code>thread</code> that moves a variable into itself, and <code>yield</code> or <code>pull</code> inside a <code>loom</code> block (<a href="diagnostics.html#U0102">U0102</a>).</p>
+<p><a href="threads.html">Threads</a> run, one at a time: <code>loom { }</code>, <code>thread</code>, <code>.join()</code> and <code>sched_yield()</code>. Not yet: several worker threads at once, <code>loom(given: pool)</code>, and <code>yield</code> or <code>pull</code> inside a <code>loom</code> block (<a href="diagnostics.html#U0102">U0102</a>).</p>
 <div class="sample" id="sample-nyet_threads">
 <div class="sample-head"><span class="file">samples/nyet_threads.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span></div>
-<pre class="code"><code><span class="k">use</span> std.io.print
-
-<span class="k">fn</span> main() {
-    <span class="k">let</span> xs = [<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]
-    <span class="c">// One thread for each iteration: not yet.</span>
-    <span class="k">loom</span> <span class="k">for</span> x <span class="k">in</span> xs {
-        print(x)
+<pre class="code"><code><span class="k">fn</span> main() {
+    <span class="c">// A loom on a pool of its own: not yet. (A loom runs its threads one</span>
+    <span class="c">// at a time.)</span>
+    <span class="k">let</span> pool = <span class="n">4</span>
+    <span class="k">loom</span>(<span class="k">given</span>: pool) {
+        ()
     }
 }</code></pre>
-<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[U0102]: not implemented yet: `loom for`</span>
-<span class="loc">  --&gt; nyet_threads.loom:6:5</span>
-  |  
-6 | /     loom for x in xs {
-7 | |         print(x)
-8 | |     }
-  | \-----^ not supported by this compiler yet
-  |  
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[U0102]: not implemented yet: `loom(given: …)`</span>
+<span class="loc">  --&gt; nyet_threads.loom:5:10</span>
+  |
+5 |     loom(given: pool) {
+  |          ^^^^^^^^^^^ not supported by this compiler yet
+  |
   = note: the type checker grows one milestone at a time; see design/lua-backend.md
 
 <span class="err">error: nyet_threads.loom failed to type-check (1 error)</span></code></pre></div>

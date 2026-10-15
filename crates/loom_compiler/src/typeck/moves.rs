@@ -181,6 +181,9 @@ struct MoveCx {
     captures_of: HashMap<LocalId, Vec<LocalId>>,
     /// The locals each loop item is borrowed from.
     item_roots: HashMap<LocalId, Vec<LocalId>>,
+    /// Items of a loop over a `#disjoint` stream (`chunks_mut`): views that
+    /// don't overlap, so each iteration's thread may change its own.
+    disjoint_items: HashSet<LocalId>,
     reported: HashSet<(&'static str, Span)>,
 }
 
@@ -355,8 +358,12 @@ impl Checker<'_> {
                     self.borrowed_roots(cx, iter, &mut over);
                 }
                 let locked = cx.locked.len();
+                let disjoint = self.iter_is_disjoint(iter);
                 for local in pat_locals(pat) {
                     cx.item_roots.insert(local, over.clone());
+                    if disjoint {
+                        cx.disjoint_items.insert(local);
+                    }
                 }
                 cx.locked.extend(over.into_iter().map(|l| (l, iter.span)));
                 cx.loops.push((e.id, cx.scopes.len()));
@@ -564,10 +571,21 @@ impl Checker<'_> {
         let by_ref = cx.looms.last().copied().unwrap_or(0);
         let held = |cx: &MoveCx, l: &LocalId| cx.scope_of.get(l).is_some_and(|&s| s < by_ref);
         let writes: Vec<LocalId> = written.iter().map(|w| w.0).filter(|l| held(cx, l)).collect();
-        let reads = caps.iter().copied().filter(|l| held(cx, l)).filter(|l| !writes.contains(l)).collect();
+        let mut reads: Vec<LocalId> =
+            caps.iter().copied().filter(|l| held(cx, l)).filter(|l| !writes.contains(l)).collect();
+        // A disjoint view it changes holds what it's a view of, which the
+        // parent mustn't touch until it's joined.
+        for &l in caps.iter().filter(|l| cx.disjoint_items.contains(l)) {
+            for r in Self::roots_of(cx, l) {
+                if held(cx, &r) && !reads.contains(&r) {
+                    reads.push(r);
+                }
+            }
+        }
         // What doesn't outlive the loom is copied into the thread:
         // a `Copy` value, or a borrow of what does.
         let mut copies = Vec::new();
+        let mut moves = Vec::new();
         let narrower: Vec<LocalId> = caps.iter().copied().filter(|l| !held(cx, l)).collect();
         for l in narrower {
             let name = self.p.local(l).name.clone();
@@ -602,20 +620,17 @@ impl Checker<'_> {
                     .help("declare it outside the `loom`, or return the new value from the thread"),
                 );
             } else if !copyable {
-                self.report(
-                    cx,
-                    Diagnostic::error(
-                        codes::C0405,
-                        format!("a thread can't keep `{name}`, which doesn't outlive the loom"),
-                    )
-                    .primary(e.span, "this thread uses it")
-                    .help("declare it outside the `loom`, or copy it (`x.copy()`) inside the thread's expression"),
-                );
+                // What it owns goes to the thread, and the parent is done
+                // with it.
+                moves.push(l);
+                cx.flow.moved.push((l, Vec::new(), e.span));
+                cx.flow.loose.retain(|&x| x != l);
             } else {
                 copies.push(l);
             }
         }
         self.b.thread_copies.insert(e.id, copies);
+        self.b.thread_moves.insert(e.id, moves);
         cx.lambda_caps.insert(e.id, caps);
         cx.live.push(LiveThread { span: e.span, reads, writes, handle: None });
     }
@@ -818,7 +833,8 @@ impl Checker<'_> {
         }
         for (root, _, mode, span, _) in &places {
             if let (Root::Local(l), ParamMode::Mut) = (root, mode) {
-                self.changes(cx, *l, *span);
+                let through = self.local_is_view(*l);
+                self.changes_via(cx, *l, *span, through);
             }
         }
         // A projection keeps what it borrows until the statement ends: the
@@ -955,7 +971,11 @@ impl Checker<'_> {
             return;
         }
         let declared = cx.depth_of.get(&owner).copied().unwrap_or(0);
-        if declared < cx.depth {
+        // What was moved into a thread (a local of the loom block, or an item
+        // of a `loom for`) is the thread's: it may move it on.
+        let into_thread = cx.writes.last().is_some_and(|w| w.0 == cx.depth)
+            && cx.looms.last().is_some_and(|&inside| cx.scope_of.get(&owner).is_some_and(|&s| s >= inside));
+        if declared < cx.depth && !into_thread {
             let diag = if cx.in_defer.last() == Some(&true) {
                 Diagnostic::error(codes::M0102, format!("can't move `{name}` in a `defer`"))
                     .primary(span, "moved here")
@@ -1287,7 +1307,9 @@ impl Checker<'_> {
         }
         if let Some((Root::Local(l), path)) = self.place_of(cx, target) {
             capture(cx, l);
-            self.changes(cx, l, target.span);
+            // An element written through a view changes what it views.
+            let through = !path.is_empty() && self.local_is_view(l);
+            self.changes_via(cx, l, target.span, through);
             if let (true, AssignOp::Assign, Some(value)) = (path.is_empty(), op, value) {
                 self.new_borrow(cx, l, value);
             }
@@ -1334,6 +1356,41 @@ impl Checker<'_> {
         roots.retain(|&r| r != l);
         if !roots.is_empty() {
             cx.borrows.insert(l, roots);
+        }
+    }
+
+    /// What the view in `l` is a view of: the locals it was made from.
+    fn roots_of(cx: &MoveCx, l: LocalId) -> Vec<LocalId> {
+        let mut roots: Vec<LocalId> = cx.item_roots.get(&l).cloned().unwrap_or_default();
+        for r in cx.borrows.get(&l).into_iter().flatten().chain(cx.parts_of.get(&l)) {
+            if !roots.contains(r) {
+                roots.push(*r);
+            }
+        }
+        roots
+    }
+
+    /// Whether local `l` is a view (a slice).
+    fn local_is_view(&mut self, l: LocalId) -> bool {
+        let Some(&ty) = self.b.local_ty.get(&l) else { return false };
+        let ty = self.deep_resolve(ty);
+        matches!(self.tcx.kind(ty), TyKind::Adt(def, _) if Some(*def) == self.std.slice)
+    }
+
+    /// Whether a loop goes over a `#disjoint` stream: one of its methods
+    /// (std marks `chunks_mut`) gives pieces that don't overlap.
+    fn iter_is_disjoint(&mut self, e: &Expr) -> bool {
+        let ExprKind::Call { callee, .. } = &e.kind else { return false };
+        if let Some(info) = self.b.calls.get(&e.id) {
+            let def = self.r.instance(info.callee).def;
+            // Only std's word is taken for it.
+            if self.p.def_path(def).starts_with("std.") && self.p.def(def).attrs.iter().any(|a| a.name == "disjoint") {
+                return true;
+            }
+        }
+        match &callee.kind {
+            ExprKind::Field { base, .. } => self.iter_is_disjoint(base),
+            _ => false,
         }
     }
 
@@ -1397,15 +1454,33 @@ impl Checker<'_> {
     /// `l` moves or changes at `at`: the borrows of it made before go stale,
     /// and a loop going over it can't let that happen.
     fn changes(&mut self, cx: &mut MoveCx, l: LocalId, at: Span) {
+        self.changes_via(cx, l, at, false);
+    }
+
+    /// `changes`, where `through_view`: an element of a view is written,
+    /// which changes what it's a view of and not the view.
+    fn changes_via(&mut self, cx: &mut MoveCx, l: LocalId, at: Span, through_view: bool) {
         if cx.flow.dead {
             return;
         }
         let owner = cx.parts_of.get(&l).copied().unwrap_or(l);
-        self.thread_conflict(cx, owner, true, at);
-        let declared = cx.depth_of.get(&owner).copied();
-        for (depth, written) in cx.writes.iter_mut() {
-            if declared.is_some_and(|d| d < *depth) && !written.iter().any(|(w, _)| *w == owner) {
-                written.push((owner, at));
+        // What threads are told it changed: the view's roots (none, for a
+        // view of a `#disjoint` stream: the iterations don't overlap, and
+        // the loop keeps everyone else off the list until it ends).
+        let changed: Vec<LocalId> = if !through_view {
+            vec![owner]
+        } else if cx.disjoint_items.contains(&owner) {
+            Vec::new()
+        } else {
+            Self::roots_of(cx, owner)
+        };
+        for &c in &changed {
+            self.thread_conflict(cx, c, true, at);
+            let declared = cx.depth_of.get(&c).copied();
+            for (depth, written) in cx.writes.iter_mut() {
+                if declared.is_some_and(|d| d < *depth) && !written.iter().any(|(w, _)| *w == c) {
+                    written.push((c, at));
+                }
             }
         }
         if let Some(&(_, over)) = cx.locked.iter().find(|(x, _)| *x == owner || *x == l) {

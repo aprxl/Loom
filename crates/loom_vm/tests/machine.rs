@@ -602,6 +602,7 @@ fn spawn(code: &mut Vec<u64>, group: u16, entry: i32, result_bytes: i32, at: u16
     code.push(word_i32(Op::Ldi, at + 3, 0));
     code.push(word_i32(Op::Ldi, at + 4, 0));
     code.push(word_i32(Op::Ldi, at + 5, result_bytes));
+    code.push(word_i32(Op::Ldi, at + 6, 0));
     code.push(word(Op::CallN, at, nat::SPAWN, 0));
     if handle != at {
         code.push(word(Op::Mov, handle, at, 0));
@@ -697,12 +698,12 @@ fn a_failure_cancels_the_threads_that_are_parked() {
     let failing =
         ("failing", 4, 2, 0, vec![word_i32(Op::Ldi, 2, 100), word(Op::AddTI8, 2, 2, 2), word(Op::Ret, 0, 0, 0)]);
     let mut main = vec![word(Op::CallN, 0, nat::LOOM_NEW, 0)];
-    spawn(&mut main, 0, 1, 0, 1, 7); // parked: yields at once
-    spawn(&mut main, 0, 2, 0, 1, 9); // failing: fails at once
-    main.push(word(Op::Mov, 11, 7, 0));
+    spawn(&mut main, 0, 1, 0, 1, 16); // parked: yields at once
+    spawn(&mut main, 0, 2, 0, 1, 17); // failing: fails at once
+    main.push(word(Op::Mov, 11, 16, 0));
     main.push(word_i32(Op::Lea, 12, 14 * 8));
     main.push(word(Op::CallN, 11, nat::JOIN, 0)); // joins the parked one: sees the failure
-    end_loom(&mut main, 0, 16);
+    end_loom(&mut main, 0, 18);
     main.push(word(Op::Ret, 0, 0, 0));
     let img = threads_image(vec![("main", 24, 0, 0, main), parked, failing]);
     let (outcome, out) = exec(&img, &Config::default());

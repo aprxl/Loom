@@ -1,0 +1,45 @@
+// Threads may change pieces of a list that don't overlap (`chunks_mut`).
+// Views that may overlap, or the list itself, are another matter.
+
+fn rows_are_fine() {
+    var cells = List.filled(0, 8)
+    loom for (row, mut line) in cells.chunks_mut(4).indexed() {
+        line[0] = row
+        line.fill(row)
+    }
+}
+
+fn overlapping_views() {
+    var cells = List.filled(0, 8)
+    loom for i in 0..2 {
+        let mut view = cells[..]             //~ C0402
+        view[0] = i                          //~ C0401
+    }
+}
+
+fn the_parent_touches_the_list() {
+    var cells = List.filled(0, 8)
+    loom {
+        for (row, mut line) in cells.chunks_mut(4).indexed() {
+            thread {
+                line[0] = row
+            }
+        }
+        cells[0] = 9                         //~ C0402
+        ()
+    }
+}
+
+fn a_thread_reassigns_its_view() {
+    var cells = List.filled(0, 8)
+    loom {
+        for (i, mut line) in cells.chunks_mut(4).indexed() {
+            thread {
+                line = line                  //~ C0405
+            }
+        }
+        ()
+    }
+}
+
+fn main() {}

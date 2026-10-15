@@ -256,6 +256,9 @@ pub struct Body {
     /// For each `thread`: the locals it gets copies of, because they don't
     /// outlive its loom (a loop variable, a lambda's parameter).
     pub thread_copies: HashMap<HirId, Vec<LocalId>>,
+    /// For each `thread`: the locals that don't outlive its loom and own
+    /// something, which move into it (an item of a `loom for`, say).
+    pub thread_moves: HashMap<HirId, Vec<LocalId>>,
     /// Patterns that test for a gauge (`x is Cents`, `c: Cents =>`): which.
     pub gauge_tests: HashMap<HirId, Ty>,
     /// Uses of `const` generic parameters (`N`): their values here.
@@ -589,6 +592,8 @@ struct Checker<'p> {
     in_argument: bool,
     /// How many `loom` blocks enclose what is being checked, in this body.
     looms: u32,
+    /// Checking the body of an iteration of a `loom for` (not a lambda in it).
+    in_item: bool,
     /// The warp whose members are being checked: what `Self` means.
     self_ty: Option<Ty>,
     /// The `self` of the method being checked.
@@ -692,6 +697,7 @@ impl<'p> Checker<'p> {
             pending_shows: Vec::new(),
             in_argument: false,
             looms: 0,
+            in_item: false,
             self_ty: None,
             self_local: None,
             subjects: Vec::new(),

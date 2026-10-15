@@ -418,6 +418,7 @@ MODULES = [
        {"sig": "fn map[U](self, f: T => U) -> List[U]", "doc": "A new list of `f` of each element. (`xs.indexed()` and the other methods of `Stream` work on slices too, lazily.)"},
        {"sig": "fn filter(self, f: T => bool) -> List[T]", "doc": "A new list with a copy of each element `f` says yes to."},
        {"sig": "fn chunks(self, n: usize) -> Stream[[T]]", "doc": "Views of `n` elements at a time, one after another; the last may be shorter. Unravels if `n` is 0."},
+       {"sig": "fn chunks_mut(mut self, n: usize) -> Stream[[T]]", "doc": "Views of `n` elements at a time, one after another, which can be changed (`line[i] = x`). They don't overlap, so in a `loom for` each thread may change its own piece. The last may be shorter. Unravels if `n` is 0."},
        {"sig": "fn windows(self, n: usize) -> Stream[[T]]", "doc": "Views of every run of `n` elements in a row: `[a, b]`, `[b, c]`, … Unravels if `n` is 0."},
      ]},
   ],

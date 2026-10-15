@@ -1,0 +1,41 @@
+// Each iteration of a `loom for` is a thread that ends with its body:
+// nothing in it can leave the loop or the function.
+
+fn first(xs: List[i32]) -> i32 {
+    loom for x in xs {
+        if x > 5 {
+            break                            //~ C0406
+        }
+        if x == 3 {
+            return x                         //~ C0406
+        }
+    }
+    0
+}
+
+fn outer() {
+    for a in 0..2 {
+        loom for x in [1, 2] {
+            if x == 1 {
+                continue
+            }
+            for y in 0..2 {
+                if y == 1 {
+                    break
+                }
+                continue
+            }
+            continue                         // ends the iteration
+        }
+    }
+}
+
+fn labeled() {
+    rows: for a in 0..2 {
+        loom for x in [1, 2] {
+            continue rows                    //~ C0406
+        }
+    }
+}
+
+fn main() {}

@@ -1,0 +1,16 @@
+// An iteration that unravels fails the loom: the items after it are never
+// started, and what they own is dropped (the checked build would catch a
+// leak). The parent unravels where the loop ends.
+
+use std.io.print
+
+fn main() {
+    let words = ["a", "b", "c", "d"]
+    loom for s in words.map(w => w.to_upper()) {
+        print("item {s}")
+        if s == "B" {
+            unravel("stop at {s}")
+        }
+    }
+    print("not reached")
+}

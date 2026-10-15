@@ -28,6 +28,11 @@ use crate::typeck::BodyId;
 pub(super) struct ThreadInfo<'a> {
     pub expr: &'a hir::Expr,
     pub captures: Vec<LocalId>,
+    /// The captures that move into the thread: what it owns, and drops.
+    pub moves: Vec<LocalId>,
+    /// What the environment owns (a moved capture that needs dropping): the
+    /// offset it's at, and its type.
+    pub owned: Vec<(u64, Ty)>,
 }
 
 /// The `#builtin` methods of `Spun` the builder writes.
@@ -124,14 +129,21 @@ impl<'a> Builder<'a> {
         let result_ty = self.thread_result_ty(e)?;
         let captures = self.f.scan.captures.get(&e.id).cloned().unwrap_or_default();
         let copies = self.tables().thread_copies.get(&e.id).cloned().unwrap_or_default();
+        let moves = self.tables().thread_moves.get(&e.id).cloned().unwrap_or_default();
         let _ = body;
-        // The environment: a pointer for each capture, then the copies.
+        // The environment: a pointer for each capture, then the copies and
+        // what moves in.
         let mut tail = 8 * captures.len() as u64;
         let mut copy_at = Vec::new();
+        let mut owned = Vec::new();
         for &l in &captures {
-            if copies.contains(&l) {
-                let (size, _) = self.size_align(self.local_ty(l))?;
+            if copies.contains(&l) || moves.contains(&l) {
+                let ty = self.local_ty(l);
+                let (size, _) = self.size_align(ty)?;
                 copy_at.push(Some((tail, size)));
+                if moves.contains(&l) && self.needs_drop(ty) {
+                    owned.push((tail, ty));
+                }
                 tail += size.div_ceil(8) * 8;
             } else {
                 copy_at.push(None);
@@ -151,13 +163,18 @@ impl<'a> Builder<'a> {
                 Some((off, size)) => {
                     let dst = self.offset(env, off as i64);
                     self.emit(InstKind::Copy { dst, src, size }, &[]);
+                    // What moves in isn't the parent's to drop any more.
+                    if moves.contains(&l) && self.needs_drop(self.local_ty(l)) {
+                        self.emit(InstKind::Zero { dst: src, size }, &[]);
+                    }
                     dst
                 }
                 None => src,
             };
             self.store(Mem::W64, env, 8 * k as i64, pointer);
         }
-        self.threads.insert((self.f.body, e.id), ThreadInfo { expr: e, captures });
+        let has_owned = !owned.is_empty();
+        self.threads.insert((self.f.body, e.id), ThreadInfo { expr: e, captures, moves, owned });
         let entry = self.func_id(FnKey::Thread(self.f.body, e.id));
         let entry = self.emit1(InstKind::FuncRef(entry), VTy::Int);
         let drop_fn = if self.needs_drop(result_ty) {
@@ -172,7 +189,14 @@ impl<'a> Builder<'a> {
         let place = self.local_place(group, span)?;
         let at = self.place_addr(&place, span)?;
         let g = self.load(Mem::W64, at, 0, VTy::Int);
-        let args = vec![g, entry, env, env_bytes, drop_fn, result_bytes];
+        // What a thread that never runs owns is dropped by its group.
+        let env_drop = if has_owned {
+            let func = self.func_id(FnKey::EnvDrop(self.f.body, e.id));
+            self.emit1(InstKind::FuncRef(func), VTy::Int)
+        } else {
+            self.iconst(0)
+        };
+        let args = vec![g, entry, env, env_bytes, drop_fn, result_bytes, env_drop];
         let handle = self.emit1(InstKind::Native { name: "task.spawn", imm: 0, args }, VTy::Int);
         Some(Val::Regs(vec![handle]))
     }
@@ -208,7 +232,21 @@ impl<'a> Builder<'a> {
         let env = env?;
         for (k, &l) in info.captures.iter().enumerate() {
             let at = self.load(Mem::W64, env, 8 * k as i64, VTy::Ptr);
-            self.f.locals.insert(l, Storage::At(at));
+            if info.moves.contains(&l) {
+                // Its own, in a slot of this frame, which it drops (pads
+                // read only memory).
+                let ty = self.local_ty(l);
+                let (size, align) = self.size_align(ty)?;
+                let slot = self.raw_slot(size.max(1), align.max(1));
+                let dst = self.slot_addr(slot);
+                self.emit(InstKind::Copy { dst, src: at, size }, &[]);
+                self.f.locals.insert(l, Storage::Slot(slot));
+                if self.needs_drop(ty) {
+                    self.add_cleanup(CleanupKind::Drop { at: super::cleanup::Stable::Slot(slot), ty });
+                }
+            } else {
+                self.f.locals.insert(l, Storage::At(at));
+            }
         }
         let depth = self.open_scope();
         let valueless = self.is_valueless(ret);
@@ -219,6 +257,19 @@ impl<'a> Builder<'a> {
             self.ret_val(val, span)?;
         }
         self.close_scope(depth);
+        Some(Vec::new())
+    }
+
+    /// What a thread that never ran owns, in its environment: dropped.
+    pub(super) fn env_drop_func(&mut self, body: BodyId, id: HirId) -> Option<Vec<VTy>> {
+        let info = self.threads.get(&(body, id)).cloned()?;
+        let env = self.new_value(VTy::Ptr);
+        self.f.blocks[0].params.push(env);
+        for (off, ty) in info.owned {
+            let at = self.offset(env, off as i64);
+            self.drop_at(at, ty);
+        }
+        self.terminate(crate::heddle::Term::Ret(Vec::new()));
         Some(Vec::new())
     }
 

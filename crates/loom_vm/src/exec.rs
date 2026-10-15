@@ -1479,6 +1479,7 @@ fn run_task_op(env: &mut Env, op: TaskOp, args: &mut [u64], pc: *const u64, fp: 
                 args[3],
                 args[4],
                 args[5],
+                args[6],
             )?;
             args[0] = handle;
             step

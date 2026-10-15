@@ -1,0 +1,41 @@
+// `loom for` starts a thread for each item, and ends when they're all
+// done. The parent goes through the iterator; an item that owns memory
+// moves into its thread.
+
+use std.io.print
+use std.sync.Atomic
+use std.sync.sched_yield
+
+fn consume(s: String) -> usize = s.len()
+
+fn main() {
+    let sum = Atomic[i64](0)
+    loom for i in 1..=4 {
+        sched_yield()
+        sum.add(i)
+        print("item {i}")
+    }
+    print("sum {sum.load()}")
+
+    // `continue` ends an iteration; a loop inside one is its own.
+    let words = ["a", "bb", "ccc", "dd"]
+    loom for w in words {
+        if w.len() == 2 {
+            continue
+        }
+        for k in 0..3 {
+            if k == 1 {
+                break
+            }
+            print("word {w} {k}")
+        }
+    }
+
+    // Items made on the way, owned: each moves into its thread.
+    let total = Atomic[usize](0)
+    loom for up in words.map(w => w.to_upper()) {
+        let n = consume(up)
+        total.add(n)
+    }
+    print("total {total.load()}")
+}

@@ -129,6 +129,7 @@ codes! {
     C0403 = "`thread` outside a `loom` block";
     C0404 = "a thread handle outlives its `loom` block";
     C0405 = "a thread can't keep a variable that doesn't outlive its loom";
+    C0406 = "an iteration of a `loom for` can't leave itself";
 
     // P01xx: patterns
     P0101 = "match isn't exhaustive";
