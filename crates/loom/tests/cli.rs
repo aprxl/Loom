@@ -772,3 +772,37 @@ main's defer
         assert_eq!(text(&out.stderr), "interrupted (Ctrl-C)\n", "{workers} workers");
     }
 }
+
+/// `examples/parallel.loom` reads this repository's docs and runs unsandboxed
+/// from the repository root: it ends well on both backends, the picture and
+/// the prime count are right, and what's printed is the same from Lua, from
+/// Treadle with one worker and with many (the word counts change with every
+/// edit of the docs, so they aren't pinned).
+#[test]
+fn parallel_example_runs_the_same_on_both_backends() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let run = |backend: &str, workers: &str| {
+        let out = Command::new(env!("CARGO_BIN_EXE_loom"))
+            .args(["--color", "never", "run", "--backend", backend, "examples/parallel.loom"])
+            .env("LOOM_THREADS", workers)
+            .current_dir(&root)
+            .output()
+            .expect("the loom binary runs");
+        assert_eq!(out.status.code(), Some(0), "{backend} x{workers}: {}", text(&out.stderr));
+        text(&out.stdout)
+    };
+    let lua = run("lua", "1");
+    // 28 rows of the picture, then the primes and the top five words.
+    assert_eq!(lua.lines().count(), 28 + 1 + 5, "{lua}");
+    assert!(
+        lua.contains(
+            "primes below 200k: 17984
+"
+        ),
+        "{lua}"
+    );
+    assert!(lua.lines().take(28).all(|l| l.chars().count() == 72), "{lua}");
+    for workers in ["1", "4"] {
+        assert_eq!(run("vm", workers), lua, "Treadle with {workers} workers");
+    }
+}

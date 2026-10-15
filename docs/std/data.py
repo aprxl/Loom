@@ -25,6 +25,8 @@ MODULES = [
     {"name": "Stream", "from": "iter"},
     {"name": "Shuttle", "from": "iter"},
     {"name": "Burst", "from": "iter"},
+    {"name": "Range", "from": "iter"},
+    {"name": "sorted_by", "from": "iter"},
     {"name": "Num", "from": "num"},
   ],
   "functions": [
@@ -138,6 +140,11 @@ MODULES = [
        {"sig": "fn next(mut self) -> ?Item",
         "doc": "The next item, or `none` once there are no more."},
      ]},
+    {"kind": "warp", "name": "Range", "suffix": "[T]", "builtin": True,
+     "doc": "The type of `a..b`, `a..=b` and `a..`: the values from `a` up to `b`. It has the methods of `Stream` (over its values), and these.",
+     "methods": [
+       {"sig": "fn chunks(self, n: usize) -> Stream[Range[T]]", "doc": "Ranges of `n` values at a time, one after another: `(0..10).chunks(4)` is `0..4`, `4..8` and `8..10`. Each one is a range too, with all the methods of one, so it can be given to a thread. Unravels if `n` is 0 or the range has no end."},
+     ]},
     {"kind": "warp", "name": "Stream", "suffix": "[T]", "builtin": True,
      "doc": "A lazy stream of `T`s: `s.chars()`, `xs.indexed()` and `stream.map(f)` are streams. Nothing is computed until something asks for the next item. Everything else with items has these methods too: arrays, lists and slices, ranges, and types that weave `Iter`. `(1..=10).filter(_ % 2 == 0)` is a stream of the range's items. The methods that make a new stream use up this one: a stream is read once.",
      "methods": [
@@ -179,6 +186,10 @@ MODULES = [
        {"sig": "fn drain(take self)", "doc": "Runs the shuttle to its next `pull`, throwing away what it yields."},
      ]},
   ],
+  "functions": [
+    {"name": "sorted_by", "suffix": "[T](take items: Stream[T], before: (T, T) => bool) -> List[T]",
+     "doc": "The items of a stream in a new list, sorted by `before`: `before(a, b)` says whether `a` goes before `b`. A stable sort: items that neither goes before the other keep the order they came in. `words.pairs().sorted_by(_.1 > _.1)` is the most frequent first."},
+  ],
 },
 
 {
@@ -213,6 +224,7 @@ MODULES = [
        {"sig": "fn get(self, key: K) -> ?V where K: Hash", "doc": "A copy of the value for `key` (`m[key]` is the value itself)."},
        {"sig": "fn has(self, key: K) -> bool where K: Hash", "doc": "Whether there's a value for `key`."},
        {"sig": "fn insert(mut self, take key: K, take value: V) -> ?V where K: Hash", "doc": "Adds `value` for `key`, and gives back the value it replaces."},
+       {"sig": "fn entry(mut self, take key: K, take default: V) ~> mut V where K: Hash", "doc": "The value for `key` as a place to change, for the statement it's in: `counts.entry(word, default: 0) += 1`. When there's none, `default` is added first (and `key` kept); when there is, both are dropped."},
        {"sig": "fn remove(mut self, key: K) -> ?V where K: Hash", "doc": "Takes out the value for `key`; later keys keep their order."},
        {"sig": "fn clear(mut self)", "doc": "Removes every key."},
        {"sig": "fn keys(self) -> Stream[K]", "doc": "The keys, in order."},

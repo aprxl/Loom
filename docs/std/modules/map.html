@@ -91,6 +91,13 @@
 </div>
 <p class="member-doc">Adds <code>value</code> for <code>key</code>, and gives back the value it replaces.</p>
 </div>
+<div class="member" id="Map.entry">
+<div class="member-head">
+<span class="sig">fn entry(mut self, take key: K, take default: V) ~&gt; mut V where K: Hash</span>
+
+</div>
+<p class="member-doc">The value for <code>key</code> as a place to change, for the statement it's in: <code>counts.entry(word, default: 0) += 1</code>. When there's none, <code>default</code> is added first (and <code>key</code> kept); when there is, both are dropped.</p>
+</div>
 <div class="member" id="Map.remove">
 <div class="member-head">
 <span class="sig">fn remove(mut self, key: K) -&gt; ?V where K: Hash</span>

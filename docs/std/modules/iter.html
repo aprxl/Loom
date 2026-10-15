@@ -80,6 +80,22 @@
 </div>
 </div>
 </div>
+<div class="item" id="Range">
+<div class="item-head">
+<span class="sig">warp <strong>Range</strong>[T]</span>
+<span class="badge builtin">builtin</span>
+</div>
+<p class="item-doc">The type of <code>a..b</code>, <code>a..=b</code> and <code>a..</code>: the values from <code>a</code> up to <code>b</code>. It has the methods of <code>Stream</code> (over its values), and these.</p>
+<div class="members">
+<div class="member" id="Range.chunks">
+<div class="member-head">
+<span class="sig">fn chunks(self, n: usize) -&gt; Stream[Range[T]]</span>
+
+</div>
+<p class="member-doc">Ranges of <code>n</code> values at a time, one after another: <code>(0..10).chunks(4)</code> is <code>0..4</code>, <code>4..8</code> and <code>8..10</code>. Each one is a range too, with all the methods of one, so it can be given to a thread. Unravels if <code>n</code> is 0 or the range has no end.</p>
+</div>
+</div>
+</div>
 <div class="item" id="Stream">
 <div class="item-head">
 <span class="sig">warp <strong>Stream</strong>[T]</span>
@@ -302,6 +318,14 @@
 <p class="member-doc">Runs the shuttle to its next <code>pull</code>, throwing away what it yields.</p>
 </div>
 </div>
+</div>
+<h2>Functions</h2>
+<div class="item" id="sorted_by">
+<div class="item-head">
+<span class="sig">fn <strong>sorted_by</strong>[T](take items: Stream[T], before: (T, T) =&gt; bool) -&gt; List[T]</span>
+
+</div>
+<p class="item-doc">The items of a stream in a new list, sorted by <code>before</code>: <code>before(a, b)</code> says whether <code>a</code> goes before <code>b</code>. A stable sort: items that neither goes before the other keep the order they came in. <code>words.pairs().sorted_by(_.1 &gt; _.1)</code> is the most frequent first.</p>
 </div>
 </main>
 </div>

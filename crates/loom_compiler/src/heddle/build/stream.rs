@@ -31,6 +31,9 @@ pub(super) enum Step {
     /// mode: `RANGE_TO`, `RANGE_THROUGH`, `RANGE_FROM` (`RANGE_FROM_ON`
     /// once started), or `RANGE_DONE`.
     Range(Ty),
+    /// Ranges of `n` values at a time, `[lo, hi)`: `[0]` where the next
+    /// starts, `[8]` the end (past the last value), `[16]` `n`.
+    RangeChunks(Ty),
     /// A type that weaves `Iter`, at `[0]`: its `next` gives the items.
     Woven {
         next: BodyId,
@@ -147,6 +150,7 @@ pub(super) fn writes_body(path: &str) -> bool {
                 | "std.slice.Slice.chunks"
                 | "std.slice.Slice.chunks_mut"
                 | "std.slice.Slice.windows"
+                | "std.iter.Range.chunks"
         )
 }
 
@@ -169,6 +173,7 @@ impl<'a> Builder<'a> {
             Step::Coll { owned, .. } => 32 + if owned { 48 } else { 0 },
             Step::Gen { .. } | Step::Burst { .. } => 16,
             Step::Chunks { .. } => 32,
+            Step::RangeChunks(_) => 24,
             _ => 56,
         })
     }
@@ -387,6 +392,29 @@ impl<'a> Builder<'a> {
                 self.ret_int(1);
             }
             Step::Text(what) => self.text_next(what, b, out)?,
+            Step::RangeChunks(elem) => {
+                let int = match (self.int_of(elem), self.tcx().kind(elem)) {
+                    (Some(int), _) => int,
+                    (None, TyKind::Char) => crate::ty::IntTy { signed: false, bits: 32, size: false },
+                    _ => return self.unsupported(span, "chunks of this range"),
+                };
+                let (lo, hi, n) = (self.word(b, 0), self.word(b, 8), self.word(b, 16));
+                let done = self.emit1(InstKind::ICmp { cmp: Cmp::Ge, unsigned: !int.signed, a: lo, b: hi }, VTy::Int);
+                self.none_if(done);
+                let left = self.uarith(IntOp::Sub, hi, lo);
+                let size = self.umin(left, n);
+                let next = self.uarith(IntOp::Add, lo, size);
+                // `lo..=last`: the value past the end of a narrow type's
+                // range (256 for a `u8`) doesn't fit in the range.
+                let one = self.iconst(1);
+                let last = self.uarith(IntOp::Sub, next, one);
+                let flags = self.iconst(3);
+                let range = self.tcx().find(&TyKind::Range(elem));
+                let Some(range) = range else { return self.internal(span, "the range type of `chunks` isn't known") };
+                self.store_val(out, 0, range, &Val::Regs(vec![lo, last, flags]), span)?;
+                self.set_word(b, 0, next);
+                self.ret_int(1);
+            }
             Step::Chunks { elem, windows } => {
                 let (len, n, at) = (self.word(b, 8), self.word(b, 16), self.word(b, 24));
                 let (size, next) = if windows {
@@ -591,6 +619,7 @@ impl<'a> Builder<'a> {
             Step::Woven { iter, .. } => format!("iter[{}]", show(iter)),
             Step::Text(what) => format!("{what:?}").to_lowercase(),
             Step::Chunks { elem, windows } => format!("{}[{}]", if windows { "windows" } else { "chunks" }, show(elem)),
+            Step::RangeChunks(elem) => format!("range_chunks[{}]", show(elem)),
             Step::Map { from, to, .. } => format!("map[{}, {}]", show(from), show(to)),
             Step::Filter { item, .. } => format!("filter[{}]", show(item)),
             Step::TakeWhile { item, .. } => format!("take_while[{}]", show(item)),
@@ -1096,6 +1125,61 @@ impl<'a> Builder<'a> {
             self.set_word(b, 8, n);
             let zero = self.iconst(0);
             self.set_word(b, 16, zero);
+            self.stream_at(sret?, step, b);
+            return self.ret_written();
+        }
+        if path == "std.iter.Range.chunks" {
+            let TyKind::Range(elem) = self.tcx().kind(tys[0]).clone() else {
+                return self.internal(span, "`chunks` of something that isn't a range");
+            };
+            let r = self.regs(args[0].clone(), tys[0], span)?;
+            let n = self.regs(args[1].clone(), self.tcx().usize, span)?[0];
+            let zero = self.iconst(0);
+            let bad = self.ucmp(Cmp::Eq, n, zero);
+            let (fail, ok) = (self.new_block(), self.new_block());
+            self.br(bad, fail, ok);
+            self.enter(fail);
+            self.unravel_msg(&[Msg::Text("chunks of 0 values")], span)?;
+            self.enter(ok);
+            // Flags: 1 is there's a high end, 2 is it's included.
+            let (one, two) = (self.iconst(1), self.iconst(2));
+            let has_hi = self.emit1(InstKind::Bit { op: BitOp::And, a: r[2], b: one }, VTy::Int);
+            let open = self.ucmp(Cmp::Eq, has_hi, zero);
+            let (fail, ok) = (self.new_block(), self.new_block());
+            self.br(open, fail, ok);
+            self.enter(fail);
+            self.unravel_msg(&[Msg::Text("chunks of a range with no end")], span)?;
+            self.enter(ok);
+            let elem = self.tcx().degauge(elem);
+            let int = match (self.int_of(elem), self.tcx().kind(elem)) {
+                (Some(int), _) => int,
+                (None, TyKind::Char) => crate::ty::IntTy { signed: false, bits: 32, size: false },
+                _ => return self.unsupported(span, "chunks of this range"),
+            };
+            // `lo..=hi` becomes `lo..hi + 1`, unless `hi` is the largest.
+            let incl = self.emit1(InstKind::Bit { op: BitOp::And, a: r[2], b: two }, VTy::Int);
+            let end = self.new_var(VTy::Int);
+            self.write(end, r[1]);
+            let (through, plain) = (self.new_block(), self.new_block());
+            let c = self.ucmp(Cmp::Ne, incl, zero);
+            self.br(c, through, plain);
+            self.enter(through);
+            let past = self.uarith(IntOp::Add, r[1], one);
+            let wraps = self.emit1(InstKind::ICmp { cmp: Cmp::Le, unsigned: !int.signed, a: past, b: r[1] }, VTy::Int);
+            let (fail, ok) = (self.new_block(), self.new_block());
+            self.br(wraps, fail, ok);
+            self.enter(fail);
+            self.unravel_msg(&[Msg::Text("chunks of a range that includes its type's maximum")], span)?;
+            self.enter(ok);
+            self.write(end, past);
+            self.jump(plain);
+            self.enter(plain);
+            let end = self.read(end);
+            let step = Step::RangeChunks(elem);
+            let b = self.new_box(step)?;
+            self.set_word(b, 0, r[0]);
+            self.set_word(b, 8, end);
+            self.set_word(b, 16, n);
             self.stream_at(sret?, step, b);
             return self.ret_written();
         }

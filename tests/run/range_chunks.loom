@@ -1,0 +1,21 @@
+// `chunks` on a range gives ranges, which are ranges all the same: a
+// stream's methods, loops, `chunks` again.
+
+use std.io.print
+
+fn main() {
+    for c in (2..12u64).chunks(4) {
+        print("{c.count()}")
+    }
+    // Inclusive, and a last one that is short.
+    print("{(0..=9i32).chunks(3).map(c => c.count()).collect()}")
+    // Negative values, and the sum of each piece.
+    print("{(-5..5i64).chunks(4).map(c => c.sum()).collect()}")
+    // Empty, and one chunk longer than the range.
+    print("{(7..7u8).chunks(3).count()} {(0..3usize).chunks(100).count()}")
+    // Pieces of pieces.
+    let nested = (0..12u32).chunks(6).map(c => c.chunks(4).count()).sum()
+    print("{nested}")
+    // The end of a narrow type.
+    print("{(250..=255u8).chunks(4).map(c => c.count()).collect()}")
+}

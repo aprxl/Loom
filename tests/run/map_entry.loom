@@ -1,0 +1,31 @@
+// `entry` is the value for a key as a place to change, made first when
+// there isn't one: new keys go at the end, in the order they came.
+
+use std.io.print
+
+fn main() {
+    var counts = Map[String, u32]()
+    for w in ["b", "a", "b", "c", "a", "b"] {
+        counts.entry(w.to_string(), default: 0) += 1
+    }
+    for (k, n) in counts {
+        print("{k} {n}")
+    }
+
+    // A value that owns memory: the default is dropped when it isn't used.
+    var groups = Map[u8, List[String]]()
+    for (k, w) in [(1u8, "x"), (2, "y"), (1, "z")] {
+        groups.entry(k, default: []).push(w.to_string())
+    }
+    for (k, ws) in groups {
+        print("{k}: {ws}")
+    }
+
+    // Keys that own memory, existing and new; and a mapped value.
+    var seen = Map[String, i64]()
+    let keys = ["one".to_string(), "two".to_string(), "one".to_string()]
+    for k in keys {
+        seen.entry(k.copy(), default: 10) *= 2
+    }
+    print("{seen.get("one")} {seen.get("two")} {seen.len()}")
+}

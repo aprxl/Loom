@@ -221,9 +221,14 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
     and the natives, the dispatch loops run without it; `LOOM_THREADS`,
     one worker per core by default, `LOOM_THREADS=1` is the reference
     schedule; `tests/par` checks what's deterministic at 2/4/8 workers,
-    `par_stress` is the `--ignored` 1000-run version). Left: scaling
-    numbers (per-worker heaps and deques if the gates miss), and the
-    rest of `examples/parallel.loom`.
+    `par_stress` is the `--ignored` 1000-run version, and
+    `thread_fixtures_on_many_workers` runs the thread fixtures of
+    `tests/run` on 8 workers and checks only how they end).
+    `Range.chunks`, `Map.entry` and `sorted_by` came with
+    `examples/parallel.loom`, which runs the same on Lua and Treadle at
+    any worker count (a test in `cli.rs`). `par_mandelbrot` scales 6.3×
+    on 8 workers; spawn+join costs 0.35 µs on one worker but 2.7 µs on 8
+    (the gate is 2 µs): per-worker deques are what's left, if it matters.
 
 Next: V5's rest, V6 spools, V7 Lua interop, V8 speed, V9 Treadle by
 default.

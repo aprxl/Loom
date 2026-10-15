@@ -250,6 +250,11 @@ impl<'a> Builder<'a> {
             let _ = (callee, args);
             return self.mutex_lock(e);
         }
+        // A map's `entry` is no shuttle either: the place is found (or made)
+        // where it's evaluated.
+        if self.p.def_path(self.typed.results.instance(info.callee).def) == "std.map.Map.entry" {
+            return self.map_entry(e);
+        }
         let sig = self.typed.results.sigs.get(&info.callee)?.clone();
         let abi = self.body_abi(info.callee, span)?;
         let modes: Vec<ParamMode> = sig.params.iter().map(|p| p.mode).collect();

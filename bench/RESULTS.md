@@ -350,6 +350,8 @@ to 0.286 s; the benchmark suite within noise.
 
 `bench/par_spawn.loom` (200 000 empty iterations: a spawn and a join each):
 0.35 µs each on one worker, 0.8 µs on 2, 1.2 µs on 4, 2.7 µs on 8 (every
-spawn and every wake goes through the pool's one lock; per-worker deques are
-the next step if that matters). The single-thread benchmarks are unchanged
+spawn and every wake goes through the pool's one lock). That misses V5's
+gate of 2 µs on 8 workers; per-worker deques are the next step if it
+matters, and `loom for` doesn't chunk its iterations yet, which is the
+cheaper fix for small items (see `Range.chunks`). The single-thread benchmarks are unchanged
 by the pool (A/B against the commit before it, within 2%).

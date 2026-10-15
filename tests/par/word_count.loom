@@ -1,0 +1,28 @@
+// A map built by each thread, and merged with `entry`: the same counts on
+// any number of workers.
+
+use std.io.print
+
+fn count(words: [str]) -> Map[String, u32] {
+    var counts = Map[String, u32]()
+    for w in words {
+        counts.entry(w.to_string(), default: 0) += 1
+    }
+    counts
+}
+
+fn main() {
+    let text = ["red", "green", "blue", "red", "blue", "red", "teal", "green", "red"]
+    var total = Map[String, u32]()
+    loom {
+        let jobs = [0, 3, 6].map(from => thread count(text[from..from + 3]))
+        for job in jobs {
+            for (word, n) in job.join() {
+                total.entry(word, default: 0) += n
+            }
+        }
+    }
+    for (word, n) in total.sorted() {
+        print("{word} {n}")
+    }
+}

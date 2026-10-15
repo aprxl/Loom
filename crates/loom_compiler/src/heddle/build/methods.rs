@@ -92,6 +92,7 @@ impl<'a> Builder<'a> {
             ("std.string.Str", []) => tcx.str,
             ("std.string.Char", []) => tcx.char,
             ("std.option.Optional", [t]) => tcx.find(&TyKind::Optional(*t)).unwrap_or(ty),
+            ("std.iter.Range", [t]) => tcx.find(&TyKind::Range(*t)).unwrap_or(ty),
             _ => ty,
         }
     }

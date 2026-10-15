@@ -20,6 +20,10 @@ pub warp Map[K, V] {
     pub fn has(self, key: K) -> bool where K: Hash
     /// Adds `value` for `key`, and gives back the value it replaces.
     pub fn insert(mut self, take key: K, take value: V) -> ?V where K: Hash
+    /// The value for `key` as a place to change, for the statement it's in:
+    /// `counts.entry(word, default: 0) += 1`. When there's none, `default`
+    /// is added first (and `key` kept); when there is, both are dropped.
+    pub fn entry(mut self, take key: K, take default: V) ~> mut V where K: Hash
     /// Takes out the value for `key`; later keys keep their order.
     pub fn remove(mut self, key: K) -> ?V where K: Hash
     /// Removes every key.

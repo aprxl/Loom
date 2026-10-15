@@ -2666,6 +2666,32 @@ ext["std.iter.Stream.join"] = function(d, s, sep)
   return concat(out, sep)
 end
 
+-- Ranges of `size` values at a time, as `{lo, last, true}`: `last` is in
+-- the range, which a narrow type's end past it (256 for a `u8`) would not be.
+ext["std.iter.Range.chunks"] = function(d, r, size)
+  if size == 0 then error(MARK .. "chunks of 0 values", 2) end
+  local at, hi, incl = r[1], r[2], r[3]
+  if hi == nil then error(MARK .. "chunks of a range with no end", 2) end
+  local u64 = d.u64
+  if incl then
+    local over = hi + 1
+    if (u64 and over == 0) or (not u64 and over < hi) then
+      error(MARK .. "chunks of a range that includes its type's maximum", 2)
+    end
+    hi = over
+  end
+  return function()
+    local inside
+    if u64 then inside = ult(at, hi) else inside = at < hi end
+    if not inside then return nil end
+    local step, left = size, hi - at
+    if ult(left, step) then step = left end
+    local from = at
+    at = at + step
+    return true, { from, at - 1, true }
+  end
+end
+
 ext["std.slice.Slice.chunks"] = function(_, s, size)
   if size == 0 then error(MARK .. "chunks of 0 elements", 2) end
   local t, o, n = parts(s)
@@ -2840,6 +2866,19 @@ ext["std.map.Map.get"] = function(dk, dv, m, k)
   local i = m.idx[hkey(dk, k)]
   if i == nil then return nil end
   return some(dv, copy(dv, m.vals[i]))
+end
+
+-- A place for the value of `k`: the entry is made first when there's none
+-- (the shuttle yields `{values, slot}`, which is what a place is).
+ext["std.map.Map.entry"] = function(dk, _, m, k, default)
+  return rt.shuttle(function()
+    local i = m.idx[hkey(dk, k)]
+    if i == nil then
+      map_put(dk, m, k, default)
+      i = m.idx[hkey(dk, k)]
+    end
+    co_yield(true, { m.vals, i })
+  end)
 end
 
 ext["std.map.Map.has"] = function(dk, _, m, k)

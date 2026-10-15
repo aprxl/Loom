@@ -21,6 +21,17 @@ pub weft Iter {
     fn next(mut self) -> ?Item
 }
 
+/// The type of `a..b`, `a..=b` and `a..`: the values from `a` up to `b`.
+/// It has the methods of `Stream` (over its values), and these.
+#builtin
+pub warp Range[T] {
+    /// Ranges of `n` values at a time, one after another: `(0..10).chunks(4)`
+    /// is `0..4`, `4..8` and `8..10`. Each one is a range too, with all the
+    /// methods of one, so it can be given to a thread. Unravels if `n` is 0
+    /// or the range has no end.
+    pub fn chunks(self, n: usize) -> Stream[Range[T]]
+}
+
 /// A lazy stream of `T`s: `s.chars()`, `xs.indexed()` and `stream.map(f)`
 /// are streams. Nothing is computed until something asks for the next item.
 ///
@@ -112,4 +123,27 @@ pub warp Shuttle[T, U] {
 pub once warp Burst[T] {
     /// Runs the shuttle to its next `pull`, throwing away what it yields.
     pub fn drain(take self)
+}
+
+/// The items of a stream in a new list, sorted by `before`: `before(a, b)`
+/// says whether `a` goes before `b`. A stable sort: items that neither goes
+/// before the other keep the order they came in.
+/// `words.pairs().sorted_by(_.1 > _.1)` is the most frequent first.
+pub fn sorted_by[T](take items: Stream[T], before: (T, T) => bool) -> List[T] {
+    var out: List[T] = []
+    for x in items {
+        // The first place `x` goes before (after any equal ones).
+        var lo = 0
+        var hi = out.len()
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if before(x, out[mid]) {
+                hi = mid
+            } else {
+                lo = mid + 1
+            }
+        }
+        out.insert(lo, x)
+    }
+    out
 }

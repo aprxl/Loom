@@ -519,6 +519,7 @@ struct Std {
     set: Option<DefId>,
     iter: Option<DefId>,
     stream: Option<DefId>,
+    range_warp: Option<DefId>,
     shuttle: Option<DefId>,
     burst: Option<DefId>,
     spun: Option<DefId>,
@@ -662,6 +663,7 @@ impl<'p> Checker<'p> {
             set: find("std.set", "Set"),
             iter: find("std.iter", "Iter"),
             stream: find("std.iter", "Stream"),
+            range_warp: find("std.iter", "Range"),
             shuttle: find("std.iter", "Shuttle"),
             burst: find("std.iter", "Burst"),
             spun: find("std.sync", "Spun"),
@@ -1325,6 +1327,10 @@ impl<'p> Checker<'p> {
                             };
                             self.diags.push(diag);
                             return self.tcx.error;
+                        }
+                        // std's `Range[T]` is the type of `a..b`.
+                        if Some(*def) == self.std.range_warp && lowered.len() == 1 {
+                            return self.tcx.intern(TyKind::Range(lowered[0]));
                         }
                         self.tcx.intern(TyKind::Adt(*def, lowered))
                     }

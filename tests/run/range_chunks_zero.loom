@@ -1,0 +1,11 @@
+// A chunk of 0 values is a mistake.
+
+use std.io.print
+
+fn main() {
+    print("start")
+    let n = 0
+    for c in (0..10).chunks(n) {
+        print("{c.count()}")
+    }
+}

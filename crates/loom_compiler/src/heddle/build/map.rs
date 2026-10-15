@@ -709,6 +709,66 @@ impl<'a> Builder<'a> {
         Some((Place::At { ptr: at, off: 0 }, c.val?))
     }
 
+    /// `m.entry(k, default: d)`: the value's place, made first (from `d`,
+    /// which `k` is kept with) when `k` isn't there. What isn't kept is
+    /// dropped here.
+    pub(super) fn map_entry(&mut self, e: &'a hir::Expr) -> Option<(Place, Ty)> {
+        let span = e.span;
+        let hir::ExprKind::Call { callee, args } = &e.kind else { return None };
+        let info = self.tables().calls.get(&e.id)?.clone();
+        let sig = self.typed.results.sigs.get(&info.callee)?.clone();
+        let modes: Vec<loom_syntax::ast::ParamMode> = sig.params.iter().map(|p| p.mode).collect();
+        let recv_ty = self.plain_ty(sig.params.first()?.ty);
+        let c = self.coll_of(recv_ty)?;
+        let vt = c.val?;
+        let worked = self.call_args(callee, args, &info, &modes, Some(recv_ty))?;
+        let mut worked = worked.into_iter();
+        let header = match worked.next()? {
+            super::call::Arg::Place(place) => self.place_addr(&place, span)?,
+            super::call::Arg::Val(v, ty) => self.addr_of(v, ty, span)?,
+        };
+        let key = match worked.next()? {
+            super::call::Arg::Val(v, _) => v,
+            super::call::Arg::Place(place) => Val::Mem(self.place_addr(&place, span)?),
+        };
+        let default = match worked.next()? {
+            super::call::Arg::Val(v, _) => v,
+            super::call::Arg::Place(place) => Val::Mem(self.place_addr(&place, span)?),
+        };
+        let (found, h) = self.lookup(&c, header, &key, span)?;
+        let none = self.iconst(NONE);
+        let missing = self.ucmp(Cmp::Eq, found, none);
+        let at = self.new_var(VTy::Int);
+        let (add, have, done) = (self.new_block(), self.new_block(), self.new_block());
+        self.br(missing, add, have);
+        // There: neither is kept.
+        self.enter(have);
+        self.write(at, found);
+        if let Val::Mem(k) = key {
+            self.drop_at(k, c.key);
+        }
+        if let Val::Mem(d) = default {
+            self.drop_at(d, vt);
+        }
+        self.jump(done);
+        // Not: both are, and then it's there.
+        self.enter(add);
+        // The new entry goes after the ones used so far.
+        let used = self.hdr(header, 40);
+        self.push_entry(&c, header, h, key.clone(), Some(default.clone()), span)?;
+        self.write(at, used);
+        self.jump(done);
+        self.enter(done);
+        // Both are used up, kept or dropped: no cleanup of theirs is left.
+        self.moved_from(&default, vt);
+        self.moved_from(&key, c.key);
+        let slot = self.read(at);
+        let ebuf = self.hdr_ptr(header, 0);
+        let ent = self.entry(&c, ebuf, slot);
+        let value = self.offset(ent, c.voff as i64);
+        Some((Place::At { ptr: value, off: 0 }, vt))
+    }
+
     /// `m[k] = v`, for `target` `m[k]`: `None` when it isn't one.
     pub(super) fn map_assign(&mut self, target: &'a hir::Expr, v: Val) -> Option<Option<()>> {
         let ExprKind::Index { base, args } = &target.kind else { return Some(None) };

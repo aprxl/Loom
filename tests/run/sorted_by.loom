@@ -1,0 +1,23 @@
+// `sorted_by` makes a list from a stream, in the order `before` says, and
+// keeps equal items in the order they came.
+
+use std.io.print
+
+fn main() {
+    let words = ["pear", "fig", "apple", "kiwi", "plum", "date", "lime"]
+    // By length: the ones of 4 keep their order.
+    let by_len = words.take(100).map(w => w.to_string()).sorted_by((a, b) => a.len() < b.len())
+    print("{by_len}")
+
+    var counts = Map[String, u32]()
+    for w in ["b", "a", "b", "c", "a", "b", "d"] {
+        counts.entry(w.to_string(), default: 0) += 1
+    }
+    // Most first; a and d (and c) tie, and stay as inserted.
+    let top = counts.pairs().sorted_by(_.1 > _.1).take(3)
+    for (w, n) in top {
+        print("{n:>3} {w}")
+    }
+    let nums = [5, 3, 9, 3, 1].take(10).sorted_by(_ < _)
+    print("{nums}")
+}
