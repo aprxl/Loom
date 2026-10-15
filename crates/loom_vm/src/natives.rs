@@ -231,10 +231,14 @@ impl<'i> Ctx<'i> {
         (&mut self.msg, &mut self.bufs)
     }
 
-    /// The address of text literal `index`, which the verifier has checked.
-    pub fn string_ptr(&self, index: usize) -> u64 {
-        let (start, _) = self.strings[index];
-        self.rodata[start..].as_ptr() as u64
+    /// Where the text literals are, and where each starts with its length:
+    /// they're never changed, so workers read them without the lock.
+    pub fn rodata_ptr(&self) -> *const u8 {
+        self.rodata.as_ptr()
+    }
+
+    pub fn strings_ptr(&self) -> *const (usize, usize) {
+        self.strings.as_ptr()
     }
 
     /// With `checked`: whether `len` bytes at `addr` are a live object or
