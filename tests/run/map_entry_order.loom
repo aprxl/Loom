@@ -1,0 +1,16 @@
+// A compound assignment works out its right side first, so the entry isn't
+// there yet when it does, and what it does to the map or the list can't
+// leave the place dangling.
+
+use std.io.print
+
+fn main() {
+    var m = Map[i32, u32]()
+    m.entry(1, default: 5) += m.len() as u32 * 100
+    for (k, v) in m {
+        print("{k} {v}")
+    }
+    var xs: List[u32] = [1, 2]
+    xs[1] += { xs.push(9); 10 }
+    print("{xs}")
+}

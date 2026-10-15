@@ -209,7 +209,7 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
     purpose: building the program from the job build's module, and baking
     maps, sets and sums (they're computed when read).
 
-27. Treadle V5, threads (design/vm.md §11), in progress. Done: `loom`,
+27. Treadle V5, threads (design/vm.md §11), done but for two gates. `loom`,
     `thread`, `Spun[T]`, `join`, `sched_yield` and the capture rules
     (C0401–C0405) on both backends; the reference schedule (a thread runs
     at once, until it parks; the spawner waits at the front, woken tasks
@@ -230,8 +230,15 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
     on 8 workers; spawn+join costs 0.35 µs on one worker but 2.7 µs on 8
     (the gate is 2 µs): per-worker deques are what's left, if it matters.
 
-Next: V5's rest, V6 spools, V7 Lua interop, V8 speed, V9 Treadle by
-default.
+V5's gates, honestly: every one passes but the speed gate's second half:
+mandelbrot with `loom for` scales 6.3× on 8 workers (0.79 of the physical
+cores, 0.4 of the 16 logical ones this machine reports), and spawning and
+joining takes 0.35 µs on one worker but 2.7 µs on 8, over the gate's 2 µs.
+Also not done: `loom for` still makes a task per iteration (design/vm.md
+§11.3 says it chunks).
+
+Next: V6 spools, V7 Lua interop, V8 speed (and V5's misses: per-worker
+deques, chunking), V9 Treadle by default.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and

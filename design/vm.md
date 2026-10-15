@@ -1279,9 +1279,10 @@ for V6.
      `defer`s);
   2. wait for all of them;
   3. carry on: return, propagate the error, or unravel again.
-- **`loom for`** splits its iterations into chunks adaptively (halving on a
-  steal, like Rayon), a task per chunk. `#disjoint` projections give each
-  iteration its own `mut` place.
+- **`loom for`** is to split its iterations into chunks adaptively (halving
+  on a steal, like Rayon), a task per chunk (**not yet**: it makes a task per
+  iteration). `#disjoint` projections give each iteration its own `mut`
+  place.
 - **`Atomic[T]`** has `T`'s layout, with Rust's atomic operations on its
   address.
 - **`Mutex[T]`** is a lock word and a `T`. Contention parks the task, not the
@@ -1303,11 +1304,17 @@ for V6.
   waits on a condition; the last to go idle with the program's own task
   waiting declares the deadlock; the first fault, or the program's task
   ending, stops them all. A native works on the worker's own message,
-  sinks and output line (`natives::Local`), so templates and `print` lines
-  stay whole. A constant that isn't baked is claimed by the first task to
-  read it (`const.begin`), and the others wait. `LOOM_THREADS` sets the
-  count (default: one per core). Not yet: per-worker heaps and deques, which
-  the scaling gates in §17 decide.
+  sinks and output line (`natives::Local`; a task's partial line goes with
+  it when it moves), and in a program with threads `print` makes its line
+  whole before it writes it, so a `show` that parks can't tear it. A
+  constant that isn't baked is claimed by the first task to read it
+  (`const.begin`), and the others wait (a place to be cancelled at).
+  `LOOM_THREADS` sets the count (default: one per core). A new thread is
+  queued and the spawner goes on (one worker keeps the reference schedule's
+  hand-over).
+  **Not yet:** per-worker heaps and deques; chunking in `loom for` (§17's
+  spawn and join gate is missed on 8 workers, 2.7 µs against 2: see
+  bench/RESULTS.md).
 
 ---
 

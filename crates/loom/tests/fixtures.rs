@@ -446,7 +446,7 @@ fn thread_fixtures_on_many_workers() {
             loom_vm::run(&image, Host::captured(buffer), &config)
         };
         let reference = std::mem::discriminant(&run(1));
-        for round in 0..50 {
+        for round in 0..1000 {
             let workers = std::env::var("LOOM_TEST_WORKERS").ok().and_then(|w| w.parse().ok()).unwrap_or(8);
             let outcome = run(workers);
             if matches!(outcome, Outcome::Crash { .. }) || std::mem::discriminant(&outcome) != reference {

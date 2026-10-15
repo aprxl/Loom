@@ -49,7 +49,7 @@ Also missing:
 
 - Integers wider than 64 bits and `f16`.
 - Generic wefts (`weft From[T]`).
-- `xs.sorted_by(...)` and other list methods the design mentions that std doesn't declare. [std.list](std:list) and [std.slice](std:slice) list what exists.
+- `xs.sorted_by(...)` on a list or an array (it takes a stream: `xs.take(n).sorted_by(...)`, or `map.pairs().sorted_by(...)`), and other list methods the design mentions that std doesn't declare. [std.list](std:list) and [std.slice](std:slice) list what exists.
 - Reading standard input. [std.io](std:io) has `print` and nothing else.
 - A `mut self` method of a scalar type can't be called through `any` yet, because the `any` holds its own copy.
 - A union of errors doesn't convert to `any Error`.

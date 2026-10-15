@@ -156,6 +156,11 @@ struct Env<'e, 'i> {
     stopping: bool,
     /// What this worker's natives work on, with several workers.
     local: crate::natives::Local,
+    /// With `stats`: what this worker dispatched, added to the context's
+    /// when it stops (the workers don't share the counters as they run).
+    st_dispatched: u64,
+    st_ops: Vec<u64>,
+    st_pcs: Vec<u64>,
 }
 
 /// What every worker of a run shares, none of which changes while it runs
@@ -196,9 +201,19 @@ impl Drop for Env<'_, '_> {
     /// when it stops.
     fn drop(&mut self) {
         *self.ticks_out = self.ticks;
-        if let Some(pool) = self.pool {
-            let _held = pool.lock();
+        let _held = self.pool.map(Pool::lock);
+        if self.pool.is_some() {
             ctx!(self).append_out(&mut self.local.out);
+        }
+        if cfg!(feature = "stats") {
+            let c = ctx!(self);
+            c.dispatched += self.st_dispatched;
+            for (to, n) in c.op_counts.iter_mut().zip(&self.st_ops) {
+                *to += n;
+            }
+            for (to, n) in c.pc_counts.iter_mut().zip(&self.st_pcs) {
+                *to += n;
+            }
         }
     }
 }
@@ -451,6 +466,9 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
             interrupt: init.interrupt.clone(),
             stopping: false,
             local: Default::default(),
+            st_dispatched: 0,
+            st_ops: if cfg!(feature = "stats") { vec![0; ctx!(init).op_counts.len()] } else { Vec::new() },
+            st_pcs: if cfg!(feature = "stats") { vec![0; ctx!(init).pc_counts.len()] } else { Vec::new() },
         };
         // Only `pc` and `fp` (and each instruction's word) stay in registers
         // through the loop; the rest is read from `env` where it's needed.
@@ -492,9 +510,9 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
                     w = unsafe { *pc };
                     pc = unsafe { pc.add(1) };
                     if cfg!(feature = "stats") {
-                        ctx!(env).dispatched += 1;
-                        ctx!(env).op_counts[usize::from(w as u16)] += 1;
-                        ctx!(env).pc_counts[(pc as usize - env.code_base as usize) / 8 - 1] += 1;
+                        env.st_dispatched += 1;
+                        env.st_ops[usize::from(w as u16)] += 1;
+                        env.st_pcs[(pc as usize - env.code_base as usize) / 8 - 1] += 1;
                     }
                     let op = if cfg!(feature = "checked") {
                         Op::from_u16(w as u16).expect("the verifier checked every opcode")
@@ -1948,6 +1966,11 @@ fn task_op<'p>(
             };
             args[0] = claim;
             if claim == 2 {
+                // Waiting for it is a place to be cancelled at (the one
+                // computing it may have unravelled).
+                if sched!(env).is_cancelled() {
+                    return Err(Trap::Cancel);
+                }
                 // The one computing it may be waiting for the lock.
                 *guard = None;
                 std::thread::yield_now();
