@@ -252,6 +252,13 @@ impl Heap {
         }
     }
 
+    /// With `checked`: the sizes of the live objects, smallest first.
+    pub fn leaked_sizes(&self) -> Vec<u64> {
+        let mut sizes: Vec<u64> = self.objects.values().copied().collect();
+        sizes.sort_unstable();
+        sizes
+    }
+
     /// With `checked`: how many objects are live, and their bytes.
     pub fn leaked(&self) -> (usize, u64) {
         (self.objects.len(), self.objects.values().sum())

@@ -224,7 +224,10 @@ impl<'i> Vm<'i> {
     pub fn leaks(&self) -> Option<Outcome> {
         let (objects, bytes) = self.machine.ctx.heap.leaked();
         (cfg!(feature = "checked") && objects > 0).then(|| Outcome::Crash {
-            message: format!("loom internal: {objects} objects ({bytes} bytes) were never freed"),
+            message: format!(
+                "loom internal: {objects} objects ({bytes} bytes) were never freed: {:?}",
+                self.machine.ctx.heap.leaked_sizes()
+            ),
             location: None,
         })
     }

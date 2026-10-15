@@ -71,7 +71,11 @@ fn not_below(order: Option<std::cmp::Ordering>, or_equal: bool) -> bool {
 /// workers, the context's otherwise.
 macro_rules! state {
     ($env:expr) => {
-        if $env.pool.is_some() { (&mut $env.local.msg, &mut $env.local.bufs) } else { ctx!($env).task_state() }
+        if $env.pool.is_some() {
+            (&mut $env.local.msg, &mut $env.local.bufs, &mut $env.local.out)
+        } else {
+            ctx!($env).task_state()
+        }
     };
 }
 
@@ -1971,8 +1975,8 @@ fn task_op<'p>(
     };
     // This task's registers and stack are saved before anything else runs
     // it (with several workers, one may be waiting for it already).
-    let (msg, bufs) = state!(env);
-    let mut run = Running { in_flight: &mut env.in_flight, stack: env.stack, msg, bufs };
+    let (msg, bufs, out) = state!(env);
+    let mut run = Running { in_flight: &mut env.in_flight, stack: env.stack, msg, bufs, out };
     sched!(env).save(resume, fp, env.seg_end, &mut run);
     let next = match started {
         Some(task) => Some(task),
@@ -1999,17 +2003,20 @@ fn thread_ended(env: &mut Env, trap: Option<Trap>) -> Moved {
     let cur = env.current;
     let freed = sched!(env).finish(&mut ctx!(env).heap, trap);
     {
-        let (msg, bufs) = state!(env);
-        let mut run = Running { in_flight: &mut env.in_flight, stack: env.stack, msg, bufs };
+        let (msg, bufs, out) = state!(env);
+        let mut run = Running { in_flight: &mut env.in_flight, stack: env.stack, msg, bufs, out };
         sched!(env).save(std::ptr::null(), std::ptr::null_mut(), std::ptr::null_mut(), &mut run);
     }
+    // What it had written of a line it won't finish goes out as it is.
+    let mut left = sched!(env).take_line(cur);
+    ctx!(env).append_out(&mut left);
     sched!(env).drop_stack(cur);
     sched!(env).current = IDLE;
     let moved = match choose(sched!(env), pool, &mut guard) {
         None => Moved::Halt,
         Some(next) => {
-            let (msg, bufs) = state!(env);
-            let mut run = Running { in_flight: &mut env.in_flight, stack: env.stack, msg, bufs };
+            let (msg, bufs, out) = state!(env);
+            let mut run = Running { in_flight: &mut env.in_flight, stack: env.stack, msg, bufs, out };
             let (pc, fp, end) = sched!(env).load(next, &mut run);
             match (freed.err(), arrived(env, pc)) {
                 (Some(trap), _) => Moved::To { pc, fp, end, trap: Some(trap) },

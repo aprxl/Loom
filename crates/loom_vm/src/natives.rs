@@ -29,6 +29,9 @@ pub(crate) struct Ctx<'i> {
     /// A worker of a pool is running a native, so `out` is its partial line
     /// (see [`Local`]) and flushing is for it to do on the way out.
     split: bool,
+    /// What a task switch swaps for a task's partial output line, with one
+    /// worker (where lines are written to `out` as they come).
+    task_line: Vec<u8>,
     /// The message of an unravel being built (`msg.*`, sink 1).
     msg: Vec<u8>,
     /// Sinks 2 and up: text being built (`sink.push`).
@@ -109,6 +112,7 @@ impl<'i> Ctx<'i> {
             msg: Vec::new(),
             bufs: Vec::new(),
             split: false,
+            task_line: Vec::new(),
             spare: Vec::new(),
             heap: Heap::default(),
             sandbox: host.sandbox,
@@ -259,8 +263,8 @@ impl<'i> Ctx<'i> {
 
     /// What the running task's natives are building (its unravel message,
     /// and the templates it has under way), which a task switch swaps.
-    pub(crate) fn task_state(&mut self) -> (&mut Vec<u8>, &mut Vec<Vec<u8>>) {
-        (&mut self.msg, &mut self.bufs)
+    pub(crate) fn task_state(&mut self) -> (&mut Vec<u8>, &mut Vec<Vec<u8>>, &mut Vec<u8>) {
+        (&mut self.msg, &mut self.bufs, &mut self.task_line)
     }
 
     /// Where the text literals are, and where each starts with its length:

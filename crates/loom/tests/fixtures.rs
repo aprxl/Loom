@@ -375,6 +375,11 @@ fn par_corpus() {
                     let config = loom_vm::Config { stack_limit: 64 << 20, workers, ..loom_vm::Config::default() };
                     let outcome = loom_vm::run(&image, Host::captured(buffer.clone()), &config);
                     let out = String::from_utf8_lossy(&buffer.borrow()).into_owned();
+                    // Threads print in any order, but each line whole: the
+                    // `.out` files are in sorted order.
+                    let mut lines: Vec<&str> = out.lines().collect();
+                    lines.sort_unstable();
+                    let out = lines.iter().map(|l| format!("{l}\n")).collect::<String>();
                     if out != expected || !matches!(outcome, Outcome::Finished) {
                         failures.push(format!(
                             "{name} at {level:?}, {workers} workers: ended with {outcome:?}\n--- expected\n{expected}--- got\n{out}"
@@ -404,8 +409,48 @@ fn par_stress() {
             let config = loom_vm::Config { stack_limit: 64 << 20, workers, ..loom_vm::Config::default() };
             let outcome = loom_vm::run(&image, Host::captured(buffer.clone()), &config);
             let out = String::from_utf8_lossy(&buffer.borrow()).into_owned();
+            let mut lines: Vec<&str> = out.lines().collect();
+            lines.sort_unstable();
+            let out = lines.iter().map(|l| format!("{l}\n")).collect::<String>();
             if out != expected || !matches!(outcome, Outcome::Finished) {
                 failures.push(format!("{name} run {run} on {workers} workers: {outcome:?}\n{out}"));
+                break;
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// The thread fixtures of `tests/run` on 8 workers, again and again: the
+/// output may come in another order, so only how each ends is compared
+/// (never a crash, a leak (in a checked build) or a hang, and the same kind
+/// of ending as with one worker). `cargo test -- --ignored thread_fixtures`.
+#[test]
+#[ignore = "slow: run with --ignored"]
+fn thread_fixtures_on_many_workers() {
+    let mut failures = Vec::new();
+    let threaded = ["threads_", "mutex_", "pipe_", "loom_for", "atomic_"];
+    for path in corpus("run") {
+        let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("?").to_string();
+        if !threaded.iter().any(|p| name.starts_with(p)) {
+            continue;
+        }
+        if std::env::var("LOOM_FIXTURE").is_ok_and(|only| only != name) {
+            continue;
+        }
+        let (_, _, image) = compile_vm(&path, Level::O2);
+        let Some(image) = image else { continue };
+        let run = |workers: usize| {
+            let buffer = Rc::new(RefCell::new(Vec::new()));
+            let config = loom_vm::Config { stack_limit: 64 << 20, workers, ..loom_vm::Config::default() };
+            loom_vm::run(&image, Host::captured(buffer), &config)
+        };
+        let reference = std::mem::discriminant(&run(1));
+        for round in 0..50 {
+            let workers = std::env::var("LOOM_TEST_WORKERS").ok().and_then(|w| w.parse().ok()).unwrap_or(8);
+            let outcome = run(workers);
+            if matches!(outcome, Outcome::Crash { .. }) || std::mem::discriminant(&outcome) != reference {
+                failures.push(format!("{name}, round {round}: {outcome:?}"));
                 break;
             }
         }

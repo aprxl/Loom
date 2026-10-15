@@ -1,0 +1,21 @@
+// A line is whole when the thread that writes it parks in the middle of it
+// (in a hand-written `show`), whichever worker goes on with it.
+
+use std.io.print
+use std.sync.sched_yield
+
+warp Slow { n: i32 }
+
+weave Show into Slow {
+    fn show(self, mut f: Fmt) {
+        f.put("slow ")
+        sched_yield()
+        f.put(self.n)
+    }
+}
+
+fn main() {
+    loom for i in 0..40 {
+        print("a{i} {Slow(i)} b{i}")
+    }
+}

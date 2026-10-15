@@ -65,6 +65,24 @@ impl<'a> Builder<'a> {
             "std.io.print" => {
                 let pieces = self.param_pieces(def, info, args, 0, span)?;
                 let out = self.sink(OUT);
+                // With threads, a piece's `show` may park, and the line
+                // would be torn by what the others print: the line is made
+                // whole first (as it is on Lua).
+                let parts = pieces.iter().any(|p| matches!(p, Piece::Value { .. }));
+                if self.has_threads
+                    && parts
+                    && let Some(string) = self.string_ty()
+                {
+                    let buf = self.new_sink();
+                    self.write_pieces(buf, pieces)?;
+                    self.write_text(buf, "\n");
+                    let dst = self.temp(string, span)?;
+                    self.emit(InstKind::Native { name: "sink.string", imm: 0, args: vec![buf.0, dst] }, &[]);
+                    self.own_temp(dst, string);
+                    let (p, n) = self.text_of(Val::Mem(dst), string, span)?;
+                    self.emit(InstKind::Native { name: "sink.str", imm: 0, args: vec![out.0, p, n] }, &[]);
+                    return Some(Val::Regs(Vec::new()));
+                }
                 self.write_pieces(out, pieces)?;
                 self.write_text(out, "\n");
                 Some(Val::Regs(Vec::new()))

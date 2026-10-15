@@ -34,6 +34,8 @@ pub(crate) struct Running<'a> {
     pub stack: &'a mut Stack,
     pub msg: &'a mut Vec<u8>,
     pub bufs: &'a mut Vec<Vec<u8>>,
+    /// The part of an output line it has written (with several workers).
+    pub out: &'a mut Vec<u8>,
 }
 
 /// What a task operation asks the dispatch loop to do next.
@@ -147,6 +149,7 @@ pub(crate) struct Task {
     /// would hand its buffer to whatever runs.
     pub msg: Vec<u8>,
     pub bufs: Vec<Vec<u8>>,
+    pub out: Vec<u8>,
     pub done: bool,
     /// Its result was taken by `join` or by the loom's leftover loop.
     pub taken: bool,
@@ -191,6 +194,7 @@ impl Task {
             in_flight: None,
             msg: Vec::new(),
             bufs: Vec::new(),
+            out: Vec::new(),
             done: false,
             taken: false,
             cancelled: false,
@@ -312,6 +316,7 @@ impl Sched {
         std::mem::swap(&mut t.stack, run.stack);
         std::mem::swap(&mut t.msg, run.msg);
         std::mem::swap(&mut t.bufs, run.bufs);
+        std::mem::swap(&mut t.out, run.out);
     }
 
     /// Makes `next` the running task, with the registers it left: the new
@@ -322,8 +327,14 @@ impl Sched {
         std::mem::swap(&mut t.in_flight, run.in_flight);
         std::mem::swap(&mut t.msg, run.msg);
         std::mem::swap(&mut t.bufs, run.bufs);
+        std::mem::swap(&mut t.out, run.out);
         self.current = next;
         (t.pc, t.fp, t.seg_end)
+    }
+
+    /// What task `index` had written of an output line, which it won't finish.
+    pub fn take_line(&mut self, index: usize) -> Vec<u8> {
+        std::mem::take(&mut self.tasks[index].out)
     }
 
     /// The next task that's ready, if there is one.
@@ -608,6 +619,11 @@ impl Sched {
         if word == me {
             return Err(Trap::Unravel("this thread holds the lock already".into()));
         }
+        // A cancelled task doesn't start to wait (with several workers it
+        // may have been told while it was running).
+        if self.tasks[self.current].cancelled {
+            return Err(Trap::Cancel);
+        }
         // Held by another: it waits at the back, and tries again when woken.
         Ok((self.park_in(Wait::Mutex(addr), true), None))
     }
@@ -670,6 +686,9 @@ impl Sched {
             return Err(Trap::Unravel("send on a closed pipe".into()));
         }
         if self.pipes[i].len >= self.pipes[i].cap {
+            if self.tasks[self.current].cancelled {
+                return Err(Trap::Cancel);
+            }
             return Ok(Err(self.park_in(Wait::Send(i), true)));
         }
         let p = &mut self.pipes[i];
@@ -698,6 +717,9 @@ impl Sched {
         }
         if p.closed {
             return Ok(Taken::Closed);
+        }
+        if self.tasks[self.current].cancelled {
+            return Err(Trap::Cancel);
         }
         Ok(Taken::Park(self.park_in(Wait::Recv(i), true)))
     }
