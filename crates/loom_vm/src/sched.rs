@@ -22,7 +22,7 @@
 
 use std::collections::VecDeque;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use crate::Trap;
 use crate::heap::Heap;
@@ -256,6 +256,9 @@ pub(crate) struct Sched {
     /// Set once any task is cancelled: until then, a cancellation point
     /// (`task.cancelled`) can be passed without the pool's lock.
     pub cancel_seen: Arc<AtomicBool>,
+    /// How many tasks are in `ready`, for the workers that spin without
+    /// the pool's lock.
+    pub queued: Arc<AtomicUsize>,
 }
 
 /// The task of a worker that has none.
@@ -288,6 +291,7 @@ impl Sched {
             free_pipes: Vec::new(),
             pending: None,
             cancel_seen: Arc::new(AtomicBool::new(false)),
+            queued: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -300,6 +304,7 @@ impl Sched {
         self.free_groups.clear();
         self.current = 0;
         self.ready.clear();
+        self.queued.store(0, Ordering::Relaxed);
         self.lockers.clear();
         self.consts.clear();
         self.pipes.clear();
@@ -348,7 +353,19 @@ impl Sched {
 
     /// The next task that's ready, if there is one.
     pub fn pop_ready(&mut self) -> Option<usize> {
-        self.ready.pop_front()
+        let next = self.ready.pop_front();
+        self.queued.store(self.ready.len(), Ordering::Relaxed);
+        next
+    }
+
+    fn ready_back(&mut self, t: usize) {
+        self.ready.push_back(t);
+        self.queued.store(self.ready.len(), Ordering::Relaxed);
+    }
+
+    fn ready_front(&mut self, t: usize) {
+        self.ready.push_front(t);
+        self.queued.store(self.ready.len(), Ordering::Relaxed);
     }
 
     /// How many tasks are ready.
@@ -375,11 +392,11 @@ impl Sched {
     /// The next task to run, when the running one parks or ends. `None`
     /// is a deadlock: nothing is ready, and the program's task waits.
     pub fn next_ready(&mut self) -> usize {
-        if let Some(next) = self.ready.pop_front() {
+        if let Some(next) = self.pop_ready() {
             return next;
         }
         self.declare_deadlock();
-        self.ready.pop_front().unwrap_or(0)
+        self.pop_ready().unwrap_or(0)
     }
 
     /// Nothing can run: every task waits for another. The program's own
@@ -391,7 +408,7 @@ impl Sched {
             self.leave_list(on, 0);
         }
         self.pending = Some(Trap::Unravel("deadlock: every thread is waiting".into()));
-        self.ready.push_front(0);
+        self.ready_front(0);
     }
 
     // ------------------------------------------------------------ waiting
@@ -401,7 +418,7 @@ impl Sched {
         if task.waiting {
             task.waiting = false;
             task.waiting_on = None;
-            self.ready.push_back(t);
+            self.ready_back(t);
         }
     }
 
@@ -614,7 +631,7 @@ impl Sched {
             return Err(Trap::Cancel);
         }
         self.tasks[cur].cancellable = true;
-        self.ready.push_back(cur);
+        self.ready_back(cur);
         Ok(Step::Park { again: false })
     }
 
@@ -866,12 +883,12 @@ impl Sched {
         if !self.eager {
             // With several workers the spawner carries on, and a worker with
             // nothing to do takes the new task.
-            self.ready.push_back(index);
+            self.ready_back(index);
             return Ok((h, Step::Next));
         }
         // The spawner waits at the front, and carries on when the new task
         // parks or ends.
-        self.ready.push_front(self.current);
+        self.ready_front(self.current);
         Ok((h, Step::Start(index)))
     }
 

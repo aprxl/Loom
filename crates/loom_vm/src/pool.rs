@@ -8,14 +8,18 @@
 //! allocates, or prints, is serialized with the others: finer locks and
 //! per-worker heaps are for when that's what's slow.)
 //!
-//! A worker that has nothing to run waits on the condition. The last one
+//! A worker that has nothing to run first spins on the count of ready tasks,
+//! which it reads without the lock (an idle worker asking for the lock would
+//! make the one that has it pay on every release), and takes the lock only
+//! when a task is queued and the lock is free; after a while it waits on the
+//! condition, and a worker that was woken spins again before it sleeps. The last one
 //! to go idle, with no task ready and the program's own task waiting,
 //! declares a deadlock. The first fault, or the program's own task ending,
 //! stops them all.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Condvar, Mutex, MutexGuard};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Condvar, Mutex, MutexGuard, TryLockError};
 
 use crate::Fault;
 
@@ -26,6 +30,10 @@ pub(crate) struct PoolState {
     pub idle: usize,
     /// Those of them that wait on the condition.
     pub sleepers: usize,
+    /// Those of the sleepers that have been notified and have not yet
+    /// run (waking takes a while, and notifying again would only cost the
+    /// notifier a system call).
+    pub notified: usize,
     /// How the program ended: the first to say wins.
     pub outcome: Option<Result<Vec<u64>, Fault>>,
 }
@@ -38,20 +46,21 @@ pub(crate) struct Pool {
     /// The program is over (it ended, or something failed): every worker
     /// stops at its next check, which is at the next tick or wait.
     over: AtomicBool,
-    /// A task became ready since a spinning worker last looked.
-    hint: AtomicBool,
+    /// How many tasks are ready (the scheduler's count), which an idle
+    /// worker watches while it spins, without the lock.
+    queued: Arc<AtomicUsize>,
     /// Whether any task has been cancelled yet (the scheduler's flag).
     cancel_seen: Arc<AtomicBool>,
 }
 
 impl Pool {
-    pub fn new(workers: usize, cancel_seen: Arc<AtomicBool>) -> Pool {
+    pub fn new(workers: usize, cancel_seen: Arc<AtomicBool>, queued: Arc<AtomicUsize>) -> Pool {
         Pool {
             state: Mutex::new(PoolState::default()),
             cv: Condvar::new(),
             workers,
             over: AtomicBool::new(false),
-            hint: AtomicBool::new(false),
+            queued,
             cancel_seen,
         }
     }
@@ -66,24 +75,37 @@ impl Pool {
         self.cv.wait(guard).unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    /// A task is ready: the workers that spin see it, and a sleeper is woken
-    /// if there is one (a notify with nobody asleep still costs a system
-    /// call).
-    pub fn wake_one(&self, state: &PoolState) {
-        self.hint.store(true, Ordering::Release);
-        if state.sleepers > 0 {
+    /// `ready` tasks are ready: the workers that spin will see them, and
+    /// a sleeper is woken if the spinners and the sleepers already woken are
+    /// fewer than the tasks (a notify with nobody asleep still costs a
+    /// system call).
+    pub fn wake_one(&self, state: &mut PoolState, ready: usize) {
+        let coming = state.idle - state.sleepers + state.notified;
+        if state.sleepers > state.notified && ready > coming {
+            state.notified += 1;
             self.cv.notify_one();
         }
     }
 
-    /// Whether a task was made ready since `clear_hint`.
-    pub fn hinted(&self) -> bool {
-        self.hint.load(Ordering::Acquire)
-    }
-
-    /// Called with the lock held, before a worker starts to spin.
-    pub fn clear_hint(&self) {
-        self.hint.store(false, Ordering::Relaxed);
+    /// An idle worker's wait for a task, for at most `spins` turns. It
+    /// watches the count of ready tasks and leaves the lock alone (a worker
+    /// asking for it makes the one that holds it pay when it lets go),
+    /// taking it only when there is something to take and it is free.
+    /// Gives the lock, held, and the turns left (none if it ran out, or the
+    /// program is over).
+    pub fn spin_for_task(&self, mut spins: u32) -> (MutexGuard<'_, PoolState>, u32) {
+        while spins > 0 && !self.is_over() {
+            if self.queued.load(Ordering::Relaxed) > 0 {
+                match self.state.try_lock() {
+                    Ok(held) => return (held, spins),
+                    Err(TryLockError::Poisoned(e)) => return (e.into_inner(), spins),
+                    Err(TryLockError::WouldBlock) => {}
+                }
+            }
+            std::hint::spin_loop();
+            spins -= 1;
+        }
+        (self.lock(), spins)
     }
 
     /// Whether a cancellation point has to look at the task: false while

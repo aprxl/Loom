@@ -1320,10 +1320,21 @@ for V6.
   `LOOM_THREADS` sets the count (default: one per core). A new thread is
   queued and the spawner goes on (one worker keeps the reference schedule's
   hand-over).
-  **Not yet:** per-worker heaps and deques; halving a chunk on a steal, like
-  Rayon, and chunks of other iterators than exclusive integer ranges
-  (spawning and joining threads of their own costs 2.2 µs on 8 workers,
-  against §17's gate of 2: see bench/RESULTS.md).
+  A worker with no task spins on the scheduler's count of ready tasks,
+  reading it without the lock, and takes the lock (`try_lock`) only when a
+  task is queued; an idle worker that asked for the lock made the holder
+  pay for it at every release, which was most of the cost of a spawn.
+  After about 50 µs it sleeps on the condition, and one that is woken spins
+  again before it sleeps (else it goes back to sleep at once whenever the
+  spawner ran the ready tasks itself, and every spawn costs a notify). A
+  notify goes out only when the spinners and the sleepers already woken are
+  fewer than the ready tasks. Spawning and joining a thread of its own
+  costs 0.9 µs on 2 to 16 workers (the gate is 2; bench/RESULTS.md has the
+  profile): the lock is held for about 0.4 µs of each, so per-worker deques
+  with stealing are not built.
+  **Not yet:** per-worker heaps (the allocator caches), halving a chunk on a
+  steal, like Rayon, and chunks of other iterators than exclusive integer
+  ranges.
 
 ---
 

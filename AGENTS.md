@@ -227,21 +227,20 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
     `Range.chunks`, `Map.entry` and `sorted_by` came with
     `examples/parallel.loom`, which runs the same on Lua and Treadle at
     any worker count (a test in `cli.rs`). `par_mandelbrot` scales 6.3×
-    on 8 workers; spawn+join costs 0.35 µs on one worker but 2.7 µs on 8
-    (the gate is 2 µs): per-worker deques are what's left, if it matters.
+    on 8 workers; spawn+join costs 0.31 µs on one worker and 0.9 µs on 8
+    (idle workers spin on the ready count and leave the lock alone).
     `loom for` over an exclusive integer range gives a task a run of items
     when there are several workers (`task.grain`; `par_spawn` on 8 workers
     0.56 s to 0.07 s); other iterators keep a task per item.
 
-V5's gates, honestly: every one passes but the speed gate's second half:
-mandelbrot with `loom for` scales 6.3× on 8 workers (0.79 of the physical
-cores, 0.4 of the 16 logical ones this machine reports), and spawning and
-joining takes 0.35 µs on one worker but 2.7 µs on 8, over the gate's 2 µs.
-Also not done: `loom for` chunks only exclusive integer ranges, at a fixed
-grain, not adaptively (design/vm.md §11.4).
+V5's gates, honestly: every one passes. Mandelbrot with `loom for` scales
+6.1× on 8 workers (0.76 of the physical cores, 0.38 of the 16 logical ones
+this machine reports), and spawning and joining takes 0.31 µs on one worker
+and 0.9 µs on 8. Not done: `loom for` chunks only exclusive integer ranges,
+at a fixed grain, not adaptively (design/vm.md §11.4).
 
-Next: V6 spools, V7 Lua interop, V8 speed (and V5's misses: per-worker
-deques, adaptive chunking of more iterators), V9 Treadle by default.
+Next: V6 spools, V7 Lua interop, V8 speed (and V5's loose end: adaptive
+chunking of more iterators), V9 Treadle by default.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and

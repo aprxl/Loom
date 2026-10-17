@@ -353,7 +353,8 @@ impl<'i> Machine<'i> {
         self.ctx.reset_sinks();
         // The compile-time VM has a meter and refuses threads: one worker.
         let workers = if self.has_threads && self.workers > 1 && !self.ctx.refuse_host { self.workers } else { 1 };
-        let pool = (workers > 1).then(|| Pool::new(workers, Arc::clone(&self.sched.cancel_seen)));
+        let pool = (workers > 1)
+            .then(|| Pool::new(workers, Arc::clone(&self.sched.cancel_seen), Arc::clone(&self.sched.queued)));
         self.sched.eager = pool.is_none();
         let init = Init {
             image: self.image,
@@ -1762,7 +1763,7 @@ fn arrived(env: &mut Env, pc: *const u64) -> Option<(Trap, *const u64)> {
     })
 }
 
-/// How long an idle worker looks for a ready task before it sleeps.
+/// How many turns an idle worker looks for a ready task before it sleeps.
 const SPINS: u32 = 4000;
 
 /// The task this worker runs next, when it has none (it parked or ended):
@@ -1775,7 +1776,7 @@ fn choose<'p>(
     guard: &mut Option<std::sync::MutexGuard<'p, PoolState>>,
 ) -> Option<usize> {
     let Some(pool) = pool else { return Some(sched.next_ready()) };
-    let mut spun = false;
+    let mut spins = SPINS;
     loop {
         if let Some(task) = sched.pop_ready() {
             return Some(task);
@@ -1789,19 +1790,12 @@ fn choose<'p>(
             continue;
         }
         state.idle += 1;
-        if !spun {
+        if spins > 0 {
             // Spin a little before sleeping: a task started in the next
             // microseconds (a `loom for` over small items) needs no wake-up.
-            spun = true;
-            pool.clear_hint();
             drop(guard.take());
-            for _ in 0..SPINS {
-                if pool.hinted() || pool.is_over() {
-                    break;
-                }
-                std::hint::spin_loop();
-            }
-            let mut held = pool.lock();
+            let (mut held, left) = pool.spin_for_task(spins);
+            spins = left;
             held.idle -= 1;
             *guard = Some(held);
             continue;
@@ -1810,8 +1804,10 @@ fn choose<'p>(
         let held = guard.take()?;
         let mut held = pool.wait(held);
         held.sleepers -= 1;
+        held.notified = held.notified.saturating_sub(1);
         held.idle -= 1;
         *guard = Some(held);
+        spins = SPINS;
     }
 }
 
@@ -1834,11 +1830,8 @@ fn run_task_op(env: &mut Env, op: TaskOp, args: &mut [u64], pc: *const u64, fp: 
     let result = task_op(env, op, args, pc, fp, pool, &mut guard);
     env.current = sched!(env).current;
     // What became ready is for the workers that have none.
-    if let (Some(pool), Some(state)) = (pool, guard.as_ref())
-        && state.idle > 0
-        && sched!(env).ready_len() > 0
-    {
-        pool.wake_one(state);
+    if let (Some(pool), Some(state)) = (pool, guard.as_mut()) {
+        pool.wake_one(state, sched!(env).ready_len());
     }
     result
 }
@@ -2062,11 +2055,8 @@ fn thread_ended(env: &mut Env, trap: Option<Trap>) -> Moved {
         }
     };
     env.current = sched!(env).current;
-    if let (Some(pool), Some(state)) = (pool, guard.as_ref())
-        && state.idle > 0
-        && sched!(env).ready_len() > 0
-    {
-        pool.wake_one(state);
+    if let (Some(pool), Some(state)) = (pool, guard.as_mut()) {
+        pool.wake_one(state, sched!(env).ready_len());
     }
     moved
 }
