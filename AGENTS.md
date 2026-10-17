@@ -18,6 +18,17 @@ cargo test -p loom --features vm-checked,vm-stats             # the fixtures on 
 
 Read your own diff before committing. One logical change per commit.
 
+## Perf gates (release build, run on an idle machine)
+
+Wall-clock gates are `#[ignore]`d, so `cargo test --workspace` stays
+deterministic under load. Run them after a change to the optimizer or the
+thread pool, and put the numbers in `bench/RESULTS.md`:
+
+```
+cargo test --release -p loom --test compile_time -- --ignored --nocapture   # -O2 vs -O0, slowest example
+cargo test --release -p loom --test perf_gates -- --ignored --nocapture     # spawn+join < 2 us and par_mandelbrot >= 5.6x on 8 workers
+```
+
 ## Agent workflow
 
 - Sonnet 5.5 is the main agent and writes the code.

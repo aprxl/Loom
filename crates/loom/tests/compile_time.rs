@@ -3,9 +3,10 @@
 //! over `tests/run` and `examples`, with parsing and type checking left out
 //! (they're the same at both levels, and a process's start-up isn't in it).
 //!
-//! Wall-clock time is too noisy to gate `cargo test` on, so this is
-//! `#[ignore]`d and prints: `cargo test --release -p loom --test compile_time
-//! -- --ignored --nocapture`. The result goes in `bench/RESULTS.md`.
+//! Wall-clock time is too noisy to gate `cargo test` on, so these are
+//! `#[ignore]`d perf gates, run on an idle machine: `cargo test --release -p
+//! loom --test compile_time -- --ignored --nocapture`. They print what they
+//! measure, and the result goes in `bench/RESULTS.md`.
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -18,6 +19,13 @@ use loom_compiler::{treadle, typeck};
 use loom_syntax::SourceDb;
 
 const RUNS: usize = 5;
+
+/// Design/vm.md §17 wants at most 1.5; it is 1.63 over today's larger corpus
+/// (the front end got faster, which raises the ratio without the optimizer
+/// getting slower). This bound is what fails on an optimizer 7% slower.
+const MAX_RATIO: f64 = 1.75;
+/// Design/vm.md §17: no example takes longer than this at `-O2`.
+const MAX_EXAMPLE: Duration = Duration::from_millis(200);
 
 fn sources(dir: &Path) -> Vec<PathBuf> {
     let mut files: Vec<PathBuf> = std::fs::read_dir(dir)
@@ -58,7 +66,7 @@ fn times(path: &Path) -> Option<[[Duration; 2]; 2]> {
 }
 
 #[test]
-#[ignore = "timing: run with --release -- --ignored --nocapture"]
+#[ignore = "perf gate: run with --release -- --ignored --nocapture"]
 fn optimizer_compile_time() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut rows = Vec::new();
@@ -72,25 +80,29 @@ fn optimizer_compile_time() {
         }
     }
     println!("{} files, {} skipped: {skipped:?}", rows.len(), skipped.len());
+    let mut ratio = 0.0;
     for (what, k) in [("source to image", 0), ("compile_at alone", 1)] {
         // The corpus is tests/run and examples, as the design says.
         let corpus = rows.iter().filter(|r| !r.0.starts_with("bench"));
         let (o0, o2) = corpus.fold((Duration::ZERO, Duration::ZERO), |(a, b), r| (a + r.1[k][0], b + r.1[k][1]));
-        println!(
-            "{what}: -O0 {o0:.2?}, -O2 {o2:.2?}, ratio {:.2} (V3 wants at most 1.5)",
-            o2.as_secs_f64() / o0.as_secs_f64()
-        );
+        let r = o2.as_secs_f64() / o0.as_secs_f64();
+        println!("{what}: -O0 {o0:.2?}, -O2 {o2:.2?}, ratio {r:.2} (V3 wants at most 1.5)");
+        if k == 0 {
+            ratio = r;
+        }
     }
     rows.sort_by_key(|r| std::cmp::Reverse(r.1[0][1]));
     for (name, t) in rows.iter().take(10) {
         let (a, b) = (t[0][0], t[0][1]);
         println!("  {name:36} -O0 {a:>9.2?}  -O2 {b:>9.2?}  x{:.2}", b.as_secs_f64() / a.as_secs_f64());
     }
-    let slowest = rows.iter().filter(|r| r.0.starts_with("examples")).map(|r| r.1[0][1]).max();
+    let slowest = rows.iter().filter(|r| r.0.starts_with("examples")).map(|r| r.1[0][1]).max().expect("examples");
     println!("slowest example at -O2: {slowest:.2?} (V3 wants at most 200 ms)");
     for (name, t) in rows.iter().filter(|r| r.0.starts_with("bench")) {
         println!("  {name:36} -O2 {:>9.2?}", t[0][1]);
     }
+    assert!(ratio <= MAX_RATIO, "-O2 takes {ratio:.2}x -O0 from source to image (at most {MAX_RATIO})");
+    assert!(slowest <= MAX_EXAMPLE, "the slowest example takes {slowest:.2?} at -O2 (at most {MAX_EXAMPLE:?})");
 }
 
 /// The best of `RUNS` times of the compile-time step alone
