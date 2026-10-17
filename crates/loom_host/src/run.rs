@@ -79,7 +79,9 @@ pub fn run_bundle(bundle: &str, map: Option<&SourceMap>, host: Host) -> Outcome 
     let term = Rc::new(RefCell::new(Term::default()));
     let watch = watch_interrupt(&lua);
     let result = install_host(&lua, host, term.clone()).and_then(|()| {
-        let main: Function = lua.load(bundle).set_name("=bundle").eval()?;
+        // Not `eval`, which loads the chunk as an expression first and, if
+        // that fails for any reason (an interrupt included), as statements.
+        let main: Function = lua.load(bundle).set_name("=bundle").into_function()?.call(())?;
         // `main ! E` returns its error's text when it fails.
         main.call::<Option<mlua::String>>(())
     });

@@ -69,15 +69,14 @@ pub fn installed() -> Option<Arc<AtomicBool>> {
 /// handler's thread, while the watch can't go.
 pub fn watch(f: impl Fn() + Send + 'static) -> Watch {
     let key = NEXT.fetch_add(1, Ordering::Relaxed);
-    // An interrupt that came before the watch is told of it now, or it
-    // would be lost. (Not under the lock: `f` may take a while.)
-    let already = FLAG.get().is_some_and(|flag| flag.load(Ordering::Relaxed));
-    let f: Watcher = Box::new(f);
-    if already {
-        f();
-    }
+    // Registered before the flag is read, under the lock `interrupt` tells
+    // the watchers by: an interrupt either sees this watcher or has set the
+    // flag already, so it can't fall between the two. (Told twice at worst.)
     if let Ok(mut watchers) = WATCHERS.lock() {
-        watchers.push((key, f));
+        watchers.push((key, Box::new(f)));
+        if FLAG.get().is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+            (watchers[watchers.len() - 1].1)();
+        }
     }
     Watch(key)
 }

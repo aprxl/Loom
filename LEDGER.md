@@ -15,7 +15,7 @@ Decision (Caio): the scaling gate counts logical cores (16) if that is worth it,
 5. **Assert the gates** that are only printed: optimizer compile time (<= 1.5x -O0, slowest example <= 200 ms) and spawn+join, so a regression fails a test.
 6. **Gaps in V5's design.** Per-worker allocator caches (11.4 "As built"); P8 note on both backends; copied str/slice tracked against the loom (11.3). `yield`/`pull` in a loom and `loom(given: ...)` wait for V6.
 7. **Doc clean-up.** 05-concurrency.md (I/O as cancel point, `.join()` type, `loom(given:)`); status marker for V5 in vm.md 17; vm.md 11.4 deques wording; stale doc comment in `loom_compiler/src/lib.rs`.
-8. **Flake.** `an_interrupt_before_the_run_starts_is_not_lost` failed once under load; run it 100x with 8 workers to rule out a lost-interrupt race.
+8. **Flake. Done.** `an_interrupt_before_the_run_starts_is_not_lost` hung the Lua backend about 1 run in 300 (`LOOM_INTERRUPT_AFTER_MS=0`): the interrupt's hook fired while mlua's `Chunk::eval` was loading the bundle as an expression, which `eval` answers by loading it as statements, so the one-shot hook was spent and the program ran on. Now the bundle is loaded with `into_function`. `interrupt::watch` also registers before it reads the flag, so an interrupt can't fall between the two. 0 hangs in 3600 Lua and 1200 Treadle runs.
 
 Then: V6 (spools, regions, `given`).
 
