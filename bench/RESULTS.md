@@ -355,3 +355,27 @@ gate of 2 µs on 8 workers; per-worker deques are the next step if it
 matters, and `loom for` doesn't chunk its iterations yet, which is the
 cheaper fix for small items (see `Range.chunks`). The single-thread benchmarks are unchanged
 by the pool (A/B against the commit before it, within 2%).
+
+### V5 close-out baseline (2026-10-17)
+
+`python bench/run.py --par --runs 5`, release build, 16 logical cores (8
+physical). `par_spawn_join` spawns and joins explicit threads, a thousand at
+a time, so it keeps measuring spawn and join once `loom for` chunks.
+
+| Benchmark | workers | seconds | speedup | per spawn+join |
+|---|--:|--:|--:|--:|
+| `par_mandelbrot` | 1 | 0.461 | 1.00x |  |
+| `par_mandelbrot` | 2 | 0.242 | 1.91x |  |
+| `par_mandelbrot` | 4 | 0.130 | 3.56x |  |
+| `par_mandelbrot` | 8 | 0.076 | 6.04x |  |
+| `par_mandelbrot` | 16 | 0.056 | 8.18x |  |
+| `par_spawn` | 1 | 0.077 | 1.00x | 0.39 us |
+| `par_spawn` | 2 | 0.172 | 0.45x | 0.86 us |
+| `par_spawn` | 4 | 0.251 | 0.31x | 1.25 us |
+| `par_spawn` | 8 | 0.557 | 0.14x | 2.78 us |
+| `par_spawn` | 16 | 0.638 | 0.12x | 3.19 us |
+| `par_spawn_join` | 1 | 0.062 | 1.00x | 0.31 us |
+| `par_spawn_join` | 2 | 0.144 | 0.43x | 0.72 us |
+| `par_spawn_join` | 4 | 0.219 | 0.28x | 1.10 us |
+| `par_spawn_join` | 8 | 0.455 | 0.14x | 2.28 us |
+| `par_spawn_join` | 16 | 0.450 | 0.14x | 2.25 us |

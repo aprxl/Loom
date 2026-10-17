@@ -3,6 +3,7 @@
 the speedups and their geometric mean (design/vm.md §16).
 
     python bench/run.py [--runs N] [--lua-backend] [NAME ...]
+    python bench/run.py --par [--runs N] [--workers 1,2,4,8,16]
 
 Build first: `cargo build --release -p loom`. `--lua-backend` also times
 Loom's Lua backend. Each run's output is checked against the Lua version's.
@@ -32,6 +33,30 @@ def best(cmd, runs):
     return min(times), out
 
 
+PAR_BENCHES = {"par_mandelbrot": 1, "par_spawn": 200_000, "par_spawn_join": 200_000}
+
+
+def par(runs, workers):
+    """Each parallel benchmark at each worker count (`LOOM_THREADS`), best of
+    `runs`, with the speedup over one worker and, for the spawn ones, the
+    cost of one spawn and join. Output is checked against the Lua backend's."""
+    print("| Benchmark | workers | seconds | speedup | per spawn+join |")
+    print("|---|--:|--:|--:|--:|")
+    for name, spawns in PAR_BENCHES.items():
+        cmd = [LOOM, "run", "--backend", "vm", f"bench/{name}.loom"]
+        _, oracle = best([LOOM, "run", f"bench/{name}.loom"], 1)
+        base = None
+        for w in workers:
+            os.environ["LOOM_THREADS"] = str(w)
+            t, out = best(cmd, runs)
+            if out.split() != oracle.split():
+                sys.exit(f"{name} at {w} workers differs from the Lua backend's output")
+            base = base or t
+            per = f"{t / spawns * 1e6:.2f} us" if spawns > 1 else ""
+            print(f"| `{name}` | {w} | {t:.3f} | {base / t:.2f}x | {per} |", flush=True)
+    del os.environ["LOOM_THREADS"]
+
+
 def main():
     args = sys.argv[1:]
     runs = 5
@@ -39,6 +64,13 @@ def main():
         i = args.index("--runs")
         runs = int(args[i + 1])
         del args[i:i + 2]
+    if "--par" in args:
+        args.remove("--par")
+        workers = [1, 2, 4, 8, 16]
+        if "--workers" in args:
+            i = args.index("--workers")
+            workers = [int(w) for w in args[i + 1].split(",")]
+        return par(runs, workers)
     lua_backend = "--lua-backend" in args
     if lua_backend:
         args.remove("--lua-backend")

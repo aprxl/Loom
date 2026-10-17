@@ -1,0 +1,20 @@
+// Spawning and joining explicit threads, a thousand at a time: what one
+// `thread` and one `join` cost (design/vm.md §11.4; `par_spawn` is
+// `loom for`, which chunks).
+
+use std.io.print
+
+fn main() {
+    var total: u64 = 0
+    for round in 0..200 {
+        total += loom {
+            let hs = (0..1000).map(i => thread (i as u64) * 2).collect()
+            var sum: u64 = 0
+            for h in hs {
+                sum += h.join()
+            }
+            sum
+        }
+    }
+    print("total {total}")
+}
