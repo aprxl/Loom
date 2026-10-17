@@ -38,9 +38,16 @@ pub(crate) struct PoolState {
     pub outcome: Option<Result<Vec<u64>, Fault>>,
 }
 
+/// A value on a cache line of its own.
+#[derive(Debug)]
+#[repr(align(64))]
+struct Alone<T>(T);
+
 #[derive(Debug)]
 pub(crate) struct Pool {
-    state: Mutex<PoolState>,
+    /// On a line of its own: every lock and unlock writes it, and the flags
+    /// below are read by workers that are running.
+    state: Alone<Mutex<PoolState>>,
     cv: Condvar,
     pub workers: usize,
     /// The program is over (it ended, or something failed): every worker
@@ -56,7 +63,7 @@ pub(crate) struct Pool {
 impl Pool {
     pub fn new(workers: usize, cancel_seen: Arc<AtomicBool>, queued: Arc<AtomicUsize>) -> Pool {
         Pool {
-            state: Mutex::new(PoolState::default()),
+            state: Alone(Mutex::new(PoolState::default())),
             cv: Condvar::new(),
             workers,
             over: AtomicBool::new(false),
@@ -67,7 +74,7 @@ impl Pool {
 
     /// Takes the lock, and with it the scheduler and the context.
     pub fn lock(&self) -> MutexGuard<'_, PoolState> {
-        self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+        self.state.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Waits for something to change.
@@ -96,7 +103,7 @@ impl Pool {
     pub fn spin_for_task(&self, mut spins: u32) -> (MutexGuard<'_, PoolState>, u32) {
         while spins > 0 && !self.is_over() {
             if self.queued.load(Ordering::Relaxed) > 0 {
-                match self.state.try_lock() {
+                match self.state.0.try_lock() {
                     Ok(held) => return (held, spins),
                     Err(TryLockError::Poisoned(e)) => return (e.into_inner(), spins),
                     Err(TryLockError::WouldBlock) => {}

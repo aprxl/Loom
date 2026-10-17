@@ -410,7 +410,7 @@ so it takes the pool's one lock.
 The profile of `par_spawn_join` at 8 workers (2.15 us per spawn and join;
 counters and timers in the pool, since removed): 8 acquisitions of the
 pool's lock per spawn and join, and the work done under it is small (a
-native 30 ns, `task.spawn` 260 ns of which the stack's allocation is most,
+native 30 ns, `task.spawn` 260 ns,
 `join` 30 ns, a thread's end 50 ns: about 0.4 us). The cost was the idle
 workers: seven of them woke on a hint, all took the lock, one found the
 task and six went to sleep for good (they spun once), so each spawn needed
@@ -426,19 +426,24 @@ it sleeps (otherwise, with the spawner running ready tasks itself at its
 joins, the sleepers woke to an empty queue and slept at once, a state it
 stayed in with a notify per spawn: 5 us); and a notify goes out only when
 the spinners and the sleepers already notified are fewer than the ready
-tasks. Same command and machine as the baseline.
+tasks. Same machine; before and after are the two binaries run alternately, best of 21.
 
 | Benchmark | workers | before | after |
 |---|--:|--:|--:|
 | `par_spawn_join` | 1 | 0.062 (0.31 us) | 0.062 (0.31 us) |
-| `par_spawn_join` | 2 | 0.144 (0.72 us) | 0.144 (0.72 us) |
-| `par_spawn_join` | 4 | 0.219 (1.10 us) | 0.173 (0.87 us) |
-| `par_spawn_join` | 8 | 0.455 (2.28 us) | 0.184 (0.92 us) |
-| `par_spawn_join` | 16 | 0.450 (2.25 us) | 0.182 (0.91 us) |
-| `par_mandelbrot` | 8 | 0.073 (6.2x) | 0.073 (6.1x) |
-| `par_spawn` | 8 | 0.073 | 0.077 |
+| `par_spawn_join` | 2 | 0.150 (0.75 us) | 0.146 (0.73 us) |
+| `par_spawn_join` | 4 | 0.211 (1.06 us) | 0.170 (0.85 us) |
+| `par_spawn_join` | 8 | 0.436 (2.18 us) | 0.177 (0.88 us) |
+| `par_spawn_join` | 16 | 0.449 (2.24 us) | 0.174 (0.87 us) |
+| `par_mandelbrot` | 8 | 0.072 (6.3x) | 0.072 (6.2x) |
+| `par_spawn` | 8 | 0.068 | 0.067 |
 
-Some runs on 4 to 16 workers take 0.27 to 0.33 s (1.4 to 1.7 us) instead,
-a second state that depends on which cores the workers land on; both are
-inside the gate. `fib`, `richards` and `binary_trees` are unchanged (A/B
-against the commit before: 0.035/0.035, 0.052/0.049, 0.666/0.667).
+Padding the lock to a cache line of its own (the flags the running workers
+read had shared it with the lock word) was found by `par_spawn` over 4
+million items on 2 workers, which the change had made 27% slower; it is
+0.32 s against 0.34 s before now, and `par_spawn_join` no longer has the
+second state (0.27 to 0.33 s instead of 0.17) it had without. `fib`,
+`richards` and `binary_trees` run the same machine code in the dispatch
+loop; their times move by up to 6% either way between builds, with where
+the linker puts what is around it (A/B against the commit before:
+0.035/0.035, 0.051/0.054, 0.670/0.653).

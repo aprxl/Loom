@@ -1328,10 +1328,12 @@ for V6.
   again before it sleeps (else it goes back to sleep at once whenever the
   spawner ran the ready tasks itself, and every spawn costs a notify). A
   notify goes out only when the spinners and the sleepers already woken are
-  fewer than the ready tasks. Spawning and joining a thread of its own
-  costs 0.9 µs on 2 to 16 workers (the gate is 2; bench/RESULTS.md has the
-  profile): the lock is held for about 0.4 µs of each, so per-worker deques
-  with stealing are not built.
+  fewer than the ready tasks. The pool's lock sits on a cache line of its
+  own, since the flags the running workers read would share it otherwise
+  and every lock and unlock would invalidate them. Spawning and joining a
+  thread of its own costs 0.9 µs on 4 to 16 workers (0.7 on 2; the gate is
+  2; bench/RESULTS.md has the profile): the lock is held for about 0.4 µs
+  of each, so per-worker deques with stealing are not built.
   **Not yet:** per-worker heaps (the allocator caches), halving a chunk on a
   steal, like Rayon, and chunks of other iterators than exclusive integer
   ranges.
