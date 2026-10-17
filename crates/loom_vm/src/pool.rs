@@ -13,6 +13,7 @@
 //! declares a deadlock. The first fault, or the program's own task ending,
 //! stops them all.
 
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Condvar, Mutex, MutexGuard};
 
@@ -39,16 +40,19 @@ pub(crate) struct Pool {
     over: AtomicBool,
     /// A task became ready since a spinning worker last looked.
     hint: AtomicBool,
+    /// Whether any task has been cancelled yet (the scheduler's flag).
+    cancel_seen: Arc<AtomicBool>,
 }
 
 impl Pool {
-    pub fn new(workers: usize) -> Pool {
+    pub fn new(workers: usize, cancel_seen: Arc<AtomicBool>) -> Pool {
         Pool {
             state: Mutex::new(PoolState::default()),
             cv: Condvar::new(),
             workers,
             over: AtomicBool::new(false),
             hint: AtomicBool::new(false),
+            cancel_seen,
         }
     }
 
@@ -80,6 +84,12 @@ impl Pool {
     /// Called with the lock held, before a worker starts to spin.
     pub fn clear_hint(&self) {
         self.hint.store(false, Ordering::Relaxed);
+    }
+
+    /// Whether a cancellation point has to look at the task: false while
+    /// nothing has been cancelled, and then it needs no lock.
+    pub fn cancel_seen(&self) -> bool {
+        self.cancel_seen.load(Ordering::Acquire)
     }
 
     pub fn is_over(&self) -> bool {

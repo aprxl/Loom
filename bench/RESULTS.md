@@ -353,7 +353,7 @@ to 0.286 s; the benchmark suite within noise.
 spawn and every wake goes through the pool's one lock). That misses V5's
 gate of 2 µs on 8 workers; per-worker deques are the next step if it
 matters, and `loom for` doesn't chunk its iterations yet, which is the
-cheaper fix for small items (see `Range.chunks`). The single-thread benchmarks are unchanged
+cheaper fix for small items (see `Range.chunks`; done below). The single-thread benchmarks are unchanged
 by the pool (A/B against the commit before it, within 2%).
 
 ### V5 close-out baseline (2026-10-17)
@@ -379,3 +379,28 @@ a time, so it keeps measuring spawn and join once `loom for` chunks.
 | `par_spawn_join` | 4 | 0.219 | 0.28x | 1.10 us |
 | `par_spawn_join` | 8 | 0.455 | 0.14x | 2.28 us |
 | `par_spawn_join` | 16 | 0.450 | 0.14x | 2.25 us |
+
+### `loom for` chunks (2026-10-17)
+
+`loom for` over an exclusive integer range gives each task a run of items
+when there are several workers (`task.grain`: `n / (8 * workers)`, at
+least 1; one worker keeps a thread per item). A cancellation point is
+passed without the pool's lock until some task has been cancelled. Same
+command and machine as the baseline above.
+
+| Benchmark | workers | before | after |
+|---|--:|--:|--:|
+| `par_mandelbrot` | 1 | 0.461 | 0.450 |
+| `par_mandelbrot` | 2 | 0.242 | 0.234 |
+| `par_mandelbrot` | 4 | 0.130 | 0.120 |
+| `par_mandelbrot` | 8 | 0.076 | 0.072 (6.2x) |
+| `par_mandelbrot` | 16 | 0.056 | 0.054 |
+| `par_spawn` | 1 | 0.077 | 0.077 |
+| `par_spawn` | 2 | 0.172 | 0.028 |
+| `par_spawn` | 4 | 0.251 | 0.057 |
+| `par_spawn` | 8 | 0.557 | 0.073 |
+| `par_spawn` | 16 | 0.638 | 0.062 |
+| `par_spawn_join` | 8 | 0.455 | 0.434 (2.17 us each) |
+
+What is left in `par_spawn` is the `Atomic.add` of every item: a native,
+so it takes the pool's one lock.

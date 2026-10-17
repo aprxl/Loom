@@ -21,6 +21,8 @@
 #![allow(unsafe_code)]
 
 use std::collections::VecDeque;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::Trap;
 use crate::heap::Heap;
@@ -63,6 +65,8 @@ pub(crate) enum TaskOp {
     LoomLeftover,
     LoomFree,
     Cancelled,
+    /// `task.grain`: how many iterations of a `loom for` go to a task.
+    Grain,
     MutexLock,
     MutexUnlock,
     /// `const.begin`: who computes a constant that isn't done.
@@ -249,6 +253,9 @@ pub(crate) struct Sched {
     free_pipes: Vec<usize>,
     /// Raised in the main task when it next runs (a deadlock).
     pending: Option<Trap>,
+    /// Set once any task is cancelled: until then, a cancellation point
+    /// (`task.cancelled`) can be passed without the pool's lock.
+    pub cancel_seen: Arc<AtomicBool>,
 }
 
 /// The task of a worker that has none.
@@ -280,6 +287,7 @@ impl Sched {
             pipes: Vec::new(),
             free_pipes: Vec::new(),
             pending: None,
+            cancel_seen: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -297,6 +305,7 @@ impl Sched {
         self.pipes.clear();
         self.free_pipes.clear();
         self.pending = None;
+        self.cancel_seen.store(false, Ordering::Relaxed);
     }
 
     // ------------------------------------------------------------ switching
@@ -443,6 +452,7 @@ impl Sched {
             }
             task.cancelled = true;
         }
+        self.cancel_seen.store(true, Ordering::Release);
         if let Some(on) = self.tasks[t].waiting_on {
             self.leave_list(on, t);
         }
@@ -811,6 +821,7 @@ impl Sched {
             // loop (its environment goes then), or freed at once.
             task.done = true;
             task.cancelled = true;
+            self.cancel_seen.store(true, Ordering::Release);
             if env_drop != 0 && env_bytes > 0 {
                 task.unrun = true;
                 task.env_drop = env_drop as u32;

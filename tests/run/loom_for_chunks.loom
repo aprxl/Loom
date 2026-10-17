@@ -1,0 +1,54 @@
+// `loom for` over a range gives each task a run of items when there are
+// several workers, and a thread each otherwise: the same totals either way.
+// `continue` ends one item, not the run; empty and backwards ranges have no
+// items; signed and narrow bounds count the same.
+
+use std.io.print
+use std.sync.Atomic
+
+fn main() {
+    let lens = Atomic[usize](0)
+    let odd = Atomic[u32](0)
+    loom for i in 0..1000 {
+        if i % 2 == 1 {
+            odd.add(1)
+            continue
+        }
+        let s = "item {i}"
+        lens.add(s.len())
+    }
+    print("lens {lens.load()} odd {odd.load()}")
+
+    let signed = Atomic[i64](0)
+    let seen = Atomic[u32](0)
+    loom for k in -50..50 {
+        signed.add(k * k)
+        seen.add(1)
+    }
+    print("signed {signed.load()} seen {seen.load()}")
+
+    let bytes = Atomic[u32](0)
+    loom for b in 200..255u8 {
+        bytes.add(b as u32)
+    }
+    print("bytes {bytes.load()}")
+
+    let empty = Atomic[u32](0)
+    loom for _ in 5..5 {
+        empty.add(1)
+    }
+    loom for _ in 5..2 {
+        empty.add(1)
+    }
+    print("empty {empty.load()}")
+
+    let lists = Atomic[usize](0)
+    loom for i in 0..300 {
+        var xs: List[String] = []
+        for j in 0..(i % 5) {
+            xs.push("{i}:{j}")
+        }
+        lists.add(xs.len())
+    }
+    print("lists {lists.load()}")
+}

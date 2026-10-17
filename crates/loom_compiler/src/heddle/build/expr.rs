@@ -15,6 +15,7 @@ use super::value::{Place, Val};
 use std::cell::Cell;
 use std::rc::Rc;
 
+use super::thread::LoomFor;
 use super::{Builder, LoopCtx, LoopResult, Vals, Var};
 use crate::heddle::{BitOp, Cmp, FOp, InstKind, IntOp, Policy, Term, VTy, Value};
 use crate::hir::{self, Block, DefKind, ExprKind, StmtKind};
@@ -349,7 +350,7 @@ impl<'a> Builder<'a> {
             ExprKind::Yield { value, .. } => self.yield_place(value, span),
             ExprKind::Pull => self.pull_expr(e, span),
             ExprKind::Loom { args, body, group } => self.loom_expr(e, args, body, *group, ty),
-            ExprKind::Thread { group, body, .. } => self.thread_expr(e, *group, body),
+            ExprKind::Thread { group, .. } => self.thread_expr(e, *group),
             _ => self.unsupported(span, "this expression"),
         }
     }
@@ -1020,12 +1021,33 @@ impl<'a> Builder<'a> {
         let Some(int) = self.int_of(elem) else {
             return self.unsupported(iter.span, "`for` loops over ranges that aren't integers");
         };
+        if let (Some(hi), false, Some((thread, group))) = (hi, *inclusive, loom_for_thread(body)) {
+            let parts = LoomFor { pat, body, thread, group, int, elem };
+            return self.loom_for_range(e, parts, lo, hi);
+        }
         // The bounds, evaluated once, before the loop.
         let lo = self.value(lo)?[0];
         let hi = match hi {
             Some(hi) => Some(self.value(hi)?[0]),
             None => None,
         };
+        self.range_loop(e, pat, body, lo, hi, *inclusive, int, elem)
+    }
+
+    /// `for pat in lo..hi { body }` (or `lo..=hi`, or `lo..`) over integers
+    /// of type `int`, with the bounds worked out.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn range_loop(
+        &mut self,
+        e: &'a hir::Expr,
+        pat: &'a hir::Pat,
+        body: &'a Block,
+        lo: Value,
+        hi: Option<Value>,
+        inclusive: bool,
+        int: IntTy,
+        elem: Ty,
+    ) -> Option<()> {
         let i = self.new_var(VTy::Int);
         self.write(i, lo);
         let (head, body_b, step, exit) = (self.new_block(), self.new_block(), self.new_block(), self.new_block());
@@ -1034,7 +1056,7 @@ impl<'a> Builder<'a> {
         let cur = self.read(i);
         match hi {
             Some(hi) => {
-                let cmp = if *inclusive { Cmp::Le } else { Cmp::Lt };
+                let cmp = if inclusive { Cmp::Le } else { Cmp::Lt };
                 let c = self.emit1(InstKind::ICmp { cmp, unsigned: !int.signed, a: cur, b: hi }, VTy::Int);
                 self.br(c, body_b, exit);
             }
@@ -1069,7 +1091,7 @@ impl<'a> Builder<'a> {
             match hi {
                 // Stepping past the last value of an inclusive range at the
                 // type's maximum mustn't overflow: stop before stepping.
-                Some(hi) if *inclusive => {
+                Some(hi) if inclusive => {
                     let at_end = self.emit1(InstKind::ICmp { cmp: Cmp::Eq, unsigned: true, a: cur, b: hi }, VTy::Int);
                     let inc = self.new_block();
                     self.br(at_end, exit, inc);
@@ -1457,5 +1479,16 @@ pub(super) fn mentions_locals(e: &hir::Expr) -> bool {
             hir::TemplatePart::Text(_) => false,
         }),
         _ => true,
+    }
+}
+
+/// The thread and group of a `loom for`'s desugared body (`{ thread { … } }`,
+/// design/vm.md §11.3), if `body` is one.
+fn loom_for_thread(body: &Block) -> Option<(&hir::Expr, hir::LocalId)> {
+    let [stmt] = body.stmts.as_slice() else { return None };
+    let StmtKind::Expr(thread) = &stmt.kind else { return None };
+    match &thread.kind {
+        ExprKind::Thread { group: Some(group), item: true, .. } => Some((thread, *group)),
+        _ => None,
     }
 }

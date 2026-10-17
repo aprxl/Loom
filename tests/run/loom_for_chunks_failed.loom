@@ -1,0 +1,23 @@
+// An item of a chunked `loom for` unravels: the rest of its run is never
+// started, the other runs are cancelled, and everything the items own is
+// freed (the checked build would catch a leak). Items print nothing, so the
+// ending is the same on any number of workers.
+
+use std.io.print
+use std.sync.Atomic
+
+fn main() {
+    let done = Atomic[u32](0)
+    loom for i in 0..4000 {
+        var rows: List[String] = []
+        for j in 0..(i % 7) {
+            rows.push("row {i}.{j}")
+        }
+        let name = "item {i}"
+        if i == 3001 {
+            unravel("stop at {name} with {rows.len()} rows")
+        }
+        done.add(1)
+    }
+    print("not reached {done.load()}")
+}

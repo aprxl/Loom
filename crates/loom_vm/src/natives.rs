@@ -640,6 +640,7 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
         "loom.leftover" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::LoomLeftover)),
         "loom.free" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::LoomFree)),
         "task.cancelled" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::Cancelled)),
+        "task.grain" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::Grain)),
         "pipe.new" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::PipeNew)),
         "pipe.send" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::PipeSend)),
         "pipe.recv" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::PipeRecv)),

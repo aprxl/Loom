@@ -1279,10 +1279,18 @@ for V6.
      `defer`s);
   2. wait for all of them;
   3. carry on: return, propagate the error, or unravel again.
-- **`loom for`** is to split its iterations into chunks adaptively (halving
-  on a steal, like Rayon), a task per chunk (**not yet**: it makes a task per
-  iteration). `#disjoint` projections give each iteration its own `mut`
-  place.
+- **`loom for`** over an integer range `lo..hi` splits its iterations into
+  chunks, a task per chunk. The split is decided when the loop starts
+  (`task.grain(n)`): with one worker the grain is 1 and every item is a
+  thread of its own, the reference schedule; with several it is `n` over
+  eight times the workers (at least 1), a fixed grain. A chunk task is a
+  loop around the item's own function, so `continue` (a `return` of the
+  item) ends one item; it checks for a cancel between items without the
+  pool's lock until some task has been cancelled, and the items it didn't
+  reach own nothing, since the loop variable is an integer and everything
+  else is by reference. Any other iterator (inclusive and open ranges,
+  lists, streams, `chunks_mut`) keeps a task per item. `#disjoint`
+  projections give each iteration its own `mut` place.
 - **`Atomic[T]`** has `T`'s layout, with Rust's atomic operations on its
   address.
 - **`Mutex[T]`** is a lock word and a `T`. Contention parks the task, not the
@@ -1312,9 +1320,10 @@ for V6.
   `LOOM_THREADS` sets the count (default: one per core). A new thread is
   queued and the spawner goes on (one worker keeps the reference schedule's
   hand-over).
-  **Not yet:** per-worker heaps and deques; chunking in `loom for` (§17's
-  spawn and join gate is missed on 8 workers, 2.7 µs against 2: see
-  bench/RESULTS.md).
+  **Not yet:** per-worker heaps and deques; halving a chunk on a steal, like
+  Rayon, and chunks of other iterators than exclusive integer ranges
+  (spawning and joining threads of their own costs 2.2 µs on 8 workers,
+  against §17's gate of 2: see bench/RESULTS.md).
 
 ---
 

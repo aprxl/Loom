@@ -154,6 +154,10 @@ pub const NATIVES: &[NativeSig] = &[
     sig("loom.free", 2, 0, NativeImm::None),
     // Unwinds with a cancel if the running thread has been cancelled.
     sig("task.cancelled", 0, 0, NativeImm::None),
+    // `task.grain(n) -> size`: how many of a `loom for`'s `n` iterations go
+    // to each task: 1 with one worker, else about `n` over eight times the
+    // workers.
+    sig("task.grain", 1, 1, NativeImm::None),
     // `Mutex[T]`: `mutex.lock(addr)` takes the lock word at `addr` for the
     // running thread, waiting while another has it; `mutex.unlock(addr)`
     // gives it back and wakes the first waiter. (Interpreter-run, like the

@@ -91,6 +91,9 @@ enum FnKey {
     /// A thread, made in that body, by its expression: runs as a task, with
     /// `(result address, environment)` (see `thread.rs`).
     Thread(BodyId, crate::hir::HirId),
+    /// A task that runs a thread's function for a run of the items of a
+    /// `loom for` (see `thread.rs`).
+    Chunk(BodyId, crate::hir::HirId),
     /// Drops what a thread's environment owns (a thread that never ran).
     EnvDrop(BodyId, crate::hir::HirId),
     /// A function instance as a value: takes an environment it ignores.
@@ -317,6 +320,8 @@ pub(super) struct Builder<'a> {
     lambdas: HashMap<(BodyId, crate::hir::HirId), lambda::LambdaInfo<'a>>,
     /// The threads made so far, by the body that made them.
     threads: HashMap<(BodyId, crate::hir::HirId), thread::ThreadInfo<'a>>,
+    /// The environments of the chunk tasks made so far, by their thread.
+    chunks: HashMap<(BodyId, crate::hir::HirId), thread::ChunkEnv>,
     /// Whether the program has a `thread` anywhere: only then can a thread
     /// be cancelled, so only then are cancellation points emitted.
     has_threads: bool,
@@ -454,6 +459,7 @@ impl<'a> Builder<'a> {
             main_span: None,
             lambdas: HashMap::new(),
             threads: HashMap::new(),
+            chunks: HashMap::new(),
             has_threads: typed.results.bodies.iter().any(|b| !b.thread_copies.is_empty()),
             globals: IndexMap::new(),
             const_exprs: HashMap::new(),
@@ -640,6 +646,7 @@ impl<'a> Builder<'a> {
             FnKey::Main(id) => format!("{}.entry", self.body_name(id)),
             FnKey::Lambda(id, _) => format!("{}.{{lambda}}", self.body_name(id)),
             FnKey::Thread(id, _) => format!("{}.{{thread}}", self.body_name(id)),
+            FnKey::Chunk(id, _) => format!("{}.{{thread}}.chunk", self.body_name(id)),
             FnKey::EnvDrop(id, _) => format!("{}.{{thread}}.drop", self.body_name(id)),
             FnKey::Thunk(id) => format!("{}.value", self.body_name(id)),
             FnKey::Step(step) => format!("stream.{}", self.step_name(step)),
@@ -684,6 +691,7 @@ impl<'a> Builder<'a> {
             | FnKey::Main(id)
             | FnKey::Lambda(id, _)
             | FnKey::Thread(id, _)
+            | FnKey::Chunk(id, _)
             | FnKey::EnvDrop(id, _)
             | FnKey::Thunk(id) => id,
             FnKey::Glue(..) | FnKey::Step(_) | FnKey::ConstInit(_) | FnKey::ConstExit | FnKey::AnyShow(..) => BodyId(0),
@@ -707,6 +715,7 @@ impl<'a> Builder<'a> {
             FnKey::Main(id) => self.main_entry(id),
             FnKey::Lambda(id, e) => self.lambda_func(id, e),
             FnKey::Thread(id, e) => self.thread_func(id, e),
+            FnKey::Chunk(id, e) => self.chunk_func(id, e),
             FnKey::EnvDrop(id, e) => self.env_drop_func(id, e),
             FnKey::Thunk(id) => self.thunk_func(id, span),
             FnKey::Step(step) => self.step_func(step),
@@ -767,7 +776,7 @@ impl<'a> Builder<'a> {
                 Some(info) => info.expr.span,
                 None => self.p.def(self.typed.results.instance(id).def).span,
             },
-            FnKey::Thread(id, e) | FnKey::EnvDrop(id, e) => match self.threads.get(&(id, e)) {
+            FnKey::Thread(id, e) | FnKey::Chunk(id, e) | FnKey::EnvDrop(id, e) => match self.threads.get(&(id, e)) {
                 Some(info) => info.expr.span,
                 None => self.p.def(self.typed.results.instance(id).def).span,
             },

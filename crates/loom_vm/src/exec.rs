@@ -36,6 +36,8 @@
 #![allow(unsafe_code)]
 
 use loom_isa::word::{a, b, bc_i32, bc_u32, c, c_i16, unpack_cast};
+use std::sync::Arc;
+
 use loom_isa::{Image, LINK_SLOTS, Op};
 
 use crate::pool::{Pool, PoolState};
@@ -54,6 +56,10 @@ pub(crate) const TRACE_ENDS: usize = 64;
 
 /// Loop iterations and calls between checks for Ctrl-C and budgets.
 const TICKS: i32 = crate::TICKS as i32;
+
+/// A `loom for` with several workers makes this many tasks per worker, so
+/// the unevenly heavy iterations even out.
+const GRAIN_SPLIT: u64 = 8;
 
 /// For the negated float comparisons: whether `x < y` (or `x <= y`, with
 /// `or_equal`) is false, which it is when either is NaN too.
@@ -347,7 +353,7 @@ impl<'i> Machine<'i> {
         self.ctx.reset_sinks();
         // The compile-time VM has a meter and refuses threads: one worker.
         let workers = if self.has_threads && self.workers > 1 && !self.ctx.refuse_host { self.workers } else { 1 };
-        let pool = (workers > 1).then(|| Pool::new(workers));
+        let pool = (workers > 1).then(|| Pool::new(workers, Arc::clone(&self.sched.cancel_seen)));
         self.sched.eager = pool.is_none();
         let init = Init {
             image: self.image,
@@ -1817,6 +1823,9 @@ fn choose<'p>(
 #[inline(never)]
 fn run_task_op(env: &mut Env, op: TaskOp, args: &mut [u64], pc: *const u64, fp: *mut u64) -> Result<Moved, Trap> {
     let pool = env.pool;
+    if op == TaskOp::Cancelled && pool.is_some_and(|p| !p.cancel_seen()) {
+        return Ok(Moved::No);
+    }
     let mut guard = pool.map(Pool::lock);
     sched!(env).current = env.current;
     if cfg!(feature = "checked") {
@@ -1893,6 +1902,10 @@ fn task_op<'p>(
             if sched!(env).is_cancelled() {
                 return Err(Trap::Cancel);
             }
+            Step::Next
+        }
+        TaskOp::Grain => {
+            args[0] = pool.map_or(1, |p| (args[0] / (p.workers as u64 * GRAIN_SPLIT)).max(1));
             Step::Next
         }
         TaskOp::MutexLock => {

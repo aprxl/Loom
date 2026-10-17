@@ -392,6 +392,50 @@ fn par_corpus() {
     assert!(failures.is_empty(), "{} par runs failed:\n{}", failures.len(), failures.join("\n"));
 }
 
+/// The `loom for` fixtures over ranges, on 8 workers, where a task takes a
+/// run of items (design/vm.md §11.4): the same output, and the failing one
+/// ends the same way and frees what its items own (a checked build, as in
+/// `cargo test --features vm-checked`, catches a leak).
+#[test]
+fn loom_for_chunks_on_many_workers() {
+    let mut failures = Vec::new();
+    for name in ["loom_for_chunks", "loom_for_chunks_failed"] {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/run").join(format!("{name}.loom"));
+        let expected = std::fs::read_to_string(path.with_extension("out")).unwrap_or_default();
+        for level in [Level::O2, Level::O0] {
+            let (db, diags, image) = compile_vm(&path, level);
+            let Some(image) = image else {
+                failures.push(format!(
+                    "{name}: didn't compile:
+{}",
+                    rendered(&db, &diags)
+                ));
+                continue;
+            };
+            for _ in 0..10 {
+                let buffer = Rc::new(RefCell::new(Vec::new()));
+                let config = loom_vm::Config { stack_limit: 64 << 20, workers: 8, ..loom_vm::Config::default() };
+                let outcome = loom_vm::run(&image, Host::captured(buffer.clone()), &config);
+                let out = String::from_utf8_lossy(&buffer.borrow()).into_owned();
+                let problem =
+                    check_outcome(&path, outcome).or_else(|| (out != expected).then(|| format!("printed {out:?}")));
+                if let Some(problem) = problem {
+                    failures.push(format!("{name} at {level:?}: {problem}"));
+                    break;
+                }
+            }
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{}",
+        failures.join(
+            "
+"
+        )
+    );
+}
+
 /// The `tests/par` programs again and again, on many workers: a race that
 /// shows once in a thousand runs. `cargo test -- --ignored par_stress`.
 #[test]
