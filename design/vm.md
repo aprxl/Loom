@@ -1326,9 +1326,13 @@ for V6.
   check only what's deterministic.
 - **As built** (the first several-worker version): `loom_vm::pool`. The
   workers are OS threads (the host's is worker 0) around one lock that
-  guards the scheduler and the context: task operations and natives run
-  with it held (so allocation, `Atomic`, `Mutex` and `Pipe` state need
-  nothing finer), the dispatch loops run without it. A worker with no task
+  guards the scheduler and the shared native context. Task operations enter
+  it directly, once; allocation, scalar leaves and sequentially consistent
+  atomics run on worker-local interfaces without it. Atomic add/sub use
+  checked compare-exchange loops, so overflow leaves the value unchanged.
+  Sleeping flushes under the lock, then blocks its worker outside it (there
+  is no timer queue yet). Mutex/Pipe state and other shared-context natives
+  still use the lock; the dispatch loops run without it. A worker with no task
   waits on a condition; the last to go idle with the program's own task
   waiting declares the deadlock; the first fault, or the program's task
   ending, stops them all. A native works on the worker's own message,
@@ -1357,6 +1361,13 @@ for V6.
   lock, which deques would not have touched: so per-worker deques with
   stealing are not built (the scheduler is one queue; idle workers spin on
   the count of ready tasks).
+  Group cleanup consumes results in spawn order with a cursor; successive
+  waits also remember the completed prefix, rather than rescanning it.
+  Lazy constant flags publish their payload with release stores and acquire
+  loads; every task records interrupt delivery across worker migration.
+  `--features vm-stats` with `LOOM_STATS=3` reports native calls and lock
+  acquisitions by category, task-operation locks, scheduler probes and stack
+  allocations. These counts are diagnostic, not wall-clock measurements.
   Allocation is off the lock too (the natives above, `mem.move`, and the free
   of a list's buffer; the natives that build text still allocate under
   it, from the context's heap, which exchanges memory with the workers' the

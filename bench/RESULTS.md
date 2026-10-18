@@ -476,3 +476,57 @@ wait for the lock, and finding it faster to take the lock for `mem.alloc`
 alone shows that this is where the time goes, but the saving on
 `par_alloc` is a factor of 13. The checked build keeps its map of live
 objects behind a mutex, and all its checks.
+
+### V5 review: native routing and scheduler scans (2026-10-18)
+
+Ordinary release binaries, original review commit `9f5e43b` against the
+runtime fixes, before changing the optimizer. Each pair alternates order;
+best of seven wall-clock runs, including compilation and process startup,
+on the same machine as above. Outputs agree. The sequential suite uses
+five pairs and has a before/after geometric speedup of 0.995x (individual
+ratios 0.955–1.025x). No build or test was running alongside the timings.
+
+| Benchmark | workers | before (s) | after (s) | speedup |
+|---|--:|--:|--:|--:|
+| `par_mandelbrot` | 1 | 0.4554 | 0.4502 | 1.01x |
+| `par_mandelbrot` | 8 | 0.0742 | 0.0736 | 1.01x |
+| `par_alloc` | 8 | 0.0459 | 0.0469 | 0.98x |
+| `par_spawn` | 8 | 0.0713 | 0.0167 | 4.26x |
+| `par_spawn_join` | 1 | 0.0654 | 0.0644 | 1.02x |
+| `par_spawn_join` | 8 | 0.1971 | 0.2149 | 0.92x |
+| `par_scalar` | 1 | 0.0345 | 0.0334 | 1.03x |
+| `par_scalar` | 8 | 0.7127 | 0.0140 | 50.81x |
+| `par_sleep` | 1 | 0.8139 | 0.8138 | 1.00x |
+| `par_sleep` | 8 | 0.8144 | 0.1116 | 7.30x |
+| `task_results` | 1 | 0.0438 | 0.0139 | 3.16x |
+| `task_results` | 8 | 0.0583 | 0.0284 | 2.05x |
+
+`par_scalar` deliberately stresses small scalar natives; the large gain is
+removing the lock convoy, not making arithmetic 50x faster. Sleep still
+occupies a worker; this is not a timer queue. Spawn/join regressed about
+9% in this comparison despite fewer lock acquisitions (1.07 us per pair
+afterward); no claim of an improvement there. No first-stack cache or
+work-stealing change is included.
+
+Diagnostic builds with `LOOM_STATS=3`, eight workers, separately from the
+timed runs (counts before routing changes versus after):
+
+| Workload / counter | before | after |
+|---|--:|--:|
+| `par_spawn`, generic locks for task natives | 200,013 | 0 |
+| `par_spawn`, atomic native locks | 200,001 | 0 |
+| `par_spawn_join`, generic locks for task natives | 400,800 | 0 |
+| `par_scalar`, scalar native locks | 5,120,000 | 0 |
+| `task_results`, leftover probes | 50,015,000 | 10,000 |
+| `task_results`, unfinished probes | 29,997 | 10,000 |
+
+Task operations still acquire the scheduler lock when needed (about
+400,807 times for `par_spawn_join`), and the 200,000 task-stack allocations
+remain. Counts exclude idle-worker queue acquisition. The scalar and
+atomic paths never borrow the shared native context. Atomic add/sub use
+checked CAS loops, so overflow leaves the value unchanged. Output suffixes
+and completed task prefixes are scanned once.
+
+The independent release perf gate passes: `par_mandelbrot` 453.603 ms /
+75.102 ms = 6.04x on eight workers (gate 5.6x); spawn/join 1.072 us
+(gate 2 us). All six repository correctness/lint gates pass.

@@ -164,3 +164,26 @@ macros only keep specializations consistent; PGO measured about 1.5% before and
 `target-cpu=native` kept nothing. Compile-time list: the second review's
 ranking matches this one (gvn stores, gvn per-instruction clones, `carry_last`,
 codegen liveness, range and modref repeats, `Emitter::line`).
+
+## Implementation follow-up (2026-10-18)
+
+The correctness fixes above landed in `b6ffd49`. Task natives now dispatch
+directly to task handling; an uncancelled chunk boundary acquires no lock.
+Atomic operations use exact-width Rust atomics, with checked CAS loops for
+add/sub. Scalar leaves take only the worker heap and argument window.
+Sleep checks host access and flushes under a short lock, then blocks its
+worker outside the lock, polling interrupt/shutdown. It remains outside
+ordinary cooperative cancellation points. Text/map natives still use the
+shared context and lock.
+
+Groups retain cleanup and completed-prefix cursors. `LOOM_STATS=3` reports
+native calls and lock acquisitions by category, scheduler probes and stack
+allocations; worker-local counters merge on shutdown. Adjacent-opcode
+counters remain a prerequisite for future dispatch-engine work.
+
+The review also found an exclusive scheduler reference held across a pool
+wait in `choose`. It now carries a raw pointer across waits and creates
+short exclusive borrows only while the guard is held. Output processing
+examines only the suffix appended by the current native invocation.
+Measurements, including the spawn/join regression, are in
+`bench/RESULTS.md` under “V5 review”.

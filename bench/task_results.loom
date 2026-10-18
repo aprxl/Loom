@@ -1,0 +1,11 @@
+// Dropping unjoined owned results must visit each task only once.
+use std.io.print
+
+fn result(i: i64) -> String = "result {i}"
+
+fn main() {
+    loom {
+        for i in 0..10000 { thread result(i) }
+    }
+    print("done")
+}

@@ -432,6 +432,22 @@ fn run_vm(path: &Path, args: &[String], color: ColorMode, level: Level) -> ExitC
                 trace = vm.backtrace().to_vec();
                 gap = vm.backtrace_gap();
                 // A stats build's op histogram (`LOOM_STATS=1`).
+                if let Some(stats) = vm.runtime_stats()
+                    && std::env::var_os("LOOM_STATS").is_some_and(|v| v == "3")
+                {
+                    for (i, category) in loom_vm::NATIVE_CATEGORIES.iter().enumerate() {
+                        eprintln!(
+                            "native {category}: {} calls, {} locks",
+                            stats.native_calls[i], stats.native_locks[i]
+                        );
+                    }
+                    eprintln!("task operation locks: {}", stats.task_locks);
+                    eprintln!(
+                        "scheduler probes: {} leftover, {} unfinished, {} cancellation",
+                        stats.leftover_probes, stats.unfinished_probes, stats.cancellation_probes
+                    );
+                    eprintln!("task stacks allocated: {}", stats.task_stacks);
+                }
                 if let (Some(counts), Some(total)) = (vm.op_counts(), vm.dispatched())
                     && std::env::var_os("LOOM_STATS").is_some_and(|v| v == "1")
                 {

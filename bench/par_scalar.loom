@@ -1,0 +1,16 @@
+// Scalar natives in parallel; one atomic update per item, outside the hot loop.
+use std.io.print
+use std.sync.Atomic
+
+fn main() {
+    let total = Atomic[u64](0)
+    loom for i in 0..128 {
+        var x = i as u64
+        for _ in 0..20000 {
+            x = (x ~ 0x9e3779b97f4a7c15).rotate_left(13)
+            x +%= x.count_ones() as u64
+        }
+        total.add(x % 1000000)
+    }
+    print("total {total.load()}")
+}

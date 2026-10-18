@@ -14,6 +14,7 @@
 //! says why it's sound. The `checked` feature adds run-time checks where the
 //! compiler is trusted (design/vm.md §5.6).
 
+mod atomic;
 mod exec;
 mod fmt;
 mod heap;
@@ -24,6 +25,9 @@ mod natives;
 mod pool;
 mod sched;
 mod stack;
+mod stats;
+
+pub use stats::{NATIVE_CATEGORIES, RuntimeStats};
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -279,6 +283,15 @@ impl<'i> Vm<'i> {
     /// Treadle is built with the `stats` feature.
     pub fn dispatched(&self) -> Option<u64> {
         cfg!(feature = "stats").then_some(self.machine.ctx.dispatched)
+    }
+
+    /// Native locks and scheduler work so far, with the `stats` feature.
+    pub fn runtime_stats(&self) -> Option<RuntimeStats> {
+        cfg!(feature = "stats").then(|| {
+            let mut stats = self.machine.ctx.runtime_stats.clone();
+            stats.add(&self.machine.scheduler_stats());
+            stats
+        })
     }
 
     /// How many times each op was dispatched, the ones that were, most

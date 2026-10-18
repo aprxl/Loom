@@ -1,0 +1,8 @@
+// Blocking a worker must not hold the scheduler's lock.
+use std.io.print
+use std.time.{ms, sleep}
+
+fn main() {
+    loom for _ in 0..8 { sleep(ms(100)) }
+    print("awake")
+}

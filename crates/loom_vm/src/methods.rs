@@ -9,8 +9,19 @@
 #![allow(unsafe_code)]
 
 use crate::Trap;
+use crate::heap::Heap;
 use crate::ints;
-use crate::natives::{Ctx, NativeFn};
+use crate::natives::{Ctx, LocalFn, NativeFn};
+
+pub(crate) fn resolve_scalar(name: &str) -> Option<LocalFn> {
+    Some(match name {
+        "char.digit" => digit,
+        "int.bits" => int_bits,
+        "int.rotate" => int_rotate,
+        "float.math" => float_math,
+        _ => return None,
+    })
+}
 
 /// The natives of this module, by name.
 pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
@@ -30,7 +41,7 @@ pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
         "string.push_char" => push_char,
         "string.push_str" => push_str,
         "string.pop" => pop,
-        "char.digit" => digit,
+        "char.digit" => |c, a, i| digit(&mut c.heap, a, i),
         "str.next_char" => next_char,
         "str.hash" => str_hash,
         "str.concat2" | "str.concat3" | "str.concat4" => concat,
@@ -38,9 +49,9 @@ pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
         "map.find_int" => map_find_int,
         "str.next_line" => next_line,
         "str.next_word" => next_word,
-        "int.bits" => int_bits,
-        "int.rotate" => int_rotate,
-        "float.math" => float_math,
+        "int.bits" => |c, a, i| int_bits(&mut c.heap, a, i),
+        "int.rotate" => |c, a, i| int_rotate(&mut c.heap, a, i),
+        "float.math" => |c, a, i| float_math(&mut c.heap, a, i),
         _ => return None,
     })
 }
@@ -722,7 +733,7 @@ fn next_word(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 }
 
 /// `char.digit(c)`: the decimal digit `c` is.
-fn digit(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn digit(_: &mut Heap, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let c = args[0] as u32;
     if !(48..=57).contains(&c) {
         let mut shown = Vec::new();
@@ -736,7 +747,7 @@ fn digit(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 
 /// `int.bits(v, type)` with `imm`: 0 `trailing_zeros`, 1 `leading_zeros`,
 /// 2 `count_ones`, 3 `is_power_of_two`, 4 `log2`.
-fn int_bits(_: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
+fn int_bits(_: &mut Heap, args: &mut [u64], imm: u16) -> Result<(), Trap> {
     let s = ints::spec(args[1]);
     let bits = u32::from(s.bits.min(64));
     let mask = if bits >= 64 { u64::MAX } else { (1u64 << bits) - 1 };
@@ -760,7 +771,7 @@ fn int_bits(_: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
 }
 
 /// `int.rotate(v, n, type)`: `imm` 0 left, 1 right.
-fn int_rotate(_: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
+fn int_rotate(_: &mut Heap, args: &mut [u64], imm: u16) -> Result<(), Trap> {
     let s = ints::spec(args[2]);
     let bits = u64::from(s.bits.min(64));
     let mask = if bits >= 64 { u64::MAX } else { (1u64 << bits) - 1 };
@@ -780,7 +791,7 @@ fn int_rotate(_: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
 // it through the name.
 #[allow(unsafe_code)]
 #[unsafe(export_name = "loom_treadle_float_math")]
-fn float_math(_: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
+fn float_math(_: &mut Heap, args: &mut [u64], imm: u16) -> Result<(), Trap> {
     let f32_ = imm & 1 == 1;
     let get = |r: u64| if f32_ { f64::from(f32::from_bits(r as u32)) } else { f64::from_bits(r) };
     let (a, b) = (get(args[0]), get(args[1]));

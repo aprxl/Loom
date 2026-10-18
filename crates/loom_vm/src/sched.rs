@@ -140,6 +140,26 @@ mod tests {
     }
 
     #[test]
+    fn leftovers_keep_order_and_include_appended_tasks() {
+        let mut sched = Sched::new();
+        let group = sched.loom_new();
+        for task in 1..=100 {
+            sched.tasks.push(Task { live: true, result_ready: true, result: task as u64, drop_fn: 7, ..Task::empty() });
+            sched.groups[0].tasks.push(task);
+        }
+        for task in 1..=100 {
+            assert_eq!(sched.leftover(group).expect("live"), (7, task));
+        }
+        assert_eq!(sched.leftover(group).expect("exhausted"), (0, 0));
+        sched.tasks.push(Task { live: true, result_ready: true, result: 101, drop_fn: 7, ..Task::empty() });
+        sched.groups[0].tasks.push(101);
+        assert_eq!(sched.leftover(group).expect("appended"), (7, 101));
+        if cfg!(feature = "stats") {
+            assert_eq!(sched.stats.leftover_probes, 101);
+        }
+    }
+
+    #[test]
     fn interrupt_claim_survives_worker_migration() {
         let mut sched = Sched::new();
         sched.tasks.push(Task { live: true, ..Task::empty() });
@@ -167,6 +187,7 @@ pub(crate) enum Step {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TaskOp {
     Spawn,
+    Sleep,
     Join,
     Yield,
     LoomNew,
@@ -349,6 +370,11 @@ impl Task {
 pub(crate) struct Group {
     /// Its tasks, in the order they were started.
     pub tasks: Vec<usize>,
+    /// Leftovers are consumed in spawn order, including tasks appended
+    /// after an earlier visit. A task is examined once for result cleanup.
+    leftover: usize,
+    /// The completed prefix, shared by successive leave/join retries.
+    unfinished: usize,
     /// What the first task to fail ended with.
     pub failure: Option<Trap>,
     pub epoch: u32,
@@ -357,6 +383,7 @@ pub(crate) struct Group {
 
 #[derive(Debug)]
 pub(crate) struct Sched {
+    pub stats: crate::RuntimeStats,
     tasks: Vec<Task>,
     groups: Vec<Group>,
     free_tasks: Vec<usize>,
@@ -401,6 +428,7 @@ impl Sched {
         let mut main = Task::empty();
         main.live = true;
         Sched {
+            stats: crate::RuntimeStats::default(),
             tasks: vec![main],
             groups: Vec::new(),
             free_tasks: Vec::new(),
@@ -632,6 +660,9 @@ impl Sched {
 
     fn cancel_all(&mut self, g: usize, except: usize) {
         for i in 0..self.groups[g].tasks.len() {
+            if cfg!(feature = "stats") {
+                self.stats.cancellation_probes += 1;
+            }
             let t = self.groups[g].tasks[i];
             if t != except {
                 self.cancel(t);
@@ -641,8 +672,20 @@ impl Sched {
 
     /// The first task of group `g`, in the order they started, that hasn't
     /// ended (and isn't the running one).
-    fn unfinished(&self, g: usize) -> Option<usize> {
-        self.groups[g].tasks.iter().copied().find(|&t| t != self.current && !self.tasks[t].done)
+    fn unfinished(&mut self, g: usize) -> Option<usize> {
+        for i in self.groups[g].unfinished..self.groups[g].tasks.len() {
+            let t = self.groups[g].tasks[i];
+            if cfg!(feature = "stats") {
+                self.stats.unfinished_probes += 1;
+            }
+            if self.tasks[t].done && self.groups[g].unfinished == i {
+                self.groups[g].unfinished += 1;
+            }
+            if t != self.current && !self.tasks[t].done {
+                return Some(t);
+            }
+        }
+        None
     }
 
     fn group_index(&self, h: u64) -> Result<usize, Trap> {
@@ -701,7 +744,12 @@ impl Sched {
     /// and where it is, or `(0, 0)`.
     pub fn leftover(&mut self, g: u64) -> Result<(u64, u64), Trap> {
         let g = self.group_index(g)?;
-        for i in 0..self.groups[g].tasks.len() {
+        while self.groups[g].leftover < self.groups[g].tasks.len() {
+            let i = self.groups[g].leftover;
+            self.groups[g].leftover += 1;
+            if cfg!(feature = "stats") {
+                self.stats.leftover_probes += 1;
+            }
             let t = self.groups[g].tasks[i];
             let task = &mut self.tasks[t];
             // A task that never ran owns what it was given.
@@ -995,6 +1043,9 @@ impl Sched {
             }
         } else {
             let mut stack = Stack::task(limit, loom_isa::LINK_SLOTS + frame, FIRST_SEGMENT)?;
+            if cfg!(feature = "stats") {
+                self.stats.task_stacks += 1;
+            }
             let (base, seg_end) = stack.bounds();
             // SAFETY: the first segment holds the linkage and the entry's
             // frame, whose first two registers are its parameters.

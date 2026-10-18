@@ -47,7 +47,7 @@ use crate::heap::{Heap, Shared};
 use loom_sys::Host;
 
 use crate::ints::{self, IntErr};
-use crate::natives::{Ctx, HeapFn, NativeFn, resolve, resolve_heap};
+use crate::natives::{Ctx, LocalFn, NativeFn, resolve, resolve_local, resolve_task};
 use crate::stack::Stack;
 use crate::{Config, Fault, Trap, crash_message};
 
@@ -137,8 +137,9 @@ struct Env<'e, 'i> {
     funcs: *const Callee,
     nfuncs: usize,
     natives: &'e [(NativeFn, usize)],
-    /// The natives that touch only the heap, by the same index.
-    heap_natives: &'e [Option<HeapFn>],
+    /// Leaves that use only arguments, memory and the worker heap.
+    local_natives: &'e [Option<LocalFn>],
+    task_natives: &'e [Option<TaskOp>],
     /// The program's context and threads, by pointer: with several workers
     /// they're shared, each use under the pool's lock (see `pool.rs`), so no
     /// two `&mut` of them ever live at once.
@@ -181,6 +182,7 @@ struct Env<'e, 'i> {
     st_dispatched: u64,
     st_ops: Vec<u64>,
     st_pcs: Vec<u64>,
+    st_runtime: crate::RuntimeStats,
 }
 
 /// What every worker of a run shares, none of which changes while it runs
@@ -191,7 +193,8 @@ struct Init<'a, 'i> {
     funcs: *const Callee,
     nfuncs: usize,
     natives: &'a [(NativeFn, usize)],
-    heap_natives: &'a [Option<HeapFn>],
+    local_natives: &'a [Option<LocalFn>],
+    task_natives: &'a [Option<TaskOp>],
     /// With several workers, what their heaps share.
     shared: Option<Arc<Shared>>,
     ctx: *mut Ctx<'i>,
@@ -231,6 +234,7 @@ impl Drop for Env<'_, '_> {
         if cfg!(feature = "stats") {
             let c = ctx!(self);
             c.dispatched += self.st_dispatched;
+            c.runtime_stats.add(&self.st_runtime);
             for (to, n) in c.op_counts.iter_mut().zip(&self.st_ops) {
                 *to += n;
             }
@@ -250,7 +254,8 @@ pub(crate) struct Machine<'i> {
     /// (constants computed on first read).
     data: Box<[u64]>,
     natives: Vec<(NativeFn, usize)>,
-    heap_natives: Vec<Option<HeapFn>>,
+    local_natives: Vec<Option<LocalFn>>,
+    task_natives: Vec<Option<TaskOp>>,
     pub ctx: Ctx<'i>,
     stack_limit: usize,
     /// Kept between calls from outside.
@@ -265,6 +270,9 @@ pub(crate) struct Machine<'i> {
 }
 
 impl<'i> Machine<'i> {
+    pub fn scheduler_stats(&self) -> crate::RuntimeStats {
+        self.sched.stats.clone()
+    }
     /// Prepares a verified image to run.
     pub fn load(image: &'i Image, host: Host, config: &Config) -> Result<Machine<'i>, String> {
         let natives = image
@@ -297,7 +305,8 @@ impl<'i> Machine<'i> {
             code: &image.code,
             funcs,
             data,
-            heap_natives: image.natives.iter().map(|name| resolve_heap(name)).collect(),
+            local_natives: image.natives.iter().map(|name| resolve_local(name)).collect(),
+            task_natives: image.natives.iter().map(|name| resolve_task(name)).collect(),
             natives,
             ctx: {
                 let mut ctx = Ctx::new(image, host);
@@ -381,7 +390,8 @@ impl<'i> Machine<'i> {
             funcs: self.funcs.as_ptr(),
             nfuncs: self.funcs.len(),
             natives: &self.natives,
-            heap_natives: &self.heap_natives,
+            local_natives: &self.local_natives,
+            task_natives: &self.task_natives,
             shared: pool.is_some().then(|| Arc::clone(self.ctx.heap.shared())),
             ctx: &raw mut self.ctx,
             sched: &raw mut self.sched,
@@ -476,7 +486,8 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
             funcs: init.funcs,
             nfuncs: init.nfuncs,
             natives: init.natives,
-            heap_natives: init.heap_natives,
+            local_natives: init.local_natives,
+            task_natives: init.task_natives,
             ctx: init.ctx,
             stack,
             rodata: init.rodata,
@@ -496,8 +507,9 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
             local: Default::default(),
             heap: init.shared.as_ref().map(|shared| Box::new(Heap::sharing(shared))),
             st_dispatched: 0,
-            st_ops: if cfg!(feature = "stats") { vec![0; ctx!(init).op_counts.len()] } else { Vec::new() },
-            st_pcs: if cfg!(feature = "stats") { vec![0; ctx!(init).pc_counts.len()] } else { Vec::new() },
+            st_runtime: crate::RuntimeStats::default(),
+            st_ops: if cfg!(feature = "stats") { vec![0; Op::ALL.len()] } else { Vec::new() },
+            st_pcs: if cfg!(feature = "stats") { vec![0; init.image.code.len()] } else { Vec::new() },
         };
         // Only `pc` and `fp` (and each instruction's word) stay in registers
         // through the loop; the rest is read from `env` where it's needed.
@@ -1343,16 +1355,27 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
                                 enter!(callee);
                             }
                             Op::CallN => {
+                                if cfg!(feature = "stats") {
+                                    let cat = crate::stats::category(&env.image.natives[b(w)]);
+                                    env.st_runtime.native_calls[cat] += 1;
+                                }
+                                if let Some(op) = env.task_natives[b(w)] {
+                                    throw!(Trap::Task(op));
+                                }
                                 let (native, regs) = env.natives[b(w)];
                                 // SAFETY: the verifier checked that the native's
                                 // registers are inside the frame.
                                 let args = unsafe { std::slice::from_raw_parts_mut(fp.add(a(w)), regs) };
                                 let done = if env.pool.is_some() {
-                                    // A native that works on the heap only runs on
-                                    // the worker's own, with no lock.
-                                    if let (Some(heap), Some(own)) = (env.heap.as_mut(), env.heap_natives[b(w)]) {
-                                        own(heap, args)
+                                    // A leaf with no shared context runs on the
+                                    // worker's own heap, without the pool lock.
+                                    if let (Some(heap), Some(own)) = (env.heap.as_mut(), env.local_natives[b(w)]) {
+                                        own(heap, args, c(w) as u16)
                                     } else {
+                                        if cfg!(feature = "stats") {
+                                            let cat = crate::stats::category(&env.image.natives[b(w)]);
+                                            env.st_runtime.native_locks[cat] += 1;
+                                        }
                                         let _held = env.pool.map(Pool::lock);
                                         if cfg!(feature = "checked") {
                                             ctx!(env).stack = &*env.stack;
@@ -1794,14 +1817,21 @@ const SPINS: u32 = 4000;
 /// the program is over. The last worker to go idle, with nothing ready,
 /// finds the program's own task waiting for what can't happen.
 fn choose<'p>(
-    sched: &mut Sched,
+    sched: *mut Sched,
     pool: Option<&'p Pool>,
     guard: &mut Option<std::sync::MutexGuard<'p, PoolState>>,
 ) -> Option<usize> {
-    let Some(pool) = pool else { return Some(sched.next_ready()) };
+    // No reference to the shared scheduler may survive releasing the
+    // guard. In particular, an &mut parameter would exclude other workers
+    // even during the intervals in which this function waits unlocked.
+    let Some(pool) = pool else {
+        // SAFETY: without a pool, this is the only worker.
+        return Some(unsafe { (&mut *sched).next_ready() });
+    };
     let mut spins = SPINS;
     loop {
-        if let Some(task) = sched.pop_ready() {
+        // SAFETY: the caller (or the preceding wait) holds the pool guard.
+        if let Some(task) = unsafe { (&mut *sched).pop_ready() } {
             return Some(task);
         }
         if pool.is_over() {
@@ -1809,7 +1839,8 @@ fn choose<'p>(
         }
         let state = guard.as_mut()?;
         if state.idle + 1 >= pool.workers {
-            sched.declare_deadlock();
+            // SAFETY: the guard remains held; this borrow ends before any wait.
+            unsafe { (&mut *sched).declare_deadlock() };
             continue;
         }
         state.idle += 1;
@@ -1834,6 +1865,43 @@ fn choose<'p>(
     }
 }
 
+/// A sleeping task occupies its worker, but never the scheduler lock.
+/// Host access and flushing happen before blocking; ordinary cancellation
+/// remains cooperative at the language's existing cancellation points.
+fn sleep_task(env: &mut Env, nanos: u64) -> Result<Moved, Trap> {
+    {
+        let _held = env.pool.map(Pool::lock);
+        if cfg!(feature = "stats") && env.pool.is_some() {
+            env.st_runtime.native_locks[5] += 1;
+        }
+        ctx!(env).host_check("time.sleep")?;
+        if ctx!(env).sandbox {
+            return Ok(Moved::No);
+        }
+        if env.pool.is_some() {
+            ctx!(env).enter(&mut env.local);
+            ctx!(env).flush();
+            ctx!(env).exit(&mut env.local);
+            ctx!(env).flush();
+        } else {
+            ctx!(env).flush();
+        }
+    }
+    let start = std::time::Instant::now();
+    let duration = std::time::Duration::from_nanos(nanos);
+    let slice = std::time::Duration::from_millis(50);
+    loop {
+        if let Some(trap) = checkpoint(env) {
+            return Err(trap);
+        }
+        let left = duration.saturating_sub(start.elapsed());
+        if left.is_zero() {
+            return Ok(Moved::No);
+        }
+        std::thread::sleep(left.min(slice));
+    }
+}
+
 /// A task operation (`calln` of `task.*` or `loom.*`), out of the dispatch
 /// loop's way: the loop's code is sensitive to what's in it (see the
 /// comments at the top of `run`). With several workers, it runs under the
@@ -1842,10 +1910,20 @@ fn choose<'p>(
 #[inline(never)]
 fn run_task_op(env: &mut Env, op: TaskOp, args: &mut [u64], pc: *const u64, fp: *mut u64) -> Result<Moved, Trap> {
     let pool = env.pool;
+    if op == TaskOp::Sleep {
+        return sleep_task(env, args[0]);
+    }
+    if op == TaskOp::Grain {
+        args[0] = pool.map_or(1, |p| (args[0] / (p.workers as u64 * GRAIN_SPLIT)).max(1));
+        return Ok(Moved::No);
+    }
     if op == TaskOp::Cancelled && pool.is_some_and(|p| !p.cancel_seen()) {
         return Ok(Moved::No);
     }
     let mut guard = pool.map(Pool::lock);
+    if cfg!(feature = "stats") && pool.is_some() {
+        env.st_runtime.task_locks += 1;
+    }
     sched!(env).current = env.current;
     if cfg!(feature = "checked") {
         ctx!(env).stack = &*env.stack;
@@ -1872,6 +1950,7 @@ fn task_op<'p>(
     let at = pc.wrapping_sub(1);
     let step = match op {
         TaskOp::Idle => Step::Park { again: false },
+        TaskOp::Sleep => unreachable!("sleep runs outside the scheduler lock"),
         TaskOp::Spawn => {
             if ctx!(env).refuse_host {
                 return Err(Trap::Refused("thread"));
@@ -2033,7 +2112,7 @@ fn task_op<'p>(
     sched!(env).save(resume, fp, env.seg_end, &mut run);
     let next = match started {
         Some(task) => Some(task),
-        None => choose(sched!(env), pool, guard),
+        None => choose(env.sched, pool, guard),
     };
     let Some(next) = next else { return Ok(Moved::Halt) };
     let (npc, nfp, nend) = sched!(env).load(next, &mut run);
@@ -2065,7 +2144,7 @@ fn thread_ended(env: &mut Env, trap: Option<Trap>) -> Moved {
     ctx!(env).append_out(&mut left);
     sched!(env).drop_stack(cur);
     sched!(env).current = IDLE;
-    let moved = match choose(sched!(env), pool, &mut guard) {
+    let moved = match choose(env.sched, pool, &mut guard) {
         None => Moved::Halt,
         Some(next) => {
             let (msg, bufs, out) = state!(env);

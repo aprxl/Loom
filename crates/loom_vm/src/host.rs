@@ -19,7 +19,6 @@ pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
     Some(match name {
         "env.get" => env_get,
         "env.args" => env_args,
-        "time.sleep" => sleep,
         "process.exit" => exit,
         "term.raw_mode" => raw_mode,
         "term.poll_keys" => poll_keys,
@@ -75,28 +74,6 @@ fn env_args(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 /// `process.exit(code)`: unwinds, and the run ends with the code.
 fn exit(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     Err(Trap::Exit(args[0] as u8))
-}
-
-/// `time.sleep(nanos)`.
-fn sleep(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    ctx.host_check("time.sleep")?;
-    if ctx.sandbox {
-        return Ok(());
-    }
-    ctx.flush();
-    // In slices, so Ctrl-C ends a long sleep, which then unwinds.
-    let slice = std::time::Duration::from_millis(50);
-    let end = std::time::Instant::now().checked_add(std::time::Duration::from_nanos(args[0]));
-    loop {
-        if ctx.interrupted() {
-            return Err(Trap::Interrupt);
-        }
-        let left = end.map_or(slice, |end| end.saturating_duration_since(std::time::Instant::now()));
-        if left.is_zero() {
-            return Ok(());
-        }
-        std::thread::sleep(left.min(slice));
-    }
 }
 
 /// `term.raw_mode(on)`.

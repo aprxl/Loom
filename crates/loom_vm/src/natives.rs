@@ -29,6 +29,8 @@ pub(crate) struct Ctx<'i> {
     /// A worker of a pool is running a native, so `out` is its partial line
     /// (see [`Local`]) and flushing is for it to do on the way out.
     split: bool,
+    /// The partial line was already scanned on the preceding native.
+    split_start: usize,
     /// What a task switch swaps for a task's partial output line, with one
     /// worker (where lines are written to `out` as they come).
     task_line: Vec<u8>,
@@ -70,6 +72,7 @@ pub(crate) struct Ctx<'i> {
     pub data_range: (u64, u64),
     /// How many instructions have been dispatched (with `stats`).
     pub dispatched: u64,
+    pub runtime_stats: crate::RuntimeStats,
     /// How many of each op, by opcode (with `stats`; empty otherwise).
     pub op_counts: Vec<u64>,
     /// How many times each instruction ran, by word of the image's code
@@ -112,6 +115,7 @@ impl<'i> Ctx<'i> {
             msg: Vec::new(),
             bufs: Vec::new(),
             split: false,
+            split_start: 0,
             task_line: Vec::new(),
             spare: Vec::new(),
             heap: Heap::default(),
@@ -127,6 +131,7 @@ impl<'i> Ctx<'i> {
             stack: std::ptr::null(),
             data_range: (0, 0),
             dispatched: 0,
+            runtime_stats: crate::RuntimeStats::default(),
             op_counts: if cfg!(feature = "stats") { vec![0; Op::ALL.len()] } else { Vec::new() },
             pc_counts: if cfg!(feature = "stats") { vec![0; image.code.len()] } else { Vec::new() },
         }
@@ -239,6 +244,7 @@ impl<'i> Ctx<'i> {
         std::mem::swap(&mut self.bufs, &mut l.bufs);
         std::mem::swap(&mut self.out, &mut l.out);
         self.split = true;
+        self.split_start = self.out.len();
     }
 
     /// The native ran: what is whole lines of the worker's output goes on
@@ -248,7 +254,8 @@ impl<'i> Ctx<'i> {
         std::mem::swap(&mut self.bufs, &mut l.bufs);
         std::mem::swap(&mut self.out, &mut l.out);
         self.split = false;
-        if let Some(i) = l.out.iter().rposition(|&b| b == b'\n') {
+        if let Some(i) = l.out[self.split_start..].iter().rposition(|&b| b == b'\n') {
+            let i = self.split_start + i;
             self.out.extend(l.out.drain(..=i));
             if self.line_buffered || self.out.len() >= OUT_BUFFER {
                 self.flush();
@@ -487,7 +494,12 @@ pub(crate) fn copy_bytes(ctx: &Ctx, dst: u64, src: u64, n: u64) -> Result<(), Tr
 
 /// The word at `addr` (a mutex's lock word), checked in the checked build.
 pub(crate) fn read_word(ctx: &Ctx, addr: u64) -> Result<u64, Trap> {
-    atomic_read(ctx, addr, loom_isa::IntSpec { bits: 64, signed: false, size: false })
+    if !addr.is_multiple_of(8) || (cfg!(feature = "checked") && !ctx.owns(addr, 8)) {
+        return Err(Trap::Crash("loom internal: a bad mutex word".into()));
+    }
+    // SAFETY: the compiler supplies a live, aligned mutex word; all
+    // concurrent mutex-word accesses are under the scheduler lock.
+    Ok(unsafe { (addr as *const u64).read() })
 }
 
 /// The word at `addr`, which is in the program's data (a constant's flag).
@@ -518,162 +530,82 @@ fn const_store(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 
 /// Sets the word at `addr`.
 pub(crate) fn write_word(ctx: &Ctx, addr: u64, v: u64) -> Result<(), Trap> {
-    atomic_write(ctx, addr, loom_isa::IntSpec { bits: 64, signed: false, size: false }, v)
+    read_word(ctx, addr)?;
+    // SAFETY: read_word validated the mutex word; the scheduler lock
+    // excludes concurrent accesses until this write has completed.
+    unsafe { (addr as *mut u64).write(v) };
+    Ok(())
 }
 
-/// The integer of `spec` at `addr`, as a register holds it.
-fn atomic_read(ctx: &Ctx, addr: u64, spec: loom_isa::IntSpec) -> Result<u64, Trap> {
-    let n = u64::from(spec.bits) / 8;
-    if !matches!(n, 1 | 2 | 4 | 8) || !addr.is_multiple_of(n) {
-        return Err(Trap::Crash("loom internal: a bad atomic".into()));
-    }
-    if cfg!(feature = "checked") && !ctx.owns(addr, n) {
-        return Err(Trap::Crash(format!("loom internal: an atomic at {addr:#x} that isn't live")));
-    }
-    // SAFETY: `addr` is the address of an `Atomic[T]` the program made (a
-    // slot or an object, aligned: checked above), `n` bytes of it.
-    let raw = unsafe {
-        match n {
-            1 => u64::from(*(addr as *const u8)),
-            2 => u64::from(*(addr as *const u16)),
-            4 => u64::from(*(addr as *const u32)),
-            _ => *(addr as *const u64),
-        }
-    };
-    Ok(if spec.signed {
-        let shift = 64 - 8 * n as u32;
-        (((raw << shift) as i64) >> shift) as u64
-    } else {
-        raw
+/// Task operations are classified once, before generic native dispatch.
+pub(crate) fn resolve_task(name: &str) -> Option<crate::sched::TaskOp> {
+    use crate::sched::TaskOp as T;
+    Some(match name {
+        "task.spawn" => T::Spawn,
+        "task.join" => T::Join,
+        "task.yield" => T::Yield,
+        "task.cancelled" => T::Cancelled,
+        "task.grain" => T::Grain,
+        "loom.new" => T::LoomNew,
+        "loom.leave" => T::LoomLeave,
+        "loom.leftover" => T::LoomLeftover,
+        "loom.free" => T::LoomFree,
+        "pipe.new" => T::PipeNew,
+        "pipe.send" => T::PipeSend,
+        "pipe.recv" => T::PipeRecv,
+        "pipe.close" => T::PipeClose,
+        "pipe.leftover" => T::PipeLeftover,
+        "pipe.free" => T::PipeFree,
+        "mutex.lock" => T::MutexLock,
+        "mutex.unlock" => T::MutexUnlock,
+        "const.begin" => T::ConstBegin,
+        "time.sleep" => T::Sleep,
+        _ => return None,
     })
-}
-
-/// Writes the low bytes of `v`, which `atomic_read` gives back.
-fn atomic_write(ctx: &Ctx, addr: u64, spec: loom_isa::IntSpec, v: u64) -> Result<(), Trap> {
-    atomic_read(ctx, addr, spec)?;
-    let n = u64::from(spec.bits) / 8;
-    // SAFETY: as in `atomic_read`, which just checked.
-    unsafe {
-        match n {
-            1 => *(addr as *mut u8) = v as u8,
-            2 => *(addr as *mut u16) = v as u16,
-            4 => *(addr as *mut u32) = v as u32,
-            _ => *(addr as *mut u64) = v,
-        }
-    }
-    Ok(())
-}
-
-fn atomic_spec(word: u64) -> Result<loom_isa::IntSpec, Trap> {
-    loom_isa::IntSpec::unpack(word).ok_or_else(|| Trap::Crash("loom internal: a bad atomic".into()))
-}
-
-/// `atomic.load(addr, spec) -> value`
-fn atomic_load(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    args[0] = atomic_read(ctx, args[0], atomic_spec(args[1])?)?;
-    Ok(())
-}
-
-/// `atomic.store(addr, value, spec)`
-fn atomic_store(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    atomic_write(ctx, args[0], atomic_spec(args[2])?, args[1])
-}
-
-/// `atomic.swap(addr, value, spec) -> before`
-fn atomic_swap(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    let spec = atomic_spec(args[2])?;
-    let before = atomic_read(ctx, args[0], spec)?;
-    atomic_write(ctx, args[0], spec, args[1])?;
-    args[0] = before;
-    Ok(())
-}
-
-/// `atomic.cas(addr, expected, desired, spec) -> (swapped, found)`
-fn atomic_cas(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    let spec = atomic_spec(args[3])?;
-    let found = atomic_read(ctx, args[0], spec)?;
-    let swapped = found == args[1];
-    if swapped {
-        atomic_write(ctx, args[0], spec, args[2])?;
-    }
-    args[0] = u64::from(swapped);
-    args[1] = found;
-    Ok(())
-}
-
-/// `atomic.add(addr, n, spec) -> before`, and `sub`.
-fn atomic_add(
-    ctx: &mut Ctx,
-    args: &mut [u64],
-    op: fn(u64, u64, loom_isa::IntSpec) -> Result<u64, crate::ints::IntErr>,
-) -> Result<(), Trap> {
-    let spec = atomic_spec(args[2])?;
-    let before = atomic_read(ctx, args[0], spec)?;
-    match op(before, args[1], spec) {
-        Ok(after) => atomic_write(ctx, args[0], spec, after)?,
-        Err(_) => return Err(Trap::Overflow),
-    }
-    args[0] = before;
-    Ok(())
 }
 
 /// The native named `name`, and how many registers it reads or writes.
 pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
-    let f: NativeFn = match name {
-        "const.load" => const_load,
-        "const.store" => const_store,
-        "out.str" => out_str,
-        "out.fmt" | "out.fmt2" => out_fmt,
-        "msg.begin" => msg_begin,
-        "msg.str" => msg_str,
-        "msg.fmt" | "msg.fmt2" => msg_fmt,
-        "msg.unravel" => msg_unravel,
-        "sink.str" => sink_str,
-        "sink.fmt" | "sink.fmt2" => sink_fmt,
-        "sink.push" => sink_push,
-        "sink.string" => sink_string,
-        "sink.pad" => sink_pad,
-        "str.new" => str_new,
-        "str.eq" => str_eq,
-        "str.cmp" => str_cmp,
-        "int.add_chk" => |_, a, _| checked(a, crate::ints::add_t),
-        "int.sub_chk" => |_, a, _| checked(a, crate::ints::sub_t),
-        "int.mul_chk" => |_, a, _| checked(a, crate::ints::mul_t),
-        "int.cast_chk" => int_cast_chk,
-        "float.to_int_chk" => float_to_int_chk,
-        "int.to_char_chk" => int_to_char_chk,
-        "exit.fail" => exit_fail,
-        "mem.alloc" => mem_alloc,
-        "mem.free" => mem_free,
-        "mem.grow" => mem_grow,
-        "mem.move" => mem_move,
-        "mem.calloc" => mem_calloc,
-        // Handled by the interpreter itself, which they ask: they switch tasks.
-        "task.spawn" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::Spawn)),
-        "task.join" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::Join)),
-        "task.yield" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::Yield)),
-        "loom.new" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::LoomNew)),
-        "loom.leave" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::LoomLeave)),
-        "loom.leftover" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::LoomLeftover)),
-        "loom.free" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::LoomFree)),
-        "task.cancelled" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::Cancelled)),
-        "task.grain" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::Grain)),
-        "pipe.new" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::PipeNew)),
-        "pipe.send" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::PipeSend)),
-        "pipe.recv" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::PipeRecv)),
-        "pipe.close" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::PipeClose)),
-        "pipe.leftover" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::PipeLeftover)),
-        "pipe.free" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::PipeFree)),
-        "mutex.lock" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::MutexLock)),
-        "const.begin" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::ConstBegin)),
-        "mutex.unlock" => |_, _, _| Err(Trap::Task(crate::sched::TaskOp::MutexUnlock)),
-        "atomic.load" => atomic_load,
-        "atomic.store" => atomic_store,
-        "atomic.swap" => atomic_swap,
-        "atomic.cas" => atomic_cas,
-        "atomic.add" => |ctx, a, _| atomic_add(ctx, a, crate::ints::add_t),
-        "atomic.sub" => |ctx, a, _| atomic_add(ctx, a, crate::ints::sub_t),
-        _ => crate::methods::resolve(name).or_else(|| crate::host::resolve(name))?,
+    let f: NativeFn = if resolve_task(name).is_some() {
+        |_, _, _| Err(Trap::Crash("loom internal: a task native bypassed dispatch".into()))
+    } else {
+        match name {
+            "const.load" => const_load,
+            "const.store" => const_store,
+            "out.str" => out_str,
+            "out.fmt" | "out.fmt2" => out_fmt,
+            "msg.begin" => msg_begin,
+            "msg.str" => msg_str,
+            "msg.fmt" | "msg.fmt2" => msg_fmt,
+            "msg.unravel" => msg_unravel,
+            "sink.str" => sink_str,
+            "sink.fmt" | "sink.fmt2" => sink_fmt,
+            "sink.push" => sink_push,
+            "sink.string" => sink_string,
+            "sink.pad" => sink_pad,
+            "str.new" => str_new,
+            "str.eq" => str_eq,
+            "str.cmp" => str_cmp,
+            "int.add_chk" => |_, a, _| checked(a, crate::ints::add_t),
+            "int.sub_chk" => |_, a, _| checked(a, crate::ints::sub_t),
+            "int.mul_chk" => |_, a, _| checked(a, crate::ints::mul_t),
+            "int.cast_chk" => |c, a, i| int_cast_chk(&mut c.heap, a, i),
+            "float.to_int_chk" => |c, a, i| float_to_int_chk(&mut c.heap, a, i),
+            "int.to_char_chk" => |c, a, i| int_to_char_chk(&mut c.heap, a, i),
+            "exit.fail" => exit_fail,
+            "mem.alloc" => mem_alloc,
+            "mem.free" => mem_free,
+            "mem.grow" => mem_grow,
+            "mem.move" => mem_move,
+            "mem.calloc" => mem_calloc,
+            "atomic.load" => |c, a, _| crate::atomic::run(&c.heap, a, crate::atomic::Op::Load),
+            "atomic.store" => |c, a, _| crate::atomic::run(&c.heap, a, crate::atomic::Op::Store),
+            "atomic.swap" => |c, a, _| crate::atomic::run(&c.heap, a, crate::atomic::Op::Swap),
+            "atomic.cas" => |c, a, _| crate::atomic::run(&c.heap, a, crate::atomic::Op::Cas),
+            "atomic.add" => |c, a, _| crate::atomic::run(&c.heap, a, crate::atomic::Op::Add),
+            "atomic.sub" => |c, a, _| crate::atomic::run(&c.heap, a, crate::atomic::Op::Sub),
+            _ => crate::methods::resolve(name).or_else(|| crate::host::resolve(name))?,
+        }
     };
     let sig = native(name)?;
     Some((f, usize::from(sig.args.max(sig.results))))
@@ -716,20 +648,26 @@ fn msg_unravel(ctx: &mut Ctx, _: &mut [u64], _: u16) -> Result<(), Trap> {
     Err(Trap::Unravel(String::from_utf8_lossy(&msg).into_owned()))
 }
 
-/// A native that works on the heap only, which a worker of a pool can run
-/// on its own heap, without the lock.
-pub(crate) type HeapFn = fn(&mut Heap, &mut [u64]) -> Result<(), Trap>;
+/// A native that touches only arguments, program memory and the worker
+/// heap, never the shared context.
+pub(crate) type LocalFn = fn(&mut Heap, &mut [u64], u16) -> Result<(), Trap>;
 
-/// The heap-only native named `name`. (`mem.move` is one but for the
-/// checked build, which looks at what it touches.)
-pub(crate) fn resolve_heap(name: &str) -> Option<HeapFn> {
+/// Worker-local leaves. Checked mem.move still uses the shared validation
+/// path; atomics validate against shared heap and stack registries.
+pub(crate) fn resolve_local(name: &str) -> Option<LocalFn> {
     Some(match name {
-        "mem.alloc" => heap_alloc,
-        "mem.free" => heap_free,
-        "mem.grow" => heap_grow,
-        "mem.calloc" => heap_calloc,
-        "mem.move" if !cfg!(feature = "checked") => heap_move,
-        _ => return None,
+        "mem.alloc" => |h, a, _| heap_alloc(h, a),
+        "mem.free" => |h, a, _| heap_free(h, a),
+        "mem.grow" => |h, a, _| heap_grow(h, a),
+        "mem.calloc" => |h, a, _| heap_calloc(h, a),
+        "mem.move" if !cfg!(feature = "checked") => |h, a, _| heap_move(h, a),
+        "int.add_chk" => |_, a, _| checked(a, crate::ints::add_t),
+        "int.sub_chk" => |_, a, _| checked(a, crate::ints::sub_t),
+        "int.mul_chk" => |_, a, _| checked(a, crate::ints::mul_t),
+        "int.cast_chk" => int_cast_chk,
+        "float.to_int_chk" => float_to_int_chk,
+        "int.to_char_chk" => int_to_char_chk,
+        _ => return crate::atomic::resolve(name).or_else(|| crate::methods::resolve_scalar(name)),
     })
 }
 
@@ -938,7 +876,7 @@ fn checked(
 }
 
 /// `int.cast_chk(v, cast)`: `v` as the cast's target type, if it fits.
-fn int_cast_chk(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn int_cast_chk(_: &mut Heap, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let (to, from) =
         loom_isa::word::unpack_cast(args[1]).ok_or_else(|| Trap::Crash("loom internal: a bad cast".into()))?;
     let r = crate::ints::cast_t(args[0], to, from);
@@ -946,13 +884,13 @@ fn int_cast_chk(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 }
 
 /// `float.to_int_chk(f64 bits, type)`: the float truncated, if it fits.
-fn float_to_int_chk(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn float_to_int_chk(_: &mut Heap, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let r = crate::ints::ftoi_t(f64::from_bits(args[0]), crate::ints::spec(args[1]));
     result_pair(args, r)
 }
 
 /// `int.to_char_chk(v, type)`: the `char` `v` is the code point of, if it's one.
-fn int_to_char_chk(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn int_to_char_chk(_: &mut Heap, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let r = crate::ints::to_char(args[0], crate::ints::spec(args[1]));
     result_pair(args, r)
 }

@@ -3,10 +3,10 @@
 //! The program's threads are tasks, which are data, so any worker can run
 //! any of them. The workers share one [`Sched`](crate::sched::Sched) and one
 //! [`Ctx`](crate::natives::Ctx), both behind the pool's one lock: a task
-//! operation or a native runs with it held, and the dispatch loops run
-//! without it, so compute-bound threads run side by side. So do the
-//! allocating natives and the frees, which work on the worker's own heap
-//! (`heap.rs`). (A native that prints is serialized with the others.)
+//! operation or a native needing shared services runs with it held. The
+//! dispatch loops, scalar leaves, atomic operations and worker-local heap
+//! operations run without it. Sleeping releases it before blocking the
+//! worker. A native that prints is serialized with the others.
 //!
 //! A worker that has nothing to run first spins on the count of ready tasks,
 //! which it reads without the lock (an idle worker asking for the lock would
