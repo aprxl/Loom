@@ -109,7 +109,7 @@ impl Stack {
 
     /// Whether the first segment holds `need` slots.
     pub fn first_holds(&self, need: usize) -> bool {
-        self.segments[0].len() >= need
+        self.segments.first().is_some_and(|segment| segment.len() >= need)
     }
 
     /// Back to the first segment, for a new call from outside.

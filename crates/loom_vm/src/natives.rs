@@ -492,13 +492,28 @@ pub(crate) fn read_word(ctx: &Ctx, addr: u64) -> Result<u64, Trap> {
 
 /// The word at `addr`, which is in the program's data (a constant's flag).
 pub(crate) fn data_word(ctx: &Ctx, addr: u64) -> Result<u64, Trap> {
+    Ok(data_atomic(ctx, addr)?.load(std::sync::atomic::Ordering::Acquire))
+}
+
+fn data_atomic<'a>(ctx: &'a Ctx, addr: u64) -> Result<&'a std::sync::atomic::AtomicU64, Trap> {
     let (lo, hi) = ctx.data_range;
     if addr < lo || addr.checked_add(8).is_none_or(|end| end > hi) || !addr.is_multiple_of(8) {
         return Err(Trap::Crash(format!("loom internal: {addr:#x} isn't a word of the program's data")));
     }
-    // SAFETY: inside the data, aligned (checked above); the data lives as
-    // long as the run, and what it holds is changed only with the lock.
-    Ok(unsafe { *(addr as *const u64) })
+    // SAFETY: inside the data and aligned (checked above). The compiler
+    // uses these words only as constant flags: all concurrent accesses
+    // are atomic, and the data outlives each native invocation.
+    Ok(unsafe { std::sync::atomic::AtomicU64::from_ptr(addr as *mut u64) })
+}
+
+fn const_load(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    args[0] = data_word(ctx, args[0])?;
+    Ok(())
+}
+
+fn const_store(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    data_atomic(ctx, args[0])?.store(args[1], std::sync::atomic::Ordering::Release);
+    Ok(())
 }
 
 /// Sets the word at `addr`.
@@ -605,6 +620,8 @@ fn atomic_add(
 /// The native named `name`, and how many registers it reads or writes.
 pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
     let f: NativeFn = match name {
+        "const.load" => const_load,
+        "const.store" => const_store,
         "out.str" => out_str,
         "out.fmt" | "out.fmt2" => out_fmt,
         "msg.begin" => msg_begin,

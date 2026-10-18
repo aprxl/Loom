@@ -170,9 +170,8 @@ struct Env<'e, 'i> {
     current: usize,
     /// The workers, when there are several.
     pool: Option<&'e Pool>,
-    /// Ctrl-C's flag, and whether this worker has raised it already.
+    /// Ctrl-C's flag. Delivery is recorded on the task, across migration.
     interrupt: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
-    stopping: bool,
     /// What this worker's natives work on, with several workers.
     local: crate::natives::Local,
     /// With several workers, this worker's own heap, which needs no lock.
@@ -494,7 +493,6 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
             current,
             pool: init.pool,
             interrupt: init.interrupt.clone(),
-            stopping: false,
             local: Default::default(),
             heap: init.shared.as_ref().map(|shared| Box::new(Heap::sharing(shared))),
             st_dispatched: 0,
@@ -1757,8 +1755,8 @@ fn halted() -> Fault {
 }
 
 /// The check every [`TICKS`] loop iterations and calls: whether this worker
-/// should stop now, and with what. With several workers each raises Ctrl-C
-/// once, in the task it's running, and all stop when the program is over.
+/// should stop now, and with what. With several workers each task raises
+/// Ctrl-C once, even when its cleanup migrates to another worker.
 #[cold]
 #[inline(never)]
 fn checkpoint(env: &mut Env) -> Option<Trap> {
@@ -1766,9 +1764,11 @@ fn checkpoint(env: &mut Env) -> Option<Trap> {
     if pool.is_over() {
         return Some(Trap::Halt);
     }
-    if !env.stopping && env.interrupt.as_ref().is_some_and(|i| i.load(std::sync::atomic::Ordering::Relaxed)) {
-        env.stopping = true;
-        return Some(Trap::Interrupt);
+    if env.interrupt.as_ref().is_some_and(|i| i.load(std::sync::atomic::Ordering::Relaxed)) {
+        let _held = pool.lock();
+        if sched!(env).claim_interrupt(env.current) {
+            return Some(Trap::Interrupt);
+        }
     }
     None
 }

@@ -4,6 +4,14 @@ Static review (nothing built or benchmarked except one `LOOM_PASS_TIMES` run on
 `examples/chip8.loom`, release). Ranks are estimates until profiled. No code was
 changed by this pass.
 
+Implementation follow-up: resource wakes now survive cancellation of the
+selected mutex/pipe waiter; normal task results are dropped even when a
+cancellation was requested; interrupt delivery is tracked per task across
+worker migration; an empty retained stack is handled on a subsequent VM
+call; lazy constant flags use acquire loads and release stores. Deterministic
+scheduler regressions cover the wake handoff, result ownership and interrupt
+claim, alongside repeated threaded calls on one VM.
+
 ## Measured
 
 chip8, `-O2`: optimize 6.6 ms, codegen 3.3 ms. By pass: gvn 2.5 ms (two runs),

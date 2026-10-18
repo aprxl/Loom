@@ -645,6 +645,25 @@ fn a_thread_gives_its_result_to_join() {
 }
 
 #[test]
+fn a_vm_can_be_called_again_after_a_threaded_run() {
+    let thread = thread_fn(2, Vec::new());
+    let mut main = vec![word(Op::CallN, 0, nat::LOOM_NEW, 0)];
+    spawn(&mut main, 0, 1, 0, 1, 7);
+    end_loom(&mut main, 0, 8);
+    main.push(word(Op::Ret, 0, 0, 0));
+    let img = threads_image(vec![("main", 16, 0, 0, main), thread]);
+    for workers in [1, 2, 4] {
+        let config = Config { workers, ..Config::default() };
+        let host = Host::captured(Rc::new(RefCell::new(Vec::new())));
+        let mut vm = loom_vm::Vm::new(&img, host, &config).expect("verified image");
+        for _ in 0..3 {
+            let result = vm.call(0, &[]);
+            assert_eq!(vm.ended(result), Outcome::Finished, "{workers} workers");
+        }
+    }
+}
+
+#[test]
 fn threads_that_yield_take_turns() {
     // thread: print 1, yield, print 2 (the same text, a count, each time).
     let mut body = vec![word_i32(Op::Ldi, 2, 1)];

@@ -45,6 +45,9 @@ const fn sink_fmt(name: &'static str, args: u16) -> NativeSig {
 /// into another sink (both take the buffer made last). `str.new` makes a
 /// `String` of text.
 pub const NATIVES: &[NativeSig] = &[
+    // Lazy constants publish their payload through an acquire/release flag.
+    sig("const.load", 1, 1, NativeImm::None),
+    sig("const.store", 2, 0, NativeImm::None),
     sig("sink.str", 3, 0, NativeImm::None),
     sink_fmt("sink.fmt", 2),
     sink_fmt("sink.fmt2", 3),

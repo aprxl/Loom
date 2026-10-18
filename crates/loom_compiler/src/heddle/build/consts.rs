@@ -108,7 +108,7 @@ impl<'a> Builder<'a> {
         let (head, init, run, ready) = (self.new_block(), self.new_block(), self.new_block(), self.new_block());
         self.jump(head);
         self.enter(head);
-        let flag = self.load(Mem::W64, at, 0, VTy::Int);
+        let flag = self.emit1(InstKind::Native { name: "const.load", imm: 0, args: vec![at] }, VTy::Int);
         let done = self.iconst(DONE);
         let ready_now = self.ucmp(Cmp::Eq, flag, done);
         self.br(ready_now, ready, init);
@@ -146,7 +146,7 @@ impl<'a> Builder<'a> {
         // constant whose computing failed is left alone.
         let (off, _) = self.const_global(key, span)?;
         let flag_at = self.offset(dst, -8);
-        let flag = self.load(Mem::W64, flag_at, 0, VTy::Int);
+        let flag = self.emit1(InstKind::Native { name: "const.load", imm: 0, args: vec![flag_at] }, VTy::Int);
         let fresh = self.iconst(FRESH);
         let is_fresh = self.ucmp(Cmp::Eq, flag, fresh);
         let (go, stuck) = (self.new_block(), self.new_block());
@@ -163,7 +163,7 @@ impl<'a> Builder<'a> {
         self.unravel_msg(&[Msg::Text(GAVE_UP)], span)?;
         self.enter(go);
         let computing = self.iconst(COMPUTING);
-        self.store(Mem::W64, flag_at, 0, computing);
+        self.emit(InstKind::Native { name: "const.store", imm: 0, args: vec![flag_at, computing] }, &[]);
         let depth = self.open_scope();
         let mut v = self.expr(value)?;
         if let Some((size, align)) = self.const_view(ty, span)? {
@@ -180,7 +180,7 @@ impl<'a> Builder<'a> {
         self.move_to(dst, 0, v, ty, span)?;
         let flag = self.offset(dst, -8);
         let done = self.iconst(DONE);
-        self.store(Mem::W64, flag, 0, done);
+        self.emit(InstKind::Native { name: "const.store", imm: 0, args: vec![flag, done] }, &[]);
         self.close_scope(depth);
         if self.live() {
             self.terminate(Term::Ret(Vec::new()));
@@ -222,7 +222,7 @@ impl<'a> Builder<'a> {
                 continue;
             }
             let at = self.emit1(InstKind::Global(off), VTy::Ptr);
-            let flag = self.load(Mem::W64, at, 0, VTy::Int);
+            let flag = self.emit1(InstKind::Native { name: "const.load", imm: 0, args: vec![at] }, VTy::Int);
             let done = self.iconst(DONE);
             let made = self.ucmp(Cmp::Eq, flag, done);
             let (yes, done) = (self.new_block(), self.new_block());

@@ -40,6 +40,115 @@ pub(crate) struct Running<'a> {
     pub out: &'a mut Vec<u8>,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn scheduler_with_waiters(source: Wait) -> Sched {
+        let mut sched = Sched::new();
+        for _ in 0..2 {
+            sched.tasks.push(Task { live: true, ..Task::empty() });
+        }
+        for task in 1..=2 {
+            sched.current = task;
+            sched.park_in(source, true);
+        }
+        sched.current = 0;
+        sched
+    }
+
+    #[test]
+    fn cancelled_mutex_winner_relays_the_wake() {
+        let source = Wait::Mutex(8);
+        let mut sched = scheduler_with_waiters(source);
+        sched.mutex_unlock(8);
+        assert_eq!(sched.pop_ready(), Some(1));
+        sched.cancel(1);
+        sched.current = 1;
+        assert_eq!(sched.arrival(), Some((Trap::Cancel, true)));
+        assert_eq!(sched.pop_ready(), Some(2));
+        assert!(!sched.lockers.contains_key(&8));
+    }
+
+    #[test]
+    fn a_wake_is_retained_until_the_resource_operation_retries() {
+        let mut sched = scheduler_with_waiters(Wait::Mutex(8));
+        sched.mutex_unlock(8);
+        assert_eq!(sched.pop_ready(), Some(1));
+        sched.current = 1;
+        assert_eq!(sched.arrival(), None);
+        assert_eq!(sched.tasks[1].wake_from, Some(Wait::Mutex(8)));
+        // An unwind before retrying must still hand the wake on.
+        sched.groups.push(Group::default());
+        sched.finish(&mut Heap::default(), Some(Trap::Cancel)).expect("cancelled");
+        assert_eq!(sched.pop_ready(), Some(2));
+    }
+
+    #[test]
+    fn cancelled_pipe_winner_relays_both_directions() {
+        for receive in [false, true] {
+            let source = if receive { Wait::Recv(0) } else { Wait::Send(0) };
+            let mut sched = Sched::new();
+            // Zero-sized items let the scheduler test the real send/recv
+            // wake paths without constructing a VM heap object.
+            sched.pipes.push(Pipe { live: true, cap: 1, len: u64::from(!receive), ..Pipe::default() });
+            for _ in 0..2 {
+                sched.tasks.push(Task { live: true, ..Task::empty() });
+            }
+            for task in 1..=2 {
+                sched.current = task;
+                sched.park_in(source, true);
+            }
+            sched.current = 0;
+            let pipe = handle(0, 1);
+            if receive {
+                assert!(matches!(sched.pipe_send(pipe), Ok(Ok(_))));
+            } else {
+                assert!(matches!(sched.pipe_recv(pipe), Ok(Taken::Item(_))));
+            }
+            assert_eq!(sched.pop_ready(), Some(1));
+            sched.cancel(1);
+            sched.current = 1;
+            assert_eq!(sched.arrival(), Some((Trap::Cancel, true)));
+            assert_eq!(sched.pop_ready(), Some(2));
+        }
+    }
+
+    #[test]
+    fn normal_result_is_dropped_even_after_a_cancellation_request() {
+        let mut sched = Sched::new();
+        let group = sched.loom_new();
+        sched.tasks.push(Task { live: true, group: 0, cancelled: true, drop_fn: 7, result: 24, ..Task::empty() });
+        sched.groups[0].tasks.push(1);
+        sched.current = 1;
+        sched.finish(&mut Heap::default(), None).expect("normal completion");
+        sched.current = 0;
+        assert_eq!(sched.leftover(group).expect("live group"), (7, 24));
+        assert_eq!(sched.leftover(group).expect("already taken"), (0, 0));
+    }
+
+    #[test]
+    fn cancelled_completion_does_not_own_a_result() {
+        let mut sched = Sched::new();
+        let group = sched.loom_new();
+        sched.tasks.push(Task { live: true, group: 0, drop_fn: 7, ..Task::empty() });
+        sched.groups[0].tasks.push(1);
+        sched.current = 1;
+        sched.finish(&mut Heap::default(), Some(Trap::Cancel)).expect("cancel completion");
+        sched.current = 0;
+        assert_eq!(sched.leftover(group).expect("live group"), (0, 0));
+    }
+
+    #[test]
+    fn interrupt_claim_survives_worker_migration() {
+        let mut sched = Sched::new();
+        sched.tasks.push(Task { live: true, ..Task::empty() });
+        assert!(sched.claim_interrupt(1));
+        assert!(sched.claim_interrupt(0));
+        assert!(!sched.claim_interrupt(1));
+    }
+}
+
 /// What a task operation asks the dispatch loop to do next.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Step {
@@ -158,6 +267,14 @@ pub(crate) struct Task {
     /// Its result was taken by `join` or by the loom's leftover loop.
     pub taken: bool,
     pub cancelled: bool,
+    /// A cancellation request need not prevent a normal return (leaving
+    /// a nested loom is not cancellable). Only a normal return owns a result.
+    result_ready: bool,
+    /// Ctrl-C has already been delivered to this task, even if it migrates.
+    interrupted: bool,
+    /// A resource wake that has not yet been retried. Cancellation must
+    /// hand it on, or another waiter can be stranded on an available resource.
+    wake_from: Option<Wait>,
     /// It failed: its fault is the group's, and it has no result.
     pub failed: bool,
     /// Parked where a cancel is noticed (`join`, `sched_yield`).
@@ -204,6 +321,9 @@ impl Task {
             done: false,
             taken: false,
             cancelled: false,
+            result_ready: false,
+            interrupted: false,
+            wake_from: None,
             failed: false,
             cancellable: false,
             reexec: false,
@@ -389,7 +509,17 @@ impl Sched {
         {
             return Some((trap, again));
         }
-        (was_parked && t.cancelled).then_some((Trap::Cancel, again))
+        let cancelled = was_parked && t.cancelled;
+        let wake = if cancelled { t.wake_from.take() } else { None };
+        if cancelled && let Some(source) = wake {
+            self.wake_resource(source);
+        }
+        cancelled.then_some((Trap::Cancel, again))
+    }
+
+    /// Interrupt delivery belongs to a task, not the worker running it.
+    pub fn claim_interrupt(&mut self, task: usize) -> bool {
+        !std::mem::replace(&mut self.tasks[task].interrupted, true)
     }
 
     /// The next task to run, when the running one parks or ends. `None`
@@ -422,6 +552,27 @@ impl Sched {
             task.waiting = false;
             task.waiting_on = None;
             self.ready_back(t);
+        }
+    }
+
+    /// Hands one available resource to the next waiter. The selected task
+    /// retains its source until arrival, so a cancellation can relay it.
+    fn wake_resource(&mut self, source: Wait) {
+        let next = match source {
+            Wait::Mutex(addr) => {
+                let next = self.lockers.get_mut(&addr).and_then(VecDeque::pop_front);
+                if self.lockers.get(&addr).is_some_and(VecDeque::is_empty) {
+                    self.lockers.remove(&addr);
+                }
+                next
+            }
+            Wait::Send(p) => self.pipes[p].senders.pop_front(),
+            Wait::Recv(p) => self.pipes[p].receivers.pop_front(),
+            Wait::Task(_) => unreachable!("task completion wakes all its waiters"),
+        };
+        if let Some(t) = next {
+            self.tasks[t].wake_from = Some(source);
+            self.wake(t);
         }
     }
 
@@ -559,7 +710,7 @@ impl Sched {
                 task.env_drop = 0;
                 return Ok((function, task.env));
             }
-            if task.done && !task.taken && !task.cancelled && !task.failed && task.drop_fn != 0 {
+            if task.result_ready && !task.taken && task.drop_fn != 0 {
                 task.taken = true;
                 return Ok((u64::from(task.drop_fn), task.result));
             }
@@ -642,6 +793,9 @@ impl Sched {
     /// free, else the holder's task index and one. Gives the word it should
     /// have now, when the lock was taken.
     pub fn mutex_lock(&mut self, addr: u64, word: u64) -> Result<(Step, Option<u64>), Trap> {
+        // The retry is now under the scheduler lock: it either takes the
+        // resource, or finds it unavailable and waits/cancels normally.
+        self.tasks[self.current].wake_from = None;
         let me = self.current as u64 + 1;
         if word == 0 {
             return Ok((Step::Next, Some(me)));
@@ -660,14 +814,7 @@ impl Sched {
 
     /// `mutex.unlock(addr)`: the first of the tasks waiting for it wakes.
     pub fn mutex_unlock(&mut self, addr: u64) {
-        let first = self.lockers.get_mut(&addr).and_then(VecDeque::pop_front);
-        if self.lockers.get(&addr).is_some_and(VecDeque::is_empty) {
-            self.lockers.remove(&addr);
-        }
-        if let Some(t) = first {
-            self.tasks[t].waiting_on = None;
-            self.wake(t);
-        }
+        self.wake_resource(Wait::Mutex(addr));
     }
 
     // ------------------------------------------------------------ pipes
@@ -712,6 +859,7 @@ impl Sched {
     /// full pipe), or it unravels (a closed one). The first receiver wakes.
     pub fn pipe_send(&mut self, h: u64) -> Result<Result<u64, Step>, Trap> {
         let i = self.pipe_index(h)?;
+        self.tasks[self.current].wake_from = None;
         if self.pipes[i].closed {
             return Err(Trap::Unravel("send on a closed pipe".into()));
         }
@@ -724,25 +872,20 @@ impl Sched {
         let p = &mut self.pipes[i];
         let at = p.buf + ((p.head + p.len) % p.cap) * p.elem;
         p.len += 1;
-        if let Some(r) = p.receivers.pop_front() {
-            self.tasks[r].waiting_on = None;
-            self.wake(r);
-        }
+        self.wake_resource(Wait::Recv(i));
         Ok(Ok(at))
     }
 
     /// `pipe.recv`: the item at the front, or closed, or the task waits.
     pub fn pipe_recv(&mut self, h: u64) -> Result<Taken, Trap> {
         let i = self.pipe_index(h)?;
+        self.tasks[self.current].wake_from = None;
         let p = &mut self.pipes[i];
         if p.len > 0 {
             let at = p.buf + p.head * p.elem;
             p.head = (p.head + 1) % p.cap;
             p.len -= 1;
-            if let Some(s) = p.senders.pop_front() {
-                self.tasks[s].waiting_on = None;
-                self.wake(s);
-            }
+            self.wake_resource(Wait::Send(i));
             return Ok(Taken::Item(at));
         }
         if p.closed {
@@ -912,9 +1055,12 @@ impl Sched {
     pub fn finish(&mut self, heap: &mut Heap, trap: Option<Trap>) -> Result<(), Trap> {
         let cur = self.current;
         let g = self.tasks[cur].group;
+        if let Some(source) = self.tasks[cur].wake_from.take() {
+            self.wake_resource(source);
+        }
         self.tasks[cur].done = true;
         match trap {
-            None => {}
+            None => self.tasks[cur].result_ready = true,
             Some(Trap::Cancel) => self.tasks[cur].cancelled = true,
             Some(trap) => {
                 self.tasks[cur].failed = true;
