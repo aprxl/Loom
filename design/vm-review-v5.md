@@ -107,3 +107,52 @@ frame/linkage reads against the verifier.
 6. Dispatch: `CallN` and `Ret` link words; bounds-checked `natives[b]`;
    narrow-width checked add/sub as two steps; `Copy`/`Zero` of 32/40/48/64
    bytes fall back to memmove/memset; `tick!` on every call. Each roughly 1-3%.
+
+## Merged from the second review (static; items marked "checked" I re-read)
+
+New findings:
+
+1. **Task ops take the pool lock twice** (checked, `exec.rs:1347-1366`, `run_task_op`
+   at `exec.rs:1843`): `CallN` locks for any non-heap native, a task native
+   returns `Trap::Task`, and `run_task_op` locks again. The cancellation check
+   between chunk items (`thread.rs:428`) pays the first lock even when nothing
+   was ever cancelled. Route task natives to their own dispatch, with the
+   `cancel_seen` fast path ahead of any lock. Likely the cheapest win for
+   `loom for` and spawn/join.
+2. **`Sched::leftover` is quadratic** (checked, `sched.rs:551-571`): each call
+   rescans `group.tasks` from the start past tasks already taken, and
+   `emit_loom_end` calls it once per result. N unjoined results with drop glue
+   cost 1+2+...+N probes under the lock. `unfinished` (`sched.rs:493`) restarts
+   from the start on every retried `leave`. Keep a cleanup cursor per group.
+   Cursor must keep result-drop order and tasks appended while active.
+3. **Atomics**: `Atomic.add/sub` must trap on overflow without changing the
+   value, so use a checked compare-exchange loop, not `fetch_add` plus a check.
+   Pairs with finding 3 of the speed list above.
+4. **Native split**: removing the lock while still handing out `&mut Ctx` would
+   be unsound; split program data (read-only), worker-local scratch and shared
+   services into separate interfaces, then move scalar leaves, then read-only
+   text/map natives, then allocating text natives.
+5. **Map maintenance** (`build/map.rs:255, 377`): `reindex` is an interpreted
+   loop and `compact` calls `mem.move` per live entry. A native index rebuild
+   over stored hashes and run-wise compaction need no user hash/eq/drop calls.
+   Fingerprints in the index are the larger follow-up.
+6. **Held shuttles**: V2 records 1.91 s held versus 0.21 s in place for 50 M
+   items; inline frames and direct step calls for known makers have real
+   headroom. Large piece of work.
+7. **Pass schedule**: the last gvn devirtualizes after the last inliner, so the
+   calls it exposes are never inlined; a worklist inline of just those calls.
+8. **Measurement gap**: no adjacent-opcode pair counters in the `vm-stats` path
+   although the design describes them; add before choosing superinstructions or
+   a new dispatch engine (the design's 15% acceptance bar stands).
+9. **Instrument first**: lock acquisitions by native category, scheduler scan
+   lengths, task-stack allocations, native-call counts.
+
+Assessments of the lower-confidence ideas: SIMD for text scanning and map
+probing is plausible only after reading the generated code (search already uses
+memchr/memmem; char counting auto-vectorizes) and a map index redesign; SIMD
+numeric kernels need callback-free loops and exact overflow and trap order;
+translating a leaf to C gains nothing unless the batch amortizes the call;
+macros only keep specializations consistent; PGO measured about 1.5% before and
+`target-cpu=native` kept nothing. Compile-time list: the second review's
+ranking matches this one (gvn stores, gvn per-instruction clones, `carry_last`,
+codegen liveness, range and modref repeats, `Emitter::line`).
