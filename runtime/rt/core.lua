@@ -1532,6 +1532,30 @@ rt.ext["std.time.sleep"] = function(d)
   host.sleep(d.nanos)
 end
 
+rt.ext["std.io.write_out"] = function(s)
+  write(s)
+end
+
+rt.ext["std.io.write_err"] = function(s)
+  if not host then needs_host("io.write_err") end
+  host.write_err(s)
+end
+
+rt.ext["std.io.read_line"] = function()
+  if not host then needs_host("io.read_line") end
+  return host.read_line()
+end
+
+rt.ext["std.io.read_all"] = function()
+  if not host then needs_host("io.read_all") end
+  return host.read_all()
+end
+
+rt.ext["std.time.monotonic_nanos"] = function()
+  if not host then needs_host("time.now") end
+  return host.now()
+end
+
 rt.ext["std.term.raw_mode"] = function(on)
   if not host then needs_host("term.raw_mode") end
   local problem = host.raw_mode(on)

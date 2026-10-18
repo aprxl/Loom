@@ -1,0 +1,17 @@
+use std.io.print
+use std.time.{Duration, Instant, ms, secs, micros, measure, ns}
+fn main() {
+    let d = secs(1).plus(ms(500))
+    print(d.to_string())
+    print(ms(250).to_string())
+    print(micros(40).to_string())
+    print(Duration.from_nanos(7).to_string())
+    print(d.as_millis())
+    print(d.times(2).as_secs())
+    print(ms(5) < ms(6))
+    let t = Instant.now()
+    print(t.elapsed() >= ns(0))
+    let r = measure(() => 6 * 7)
+    print(r.0)
+    print(r.1 < secs(1))
+}

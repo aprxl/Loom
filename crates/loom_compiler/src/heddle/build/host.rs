@@ -44,6 +44,25 @@ impl<'a> Builder<'a> {
                 self.own_temp(dst, ret);
                 Some(Val::Mem(dst))
             }
+            "std.io.read_line" | "std.io.read_all" => {
+                let dst = self.temp(ret, span)?;
+                let name = if path == "std.io.read_line" { "io.read_line" } else { "io.read_all" };
+                self.native(name, vec![dst], 0);
+                self.own_temp(dst, ret);
+                Some(Val::Mem(dst))
+            }
+            "std.io.write_err" => {
+                let (v, ty) = arg(self, 0)?;
+                let (p, n) = self.text_of(v, ty, span)?;
+                self.native("io.write_err", vec![p, n], 0);
+                Some(Val::Regs(Vec::new()))
+            }
+            "std.io.write_out" => {
+                let (v, ty) = arg(self, 0)?;
+                let (p, n) = self.text_of(v, ty, span)?;
+                self.native("out.str", vec![p, n], 0);
+                Some(Val::Regs(Vec::new()))
+            }
             "std.env.args" => {
                 let dst = self.temp(ret, span)?;
                 self.native("env.args", vec![dst], 0);
@@ -68,6 +87,7 @@ impl<'a> Builder<'a> {
                 self.native("time.sleep", vec![nanos], 0);
                 Some(Val::Regs(Vec::new()))
             }
+            "std.time.monotonic_nanos" => Some(Val::Regs(self.native("time.now", Vec::new(), 1))),
             "std.term.raw_mode" => {
                 let (v, ty) = arg(self, 0)?;
                 let on = self.regs(v, ty, span)?[0];

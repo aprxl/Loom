@@ -1,0 +1,32 @@
+use std.io.print
+use std.rand.Rng
+fn main() {
+    var r = Rng.seeded(42)
+    var counts: [u32; 6] = [0; 6]
+    for _ in 0..60000 {
+        counts[r.below(6) as usize] += 1
+    }
+    var good = true
+    for c in counts { if c < 9500 or c > 10500 { good = false } }
+    print(good)
+    var lo = 100
+    var hi = -100
+    for _ in 0..1000 {
+        let v = r.between(-3, 4)
+        lo = min(lo, v)
+        hi = max(hi, v)
+    }
+    print("{lo} {hi}")
+    var f = 0.0
+    for _ in 0..10000 { f += r.float() }
+    print(f > 4900.0 and f < 5100.0)
+    var xs: List[i32] = [1, 2, 3, 4, 5, 6, 7, 8]
+    r.shuffle(mut xs)
+    print(xs.len())
+    print(xs.sorted().join(","))
+    print(r.choose(xs) != none)
+    var a = Rng.seeded(5)
+    var b = a.jump()
+    print(a.next_u64() != b.next_u64())
+    print(a.next_u64())
+}

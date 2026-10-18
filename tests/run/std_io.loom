@@ -1,0 +1,8 @@
+use std.io.{print, write, eprint}
+
+fn main() {
+    write("a")
+    write(1)
+    print("b")
+    eprint("not captured")
+}

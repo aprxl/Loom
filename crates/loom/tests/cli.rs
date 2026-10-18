@@ -806,3 +806,24 @@ fn parallel_example_runs_the_same_on_both_backends() {
         assert_eq!(run("vm", workers), lua, "Treadle with {workers} workers");
     }
 }
+
+#[test]
+fn stdin_and_stderr_work_on_both_backends() {
+    let source = "use std.io.{print, write, eprint, read_line, lines}\n\nfn main() {\n    write(\"a\")\n    eprint(\"err\")\n    print(read_line())\n    var n = 0\n    for line in lines() {\n        n += line.len()\n    }\n    print(n)\n    print(read_line())\n}\n";
+    let path = temp_source("stdin", source);
+    let path = path.to_str().expect("utf-8 path");
+    for backend in ["lua", "vm"] {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_loom"))
+            .args(["--color", "never", "run", "--backend", backend, path])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("the loom binary runs");
+        std::io::Write::write_all(&mut child.stdin.take().expect("stdin"), b"hello\nab\r\ncd\nlast").expect("input");
+        let out = child.wait_with_output().expect("finishes");
+        assert!(out.status.success(), "{backend}: {}", text(&out.stderr));
+        assert_eq!(text(&out.stdout), "ahello\n8\nnone\n", "{backend}");
+        assert_eq!(text(&out.stderr), "err\n", "{backend}");
+    }
+}

@@ -9,7 +9,7 @@
 //! in the compiler or runtime.
 
 use std::cell::RefCell;
-use std::io::Write as _;
+use std::io::{BufRead as _, Read as _, Write as _};
 use std::rc::Rc;
 
 use mlua::{Function, Lua, Table};
@@ -313,6 +313,40 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
         }
     })?;
     table.set("sleep", sleep)?;
+    let write_err = lua.create_function(move |_, s: mlua::String| {
+        if !sandbox {
+            flush_stdout();
+            let mut err = std::io::stderr().lock();
+            let _ = std::io::Write::write_all(&mut err, &s.as_bytes());
+            let _ = std::io::Write::flush(&mut err);
+        }
+        Ok(())
+    })?;
+    table.set("write_err", write_err)?;
+    // The next line of standard input without its line ending, `nil` at the end.
+    let read_line = lua.create_function(move |lua, ()| {
+        flush_stdout();
+        let mut line = String::new();
+        let got =
+            if sandbox { 0 } else { std::io::stdin().lock().read_line(&mut line).map_err(mlua::Error::external)? };
+        if got == 0 {
+            return Ok(None);
+        }
+        let line = line.trim_end_matches(char::is_control);
+        Ok(Some(lua.create_string(line)?))
+    })?;
+    table.set("read_line", read_line)?;
+    let read_all = lua.create_function(move |lua, ()| {
+        flush_stdout();
+        let mut all = Vec::new();
+        if !sandbox {
+            std::io::stdin().lock().read_to_end(&mut all).map_err(mlua::Error::external)?;
+        }
+        lua.create_string(&all)
+    })?;
+    table.set("read_all", read_all)?;
+    let clock_start = std::time::Instant::now();
+    table.set("now", lua.create_function(move |_, ()| Ok(clock_start.elapsed().as_nanos() as i64))?)?;
     // The terminal: each returns an error message when it fails, which the
     // runtime unravels with. A sandboxed run has no terminal and no keys held.
     let raw_term = term.clone();

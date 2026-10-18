@@ -39,4 +39,82 @@ pub warp Rng {
 
     /// A random byte: the top 8 bits of `next_u64`.
     pub fn byte(mut self) -> u8 = (.next_u64() >> 56) as u8
+
+    /// A number from `0` up to but not including `n`, every one equally
+    /// likely. Unravels if `n` is 0.
+    pub fn below(mut self, n: u64) -> u64 {
+        assert(n > 0, "below: n is 0")
+        // Redraws the few values below 2^64 mod n, which would make small
+        // results likelier.
+        let threshold = (0 -% n) % n
+        while true {
+            let x = .next_u64()
+            if x >= threshold { return x % n }
+        }
+        0
+    }
+
+    /// A number from `lo` to `hi`, both included. Unravels if `hi < lo`.
+    pub fn between(mut self, lo: i64, hi: i64) -> i64 {
+        assert(lo <= hi, "between: hi is less than lo")
+        let span = (hi as% u64) -% (lo as% u64)
+        if span == 0xFFFF_FFFF_FFFF_FFFF { return .next_u64() as% i64 }
+        ((lo as% u64) +% .below(span + 1)) as% i64
+    }
+
+    /// A number from 0 up to but not including 1, with 53 random bits.
+    pub fn float(mut self) -> f64 = (.next_u64() >> 11) as f64 * (1.0 / 9007199254740992.0)
+
+    /// `true` with probability `p`.
+    pub fn chance(mut self, p: f64) -> bool = .float() < p
+
+    /// Puts the items in a random order.
+    pub fn shuffle[T](mut self, mut xs: [T]) {
+        var i = xs.len()
+        while i > 1 {
+            let j = .below(i as u64) as usize
+            i -= 1
+            xs.swap(i, j)
+        }
+    }
+
+    /// A copy of a random item, if there are any.
+    pub fn choose[T](mut self, xs: [T]) -> ?T {
+        if xs.is_empty() { return none }
+        xs.get(.below(xs.len() as u64) as usize)
+    }
+
+    /// Fills `buf` with random bytes.
+    pub fn fill(mut self, mut buf: [u8]) {
+        for i in 0..buf.len() {
+            buf[i] = .byte()
+        }
+    }
+
+    /// A generator that continues 2^128 steps ahead of this one, which is
+    /// left as it was: every thread can have its own stream.
+    pub fn jump(self) -> Rng {
+        var next = Rng(s0: .s0, s1: .s1, s2: .s2, s3: .s3)
+        var t0 = 0u64
+        var t1 = 0u64
+        var t2 = 0u64
+        var t3 = 0u64
+        let table: [u64; 4] = [0x180E_C6D3_3CFD_0ABA, 0xD5A6_1266_F0C9_392C, 0xA958_2618_E03F_C9AA, 0x39AB_DC45_29B1_661C]
+        for word in table {
+            for bit in 0..64u64 {
+                if word & (1u64 << bit) != 0 {
+                    t0 ~= next.s0
+                    t1 ~= next.s1
+                    t2 ~= next.s2
+                    t3 ~= next.s3
+                }
+                next.next_u64()
+            }
+        }
+        next.s0 = t0
+        next.s1 = t1
+        next.s2 = t2
+        next.s3 = t3
+        next
+    }
 }

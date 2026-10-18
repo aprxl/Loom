@@ -3,4 +3,38 @@
 extern "lua" {
     /// Writes `x` and a newline to standard output.
     pub fn print(x: any Show)
+    /// Standard output, as is: no newline.
+    pub fn write_out(text: str)
+    /// Standard error, as is: no newline.
+    pub fn write_err(text: str)
+    /// The next line of standard input, without its line ending; `none`
+    /// once the input has ended.
+    pub fn read_line() -> ?String
+    /// Everything left on standard input.
+    pub fn read_all() -> String
+}
+
+/// Writes `x` to standard output, with no newline after it.
+pub fn write(x: any Show) {
+    write_out("{x}")
+}
+
+/// Writes `x` and a newline to standard error.
+pub fn eprint(x: any Show) {
+    write_err("{x}\n")
+}
+
+/// Writes `x` to standard error, with no newline after it.
+pub fn ewrite(x: any Show) {
+    write_err("{x}")
+}
+
+/// The lines of standard input, one at a time, as they are read.
+pub fn lines() -> Stream[String] = StdinLines()
+
+/// The lines of standard input.
+warp StdinLines: Iter {
+    type Item = String
+
+    fn next(mut self) -> ?String = read_line()
 }

@@ -9,7 +9,7 @@
 
 #![allow(unsafe_code)]
 
-use std::io::Write;
+use std::io::{BufRead as _, Read as _, Write};
 
 use crate::Trap;
 use crate::natives::{Ctx, NativeFn};
@@ -19,6 +19,9 @@ pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
     Some(match name {
         "env.get" => env_get,
         "env.args" => env_args,
+        "io.read_line" => read_line,
+        "io.read_all" => read_all,
+        "io.write_err" => write_err,
         "process.exit" => exit,
         "term.raw_mode" => raw_mode,
         "term.poll_keys" => poll_keys,
@@ -67,6 +70,51 @@ fn env_args(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
         d.write(buf);
         d.add(1).write(n);
         d.add(2).write(n);
+    }
+    Ok(())
+}
+
+/// `io.read_line(dst)`: the next line of standard input, without its line
+/// ending, as a `?String` at `dst`; `none` at the end of the input.
+fn read_line(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.host_check("io.read_line")?;
+    ctx.flush();
+    let mut line = String::new();
+    let got = if ctx.sandbox {
+        0
+    } else {
+        std::io::stdin().lock().read_line(&mut line).map_err(|e| Trap::Unravel(e.to_string()))?
+    };
+    if got == 0 {
+        // SAFETY: `dst` is the 24 bytes of a `?String` the compiler gave.
+        unsafe { std::ptr::write_bytes(args[0] as *mut u8, 0, 24) };
+        return Ok(());
+    }
+    let trimmed = line.trim_end_matches(char::is_control);
+    ctx.new_string(trimmed.as_bytes(), args[0])
+}
+
+/// `io.read_all(dst)`: the rest of standard input, as a `String` at `dst`.
+fn read_all(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.host_check("io.read_all")?;
+    ctx.flush();
+    let mut all = Vec::new();
+    if !ctx.sandbox {
+        std::io::stdin().lock().read_to_end(&mut all).map_err(|e| Trap::Unravel(e.to_string()))?;
+    }
+    ctx.new_string(&all, args[0])
+}
+
+/// `io.write_err(text)`: standard error, after what is waiting for
+/// standard output, so the two keep their order on a terminal.
+fn write_err(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.host_check("io.write_err")?;
+    let bytes = text(ctx, args[0], args[1])?;
+    ctx.flush();
+    if !ctx.sandbox {
+        let mut err = std::io::stderr().lock();
+        let _ = err.write_all(bytes.as_bytes());
+        let _ = err.flush();
     }
     Ok(())
 }
