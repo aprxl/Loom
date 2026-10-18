@@ -20,9 +20,19 @@ pub warp Optional[T] {
         }
     }
     /// Whether there is a value.
-    pub fn is_some(self) -> bool = self != none
+    pub fn is_some(self) -> bool {
+        match self {
+            some(_) => true
+            none => false
+        }
+    }
     /// Whether there is no value.
-    pub fn is_none(self) -> bool = self == none
+    pub fn is_none(self) -> bool {
+        match self {
+            some(_) => false
+            none => true
+        }
+    }
     /// The two values together, if both are there.
     pub fn zip[U](take self, take other: ?U) -> ?(T, U) {
         match self {

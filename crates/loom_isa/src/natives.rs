@@ -119,6 +119,9 @@ pub const NATIVES: &[NativeSig] = &[
     sig("term.poll_keys", 2, 1, NativeImm::None),
     sig("fs.append", 3, 1, NativeImm::None),
     sig("fs.write_line", 5, 1, NativeImm::None),
+    sig("fs.write", 5, 1, NativeImm::None),
+    sig("fs.exists", 2, 1, NativeImm::None),
+    sig("fs.remove", 3, 1, NativeImm::None),
     sig("fs.read", 3, 1, NativeImm::None),
     // Maps' fast paths: the entry with a key (text, or one word) in the
     // map at a header, and the key's hash, from a packed layout (the key's

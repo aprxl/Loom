@@ -172,6 +172,9 @@ MODULES = [
   "functions": [
     {"name": "read", "suffix": "(path: str) -> List[u8] ! IoError", "extern": True, "doc": None},
     {"name": "read_text", "suffix": "(path: str) -> String ! IoError", "extern": True, "doc": None},
+    {"name": "write_text", "suffix": "(path: str, text: str) ! IoError", "extern": True, "doc": "Makes the file `path` hold `text`, replacing what was there."},
+    {"name": "exists", "suffix": "(path: str) -> bool", "extern": True, "doc": "Whether there is a file or a directory at `path`."},
+    {"name": "remove_file", "suffix": "(path: str) ! IoError", "extern": True, "doc": "Deletes the file at `path`."},
   ],
 },
 

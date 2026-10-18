@@ -1,0 +1,14 @@
+use std.fs
+use std.io.print
+
+fn main() ! any Error {
+    let path = "std_fs_probe.txt"
+    print(fs.exists(path))
+    fs.write_text(path, "one\n")?
+    print(fs.exists(path))
+    fs.write_text(path, "two\nthree\n")?
+    print(fs.read_text(path)?.lines().count())
+    fs.remove_file(path)?
+    print(fs.exists(path))
+    print(fs.remove_file(path).error().is_some())
+}

@@ -3191,6 +3191,52 @@ ext["std.fs.File.write_line"] = function(f, line)
   return { true, nil }
 end
 
+ext["std.fs.write_text"] = function(path, text)
+  if memory then
+    memory[path] = text
+    return { true, nil }
+  end
+  local h = open_files[path]
+  if h then
+    h:close()
+    open_files[path] = nil
+    open_count = open_count - 1
+  end
+  local f, message, errno = io.open(path, "wb")
+  if not f then return io_error(path, message, errno) end
+  local ok, werr, wno = f:write(text)
+  f:close()
+  if not ok then return io_error(path, werr, wno) end
+  return { true, nil }
+end
+
+ext["std.fs.exists"] = function(path)
+  if memory then return memory[path] ~= nil end
+  local f = io.open(path, "rb")
+  if f then
+    f:close()
+    return true
+  end
+  return false
+end
+
+ext["std.fs.remove_file"] = function(path)
+  if memory then
+    if memory[path] == nil then return io_error(path, nil, 2) end
+    memory[path] = nil
+    return { true, nil }
+  end
+  local h = open_files[path]
+  if h then
+    h:close()
+    open_files[path] = nil
+    open_count = open_count - 1
+  end
+  local ok, message, errno = os.remove(path)
+  if not ok then return io_error(path, message, errno) end
+  return { true, nil }
+end
+
 ext["std.fs.read_text"] = function(path)
   local text, message, errno = read_all(path)
   if text == nil then return io_error(path, message, errno) end

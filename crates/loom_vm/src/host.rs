@@ -29,6 +29,9 @@ pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
         "fs.append" => fs_append,
         "fs.write_line" => fs_write_line,
         "fs.read" => fs_read,
+        "fs.write" => fs_write,
+        "fs.exists" => fs_exists,
+        "fs.remove" => fs_remove,
         _ => return None,
     })
 }
@@ -220,6 +223,51 @@ fn fs_write_line(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     args[0] = match append(ctx, &path, &line) {
         Ok(()) => FINE,
         Err(e) => failure(ctx, &e, args[4])?,
+    };
+    Ok(())
+}
+
+/// `fs.write(path, text, dst)`: the file's contents become `text`, made if
+/// it isn't there.
+fn fs_write(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.host_check("fs.write")?;
+    let path = text(ctx, args[0], args[1])?;
+    let bytes = text(ctx, args[2], args[3])?.into_bytes();
+    ctx.open_files.remove(&path);
+    let done = if ctx.sandbox {
+        ctx.files.insert(path, bytes);
+        Ok(())
+    } else {
+        std::fs::write(&path, &bytes)
+    };
+    args[0] = match done {
+        Ok(()) => FINE,
+        Err(e) => failure(ctx, &e, args[4])?,
+    };
+    Ok(())
+}
+
+/// `fs.exists(path)`: whether there is a file or a directory there.
+fn fs_exists(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.host_check("fs.exists")?;
+    let path = text(ctx, args[0], args[1])?;
+    args[0] = u64::from(if ctx.sandbox { ctx.files.contains_key(&path) } else { std::path::Path::new(&path).exists() });
+    Ok(())
+}
+
+/// `fs.remove(path, dst)`: deletes the file.
+fn fs_remove(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.host_check("fs.remove")?;
+    let path = text(ctx, args[0], args[1])?;
+    ctx.open_files.remove(&path);
+    let done = if ctx.sandbox {
+        ctx.files.remove(&path).map(|_| ()).ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))
+    } else {
+        std::fs::remove_file(&path)
+    };
+    args[0] = match done {
+        Ok(()) => FINE,
+        Err(e) => failure(ctx, &e, args[2])?,
     };
     Ok(())
 }

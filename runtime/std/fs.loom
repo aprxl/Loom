@@ -17,4 +17,10 @@ pub warp File {
 extern "lua" {
     pub fn read(path: str) -> List[u8] ! IoError
     pub fn read_text(path: str) -> String ! IoError
+    /// Makes the file `path` hold `text`, replacing what was there.
+    pub fn write_text(path: str, text: str) ! IoError
+    /// Whether there is a file or a directory at `path`.
+    pub fn exists(path: str) -> bool
+    /// Deletes the file at `path`.
+    pub fn remove_file(path: str) ! IoError
 }

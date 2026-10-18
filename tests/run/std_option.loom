@@ -22,4 +22,7 @@ fn main() {
     print(r2 mend -1)
     print((3 > 2).then(() => 7))
     print((3 < 2).then_some(7))
+    let m: ?Missing = some(Missing())
+    print(m.is_some())
+    print(m.is_none())
 }

@@ -99,6 +99,27 @@ impl<'a> Builder<'a> {
                 let (p, n) = self.text_of(v, ty, span)?;
                 Some(Val::Regs(self.native("term.poll_keys", vec![p, n], 1)))
             }
+            "std.fs.write_text" => {
+                let (v, ty) = arg(self, 0)?;
+                let (p, n) = self.text_of(v, ty, span)?;
+                let (t, tty) = arg(self, 1)?;
+                let (tp, tn) = self.text_of(t, tty, span)?;
+                let msg = self.temp_string(span)?;
+                let code = self.native("fs.write", vec![p, n, tp, tn, msg], 1)[0];
+                self.io_result(ret, code, (p, n), None, msg, span)
+            }
+            "std.fs.exists" => {
+                let (v, ty) = arg(self, 0)?;
+                let (p, n) = self.text_of(v, ty, span)?;
+                Some(Val::Regs(self.native("fs.exists", vec![p, n], 1)))
+            }
+            "std.fs.remove_file" => {
+                let (v, ty) = arg(self, 0)?;
+                let (p, n) = self.text_of(v, ty, span)?;
+                let msg = self.temp_string(span)?;
+                let code = self.native("fs.remove", vec![p, n, msg], 1)[0];
+                self.io_result(ret, code, (p, n), None, msg, span)
+            }
             "std.fs.read" | "std.fs.read_text" => {
                 let (v, ty) = arg(self, 0)?;
                 let (p, n) = self.text_of(v, ty, span)?;
