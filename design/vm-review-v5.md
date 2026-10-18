@@ -187,3 +187,12 @@ short exclusive borrows only while the guard is held. Output processing
 examines only the suffix appended by the current native invocation.
 Measurements, including the spawn/join regression, are in
 `bench/RESULTS.md` under “V5 review”.
+
+The compiler follow-up retains a flat GVN fact table, with a secondary
+root index for private-slot facts and zeroed regions. Indexing every fact
+regressed map-heavy compilation, so broad writes still use a complete
+alias scan. Instruction/type-key allocation reductions, indexed readers
+in `carry_last`, and dirty-gated SCCP/GVN cleanup are implemented. The
+pass schedule and call-summary recomputation are unchanged. The full
+root index, compact Alias provenance, codegen work and re-inlining after
+the last GVN remain separate follow-ups; no dispatch/SIMD change is made.

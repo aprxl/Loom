@@ -295,6 +295,17 @@ fn carry_last(f: &mut Func) {
         let n = block.insts.len();
         let def: FxHashMap<Value, usize> =
             block.insts.iter().enumerate().flat_map(|(i, inst)| inst.results.iter().map(move |&r| (r, i))).collect();
+        // The closure below changes only `moving`, so readers can be
+        // indexed once instead of rescanning the block for every result.
+        let mut readers: FxHashMap<Value, Vec<usize>> = FxHashMap::default();
+        for (i, inst) in block.insts.iter().enumerate() {
+            for u in crate::heddle::inst_uses(&inst.kind) {
+                let uses = readers.entry(u).or_default();
+                if uses.last() != Some(&i) {
+                    uses.push(i);
+                }
+            }
+        }
         let movable = |k: &InstKind| pure(k) && !matches!(k, InstKind::Load { .. });
         // What moves: the instructions making what's passed, and what only
         // they read (moving them later in the block delays no use: the
@@ -312,11 +323,10 @@ fn carry_last(f: &mut Func) {
                 if moving[i] || !movable(&inst.kind) || inst.results.is_empty() {
                     continue;
                 }
-                let only_moving = inst.results.iter().all(|r| {
-                    let readers: Vec<usize> =
-                        (0..n).filter(|&j| crate::heddle::inst_uses(&block.insts[j].kind).any(|u| u == *r)).collect();
-                    !readers.is_empty() && readers.iter().all(|&j| moving[j])
-                });
+                let only_moving = inst
+                    .results
+                    .iter()
+                    .all(|r| readers.get(r).is_some_and(|uses| !uses.is_empty() && uses.iter().all(|&j| moving[j])));
                 if only_moving {
                     moving[i] = true;
                     grew = true;

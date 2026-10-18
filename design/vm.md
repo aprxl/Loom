@@ -488,7 +488,18 @@ and superinstructions (§8.4).
 - **`ranges`** takes a passed `bounds` as a fact from there on, and narrows
   again what widening overshot.
 - **GVN** keeps what's known across a join no path to it writes in.
+  A secondary index groups private-slot and zeroed-memory facts by alias
+  root; stores in a private frame slot inspect only that root's facts.
+  Other writes conservatively scan the flat fact table. Dominator undo
+  restores each fact's preceding value. Expression type keys for zero or
+  one result stay inline, and quiet/inert instructions avoid owned clones.
 - **`ipcp`** (a parameter every call gives one constant is that constant).
+
+SCCP and GVN tidy only functions they changed (including comparison folds,
+element splitting and devirtualization). They still run on every function
+at each scheduled invocation; call summaries are recomputed. Cleanup's
+`carry_last` indexes instruction readers once per block before finding the
+movable closure.
 
 Built where the typed program becomes Heddle, not as passes of their own:
 projections used by one statement and generators a `for` goes over (9), and
@@ -1934,7 +1945,7 @@ unravel carries a note of where the thread started on both backends (P8,
 - The grain is fixed when the loop starts (`n / (8 × workers)`), not
   adaptive; there are no per-worker deques and no stealing.
 - The optimizer's compile-time ratio (V3's gate of 1.5× `-O0`) measures
-  about 1.63× over today's larger corpus, because the front end got faster;
+  about 1.60–1.61× after the V5 review's compiler changes (1.63× before);
   the test asserts 1.75×, so the 1.5× of the design is not met as written.
 - `par_mandelbrot` scales about 5.7× on 8 workers against the gate's 5.6×
   (0.7 × 8): it passes with little room (best-of-N runs in

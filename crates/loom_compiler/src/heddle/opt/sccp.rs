@@ -20,9 +20,10 @@ use crate::heddle::{BitOp, Cmp, Func, Inst, InstKind, IntOp, Module, Term, VTy, 
 
 pub fn sccp(module: &mut Module) {
     for f in &mut module.funcs {
-        sccp_func(f);
-        simplify(f);
-        super::tidy::tidy(f);
+        let changed = sccp_func(f) | simplify(f);
+        if changed {
+            super::tidy::tidy(f);
+        }
     }
 }
 
@@ -148,7 +149,7 @@ fn foldable(k: &InstKind) -> bool {
     )
 }
 
-fn sccp_func(f: &mut Func) {
+fn sccp_func(f: &mut Func) -> bool {
     let n = f.types.len();
     let mut users: Vec<Vec<User>> = vec![Vec::new(); n];
     for (b, block) in f.blocks.iter().enumerate() {
@@ -199,6 +200,7 @@ fn sccp_func(f: &mut Func) {
         }
     }
     let (lat, run) = (s.lat, s.run);
+    let mut changed = run.iter().any(|&reached| !reached);
     // Constants made where they're known, and branches that go one way.
     let mut subst: Vec<Value> = (0..n as u32).map(Value).collect();
     for (b, block) in f.blocks.iter_mut().enumerate() {
@@ -209,6 +211,7 @@ fn sccp_func(f: &mut Func) {
         if b != 0 {
             for &p in &block.params {
                 if let Lat::Const(c) = lat[p.0 as usize] {
+                    changed = true;
                     let ty = f.types[p.0 as usize];
                     f.types.push(ty);
                     let v = Value(f.types.len() as u32 - 1);
@@ -222,6 +225,7 @@ fn sccp_func(f: &mut Func) {
                 && let Lat::Const(c) = lat[r.0 as usize]
                 && !is_constant(&inst.kind)
             {
+                changed = true;
                 let ty = f.types[r.0 as usize];
                 inst.kind = constant(ty, c, *r, None).kind;
                 inst.unwind = None;
@@ -231,9 +235,13 @@ fn sccp_func(f: &mut Func) {
         if let Some(Term::Br { cond, then, else_ }) = &block.term
             && let Lat::Const(c) = lat[cond.0 as usize]
         {
+            changed = true;
             let e = if c != 0 { then.clone() } else { else_.clone() };
             block.term = Some(Term::Jump(e));
         }
+    }
+    if !changed {
+        return false;
     }
     for block in &mut f.blocks {
         for inst in &mut block.insts {
@@ -243,6 +251,7 @@ fn sccp_func(f: &mut Func) {
             super::rewrite_term(t, |v| subst[v.0 as usize]);
         }
     }
+    true
 }
 
 /// An instruction making constant `bits` as `v`, of type `ty`.
@@ -257,7 +266,7 @@ fn constant(ty: VTy, bits: u64, v: Value, span: Option<loom_syntax::source::Span
 /// The identities (see the module's documentation): each result that's
 /// one of its operands is replaced by it, and the instruction goes; an
 /// integer compared with itself becomes a constant.
-fn simplify(f: &mut Func) {
+fn simplify(f: &mut Func) -> bool {
     let mut consts: Vec<Option<u64>> = vec![None; f.types.len()];
     let mut nots: Vec<Option<Value>> = vec![None; f.types.len()];
     for inst in f.blocks.iter().flat_map(|b| &b.insts) {
@@ -270,6 +279,7 @@ fn simplify(f: &mut Func) {
     let k = |v: Value| consts[v.0 as usize];
     let mut subst: Vec<Value> = (0..f.types.len() as u32).map(Value).collect();
     let mut changed = false;
+    let mut compared = false;
     for block in &mut f.blocks {
         block.insts.retain_mut(|inst| {
             let [r] = inst.results.as_slice() else { return true };
@@ -299,12 +309,13 @@ fn simplify(f: &mut Func) {
             {
                 inst.kind = K::Iconst(u64::from(matches!(cmp, Cmp::Eq | Cmp::Le | Cmp::Ge)));
                 inst.unwind = None;
+                compared = true;
             }
             true
         });
     }
     if !changed {
-        return;
+        return compared;
     }
     let find = |mut v: Value| {
         while subst[v.0 as usize] != v {
@@ -320,4 +331,5 @@ fn simplify(f: &mut Func) {
             super::rewrite_term(t, find);
         }
     }
+    true
 }

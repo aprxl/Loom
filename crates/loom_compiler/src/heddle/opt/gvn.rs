@@ -45,16 +45,18 @@ pub fn gvn(module: &mut Module) {
     let shapes: Vec<(usize, usize)> = module.funcs.iter().map(|f| (f.params().len(), f.results.len())).collect();
     let summaries = super::modref::summaries(module);
     for f in &mut module.funcs {
-        gvn_func(f, &summaries);
-        devirtualize(f, &shapes);
-        super::tidy::tidy(f);
+        let changed = gvn_func(f, &summaries) | devirtualize(f, &shapes);
+        if changed {
+            super::tidy::tidy(f);
+        }
     }
 }
 
 /// A call through a function value that's a known function (a lambda
 /// passed to a method inlined here, whose value GVN found in memory)
 /// becomes a call of that function, which inlining can then copy in.
-fn devirtualize(f: &mut Func, shapes: &[(usize, usize)]) {
+fn devirtualize(f: &mut Func, shapes: &[(usize, usize)]) -> bool {
+    let mut changed = false;
     let mut func_of: FxHashMap<Value, crate::heddle::FuncId> = FxHashMap::default();
     for inst in f.blocks.iter().flat_map(|b| &b.insts) {
         if let (InstKind::FuncRef(g), [r]) = (&inst.kind, inst.results.as_slice()) {
@@ -67,8 +69,10 @@ fn devirtualize(f: &mut Func, shapes: &[(usize, usize)]) {
             && shapes.get(g.0 as usize) == Some(&(args.len(), inst.results.len()))
         {
             inst.kind = InstKind::Call { func: g, args: args.clone() };
+            changed = true;
         }
     }
+    changed
 }
 
 /// What a load reads, as a key of the table of known memory.
@@ -101,6 +105,81 @@ impl MemKey {
         match self {
             MemKey::Load { ptr, off, mem } => Access { ptr: *ptr, off: i64::from(*off), size: mem.bytes() },
             MemKey::Zero { ptr, off, size } => Access { ptr: *ptr, off: *off, size: *size },
+        }
+    }
+}
+
+/// Flat facts keep reads and full-table invalidation cheap. The secondary
+/// root index covers private slots (stores need only that bucket) and zero
+/// facts (the only candidates for zeroed/zero_left). Broad writes still use
+/// the full alias test. Empty buckets retain their storage for dominator undo.
+#[derive(Default)]
+struct Memory {
+    facts: FxHashMap<MemKey, Value>,
+    roots: FxHashMap<Root, FxHashSet<MemKey>>,
+}
+
+impl Memory {
+    fn get(&self, key: &MemKey) -> Option<&Value> {
+        self.facts.get(key)
+    }
+
+    fn insert(&mut self, alias: &Alias, key: MemKey, value: Value) -> Option<Value> {
+        let old = self.facts.insert(key.clone(), value);
+        if old.is_none() {
+            let root = alias.root(key.access().ptr).0;
+            if matches!(root, Root::Slot(n) if !alias.escapes[n as usize]) || matches!(key, MemKey::Zero { .. }) {
+                self.roots.entry(root).or_default().insert(key);
+            }
+        }
+        old
+    }
+
+    fn remove(&mut self, alias: &Alias, key: &MemKey) -> Option<Value> {
+        let old = self.facts.remove(key)?;
+        let root = alias.root(key.access().ptr).0;
+        if matches!(root, Root::Slot(n) if !alias.escapes[n as usize]) || matches!(key, MemKey::Zero { .. }) {
+            self.roots.get_mut(&root).expect("indexed fact").remove(key);
+        }
+        Some(old)
+    }
+
+    fn keys(&self) -> impl Iterator<Item = &MemKey> {
+        self.facts.keys()
+    }
+
+    fn iter(&self) -> impl Iterator<Item = (&MemKey, &Value)> {
+        self.facts.iter()
+    }
+
+    fn at_root(&self, root: Root) -> impl Iterator<Item = &MemKey> {
+        self.roots.get(&root).into_iter().flat_map(|facts| facts.iter())
+    }
+
+    fn overlapping(&self, alias: &Alias, access: Access) -> Vec<MemKey> {
+        let root = alias.root(access.ptr).0;
+        if matches!(root, Root::Slot(n) if !alias.escapes[n as usize]) {
+            return self.at_root(root).filter(|key| alias.may_alias(access, key.access())).cloned().collect();
+        }
+        self.facts.keys().filter(|key| alias.may_alias(access, key.access())).cloned().collect()
+    }
+}
+
+/// Nearly all expressions have zero or one result. Keep their type keys
+/// inline, without allocating a vector for each instruction visited.
+#[derive(Clone, PartialEq, Eq, Hash)]
+enum TypeKey {
+    None,
+    One(VTy),
+    Many(Vec<VTy>),
+}
+
+impl TypeKey {
+    fn of(f: &Func, results: &[Value]) -> Self {
+        match results {
+            [] => Self::None,
+            [r] => Self::One(f.ty(*r)),
+            rs => Self::Many(rs.iter().map(|&r| f.ty(r)).collect()),
         }
     }
 }
@@ -242,10 +321,10 @@ type FindKey = (&'static str, u16, Vec<Arg>);
 
 /// One change to a table, to undo when the walk leaves the block.
 enum Undo {
-    Expr((InstKind, Vec<VTy>)),
+    Expr((InstKind, TypeKey)),
     /// An expression known by its constants' values made (to forget), or
     /// forgotten at a call (to know again).
-    KExpr((InstKind, Vec<VTy>), Option<Vec<Value>>),
+    KExpr((InstKind, TypeKey), Option<Vec<Value>>),
     /// What a key of known memory was before.
     Mem(MemKey, Option<Value>),
     /// The same for the memory quiet natives leave known.
@@ -349,17 +428,17 @@ struct Gvn<'a> {
     repl: Vec<Value>,
     /// What's been computed, with its results' types (a zero address isn't
     /// a zero integer), and its results.
-    exprs: FxHashMap<(InstKind, Vec<VTy>), Vec<Value>>,
+    exprs: FxHashMap<(InstKind, TypeKey), Vec<Value>>,
     /// The same, by what its constant operands are rather than which
     /// values: until the next call, past which recomputing one (an
     /// instruction) is as cheap as keeping it (a move into the call's
     /// window).
-    kexprs: FxHashMap<(InstKind, Vec<VTy>), Vec<Value>>,
+    kexprs: FxHashMap<(InstKind, TypeKey), Vec<Value>>,
     /// Known memory: what a load at each key gives.
-    mem: FxHashMap<MemKey, Value>,
+    mem: Memory,
     /// Known memory that natives which write nothing don't forget: which
     /// value a load at each key read first.
-    stable: FxHashMap<MemKey, Value>,
+    stable: Memory,
     /// For a load of what an earlier one read: that one (for lookups' keys
     /// alone; the load stays).
     same: FxHashMap<Value, Value>,
@@ -416,7 +495,7 @@ impl Gvn<'_> {
     fn zeroed(&self, access: Access) -> bool {
         let (root, off) = self.alias.root(access.ptr);
         let Some(off) = off.map(|o| o.wrapping_add(access.off)) else { return false };
-        self.mem.keys().any(|k| match k {
+        self.mem.at_root(root).any(|k| match k {
             MemKey::Zero { ptr, off: zoff, size } => match self.alias.root(*ptr) {
                 (r, Some(start)) if r == root => {
                     let start = start + zoff;
@@ -450,7 +529,7 @@ impl Gvn<'_> {
     }
 
     fn remember(&mut self, key: MemKey, v: Value) {
-        let old = self.mem.insert(key.clone(), v);
+        let old = self.mem.insert(&self.alias, key.clone(), v);
         self.undo.push(Undo::Mem(key, old));
     }
 
@@ -458,7 +537,7 @@ impl Gvn<'_> {
     fn forget(&mut self, keep: impl Fn(&Alias, &MemKey) -> bool) {
         let gone: Vec<MemKey> = self.mem.keys().filter(|k| !keep(&self.alias, k)).cloned().collect();
         for k in gone {
-            let old = self.mem.remove(&k);
+            let old = self.mem.remove(&self.alias, &k);
             self.undo.push(Undo::Mem(k, old));
         }
     }
@@ -476,7 +555,7 @@ impl Gvn<'_> {
             .map(|(k, _)| k.clone())
             .collect();
         for k in gone {
-            let old = self.mem.remove(&k);
+            let old = self.mem.remove(&self.alias, &k);
             self.undo.push(Undo::Mem(k, old));
         }
     }
@@ -486,11 +565,35 @@ impl Gvn<'_> {
     fn forget_stable(&mut self, keep: impl Fn(&Alias, &MemKey) -> bool) {
         let gone: Vec<MemKey> = self.stable.keys().filter(|k| !keep(&self.alias, k)).cloned().collect();
         for k in gone {
-            let old = self.stable.remove(&k);
+            let old = self.stable.remove(&self.alias, &k);
             self.undo.push(Undo::Stable(k, old));
         }
         for (k, v) in self.finds.drain().collect::<Vec<_>>() {
             self.undo.push(Undo::Find(k, Some(v)));
+        }
+    }
+
+    /// Invalidate candidate facts, preserving any zeroed prefix/suffix
+    /// before removing the original fact. Private-slot writes use their
+    /// bucket; broad writes and all lookups retain conservative invalidation.
+    fn invalidate(&mut self, access: Access, keep_zero: bool) {
+        let root = self.alias.root(access.ptr).0;
+        let kept: Vec<MemKey> =
+            self.mem.at_root(root).filter(|_| keep_zero).filter_map(|k| self.zero_left(k, access)).flatten().collect();
+        for k in self.mem.overlapping(&self.alias, access) {
+            let old = self.mem.remove(&self.alias, &k);
+            self.undo.push(Undo::Mem(k, old));
+        }
+        for k in self.stable.overlapping(&self.alias, access) {
+            let old = self.stable.remove(&self.alias, &k);
+            self.undo.push(Undo::Stable(k, old));
+        }
+        for (k, v) in self.finds.drain() {
+            self.undo.push(Undo::Find(k, Some(v)));
+        }
+        for k in kept {
+            let at = k.access().ptr;
+            self.remember(k, at);
         }
     }
 
@@ -528,16 +631,16 @@ impl Gvn<'_> {
                     self.kexprs.remove(&k);
                 }
                 Undo::Mem(k, Some(v)) => {
-                    self.mem.insert(k, v);
+                    self.mem.insert(&self.alias, k, v);
                 }
                 Undo::Mem(k, None) => {
-                    self.mem.remove(&k);
+                    self.mem.remove(&self.alias, &k);
                 }
                 Undo::Stable(k, Some(v)) => {
-                    self.stable.insert(k, v);
+                    self.stable.insert(&self.alias, k, v);
                 }
                 Undo::Stable(k, None) => {
-                    self.stable.remove(&k);
+                    self.stable.remove(&self.alias, &k);
                 }
                 Undo::Find(k, Some(v)) => {
                     self.finds.insert(k, v);
@@ -550,7 +653,7 @@ impl Gvn<'_> {
     }
 }
 
-fn gvn_func(f: &mut Func, summaries: &[Vec<Writes>]) {
+fn gvn_func(f: &mut Func, summaries: &[Vec<Writes>]) -> bool {
     let cfg = Cfg::new(f);
     let mut g = Gvn {
         alias: Alias::new(f),
@@ -559,8 +662,8 @@ fn gvn_func(f: &mut Func, summaries: &[Vec<Writes>]) {
         repl: (0..f.types.len() as u32).map(Value).collect(),
         exprs: FxHashMap::default(),
         kexprs: FxHashMap::default(),
-        mem: FxHashMap::default(),
-        stable: FxHashMap::default(),
+        mem: Memory::default(),
+        stable: Memory::default(),
         same: FxHashMap::default(),
         consts: f
             .blocks
@@ -648,6 +751,10 @@ fn gvn_func(f: &mut Func, summaries: &[Vec<Writes>]) {
         }
     }
     // Replace what went everywhere (landing pads too), and drop it.
+    let changed = !g.split.is_empty() || dead.iter().flatten().any(|&d| d) || zero.iter().flatten().any(|&z| z);
+    if !changed {
+        return false;
+    }
     f.types.extend(g.fresh.iter().copied());
     let repl: Vec<Value> = (0..f.types.len() as u32).map(|v| g.find(Value(v))).collect();
     for (b, ((block, dead), zero)) in f.blocks.iter_mut().zip(&dead).zip(&zero).enumerate() {
@@ -697,6 +804,7 @@ fn gvn_func(f: &mut Func, summaries: &[Vec<Writes>]) {
             super::rewrite_term(t, |v| repl[v.0 as usize]);
         }
     }
+    true
 }
 
 /// The buffer and the length of the list whose header is at `header +
@@ -727,6 +835,35 @@ fn elem_parts(g: &mut Gvn, b: usize, i: usize, header: Value, off: i32) -> Optio
 /// Numbers block `b`'s instructions, marking those that go in `dead`.
 fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool], summaries: &[Vec<Writes>]) {
     for (i, inst) in f.blocks[b].insts.iter().enumerate() {
+        // Inert instructions and quiet natives need no owned instruction
+        // or argument-vector clone. Elem still needs rewritten operands.
+        if matches!(role(&inst.kind), Role::Other) {
+            match &inst.kind {
+                InstKind::Native { name, imm, args } if LOOKUPS.contains(name) => {
+                    let key: FindKey = (name, *imm, args.iter().map(|&a| g.arg(a)).collect());
+                    match g.finds.get(&key) {
+                        Some(old) if old.len() == inst.results.len() => {
+                            for (r, &o) in inst.results.iter().zip(old) {
+                                g.repl[r.0 as usize] = o;
+                            }
+                            dead[i] = true;
+                        }
+                        _ => {
+                            g.finds.insert(key.clone(), inst.results.clone());
+                            g.undo.push(Undo::Find(key, None));
+                            g.forget_loaded();
+                        }
+                    }
+                    continue;
+                }
+                InstKind::Native { .. } => {
+                    g.forget_loaded();
+                    continue;
+                }
+                InstKind::Elem { .. } => {}
+                _ => continue,
+            }
+        }
         let mut kind = inst.kind.clone();
         crate::heddle::rewrite(&mut kind, |v| g.find(v));
         let role = match role(&kind) {
@@ -735,13 +872,13 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool], 
         };
         match role {
             Role::Pure => {
-                let tys: Vec<VTy> = inst.results.iter().map(|&r| f.ty(r)).collect();
+                let tys = TypeKey::of(f, &inst.results);
                 let kkey = (canonical(g.keyed(kind.clone())), tys.clone());
                 let key = (canonical(kind), tys);
                 if kkey != key {
                     match g.kexprs.get(&kkey).or_else(|| g.exprs.get(&key)) {
                         Some(old) => {
-                            for (r, o) in inst.results.iter().zip(old.clone()) {
+                            for (r, &o) in inst.results.iter().zip(old) {
                                 g.repl[r.0 as usize] = o;
                             }
                             dead[i] = true;
@@ -754,7 +891,7 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool], 
                         }
                     }
                 } else if let Some(old) = g.exprs.get(&key) {
-                    for (r, o) in inst.results.iter().zip(old.clone()) {
+                    for (r, &o) in inst.results.iter().zip(old) {
                         g.repl[r.0 as usize] = o;
                     }
                     dead[i] = true;
@@ -776,7 +913,7 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool], 
                             g.same.insert(*r, old);
                         }
                         _ => {
-                            let old = g.stable.insert(key.clone(), *r);
+                            let old = g.stable.insert(&g.alias, key.clone(), *r);
                             g.undo.push(Undo::Stable(key.clone(), old));
                         }
                     }
@@ -800,15 +937,7 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool], 
                 dead[i] = true;
             }
             Role::Write(access) => {
-                // What's left zero around the bytes written, when they're
-                // at known places in a zeroed stretch.
-                let kept: Vec<MemKey> = g.mem.keys().filter_map(|k| g.zero_left(k, access)).flatten().collect();
-                g.forget(|alias, k| !alias.may_alias(access, k.access()));
-                g.forget_stable(|alias, k| !alias.may_alias(access, k.access()));
-                for k in kept {
-                    let at = k.access().ptr;
-                    g.remember(k, at);
-                }
+                g.invalidate(access, true);
                 match kind {
                     InstKind::Store { ptr, off, mem, val } => {
                         g.remember(MemKey::Load { ptr: g.addr(ptr), off, mem }, val)
@@ -830,8 +959,7 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool], 
             // moves its buffer: what's known of the rest stays known.
             Role::Clobber if let InstKind::Native { name: "mem.grow", args, .. } = &kind => {
                 for access in super::alias::grow_writes(args[0]) {
-                    g.forget(|alias, k| !alias.may_alias(access, k.access()));
-                    g.forget_stable(|alias, k| !alias.may_alias(access, k.access()));
+                    g.invalidate(access, false);
                 }
             }
             Role::Clobber => {
@@ -849,7 +977,7 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool], 
                 if let InstKind::Elem { header, off, index, .. } = kind
                     && let Some((buf, len)) = elem_parts(g, b, i, header, off) =>
             {
-                let key = (g.keyed(InstKind::Bounds { index, len }), Vec::new());
+                let key = (g.keyed(InstKind::Bounds { index, len }), TypeKey::None);
                 let checked = g.exprs.contains_key(&key);
                 if !checked {
                     g.exprs.insert(key.clone(), Vec::new());
@@ -857,27 +985,69 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool], 
                 }
                 g.split.insert((b, i), ((!checked).then_some(len), buf));
             }
-            Role::Other
-                if let InstKind::Native { name, imm, args } = &kind
-                    && LOOKUPS.contains(name) =>
-            {
-                let key: FindKey = (name, *imm, args.iter().map(|&a| g.arg(a)).collect());
-                match g.finds.get(&key) {
-                    Some(old) if old.len() == inst.results.len() => {
-                        for (r, o) in inst.results.iter().zip(old.clone()) {
-                            g.repl[r.0 as usize] = o;
-                        }
-                        dead[i] = true;
-                    }
-                    _ => {
-                        g.finds.insert(key.clone(), inst.results.clone());
-                        g.undo.push(Undo::Find(key, None));
-                        g.forget_loaded();
-                    }
-                }
-            }
-            Role::Other if matches!(kind, InstKind::Native { .. }) => g.forget_loaded(),
             Role::Other => {}
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::heddle::{Block, Inst, Slot};
+
+    #[test]
+    fn memory_buckets_keep_cross_root_aliases() {
+        let kinds = [
+            InstKind::Slot(0),
+            InstKind::Slot(1),
+            InstKind::Global(0),
+            InstKind::Native { name: "mem.alloc", imm: 0, args: Vec::new() },
+            InstKind::Native { name: "mem.alloc", imm: 0, args: Vec::new() },
+            InstKind::Elem { header: Value(0), off: 0, index: Value(7), scale: 8 },
+            InstKind::Offset { ptr: Value(0), off: 8 },
+        ];
+        let f = Func {
+            blocks: vec![Block {
+                params: vec![Value(7)],
+                insts: kinds
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, kind)| Inst {
+                        kind,
+                        results: vec![Value(i as u32)],
+                        span: None,
+                        unwind: None,
+                        site: None,
+                    })
+                    .collect(),
+                // Slot 0 escapes; slot 1 remains private.
+                term: Some(Term::Ret(vec![Value(0)])),
+                ..Block::default()
+            }],
+            types: vec![VTy::Ptr; 8],
+            slots: vec![Slot { size: 32, align: 8 }; 2],
+            ..Func::default()
+        };
+        let alias = Alias::new(&f);
+        let mut facts = Memory::default();
+        let keys: Vec<_> = (0..8).map(|v| MemKey::Load { ptr: Value(v), off: 0, mem: Mem::W64 }).collect();
+        for (i, k) in keys.iter().enumerate() {
+            facts.insert(&alias, k.clone(), Value(i as u32));
+        }
+        let unknown = keys[7].clone();
+        assert!(facts.overlapping(&alias, keys[0].access()).contains(&unknown));
+        assert!(!facts.overlapping(&alias, keys[1].access()).contains(&unknown));
+        assert!(!facts.overlapping(&alias, keys[0].access()).contains(&keys[5]));
+        // Compare every access with a flat fact scan, including shifted
+        // offsets, headers/buffers, fresh heaps and escaped/unknown roots.
+        for k in &keys {
+            for off in [-8, 0, 8, 24, 40] {
+                let access = Access { off, ..k.access() };
+                let got: FxHashSet<_> = facts.overlapping(&alias, access).into_iter().collect();
+                let expected: FxHashSet<_> =
+                    keys.iter().filter(|k| alias.may_alias(access, k.access())).cloned().collect();
+                assert_eq!(got, expected);
+            }
         }
     }
 }

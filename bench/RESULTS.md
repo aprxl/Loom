@@ -529,4 +529,89 @@ and completed task prefixes are scanned once.
 
 The independent release perf gate passes: `par_mandelbrot` 453.603 ms /
 75.102 ms = 6.04x on eight workers (gate 5.6x); spawn/join 1.072 us
-(gate 2 us). All six repository correctness/lint gates pass.
+(gate 2 us). All six repository correctness/lint gates passed for this runtime batch.
+
+### V5 review: compiler passes (2026-10-18)
+
+The optimizer keeps the same pass schedule and transformations. GVN uses
+flat facts with a secondary root index for private-slot facts and zeroed
+regions. Broad writes retain the complete alias scan; dominator undo
+updates both tables. Inert/quiet instruction handling avoids owned
+instruction clones, and zero/single-result type keys need no vector.
+SCCP/GVN skip tidy when unchanged; `carry_last` indexes instruction readers
+once per block.
+
+Release `LOOM_PASS_TIMES=1`, `build FILE --emit heddle`, before/after
+alternating, median of 15 samples per binary. Columns sum all invocations
+of each pass in that compilation, in milliseconds; includes the cleanup
+each pass performs.
+
+| Program | GVN before | GVN after | SCCP before | SCCP after |
+|---|--:|--:|--:|--:|
+| `examples/chip8` | 1.839 | 1.649 | 1.426 | 1.165 |
+| `examples/lexer` | 2.100 | 1.947 | 1.490 | 1.196 |
+| `tests/run/iterators` | 6.070 | 5.830 | 6.000 | 5.457 |
+| `tests/run/map_removals` | 4.730 | 4.590 | 4.478 | 4.097 |
+| `tests/run/maps` | 4.840 | 4.580 | 5.010 | 4.830 |
+| `bench/mandelbrot` | 0.089 | 0.077 | 0.062 | 0.057 |
+
+A full nested map per root was rejected: it slowed GVN on large
+iterator/map programs by 13–24%. A flat primary table removed most of
+that cost, but indexing every fact still slowed `map_removals` by about
+10%. The retained selective index improves GVN on all six above (3–15%)
+without making broad scans traverse retained empty buckets. No separate
+cleanup-pass improvement is claimed by these measurements.
+
+Validation: optimizer and instruction-count snapshots are unchanged;
+all 193 successfully compiled fixture/example/benchmark bytecode listings
+match the pre-compiler-change binary (the same two unsupported examples
+fail in both). The checked/statistics VM passes 20,000 additional generated
+programs at `-O0` and `-O2` against Lua, the seven parallel fixtures 1,000
+times each across 2/4/8/16 workers, and the thread fixtures 1,000 times
+each on eight workers.
+
+Three paired corpus runs of the release `optimizer_compile_time` test,
+alternating binary order (each test takes the best of five per file and
+level). Median aggregate milliseconds over fixtures/examples:
+
+| Stage | before `-O0` | before `-O2` | after `-O0` | after `-O2` |
+|---|--:|--:|--:|--:|
+| Source to image | 396.13 | 646.84 | 395.78 | 631.31 |
+| `compile_at` alone | 221.95 | 471.54 | 221.58 | 456.00 |
+
+That is 2.4% less source-to-image time and 3.3% less `compile_at` time at
+`-O2`; `-O0` is essentially unchanged. The source-to-image ratio drops
+from about 1.63x to 1.60x. A separate final gate run measured 1.61x
+(395.68 / 638.62 ms), with the slowest example 39.25 ms against 200 ms.
+The asserted 1.75x gate passes; the design's 1.5x target remains unmet.
+Neither threshold was changed.
+
+The final release parallel gates also pass: Mandelbrot 445.253 / 73.589 ms
+= 6.05x on eight workers, and spawn/join 1.06 us against the 2 us limit.
+
+Final ordinary release binary versus `9f5e43b`, alternating order, best of
+seven, with outputs compared. All rows below use eight workers and include
+compilation/process startup (milliseconds):
+
+| Benchmark | before | final | speedup |
+|---|--:|--:|--:|
+| `par_mandelbrot` | 73.308 | 70.839 | 1.03x |
+| `par_alloc` | 41.878 | 45.091 | 0.93x |
+| `par_spawn` | 75.940 | 16.683 | 4.55x |
+| `par_spawn_join` | 194.715 | 204.119 | 0.95x |
+| `par_scalar` | 749.665 | 13.534 | 55.39x |
+| `par_sleep` | 814.484 | 111.826 | 7.28x |
+| `task_results` | 60.605 | 29.452 | 2.06x |
+
+Repeating the two slower parallel cases with 21 pairs: `par_alloc`
+43.781 / 43.897 ms (essentially unchanged), and `par_spawn_join`
+190.740 / 203.735 ms (6.8% more time; 1.02 us per pair). Its one-worker
+repeat is 64.553 / 62.844 ms. The eight-worker spawn/join regression is
+retained and needs follow-up; the stack-allocation counter is unchanged.
+No general speedup for allocation or task creation is claimed.
+
+The final sequential suite, best of five pairs, has a geometric speedup
+of 0.996x. Largest slower cases: `richards` 48.746 / 51.287 ms and
+`word_freq` 209.094 / 218.891 ms. Largest faster cases: `fannkuch`
+787.055 / 760.580 ms and `binary_trees` 664.996 / 649.806 ms. These are
+whole-program timings, not timings of the unchanged bytecode in isolation.
