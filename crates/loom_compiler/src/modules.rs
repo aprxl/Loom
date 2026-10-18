@@ -35,6 +35,7 @@ pub trait Loader {
 /// `std` as embedded at build time: `(path below std, source)`.
 const EMBEDDED_STD: &[(&str, &str)] = &[
     ("prelude", include_str!("../../../runtime/std/prelude.loom")),
+    ("bitset", include_str!("../../../runtime/std/bitset.loom")),
     ("cmp", include_str!("../../../runtime/std/cmp.loom")),
     ("deque", include_str!("../../../runtime/std/deque.loom")),
     ("env", include_str!("../../../runtime/std/env.loom")),
@@ -51,6 +52,7 @@ const EMBEDDED_STD: &[(&str, &str)] = &[
     ("num", include_str!("../../../runtime/std/num.loom")),
     ("ops", include_str!("../../../runtime/std/ops.loom")),
     ("option", include_str!("../../../runtime/std/option.loom")),
+    ("priority", include_str!("../../../runtime/std/priority.loom")),
     ("process", include_str!("../../../runtime/std/process.loom")),
     ("rand", include_str!("../../../runtime/std/rand.loom")),
     ("set", include_str!("../../../runtime/std/set.loom")),

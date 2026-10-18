@@ -1,0 +1,26 @@
+// A priority queue as a scheduler: push many, pop in order.
+use std.io.print
+use std.priority.PriorityQueue
+use std.bitset.BitSet
+use std.rand.Rng
+
+const SIZE = 200_000
+
+fn main() {
+    var r = Rng.seeded(3)
+    var q: PriorityQueue[u64] = PriorityQueue.new()
+    var seen = BitSet.new(1_000_000)
+    for _ in 0..SIZE as u64 {
+        let x = r.below(1_000_000)
+        q.push(x)
+        seen.set(x as usize)
+    }
+    var last = 1_000_000u64
+    var sorted = true
+    while q.len() > 0 {
+        let x = q.pop() mend 0
+        if x > last { sorted = false }
+        last = x
+    }
+    print("{sorted} {seen.count()}")
+}

@@ -1,0 +1,36 @@
+use std.io.print
+use std.priority.PriorityQueue
+use std.bitset.BitSet
+use std.cmp.Reverse
+fn main() {
+    var q: PriorityQueue[i32] = PriorityQueue.new()
+    for x in [5, 1, 8, 3, 9, 2, 7] { q.push(x) }
+    print(q.peek())
+    print(q.pop())
+    print(q.pop())
+    print(q.len())
+    print(q.into_sorted().join(","))
+    let h = PriorityQueue.from_list([4, 10, 3, 5, 1, 12])
+    print(h.into_sorted().join(","))
+    var m: PriorityQueue[Reverse[i32]] = PriorityQueue.new()
+    for x in [5, 1, 8] { m.push(Reverse(value: x)) }
+    print(m.pop().map(_.value))
+    var b = BitSet.new(130)
+    b.set(0)
+    b.set(64)
+    b.set(129)
+    b.toggle(64)
+    b.toggle(3)
+    print(b.test(0))
+    print(b.test(64))
+    print(b.count())
+    print(b.items().join(","))
+    var c = BitSet.new(130)
+    c.set(3)
+    c.set(5)
+    b.intersect_with(c)
+    print(b.items().join(","))
+    b.union_with(c)
+    b.subtract(c)
+    print(b.count())
+}

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>std.bitset · Loom</title>
+<link rel="stylesheet" href="../../style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="../../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a href="../../lang/index.html">Language</a></li>
+<li><a class="current" href="../../std/index.html">Standard library</a></li>
+<li><a href="../../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Standard library</h3>
+<ul>
+<li><a href="../index.html">Overview</a></li>
+<li><a href="prelude.html">prelude</a></li>
+<li><a class="current" href="bitset.html">bitset</a></li>
+<li><a href="cmp.html">cmp</a></li>
+<li><a href="deque.html">deque</a></li>
+<li><a href="env.html">env</a></li>
+<li><a href="error.html">error</a></li>
+<li><a href="fmt.html">fmt</a></li>
+<li><a href="fs.html">fs</a></li>
+<li><a href="io.html">io</a></li>
+<li><a href="iter.html">iter</a></li>
+<li><a href="list.html">list</a></li>
+<li><a href="map.html">map</a></li>
+<li><a href="math.html">math</a></li>
+<li><a href="mem.html">mem</a></li>
+<li><a href="meta.html">meta</a></li>
+<li><a href="num.html">num</a></li>
+<li><a href="ops.html">ops</a></li>
+<li><a href="option.html">option</a></li>
+<li><a href="priority.html">priority</a></li>
+<li><a href="process.html">process</a></li>
+<li><a href="rand.html">rand</a></li>
+<li><a href="set.html">set</a></li>
+<li><a href="slice.html">slice</a></li>
+<li><a href="string.html">string</a></li>
+<li><a href="sync.html">sync</a></li>
+<li><a href="target.html">target</a></li>
+<li><a href="term.html">term</a></li>
+<li><a href="time.html">time</a></li>
+</ul>
+</nav>
+<main>
+<div class="crumb"><a href="../index.html">std</a> / bitset</div>
+<h1>std.bitset</h1>
+<p class="summary">Sets of small numbers.</p>
+<h2>Types</h2>
+<div class="item" id="BitSet">
+<div class="item-head">
+<span class="sig">warp <strong>BitSet</strong></span>
+
+</div>
+<p class="item-doc">A set of the numbers <code>0..len</code>, one bit each. Constant-time <code>set</code>, <code>clear</code>, <code>test</code> and <code>toggle</code>; <code>count</code> and the bulk operations work a word of 64 bits at a time.</p>
+<div class="members">
+<div class="member" id="BitSet.new">
+<div class="member-head">
+<span class="sig">fn new(len: usize) -&gt; BitSet</span>
+
+</div>
+<p class="member-doc">A set of <code>len</code> numbers, none in it.</p>
+</div>
+<div class="member" id="BitSet.len">
+<div class="member-head">
+<span class="sig">fn len(self) -&gt; usize</span>
+
+</div>
+<p class="member-doc">How many numbers it can hold: they are <code>0</code> up to this.</p>
+</div>
+<div class="member" id="BitSet.set">
+<div class="member-head">
+<span class="sig">fn set(mut self, i: usize)</span>
+
+</div>
+<p class="member-doc">Puts <code>i</code> in. Unravels if <code>i &gt;= len</code>.</p>
+</div>
+<div class="member" id="BitSet.clear">
+<div class="member-head">
+<span class="sig">fn clear(mut self, i: usize)</span>
+
+</div>
+<p class="member-doc">Takes <code>i</code> out. Unravels if <code>i &gt;= len</code>.</p>
+</div>
+<div class="member" id="BitSet.toggle">
+<div class="member-head">
+<span class="sig">fn toggle(mut self, i: usize)</span>
+
+</div>
+<p class="member-doc">Puts <code>i</code> in if it is out, and out if it is in.</p>
+</div>
+<div class="member" id="BitSet.test">
+<div class="member-head">
+<span class="sig">fn test(self, i: usize) -&gt; bool</span>
+
+</div>
+<p class="member-doc">Whether <code>i</code> is in. Unravels if <code>i &gt;= len</code>.</p>
+</div>
+<div class="member" id="BitSet.count">
+<div class="member-head">
+<span class="sig">fn count(self) -&gt; usize</span>
+
+</div>
+<p class="member-doc">How many numbers are in.</p>
+</div>
+<div class="member" id="BitSet.items">
+<div class="member-head">
+<span class="sig">fn items(self) -&gt; List[usize]</span>
+
+</div>
+<p class="member-doc">The numbers that are in, from the smallest.</p>
+</div>
+<div class="member" id="BitSet.intersect_with">
+<div class="member-head">
+<span class="sig">fn intersect_with(mut self, other: BitSet)</span>
+
+</div>
+<p class="member-doc">Keeps the numbers that are also in <code>other</code>. The sets must be the same size.</p>
+</div>
+<div class="member" id="BitSet.union_with">
+<div class="member-head">
+<span class="sig">fn union_with(mut self, other: BitSet)</span>
+
+</div>
+<p class="member-doc">Adds the numbers in <code>other</code>. The sets must be the same size.</p>
+</div>
+<div class="member" id="BitSet.subtract">
+<div class="member-head">
+<span class="sig">fn subtract(mut self, other: BitSet)</span>
+
+</div>
+<p class="member-doc">Takes out the numbers that are in <code>other</code>. The sets must be the same size.</p>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body>
+</html>

@@ -42,6 +42,27 @@ MODULES = [
 },
 
 {
+  "name": "bitset",
+  "summary": "Sets of small numbers.",
+  "types": [
+    {"kind": "warp", "name": "BitSet", "doc": "A set of the numbers `0..len`, one bit each. Constant-time `set`, `clear`, `test` and `toggle`; `count` and the bulk operations work a word of 64 bits at a time.",
+     "methods": [
+       {"sig": "fn new(len: usize) -> BitSet", "doc": "A set of `len` numbers, none in it."},
+       {"sig": "fn len(self) -> usize", "doc": "How many numbers it can hold: they are `0` up to this."},
+       {"sig": "fn set(mut self, i: usize)", "doc": "Puts `i` in. Unravels if `i >= len`."},
+       {"sig": "fn clear(mut self, i: usize)", "doc": "Takes `i` out. Unravels if `i >= len`."},
+       {"sig": "fn toggle(mut self, i: usize)", "doc": "Puts `i` in if it is out, and out if it is in."},
+       {"sig": "fn test(self, i: usize) -> bool", "doc": "Whether `i` is in. Unravels if `i >= len`."},
+       {"sig": "fn count(self) -> usize", "doc": "How many numbers are in."},
+       {"sig": "fn items(self) -> List[usize]", "doc": "The numbers that are in, from the smallest."},
+       {"sig": "fn intersect_with(mut self, other: BitSet)", "doc": "Keeps the numbers that are also in `other`. The sets must be the same size."},
+       {"sig": "fn union_with(mut self, other: BitSet)", "doc": "Adds the numbers in `other`. The sets must be the same size."},
+       {"sig": "fn subtract(mut self, other: BitSet)", "doc": "Takes out the numbers that are in `other`. The sets must be the same size."},
+     ]},
+  ],
+},
+
+{
   "name": "cmp",
   "summary": "Comparing.",
   "types": [
@@ -422,6 +443,25 @@ MODULES = [
   "functions": [
     {"name": "then", "suffix": "[T](cond: bool, f: () => T) -> ?T", "doc": "`f()` when the condition holds: `(n > 0).then(() => 100 / n)`."},
     {"name": "then_some", "suffix": "[T](cond: bool, take x: T) -> ?T", "doc": "`x` when the condition holds."},
+  ],
+},
+
+{
+  "name": "priority",
+  "summary": "Priority queues.",
+  "types": [
+    {"kind": "warp", "name": "PriorityQueue", "suffix": "[T: Ord]", "doc": "A queue that gives the largest item first. For the smallest first, put `Reverse` around the items (`std.cmp.Reverse`). A binary heap in a list: `push` and `pop` take `O(log n)`, `peek` takes constant time.",
+     "methods": [
+       {"sig": "fn new() -> PriorityQueue[T]", "doc": "An empty queue."},
+       {"sig": "fn from_list(take items: List[T]) -> PriorityQueue[T]", "doc": "A queue of `items`, made in `O(n)`."},
+       {"sig": "fn len(self) -> usize", "doc": "How many items there are."},
+       {"sig": "fn is_empty(self) -> bool", "doc": None},
+       {"sig": "fn peek(self) -> ?T", "doc": "A copy of the largest item."},
+       {"sig": "fn push(mut self, take x: T)", "doc": "Adds `x`."},
+       {"sig": "fn pop(mut self) -> ?T", "doc": "Takes off the largest item."},
+       {"sig": "fn clear(mut self)", "doc": "Removes every item."},
+       {"sig": "fn into_sorted(take self) -> List[T]", "doc": "The items from the largest to the smallest, in a new list; this queue is used up."},
+     ]},
   ],
 },
 
