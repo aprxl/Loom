@@ -1,17 +1,19 @@
-//! Everything semantic in the Loom → Lua pipeline.
+//! Everything semantic in Loom, between the parser and the two backends.
 //!
 //! ```text
 //! SourceDb → lex → Tokens → parse → AST → resolve/desugar → HIR
-//!   → typeck(Instance) → THIR ⇄ const eval (Rust fold | sandboxed Lua)
-//!   → flow::Cfg → analyses → FlowFacts
-//!   → lower → LIR → lir_verify → luagen → Bundle { lua, source map }
+//!   → typeck → THIR → analyses (moves, gauges, concurrency) → lower
+//!       ├─ lower → luagen → Bundle { lua, source map }      (the Lua backend)
+//!       └─ heddle (typed SSA IR) → opt → codegen → image    (Treadle, `loom_vm`)
 //! ```
 //!
 //! The lexer and parser live in `loom_syntax`. This crate has name
-//! resolution ([`hir`], [`modules`]), type checking ([`ty`], [`typeck`]) and
-//! lowering to Lua ([`lower`]), each covering the same first slice of the
-//! language. Still to come: `consteval`, `flow` (the analyses) and
-//! `lir_verify`. See `design/lua-backend.md` for the decisions they implement.
+//! resolution ([`hir`], [`modules`]), type checking ([`ty`], [`typeck`]),
+//! compile-time code ([`consteval`], run as jobs on an in-process Treadle,
+//! and [`baked`], the values it computed), lowering to Lua ([`lower`]), and
+//! the Treadle pipeline ([`heddle`], [`codegen`], [`treadle`]). See
+//! `design/lua-backend.md` and `design/vm.md` for the decisions they
+//! implement.
 
 pub mod baked;
 pub mod codegen;

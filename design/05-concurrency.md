@@ -106,8 +106,13 @@ let (a, b) = loom {
 ```
 
 - **`thread expr`** evaluates `expr` on the loom's worker pool and returns a
-  **`Spun[T]`** handle. **`.join()`** waits for the result and returns `T`,
-  which is a `T ! E` if `expr` could fail.
+  **`Spun[T]`** handle, where `T` is the type of `expr` (`return` leaves the
+  thread, and a `?` in it can't reach a `mend` outside it). **`.join()`**
+  (`fn join(take self) -> T`) waits for the thread and gives its value as it
+  is: if `expr` is a `U ! E`, `join` gives the `U ! E` for the caller to
+  handle, it doesn't propagate it. A handle is joined once (a second `join`
+  unravels), and a `Spun[T]` is `once` when `T` is. If a thread unravelled,
+  `join` unravels in the joiner with a note of where the thread started.
 - `thread` only works lexically inside a `loom` block, and it belongs to the
   innermost one. The block acts as a region: a handle's type is
   `Spun[T]@<that loom>`. Like arena pointers, handles can go into a `List`
@@ -146,8 +151,14 @@ error[C0401]: `hits` is mutated by more than one thread
 If the block exits early through `?`, `return`, `break`, or a thread that
 unraveled, the loom:
 
-1. **cancels** the unfinished threads, cooperatively, at their next `yield`,
-   `pull`, `join`, I/O call, or explicit `sched_yield()`
+1. **cancels** the unfinished threads, cooperatively, at their next
+   cancellation point: a `yield`, `pull`, `join`, `sched_yield()`, a wait on
+   a `Mutex` (`lock`) or a `Pipe` (`send`, `recv`), or the wait for a
+   constant another thread is computing. **I/O is not a cancel point yet**:
+   a thread that is inside a file or terminal call isn't interrupted, and
+   one that never reaches a cancellation point can't be cancelled (the
+   block waits for it). Making I/O calls cancel points is planned with
+   `std.reel` (see below).
 2. **waits** for all of them
 3. carries on with the exit: returning, propagating the error, or unravelling
    again in the parent
@@ -173,8 +184,12 @@ marked `#disjoint` in `std`.
 ### Where threads run
 
 A loom schedules threads on the ambient `given pool: Pool`. The default is a
-global work-stealing pool with one worker per core. For a dedicated pool,
-write `loom(given: my_pool) { ... }`. Loom has no hidden async runtime.
+global pool with one worker per core (`LOOM_THREADS` changes the count; with
+one worker threads run in the reference schedule: a thread runs at once until
+it parks). For a dedicated pool, `loom(given: my_pool) { ... }` is planned,
+but **not implemented yet**: it waits for V6, which brings `given`, and a
+`loom` with arguments is rejected today with a `U` diagnostic. There is no
+`Pool` type in `std` yet either. Loom has no hidden async runtime.
 
 ---
 

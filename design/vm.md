@@ -8,6 +8,8 @@
 > **V4 is built** (2026-10-11): compile-time code runs on Treadle, in the
 > compiler's process, for both backends, and what it computed is baked into
 > the image and the Lua bundle (§17).
+> **V5 is built** (2026-10-17): threads on several workers, with the limits
+> listed in §17.
 > The decisions in
 > [section 3](#3-decisions) were settled on 2026-09-29.
 
@@ -1275,7 +1277,9 @@ for V6.
   and a `// SAFETY:` comment for its raw pointers), a `Task` (value stack,
   `pc`, `fp`, segment end, ticks, the unwind in flight, a cancel flag), and a
   `Worker` (heap cache, output). Workers are OS threads, one per core by
-  default (`LOOM_THREADS` changes it), each with a work-stealing deque. A
+  default (`LOOM_THREADS` changes it), around one scheduler (ready queue,
+  parked tasks), with a heap each. There are no per-worker deques and no
+  stealing; see "As built" below for why. A
   task's whole state is data, so parking one means saving three words, and
   its worker picks up another. These are green threads with no OS stack
   switching. A thread's first stack segment is small (or taken from the
@@ -1349,14 +1353,17 @@ for V6.
   and every lock and unlock would invalidate them. Spawning and joining a
   thread of its own costs 0.9 µs on 4 to 16 workers (0.7 on 2; the gate is
   2; bench/RESULTS.md has the profile): the lock is held for about 0.4 µs
-  of each, so per-worker deques with stealing are not built.
+  of each, and the profile put the cost in idle workers contending for the
+  lock, which deques would not have touched: so per-worker deques with
+  stealing are not built (the scheduler is one queue; idle workers spin on
+  the count of ready tasks).
   Allocation is off the lock too (the natives above, `mem.move`, and the free
   of a list's buffer; the natives that build text still allocate under
   it, from the context's heap, which exchanges memory with the workers' the
   same way): `par_alloc`, which builds and drops trees of small lists in
   `loom for`, ran 0.37× as fast on 8 workers as on one, and runs 4.9× as
-  fast. **Not yet:** halving a chunk on a steal, like Rayon, and chunks of
-  other iterators than exclusive integer ranges.
+  fast. **Not yet:** splitting a chunk adaptively (like Rayon, which needs
+  stealing), and chunks of other iterators than exclusive integer ranges.
 
 ---
 
@@ -1902,6 +1909,27 @@ Passing:
    no hang (`--ignored`).
 6. Speed: mandelbrot with `loom for` scales to at least 0.7× the number of
    cores, and spawning and joining a thread takes under 2 µs.
+
+**Status: done (2026-10-17).** `loom for` over an exclusive integer range
+runs in chunks (`task.grain`), spawning and joining takes about 1 µs on 8
+workers (0.88 µs; it was 2.2 µs before idle workers spun on the ready count
+instead of taking the lock), allocation is per-worker (§5.5), and a thread's
+unravel carries a note of where the thread started on both backends (P8,
+§11.2). The gates are asserted by `#[ignore]`d tests (`perf_gates.rs`,
+`compile_time.rs`), and met with these limits, which are honest ones:
+
+- Only `loom for` over an **exclusive integer range** chunks; inclusive and
+  open ranges, lists, streams and `chunks_mut` still make a task per item.
+- The grain is fixed when the loop starts (`n / (8 × workers)`), not
+  adaptive; there are no per-worker deques and no stealing.
+- The optimizer's compile-time ratio (V3's gate of 1.5× `-O0`) measures
+  about 1.63× over today's larger corpus, because the front end got faster;
+  the test asserts 1.75×, so the 1.5× of the design is not met as written.
+- `par_mandelbrot` scales about 5.7× on 8 workers against the gate's 5.6×
+  (0.7 × 8): it passes with little room (best-of-N runs in
+  bench/RESULTS.md read up to 6.3×), and 8 workers is the physical core
+  count of the test machine, not its 16 logical cores.
+- `yield`/`pull` in a loom body and `loom(given: …)` wait for V6.
 
 ### V6: spools and `given` (frontend about 4k, VM about 2k)
 
