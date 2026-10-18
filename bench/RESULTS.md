@@ -76,7 +76,7 @@ The other gates of §17's V3 passing list:
 | | Gate | Now |
 |---|---|---|
 | 4. checks gone at `-O2` | 80% of bounds, 60% of overflow | **87.4%** of 721 048 bounds checks, **62.4%** of 1 434 750 overflow checks, over `bench/` at `counts.txt`'s sizes (`check_counts.rs`) |
-| 6. compile time at `-O2` | at most 1.5× `-O0`, no example over 200 ms | **1.48×** from source to image over `tests/run` and `examples` (`compile_at` alone, the front end left out: 1.7×); slowest example 61 ms; the benchmarks compile in 0.8 to 7 ms (`cargo test --release -p loom --test compile_time -- --ignored --nocapture`) |
+| 6. compile time at `-O2` | at most 1.5× `-O0`, no example over 200 ms | **1.48×** when measured at V3, **1.62–1.64×** now over the larger corpus (the front end got faster, which raises the ratio; `compile_time.rs` asserts 1.75×), from source to image over `tests/run` and `examples` (`compile_at` alone, the front end left out: 1.7×); slowest example 61 ms; the benchmarks compile in 0.8 to 7 ms (`cargo test --release -p loom --test compile_time -- --ignored --nocapture`) |
 
 The checks left at `-O2` (about 91 000 bounds checks): fannkuch's swap loop
 (35 610 of its 39 230: `perm[j]` is checked on every trip, and only the
@@ -351,9 +351,9 @@ to 0.286 s; the benchmark suite within noise.
 `bench/par_spawn.loom` (200 000 empty iterations: a spawn and a join each):
 0.35 µs each on one worker, 0.8 µs on 2, 1.2 µs on 4, 2.7 µs on 8 (every
 spawn and every wake goes through the pool's one lock). That misses V5's
-gate of 2 µs on 8 workers; per-worker deques are the next step if it
-matters, and `loom for` doesn't chunk its iterations yet, which is the
-cheaper fix for small items (see `Range.chunks`; done below). The single-thread benchmarks are unchanged
+gate of 2 µs on 8 workers (this was the first measure; the sections below
+fix it: `loom for` chunks, and spawn+join comes to 0.88 µs on 8 workers
+without per-worker deques). The single-thread benchmarks are unchanged
 by the pool (A/B against the commit before it, within 2%).
 
 ### V5 close-out baseline (2026-10-17)

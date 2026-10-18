@@ -220,7 +220,7 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
     purpose: building the program from the job build's module, and baking
     maps, sets and sums (they're computed when read).
 
-27. Treadle V5, threads (design/vm.md §11), done but for two gates. `loom`,
+27. Treadle V5, threads (design/vm.md §11), done (limits below). `loom`,
     `thread`, `Spun[T]`, `join`, `sched_yield` and the capture rules
     (C0401–C0405) on both backends; the reference schedule (a thread runs
     at once, until it parks; the spawner waits at the front, woken tasks
@@ -244,14 +244,19 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
     when there are several workers (`task.grain`; `par_spawn` on 8 workers
     0.56 s to 0.07 s); other iterators keep a task per item.
 
-V5's gates, honestly: every one passes. Mandelbrot with `loom for` scales
-6.1× on 8 workers (0.76 of the physical cores, 0.38 of the 16 logical ones
-this machine reports), and spawning and joining takes 0.31 µs on one worker
-and 0.9 µs on 8. Not done: `loom for` chunks only exclusive integer ranges,
-at a fixed grain, not adaptively (design/vm.md §11.4).
+V5 is done. Its gates are asserted by `#[ignore]`d tests (`perf_gates.rs`,
+`compile_time.rs`), with these limits: mandelbrot with `loom for` scales
+about 5.7× on 8 workers (6.1–6.3× best of N in `bench/RESULTS.md`) against
+the gate's 5.6× (0.7 × 8 physical cores; 0.36 of the 16 logical ones);
+spawn+join takes 0.3 µs on one worker and about 1 µs on 8 (gate 2 µs);
+the optimizer's compile-time ratio is about 1.63× `-O0` (design says 1.5×;
+the test asserts 1.75×); only `loom for` over exclusive integer ranges
+chunks, at a fixed grain; there are no per-worker deques or stealing.
+`yield`/`pull` in a loom and `loom(given: …)` wait for V6; I/O is not a
+cancel point yet (design/vm.md §11.4, §17).
 
-Next: V6 spools, V7 Lua interop, V8 speed (and V5's loose end: adaptive
-chunking of more iterators), V9 Treadle by default.
+Next: V6 spools (and `given`), V7 Lua interop, V8 speed, V9 Treadle by
+default.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and
