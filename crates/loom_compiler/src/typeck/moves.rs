@@ -794,7 +794,20 @@ impl Checker<'_> {
             // `.consume()` in a method: takes `self`.
             self.move_local(cx, callee.id, l, &[], callee.span);
         }
+        // A lambda's parameters are the items of the receiver, borrowed from
+        // what the receiver is made from, as a loop's are.
+        let item_roots = base.map(|base| self.receiver_roots(cx, base)).unwrap_or_default();
         for (i, arg) in args.iter().enumerate() {
+            if let ExprKind::Lambda { params, .. } = &arg.value.kind
+                && !item_roots.is_empty()
+            {
+                for p in params {
+                    let ty = self.b.local_ty.get(&p.local).copied();
+                    if ty.is_some_and(|t| self.holds_borrow(t)) {
+                        cx.item_roots.insert(p.local, item_roots.clone());
+                    }
+                }
+            }
             // A stream given to a call is used up, whatever the parameter:
             // `a.chain(b)` reads `b` to its end.
             let take = mode_of(super::ArgSource::Arg(i)) == ParamMode::Take;
@@ -1077,6 +1090,32 @@ impl Checker<'_> {
             TyKind::Fn(..) => true,
             TyKind::Adt(def, _) => Some(*def) == self.std.slice || Some(*def) == self.std.stream,
             _ => false,
+        }
+    }
+
+    /// The locals the items of `recv` (the receiver of a method call) are
+    /// borrowed from: its roots, if it is a list, a slice, a map, a set or
+    /// a stream.
+    fn receiver_roots(&mut self, cx: &MoveCx, recv: &Expr) -> Vec<LocalId> {
+        let Some(ty) = self.b.expr_ty.get(&recv.id).copied().map(|t| self.deep_resolve(t)) else { return Vec::new() };
+        let mut roots = Vec::new();
+        if self.seq(ty).is_some() || self.coll_parts(ty).is_some() || self.is_borrowing_ty(ty) {
+            self.borrowed_roots(cx, recv, &mut roots);
+        }
+        roots
+    }
+
+    /// Whether a value of `ty` can be, or hold, a borrow of something else:
+    /// text and slices, and anything that isn't `Copy` (an item of a list is
+    /// borrowed). A number is a copy of its item.
+    fn holds_borrow(&mut self, ty: Ty) -> bool {
+        let ty = self.deep_resolve(ty);
+        match self.tcx.kind(ty).clone() {
+            TyKind::Str => true,
+            TyKind::Adt(def, _) if Some(def) == self.std.slice => true,
+            TyKind::Tuple(items) => items.iter().any(|&t| self.holds_borrow(t)),
+            TyKind::Optional(t) => self.holds_borrow(t),
+            _ => !self.is_copy(ty),
         }
     }
 

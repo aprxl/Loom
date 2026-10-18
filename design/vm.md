@@ -1217,19 +1217,23 @@ moved: `take`; otherwise read).
   into a failed loom, has it dropped by its group); a thread can't change
   such a copy (C0405). A copied
   borrow's root has to outlive the loom, and is checked from what the move
-  checker tracks (`borrows`, loop items, bound parts); a block's `defer`
-  runs before the guard waits, so a thread can't rely on it.
+  checker tracks (`borrows`, loop items, bound parts, and the parameters of
+  a lambda given to a method of a list, a slice, a map, a set or a stream,
+  which are its items); a block's `defer` runs before the guard waits, so
+  a thread can't rely on it. A parameter that is a number is a copy of its
+  item and needs none of this; one that is text, a slice or an owned value
+  is a borrow of what the receiver is made from.
 - **`loom for pat in iter { body }`** is `loom { for pat in iter { thread {
   body } }; () }` (desugared in HIR, so both backends have it): the parent
   goes through the iterator, and each item's thread starts at once, which is
   one thread per iteration on the reference schedule. An iteration's value
   is `()`, and it can't leave itself: `break`, `return`, a `continue` of an
   outer loop and a `?` with no `mend` are C0406; `continue` ends it.
-- **Not yet:** a copied `str` or slice whose backing the checker doesn't
-  track (a stream's items, a lambda parameter) isn't checked against the
-  loom, and `yield` and `pull` inside a loom block are U0102 (a suspended
-  shuttle would hold the group). A lambda that contains a `thread` can still
-  leave its loom (only `Spun` itself is tracked, not function types holding
+- **Not yet:** a lambda parameter of a method called on a list that a call
+  just made (`xs.filter(f).map(n => thread g(n))`: the list in between is a
+  temporary) isn't checked against the loom, and `yield` and `pull` inside a
+  loom block are U0102 (a suspended shuttle would hold the group). A lambda
+  that contains a `thread` can still leave its loom (only `Spun` itself is tracked, not function types holding
   one), and a handle joined on only some paths releases what it held on all
   of them.
 - **A `Spun[T]` holds** the read and `mut` captures it took by reference,

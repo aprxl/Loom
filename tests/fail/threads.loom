@@ -139,3 +139,53 @@ fn a_borrow_of_what_outlives_the_loom_is_fine(names: List[str]) {
         }
     }
 }
+
+fn a_lambda_parameter_borrows_a_loom_local() {
+    loom {
+        let names: List[String] = ["a".to_string(), "bb".to_string()]
+        let jobs = names.map(n => thread n.len())       //~ C0405
+        for job in jobs {
+            print(job.join())
+        }
+    }
+}
+
+fn through_a_stream_over_a_loom_local() {
+    loom {
+        let text = "a bb ccc".to_string()
+        let jobs = text.words().map(w => thread w.len()).collect()      //~ C0405
+        for job in jobs {
+            print(job.join())
+        }
+    }
+}
+
+fn a_lambda_over_a_slice_of_a_loom_local() {
+    loom {
+        let names: List[str] = ["a", "bb", "ccc"]
+        let rest = names[1..]
+        let jobs = rest.map(n => thread n.len())        //~ C0405
+        for job in jobs {
+            print(job.join())
+        }
+    }
+}
+
+fn a_lambda_over_what_outlives_the_loom_is_fine(names: List[String]) {
+    loom {
+        let jobs = names.map(n => thread n.len())
+        for job in jobs {
+            print(job.join())
+        }
+    }
+}
+
+fn numbers_are_copies_of_their_items() {
+    loom {
+        let xs: List[i32] = [1, 2]
+        let jobs = xs.map(x => thread x + 1)
+        for job in jobs {
+            print(job.join())
+        }
+    }
+}
