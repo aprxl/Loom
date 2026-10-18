@@ -1,0 +1,16 @@
+use std.io.print
+use std.cmp.Reverse
+
+warp P: Eq, Ord { a: i32, b: i32 }
+
+fn main() {
+    print(min(3, 2))
+    print(max(3, 2))
+    print(15.clamp(0, 10))
+    print(1.cmp(2))
+    print("b".cmp("a"))
+    print(P(a: 1, b: 2).cmp(P(a: 1, b: 2)))
+    print(Ordering.Less.then(Ordering.Greater))
+    print(Ordering.Equal.then(Ordering.Greater).reverse())
+    print(Reverse(value: 3) < Reverse(value: 5))
+}

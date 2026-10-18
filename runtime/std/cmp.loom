@@ -1,0 +1,50 @@
+// Comparing.
+
+/// How two values compare.
+pub warp Ordering: Eq, Ord, Show {
+    case Less
+    case Equal
+    case Greater
+
+    /// `Less` becomes `Greater` and the other way round.
+    pub fn reverse(self) -> Ordering {
+        match self {
+            .Less => Ordering.Greater
+            .Equal => Ordering.Equal
+            .Greater => Ordering.Less
+        }
+    }
+
+    /// Breaks a tie: `a.age.cmp(b.age).then(a.name.cmp(b.name))`.
+    pub fn then(self, other: Ordering) -> Ordering {
+        match self {
+            .Equal => other
+            _ => self
+        }
+    }
+}
+
+/// How `a` compares to `b`: `x.cmp(y)` also works on numbers and text.
+pub fn cmp[T: Ord](a: T, b: T) -> Ordering {
+    if a < b { Ordering.Less } else if b < a { Ordering.Greater } else { Ordering.Equal }
+}
+
+/// The smaller of two values (the first, if they are equal).
+pub fn min[T: Ord](a: T, b: T) -> T = if b < a { b } else { a }
+
+/// The larger of two values (the first, if they are equal).
+pub fn max[T: Ord](a: T, b: T) -> T = if a < b { b } else { a }
+
+/// `x`, or the nearest of `lo` and `hi` when it is outside them.
+pub fn clamp[T: Ord](x: T, lo: T, hi: T) -> T {
+    assert(not (hi < lo), "clamp: lo is greater than hi")
+    if x < lo { lo } else if hi < x { hi } else { x }
+}
+
+/// A value that compares the other way round: sorting by `Reverse(score)`
+/// puts the highest score first.
+pub warp Reverse[T: Ord]: Ord {
+    pub value: T
+
+    pub fn lt(self, other: Reverse[T]) -> bool = other.value < self.value
+}

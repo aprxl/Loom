@@ -46,4 +46,129 @@ pub warp Slice[T] {
     /// Views of every run of `n` elements in a row: `[a, b]`, `[b, c]`, …
     /// Unravels if `n` is 0.
     pub fn windows(self, n: usize) -> Stream[[T]]
+    /// Sorts so that `less(a, b)` says whether `a` goes before `b`. Stable:
+    /// elements neither goes before the other keep their order.
+    pub fn sort_by(mut self, less: (T, T) => bool) {
+        var order = sorted_order(self.len(), (i, j) => less(self[i], self[j]))
+        apply_order(mut self, mut order)
+    }
+    /// Sorts by `key` of each element, which is computed once per element.
+    /// Stable.
+    pub fn sort_by_key[K: Ord](mut self, key: T => K) {
+        let keys = self.map(key)
+        var order = sorted_order(self.len(), (i, j) => keys[i] < keys[j])
+        apply_order(mut self, mut order)
+    }
+    /// Whether every element is at or after the one before it.
+    pub fn is_sorted(self) -> bool where T: Ord {
+        for i in 1..self.len() {
+            if self[i] < self[i - 1] { return false }
+        }
+        true
+    }
+    /// The index of the first element that is not before `x` in a sorted
+    /// slice: where `x` would go.
+    pub fn lower_bound(self, x: T) -> usize where T: Ord {
+        self.partition_point(e => e < x)
+    }
+    /// The index of the first element after `x` in a sorted slice.
+    pub fn upper_bound(self, x: T) -> usize where T: Ord {
+        self.partition_point(e => not (x < e))
+    }
+    /// The index of an element equal to `x` in a sorted slice.
+    pub fn binary_search(self, x: T) -> ?usize where T: Ord {
+        let i = self.lower_bound(x)
+        if i < self.len() and not (x < self[i]) { some(i) } else { none }
+    }
+    /// In a slice where `pred` says yes to a run of elements and then no to
+    /// the rest, the index of the first no.
+    pub fn partition_point(self, pred: T => bool) -> usize {
+        var lo = 0
+        var hi = self.len()
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2
+            if pred(self[mid]) { lo = mid + 1 } else { hi = mid }
+        }
+        lo
+    }
+}
+
+const RUN: usize = 8
+
+/// The indices `0..n` in an order that stably sorts them by `before`.
+fn sorted_order(n: usize, before: (usize, usize) => bool) -> List[usize] {
+    var a: List[usize] = List.filled(0, n)
+    for i in 0..n { a[i] = i }
+    var sorted = true
+    for i in 1..n {
+        if before(i, i - 1) {
+            sorted = false
+            break
+        }
+    }
+    if sorted { return a }
+    var lo = 0
+    while lo < n {
+        let hi = min(lo + RUN, n)
+        for i in lo + 1..hi {
+            let v = a[i]
+            var j = i
+            while j > lo and before(v, a[j - 1]) {
+                a[j] = a[j - 1]
+                j -= 1
+            }
+            a[j] = v
+        }
+        lo = hi
+    }
+    var b: List[usize] = List.filled(0, n)
+    var width = RUN
+    while width < n {
+        var start = 0
+        while start < n {
+            let mid = min(start + width, n)
+            let end = min(start + 2 * width, n)
+            var i = start
+            var j = mid
+            var k = start
+            while i < mid and j < end {
+                if before(a[j], a[i]) {
+                    b[k] = a[j]
+                    j += 1
+                } else {
+                    b[k] = a[i]
+                    i += 1
+                }
+                k += 1
+            }
+            while i < mid {
+                b[k] = a[i]
+                i += 1
+                k += 1
+            }
+            while j < end {
+                b[k] = a[j]
+                j += 1
+                k += 1
+            }
+            start = end
+        }
+        a.copy_from(b)
+        width *= 2
+    }
+    a
+}
+
+/// Puts `xs[order[k]]` at `k` for every `k`, by swaps.
+fn apply_order[T](mut xs: [T], mut order: List[usize]) {
+    for i in 0..order.len() {
+        var cur = i
+        while order[cur] != i {
+            let next = order[cur]
+            xs.swap(cur, next)
+            order[cur] = cur
+            cur = next
+        }
+        order[cur] = cur
+    }
 }

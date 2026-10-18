@@ -172,7 +172,7 @@ independent enough to ship alone.
 
 ### Phase 0: foundations (unblocks the rest)
 
-```loom
+```text
 // std.cmp
 pub warp Ordering: Eq, Ord, Show {
     case Less, Equal, Greater
@@ -180,15 +180,15 @@ pub warp Ordering: Eq, Ord, Show {
     /// Breaks a tie: `a.age.cmp(b.age).then(a.name.cmp(b.name))`.
     pub fn then(self, other: Ordering) -> Ordering
 }
-pub weft Ord: Eq {
-    fn lt(self, other: Self) -> bool        // as now; derived from fields
-    fn cmp(self, other: Self) -> Ordering   // new, derived the same way
-}
+// `cmp` is a free function in the prelude, so `a.cmp(b)` works on every `Ord`
+// type through UFCS. (A default method `Ord.cmp` recursed: the derived `<`
+// runs through the runtime's comparison, which finds the new method.)
+pub fn cmp[T: Ord](a: T, b: T) -> Ordering
 pub fn min[T: Ord](a: T, b: T) -> T
 pub fn max[T: Ord](a: T, b: T) -> T
 pub fn clamp[T: Ord](x: T, lo: T, hi: T) -> T
 /// Flips the order: `xs.sort_by_key(Reverse(_.score))` is highest first.
-pub warp Reverse[T: Ord](T): Ord
+pub warp Reverse[T: Ord]: Ord { pub value: T }
 
 // std.default
 pub weft Default { fn default() -> Self }   // derived: field defaults, else the field type's
@@ -208,7 +208,7 @@ common case.
 
 **Sorting** [L, with a native fast path for primitive keys]:
 
-```loom
+```text
 pub fn sort(mut self) where T: Ord                          // exists; same algorithm underneath
 pub fn sort_by(mut self, less: (T, T) => bool)
 pub fn sort_by_key[K: Ord](mut self, key: T => K)
@@ -234,7 +234,7 @@ stability test with equal keys.
 
 **Stream** (all [L] or the existing fused [B] path, per step 0):
 
-```loom
+```text
 pub fn rev(take self) -> Stream[T]            // only on sources that know their end:
                                               // slices, lists, ranges, chars(), indexed() of those
 pub fn step_by(take self, n: usize) -> Stream[T]
@@ -278,7 +278,7 @@ length; `counts` on 4M items is within 10% of the hand-written `Map` loop in
 
 **List and Slice**:
 
-```loom
+```text
 // List
 pub fn with_capacity(n: usize) -> List[T]
 pub fn reserve(mut self, extra: usize)
@@ -310,7 +310,7 @@ reallocation.
 
 **Map and Set**:
 
-```loom
+```text
 // Map
 pub fn of(pairs: [(K, V)]) -> Map[K, V]
 pub fn with_capacity(n: usize) -> Map[K, V]
@@ -359,7 +359,7 @@ hello-world binary and image sizes grow by < 2% (tables are lazy).
 
 **Str** [B for view-returning, N for search, L for the rest]:
 
-```loom
+```text
 pub fn split_once(self, sep: str) -> ?(str, str)             // rsplit_once
 pub fn splitn(self, n: usize, sep: str) -> Stream[str]       // rsplit, split_terminator
 pub fn split_by(self, f: char => bool) -> Stream[str]
@@ -387,7 +387,7 @@ pub fn parse_radix[T: Parse](self, radix: u32) -> T ! NumError
 
 **Fmt** (so user `Show` weaves behave like built-ins):
 
-```loom
+```text
 pub fn spec(self) -> Spec          // width, fill, align, precision, radix, debug flag
 pub fn put_str(mut self, s: str)
 pub fn pad(mut self, s: str)       // writes `s` honouring the spec: `{name:>12}` works for user types
@@ -408,7 +408,7 @@ Gates for the rest: `split_once`, `strip_prefix`, `lines` stay allocation-free
 
 ### Phase 3: numbers and math
 
-```loom
+```text
 // Int[T]
 pub fn signum / is_negative (self)
 pub fn clamp(self, lo: T, hi: T) -> T
@@ -456,7 +456,7 @@ All host services (`io`, `fs`, `env`, `process`, `term`, `time`) go through
 **io.** The pair of wefts mirrors Rust's `Read`/`Write` and C++'s streams, and
 makes everything else composable:
 
-```loom
+```text
 pub fn print(x: any Show)                   // exists
 pub fn eprint(x: any Show)                  // stderr, newline
 pub fn write(x: any Show)                   // stdout, no newline  (ewrite for stderr)
@@ -477,7 +477,7 @@ allocates one `String` per line at most; `BufWriter` ≥ 5x faster than unbuffer
 
 **fs and path.**
 
-```loom
+```text
 pub fn write_text(path: str, text: str) ! IoError      // write(bytes), append_text
 pub fn exists(path: str) -> bool
 pub fn read_dir(path: str) -> List[DirEntry] ! IoError
@@ -499,7 +499,7 @@ calls through `loom_sys`, so there are no `U` diagnostics.
 
 **time.**
 
-```loom
+```text
 pub warp Duration { ... }   // + - * / by integer, Ord, Eq, Show ("1.5s", "250ms"),
                             // as_secs_f64, as_millis, checked arithmetic via the operators
 pub warp Instant: Ord       // monotonic clock: `Instant.now()`, `elapsed()`, `since(other)`, `+ Duration`
@@ -514,7 +514,7 @@ Needs the operator wefts (D4) for `+`/`-` on durations. Gates: `Instant.now()`
 
 **rand.**
 
-```loom
+```text
 pub fn from_entropy() -> Rng                      // OS seed; every other constructor stays deterministic
 pub fn range[T: Integer](mut self, r: Range[T]) -> T   // unbiased (Lemire), accepts a..b and a..=b
 pub fn float(mut self) -> f64                     // [0, 1), 53 bits
@@ -532,7 +532,7 @@ Gates: `range` modulo-bias test (chi-squared on 10^7 draws, deterministic seed);
 
 **env, process, term.**
 
-```loom
+```text
 // env:     vars() -> Map[String, String], set(name, value), current_dir(), home_dir(), temp_dir()
 // process: run(program: str, args: [str]) -> Output ! IoError   // status, stdout, stderr captured
 //          pub once warp Child { wait, kill, stdin/stdout pipes }  // spawn
@@ -547,7 +547,7 @@ build machine: a program that spawns can't forget the child.
 
 ### Phase 5: concurrency (fits V5 as built)
 
-```loom
+```text
 // Atomic[T]
 pub fn fetch_and / fetch_or / fetch_xor / fetch_max / fetch_min (self, v: T) -> T
 pub fn update(self, f: T => T) -> T         // compare-exchange loop; f must be pure
@@ -595,7 +595,7 @@ in this plan scales regardless, which is one more reason for principle 2.
 Waits for V6 to land the language side; designed now so nothing in phases 1 to 5
 has to change.
 
-```loom
+```text
 // std.mem
 pub weft Spool { fn alloc(...); fn free(...); fn reset(mut self) }   // 03-memory: "alloc, free, reset"
 pub warp Arena: Spool            // exists as a stub
@@ -634,7 +634,7 @@ inlining; collections' single-thread benchmarks unchanged by spool-awareness
 02-types promises "`derive` is just a default method". `tests/run/derive_json`
 already proves it for `ToJson`. Promote that and add the others:
 
-```loom
+```text
 warp Config: Default, ToJson, FromJson, Args {
     host: String = "localhost"
     port: u16 = 8080

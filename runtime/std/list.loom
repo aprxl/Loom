@@ -24,4 +24,15 @@ pub warp List[T] {
     pub fn extend(mut self, xs: [T])
     /// A deep copy.
     pub fn copy(self) -> List[T]
+    /// Keeps the elements `keep` says yes to.
+    pub fn retain(mut self, keep: T => bool) {
+        var w = 0
+        for i in 0..self.len() {
+            if keep(self[i]) {
+                if w != i { self[w] = self[i] }
+                w += 1
+            }
+        }
+        self.truncate(w)
+    }
 }

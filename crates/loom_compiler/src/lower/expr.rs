@@ -17,7 +17,7 @@ use super::seq::Coll;
 use super::{Dest, LoopInfo, Lowerer};
 use crate::hir::{self, Block, DefKind, ExprKind, HirId, PatKind, StmtKind as HirStmt, TemplatePart};
 use crate::ty::{FloatTy, IntTy, Ty, TyKind};
-use crate::typeck::{ArgSource, Coercion, IterSource, Receiver};
+use crate::typeck::{ArgSource, Coercion, IterSource, Receiver, Seq};
 
 /// How deep a value's Lua expression may nest before it goes into a
 /// temporary (see `lower_expr`).
@@ -952,6 +952,7 @@ impl Lowerer<'_> {
         // Scalar `mut` arguments come back after the result and are written
         // to where they came from: each such place is worked out once.
         let modes = self.typed.results.sigs.get(&info.callee).map(|s| s.params.clone()).unwrap_or_default();
+        let modes_ty: Vec<Ty> = modes.iter().map(|p| p.ty).collect();
         let outs: Vec<usize> = modes
             .iter()
             .enumerate()
@@ -975,6 +976,19 @@ impl Lowerer<'_> {
         };
         // A method a `through` field has is called on that field.
         let receiver = receiver.map(|r| info.through.iter().fold(r, Self::access));
+        // A method written in Loom on a slice sees a view, not the list or
+        // array it was called on.
+        let receiver = match (receiver, receiver_base, receiver_slot) {
+            (Some(r), Some(base), Some(k))
+                if !runtime
+                    && info.through.is_empty()
+                    && matches!(self.seq(self.ty_of(base)), Some(Seq::Array(..) | Seq::List(_)))
+                    && modes_ty.get(k).is_some_and(|&t| matches!(self.seq(t), Some(Seq::Slice(_)))) =>
+            {
+                Some(Expr::rt("view", vec![r]))
+            }
+            (r, ..) => r,
+        };
         let receiver = match (receiver, &stream) {
             (Some(r), Some(source)) => Some(self.stream_from(source, r, call.span)),
             (r, _) => r,

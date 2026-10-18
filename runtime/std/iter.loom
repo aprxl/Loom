@@ -97,6 +97,27 @@ pub warp Stream[T] {
     pub fn max(take self) -> ?T where T: Ord
     /// The items as text, with `sep` between them.
     pub fn join(take self, sep: str) -> String where T: Show
+    /// The items in a new list, sorted by `before`: `before(a, b)` says
+    /// whether `a` goes before `b`. A stable sort: items that neither goes
+    /// before the other keep the order they came in.
+    /// `words.pairs().sorted_by(_.1 > _.1)` is the most frequent first.
+    pub fn sorted_by(take self, before: (T, T) => bool) -> List[T] {
+        var out = self.collect()
+        out.sort_by(before)
+        out
+    }
+    /// The items in a new list, sorted by `key` of each. Stable.
+    pub fn sorted_by_key[K: Ord](take self, key: T => K) -> List[T] {
+        var out = self.collect()
+        out.sort_by_key(key)
+        out
+    }
+    /// The items in a new list, in order. Stable.
+    pub fn sorted(take self) -> List[T] where T: Ord {
+        var out = self.collect()
+        out.sort()
+        out
+    }
 }
 
 /// A shuttle: a function paused between the `T`s it yields and the `U`s it
@@ -123,27 +144,4 @@ pub warp Shuttle[T, U] {
 pub once warp Burst[T] {
     /// Runs the shuttle to its next `pull`, throwing away what it yields.
     pub fn drain(take self)
-}
-
-/// The items of a stream in a new list, sorted by `before`: `before(a, b)`
-/// says whether `a` goes before `b`. A stable sort: items that neither goes
-/// before the other keep the order they came in.
-/// `words.pairs().sorted_by(_.1 > _.1)` is the most frequent first.
-pub fn sorted_by[T](take items: Stream[T], before: (T, T) => bool) -> List[T] {
-    var out: List[T] = []
-    for x in items {
-        // The first place `x` goes before (after any equal ones).
-        var lo = 0
-        var hi = out.len()
-        while lo < hi {
-            let mid = (lo + hi) / 2
-            if before(x, out[mid]) {
-                hi = mid
-            } else {
-                lo = mid + 1
-            }
-        }
-        out.insert(lo, x)
-    }
-    out
 }

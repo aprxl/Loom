@@ -9,8 +9,9 @@ pub use std.set.Set
 pub use std.error.{Error, Missing, assert, unravel}
 pub use std.fmt.{Show, Fmt}
 pub use std.ops.{Copy, Eq, Ord, Hash, Integer}
-pub use std.iter.{Iter, Stream, Shuttle, Burst, Range, sorted_by}
+pub use std.iter.{Iter, Stream, Shuttle, Burst, Range}
 pub use std.num.Num
+pub use std.cmp.{Ordering, cmp, min, max, clamp}
 
 /// The unsigned integer type with `bits` bits: `uint(12)` is `u12`.
 #builtin
