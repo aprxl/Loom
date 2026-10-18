@@ -19,6 +19,8 @@
 <ul>
 <li><a href="../index.html">Overview</a></li>
 <li><a href="prelude.html">prelude</a></li>
+<li><a href="cmp.html">cmp</a></li>
+<li><a href="deque.html">deque</a></li>
 <li><a href="env.html">env</a></li>
 <li><a href="error.html">error</a></li>
 <li><a href="fmt.html">fmt</a></li>
@@ -63,7 +65,78 @@
 </div>
 <p class="member-doc">The value, leaving <code>none</code> in its place.</p>
 </div>
+<div class="member" id="Optional.map">
+<div class="member-head">
+<span class="sig">fn map[U](take self, f: T =&gt; U) -&gt; ?U</span>
+
 </div>
+<p class="member-doc"><code>f</code> of the value, if there is one.</p>
+</div>
+<div class="member" id="Optional.filter">
+<div class="member-head">
+<span class="sig">fn filter(take self, f: T =&gt; bool) -&gt; ?T</span>
+
+</div>
+<p class="member-doc">The value, if <code>f</code> says yes to it.</p>
+</div>
+<div class="member" id="Optional.is_some">
+<div class="member-head">
+<span class="sig">fn is_some(self) -&gt; bool</span>
+
+</div>
+<p class="member-doc">Whether there is a value.</p>
+</div>
+<div class="member" id="Optional.is_none">
+<div class="member-head">
+<span class="sig">fn is_none(self) -&gt; bool</span>
+
+</div>
+<p class="member-doc">Whether there is no value.</p>
+</div>
+<div class="member" id="Optional.zip">
+<div class="member-head">
+<span class="sig">fn zip[U](take self, take other: ?U) -&gt; ?(T, U)</span>
+
+</div>
+<p class="member-doc">The two values together, if both are there.</p>
+</div>
+<div class="member" id="Optional.replace">
+<div class="member-head">
+<span class="sig">fn replace(mut self, take x: T) -&gt; ?T</span>
+
+</div>
+<p class="member-doc">Puts <code>x</code> in, returning what was there.</p>
+</div>
+<div class="member" id="Optional.take_if">
+<div class="member-head">
+<span class="sig">fn take_if(mut self, f: T =&gt; bool) -&gt; ?T</span>
+
+</div>
+<p class="member-doc">Takes the value out, if <code>f</code> says yes to it.</p>
+</div>
+<div class="member" id="Optional.ok_or">
+<div class="member-head">
+<span class="sig">fn ok_or[E](take self, take e: E) -&gt; T ! E</span>
+
+</div>
+<p class="member-doc">The value, or <code>e</code> as an error when there is none.</p>
+</div>
+</div>
+</div>
+<h2>Functions</h2>
+<div class="item" id="then">
+<div class="item-head">
+<span class="sig">fn <strong>then</strong>[T](cond: bool, f: () =&gt; T) -&gt; ?T</span>
+
+</div>
+<p class="item-doc"><code>f()</code> when the condition holds: <code>(n &gt; 0).then(() =&gt; 100 / n)</code>.</p>
+</div>
+<div class="item" id="then_some">
+<div class="item-head">
+<span class="sig">fn <strong>then_some</strong>[T](cond: bool, take x: T) -&gt; ?T</span>
+
+</div>
+<p class="item-doc"><code>x</code> when the condition holds.</p>
 </div>
 </main>
 </div>

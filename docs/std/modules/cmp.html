@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>std.cmp · Loom</title>
+<link rel="stylesheet" href="../../style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="../../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a href="../../lang/index.html">Language</a></li>
+<li><a class="current" href="../../std/index.html">Standard library</a></li>
+<li><a href="../../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Standard library</h3>
+<ul>
+<li><a href="../index.html">Overview</a></li>
+<li><a href="prelude.html">prelude</a></li>
+<li><a class="current" href="cmp.html">cmp</a></li>
+<li><a href="deque.html">deque</a></li>
+<li><a href="env.html">env</a></li>
+<li><a href="error.html">error</a></li>
+<li><a href="fmt.html">fmt</a></li>
+<li><a href="fs.html">fs</a></li>
+<li><a href="io.html">io</a></li>
+<li><a href="iter.html">iter</a></li>
+<li><a href="list.html">list</a></li>
+<li><a href="map.html">map</a></li>
+<li><a href="math.html">math</a></li>
+<li><a href="mem.html">mem</a></li>
+<li><a href="meta.html">meta</a></li>
+<li><a href="num.html">num</a></li>
+<li><a href="ops.html">ops</a></li>
+<li><a href="option.html">option</a></li>
+<li><a href="process.html">process</a></li>
+<li><a href="rand.html">rand</a></li>
+<li><a href="set.html">set</a></li>
+<li><a href="slice.html">slice</a></li>
+<li><a href="string.html">string</a></li>
+<li><a href="sync.html">sync</a></li>
+<li><a href="target.html">target</a></li>
+<li><a href="term.html">term</a></li>
+<li><a href="time.html">time</a></li>
+</ul>
+</nav>
+<main>
+<div class="crumb"><a href="../index.html">std</a> / cmp</div>
+<h1>std.cmp</h1>
+<p class="summary">Comparing.</p>
+<h2>Types</h2>
+<div class="item" id="Ordering">
+<div class="item-head">
+<span class="sig">warp <strong>Ordering</strong>: Eq, Ord, Show</span>
+
+</div>
+<p class="item-doc">How two values compare.</p>
+<ul class="cases">
+<li><span class="sig">case Less</span></li>
+<li><span class="sig">case Equal</span></li>
+<li><span class="sig">case Greater</span></li>
+</ul>
+<div class="members">
+<div class="member" id="Ordering.reverse">
+<div class="member-head">
+<span class="sig">fn reverse(self) -&gt; Ordering</span>
+
+</div>
+<p class="member-doc"><code>Less</code> becomes <code>Greater</code> and the other way round.</p>
+</div>
+<div class="member" id="Ordering.then">
+<div class="member-head">
+<span class="sig">fn then(self, other: Ordering) -&gt; Ordering</span>
+
+</div>
+<p class="member-doc">Breaks a tie: <code>a.age.cmp(b.age).then(a.name.cmp(b.name))</code>.</p>
+</div>
+</div>
+</div>
+<div class="item" id="Reverse">
+<div class="item-head">
+<span class="sig">warp <strong>Reverse</strong>[T: Ord]: Ord</span>
+
+</div>
+<p class="item-doc">A value that compares the other way round: sorting by <code>Reverse(score)</code> puts the highest score first.</p>
+<ul class="fields">
+<li><span class="sig">pub value: T</span></li>
+</ul>
+<div class="members">
+<div class="member" id="Reverse.lt">
+<div class="member-head">
+<span class="sig">fn lt(self, other: Reverse[T]) -&gt; bool</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+</div>
+</div>
+<h2>Functions</h2>
+<div class="item" id="cmp">
+<div class="item-head">
+<span class="sig">fn <strong>cmp</strong>[T: Ord](a: T, b: T) -&gt; Ordering</span>
+
+</div>
+<p class="item-doc">How <code>a</code> compares to <code>b</code>: <code>x.cmp(y)</code> also works on numbers and text.</p>
+</div>
+<div class="item" id="min">
+<div class="item-head">
+<span class="sig">fn <strong>min</strong>[T: Ord](a: T, b: T) -&gt; T</span>
+
+</div>
+<p class="item-doc">The smaller of two values (the first, if they are equal).</p>
+</div>
+<div class="item" id="max">
+<div class="item-head">
+<span class="sig">fn <strong>max</strong>[T: Ord](a: T, b: T) -&gt; T</span>
+
+</div>
+<p class="item-doc">The larger of two values (the first, if they are equal).</p>
+</div>
+<div class="item" id="clamp">
+<div class="item-head">
+<span class="sig">fn <strong>clamp</strong>[T: Ord](x: T, lo: T, hi: T) -&gt; T</span>
+
+</div>
+<p class="item-doc"><code>x</code>, or the nearest of <code>lo</code> and <code>hi</code> when it is outside them.</p>
+</div>
+</main>
+</div>
+</body>
+</html>

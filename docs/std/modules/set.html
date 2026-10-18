@@ -19,6 +19,8 @@
 <ul>
 <li><a href="../index.html">Overview</a></li>
 <li><a href="prelude.html">prelude</a></li>
+<li><a href="cmp.html">cmp</a></li>
+<li><a href="deque.html">deque</a></li>
 <li><a href="env.html">env</a></li>
 <li><a href="error.html">error</a></li>
 <li><a href="fmt.html">fmt</a></li>
@@ -118,6 +120,76 @@
 
 </div>
 <p class="member-doc">A deep copy.</p>
+</div>
+<div class="member" id="Set.union">
+<div class="member-head">
+<span class="sig">fn union(self, other: Set[T]) -&gt; Set[T] where T: Hash</span>
+
+</div>
+<p class="member-doc">The items in this set, <code>other</code>, or both.</p>
+</div>
+<div class="member" id="Set.intersection">
+<div class="member-head">
+<span class="sig">fn intersection(self, other: Set[T]) -&gt; Set[T] where T: Hash</span>
+
+</div>
+<p class="member-doc">The items in both sets.</p>
+</div>
+<div class="member" id="Set.difference">
+<div class="member-head">
+<span class="sig">fn difference(self, other: Set[T]) -&gt; Set[T] where T: Hash</span>
+
+</div>
+<p class="member-doc">The items in this set and not in <code>other</code>.</p>
+</div>
+<div class="member" id="Set.symmetric_difference">
+<div class="member-head">
+<span class="sig">fn symmetric_difference(self, other: Set[T]) -&gt; Set[T] where T: Hash</span>
+
+</div>
+<p class="member-doc">The items in one set but not the other.</p>
+</div>
+<div class="member" id="Set.is_subset">
+<div class="member-head">
+<span class="sig">fn is_subset(self, other: Set[T]) -&gt; bool where T: Hash</span>
+
+</div>
+<p class="member-doc">Whether every item is in <code>other</code>.</p>
+</div>
+<div class="member" id="Set.is_superset">
+<div class="member-head">
+<span class="sig">fn is_superset(self, other: Set[T]) -&gt; bool where T: Hash</span>
+
+</div>
+<p class="member-doc">Whether every item of <code>other</code> is here.</p>
+</div>
+<div class="member" id="Set.is_disjoint">
+<div class="member-head">
+<span class="sig">fn is_disjoint(self, other: Set[T]) -&gt; bool where T: Hash</span>
+
+</div>
+<p class="member-doc">Whether no item is in both.</p>
+</div>
+<div class="member" id="Set.retain">
+<div class="member-head">
+<span class="sig">fn retain(mut self, keep: T =&gt; bool) where T: Hash</span>
+
+</div>
+<p class="member-doc">Keeps the items <code>keep</code> says yes to.</p>
+</div>
+<div class="member" id="Set.extend">
+<div class="member-head">
+<span class="sig">fn extend(mut self, take items: Stream[T]) where T: Hash</span>
+
+</div>
+<p class="member-doc">Adds each item.</p>
+</div>
+<div class="member" id="Set.pop">
+<div class="member-head">
+<span class="sig">fn pop(mut self) -&gt; ?T where T: Hash</span>
+
+</div>
+<p class="member-doc">Takes out the oldest item.</p>
 </div>
 </div>
 </div>

@@ -19,6 +19,8 @@
 <ul>
 <li><a href="../index.html">Overview</a></li>
 <li><a href="prelude.html">prelude</a></li>
+<li><a href="cmp.html">cmp</a></li>
+<li><a href="deque.html">deque</a></li>
 <li><a href="env.html">env</a></li>
 <li><a href="error.html">error</a></li>
 <li><a href="fmt.html">fmt</a></li>
@@ -118,6 +120,62 @@
 
 </div>
 <p class="member-doc">A deep copy.</p>
+</div>
+<div class="member" id="List.retain">
+<div class="member-head">
+<span class="sig">fn retain(mut self, keep: T =&gt; bool)</span>
+
+</div>
+<p class="member-doc">Keeps the elements <code>keep</code> says yes to, in their order.</p>
+</div>
+<div class="member" id="List.dedup_by_key">
+<div class="member-head">
+<span class="sig">fn dedup_by_key[K: Eq](mut self, key: T =&gt; K)</span>
+
+</div>
+<p class="member-doc">Removes the elements <code>same_key</code> of which equals the one before's.</p>
+</div>
+<div class="member" id="List.dedup">
+<div class="member-head">
+<span class="sig">fn dedup(mut self) where T: Eq</span>
+
+</div>
+<p class="member-doc">Removes each element that equals the one before it.</p>
+</div>
+<div class="member" id="List.swap_remove">
+<div class="member-head">
+<span class="sig">fn swap_remove(mut self, i: usize) -&gt; T</span>
+
+</div>
+<p class="member-doc">Takes out the element at <code>i</code> by moving the last one into its place: quick, but it changes the order. Unravels if <code>i &gt;= len</code>.</p>
+</div>
+<div class="member" id="List.resize">
+<div class="member-head">
+<span class="sig">fn resize(mut self, n: usize, x: T)</span>
+
+</div>
+<p class="member-doc">Grows with copies of <code>x</code>, or shrinks, to <code>n</code> elements.</p>
+</div>
+<div class="member" id="List.split_off">
+<div class="member-head">
+<span class="sig">fn split_off(mut self, at: usize) -&gt; List[T]</span>
+
+</div>
+<p class="member-doc">Cuts the list at <code>at</code>: this keeps the first <code>at</code> elements, and the rest are returned. Unravels if <code>at &gt; len</code>.</p>
+</div>
+<div class="member" id="List.append">
+<div class="member-head">
+<span class="sig">fn append(mut self, mut other: List[T])</span>
+
+</div>
+<p class="member-doc">Moves every element of <code>other</code> to the end of this list.</p>
+</div>
+<div class="member" id="List.drain">
+<div class="member-head">
+<span class="sig">fn drain(mut self, from: usize, to: usize) -&gt; List[T]</span>
+
+</div>
+<p class="member-doc">Takes out the elements in <code>from..to</code> and returns them. Unravels if the range is outside the list.</p>
 </div>
 </div>
 </div>

@@ -19,6 +19,8 @@
 <ul>
 <li><a href="../index.html">Overview</a></li>
 <li><a href="prelude.html">prelude</a></li>
+<li><a href="cmp.html">cmp</a></li>
+<li><a href="deque.html">deque</a></li>
 <li><a href="env.html">env</a></li>
 <li><a href="error.html">error</a></li>
 <li><a href="fmt.html">fmt</a></li>
@@ -181,6 +183,62 @@
 
 </div>
 <p class="member-doc">Views of every run of <code>n</code> elements in a row: <code>[a, b]</code>, <code>[b, c]</code>, … Unravels if <code>n</code> is 0.</p>
+</div>
+<div class="member" id="Slice.rev">
+<div class="member-head">
+<span class="sig">fn rev(self) -&gt; Stream[T]</span>
+
+</div>
+<p class="member-doc">The elements from the last to the first.</p>
+</div>
+<div class="member" id="Slice.sort_by">
+<div class="member-head">
+<span class="sig">fn sort_by(mut self, less: (T, T) =&gt; bool)</span>
+
+</div>
+<p class="member-doc">Sorts so that <code>less(a, b)</code> says whether <code>a</code> goes before <code>b</code>. Stable: elements neither goes before the other keep their order.</p>
+</div>
+<div class="member" id="Slice.sort_by_key">
+<div class="member-head">
+<span class="sig">fn sort_by_key[K: Ord](mut self, key: T =&gt; K)</span>
+
+</div>
+<p class="member-doc">Sorts by <code>key</code> of each element, which is computed once per element. Stable.</p>
+</div>
+<div class="member" id="Slice.is_sorted">
+<div class="member-head">
+<span class="sig">fn is_sorted(self) -&gt; bool where T: Ord</span>
+
+</div>
+<p class="member-doc">Whether every element is at or after the one before it.</p>
+</div>
+<div class="member" id="Slice.lower_bound">
+<div class="member-head">
+<span class="sig">fn lower_bound(self, x: T) -&gt; usize where T: Ord</span>
+
+</div>
+<p class="member-doc">The index of the first element that is not before <code>x</code> in a sorted slice: where <code>x</code> would go.</p>
+</div>
+<div class="member" id="Slice.upper_bound">
+<div class="member-head">
+<span class="sig">fn upper_bound(self, x: T) -&gt; usize where T: Ord</span>
+
+</div>
+<p class="member-doc">The index of the first element after <code>x</code> in a sorted slice.</p>
+</div>
+<div class="member" id="Slice.binary_search">
+<div class="member-head">
+<span class="sig">fn binary_search(self, x: T) -&gt; ?usize where T: Ord</span>
+
+</div>
+<p class="member-doc">The index of an element equal to <code>x</code> in a sorted slice.</p>
+</div>
+<div class="member" id="Slice.partition_point">
+<div class="member-head">
+<span class="sig">fn partition_point(self, pred: T =&gt; bool) -&gt; usize</span>
+
+</div>
+<p class="member-doc">In a slice where <code>pred</code> says yes to a run of elements and then no to the rest, the index of the first no.</p>
 </div>
 </div>
 </div>

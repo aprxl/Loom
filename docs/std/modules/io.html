@@ -19,6 +19,8 @@
 <ul>
 <li><a href="../index.html">Overview</a></li>
 <li><a href="prelude.html">prelude</a></li>
+<li><a href="cmp.html">cmp</a></li>
+<li><a href="deque.html">deque</a></li>
 <li><a href="env.html">env</a></li>
 <li><a href="error.html">error</a></li>
 <li><a href="fmt.html">fmt</a></li>
@@ -55,6 +57,62 @@
 <span class="badge extern">extern</span>
 </div>
 <p class="item-doc">Writes <code>x</code> and a newline to standard output.</p>
+</div>
+<div class="item" id="write_out">
+<div class="item-head">
+<span class="sig">fn <strong>write_out</strong>(text: str)</span>
+<span class="badge extern">extern</span>
+</div>
+<p class="item-doc">Standard output, as is: no newline.</p>
+</div>
+<div class="item" id="write_err">
+<div class="item-head">
+<span class="sig">fn <strong>write_err</strong>(text: str)</span>
+<span class="badge extern">extern</span>
+</div>
+<p class="item-doc">Standard error, as is: no newline.</p>
+</div>
+<div class="item" id="read_line">
+<div class="item-head">
+<span class="sig">fn <strong>read_line</strong>() -&gt; ?String</span>
+<span class="badge extern">extern</span>
+</div>
+<p class="item-doc">The next line of standard input, without its line ending; <code>none</code> once the input has ended.</p>
+</div>
+<div class="item" id="read_all">
+<div class="item-head">
+<span class="sig">fn <strong>read_all</strong>() -&gt; String</span>
+<span class="badge extern">extern</span>
+</div>
+<p class="item-doc">Everything left on standard input.</p>
+</div>
+<div class="item" id="write">
+<div class="item-head">
+<span class="sig">fn <strong>write</strong>(x: any Show)</span>
+
+</div>
+<p class="item-doc">Writes <code>x</code> to standard output, with no newline after it.</p>
+</div>
+<div class="item" id="eprint">
+<div class="item-head">
+<span class="sig">fn <strong>eprint</strong>(x: any Show)</span>
+
+</div>
+<p class="item-doc">Writes <code>x</code> and a newline to standard error.</p>
+</div>
+<div class="item" id="ewrite">
+<div class="item-head">
+<span class="sig">fn <strong>ewrite</strong>(x: any Show)</span>
+
+</div>
+<p class="item-doc">Writes <code>x</code> to standard error, with no newline after it.</p>
+</div>
+<div class="item" id="lines">
+<div class="item-head">
+<span class="sig">fn <strong>lines</strong>() -&gt; Stream[String]</span>
+
+</div>
+<p class="item-doc">The lines of standard input, one at a time, as they are read.</p>
 </div>
 </main>
 </div>

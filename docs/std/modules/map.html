@@ -19,6 +19,8 @@
 <ul>
 <li><a href="../index.html">Overview</a></li>
 <li><a href="prelude.html">prelude</a></li>
+<li><a href="cmp.html">cmp</a></li>
+<li><a href="deque.html">deque</a></li>
 <li><a href="env.html">env</a></li>
 <li><a href="error.html">error</a></li>
 <li><a href="fmt.html">fmt</a></li>
@@ -146,6 +148,69 @@
 
 </div>
 <p class="member-doc">A deep copy.</p>
+</div>
+<div class="member" id="Map.of">
+<div class="member-head">
+<span class="sig">fn of(pairs: [(K, V)]) -&gt; Map[K, V] where K: Hash</span>
+
+</div>
+<p class="member-doc">A map of <code>pairs</code>; a key that comes up again keeps the last value.</p>
+</div>
+<div class="member" id="Map.get_or">
+<div class="member-head">
+<span class="sig">fn get_or(self, key: K, default: V) -&gt; V where K: Hash</span>
+
+</div>
+<p class="member-doc">The value for <code>key</code>, or <code>default</code> when there is none.</p>
+</div>
+<div class="member" id="Map.retain">
+<div class="member-head">
+<span class="sig">fn retain(mut self, keep: (K, V) =&gt; bool) where K: Hash</span>
+
+</div>
+<p class="member-doc">Keeps the entries <code>keep</code> says yes to.</p>
+</div>
+<div class="member" id="Map.extend">
+<div class="member-head">
+<span class="sig">fn extend(mut self, take pairs: Stream[(K, V)]) where K: Hash</span>
+
+</div>
+<p class="member-doc">Adds each pair; a key already there gets the new value.</p>
+</div>
+<div class="member" id="Map.remove_entry">
+<div class="member-head">
+<span class="sig">fn remove_entry(mut self, take key: K) -&gt; ?(K, V) where K: Hash</span>
+
+</div>
+<p class="member-doc">Takes out the entry for <code>key</code>, with the key as the map had it.</p>
+</div>
+<div class="member" id="Map.update">
+<div class="member-head">
+<span class="sig">fn update(mut self, take key: K, f: V =&gt; V) where K: Hash</span>
+
+</div>
+<p class="member-doc">Replaces the value for <code>key</code> with <code>f</code> of it, if there is one.</p>
+</div>
+<div class="member" id="Map.merge">
+<div class="member-head">
+<span class="sig">fn merge(mut self, take other: Map[K, V], f: (V, V) =&gt; V) where K: Hash</span>
+
+</div>
+<p class="member-doc">Adds the entries of <code>other</code>; for a key in both, <code>f(mine, theirs)</code>.</p>
+</div>
+<div class="member" id="Map.first">
+<div class="member-head">
+<span class="sig">fn first(self) -&gt; ?(K, V)</span>
+
+</div>
+<p class="member-doc">The oldest entry.</p>
+</div>
+<div class="member" id="Map.last">
+<div class="member-head">
+<span class="sig">fn last(self) -&gt; ?(K, V)</span>
+
+</div>
+<p class="member-doc">The newest entry.</p>
 </div>
 </div>
 </div>

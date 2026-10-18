@@ -32,4 +32,14 @@ A generic one's implementation gets the descriptor of each type argument
 first; a `mut self` method of `String` returns its result, then the new
 string.
 
+Most of the library after the first slices is plain Loom, not a native: a
+method of a `#builtin` warp may have a body (`List.retain`, `Slice.sort_by`,
+`Stream.min_by_key`, `Map.merge`). Adaptors that need to remember a lambda
+can't be written that way (a closure can't be stored in a warp), so they
+stay compiler builtins or are built from `map`, `filter` and friends.
+`cmp.loom` has `Ordering` and the free functions `cmp`, `min`, `max`,
+`clamp`, which work on any `Ord` type through UFCS; `deque.loom` is
+`Deque[T]`. Host services (`io`, `time`) reach both backends through a
+native, a `loom_vm` host function and the Lua host table.
+
 `prelude.loom` lists the names every module sees without a `use`.

@@ -19,6 +19,8 @@
 <ul>
 <li><a href="../index.html">Overview</a></li>
 <li><a href="prelude.html">prelude</a></li>
+<li><a href="cmp.html">cmp</a></li>
+<li><a href="deque.html">deque</a></li>
 <li><a href="env.html">env</a></li>
 <li><a href="error.html">error</a></li>
 <li><a href="fmt.html">fmt</a></li>
@@ -93,6 +95,13 @@
 
 </div>
 <p class="member-doc">Ranges of <code>n</code> values at a time, one after another: <code>(0..10).chunks(4)</code> is <code>0..4</code>, <code>4..8</code> and <code>8..10</code>. Each one is a range too, with all the methods of one, so it can be given to a thread. Unravels if <code>n</code> is 0 or the range has no end.</p>
+</div>
+<div class="member" id="Range.rev">
+<div class="member-head">
+<span class="sig">fn rev(self) -&gt; Stream[T]</span>
+
+</div>
+<p class="member-doc">The values from the last to the first. Needs room for all of them.</p>
 </div>
 </div>
 </div>
@@ -172,6 +181,118 @@
 
 </div>
 <p class="member-doc">These items, then <code>other</code>'s.</p>
+</div>
+<div class="member" id="Stream.step_by">
+<div class="member-head">
+<span class="sig">fn step_by(take self, n: usize) -&gt; Stream[T]</span>
+
+</div>
+<p class="member-doc">Every <code>n</code>th item, starting with the first. Unravels if <code>n</code> is 0.</p>
+</div>
+<div class="member" id="Stream.filter_map">
+<div class="member-head">
+<span class="sig">fn filter_map[U](take self, f: T =&gt; ?U) -&gt; Stream[U]</span>
+
+</div>
+<p class="member-doc"><code>f</code> of each item, leaving out the ones it gives <code>none</code> for.</p>
+</div>
+<div class="member" id="Stream.flat_map">
+<div class="member-head">
+<span class="sig">fn flat_map[U](take self, f: T =&gt; Stream[U]) -&gt; Stream[U]</span>
+
+</div>
+<p class="member-doc">The items of the streams <code>f</code> makes from each item, one after another.</p>
+</div>
+<div class="member" id="Stream.peekable">
+<div class="member-head">
+<span class="sig">fn peekable(take self) -&gt; Peekable[T]</span>
+
+</div>
+<p class="member-doc">A stream that lets you look at the next item before taking it.</p>
+</div>
+<div class="member" id="Stream.cycle">
+<div class="member-head">
+<span class="sig">fn cycle(take self) -&gt; Stream[T]</span>
+
+</div>
+<p class="member-doc">The items again and again, for ever. Nothing if there are none.</p>
+</div>
+<div class="member" id="Stream.chunks">
+<div class="member-head">
+<span class="sig">fn chunks(take self, n: usize) -&gt; Stream[List[T]]</span>
+
+</div>
+<p class="member-doc">Lists of <code>n</code> items at a time; the last may be shorter. Unravels if <code>n</code> is 0.</p>
+</div>
+<div class="member" id="Stream.nth">
+<div class="member-head">
+<span class="sig">fn nth(take self, n: usize) -&gt; ?T</span>
+
+</div>
+<p class="member-doc">The item after skipping <code>n</code>.</p>
+</div>
+<div class="member" id="Stream.is_empty">
+<div class="member-head">
+<span class="sig">fn is_empty(take self) -&gt; bool</span>
+
+</div>
+<p class="member-doc">Whether there are no items.</p>
+</div>
+<div class="member" id="Stream.eq">
+<div class="member-head">
+<span class="sig">fn eq(take self, take other: Stream[T]) -&gt; bool where T: Eq</span>
+
+</div>
+<p class="member-doc">Whether both streams have equal items in the same order.</p>
+</div>
+<div class="member" id="Stream.min_by_key">
+<div class="member-head">
+<span class="sig">fn min_by_key[K: Ord](take self, key: T =&gt; K) -&gt; ?T</span>
+
+</div>
+<p class="member-doc">The item with the smallest <code>key</code> (the first, among equals).</p>
+</div>
+<div class="member" id="Stream.max_by_key">
+<div class="member-head">
+<span class="sig">fn max_by_key[K: Ord](take self, key: T =&gt; K) -&gt; ?T</span>
+
+</div>
+<p class="member-doc">The item with the largest <code>key</code> (the last, among equals).</p>
+</div>
+<div class="member" id="Stream.min_by">
+<div class="member-head">
+<span class="sig">fn min_by(take self, before: (T, T) =&gt; bool) -&gt; ?T</span>
+
+</div>
+<p class="member-doc">The item no other goes before, by <code>before</code> (the first, among equals).</p>
+</div>
+<div class="member" id="Stream.max_by">
+<div class="member-head">
+<span class="sig">fn max_by(take self, before: (T, T) =&gt; bool) -&gt; ?T</span>
+
+</div>
+<p class="member-doc">The item that goes before no other, by <code>before</code> (the last, among equals).</p>
+</div>
+<div class="member" id="Stream.partition">
+<div class="member-head">
+<span class="sig">fn partition(take self, f: T =&gt; bool) -&gt; (List[T], List[T])</span>
+
+</div>
+<p class="member-doc">The items <code>f</code> says yes to, and the ones it says no to.</p>
+</div>
+<div class="member" id="Stream.counts">
+<div class="member-head">
+<span class="sig">fn counts(take self) -&gt; Map[T, usize] where T: Hash</span>
+
+</div>
+<p class="member-doc">How many times each item comes up.</p>
+</div>
+<div class="member" id="Stream.group_by">
+<div class="member-head">
+<span class="sig">fn group_by[K: Hash](take self, key: T =&gt; K) -&gt; Map[K, List[T]]</span>
+
+</div>
+<p class="member-doc">The items in lists by <code>key</code>, in the order the keys first came up.</p>
 </div>
 <div class="member" id="Stream.collect">
 <div class="member-head">
@@ -278,6 +399,27 @@
 </div>
 <p class="member-doc">The items as text, with <code>sep</code> between them.</p>
 </div>
+<div class="member" id="Stream.sorted_by">
+<div class="member-head">
+<span class="sig">fn sorted_by(take self, before: (T, T) =&gt; bool) -&gt; List[T]</span>
+
+</div>
+<p class="member-doc">The items in a new list, sorted by <code>before</code>: <code>before(a, b)</code> says whether <code>a</code> goes before <code>b</code>. A stable sort: items that neither goes before the other keep the order they came in. <code>words.pairs().sorted_by(_.1 &gt; _.1)</code> is the most frequent first.</p>
+</div>
+<div class="member" id="Stream.sorted_by_key">
+<div class="member-head">
+<span class="sig">fn sorted_by_key[K: Ord](take self, key: T =&gt; K) -&gt; List[T]</span>
+
+</div>
+<p class="member-doc">The items in a new list, sorted by <code>key</code> of each. Stable.</p>
+</div>
+<div class="member" id="Stream.sorted">
+<div class="member-head">
+<span class="sig">fn sorted(take self) -&gt; List[T] where T: Ord</span>
+
+</div>
+<p class="member-doc">The items in a new list, in order. Stable.</p>
+</div>
 </div>
 </div>
 <div class="item" id="Shuttle">
@@ -319,13 +461,54 @@
 </div>
 </div>
 </div>
-<h2>Functions</h2>
-<div class="item" id="sorted_by">
+<div class="item" id="Peekable">
 <div class="item-head">
-<span class="sig">fn <strong>sorted_by</strong>[T](take items: Stream[T], before: (T, T) =&gt; bool) -&gt; List[T]</span>
+<span class="sig">warp <strong>Peekable</strong>[T]: Iter</span>
 
 </div>
-<p class="item-doc">The items of a stream in a new list, sorted by <code>before</code>: <code>before(a, b)</code> says whether <code>a</code> goes before <code>b</code>. A stable sort: items that neither goes before the other keep the order they came in. <code>words.pairs().sorted_by(_.1 &gt; _.1)</code> is the most frequent first.</p>
+<p class="item-doc">What <code>peekable</code> makes.</p>
+<div class="members">
+<div class="member" id="Peekable.Item">
+<div class="member-head">
+<span class="sig">type Item = T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member" id="Peekable.peek">
+<div class="member-head">
+<span class="sig">fn peek(mut self) -&gt; ?T</span>
+
+</div>
+<p class="member-doc">A copy of the next item, without taking it.</p>
+</div>
+<div class="member" id="Peekable.next_if">
+<div class="member-head">
+<span class="sig">fn next_if(mut self, f: T =&gt; bool) -&gt; ?T</span>
+
+</div>
+<p class="member-doc">The next item, if <code>f</code> says yes to it.</p>
+</div>
+</div>
+</div>
+<div class="item" id="Reversed">
+<div class="item-head">
+<span class="sig">warp <strong>Reversed</strong>[T]: Iter</span>
+
+</div>
+<p class="item-doc">The items of <code>rev</code>: the list, emptied from the end.</p>
+<ul class="fields">
+<li><span class="sig">pub items: List[T]</span></li>
+</ul>
+<div class="members">
+<div class="member" id="Reversed.Item">
+<div class="member-head">
+<span class="sig">type Item = T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+</div>
 </div>
 </main>
 </div>
