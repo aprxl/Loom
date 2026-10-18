@@ -615,3 +615,28 @@ of 0.996x. Largest slower cases: `richards` 48.746 / 51.287 ms and
 `word_freq` 209.094 / 218.891 ms. Largest faster cases: `fannkuch`
 787.055 / 760.580 ms and `binary_trees` 664.996 / 649.806 ms. These are
 whole-program timings, not timings of the unchanged bytecode in isolation.
+
+## Standard library, phases 0, 1 and 4 (design/stdlib-plan.md)
+
+Step-0 spike: a higher-order function written in Loom (`retain` with a
+lambda) over 3 million `i64`s on Treadle at `-O2` ran at 1.0 to 1.1x the
+hand-written loop, so the library is plain Loom by default.
+
+Scaling gates (dispatch counts, `bench/counts.txt`, test
+`std_collections_scale`): ten times the input costs this many times the
+instructions: `deque` 10.0x (limit 10.5), `list_ops` (stable `sort_by`,
+`dedup`, `retain`, `step_by`, `filter_map`) 10.2x (limit 12), `heap`
+(`PriorityQueue`, `BitSet`) under the 13x limit.
+
+`sort_by` over random `u64`s on Treadle, whole run including startup:
+100 000 items about 50 ms, 1 000 000 items about 480 ms (the old
+`sorted_by` was quadratic).
+
+Compile time with the new modules: `-O2` over `-O0` 1.43x (limit 1.5,
+asserted at 1.75x), measured on a loaded machine.
+
+Known limits: `sort_by` and the other list code written in Loom keep about
+95% of their bounds checks at `-O2` (`list_ops` in `check_counts`), so the
+benchmarks for the standard library are left out of that aggregate; the
+stream adaptors that are warps (`step_by`, `peekable`, `chunks`, `cycle`,
+`flat_map`) are not fused into the loop that consumes them.
