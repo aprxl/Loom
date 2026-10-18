@@ -32,3 +32,9 @@ Then: V6 (spools, regions, `given`).
 
 - Q8: what happens to `once` values when a thread unravels? (deferred)
 - `projects/` (spindle) is untracked: commit it, ignore it, or leave it?
+
+## V5 close-out result (2026-10-17)
+
+- Step 4 decision (Caio): the scaling gate stays 0.7x of 8 physical cores (5.6x). 16 logical workers reach 8.2x against 6.1x on 8, so the pool keeps one worker per logical core, but the gate is not raised.
+- Caveats: the optimizer compile-time ratio is 1.62-1.64x and `compile_time` asserts 1.75x (design gate 1.5x); `par_mandelbrot` measures 5.7-6.3x at 8 workers, a thin margin over 5.6x; par_spawn_join is ~1.1 us on 8 workers after per-worker heaps (gate 2 us).
+- Only exclusive integer ranges chunk, with a fixed grain.
