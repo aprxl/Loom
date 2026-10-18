@@ -1170,7 +1170,7 @@ impl<'p> Checker<'p> {
         for param in &f.params {
             let ty = if param.is_self {
                 match self.self_ty {
-                    Some(ty) => ty,
+                    Some(ty) => self.builtin_self(ty),
                     None => {
                         self.unsupported(param.span, "methods outside warps");
                         return None;
@@ -1424,7 +1424,7 @@ impl<'p> Checker<'p> {
                 self.tcx.union(items)
             }
             HirTy::SelfType => match self.self_ty {
-                Some(ty) => ty,
+                Some(ty) => self.builtin_self(ty),
                 None => self.unsupported(span, "`Self` outside warps"),
             },
             HirTy::Assoc { base, name } => {
@@ -1434,6 +1434,14 @@ impl<'p> Checker<'p> {
             HirTy::ConstCall { def, args } => self.const_call_ty(*def, args, span),
             HirTy::Local(_) | HirTy::TypeType => self.unsupported(span, "types computed at compile time"),
             HirTy::Infer => self.unsupported(span, "inferred error sets (`! _`)"),
+        }
+    }
+
+    /// What `Self` means in the methods of `Optional[T]`: `?T`.
+    pub(super) fn builtin_self(&mut self, ty: Ty) -> Ty {
+        match self.tcx.kind(ty).clone() {
+            TyKind::Adt(def, args) if Some(def) == self.std.optional && args.len() == 1 => self.tcx.optional(args[0]),
+            _ => ty,
         }
     }
 

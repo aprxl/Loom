@@ -1,0 +1,25 @@
+use std.io.print
+use std.error.Missing
+fn main() {
+    let a: ?i32 = some(4)
+    let b: ?i32 = none
+    print(a.map(_ * 2))
+    print(b.map(_ * 2))
+    print(a.filter(_ > 5))
+    print(a.is_some())
+    print(b.is_none())
+    print(a.zip(some("x")))
+    var c: ?i32 = some(1)
+    print(c.replace(2))
+    print(c)
+    print(c.take_if(_ > 5))
+    print(c)
+    print(c.take_if(_ > 1))
+    print(c)
+    let r: i32 ! Missing = a.ok_or(Missing())
+    print(r mend 0)
+    let r2: i32 ! Missing = b.ok_or(Missing())
+    print(r2 mend -1)
+    print((3 > 2).then(() => 7))
+    print((3 < 2).then_some(7))
+}

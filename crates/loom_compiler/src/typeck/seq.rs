@@ -304,7 +304,9 @@ impl Checker<'_> {
         let Some(Member::Method(m)) = self.member(warp, name) else { return None };
         let self_ty = self.tcx.intern(TyKind::Adt(warp, args));
         let via = format!("{}.{name}", self.p.def(warp).name);
-        Some(Found { inst: self.member_instance(m, self_ty), path: Vec::new(), self_ty, via, stream: None })
+        let inst = self.member_instance(m, self_ty);
+        let self_ty = self.builtin_self(self_ty);
+        Some(Found { inst, path: Vec::new(), self_ty, via, stream: None })
     }
 
     /// An index: any unsigned integer, used as a `usize`.
