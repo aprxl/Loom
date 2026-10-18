@@ -512,6 +512,7 @@ struct Std {
     char_warp: Option<DefId>,
     int_warp: Option<DefId>,
     optional: Option<DefId>,
+    result_warp: Option<DefId>,
     float_warp: Option<DefId>,
     parse: Option<DefId>,
     num: Option<DefId>,
@@ -656,6 +657,7 @@ impl<'p> Checker<'p> {
             char_warp: find("std.string", "Char"),
             int_warp: find("std.num", "Int"),
             optional: find("std.option", "Optional"),
+            result_warp: find("std.error", "Fallible"),
             float_warp: find("std.num", "Float"),
             parse: find("std.num", "Parse"),
             num: find("std.num", "Num"),
@@ -1437,11 +1439,14 @@ impl<'p> Checker<'p> {
         }
     }
 
-    /// What `Self` means in the methods of `Optional[T]` and `Range[T]`: `?T`
-    /// and the range itself.
+    /// What `Self` means in the methods of `Optional[T]`, `Fallible[T, E]` and
+    /// `Range[T]`: `?T`, `T ! E` and the range itself.
     pub(super) fn builtin_self(&mut self, ty: Ty) -> Ty {
         match self.tcx.kind(ty).clone() {
             TyKind::Adt(def, args) if Some(def) == self.std.optional && args.len() == 1 => self.tcx.optional(args[0]),
+            TyKind::Adt(def, args) if Some(def) == self.std.result_warp && args.len() == 2 => {
+                self.tcx.intern(TyKind::Result(args[0], args[1]))
+            }
             TyKind::Adt(def, args) if Some(def) == self.std.range_warp && args.len() == 1 => {
                 self.tcx.intern(TyKind::Range(args[0]))
             }

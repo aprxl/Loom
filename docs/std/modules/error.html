@@ -69,6 +69,50 @@
 </div>
 </div>
 </div>
+<div class="item" id="Fallible">
+<div class="item-head">
+<span class="sig">warp <strong>Fallible</strong>[T, E]</span>
+<span class="badge builtin">builtin</span>
+</div>
+<p class="item-doc">The methods of every result type, <code>T ! E</code>.</p>
+<div class="members">
+<div class="member" id="Fallible.map">
+<div class="member-head">
+<span class="sig">fn map[U](take self, f: T =&gt; U) -&gt; U ! E</span>
+
+</div>
+<p class="member-doc"><code>f</code> of the value, or the error as it was.</p>
+</div>
+<div class="member" id="Fallible.map_err">
+<div class="member-head">
+<span class="sig">fn map_err[F](take self, f: E =&gt; F) -&gt; T ! F</span>
+
+</div>
+<p class="member-doc">The value as it was, or <code>f</code> of the error.</p>
+</div>
+<div class="member" id="Fallible.value">
+<div class="member-head">
+<span class="sig">fn value(take self) -&gt; ?T</span>
+
+</div>
+<p class="member-doc">The value, if it worked.</p>
+</div>
+<div class="member" id="Fallible.error">
+<div class="member-head">
+<span class="sig">fn error(take self) -&gt; ?E</span>
+
+</div>
+<p class="member-doc">The error, if it failed.</p>
+</div>
+<div class="member" id="Fallible.is_ok">
+<div class="member-head">
+<span class="sig">fn is_ok(self) -&gt; bool</span>
+
+</div>
+<p class="member-doc">Whether it worked.</p>
+</div>
+</div>
+</div>
 <div class="item" id="Missing">
 <div class="item-head">
 <span class="sig">warp <strong>Missing</strong>: Error</span>

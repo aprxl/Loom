@@ -298,6 +298,7 @@ impl Checker<'_> {
             TyKind::Int(_) | TyKind::IntVar(_) => (self.std.int_warp?, vec![ty]),
             TyKind::Float(_) | TyKind::FloatVar(_) => (self.std.float_warp?, vec![ty]),
             TyKind::Optional(inner) => (self.std.optional?, vec![*inner]),
+            TyKind::Result(ok, err) => (self.std.result_warp?, vec![*ok, *err]),
             TyKind::Range(elem) => (self.std.range_warp?, vec![*elem]),
             _ => return None,
         };

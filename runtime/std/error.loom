@@ -8,6 +8,46 @@ pub weft Error: Show {
     fn message(self) -> String
 }
 
+/// The methods of every result type, `T ! E`.
+#builtin
+pub warp Fallible[T, E] {
+    /// `f` of the value, or the error as it was.
+    pub fn map[U](take self, f: T => U) -> U ! E {
+        match self {
+            ok(x) => ok(f(x))
+            err(e) => err(e)
+        }
+    }
+    /// The value as it was, or `f` of the error.
+    pub fn map_err[F](take self, f: E => F) -> T ! F {
+        match self {
+            ok(x) => ok(x)
+            err(e) => err(f(e))
+        }
+    }
+    /// The value, if it worked.
+    pub fn value(take self) -> ?T {
+        match self {
+            ok(x) => some(x)
+            err(_) => none
+        }
+    }
+    /// The error, if it failed.
+    pub fn error(take self) -> ?E {
+        match self {
+            ok(_) => none
+            err(e) => some(e)
+        }
+    }
+    /// Whether it worked.
+    pub fn is_ok(self) -> bool {
+        match self {
+            ok(_) => true
+            err(_) => false
+        }
+    }
+}
+
 /// The error a `?` on an empty optional produces.
 pub warp Missing: Error
 

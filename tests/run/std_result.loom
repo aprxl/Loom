@@ -1,0 +1,17 @@
+use std.io.print
+use std.error.Missing
+warp Bad: Error { code: i32 }
+fn parse(s: str) -> i32 ! Bad {
+    let n = s.parse[i32]() mend 0
+    if n < 0 { fail Bad(code: n) }
+    n
+}
+fn main() {
+    let a = parse("5")
+    print(a.map(_ * 2).value())
+    let b = parse("-3")
+    print(b.error().map(_.code))
+    print(parse("7").is_ok())
+    let c: i32 ! Missing = parse("2").map_err(e => Missing())
+    print(c.value())
+}

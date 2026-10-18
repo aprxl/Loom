@@ -126,6 +126,14 @@ MODULES = [
      "methods": [
        {"sig": "fn message(self) -> String", "builtin": True, "doc": "What went wrong, in words. Derived: the value's `Show` form."},
      ]},
+    {"kind": "warp", "name": "Fallible", "suffix": "[T, E]", "builtin": True, "doc": "The methods of every result type, `T ! E`.",
+     "methods": [
+       {"sig": "fn map[U](take self, f: T => U) -> U ! E", "doc": "`f` of the value, or the error as it was."},
+       {"sig": "fn map_err[F](take self, f: E => F) -> T ! F", "doc": "The value as it was, or `f` of the error."},
+       {"sig": "fn value(take self) -> ?T", "doc": "The value, if it worked."},
+       {"sig": "fn error(take self) -> ?E", "doc": "The error, if it failed."},
+       {"sig": "fn is_ok(self) -> bool", "doc": "Whether it worked."},
+     ]},
     {"kind": "warp", "name": "Missing", "suffix": ": Error", "doc": "The error a `?` on an empty optional produces."},
   ],
   "functions": [
