@@ -132,10 +132,10 @@
 </div>
 <div class="member" id="Rng.jump">
 <div class="member-head">
-<span class="sig">fn jump(self) -&gt; Rng</span>
+<span class="sig">fn jump(mut self) -&gt; Rng</span>
 
 </div>
-<p class="member-doc">A generator that continues 2^128 steps ahead of this one, which is left as it was: every thread can have its own stream.</p>
+<p class="member-doc">A generator at the current state, which this one then leaves 2^128 steps behind: each call gives a stream that overlaps no other, so every thread can have its own.</p>
 </div>
 </div>
 </div>

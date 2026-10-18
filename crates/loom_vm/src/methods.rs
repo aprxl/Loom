@@ -19,7 +19,6 @@ pub(crate) fn resolve_scalar(name: &str) -> Option<LocalFn> {
         "int.bits" => int_bits,
         "int.rotate" => int_rotate,
         "float.math" => float_math,
-        "time.now" => now,
         _ => return None,
     })
 }
@@ -53,7 +52,6 @@ pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
         "int.bits" => |c, a, i| int_bits(&mut c.heap, a, i),
         "int.rotate" => |c, a, i| int_rotate(&mut c.heap, a, i),
         "float.math" => |c, a, i| float_math(&mut c.heap, a, i),
-        "time.now" => |c, a, i| now(&mut c.heap, a, i),
         _ => return None,
     })
 }
@@ -731,14 +729,6 @@ fn next_word(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     args[0] += start as u64;
     args[1] = (i - start) as u64;
     args[2] = i as u64;
-    Ok(())
-}
-
-/// `time.now() -> nanoseconds`: a clock that only goes forward, counted from
-/// the first time anything asks.
-fn now(_: &mut Heap, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
-    args[0] = START.get_or_init(std::time::Instant::now).elapsed().as_nanos() as u64;
     Ok(())
 }
 

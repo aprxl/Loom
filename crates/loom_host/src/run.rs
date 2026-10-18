@@ -332,7 +332,8 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
         if got == 0 {
             return Ok(None);
         }
-        let line = line.trim_end_matches(char::is_control);
+        let line = line.strip_suffix('\n').unwrap_or(&line);
+        let line = line.strip_suffix('\r').unwrap_or(line);
         Ok(Some(lua.create_string(line)?))
     })?;
     table.set("read_line", read_line)?;

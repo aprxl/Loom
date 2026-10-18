@@ -91,10 +91,11 @@ pub warp Rng {
         }
     }
 
-    /// A generator that continues 2^128 steps ahead of this one, which is
-    /// left as it was: every thread can have its own stream.
-    pub fn jump(self) -> Rng {
-        var next = Rng(s0: .s0, s1: .s1, s2: .s2, s3: .s3)
+    /// A generator at the current state, which this one then leaves 2^128
+    /// steps behind: each call gives a stream that overlaps no other, so
+    /// every thread can have its own.
+    pub fn jump(mut self) -> Rng {
+        let child = Rng(s0: .s0, s1: .s1, s2: .s2, s3: .s3)
         var t0 = 0u64
         var t1 = 0u64
         var t2 = 0u64
@@ -103,18 +104,18 @@ pub warp Rng {
         for word in table {
             for bit in 0..64u64 {
                 if word & (1u64 << bit) != 0 {
-                    t0 ~= next.s0
-                    t1 ~= next.s1
-                    t2 ~= next.s2
-                    t3 ~= next.s3
+                    t0 ~= .s0
+                    t1 ~= .s1
+                    t2 ~= .s2
+                    t3 ~= .s3
                 }
-                next.next_u64()
+                .next_u64()
             }
         }
-        next.s0 = t0
-        next.s1 = t1
-        next.s2 = t2
-        next.s3 = t3
-        next
+        .s0 = t0
+        .s1 = t1
+        .s2 = t2
+        .s3 = t3
+        child
     }
 }

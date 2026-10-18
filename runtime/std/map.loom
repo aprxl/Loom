@@ -69,7 +69,7 @@ pub warp Map[K, V] {
             self.insert(k, v)
         }
     }
-    /// Takes out the entry for `key`, with the key as the map had it.
+    /// Takes out the entry for `key` and gives it back with the key you gave.
     pub fn remove_entry(mut self, take key: K) -> ?(K, V) where K: Hash {
         match self.remove(key) {
             some(v) => some((key, v))
@@ -78,7 +78,7 @@ pub warp Map[K, V] {
     }
     /// Replaces the value for `key` with `f` of it, if there is one.
     pub fn update(mut self, take key: K, f: V => V) where K: Hash {
-        match self.remove(key) {
+        match self.get(key) {
             some(v) => self.insert(key, f(v))
             none => none
         }
@@ -86,7 +86,7 @@ pub warp Map[K, V] {
     /// Adds the entries of `other`; for a key in both, `f(mine, theirs)`.
     pub fn merge(mut self, take other: Map[K, V], f: (V, V) => V) where K: Hash {
         for (k, v) in other.pairs() {
-            match self.remove(k) {
+            match self.get(k) {
                 some(mine) => self.insert(k, f(mine, v))
                 none => self.insert(k, v)
             }

@@ -820,10 +820,10 @@ fn stdin_and_stderr_work_on_both_backends() {
             .stderr(std::process::Stdio::piped())
             .spawn()
             .expect("the loom binary runs");
-        std::io::Write::write_all(&mut child.stdin.take().expect("stdin"), b"hello\nab\r\ncd\nlast").expect("input");
+        std::io::Write::write_all(&mut child.stdin.take().expect("stdin"), b"hello\t\nab\r\ncd\nlast").expect("input");
         let out = child.wait_with_output().expect("finishes");
         assert!(out.status.success(), "{backend}: {}", text(&out.stderr));
-        assert_eq!(text(&out.stdout), "ahello\n8\nnone\n", "{backend}");
+        assert_eq!(text(&out.stdout), "ahello\t\n8\nnone\n", "{backend}");
         assert_eq!(text(&out.stderr), "err\n", "{backend}");
     }
 }

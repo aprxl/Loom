@@ -618,9 +618,15 @@ whole-program timings, not timings of the unchanged bytecode in isolation.
 
 ## Standard library, phases 0, 1 and 4 (design/stdlib-plan.md)
 
-Step-0 spike: a higher-order function written in Loom (`retain` with a
-lambda) over 3 million `i64`s on Treadle at `-O2` ran at 1.0 to 1.1x the
-hand-written loop, so the library is plain Loom by default.
+Step-0 spike: dispatch counts (`crates/loom/tests/std_counts.rs`) of a std
+method written in Loom against the same work as a hand loop, input building
+taken away: `retain`, `dedup` and `swap_remove` are 1.00x (the method inlines
+to the hand loop). Others miss the plan and are held by a guard in that test:
+`resize` 2.2x (plan 1.1x), `counts` 2.6x (1.1x), `min_by_key` 8x and
+`filter_map` then `sum` 16x (1.25x), `step_by` then `sum` 32x (1.25x; the
+adaptor walks every item). `sort_by` costs 1.3x the native `sort`. An earlier
+wall-clock spike (3M items, whole process) gave 1.0 to 1.1x, but it was
+dominated by building the list and is not evidence.
 
 Scaling gates (dispatch counts, `bench/counts.txt`, test
 `std_collections_scale`): ten times the input costs this many times the

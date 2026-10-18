@@ -1,0 +1,11 @@
+use std.io.print
+
+fn main() {
+    let xs: List[i32] = [1, 2, 3, 4, 5, 6]
+    let k = 2
+    let kept = xs.filter_map(x => if x > k { some(x + k) } else { none })
+    let spread = xs.flat_map(x => (0..x + k))
+    print("before")
+    print(kept.join(","))
+    print(spread.count())
+}

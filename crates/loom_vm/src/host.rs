@@ -19,6 +19,7 @@ pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
     Some(match name {
         "env.get" => env_get,
         "env.args" => env_args,
+        "time.now" => now,
         "io.read_line" => read_line,
         "io.read_all" => read_all,
         "io.write_err" => write_err,
@@ -74,6 +75,15 @@ fn env_args(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     Ok(())
 }
 
+/// `time.now() -> nanoseconds`: a clock that only goes forward, counted
+/// from the first time anything asks. Compile-time code can't read it.
+fn now(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.host_check("time.now")?;
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    args[0] = START.get_or_init(std::time::Instant::now).elapsed().as_nanos() as u64;
+    Ok(())
+}
+
 /// `io.read_line(dst)`: the next line of standard input, without its line
 /// ending, as a `?String` at `dst`; `none` at the end of the input.
 fn read_line(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
@@ -90,7 +100,8 @@ fn read_line(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
         unsafe { std::ptr::write_bytes(args[0] as *mut u8, 0, 24) };
         return Ok(());
     }
-    let trimmed = line.trim_end_matches(char::is_control);
+    let trimmed = line.strip_suffix('\n').unwrap_or(&line);
+    let trimmed = trimmed.strip_suffix('\r').unwrap_or(trimmed);
     ctx.new_string(trimmed.as_bytes(), args[0])
 }
 

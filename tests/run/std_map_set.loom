@@ -1,5 +1,10 @@
 use std.io.print
 fn main() {
+    var order: Map[str, i32] = Map.of([("a", 1), ("b", 2), ("c", 3)])
+    order.update("a", _ + 1)
+    order.merge(Map.of([("b", 10), ("a", 10)]), _ + _)
+    print(order.keys().join(","))
+    print(order.values().join(","))
     var m: Map[str, i32] = Map.of([("a", 1), ("b", 2), ("c", 3)])
     print(m.get_or("z", 9))
     m.update("a", _ + 10)

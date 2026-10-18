@@ -4,6 +4,7 @@
 
 use std.env
 use std.fs
+use std.io
 use std.io.print
 use std.term
 use std.time
@@ -30,6 +31,13 @@ fn raw() -> i32 {
 
 fn keys() -> i32 = term.poll_keys("ab") as i32
 
+fn clock() -> i32 = (time.monotonic_nanos() % 1) as i32
+
+fn line() -> i32 {
+    let _ = io.read_line()
+    6
+}
+
 fn read() -> i32 {
     let _ = fs.read_text("/nope")
     5
@@ -41,5 +49,7 @@ const HOME: i32 = home()                         //~ K0104
 const RAW: i32 = raw()                           //~ K0104
 const KEYS: i32 = keys()                         //~ K0104
 const READS: i32 = read()                        //~ K0104
+const CLOCK: i32 = clock()                       //~ K0104
+const LINE: i32 = line()                         //~ K0104
 
 fn main() {}
