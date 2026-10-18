@@ -30,6 +30,10 @@ pub warp Range[T] {
     /// methods of one, so it can be given to a thread. Unravels if `n` is 0
     /// or the range has no end.
     pub fn chunks(self, n: usize) -> Stream[Range[T]]
+    /// The values from the last to the first. Needs room for all of them.
+    pub fn rev(self) -> Stream[T] {
+        Reversed(items: self.collect())
+    }
 }
 
 /// A lazy stream of `T`s: `s.chars()`, `xs.indexed()` and `stream.map(f)`
@@ -64,6 +68,139 @@ pub warp Stream[T] {
     pub fn zip[U](take self, other: Stream[U]) -> Stream[(T, U)]
     /// These items, then `other`'s.
     pub fn chain(take self, other: Stream[T]) -> Stream[T]
+
+    /// Every `n`th item, starting with the first. Unravels if `n` is 0.
+    pub fn step_by(take self, n: usize) -> Stream[T] {
+        assert(n > 0, "step_by: n is 0")
+        StepBy(src: self, n: n, started: false)
+    }
+
+    /// `f` of each item, leaving out the ones it gives `none` for.
+    pub fn filter_map[U](take self, f: T => ?U) -> Stream[U] {
+        self.map(f).filter(_.is_some()).map(x => x mend unravel("filter_map"))
+    }
+
+    /// The items of the streams `f` makes from each item, one after another.
+    pub fn flat_map[U](take self, f: T => Stream[U]) -> Stream[U] {
+        Flatten(src: self.map(f), cur: [])
+    }
+    /// A stream that lets you look at the next item before taking it.
+    pub fn peekable(take self) -> Peekable[T] {
+        Peekable(src: self, buf: [], peeked: false)
+    }
+    /// The items again and again, for ever. Nothing if there are none.
+    pub fn cycle(take self) -> Stream[T] {
+        Cycle(items: self.collect(), at: 0)
+    }
+    /// Lists of `n` items at a time; the last may be shorter. Unravels if
+    /// `n` is 0.
+    pub fn chunks(take self, n: usize) -> Stream[List[T]] {
+        assert(n > 0, "chunks: n is 0")
+        Chunks(src: self, n: n)
+    }
+    /// The item after skipping `n`.
+    pub fn nth(take self, n: usize) -> ?T {
+        var rest = self.skip(n)
+        rest.next()
+    }
+    /// Whether there are no items.
+    pub fn is_empty(take self) -> bool {
+        var rest = self
+        rest.next() == none
+    }
+    /// Whether both streams have equal items in the same order.
+    pub fn eq(take self, take other: Stream[T]) -> bool where T: Eq {
+        var a = self
+        var b = other
+        while true {
+            match a.next() {
+                some(x) => match b.next() {
+                    some(y) => if x != y { return false }
+                    none => return false
+                }
+                none => return b.next() == none
+            }
+        }
+        true
+    }
+    /// The item with the smallest `key` (the first, among equals).
+    pub fn min_by_key[K: Ord](take self, key: T => K) -> ?T {
+        var best: List[T] = []
+        var best_key: List[K] = []
+        for x in self {
+            let k = key(x)
+            if best.is_empty() or k < best_key[0] {
+                best.clear()
+                best_key.clear()
+                best.push(x)
+                best_key.push(k)
+            }
+        }
+        best.pop()
+    }
+    /// The item with the largest `key` (the last, among equals).
+    pub fn max_by_key[K: Ord](take self, key: T => K) -> ?T {
+        var best: List[T] = []
+        var best_key: List[K] = []
+        for x in self {
+            let k = key(x)
+            if best.is_empty() or not (k < best_key[0]) {
+                best.clear()
+                best_key.clear()
+                best.push(x)
+                best_key.push(k)
+            }
+        }
+        best.pop()
+    }
+    /// The item no other goes before, by `before` (the first, among equals).
+    pub fn min_by(take self, before: (T, T) => bool) -> ?T {
+        var best: List[T] = []
+        for x in self {
+            if best.is_empty() or before(x, best[0]) {
+                best.clear()
+                best.push(x)
+            }
+        }
+        best.pop()
+    }
+    /// The item that goes before no other, by `before` (the last, among
+    /// equals).
+    pub fn max_by(take self, before: (T, T) => bool) -> ?T {
+        var best: List[T] = []
+        for x in self {
+            if best.is_empty() or not before(x, best[0]) {
+                best.clear()
+                best.push(x)
+            }
+        }
+        best.pop()
+    }
+    /// The items `f` says yes to, and the ones it says no to.
+    pub fn partition(take self, f: T => bool) -> (List[T], List[T]) {
+        var yes: List[T] = []
+        var no: List[T] = []
+        for x in self {
+            if f(x) { yes.push(x) } else { no.push(x) }
+        }
+        (yes, no)
+    }
+    /// How many times each item comes up.
+    pub fn counts(take self) -> Map[T, usize] where T: Hash {
+        var m: Map[T, usize] = Map()
+        for x in self {
+            m.entry(x, default: 0) += 1
+        }
+        m
+    }
+    /// The items in lists by `key`, in the order the keys first came up.
+    pub fn group_by[K: Hash](take self, key: T => K) -> Map[K, List[T]] {
+        var m: Map[K, List[T]] = Map()
+        for x in self {
+            m.entry(key(x), default: []).push(x)
+        }
+        m
+    }
 
     /// A list of the items.
     pub fn collect(take self) -> List[T]
@@ -144,4 +281,130 @@ pub warp Shuttle[T, U] {
 pub once warp Burst[T] {
     /// Runs the shuttle to its next `pull`, throwing away what it yields.
     pub fn drain(take self)
+}
+
+/// The items of `step_by`.
+warp StepBy[T]: Iter {
+    src: Stream[T]
+    n: usize
+    started: bool
+
+    type Item = T
+
+    fn next(mut self) -> ?T {
+        if not .started {
+            .started = true
+            return .src.next()
+        }
+        for _ in 1..self.n {
+            if .src.next() == none { return none }
+        }
+        .src.next()
+    }
+}
+
+/// The items of `flat_map`.
+warp Flatten[U]: Iter {
+    src: Stream[Stream[U]]
+    cur: List[Stream[U]]
+
+    type Item = U
+
+    fn next(mut self) -> ?U {
+        while true {
+            if .cur.is_empty() {
+                match .src.next() {
+                    some(inner) => .cur.push(inner)
+                    none => return none
+                }
+            }
+            match .cur[0].next() {
+                some(x) => return some(x)
+                none => .cur.clear()
+            }
+        }
+        none
+    }
+}
+
+/// What `peekable` makes.
+pub warp Peekable[T]: Iter {
+    src: Stream[T]
+    buf: List[T]
+    peeked: bool
+
+    type Item = T
+
+    fn next(mut self) -> ?T {
+        if .peeked {
+            .peeked = false
+            return .buf.pop()
+        }
+        .src.next()
+    }
+
+    /// A copy of the next item, without taking it.
+    pub fn peek(mut self) -> ?T {
+        if not .peeked {
+            match .src.next() {
+                some(x) => {
+                    .buf.push(x)
+                    .peeked = true
+                }
+                none => return none
+            }
+        }
+        .buf.get(0)
+    }
+
+    /// The next item, if `f` says yes to it.
+    pub fn next_if(mut self, f: T => bool) -> ?T {
+        match .peek() {
+            some(x) => if f(x) { .next() } else { none }
+            none => none
+        }
+    }
+}
+
+/// The items of `cycle`.
+warp Cycle[T]: Iter {
+    items: List[T]
+    at: usize
+
+    type Item = T
+
+    fn next(mut self) -> ?T {
+        if .items.is_empty() { return none }
+        let x = .items.get(.at)
+        .at = (.at + 1) % .items.len()
+        x
+    }
+}
+
+/// The items of `chunks`.
+warp Chunks[T]: Iter {
+    src: Stream[T]
+    n: usize
+
+    type Item = List[T]
+
+    fn next(mut self) -> ?List[T] {
+        var out: List[T] = []
+        while out.len() < .n {
+            match .src.next() {
+                some(x) => out.push(x)
+                none => break
+            }
+        }
+        if out.is_empty() { none } else { some(out) }
+    }
+}
+
+/// The items of `rev`: the list, emptied from the end.
+pub warp Reversed[T]: Iter {
+    pub items: List[T]
+
+    type Item = T
+
+    fn next(mut self) -> ?T = .items.pop()
 }

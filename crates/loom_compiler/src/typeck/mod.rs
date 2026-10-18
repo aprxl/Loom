@@ -1437,10 +1437,14 @@ impl<'p> Checker<'p> {
         }
     }
 
-    /// What `Self` means in the methods of `Optional[T]`: `?T`.
+    /// What `Self` means in the methods of `Optional[T]` and `Range[T]`: `?T`
+    /// and the range itself.
     pub(super) fn builtin_self(&mut self, ty: Ty) -> Ty {
         match self.tcx.kind(ty).clone() {
             TyKind::Adt(def, args) if Some(def) == self.std.optional && args.len() == 1 => self.tcx.optional(args[0]),
+            TyKind::Adt(def, args) if Some(def) == self.std.range_warp && args.len() == 1 => {
+                self.tcx.intern(TyKind::Range(args[0]))
+            }
             _ => ty,
         }
     }

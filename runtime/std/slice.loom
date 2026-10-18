@@ -1,5 +1,7 @@
 // Slices: views of contiguous elements.
 
+use std.iter.Reversed
+
 /// `[T]`: a view of contiguous `T`s, in an array or a list. Arrays and lists
 /// have these methods too.
 #builtin
@@ -46,6 +48,10 @@ pub warp Slice[T] {
     /// Views of every run of `n` elements in a row: `[a, b]`, `[b, c]`, …
     /// Unravels if `n` is 0.
     pub fn windows(self, n: usize) -> Stream[[T]]
+    /// The elements from the last to the first.
+    pub fn rev(self) -> Stream[T] {
+        Reversed(items: self.to_list())
+    }
     /// Sorts so that `less(a, b)` says whether `a` goes before `b`. Stable:
     /// elements neither goes before the other keep their order.
     pub fn sort_by(mut self, less: (T, T) => bool) {

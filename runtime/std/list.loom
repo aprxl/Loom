@@ -24,15 +24,91 @@ pub warp List[T] {
     pub fn extend(mut self, xs: [T])
     /// A deep copy.
     pub fn copy(self) -> List[T]
-    /// Keeps the elements `keep` says yes to.
+    /// Keeps the elements `keep` says yes to, in their order.
     pub fn retain(mut self, keep: T => bool) {
         var w = 0
         for i in 0..self.len() {
             if keep(self[i]) {
-                if w != i { self[w] = self[i] }
+                if w != i { self.swap(w, i) }
                 w += 1
             }
         }
         self.truncate(w)
+    }
+    /// Removes the elements `same_key` of which equals the one before's.
+    pub fn dedup_by_key[K: Eq](mut self, key: T => K) {
+        if self.len() < 2 { return }
+        var w = 1
+        for i in 1..self.len() {
+            if key(self[i]) != key(self[w - 1]) {
+                if w != i { self.swap(w, i) }
+                w += 1
+            }
+        }
+        self.truncate(w)
+    }
+    /// Removes each element that equals the one before it.
+    pub fn dedup(mut self) where T: Eq {
+        if self.len() < 2 { return }
+        var w = 1
+        for i in 1..self.len() {
+            if self[i] != self[w - 1] {
+                if w != i { self.swap(w, i) }
+                w += 1
+            }
+        }
+        self.truncate(w)
+    }
+    /// Takes out the element at `i` by moving the last one into its place:
+    /// quick, but it changes the order. Unravels if `i >= len`.
+    pub fn swap_remove(mut self, i: usize) -> T {
+        assert(i < self.len(), "swap_remove: index out of bounds")
+        self.swap(i, self.len() - 1)
+        match self.pop() {
+            some(x) => x
+            none => unravel("swap_remove: empty")
+        }
+    }
+    /// Grows with copies of `x`, or shrinks, to `n` elements.
+    pub fn resize(mut self, n: usize, x: T) {
+        if n < self.len() {
+            self.truncate(n)
+        } else if n > self.len() {
+            var extra = List.filled(x, n - self.len())
+            self.append(mut extra)
+        }
+    }
+    /// Cuts the list at `at`: this keeps the first `at` elements, and the
+    /// rest are returned. Unravels if `at > len`.
+    pub fn split_off(mut self, at: usize) -> List[T] {
+        assert(at <= self.len(), "split_off: index out of bounds")
+        var tail: List[T] = List()
+        while self.len() > at {
+            match self.pop() {
+                some(x) => tail.push(x)
+                none => break
+            }
+        }
+        tail.reverse()
+        tail
+    }
+    /// Moves every element of `other` to the end of this list.
+    pub fn append(mut self, mut other: List[T]) {
+        other.reverse()
+        while true {
+            match other.pop() {
+                some(x) => self.push(x)
+                none => break
+            }
+        }
+    }
+    /// Takes out the elements in `from..to` and returns them. Unravels if
+    /// the range is outside the list.
+    pub fn drain(mut self, from: usize, to: usize) -> List[T] {
+        assert(from <= to and to <= self.len(), "drain: range out of bounds")
+        var tail = self.split_off(to)
+        let taken = self.split_off(from)
+        self.append(mut tail)
+        taken
     }
 }
