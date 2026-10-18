@@ -717,3 +717,7 @@ Regex, calendar dates and time zones, grapheme clusters and normalisation, async
 I/O (`std.reel`, its own design), networking, compression, cryptographic hashes
 and CSPRNGs, a package registry. Each deserves its own proposal once this
 foundation exists.
+
+## 9. Decisions (2026-10-18)
+
+D4: methods only, no operator overloading for now (`Duration.plus`, `Grid.get`). Drifts from the sketches above are fine. D1: no prelude growth; methods live in the type's body. D2: Unicode in place, `_ascii` variants keep the old behaviour. D3: as built. D5: one-shot `fs` functions, `File` stays a path until a real handle exists. D6: postponed. D7: a declared default per weft. D8: done. The status of each item is in LEDGER.md.
