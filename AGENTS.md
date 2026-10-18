@@ -17,6 +17,7 @@ cargo test -p loom --features vm-checked,vm-stats             # the fixtures on 
 ```
 
 Read your own diff before committing. One logical change per commit.
+When work is done, commit it and push it to GitHub.
 
 ## Perf gates (release build, run on an idle machine)
 
