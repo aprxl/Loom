@@ -1,0 +1,18 @@
+// A thread that unravels: the parent unravels with its message where it
+// joins, and the report names where the thread was started (design/vm.md
+// §11.2, P8).
+
+use std.io.print
+
+fn boom() -> i32 {
+    unravel("boom")
+}
+
+fn main() {
+    loom {
+        let fine = thread 1
+        let t = thread boom()
+        print(fine.join())
+        print(t.join())
+    }
+}

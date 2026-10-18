@@ -1,0 +1,15 @@
+// The parent itself unravels while a thread is running: it is not a
+// thread's unravel, so there is no note.
+
+use std.io.print
+use std.sync.sched_yield
+
+fn main() {
+    loom {
+        let t = thread {
+            sched_yield()
+            print("not reached")
+        }
+        unravel("parent")
+    }
+}

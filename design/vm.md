@@ -1168,10 +1168,14 @@ A **loom group** is the set of threads a block started. Its rules:
   path). If the group has failed it cancels what's left, waits for every
   thread, then unravels with the recorded message, reported where the parent
   observed it (the `join`, or the end of the block): both backends give that
-  line, whatever shape the thread's code had. A note, `the thread started
-  here unravelled`, at the `thread` expression is allowed on Treadle's
-  report and not on the Lua backend's (P8; neither emits it yet). A `join` of a thread that finished
-  normally, in a group that hasn't failed, just takes the value.
+  line, whatever shape the thread's code had. The report adds a note, `the
+  thread started here unravelled`, at the `thread` expression of the thread
+  that failed (P8: `Outcome::Unravel`'s `thread`, on both backends). When it
+  was a thread's own loom that failed, the note is at the thread the parent
+  can see, the outer one. An exit, Ctrl-C, a deadlock and a cancel have no
+  note, and neither has an unravel of the parent's own. A `join` of a thread
+  that finished normally, in a group that hasn't failed, just takes the
+  value.
 - **Deadlock**: when the queue is empty and tasks are parked, the program's
   own task unravels with `deadlock: every thread is waiting`, where it
   waits (a `join`, or a loom's end). It propagates as any unravel, so the
@@ -1417,7 +1421,7 @@ On Treadle:
 | P5 | formatting numbers (the review's F2–F4) | one table of cases, Rust's formatting where the spec is silent | fixed to match |
 | P6 | `usize` (D3) | 64 bits | 63 bits |
 | P7 | how deep recursion goes before `stack overflow` | memory-bound (256 MiB of stack by default) | Lua's limits |
-| P8 | the note on a thread's unravel (§11.2) | `the thread started here unravelled`, at the `thread` expression | none. Allowed to differ |
+| P8 | the note on a thread's unravel (§11.2) | `the thread started here unravelled`, at the `thread` expression | the same line; the column is the statement's or the expression's |
 | P8 | which unravel wins when two things in a statement could unravel | the first in evaluation order | the same |
 | P9 | a `Map` or `Set` key with a hand-written `eq` or `hash` | uses them | structural. Fixed to match where it can be |
 

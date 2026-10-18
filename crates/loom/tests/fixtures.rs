@@ -3,7 +3,9 @@
 //! - `tests/run/NAME.loom` is compiled and run in-process. Its output must
 //!   match `NAME.out`. With `NAME.unravel`, the run must unravel with the
 //!   message on that file's first line, at the Loom line its second line
-//!   names (`line 4`); otherwise it must finish.
+//!   names (`line 4`), and, if there is a third line, with the thread it
+//!   came from started on the line it names (`thread line 9`; `no thread`
+//!   if it isn't a thread's); otherwise it must finish.
 //! - `tests/examples/NAME.out` is the exact output of `examples/NAME.loom`,
 //!   on both backends.
 //! - `tests/test/NAME.out` is the report `loom test` prints for `NAME.loom`.
@@ -106,14 +108,23 @@ fn check_outcome(path: &Path, outcome: Outcome) -> Option<String> {
             let want = error.unwrap_or_default();
             (message != want.trim_end()).then(|| format!("failed with {message:?}, expected {:?}", want.trim_end()))
         }
-        (Some(spec), Outcome::Unravel { message, location }) => {
+        (Some(spec), Outcome::Unravel { message, location, thread }) => {
             let mut lines = spec.lines();
             let want_message = lines.next().unwrap_or_default();
             let want_line = lines.next().and_then(|l| l.strip_prefix("line ")).and_then(|n| n.parse::<u32>().ok());
+            // `thread line N`: the thread whose unravel it is was started on
+            // that line; `no thread`: it isn't a thread's.
+            let want_thread = match lines.next() {
+                Some("no thread") => Some(None),
+                Some(l) => l.strip_prefix("thread line ").and_then(|n| n.parse::<u32>().ok()).map(Some),
+                None => None,
+            };
             if message != want_message {
                 Some(format!("unraveled with {message:?}, expected {want_message:?}"))
             } else if want_line.is_some() && location.as_ref().map(|l| l.line) != want_line {
                 Some(format!("unraveled at {location:?}, expected line {want_line:?}"))
+            } else if want_thread.is_some_and(|want| thread.as_ref().map(|l| l.line) != want) {
+                Some(format!("the thread was started at {thread:?}, expected line {want_thread:?}"))
             } else {
                 None
             }

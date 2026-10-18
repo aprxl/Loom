@@ -184,6 +184,8 @@ pub(crate) struct Task {
     pub env_drop: u32,
     /// It was spawned into a failed group: it never ran.
     pub unrun: bool,
+    /// The word of the instruction that started it.
+    pub started: usize,
     pub epoch: u32,
     live: bool,
 }
@@ -216,6 +218,7 @@ impl Task {
             drop_fn: 0,
             env_drop: 0,
             unrun: false,
+            started: 0,
             epoch: 0,
             live: false,
         }
@@ -810,6 +813,7 @@ impl Sched {
         drop_fn: u64,
         result_bytes: u64,
         env_drop: u64,
+        started: usize,
     ) -> Result<(u64, Step), Trap> {
         let g = self.group_index(g)?;
         let (code, frame, params) = entry;
@@ -830,6 +834,7 @@ impl Sched {
             env,
             env_bytes,
             drop_fn: drop_fn as u32,
+            started,
             ..Task::empty()
         };
         if failed {
@@ -914,7 +919,7 @@ impl Sched {
             Some(trap) => {
                 self.tasks[cur].failed = true;
                 if self.groups[g].failure.is_none() {
-                    self.groups[g].failure = Some(trap);
+                    self.groups[g].failure = Some(trap.of_thread(self.tasks[cur].started));
                     self.cancel_all(g, cur);
                 }
             }

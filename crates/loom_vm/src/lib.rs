@@ -125,6 +125,10 @@ pub(crate) enum Trap {
     /// `process.exit(code)`: unwinds as an unravel does, then ends the run.
     Exit(u8),
     Unravel(String),
+    /// A thread's unravel, as its parent sees it at the `join` or where the
+    /// loom ends: the message, and the word of the instruction that started
+    /// the thread (design/vm.md §11.2).
+    Thread(String, usize),
     /// `main` returned this error.
     Failed(String),
     /// A bug in Loom.
@@ -150,7 +154,27 @@ impl Trap {
             Trap::Budget { .. } => "compile-time code used more than its budget".into(),
             Trap::Refused(native) => format!("`{native}` can't run at compile time"),
             Trap::Exit(code) => format!("exit {code}"),
-            Trap::Unravel(message) | Trap::Failed(message) | Trap::Crash(message) => message.clone(),
+            Trap::Unravel(message) | Trap::Thread(message, _) | Trap::Failed(message) | Trap::Crash(message) => {
+                message.clone()
+            }
+        }
+    }
+
+    /// What this trap is to the parent of the thread that started at word
+    /// `started`, if the thread ended with it: an unravel is the thread's,
+    /// and the others (a cancel, an exit, Ctrl-C, a bug) are not.
+    pub(crate) fn of_thread(self, started: usize) -> Trap {
+        match self {
+            Trap::Cancel
+            | Trap::Halt
+            | Trap::Task(_)
+            | Trap::Interrupt
+            | Trap::Exit(_)
+            | Trap::Failed(_)
+            | Trap::Crash(_)
+            | Trap::Budget { .. }
+            | Trap::Refused(_) => self,
+            other => Trap::Thread(other.message(), started),
         }
     }
 }
@@ -373,7 +397,15 @@ impl<'i> Vm<'i> {
                 Trap::Budget { budget, .. } => Outcome::OverBudget { budget, location },
                 Trap::OutOfMemory if self.memory_limited => Outcome::OverBudget { budget: Budget::Memory, location },
                 Trap::Refused(native) => Outcome::Refused { native: native.into(), location },
-                trap => Outcome::Unravel { message: trap.message(), location },
+                Trap::Thread(message, started) => {
+                    let thread = self.image.line_at(started as u32).map(|(file, line, column)| Location {
+                        file: file.to_string(),
+                        line,
+                        column,
+                    });
+                    Outcome::Unravel { message, location, thread }
+                }
+                trap => Outcome::Unravel { message: trap.message(), location, thread: None },
             }
         })
     }

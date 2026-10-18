@@ -97,7 +97,7 @@ pub fn evaluate(db: &SourceDb, p: &Program, typed: &Typed, tests: bool) -> Resul
             }
         }
         let diag = match &outcome {
-            Outcome::Unravel { message, location } => {
+            Outcome::Unravel { message, location, .. } => {
                 if let Some(rest) = message.strip_prefix(heddle::CYCLE) {
                     // The unravel is in the constant's init: the read is
                     // where that was called from.

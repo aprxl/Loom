@@ -27,6 +27,9 @@ pub const UNRAVEL_MARK: &str = "\u{1f}LOOM\u{1f}";
 const EXIT_MARK: &str = "\u{1f}exit ";
 /// After [`UNRAVEL_MARK`]: Ctrl-C.
 const INTERRUPT_MARK: &str = "\u{1f}interrupt";
+/// At the end of an unravel's message when a thread's failure carries it to
+/// its parent: the line of the bundle that started the thread follows.
+const THREAD_MARK: &str = "\u{1f}thread ";
 
 /// How much memory a program may use. Past it, it unravels; without a
 /// limit, an allocation the system refuses (`s.repeat(1 << 40)`) aborts
@@ -220,7 +223,9 @@ pub(crate) fn outcome(result: mlua::Result<Option<mlua::String>>, map: Option<&S
     match result {
         Ok(None) => Outcome::Finished,
         Ok(Some(message)) => Outcome::Failed { message: message.to_string_lossy() },
-        Err(e) if is_memory_error(&e) => Outcome::Unravel { message: "out of memory".into(), location: None },
+        Err(e) if is_memory_error(&e) => {
+            Outcome::Unravel { message: "out of memory".into(), location: None, thread: None }
+        }
         Err(e) => {
             let mut outcome = classify(&error_text(&e), map);
             // Raised inside the runtime (a stream's step, say): the Loom
@@ -382,11 +387,21 @@ fn classify(text: &str, map: Option<&SourceMap>) -> Outcome {
             Err(_) => Outcome::Crash { message: format!("a bad exit code: {message}"), location },
         },
         Some(message) if message == INTERRUPT_MARK => Outcome::Interrupted,
-        Some(message) => Outcome::Unravel { message: message.to_string(), location },
-        // Recursion that doesn't stop is the program's, not Loom's.
-        None if rest.starts_with("stack overflow") || rest.starts_with("C stack overflow") => {
-            Outcome::Unravel { message: "stack overflow: too many calls inside each other".into(), location }
+        Some(message) => {
+            let (message, thread) = match message.rsplit_once(THREAD_MARK) {
+                Some((message, line)) => {
+                    (message, line.parse::<u32>().ok().and_then(|l| map.and_then(|m| m.locate(l))))
+                }
+                None => (message, None),
+            };
+            Outcome::Unravel { message: message.to_string(), location, thread }
         }
+        // Recursion that doesn't stop is the program's, not Loom's.
+        None if rest.starts_with("stack overflow") || rest.starts_with("C stack overflow") => Outcome::Unravel {
+            message: "stack overflow: too many calls inside each other".into(),
+            location,
+            thread: None,
+        },
         None => Outcome::Crash { message: rest.to_string(), location },
     }
 }
@@ -422,7 +437,29 @@ mod tests {
             outcome,
             Outcome::Unravel {
                 message: "boom".into(),
-                location: Some(Location { file: "a.loom".into(), line: 7, column: 5 })
+                location: Some(Location { file: "a.loom".into(), line: 7, column: 5 }),
+                thread: None,
+            }
+        );
+    }
+
+    #[test]
+    fn a_threads_unravel_names_where_the_thread_started() {
+        let map = SourceMap {
+            files: vec!["a.loom".into()],
+            lines: vec![
+                Mapping { lua_line: 2, file: 0, line: 7, column: 5 },
+                Mapping { lua_line: 3, file: 0, line: 9, column: 13 },
+            ],
+        };
+        let bundle = "return function()\n  error('\\31LOOM\\31boom\\31thread 3', 1)\nend";
+        let outcome = run_bundle(bundle, Some(&map), Host::captured(Default::default()));
+        assert_eq!(
+            outcome,
+            Outcome::Unravel {
+                message: "boom".into(),
+                location: Some(Location { file: "a.loom".into(), line: 7, column: 5 }),
+                thread: Some(Location { file: "a.loom".into(), line: 9, column: 13 }),
             }
         );
     }
@@ -451,7 +488,7 @@ mod tests {
             [
                 ("quiet", &Outcome::Finished, ""),
                 ("loud", &Outcome::Failed { message: "it broke".into() }, "one\n"),
-                ("gives_up", &Outcome::Unravel { message: "nope".into(), location: None }, "two\n"),
+                ("gives_up", &Outcome::Unravel { message: "nope".into(), location: None, thread: None }, "two\n"),
             ]
         );
     }

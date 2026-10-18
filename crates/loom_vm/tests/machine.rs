@@ -125,7 +125,7 @@ fn endless_recursion_is_a_stack_overflow() {
     let forever = vec![word_i32(Op::Call, 4, 1), word(Op::Ret, 4, 1, 0)];
     let config = Config { stack_limit: 4 << 20, ..Config::default() };
     let (outcome, _) = exec(&image(vec![main_printing(0), ("forever", 5, 1, 1, forever)]), &config);
-    let Outcome::Unravel { message, location } = outcome else { panic!("{outcome:?}") };
+    let Outcome::Unravel { message, location, .. } = outcome else { panic!("{outcome:?}") };
     assert_eq!(message, "stack overflow: too many calls inside each other");
     assert_eq!(location.map(|l| l.line), Some(8), "at the call in `forever`");
 }
@@ -140,7 +140,7 @@ fn traps_carry_the_location_of_their_code() {
     ];
     let (outcome, _) = exec(&img, &Config::default());
     let location = Some(Location { file: "test.loom".into(), line: 4, column: 9 });
-    assert_eq!(outcome, Outcome::Unravel { message: "arithmetic overflow".into(), location });
+    assert_eq!(outcome, Outcome::Unravel { message: "arithmetic overflow".into(), location, thread: None });
 }
 
 #[test]
@@ -365,7 +365,7 @@ fn an_unravel_runs_each_frames_landing_pad() {
     pad.push(word(Op::Resume, 0, 0, 0));
     let (outcome, out) = exec(&unwinding_image(pad), &Config::default());
     assert_eq!(out, "inner\nouter\n");
-    let Outcome::Unravel { message, location } = outcome else { panic!("{outcome:?}") };
+    let Outcome::Unravel { message, location, .. } = outcome else { panic!("{outcome:?}") };
     assert_eq!(message, "arithmetic overflow");
     assert_eq!(location.map(|l| l.line), Some(7), "where it overflowed, in `f` (at word 6)");
 }

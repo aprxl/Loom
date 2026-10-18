@@ -1893,6 +1893,7 @@ fn task_op<'p>(
                 args[4],
                 args[5],
                 args[6],
+                (at as usize - env.code_base as usize) / 8,
             )?;
             args[0] = handle;
             step

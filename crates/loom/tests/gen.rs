@@ -1148,7 +1148,7 @@ fn rendered(db: &SourceDb, diags: &[loom_syntax::Diagnostic]) -> String {
 fn ending(outcome: Outcome) -> String {
     match outcome {
         Outcome::Finished => "finished".into(),
-        Outcome::Unravel { message, location } => {
+        Outcome::Unravel { message, location, .. } => {
             format!("unravel {message:?} at {:?}", location.map(|l| (l.line, l.column)))
         }
         Outcome::Failed { message } => format!("failed {message:?}"),

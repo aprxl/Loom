@@ -71,6 +71,10 @@ pub enum Outcome {
     Unravel {
         message: String,
         location: Option<Location>,
+        /// Where the thread that unravelled was started, when the unravel
+        /// is a thread's, seen by the parent at its `join` or where the
+        /// loom ends (design/vm.md §11.2).
+        thread: Option<Location>,
     },
     /// `main ! E` (or a test) returned an error, shown here.
     Failed {

@@ -1982,7 +1982,14 @@ local function thread_main(t, fn)
       if not g.failure then
         -- Where it was raised is the thread's: the parent reports it where
         -- it sees it (design/vm.md §11.2), whatever shape the code had.
-        if type(r) == "string" then r = r:gsub("^bundle:%d+: ", "") end
+        if type(r) == "string" then
+          r = r:gsub("^bundle:%d+: ", "")
+          -- An unravel (not an exit or Ctrl-C) says where the thread
+          -- started; a nested thread's note is the outer thread's.
+          if t.at and r:sub(1, #MARK) == MARK and r:sub(#MARK + 1, #MARK + 1) ~= "\31" then
+            r = r:gsub("\31thread %d+$", "") .. "\31thread " .. t.at
+          end
+        end
         g.failure = r
         for i = 1, g.n do
           if g.tasks[i] ~= t then cancel(g.tasks[i]) end
@@ -2002,6 +2009,9 @@ end
 
 function rt.spawn(g, fn)
   local t = { group = g, waiters = {}, done = false, sdepth = 0 }
+  -- The line of the bundle that spawns it (the caller of the caller of
+  -- `error`), which the host maps to the `thread` expression.
+  t.at = select(2, pcall(error, "", 3)):match("^bundle:(%d+):")
   g.n = g.n + 1
   g.tasks[g.n] = t
   if g.failure then

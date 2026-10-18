@@ -82,7 +82,12 @@ impl Lowerer<'_> {
                 Expr::Function(names, vec![Stmt { kind: StmtKind::Return(Some(thread)), span: Some(body.span) }]);
             Expr::call(maker, args)
         };
-        Expr::rt("spawn", vec![Expr::name(group), thread])
+        // A statement of its own, on the line of the `thread` expression:
+        // the runtime reports the thread's unravel there.
+        let spawned = self.new_temp();
+        let call = Expr::rt("spawn", vec![Expr::name(group), thread]);
+        self.out.push(Stmt { kind: StmtKind::Local(vec![spawned.clone()], vec![call]), span: Some(e.span) });
+        Expr::name(spawned)
     }
 
     /// `loom { … }`: a group for the threads, and a `<close>` guard that

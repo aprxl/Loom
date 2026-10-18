@@ -1,0 +1,22 @@
+// A thread whose own thread unravels: the note is at the thread the parent
+// can see, the outer one, not at the one that unravelled.
+
+use std.io.print
+
+fn inner() -> i32 {
+    unravel("deep")
+}
+
+fn outer() -> i32 {
+    loom {
+        let t = thread inner()
+        t.join()
+    }
+}
+
+fn main() {
+    loom {
+        let a = thread outer()
+        print(a.join())
+    }
+}

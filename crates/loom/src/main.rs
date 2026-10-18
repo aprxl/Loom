@@ -637,8 +637,13 @@ fn describe(outcome: &Outcome) -> Option<String> {
     Some(match outcome {
         Outcome::Finished | Outcome::Exit(_) => return None,
         Outcome::Interrupted => "interrupted (Ctrl-C)\n".into(),
-        Outcome::Unravel { message, location } => {
-            format!("unravel: {message}\n{}", location_text(location.as_ref()))
+        Outcome::Unravel { message, location, thread } => {
+            let mut text = format!("unravel: {message}\n{}", location_text(location.as_ref()));
+            if thread.is_some() {
+                text.push_str("  = note: the thread started here unravelled\n");
+                text.push_str(&location_text(thread.as_ref()));
+            }
+            text
         }
         Outcome::Failed { message } => format!("error: {message}\n"),
         Outcome::Crash { message, location } => format!(
