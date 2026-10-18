@@ -198,6 +198,13 @@
 </div>
 <p class="member-doc"><code>f</code> of each item, leaving out the ones it gives <code>none</code> for.</p>
 </div>
+<div class="member" id="Stream.inspect">
+<div class="member-head">
+<span class="sig">fn inspect(take self, f: T =&gt; ()) -&gt; Stream[T]</span>
+
+</div>
+<p class="member-doc">The items, calling <code>f</code> with each as it goes by.</p>
+</div>
 <div class="member" id="Stream.flat_map">
 <div class="member-head">
 <span class="sig">fn flat_map[U](take self, f: T =&gt; Stream[U]) -&gt; Stream[U]</span>

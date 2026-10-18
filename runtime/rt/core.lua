@@ -2456,6 +2456,44 @@ ext["std.iter.Stream.map"] = function(_, _, s, f)
   end
 end
 
+ext["std.iter.Stream.filter_map"] = function(_, du, s, f)
+  local boxed = du.kind == "opt" or du.kind == "unit"
+  return function()
+    while true do
+      local ok, v = s()
+      if not ok then return nil end
+      local y = f(v)
+      if y ~= nil then
+        if boxed then y = y[1] end
+        return true, y
+      end
+    end
+  end
+end
+
+ext["std.iter.Stream.inspect"] = function(_, s, f)
+  return function()
+    local ok, v = s()
+    if not ok then return nil end
+    f(v)
+    return true, v
+  end
+end
+
+ext["std.iter.Stream.step_by"] = function(_, s, n)
+  if n == 0 then error(MARK .. "step_by of 0 items", 2) end
+  local started = false
+  return function()
+    if started then
+      for _ = 2, n do
+        if not s() then return nil end
+      end
+    end
+    started = true
+    return s()
+  end
+end
+
 ext["std.iter.Stream.filter"] = function(_, s, f)
   return function()
     while true do

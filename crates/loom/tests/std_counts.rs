@@ -98,7 +98,7 @@ const CASES: &[Case] = &[
         std: "    print(xs.step_by(3).sum())",
         hand: "    var s = 0u64\n    var i = 0\n    while i < xs.len() {\n        s += xs[i]\n        i += 3\n    }\n    print(s)",
         plan: 1.25,
-        guard: 36.0,
+        guard: 30.0,
     },
     Case {
         name: "filter_map.sum",
@@ -106,7 +106,7 @@ const CASES: &[Case] = &[
         std: "    print(xs.filter_map(x => if x % 2 == 0 { some(x / 2) } else { none }).sum())",
         hand: "    var s = 0u64\n    for x in xs {\n        if x % 2 == 0 { s += x / 2 }\n    }\n    print(s)",
         plan: 1.25,
-        guard: 18.0,
+        guard: 10.0,
     },
     Case {
         name: "min_by_key",

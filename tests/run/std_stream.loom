@@ -27,4 +27,9 @@ fn main() {
     print(xs.step_by(3).sum())
     print(xs.rev().join(","))
     print((0..4).rev().join(","))
+    print(xs.inspect(x => print("saw {x}")).take(2).sum())
+    let names: List[String] = ["a", "bb", "ccc"]
+    print(names.filter_map(s => if s.len() > 1 { some(s.len()) } else { none }).join(","))
+    let nested: List[?i32] = [some(1), none]
+    print(nested.filter_map(x => some(x)).count())
 }

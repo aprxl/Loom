@@ -70,6 +70,19 @@ pub(super) enum Step {
     },
     Take(Ty),
     Skip(Ty),
+    /// `[16]` the step, `[32]` whether the first item has been given, `[40]`
+    /// how many are left to skip before the next.
+    Stride(Ty),
+    Inspect {
+        item: Ty,
+        f: Ty,
+    },
+    /// `f` gives an optional: the items it gives `some` for, unwrapped.
+    FilterMap {
+        from: Ty,
+        to: Ty,
+        f: Ty,
+    },
     Indexed {
         item: Ty,
         pair: Ty,
@@ -119,6 +132,9 @@ const METHODS: &[&str] = &[
     "skip",
     "take_while",
     "skip_while",
+    "step_by",
+    "inspect",
+    "filter_map",
     "indexed",
     "zip",
     "chain",
@@ -313,6 +329,9 @@ impl<'a> Builder<'a> {
             | Step::SkipWhile { .. }
             | Step::Take(_)
             | Step::Skip(_)
+            | Step::Stride(_)
+            | Step::Inspect { .. }
+            | Step::FilterMap { .. }
             | Step::Indexed { .. } => self.drop_stream(b),
             Step::Zip { .. } | Step::Chain(_) => {
                 self.drop_stream(b);
@@ -511,6 +530,78 @@ impl<'a> Builder<'a> {
                 }
                 self.seal(head);
             }
+            Step::Stride(item) => {
+                let first = self.word(b, 32);
+                let zero = self.iconst(0);
+                let started = self.ucmp(Cmp::Ne, first, zero);
+                let (go, begin) = (self.new_block(), self.new_block());
+                self.br(started, go, begin);
+                self.enter(begin);
+                let one = self.iconst(1);
+                self.set_word(b, 32, one);
+                let got = self.step(b, out);
+                self.terminate(Term::Ret(vec![got]));
+                self.enter(go);
+                let n = self.word(b, 16);
+                let one = self.iconst(1);
+                let skips = self.uarith(IntOp::Sub, n, one);
+                self.set_word(b, 40, skips);
+                let tmp = self.item_slot(item, span)?;
+                let (head, skip, rest) = (self.new_block(), self.new_block(), self.new_block());
+                self.jump(head);
+                self.switch_to(head);
+                let left = self.word(b, 40);
+                let zero = self.iconst(0);
+                let more = self.ucmp(Cmp::Ne, left, zero);
+                self.br(more, skip, rest);
+                self.enter(skip);
+                let one = self.iconst(1);
+                let less = self.uarith(IntOp::Sub, left, one);
+                self.set_word(b, 40, less);
+                let got = self.step(b, tmp);
+                let not = self.emit1(InstKind::Not(got), VTy::Int);
+                self.none_if(not);
+                self.drop_at(tmp, item);
+                self.jump(head);
+                self.seal(head);
+                self.enter(rest);
+                let got = self.step(b, out);
+                self.terminate(Term::Ret(vec![got]));
+            }
+            Step::Inspect { item, f } => {
+                let got = self.step(b, out);
+                let not = self.emit1(InstKind::Not(got), VTy::Int);
+                self.none_if(not);
+                let fv = self.fn_in_box(b, 16);
+                let x = self.load_val(out, 0, item, span)?;
+                self.call_fn(&fv, f, vec![x], span)?;
+                self.ret_int(1);
+            }
+            Step::FilterMap { from, to, f } => {
+                let TyKind::Fn(_, opt) = self.tcx().kind(f).clone() else { return self.internal(span, "a function") };
+                let opt = self.tcx().degauge(opt);
+                let tmp = self.item_slot(from, span)?;
+                let head = self.new_block();
+                self.jump(head);
+                self.switch_to(head);
+                let got = self.step(b, tmp);
+                let not = self.emit1(InstKind::Not(got), VTy::Int);
+                self.none_if(not);
+                let fv = self.fn_in_box(b, 16);
+                let x = self.load_val(tmp, 0, from, span)?;
+                let r = self.call_fn(&fv, f, vec![x], span)?;
+                self.drop_at(tmp, from);
+                let some = self.is_some(&r, opt, span)?;
+                let (yes, no) = (self.new_block(), self.new_block());
+                self.br(some, yes, no);
+                self.enter(yes);
+                let y = self.unwrap_some(&r, opt, span)?;
+                self.move_to(out, 0, y, to, span)?;
+                self.ret_int(1);
+                self.enter(no);
+                self.jump(head);
+                self.seal(head);
+            }
             Step::Take(_) => {
                 let n = self.word(b, 16);
                 let zero = self.iconst(0);
@@ -626,6 +717,9 @@ impl<'a> Builder<'a> {
             Step::SkipWhile { item, .. } => format!("skip_while[{}]", show(item)),
             Step::Take(t) => format!("take[{}]", show(t)),
             Step::Skip(t) => format!("skip[{}]", show(t)),
+            Step::Stride(t) => format!("step_by[{}]", show(t)),
+            Step::Inspect { item, .. } => format!("inspect[{}]", show(item)),
+            Step::FilterMap { from, to, .. } => format!("filter_map[{}, {}]", show(from), show(to)),
             Step::Indexed { item, .. } => format!("indexed[{}]", show(item)),
             Step::Zip { pair, .. } => format!("zip[{}]", show(pair)),
             Step::Chain(t) => format!("chain[{}]", show(t)),
@@ -1254,6 +1348,29 @@ impl<'a> Builder<'a> {
                 let n = self.regs(args[1].clone(), self.tcx().usize, span)?[0];
                 let step = if name == "take" { Step::Take(item) } else { Step::Skip(item) };
                 adaptor(self, step, None, Some(n), None)
+            }
+            "step_by" => {
+                let n = self.regs(args[1].clone(), self.tcx().usize, span)?[0];
+                let zero = self.iconst(0);
+                let bad = self.ucmp(Cmp::Eq, n, zero);
+                let (fail, ok) = (self.new_block(), self.new_block());
+                self.br(bad, fail, ok);
+                self.enter(fail);
+                self.unravel_msg(&[Msg::Text("step_by of 0 items")], span)?;
+                self.enter(ok);
+                adaptor(self, Step::Stride(item), None, Some(n), None)
+            }
+            "inspect" => adaptor(self, Step::Inspect { item, f: tys[1] }, Some((args[1].clone(), tys[1])), None, None),
+            "filter_map" => {
+                let TyKind::Adt(_, out) = self.tcx().kind(ret).clone() else { return None };
+                let to = self.tcx().degauge(out[0]);
+                adaptor(
+                    self,
+                    Step::FilterMap { from: item, to, f: tys[1] },
+                    Some((args[1].clone(), tys[1])),
+                    None,
+                    None,
+                )
             }
             "indexed" => {
                 let TyKind::Adt(_, out) = self.tcx().kind(ret).clone() else { return None };

@@ -70,15 +70,12 @@ pub warp Stream[T] {
     pub fn chain(take self, other: Stream[T]) -> Stream[T]
 
     /// Every `n`th item, starting with the first. Unravels if `n` is 0.
-    pub fn step_by(take self, n: usize) -> Stream[T] {
-        assert(n > 0, "step_by: n is 0")
-        StepBy(src: self, n: n, started: false)
-    }
+    pub fn step_by(take self, n: usize) -> Stream[T]
 
     /// `f` of each item, leaving out the ones it gives `none` for.
-    pub fn filter_map[U](take self, f: T => ?U) -> Stream[U] {
-        self.map(f).filter(_.is_some()).map(x => x mend unravel("filter_map"))
-    }
+    pub fn filter_map[U](take self, f: T => ?U) -> Stream[U]
+    /// The items, calling `f` with each as it goes by.
+    pub fn inspect(take self, f: T => ()) -> Stream[T]
 
     /// The items of the streams `f` makes from each item, one after another.
     pub fn flat_map[U](take self, f: T => Stream[U]) -> Stream[U] {
@@ -281,26 +278,6 @@ pub warp Shuttle[T, U] {
 pub once warp Burst[T] {
     /// Runs the shuttle to its next `pull`, throwing away what it yields.
     pub fn drain(take self)
-}
-
-/// The items of `step_by`.
-warp StepBy[T]: Iter {
-    src: Stream[T]
-    n: usize
-    started: bool
-
-    type Item = T
-
-    fn next(mut self) -> ?T {
-        if not .started {
-            .started = true
-            return .src.next()
-        }
-        for _ in 1..self.n {
-            if .src.next() == none { return none }
-        }
-        .src.next()
-    }
 }
 
 /// The items of `flat_map`.

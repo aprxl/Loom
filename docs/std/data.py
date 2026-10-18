@@ -211,6 +211,7 @@ MODULES = [
        {"sig": "fn chain(take self, other: Stream[T]) -> Stream[T]", "doc": "These items, then `other`'s."},
        {"sig": "fn step_by(take self, n: usize) -> Stream[T]", "doc": "Every `n`th item, starting with the first. Unravels if `n` is 0."},
        {"sig": "fn filter_map[U](take self, f: T => ?U) -> Stream[U]", "doc": "`f` of each item, leaving out the ones it gives `none` for."},
+       {"sig": "fn inspect(take self, f: T => ()) -> Stream[T]", "doc": "The items, calling `f` with each as it goes by."},
        {"sig": "fn flat_map[U](take self, f: T => Stream[U]) -> Stream[U]", "doc": "The items of the streams `f` makes from each item, one after another."},
        {"sig": "fn peekable(take self) -> Peekable[T]", "doc": "A stream that lets you look at the next item before taking it."},
        {"sig": "fn cycle(take self) -> Stream[T]", "doc": "The items again and again, for ever. Nothing if there are none."},
