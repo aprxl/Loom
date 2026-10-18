@@ -43,11 +43,11 @@ use loom_isa::{Image, LINK_SLOTS, Op};
 use crate::pool::{Pool, PoolState};
 use crate::sched::{IDLE, Running, Sched, Step, Taken, TaskOp};
 
-use crate::heap::Heap;
+use crate::heap::{Heap, Shared};
 use loom_sys::Host;
 
 use crate::ints::{self, IntErr};
-use crate::natives::{Ctx, NativeFn, resolve};
+use crate::natives::{Ctx, HeapFn, NativeFn, resolve, resolve_heap};
 use crate::stack::Stack;
 use crate::{Config, Fault, Trap, crash_message};
 
@@ -98,6 +98,17 @@ macro_rules! ctx {
     };
 }
 
+/// The heap this worker allocates from: its own with several workers, the
+/// context's otherwise.
+macro_rules! heap {
+    ($env:expr) => {
+        match $env.heap.as_mut() {
+            Some(heap) => heap,
+            None => &mut ctx!($env).heap,
+        }
+    };
+}
+
 macro_rules! sched {
     ($env:expr) => {
         // SAFETY: as for `ctx!`.
@@ -126,6 +137,8 @@ struct Env<'e, 'i> {
     funcs: *const Callee,
     nfuncs: usize,
     natives: &'e [(NativeFn, usize)],
+    /// The natives that touch only the heap, by the same index.
+    heap_natives: &'e [Option<HeapFn>],
     /// The program's context and threads, by pointer: with several workers
     /// they're shared, each use under the pool's lock (see `pool.rs`), so no
     /// two `&mut` of them ever live at once.
@@ -162,6 +175,8 @@ struct Env<'e, 'i> {
     stopping: bool,
     /// What this worker's natives work on, with several workers.
     local: crate::natives::Local,
+    /// With several workers, this worker's own heap, which needs no lock.
+    heap: Option<Box<Heap>>,
     /// With `stats`: what this worker dispatched, added to the context's
     /// when it stops (the workers don't share the counters as they run).
     st_dispatched: u64,
@@ -177,6 +192,9 @@ struct Init<'a, 'i> {
     funcs: *const Callee,
     nfuncs: usize,
     natives: &'a [(NativeFn, usize)],
+    heap_natives: &'a [Option<HeapFn>],
+    /// With several workers, what their heaps share.
+    shared: Option<Arc<Shared>>,
     ctx: *mut Ctx<'i>,
     sched: *mut Sched,
     rodata: *const u8,
@@ -233,6 +251,7 @@ pub(crate) struct Machine<'i> {
     /// (constants computed on first read).
     data: Box<[u64]>,
     natives: Vec<(NativeFn, usize)>,
+    heap_natives: Vec<Option<HeapFn>>,
     pub ctx: Ctx<'i>,
     stack_limit: usize,
     /// Kept between calls from outside.
@@ -279,6 +298,7 @@ impl<'i> Machine<'i> {
             code: &image.code,
             funcs,
             data,
+            heap_natives: image.natives.iter().map(|name| resolve_heap(name)).collect(),
             natives,
             ctx: {
                 let mut ctx = Ctx::new(image, host);
@@ -362,6 +382,8 @@ impl<'i> Machine<'i> {
             funcs: self.funcs.as_ptr(),
             nfuncs: self.funcs.len(),
             natives: &self.natives,
+            heap_natives: &self.heap_natives,
+            shared: pool.is_some().then(|| Arc::clone(self.ctx.heap.shared())),
             ctx: &raw mut self.ctx,
             sched: &raw mut self.sched,
             rodata: self.ctx.rodata_ptr(),
@@ -455,6 +477,7 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
             funcs: init.funcs,
             nfuncs: init.nfuncs,
             natives: init.natives,
+            heap_natives: init.heap_natives,
             ctx: init.ctx,
             stack,
             rodata: init.rodata,
@@ -473,6 +496,7 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
             interrupt: init.interrupt.clone(),
             stopping: false,
             local: Default::default(),
+            heap: init.shared.as_ref().map(|shared| Box::new(Heap::sharing(shared))),
             st_dispatched: 0,
             st_ops: if cfg!(feature = "stats") { vec![0; ctx!(init).op_counts.len()] } else { Vec::new() },
             st_pcs: if cfg!(feature = "stats") { vec![0; ctx!(init).pc_counts.len()] } else { Vec::new() },
@@ -650,10 +674,7 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
                             ($addr:expr, $len:expr) => {{
                                 if cfg!(feature = "checked") {
                                     let (addr, len) = ($addr, $len as u64);
-                                    let _held = env.pool.map(Pool::lock);
-                                    let ok =
-                                        valid(&ctx!(env).heap, env.stack, env.rodata_range, env.data_range, addr, len);
-                                    drop(_held);
+                                    let ok = valid(heap!(env), env.stack, env.rodata_range, env.data_range, addr, len);
                                     if !ok {
                                         return Err(fault!(
                                             Trap::Crash(format!(
@@ -881,11 +902,7 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
                                     (h.read(), h.add(2).read())
                                 };
                                 if cap != 0 {
-                                    let freed = {
-                                        let _held = env.pool.map(Pool::lock);
-                                        ctx!(env).heap.free(buf, cap.wrapping_mul($size), $align)
-                                    };
-                                    if let Err(trap) = freed {
+                                    if let Err(trap) = heap!(env).free(buf, cap.wrapping_mul($size), $align) {
                                         throw!(trap);
                                     }
                                 }
@@ -1333,14 +1350,20 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
                                 // registers are inside the frame.
                                 let args = unsafe { std::slice::from_raw_parts_mut(fp.add(a(w)), regs) };
                                 let done = if env.pool.is_some() {
-                                    let _held = env.pool.map(Pool::lock);
-                                    if cfg!(feature = "checked") {
-                                        ctx!(env).stack = &*env.stack;
+                                    // A native that works on the heap only runs on
+                                    // the worker's own, with no lock.
+                                    if let (Some(heap), Some(own)) = (env.heap.as_mut(), env.heap_natives[b(w)]) {
+                                        own(heap, args)
+                                    } else {
+                                        let _held = env.pool.map(Pool::lock);
+                                        if cfg!(feature = "checked") {
+                                            ctx!(env).stack = &*env.stack;
+                                        }
+                                        ctx!(env).enter(&mut env.local);
+                                        let done = native(ctx!(env), args, c(w) as u16);
+                                        ctx!(env).exit(&mut env.local);
+                                        done
                                     }
-                                    ctx!(env).enter(&mut env.local);
-                                    let done = native(ctx!(env), args, c(w) as u16);
-                                    ctx!(env).exit(&mut env.local);
-                                    done
                                 } else {
                                     if cfg!(feature = "checked") {
                                         ctx!(env).stack = &*env.stack;
@@ -1861,7 +1884,7 @@ fn task_op<'p>(
             let callee = unsafe { &*env.funcs.add(index) };
             let entry = (callee.entry, callee.frame, callee.params);
             let (handle, step) = sched!(env).spawn(
-                &mut ctx!(env).heap,
+                heap!(env),
                 env.stack_limit,
                 entry,
                 args[0],
@@ -1888,7 +1911,7 @@ fn task_op<'p>(
             Step::Next
         }
         TaskOp::LoomFree => {
-            sched!(env).free(&mut ctx!(env).heap, args[0], args[1])?;
+            sched!(env).free(heap!(env), args[0], args[1])?;
             Step::Next
         }
         TaskOp::Cancelled => {
@@ -1910,7 +1933,7 @@ fn task_op<'p>(
             step
         }
         TaskOp::PipeNew => {
-            args[0] = sched!(env).pipe_new(&mut ctx!(env).heap, args[0], args[1], args[2])?;
+            args[0] = sched!(env).pipe_new(heap!(env), args[0], args[1], args[2])?;
             Step::Next
         }
         TaskOp::PipeSend => match sched!(env).pipe_send(args[0])? {
@@ -1945,7 +1968,7 @@ fn task_op<'p>(
             Step::Next
         }
         TaskOp::PipeFree => {
-            sched!(env).pipe_free(&mut ctx!(env).heap, args[0])?;
+            sched!(env).pipe_free(heap!(env), args[0])?;
             Step::Next
         }
         TaskOp::ConstBegin => {
@@ -2030,7 +2053,7 @@ fn thread_ended(env: &mut Env, trap: Option<Trap>) -> Moved {
     let mut guard = pool.map(Pool::lock);
     sched!(env).current = env.current;
     let cur = env.current;
-    let freed = sched!(env).finish(&mut ctx!(env).heap, trap);
+    let freed = sched!(env).finish(heap!(env), trap);
     {
         let (msg, bufs, out) = state!(env);
         let mut run = Running { in_flight: &mut env.in_flight, stack: env.stack, msg, bufs, out };

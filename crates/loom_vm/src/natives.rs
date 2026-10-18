@@ -699,33 +699,57 @@ fn msg_unravel(ctx: &mut Ctx, _: &mut [u64], _: u16) -> Result<(), Trap> {
     Err(Trap::Unravel(String::from_utf8_lossy(&msg).into_owned()))
 }
 
+/// A native that works on the heap only, which a worker of a pool can run
+/// on its own heap, without the lock.
+pub(crate) type HeapFn = fn(&mut Heap, &mut [u64]) -> Result<(), Trap>;
+
+/// The heap-only native named `name`. (`mem.move` is one but for the
+/// checked build, which looks at what it touches.)
+pub(crate) fn resolve_heap(name: &str) -> Option<HeapFn> {
+    Some(match name {
+        "mem.alloc" => heap_alloc,
+        "mem.free" => heap_free,
+        "mem.grow" => heap_grow,
+        "mem.calloc" => heap_calloc,
+        "mem.move" if !cfg!(feature = "checked") => heap_move,
+        _ => return None,
+    })
+}
+
 /// `mem.alloc(size, align) -> address`.
+#[inline(always)]
+fn heap_alloc(heap: &mut Heap, args: &mut [u64]) -> Result<(), Trap> {
+    args[0] = heap.alloc(args[0], args[1])?;
+    Ok(())
+}
+
 // SAFETY: no other symbol in the program has this name, and nothing calls
 // it through the name.
 #[allow(unsafe_code)]
 #[unsafe(export_name = "loom_treadle_mem_alloc")]
 fn mem_alloc(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    args[0] = ctx.heap.alloc(args[0], args[1])?;
-    Ok(())
+    heap_alloc(&mut ctx.heap, args)
 }
 
 /// `mem.free(address, size, align)`.
+#[inline(always)]
+fn heap_free(heap: &mut Heap, args: &mut [u64]) -> Result<(), Trap> {
+    heap.free(args[0], args[1], args[2])
+}
+
 // SAFETY: no other symbol in the program has this name, and nothing calls
 // it through the name.
 #[allow(unsafe_code)]
 #[unsafe(export_name = "loom_treadle_mem_free")]
 fn mem_free(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    ctx.heap.free(args[0], args[1], args[2])
+    heap_free(&mut ctx.heap, args)
 }
 
 /// `mem.calloc(size, align) -> address`: zeroed memory.
-// SAFETY: no other symbol in the program has this name, and nothing calls
-// it through the name.
-#[allow(unsafe_code)]
-#[unsafe(export_name = "loom_treadle_mem_calloc")]
-fn mem_calloc(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+#[inline(always)]
+fn heap_calloc(heap: &mut Heap, args: &mut [u64]) -> Result<(), Trap> {
     let (size, align) = (args[0], args[1]);
-    let ptr = ctx.heap.alloc(size, align)?;
+    let ptr = heap.alloc(size, align)?;
     if size > 0 {
         // SAFETY: `ptr` is a new object of `size` bytes.
         unsafe { std::ptr::write_bytes(ptr as *mut u8, 0, size as usize) };
@@ -734,34 +758,44 @@ fn mem_calloc(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     Ok(())
 }
 
+// SAFETY: no other symbol in the program has this name, and nothing calls
+// it through the name.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "loom_treadle_mem_calloc")]
+fn mem_calloc(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    heap_calloc(&mut ctx.heap, args)
+}
+
 /// `mem.move(dst, src, bytes)`: copies `bytes` bytes, which may overlap.
+#[inline(always)]
+fn heap_move(_: &mut Heap, args: &mut [u64]) -> Result<(), Trap> {
+    let (dst, src, n) = (args[0], args[1], args[2]);
+    if n > 0 {
+        // SAFETY: the compiler passes two runs of `n` bytes the program owns,
+        // in the buffers of lists, or a literal's to copy (the checked build
+        // checks they're live, in `mem_move`).
+        unsafe { std::ptr::copy(src as *const u8, dst as *mut u8, n as usize) };
+    }
+    Ok(())
+}
+
 // SAFETY: no other symbol in the program has this name, and nothing calls
 // it through the name.
 #[allow(unsafe_code)]
 #[unsafe(export_name = "loom_treadle_mem_move")]
 fn mem_move(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let (dst, src, n) = (args[0], args[1], args[2]);
-    if n == 0 {
-        return Ok(());
-    }
-    if cfg!(feature = "checked") && !(ctx.owns(dst, n) && ctx.readable(src, n)) {
+    if cfg!(feature = "checked") && n > 0 && !(ctx.owns(dst, n) && ctx.readable(src, n)) {
         return Err(Trap::Crash(format!("loom internal: moving {n} bytes from {src:#x} to {dst:#x}")));
     }
-    // SAFETY: the compiler passes two runs of `n` bytes the program owns,
-    // in the buffers of lists, or a literal's to copy (the checked build
-    // checks they're live).
-    unsafe { std::ptr::copy(src as *const u8, dst as *mut u8, n as usize) };
-    Ok(())
+    heap_move(&mut ctx.heap, args)
 }
 
 /// `mem.grow(header, element size, align, at least)`: makes room in the
 /// buffer of the list (or string) whose header (address, length, capacity)
 /// is at `header` for at least `at least` elements, at least doubling it.
-// SAFETY: no other symbol in the program has this name, and nothing calls
-// it through the name.
-#[allow(unsafe_code)]
-#[unsafe(export_name = "loom_treadle_mem_grow")]
-fn mem_grow(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+#[inline(always)]
+fn heap_grow(heap: &mut Heap, args: &mut [u64]) -> Result<(), Trap> {
     let (header, size, align, want) = (args[0], args[1], args[2], args[3]);
     // SAFETY: the compiler passes the address of a list's header, three
     // words it owns (the checked build checks the buffer below).
@@ -777,7 +811,7 @@ fn mem_grow(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
         (Some(o), Some(n)) if n <= crate::heap::LIMIT => (o, n),
         _ => return Err(Trap::OutOfMemory),
     };
-    let moved = ctx.heap.realloc(ptr, old_bytes, new_bytes, align)?;
+    let moved = heap.realloc(ptr, old_bytes, new_bytes, align)?;
     // SAFETY: as above.
     unsafe {
         let h = header as *mut u64;
@@ -785,6 +819,14 @@ fn mem_grow(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
         h.add(2).write(if size == 0 { u64::MAX } else { new_cap });
     }
     Ok(())
+}
+
+// SAFETY: no other symbol in the program has this name, and nothing calls
+// it through the name.
+#[allow(unsafe_code)]
+#[unsafe(export_name = "loom_treadle_mem_grow")]
+fn mem_grow(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    heap_grow(&mut ctx.heap, args)
 }
 
 /// `sink.str(sink, text address, length)`.

@@ -312,8 +312,15 @@ without copying it) is a double free on Treadle, so it's fixed before V1
 - Bigger ones come straight from the global allocator.
 - The limit is 8 GiB, as on Lua. Past it, allocation unravels with
   `out of memory`.
-- From V5 each worker thread has its own cache, and a buffer freed on
-  another thread goes back to the page it came from.
+- From V5 each worker has a heap of its own: free lists, a page to carve
+  from, and a share of the limit, taken from the program's total a chunk
+  (16 KiB) at a time, so allocating and freeing take no lock. A buffer
+  freed on another worker goes on the freeing worker's list. A worker that
+  has freed more than it allocated (a chunk and more beyond its share) gives
+  its lists away whole, and a worker whose list is empty takes one of those
+  before it carves a new object, so memory made on one worker and freed on
+  another is reused instead of piling up. The limit is exact with one
+  worker, and with several can be passed by up to two chunks for each.
 
 The fast path (pop a free list) is a handful of machine instructions, inside
 the ops that allocate.
@@ -1298,8 +1305,9 @@ for V6.
   lock is held for exactly one statement: `total.lock() += n`.
 - **`Pipe[T]`** is a bounded queue. `send` when it's full and `recv` when
   it's empty park the task.
-- **Memory**: per-worker allocator caches, and frees from other threads go
-  back to the page's owner (§5.5).
+- **Memory**: per-worker heaps (§5.5). `mem.alloc`, `mem.free`,
+  `mem.calloc`, `mem.grow` and the free of a list's buffer run on the
+  worker's own heap, without the pool's lock.
 - **Determinism**: with one worker this is the reference schedule (§11.1),
   the same as the Lua backend's. The fixture harness uses one worker for any
   fixture that prints from threads. Dedicated tests run with many workers and
@@ -1334,9 +1342,13 @@ for V6.
   thread of its own costs 0.9 µs on 4 to 16 workers (0.7 on 2; the gate is
   2; bench/RESULTS.md has the profile): the lock is held for about 0.4 µs
   of each, so per-worker deques with stealing are not built.
-  **Not yet:** per-worker heaps (the allocator caches), halving a chunk on a
-  steal, like Rayon, and chunks of other iterators than exclusive integer
-  ranges.
+  Allocation is off the lock too (the natives above, `mem.move`, and the free
+  of a list's buffer; the natives that build text still allocate under
+  it, from the context's heap, which exchanges memory with the workers' the
+  same way): `par_alloc`, which builds and drops trees of small lists in
+  `loom for`, ran 0.37× as fast on 8 workers as on one, and runs 4.9× as
+  fast. **Not yet:** halving a chunk on a steal, like Rayon, and chunks of
+  other iterators than exclusive integer ranges.
 
 ---
 

@@ -33,7 +33,7 @@ def best(cmd, runs):
     return min(times), out
 
 
-PAR_BENCHES = {"par_mandelbrot": 1, "par_spawn": 200_000, "par_spawn_join": 200_000}
+PAR_BENCHES = {"par_mandelbrot": 1, "par_alloc": 1, "par_spawn": 200_000, "par_spawn_join": 200_000}
 
 
 def par(runs, workers):

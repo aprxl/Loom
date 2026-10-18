@@ -447,3 +447,32 @@ second state (0.27 to 0.33 s instead of 0.17) it had without. `fib`,
 loop; their times move by up to 6% either way between builds, with where
 the linker puts what is around it (A/B against the commit before:
 0.035/0.035, 0.051/0.054, 0.670/0.653).
+
+### Per-worker heaps (2026-10-17)
+
+Allocating and freeing no longer take the pool's lock: each worker has a
+heap of its own (design/vm.md 5.5), and `mem.alloc`, `mem.free`,
+`mem.calloc`, `mem.grow`, `mem.move` and the free of a list's buffer run on
+it. `par_alloc` (new: each row builds and drops 40 trees of 511 small
+lists, in `loom for`) was the benchmark that showed the lock: it got slower
+with every worker added. Same machine as above; `python bench/run.py --par`.
+
+| Benchmark | workers | before | after |
+|---|--:|--:|--:|
+| `par_alloc` | 1 | 0.311 | 0.316 |
+| `par_alloc` | 2 | 0.338 | 0.173 (1.8x) |
+| `par_alloc` | 4 | 0.620 | 0.112 (2.8x) |
+| `par_alloc` | 8 | 0.852 | 0.065 (4.9x) |
+
+The single-thread benchmarks, the unchanged commit rebuilt in the same
+directory against the new one, run alternately, best of 15 to 25
+(wall clock with compilation, so a short run moves with where the linker
+puts the compiler too: `richards` runs 3% faster with 20 times the
+iterations and 6% slower as shipped): `fib` 0.97, `binary_trees` 0.96 to
+0.98, `word_freq` 1.00 to 1.01, `maps` 0.97 to 0.99, `richards` 0.97 (long)
+and 1.05 (as shipped). `par_spawn_join` on 8 workers is 4 to 7% slower
+(0.203 to 0.210 s before, 0.218 after): the spawner's allocations no longer
+wait for the lock, and finding it faster to take the lock for `mem.alloc`
+alone shows that this is where the time goes, but the saving on
+`par_alloc` is a factor of 13. The checked build keeps its map of live
+objects behind a mutex, and all its checks.

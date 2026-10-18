@@ -11,6 +11,14 @@
 //! [`LIMIT`] bytes live at once, allocating unravels with `out of memory`,
 //! as on Lua.
 //!
+//! A [`Heap`] is one worker's cache: its free lists and its page, and a
+//! share of the bytes the limit allows, taken from the program's total in
+//! chunks, so allocating and freeing need no lock. The heaps of a program's
+//! workers share a [`Shared`]: the total, the pages, and the lists a heap
+//! gave up when it had freed much more than it allocated (a buffer made on
+//! one worker and freed on another), which a heap with an empty list takes
+//! before it carves.
+//!
 //! In the checked build every live object is recorded, so a load or store
 //! outside one, a free of something that isn't live, and a leak at the end
 //! of a run are caught (§5.6).
@@ -19,6 +27,8 @@
 
 use std::alloc::Layout;
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::Trap;
 
@@ -33,6 +43,9 @@ const SMALL_ALIGN: u64 = 16;
 const PAGE: u64 = 64 * 1024;
 /// How many size classes there are (see [`class_of`]).
 const CLASSES: usize = 44;
+/// How many bytes of the limit a heap takes at a time, and keeps when it has
+/// freed more than twice as many.
+const CHUNK: u64 = 16 * 1024;
 
 /// The size class of `size` bytes (`0 < size <= SMALL`): its number, and
 /// the size of its objects.
@@ -48,15 +61,63 @@ fn class_of(size: u64) -> (usize, u64) {
     (16 + (p as usize - 8) * 4 + (k as usize - 1), (1 << p) + k * step)
 }
 
+fn page_layout() -> Layout {
+    Layout::from_size_align(PAGE as usize, SMALL_ALIGN as usize).expect("a valid layout")
+}
+
+/// What a program's heaps share.
 #[derive(Debug)]
-pub(crate) struct Heap {
-    /// Bytes allocated and not yet freed.
-    live: u64,
+pub(crate) struct Shared {
+    /// Bytes in live objects, plus what the heaps hold in reserve.
+    live: AtomicU64,
     /// The most `live` may be: [`LIMIT`], or what compile-time code is
     /// given.
-    limit: u64,
+    limit: AtomicU64,
     /// With `checked`: every live object, by address, with its size.
-    objects: BTreeMap<u64, u64>,
+    objects: Mutex<BTreeMap<u64, u64>>,
+    /// Every page, to give back when the program's memory goes.
+    pages: Mutex<Vec<u64>>,
+    /// Free lists heaps gave up, by class (each is a list through the
+    /// objects, as in [`Heap::free`]).
+    spilled: Mutex<[Vec<u64>; CLASSES]>,
+    /// The classes `spilled` has a list of.
+    pending: AtomicU64,
+}
+
+impl Default for Shared {
+    fn default() -> Shared {
+        Shared {
+            live: AtomicU64::new(0),
+            limit: AtomicU64::new(LIMIT),
+            objects: Mutex::default(),
+            pages: Mutex::default(),
+            spilled: Mutex::new(std::array::from_fn(|_| Vec::new())),
+            pending: AtomicU64::new(0),
+        }
+    }
+}
+
+fn locked<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+impl Drop for Shared {
+    fn drop(&mut self) {
+        let layout = page_layout();
+        for &p in locked(&self.pages).iter() {
+            // SAFETY: each page was allocated with this layout, and no heap
+            // is left to use it.
+            unsafe { std::alloc::dealloc(p as *mut u8, layout) };
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct Heap {
+    shared: Arc<Shared>,
+    /// Bytes of the limit this heap holds that no object of its has: an
+    /// allocation spends them, a free adds to them.
+    credit: u64,
     /// Each size class's free objects, as a list through the objects
     /// themselves (the first word of a free one is the next's address, 0
     /// at the end): every object is at least 16 bytes.
@@ -64,32 +125,35 @@ pub(crate) struct Heap {
     /// Where the page being carved from is free, to its end.
     next: u64,
     end: u64,
-    /// Every page, to give back when the heap goes.
-    pages: Vec<u64>,
 }
 
 impl Default for Heap {
     fn default() -> Heap {
-        Heap { live: 0, limit: LIMIT, objects: BTreeMap::new(), free: [0; CLASSES], next: 0, end: 0, pages: Vec::new() }
+        Heap::sharing(&Arc::new(Shared::default()))
     }
 }
 
 impl Drop for Heap {
     fn drop(&mut self) {
-        let layout = Layout::from_size_align(PAGE as usize, SMALL_ALIGN as usize).expect("a valid layout");
-        for &p in &self.pages {
-            // SAFETY: each page was allocated with this layout, and nothing
-            // of the program is left to use it.
-            unsafe { std::alloc::dealloc(p as *mut u8, layout) };
-        }
+        self.shared.live.fetch_sub(self.credit, Relaxed);
+        self.spill();
     }
 }
 
 impl Heap {
+    /// A heap of its own with the program's total, pages and spilled lists.
+    pub fn sharing(shared: &Arc<Shared>) -> Heap {
+        Heap { shared: Arc::clone(shared), credit: 0, free: [0; CLASSES], next: 0, end: 0 }
+    }
+
+    pub fn shared(&self) -> &Arc<Shared> {
+        &self.shared
+    }
+
     /// Allows `bytes` to be live at once (at most [`LIMIT`]): for
     /// compile-time code, before it allocates anything.
     pub fn set_limit(&mut self, bytes: u64) {
-        self.limit = bytes.min(LIMIT);
+        self.shared.limit.store(bytes.min(LIMIT), Relaxed);
     }
 
     fn layout(size: u64, align: u64) -> Option<Layout> {
@@ -98,6 +162,85 @@ impl Heap {
 
     fn is_small(size: u64, align: u64) -> bool {
         size <= SMALL && align <= SMALL_ALIGN
+    }
+
+    /// Spends `n` bytes of the limit, taking more from the program's total
+    /// when this heap's share is short: a chunk, or what is left if that is
+    /// less. The first heap past the limit gets `out of memory`.
+    #[inline(always)]
+    fn take(&mut self, n: u64) -> Result<(), Trap> {
+        if n > self.credit {
+            self.reserve(n)?;
+        }
+        self.credit -= n;
+        Ok(())
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn reserve(&mut self, n: u64) -> Result<(), Trap> {
+        let need = n - self.credit;
+        let limit = self.shared.limit.load(Relaxed);
+        let mut live = self.shared.live.load(Relaxed);
+        loop {
+            let room = limit.saturating_sub(live);
+            if need > room {
+                return Err(Trap::OutOfMemory);
+            }
+            let grab = need.max(CHUNK).min(room);
+            match self.shared.live.compare_exchange_weak(live, live + grab, Relaxed, Relaxed) {
+                Ok(_) => {
+                    self.credit += grab;
+                    return Ok(());
+                }
+                Err(now) => live = now,
+            }
+        }
+    }
+
+    /// Gives back `n` bytes of the limit; a heap that ends up with more
+    /// than two chunks gives all but one back to the total, and its lists to
+    /// the others.
+    #[inline(always)]
+    fn give(&mut self, n: u64) {
+        self.credit += n;
+        if self.credit > 2 * CHUNK {
+            self.release();
+        }
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn release(&mut self) {
+        self.shared.live.fetch_sub(self.credit - CHUNK, Relaxed);
+        self.credit = CHUNK;
+        self.spill();
+    }
+
+    /// Hands the free lists to the other heaps, if there are any.
+    fn spill(&mut self) {
+        if Arc::strong_count(&self.shared) == 1 {
+            return;
+        }
+        let mut spilled = None;
+        for (class, head) in self.free.iter_mut().enumerate() {
+            if *head != 0 {
+                let lists = spilled.get_or_insert_with(|| locked(&self.shared.spilled));
+                lists[class].push(*head);
+                self.shared.pending.fetch_or(1 << class, Relaxed);
+                *head = 0;
+            }
+        }
+    }
+
+    /// A list another heap gave up, for `class`.
+    fn take_spilled(&self, class: usize) -> Option<u64> {
+        let mut lists = locked(&self.shared.spilled);
+        let head = lists[class].pop();
+        if lists[class].is_empty() {
+            self.shared.pending.fetch_and(!(1 << class), Relaxed);
+        }
+        head
     }
 
     /// `size` bytes aligned to `align`. Nothing is allocated for zero
@@ -110,13 +253,17 @@ impl Heap {
         if size == 0 {
             return Ok(align.max(1));
         }
-        if size > self.limit - self.live {
-            return Err(Trap::OutOfMemory);
-        }
-        let ptr = if Self::is_small(size, align) { self.alloc_small(size)? } else { Self::alloc_big(size, align)? };
-        self.live += size;
+        self.take(size)?;
+        let ptr = if Self::is_small(size, align) { self.alloc_small(size) } else { Self::alloc_big(size, align) };
+        let ptr = match ptr {
+            Ok(ptr) => ptr,
+            Err(trap) => {
+                self.give(size);
+                return Err(trap);
+            }
+        };
         if cfg!(feature = "checked") {
-            self.objects.insert(ptr, size);
+            locked(&self.shared.objects).insert(ptr, size);
         }
         Ok(ptr)
     }
@@ -130,14 +277,26 @@ impl Heap {
             self.free[class] = unsafe { (head as *const u64).read() };
             return Ok(head);
         }
+        self.carve(class, bytes)
+    }
+
+    /// An object of `class` when its free list is empty: from a list
+    /// another heap gave up, or new, from the page.
+    fn carve(&mut self, class: usize, bytes: u64) -> Result<u64, Trap> {
+        if self.shared.pending.load(Relaxed) & (1 << class) != 0
+            && let Some(head) = self.take_spilled(class)
+        {
+            // SAFETY: the head of a list of free objects of this class.
+            self.free[class] = unsafe { (head as *const u64).read() };
+            return Ok(head);
+        }
         if self.end - self.next < bytes {
-            let layout = Layout::from_size_align(PAGE as usize, SMALL_ALIGN as usize).expect("a valid layout");
             // SAFETY: the layout's size isn't zero.
-            let page = unsafe { std::alloc::alloc(layout) } as u64;
+            let page = unsafe { std::alloc::alloc(page_layout()) } as u64;
             if page == 0 {
                 return Err(Trap::OutOfMemory);
             }
-            self.pages.push(page);
+            locked(&self.shared.pages).push(page);
             self.next = page;
             self.end = page + PAGE;
         }
@@ -165,7 +324,7 @@ impl Heap {
         if size == 0 {
             return Ok(());
         }
-        if cfg!(feature = "checked") && self.objects.remove(&ptr) != Some(size) {
+        if cfg!(feature = "checked") && locked(&self.shared.objects).remove(&ptr) != Some(size) {
             return Err(Trap::Crash(format!("freeing {size} bytes at {ptr:#x}, which isn't an object of that size")));
         }
         if Self::is_small(size, align) {
@@ -181,7 +340,7 @@ impl Heap {
             // checked build verifies it above) and is freed once.
             unsafe { std::alloc::dealloc(ptr as *mut u8, layout) };
         }
-        self.live -= size;
+        self.give(size);
         Ok(())
     }
 
@@ -199,20 +358,14 @@ impl Heap {
             self.free(ptr, old, align)?;
             return Ok(align.max(1));
         }
-        if new > old && new - old > self.limit - self.live {
-            return Err(Trap::OutOfMemory);
-        }
-        if cfg!(feature = "checked") && self.objects.get(&ptr) != Some(&old) {
+        if cfg!(feature = "checked") && locked(&self.shared.objects).get(&ptr) != Some(&old) {
             return Err(Trap::Crash(format!("growing {old} bytes at {ptr:#x}, which isn't an object of that size")));
         }
         // Still the same class: it fits where it is.
         if Self::is_small(old, align) && Self::is_small(new, align) && class_of(old).1 == class_of(new).1 {
-            if new > old && new - old > self.limit - self.live {
-                return Err(Trap::OutOfMemory);
-            }
-            self.live = self.live - old + new;
+            self.resize_account(old, new)?;
             if cfg!(feature = "checked") {
-                self.objects.insert(ptr, new);
+                locked(&self.shared.objects).insert(ptr, new);
             }
             return Ok(ptr);
         }
@@ -222,16 +375,18 @@ impl Heap {
             if Self::layout(new, align).is_none() {
                 return Err(Trap::OutOfMemory);
             }
+            self.resize_account(old, new)?;
             // SAFETY: `ptr` is a live object allocated with `layout`, and the
             // new size is a valid size for its alignment (checked above).
             let moved = unsafe { std::alloc::realloc(ptr as *mut u8, layout, size) } as u64;
             if moved == 0 {
+                self.resize_account(new, old).expect("giving bytes back");
                 return Err(Trap::OutOfMemory);
             }
-            self.live = self.live - old + new;
             if cfg!(feature = "checked") {
-                self.objects.remove(&ptr);
-                self.objects.insert(moved, new);
+                let mut objects = locked(&self.shared.objects);
+                objects.remove(&ptr);
+                objects.insert(moved, new);
             }
             return Ok(moved);
         }
@@ -243,10 +398,21 @@ impl Heap {
         Ok(moved)
     }
 
+    /// An object of `old` bytes is now one of `new`: spends or gives back
+    /// the difference.
+    fn resize_account(&mut self, old: u64, new: u64) -> Result<(), Trap> {
+        if new > old {
+            self.take(new - old)
+        } else {
+            self.give(old - new);
+            Ok(())
+        }
+    }
+
     /// With `checked`: whether `len` bytes at `addr` are inside one live
     /// object.
     pub fn holds(&self, addr: u64, len: u64) -> bool {
-        match self.objects.range(..=addr).next_back() {
+        match locked(&self.shared.objects).range(..=addr).next_back() {
             Some((&start, &size)) => addr.checked_add(len).is_some_and(|end| end <= start + size),
             None => false,
         }
@@ -254,14 +420,15 @@ impl Heap {
 
     /// With `checked`: the sizes of the live objects, smallest first.
     pub fn leaked_sizes(&self) -> Vec<u64> {
-        let mut sizes: Vec<u64> = self.objects.values().copied().collect();
+        let mut sizes: Vec<u64> = locked(&self.shared.objects).values().copied().collect();
         sizes.sort_unstable();
         sizes
     }
 
     /// With `checked`: how many objects are live, and their bytes.
     pub fn leaked(&self) -> (usize, u64) {
-        (self.objects.len(), self.objects.values().sum())
+        let objects = locked(&self.shared.objects);
+        (objects.len(), objects.values().sum())
     }
 }
 
@@ -284,7 +451,7 @@ mod tests {
         // SAFETY: `r` holds `small` bytes.
         assert!((0..small).all(|i| unsafe { (r as *const u8).add(i as usize).read() } == i as u8));
         heap.free(r, small, 8).expect("frees");
-        assert_eq!(heap.live, 0);
+        assert_eq!(heap.shared.live.load(Relaxed), heap.credit);
     }
 
     #[test]
@@ -293,10 +460,36 @@ mod tests {
         let p = heap.alloc(64, 8).expect("allocates");
         assert_eq!(heap.realloc(p, 64, LIMIT + 1, 8), Err(Trap::OutOfMemory));
         // The same class: a small growth that would pass the limit.
-        heap.live = LIMIT;
-        assert_eq!(heap.realloc(p, 33, 48, 8), Err(Trap::OutOfMemory));
-        heap.live = 64;
         heap.free(p, 64, 8).expect("frees");
+        // The same class: a small growth that would pass the limit.
+        let mut heap = Heap::default();
+        heap.set_limit(40);
+        let q = heap.alloc(33, 8).expect("allocates");
+        assert_eq!(heap.realloc(q, 33, 48, 8), Err(Trap::OutOfMemory));
+    }
+
+    #[test]
+    fn the_limit_is_exact_for_one_heap() {
+        let mut heap = Heap::default();
+        heap.set_limit(1000);
+        let p = heap.alloc(600, 8).expect("fits");
+        assert_eq!(heap.alloc(401, 8), Err(Trap::OutOfMemory));
+        let q = heap.alloc(400, 8).expect("fits exactly");
+        heap.free(p, 600, 8).expect("frees");
+        heap.free(q, 400, 8).expect("frees");
+        assert!(heap.alloc(1000, 8).is_ok());
+    }
+
+    #[test]
+    fn a_free_on_another_heap_is_reused() {
+        let mut a = Heap::default();
+        let mut b = Heap::sharing(a.shared());
+        let ptrs: Vec<u64> = (0..CHUNK / 64 * 3).map(|_| a.alloc(48, 8).expect("allocates")).collect();
+        for &p in &ptrs {
+            b.free(p, 48, 8).expect("frees");
+        }
+        let again = a.alloc(48, 8).expect("allocates");
+        assert!(ptrs.contains(&again), "a heap that has freed far more than it allocated gives its lists away");
     }
 
     #[test]
