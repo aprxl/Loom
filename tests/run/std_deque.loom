@@ -1,0 +1,27 @@
+use std.io.print
+use std.deque.Deque
+fn main() {
+    var d: Deque[i32] = Deque.new()
+    for i in 0..5 { d.push_back(i) }
+    for i in 10..13 { d.push_front(i) }
+    print(d.to_list().join(","))
+    print(d.pop_front())
+    print(d.pop_back())
+    print(d.len())
+    print(d.get(0))
+    print(d.get(3))
+    print(d.first())
+    print(d.last())
+    d.set(1, 99)
+    print(d.to_list().join(","))
+    var n = 0
+    while d.pop_front() != none { n += 1 }
+    print(n)
+    print(d.pop_back())
+    var s: Deque[String] = Deque.new()
+    s.push_back("a")
+    s.push_front("b")
+    print(s.pop_back())
+    print(s.pop_back())
+    print(s.is_empty())
+}

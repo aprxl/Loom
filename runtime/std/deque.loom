@@ -1,0 +1,85 @@
+// Double-ended queues.
+
+/// A queue with fast pushes and pops at both ends. Two stacks, so every
+/// operation takes constant time except the occasional one that moves half
+/// the items from one side to the other; any run of `n` operations costs
+/// `O(n)`.
+pub warp Deque[T] {
+    front: List[T]
+    back: List[T]
+
+    /// An empty queue.
+    pub fn new() -> Deque[T] = Deque(front: [], back: [])
+
+    /// How many items there are.
+    pub fn len(self) -> usize = .front.len() + .back.len()
+
+    pub fn is_empty(self) -> bool = .front.is_empty() and .back.is_empty()
+
+    /// Adds `x` at the end.
+    pub fn push_back(mut self, take x: T) {
+        .back.push(x)
+    }
+
+    /// Adds `x` at the start.
+    pub fn push_front(mut self, take x: T) {
+        .front.push(x)
+    }
+
+    /// Takes off the last item.
+    pub fn pop_back(mut self) -> ?T {
+        if .back.is_empty() {
+            let moved = .front.len() - .front.len() / 2
+            var low = .front.drain(0, moved)
+            low.reverse()
+            .back.append(mut low)
+        }
+        .back.pop()
+    }
+
+    /// Takes off the first item.
+    pub fn pop_front(mut self) -> ?T {
+        if .front.is_empty() {
+            let moved = .back.len() - .back.len() / 2
+            var low = .back.drain(0, moved)
+            low.reverse()
+            .front.append(mut low)
+        }
+        .front.pop()
+    }
+
+    /// A copy of the item at `i`, counting from the start.
+    pub fn get(self, i: usize) -> ?T {
+        let nf = .front.len()
+        if i < nf { .front.get(nf - 1 - i) } else { .back.get(i - nf) }
+    }
+
+    /// A copy of the first item.
+    pub fn first(self) -> ?T = .get(0)
+
+    /// A copy of the last item.
+    pub fn last(self) -> ?T {
+        if .back.is_empty() { .front.get(0) } else { .back.last() }
+    }
+
+    /// Replaces the item at `i`. Unravels if there isn't one.
+    pub fn set(mut self, i: usize, take x: T) {
+        let nf = .front.len()
+        assert(i < nf + .back.len(), "Deque.set: index out of bounds")
+        if i < nf { .front[nf - 1 - i] = x } else { .back[i - nf] = x }
+    }
+
+    /// Removes every item.
+    pub fn clear(mut self) {
+        .front.clear()
+        .back.clear()
+    }
+
+    /// The items in order, in a new list.
+    pub fn to_list(self) -> List[T] {
+        var out: List[T] = .front.copy()
+        out.reverse()
+        out.extend(.back)
+        out
+    }
+}

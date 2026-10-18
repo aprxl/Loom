@@ -38,4 +38,62 @@ pub warp Map[K, V] {
     pub fn sorted(self) -> List[(K, V)] where K: Ord
     /// A deep copy.
     pub fn copy(self) -> Map[K, V]
+    /// A map of `pairs`; a key that comes up again keeps the last value.
+    pub fn of(pairs: [(K, V)]) -> Map[K, V] where K: Hash {
+        var m: Map[K, V] = Map()
+        for (k, v) in pairs {
+            m.insert(k, v)
+        }
+        m
+    }
+    /// The value for `key`, or `default` when there is none.
+    pub fn get_or(self, key: K, default: V) -> V where K: Hash {
+        match self.get(key) {
+            some(v) => v
+            none => default
+        }
+    }
+    /// Keeps the entries `keep` says yes to.
+    pub fn retain(mut self, keep: (K, V) => bool) where K: Hash {
+        var dead: List[K] = []
+        for (k, v) in self.pairs() {
+            if not keep(k, v) { dead.push(k) }
+        }
+        for k in dead {
+            self.remove(k)
+        }
+    }
+    /// Adds each pair; a key already there gets the new value.
+    pub fn extend(mut self, take pairs: Stream[(K, V)]) where K: Hash {
+        for (k, v) in pairs {
+            self.insert(k, v)
+        }
+    }
+    /// Takes out the entry for `key`, with the key as the map had it.
+    pub fn remove_entry(mut self, take key: K) -> ?(K, V) where K: Hash {
+        match self.remove(key) {
+            some(v) => some((key, v))
+            none => none
+        }
+    }
+    /// Replaces the value for `key` with `f` of it, if there is one.
+    pub fn update(mut self, take key: K, f: V => V) where K: Hash {
+        match self.remove(key) {
+            some(v) => self.insert(key, f(v))
+            none => none
+        }
+    }
+    /// Adds the entries of `other`; for a key in both, `f(mine, theirs)`.
+    pub fn merge(mut self, take other: Map[K, V], f: (V, V) => V) where K: Hash {
+        for (k, v) in other.pairs() {
+            match self.remove(k) {
+                some(mine) => self.insert(k, f(mine, v))
+                none => self.insert(k, v)
+            }
+        }
+    }
+    /// The oldest entry.
+    pub fn first(self) -> ?(K, V) = self.pairs().next()
+    /// The newest entry.
+    pub fn last(self) -> ?(K, V) = self.pairs().last()
 }

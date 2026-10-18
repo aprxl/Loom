@@ -53,6 +53,11 @@ fn most_checks_are_gone_at_o2() {
         let fields: Vec<&str> = line.split_whitespace().collect();
         let [name, size, _] = fields.as_slice() else { continue };
         let Ok(size) = size.parse::<u64>() else { continue };
+        // These measure the standard library's collections (see
+        // `std_collections_scale`), not the optimizer's loops.
+        if matches!(*name, "deque" | "list_ops") {
+            continue;
+        }
         let (b0, v0) = checks(&root, name, size, Level::O0);
         let (b2, v2) = checks(&root, name, size, Level::O2);
         o0 = (o0.0 + b0, o0.1 + v0);

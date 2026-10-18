@@ -1,0 +1,25 @@
+// A queue used both ways: pushes at one end, pops at the other, and a stack
+// at the front.
+use std.io.print
+use std.deque.Deque
+
+const SIZE = 1_000_000
+
+fn main() {
+    var d: Deque[u64] = Deque.new()
+    var total = 0u64
+    for i in 0..SIZE as u64 {
+        d.push_back(i)
+        if i % 3 == 0 {
+            total += d.pop_front() mend 0
+        }
+        d.push_front(i)
+        if i % 5 == 0 {
+            total += d.pop_back() mend 0
+        }
+    }
+    while d.len() > 0 {
+        total += d.pop_front() mend 0
+    }
+    print(total)
+}

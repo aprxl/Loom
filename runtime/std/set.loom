@@ -21,4 +21,85 @@ pub warp Set[T] {
     pub fn sorted(self) -> List[T] where T: Ord
     /// A deep copy.
     pub fn copy(self) -> Set[T]
+    /// The items in this set, `other`, or both.
+    pub fn union(self, other: Set[T]) -> Set[T] where T: Hash {
+        var out = self.copy()
+        for x in other {
+            out.insert(x)
+        }
+        out
+    }
+    /// The items in both sets.
+    pub fn intersection(self, other: Set[T]) -> Set[T] where T: Hash {
+        var out: Set[T] = Set()
+        for x in self {
+            if other.has(x) { out.insert(x) }
+        }
+        out
+    }
+    /// The items in this set and not in `other`.
+    pub fn difference(self, other: Set[T]) -> Set[T] where T: Hash {
+        var out: Set[T] = Set()
+        for x in self {
+            if not other.has(x) { out.insert(x) }
+        }
+        out
+    }
+    /// The items in one set but not the other.
+    pub fn symmetric_difference(self, other: Set[T]) -> Set[T] where T: Hash {
+        var out = self.difference(other)
+        for x in other {
+            if not self.has(x) { out.insert(x) }
+        }
+        out
+    }
+    /// Whether every item is in `other`.
+    pub fn is_subset(self, other: Set[T]) -> bool where T: Hash {
+        for x in self {
+            if not other.has(x) { return false }
+        }
+        true
+    }
+    /// Whether every item of `other` is here.
+    pub fn is_superset(self, other: Set[T]) -> bool where T: Hash {
+        other.is_subset(self)
+    }
+    /// Whether no item is in both.
+    pub fn is_disjoint(self, other: Set[T]) -> bool where T: Hash {
+        for x in self {
+            if other.has(x) { return false }
+        }
+        true
+    }
+    /// Keeps the items `keep` says yes to.
+    pub fn retain(mut self, keep: T => bool) where T: Hash {
+        var dead: List[T] = []
+        for x in self {
+            if not keep(x) { dead.push(x) }
+        }
+        for x in dead {
+            self.remove(x)
+        }
+    }
+    /// Adds each item.
+    pub fn extend(mut self, take items: Stream[T]) where T: Hash {
+        for x in items {
+            self.insert(x)
+        }
+    }
+    /// Takes out the oldest item.
+    pub fn pop(mut self) -> ?T where T: Hash {
+        var first: List[T] = []
+        for x in self {
+            first.push(x)
+            break
+        }
+        match first.pop() {
+            some(x) => {
+                self.remove(x)
+                some(x)
+            }
+            none => none
+        }
+    }
 }

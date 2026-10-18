@@ -77,3 +77,14 @@ fn dispatch_counts_hold() {
     }
     assert!(failures.is_empty(), "dispatch counts moved (LOOM_BLESS=1 to accept):\n{}", failures.join("\n"));
 }
+
+/// Ten times the input costs about ten times the instructions: the deque
+/// does constant work per operation, and sorting does `n log n`.
+#[test]
+fn std_collections_scale() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for (name, small, large, limit) in [("deque", 50_000, 500_000, 10.5), ("list_ops", 20_000, 200_000, 12.0)] {
+        let ratio = dispatched(&root, name, large) as f64 / dispatched(&root, name, small) as f64;
+        assert!(ratio <= limit, "{name}: 10x the input cost {ratio:.2}x the instructions (limit {limit}x)");
+    }
+}

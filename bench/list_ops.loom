@@ -1,0 +1,20 @@
+// The list methods written in Loom: sort_by, retain, dedup, step_by and a
+// stream chain that goes through an adaptor warp.
+use std.io.print
+use std.rand.Rng
+
+const SIZE = 400_000
+
+fn main() {
+    var r = Rng.seeded(7)
+    var xs: List[u64] = []
+    for _ in 0..SIZE as u64 {
+        xs.push(r.next_u64() % 100_000)
+    }
+    xs.sort_by(_ < _)
+    xs.dedup()
+    xs.retain(_ % 3 != 0)
+    let strided = xs.step_by(7).sum()
+    let kept = xs.filter_map(x => if x % 2 == 0 { some(x / 2) } else { none }).count()
+    print("{xs.len()} {strided} {kept}")
+}
