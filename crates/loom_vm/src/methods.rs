@@ -16,6 +16,7 @@ use crate::natives::{Ctx, LocalFn, NativeFn};
 pub(crate) fn resolve_scalar(name: &str) -> Option<LocalFn> {
     Some(match name {
         "char.digit" => digit,
+        "char.uni" => char_uni,
         "int.bits" => int_bits,
         "int.rotate" => int_rotate,
         "int.math" => int_math,
@@ -43,6 +44,7 @@ pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
         "string.push_str" => push_str,
         "string.pop" => pop,
         "char.digit" => |c, a, i| digit(&mut c.heap, a, i),
+        "char.uni" => |c, a, i| char_uni(&mut c.heap, a, i),
         "str.next_char" => next_char,
         "str.hash" => str_hash,
         "str.concat2" | "str.concat3" | "str.concat4" => concat,
@@ -118,14 +120,30 @@ fn trim(ctx: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
     let s = text(ctx, args[0], args[1])?;
     let mut start = 0;
     let mut end = s.len();
-    if imm != 2 {
-        while start < end && is_space(s[start]) {
-            start += 1;
+    // 3, 4 and 5 are the same for ASCII whitespace only.
+    let ascii = imm >= 3;
+    let side = imm % 3;
+    match std::str::from_utf8(s) {
+        Ok(t) if !ascii => {
+            let kept = match side {
+                0 => t.trim_matches(char::is_whitespace),
+                1 => t.trim_start_matches(char::is_whitespace),
+                _ => t.trim_end_matches(char::is_whitespace),
+            };
+            start = kept.as_ptr() as usize - t.as_ptr() as usize;
+            end = start + kept.len();
         }
-    }
-    if imm != 1 {
-        while end > start && is_space(s[end - 1]) {
-            end -= 1;
+        _ => {
+            if side != 2 {
+                while start < end && is_space(s[start]) {
+                    start += 1;
+                }
+            }
+            if side != 1 {
+                while end > start && is_space(s[end - 1]) {
+                    end -= 1;
+                }
+            }
         }
     }
     args[0] += start as u64;
@@ -133,18 +151,57 @@ fn trim(ctx: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
     Ok(())
 }
 
-/// `str.case(s, dst)`: a `String` of `s` with its ASCII letters in upper
-/// case (`imm` 0) or lower case (1).
+/// `str.case(s, dst)`: a `String` of `s` in upper case (`imm` 0) or lower
+/// case (1); with 2 or 3, only its ASCII letters change.
 fn case(ctx: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
     let s = text_raw(ctx, args[0], args[1])?;
+    if imm < 2
+        && let Ok(t) = std::str::from_utf8(s)
+        && !t.is_ascii()
+    {
+        // Character by character, as the Lua runtime does: no rule about
+        // where in a word a letter is.
+        let changed: String = if imm == 0 {
+            t.chars().flat_map(char::to_uppercase).collect()
+        } else {
+            t.chars().flat_map(char::to_lowercase).collect()
+        };
+        return ctx.new_string(changed.as_bytes(), args[2]);
+    }
     ctx.new_string_with(s.len(), args[2], |out| {
         out.copy_from_slice(s);
-        if imm == 0 {
+        if imm.is_multiple_of(2) {
             out.make_ascii_uppercase();
         } else {
             out.make_ascii_lowercase();
         }
     })
+}
+
+/// `char.uni(c)` with `imm`: 0 `is_alphabetic`, 1 `is_numeric`, 2
+/// `is_alphanumeric`, 3 `is_whitespace`, 4 `is_upper`, 5 `is_lower`, 6
+/// `to_upper`, 7 `to_lower`. A mapping to more than one character leaves the
+/// character as it is.
+fn char_uni(_: &mut Heap, args: &mut [u64], imm: u16) -> Result<(), Trap> {
+    let Some(c) = char::from_u32(args[0] as u32) else {
+        args[0] = 0;
+        return Ok(());
+    };
+    let single = |mut it: Box<dyn Iterator<Item = char>>| match (it.next(), it.next()) {
+        (Some(one), None) => one,
+        _ => c,
+    };
+    args[0] = match imm {
+        0 => u64::from(c.is_alphabetic()),
+        1 => u64::from(c.is_numeric()),
+        2 => u64::from(c.is_alphanumeric()),
+        3 => u64::from(c.is_whitespace()),
+        4 => u64::from(c.is_uppercase()),
+        5 => u64::from(c.is_lowercase()),
+        6 => single(Box::new(c.to_uppercase())) as u64,
+        _ => single(Box::new(c.to_lowercase())) as u64,
+    };
+    Ok(())
 }
 
 /// `str.replace(s, from, to, dst)`: every `from` replaced.
@@ -720,12 +777,31 @@ fn next_line(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 fn next_word(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let s = text(ctx, args[0], args[1])?;
     let mut i = (args[2] as usize).min(s.len());
-    while i < s.len() && is_space(s[i]) {
-        i += 1;
+    let wide = !s.is_ascii();
+    // The width and whitespace-ness of the character at `i`.
+    let at = |i: usize| -> (usize, bool) {
+        if !wide || s[i] < 0x80 {
+            return (1, is_space(s[i]));
+        }
+        match std::str::from_utf8(&s[i..]).ok().and_then(|t| t.chars().next()) {
+            Some(c) => (c.len_utf8(), c.is_whitespace()),
+            None => (1, false),
+        }
+    };
+    while i < s.len() {
+        let (w, space) = at(i);
+        if !space {
+            break;
+        }
+        i += w;
     }
     let start = i;
-    while i < s.len() && !is_space(s[i]) {
-        i += 1;
+    while i < s.len() {
+        let (w, space) = at(i);
+        if space {
+            break;
+        }
+        i += w;
     }
     args[3] = u64::from(i > start);
     args[0] += start as u64;

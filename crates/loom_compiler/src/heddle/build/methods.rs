@@ -102,6 +102,19 @@ const BODIES: &[&str] = &[
     "std.num.Float.abs",
     "std.num.Float.min",
     "std.num.Float.max",
+    "std.string.Char.is_numeric",
+    "std.string.Char.is_ascii_alphabetic",
+    "std.string.Char.is_ascii_alphanumeric",
+    "std.string.Char.is_ascii_whitespace",
+    "std.string.Char.is_ascii_upper",
+    "std.string.Char.is_ascii_lower",
+    "std.string.Char.to_ascii_upper",
+    "std.string.Char.to_ascii_lower",
+    "std.string.Str.to_ascii_upper",
+    "std.string.Str.to_ascii_lower",
+    "std.string.Str.trim_ascii",
+    "std.string.Str.trim_ascii_start",
+    "std.string.Str.trim_ascii_end",
     "std.num.Float.sqrt",
     "std.num.Float.floor",
     "std.num.Float.ceil",
@@ -216,18 +229,30 @@ impl<'a> Builder<'a> {
                     _ => Some(native(self, "str.ends_with", 0, vec![p, n, q, m], 1)),
                 }
             }
-            ("std.string.Str", "trim" | "trim_start" | "trim_end") => {
+            (
+                "std.string.Str",
+                "trim" | "trim_start" | "trim_end" | "trim_ascii" | "trim_ascii_start" | "trim_ascii_end",
+            ) => {
                 let (p, n) = text(self, 0)?;
                 let imm = match name {
                     "trim" => 0,
                     "trim_start" => 1,
-                    _ => 2,
+                    "trim_end" => 2,
+                    "trim_ascii" => 3,
+                    "trim_ascii_start" => 4,
+                    _ => 5,
                 };
                 Some(native(self, "str.trim", imm, vec![p, n], 2))
             }
-            ("std.string.Str", "to_upper" | "to_lower") => {
+            ("std.string.Str", "to_upper" | "to_lower" | "to_ascii_upper" | "to_ascii_lower") => {
                 let (p, n) = text(self, 0)?;
-                native(self, "str.case", u16::from(name == "to_lower"), vec![p, n, sret?], 0);
+                let imm = match name {
+                    "to_upper" => 0,
+                    "to_lower" => 1,
+                    "to_ascii_upper" => 2,
+                    _ => 3,
+                };
+                native(self, "str.case", imm, vec![p, n, sret?], 0);
                 Some(Vec::new())
             }
             ("std.string.Str", "replace") => {
@@ -509,30 +534,57 @@ impl<'a> Builder<'a> {
             this.enter(done);
             this.read(r)
         };
+        // Past ASCII, the Unicode tables decide.
+        let unicode = match name {
+            "is_alphabetic" => Some(("is_ascii_alphabetic", 0)),
+            "is_numeric" => Some(("is_digit", 1)),
+            "is_alphanumeric" => Some(("is_ascii_alphanumeric", 2)),
+            "is_whitespace" => Some(("is_ascii_whitespace", 3)),
+            "is_upper" => Some(("is_ascii_upper", 4)),
+            "is_lower" => Some(("is_ascii_lower", 5)),
+            "to_upper" => Some(("to_ascii_upper", 6)),
+            "to_lower" => Some(("to_ascii_lower", 7)),
+            _ => None,
+        };
+        if let Some((ascii, imm)) = unicode {
+            let narrow = self.char_method(ascii, c, arg, ret, span)?[0];
+            let r = self.new_var(VTy::Int);
+            self.write(r, narrow);
+            let limit = self.iconst(128);
+            let wide = self.ucmp(Cmp::Ge, c, limit);
+            let (yes, done) = (self.new_block(), self.new_block());
+            self.br(wide, yes, done);
+            self.enter(yes);
+            let v = self.emit(InstKind::Native { name: "char.uni", imm, args: vec![c] }, &[VTy::Int])[0];
+            self.write(r, v);
+            self.jump(done);
+            self.enter(done);
+            return Some(vec![self.read(r)]);
+        }
         Some(vec![match name {
             "is_digit" => within(self, 48, 57),
-            "is_upper" => within(self, 65, 90),
-            "is_lower" => within(self, 97, 122),
-            "is_alphabetic" => {
+            "is_ascii_upper" => within(self, 65, 90),
+            "is_ascii_lower" => within(self, 97, 122),
+            "is_ascii_alphabetic" => {
                 let (u, l) = (within(self, 65, 90), within(self, 97, 122));
                 or(self, u, l)
             }
-            "is_alphanumeric" => {
+            "is_ascii_alphanumeric" => {
                 let (u, l, d) = (within(self, 65, 90), within(self, 97, 122), within(self, 48, 57));
                 let a = or(self, u, l);
                 or(self, a, d)
             }
-            "is_whitespace" => {
+            "is_ascii_whitespace" => {
                 let sp = self.iconst(32);
                 let a = self.ucmp(Cmp::Eq, c, sp);
                 let b = within(self, 9, 13);
                 or(self, a, b)
             }
-            "to_upper" => {
+            "to_ascii_upper" => {
                 let l = within(self, 97, 122);
                 shift(self, l, -32)
             }
-            "to_lower" => {
+            "to_ascii_lower" => {
                 let u = within(self, 65, 90);
                 shift(self, u, 32)
             }

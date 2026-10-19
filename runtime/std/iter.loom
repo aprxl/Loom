@@ -388,3 +388,18 @@ pub warp Reversed[T]: Iter {
 
     fn next(mut self) -> ?T = .items.pop()
 }
+
+/// The items of a list this owns, from the first: what a method that builds
+/// its items in a list gives as a stream.
+pub warp Owned[T]: Iter {
+    pub items: List[T]
+    pub at: usize
+
+    type Item = T
+
+    fn next(mut self) -> ?T {
+        let x = .items.get(.at)
+        .at += 1
+        x
+    }
+}

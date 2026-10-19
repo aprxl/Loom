@@ -1,5 +1,7 @@
 // Text.
 
+use std.iter.Owned
+
 use std.num.{NumError, Parse}
 
 /// Owned, growable UTF-8 text. `str` is a view of text; a string literal
@@ -34,15 +36,15 @@ pub warp Str {
     pub fn ends_with(self, suffix: str) -> bool
     /// The byte position of the first `part`, if there is one.
     pub fn find(self, part: str) -> ?usize
-    /// Without whitespace at either end: ASCII whitespace (space, tab, newline, carriage return, vertical tab, form feed). Other characters, a no-break space say, stay.
+    /// Without the white space at both ends (Unicode `White_Space`).
     pub fn trim(self) -> str
-    /// Without ASCII whitespace at the start.
+    /// Without the white space at the start.
     pub fn trim_start(self) -> str
-    /// Without ASCII whitespace at the end.
+    /// Without the white space at the end.
     pub fn trim_end(self) -> str
-    /// Upper case, for ASCII letters.
+    /// In upper case, letter by letter (`ß` becomes `SS`).
     pub fn to_upper(self) -> String
-    /// Lower case, for ASCII letters.
+    /// In lower case, letter by letter.
     pub fn to_lower(self) -> String
     /// Every `from` replaced with `to`. An empty `from` is found before every character and at the end: `"ab".replace("", "-")` is `-a-b-`.
     pub fn replace(self, from: str, to: str) -> String
@@ -57,35 +59,187 @@ pub warp Str {
     /// The lines, without their line breaks (a newline, or a carriage
     /// return and a newline).
     pub fn lines(self) -> Stream[str]
-    /// The words: what's between runs of whitespace.
+    /// The words: what's between runs of white space.
     pub fn words(self) -> Stream[str]
     /// The text as a `String` of its own.
+    /// Without the ASCII white space at both ends.
+    pub fn trim_ascii(self) -> str
+    /// Without the ASCII white space at the start.
+    pub fn trim_ascii_start(self) -> str
+    /// Without the ASCII white space at the end.
+    pub fn trim_ascii_end(self) -> str
+    /// With only the ASCII letters in upper case.
+    pub fn to_ascii_upper(self) -> String
+    /// With only the ASCII letters in lower case.
+    pub fn to_ascii_lower(self) -> String
     pub fn to_string(self) -> String
     pub fn copy(self) -> String
     /// The number the text spells: `"42".parse[u8]()`. Decimal, with an
     /// optional sign; floats also take a fraction, an exponent, `inf`, `NaN`.
     pub fn parse[T: Parse](self) -> T ! NumError
+    /// The text before and after the first `sep`.
+    pub fn split_once(self, sep: str) -> ?(str, str) {
+        match self.find(sep) {
+            some(i) => some((self[..i], self[i + sep.len()..]))
+            none => none
+        }
+    }
+    /// The text before and after the last `sep`.
+    pub fn rsplit_once(self, sep: str) -> ?(str, str) {
+        match self.rfind(sep) {
+            some(i) => some((self[..i], self[i + sep.len()..]))
+            none => none
+        }
+    }
+    /// The index of the last `part`.
+    pub fn rfind(self, part: str) -> ?usize {
+        var found: ?usize = none
+        var at = 0
+        while at <= self.len() {
+            match self[at..].find(part) {
+                some(i) => {
+                    found = some(at + i)
+                    at += i + 1
+                }
+                none => break
+            }
+        }
+        found
+    }
+    /// The text after `prefix`, if it starts with it.
+    pub fn strip_prefix(self, prefix: str) -> ?str {
+        if self.starts_with(prefix) { some(self[prefix.len()..]) } else { none }
+    }
+    /// The text before `suffix`, if it ends with it.
+    pub fn strip_suffix(self, suffix: str) -> ?str {
+        if self.ends_with(suffix) { some(self[..self.len() - suffix.len()]) } else { none }
+    }
+    /// How many times `part` comes up, not overlapping. Unravels if `part`
+    /// is empty.
+    pub fn count_of(self, part: str) -> usize {
+        assert(not part.is_empty(), "count_of: part is empty")
+        var n = 0
+        var at = 0
+        while at <= self.len() {
+            match self[at..].find(part) {
+                some(i) => {
+                    n += 1
+                    at += i + part.len()
+                }
+                none => break
+            }
+        }
+        n
+    }
+    /// Each character with the byte index it starts at.
+    pub fn char_indices(self) -> Stream[(usize, char)] {
+        var out: List[(usize, char)] = []
+        var at = 0
+        for c in self.chars() {
+            out.push((at, c))
+            at += c.len_utf8()
+        }
+        Owned(items: out, at: 0)
+    }
+    /// The `i`th character (counting characters, so it takes `O(i)`).
+    pub fn char_at(self, i: usize) -> ?char = self.chars().nth(i)
+    /// Without the characters at both ends that `f` says yes to.
+    pub fn trim_matches(self, f: char => bool) -> str = self.trim_start_matches(f).trim_end_matches(f)
+    /// Without the characters at the start that `f` says yes to.
+    pub fn trim_start_matches(self, f: char => bool) -> str {
+        var at = 0
+        for c in self.chars() {
+            if not f(c) { break }
+            at += c.len_utf8()
+        }
+        self[at..]
+    }
+    /// Without the characters at the end that `f` says yes to.
+    pub fn trim_end_matches(self, f: char => bool) -> str {
+        var end = self.len()
+        for (i, c) in self.char_indices() {
+            if not f(c) { end = i + c.len_utf8() }
+        }
+        if self.chars().all(f) { self[..0] } else { self[..end] }
+    }
+    /// Whether the two are equal when upper and lower case don't count.
+    pub fn eq_ignore_case(self, other: str) -> bool = self.to_lower() == other.to_lower()
+    /// Whether every character is ASCII.
+    pub fn is_ascii(self) -> bool = self.chars().all(c => c.is_ascii())
+    /// With the first letter in upper case.
+    pub fn capitalize(self) -> String {
+        var out: String = ""
+        var first = true
+        for c in self.chars() {
+            if first {
+                out.push(c.to_upper())
+                first = false
+            } else {
+                out.push(c)
+            }
+        }
+        out
+    }
+    /// At least `width` characters, with `fill` added at the start.
+    pub fn pad_left(self, width: usize, fill: char = ' ') -> String {
+        var out: String = ""
+        var n = self.char_count()
+        while n < width {
+            out.push(fill)
+            n += 1
+        }
+        out.push_str(self)
+        out
+    }
+    /// At least `width` characters, with `fill` added at the end.
+    pub fn pad_right(self, width: usize, fill: char = ' ') -> String {
+        var out = self.to_string()
+        var n = self.char_count()
+        while n < width {
+            out.push(fill)
+            n += 1
+        }
+        out
+    }
 }
 
-/// The methods of `char`. The tests are for ASCII.
+/// The methods of `char`. The tests and the case changes follow Unicode;
+/// the `_ascii` ones look at the ASCII letters only.
 #builtin
 pub warp Char {
     /// `0` through `9`.
     pub fn is_digit(self) -> bool
-    /// `a` through `z`, or `A` through `Z`: `'é'` isn't.
+    /// A letter in any alphabet: `'é'` is.
     pub fn is_alphabetic(self) -> bool
-    /// ASCII letters and `0` through `9`.
+    /// A digit in any script, or another number sign (`'½'`).
+    pub fn is_numeric(self) -> bool
+    /// A letter or a number.
     pub fn is_alphanumeric(self) -> bool
-    /// ASCII whitespace: a space, tab, newline, carriage return, vertical tab or form feed.
+    /// White space: a space, a tab, a line break, a no-break space...
     pub fn is_whitespace(self) -> bool
-    /// `A` through `Z`: `'É'` isn't.
+    /// An upper case letter in any alphabet.
     pub fn is_upper(self) -> bool
-    /// `a` through `z`: `'é'` isn't.
+    /// A lower case letter in any alphabet.
     pub fn is_lower(self) -> bool
-    /// Upper case for an ASCII letter; any other character stays as it is.
+    /// `a` through `z`, or `A` through `Z`.
+    pub fn is_ascii_alphabetic(self) -> bool
+    /// ASCII letters and `0` through `9`.
+    pub fn is_ascii_alphanumeric(self) -> bool
+    /// A space, tab, newline, carriage return, vertical tab or form feed.
+    pub fn is_ascii_whitespace(self) -> bool
+    /// `A` through `Z`.
+    pub fn is_ascii_upper(self) -> bool
+    /// `a` through `z`.
+    pub fn is_ascii_lower(self) -> bool
+    /// Upper case; a letter with no single upper case character (`ß`)
+    /// stays as it is.
     pub fn to_upper(self) -> char
-    /// Lower case for an ASCII letter; any other character stays as it is.
+    /// Lower case; a letter with no single lower case character stays as it is.
     pub fn to_lower(self) -> char
+    /// Upper case for an ASCII letter; any other character stays as it is.
+    pub fn to_ascii_upper(self) -> char
+    /// Lower case for an ASCII letter; any other character stays as it is.
+    pub fn to_ascii_lower(self) -> char
     /// Its value as a digit in `radix`: `'f'.to_digit(16)` is `15`.
     pub fn to_digit(self, radix: u32 = 10) -> ?u32
     /// The value of a decimal digit: `'7'.digit()` is `7`. Unravels for
@@ -93,4 +247,8 @@ pub warp Char {
     pub fn digit(self) -> u8
     /// How many bytes it takes in UTF-8.
     pub fn len_utf8(self) -> usize
+    /// Whether it is one of the 128 ASCII characters.
+    pub fn is_ascii(self) -> bool {
+        self < '\u{80}'
+    }
 }

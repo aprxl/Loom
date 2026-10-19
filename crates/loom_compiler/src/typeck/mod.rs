@@ -1444,6 +1444,8 @@ impl<'p> Checker<'p> {
     pub(super) fn builtin_self(&mut self, ty: Ty) -> Ty {
         match self.tcx.kind(ty).clone() {
             TyKind::Adt(def, args) if Some(def) == self.std.optional && args.len() == 1 => self.tcx.optional(args[0]),
+            TyKind::Adt(def, args) if Some(def) == self.std.str_warp && args.is_empty() => self.tcx.str,
+            TyKind::Adt(def, args) if Some(def) == self.std.char_warp && args.is_empty() => self.tcx.char,
             TyKind::Adt(def, args) if Some(def) == self.std.result_warp && args.len() == 2 => {
                 self.tcx.intern(TyKind::Result(args[0], args[1]))
             }
