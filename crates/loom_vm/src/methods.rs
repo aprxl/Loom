@@ -18,6 +18,7 @@ pub(crate) fn resolve_scalar(name: &str) -> Option<LocalFn> {
         "char.digit" => digit,
         "int.bits" => int_bits,
         "int.rotate" => int_rotate,
+        "int.math" => int_math,
         "float.math" => float_math,
         _ => return None,
     })
@@ -51,6 +52,7 @@ pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
         "str.next_word" => next_word,
         "int.bits" => |c, a, i| int_bits(&mut c.heap, a, i),
         "int.rotate" => |c, a, i| int_rotate(&mut c.heap, a, i),
+        "int.math" => |c, a, i| int_math(&mut c.heap, a, i),
         "float.math" => |c, a, i| float_math(&mut c.heap, a, i),
         _ => return None,
     })
@@ -770,6 +772,105 @@ fn int_bits(_: &mut Heap, args: &mut [u64], imm: u16) -> Result<(), Trap> {
     Ok(())
 }
 
+/// What `int.math` is asked for, by `imm`.
+const INT_MATH: [&str; 11] = [
+    "signum",
+    "rem_euclid",
+    "div_euclid",
+    "div_floor",
+    "div_ceil",
+    "gcd",
+    "lcm",
+    "isqrt",
+    "ilog10",
+    "next_power_of_two",
+    "count_zeros",
+];
+
+/// `int.math(a, b, type)`: the number methods that need the exact result:
+/// done on 128 bits, and an unravel when it doesn't fit the type.
+fn int_math(_: &mut Heap, args: &mut [u64], imm: u16) -> Result<(), Trap> {
+    let s = ints::spec(args[2]);
+    let bits = u32::from(s.bits.min(64));
+    let wide = |r: u64| -> i128 { if s.signed { i128::from(r as i64) } else { i128::from(r) } };
+    let (a, b) = (wide(args[0]), wide(args[1]));
+    let (lo, hi) =
+        if s.signed { (-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1) } else { (0, (1i128 << bits) - 1) };
+    let name = INT_MATH[usize::from(imm)];
+    let fail = |what: &str| Err(Trap::Unravel(format!("{name}: {what}")));
+    let r: i128 = match imm {
+        0 => a.signum(),
+        1..=4 => {
+            if b == 0 {
+                return fail("division by zero");
+            }
+            let (q, m) = (a / b, a % b);
+            match imm {
+                1 => a.rem_euclid(b),
+                2 => a.div_euclid(b),
+                3 if m != 0 && ((m < 0) != (b < 0)) => q - 1,
+                4 if m != 0 && ((m < 0) == (b < 0)) => q + 1,
+                _ => q,
+            }
+        }
+        5 | 6 => {
+            let (mut x, mut y) = (a.abs(), b.abs());
+            while y != 0 {
+                (x, y) = (y, x % y);
+            }
+            if imm == 5 {
+                x
+            } else if x == 0 {
+                0
+            } else {
+                (a.abs() / x).saturating_mul(b.abs())
+            }
+        }
+        7 => {
+            if a < 0 {
+                return fail("the number is below zero");
+            }
+            let mut r = (a as f64).sqrt() as i128;
+            while r * r > a {
+                r -= 1;
+            }
+            while (r + 1) * (r + 1) <= a {
+                r += 1;
+            }
+            r
+        }
+        8 => {
+            if a <= 0 {
+                return fail("the number must be above zero");
+            }
+            let mut n = 0;
+            let mut x = a;
+            while x >= 10 {
+                x /= 10;
+                n += 1;
+            }
+            n
+        }
+        9 => {
+            let mut p = 1i128;
+            while p < a {
+                p <<= 1;
+            }
+            p
+        }
+        _ => {
+            let x = args[0] & if bits >= 64 { u64::MAX } else { (1u64 << bits) - 1 };
+            args[0] = u64::from(bits - x.count_ones());
+            return Ok(());
+        }
+    };
+    if r < lo || r > hi {
+        return fail("the result doesn't fit");
+    }
+    args[0] = if s.signed { r as i64 as u64 } else { r as u64 };
+    Ok(())
+}
+
 /// `int.rotate(v, n, type)`: `imm` 0 left, 1 right.
 fn int_rotate(_: &mut Heap, args: &mut [u64], imm: u16) -> Result<(), Trap> {
     let s = ints::spec(args[2]);
@@ -822,6 +923,48 @@ fn float_math(_: &mut Heap, args: &mut [u64], imm: u16) -> Result<(), Trap> {
         // Halves away from zero.
         7 => a.round(),
         8 => a.powf(b),
+        // The hyperbolic functions are written out, since Lua has none.
+        10 => a.sin(),
+        11 => a.cos(),
+        12 => a.tan(),
+        13 => a.asin(),
+        14 => a.acos(),
+        15 => a.atan(),
+        16 => (a.exp() - (-a).exp()) / 2.0,
+        17 => (a.exp() + (-a).exp()) / 2.0,
+        18 => {
+            let e = (2.0 * a).exp();
+            if e.is_infinite() { 1.0 } else { (e - 1.0) / (e + 1.0) }
+        }
+        19 => a.exp(),
+        20 => 2.0f64.powf(a),
+        21 => a.ln(),
+        22 => a.log2(),
+        23 => a.log10(),
+        24 => a.atan2(b),
+        25 => (a * a + b * b).sqrt(),
+        26 => a.ln() / b.ln(),
+        27 => a - a.trunc(),
+        28 => {
+            if a.is_nan() {
+                a
+            } else if a.is_sign_negative() {
+                -1.0
+            } else {
+                1.0
+            }
+        }
+        29 => a.copysign(b),
+        30 => a * (180.0 / std::f64::consts::PI),
+        31 => a * (std::f64::consts::PI / 180.0),
+        32..=34 => {
+            args[0] = u64::from(match imm >> 1 {
+                32 => a.is_finite(),
+                33 => a.is_infinite(),
+                _ => a.is_sign_negative(),
+            });
+            return Ok(());
+        }
         _ => {
             args[0] = u64::from(a.is_nan());
             return Ok(());

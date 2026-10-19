@@ -1,0 +1,19 @@
+// Hashes that stay the same between versions and machines.
+
+/// The FNV-1a hash of `bytes`: the same on every machine and in every
+/// version, unlike `Hash.hash`, which can change.
+pub fn fnv1a(bytes: [u8]) -> u64 {
+    var h = 0xCBF2_9CE4_8422_2325u64
+    for b in bytes {
+        h ~= b as u64
+        h *%= 0x0000_0100_0000_01B3u64
+    }
+    h
+}
+
+/// A hash of the two hashes together, which depends on their order.
+pub fn combine(a: u64, b: u64) -> u64 {
+    var h = a ~ (b +% 0x9E37_79B9_7F4A_7C15u64 +% (a << 6) +% (a >> 2))
+    h = (h ~ (h >> 30)) *% 0xBF58_476D_1CE4_E5B9u64
+    h ~ (h >> 27)
+}

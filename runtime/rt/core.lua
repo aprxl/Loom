@@ -3700,6 +3700,123 @@ ext["std.num.Int.log2"] = function(d, v)
   return n
 end
 
+-- Number methods that need the exact result, or overflow: the work is done in
+-- Lua integers, with unsigned 64-bit values going through `udiv`.
+
+local function ucmp_lt(d, a, b)
+  if d.u64 then return ult(a, b) end
+  return a < b
+end
+
+local function divmod(d, a, b, name)
+  if b == 0 then error(MARK .. name .. ": division by zero", 3) end
+  return rt.div(d, a, b), rt.rem(d, a, b)
+end
+
+local function fits(d, r, name)
+  if r == nil then error(MARK .. name .. ": the result doesn't fit", 3) end
+  return r
+end
+
+ext["std.num.Int.signum"] = function(d, v)
+  if d.signed then return v < 0 and -1 or (v > 0 and 1 or 0) end
+  return v ~= 0 and 1 or 0
+end
+
+ext["std.num.Int.rem_euclid"] = function(d, a, b)
+  local _, m = divmod(d, a, b, "rem_euclid")
+  if d.signed and m < 0 then m = m + (b < 0 and -b or b) end
+  return m
+end
+
+ext["std.num.Int.div_euclid"] = function(d, a, b)
+  local q, m = divmod(d, a, b, "div_euclid")
+  if d.signed and m < 0 then q = b > 0 and q - 1 or q + 1 end
+  return q
+end
+
+ext["std.num.Int.div_floor"] = function(d, a, b)
+  local q, m = divmod(d, a, b, "div_floor")
+  if d.signed and m ~= 0 and ((m < 0) ~= (b < 0)) then q = q - 1 end
+  return q
+end
+
+ext["std.num.Int.div_ceil"] = function(d, a, b)
+  local q, m = divmod(d, a, b, "div_ceil")
+  if m ~= 0 and (not d.signed or ((m < 0) == (b < 0))) then q = q + 1 end
+  return q
+end
+
+local function gcd(d, a, b)
+  while b ~= 0 do
+    a, b = b, rt.rem(d, a, b)
+  end
+  if d.signed and a < 0 then
+    if a == d.lo then error(MARK .. "gcd: the result doesn't fit", 3) end
+    a = -a
+  end
+  return a
+end
+
+ext["std.num.Int.gcd"] = function(d, a, b)
+  return gcd(d, a, b)
+end
+
+ext["std.num.Int.lcm"] = function(d, a, b)
+  local g = gcd(d, a, b)
+  if g == 0 then return 0 end
+  local q = rt.div(d, a, g)
+  if d.signed and q < 0 then q = -q end
+  if d.signed and b < 0 then b = -b end
+  local fine, r = pcall(rt.mul, d, q, b)
+  if not fine then error(MARK .. "lcm: the result doesn't fit", 2) end
+  return r
+end
+
+ext["std.num.Int.isqrt"] = function(d, v)
+  if d.signed and v < 0 then error(MARK .. "isqrt: the number is below zero", 2) end
+  local f = v >= 0 and v + 0.0 or ((v >> 1) + 0.0) * 2.0
+  local r = floor(math.sqrt(f))
+  if r > 4294967295 then r = 4294967295 end
+  r = math.tointeger(r)
+  while r > 0 and ult(v, r * r) do r = r - 1 end
+  while r < 4294967295 and not ult(v, (r + 1) * (r + 1)) do r = r + 1 end
+  return r
+end
+
+ext["std.num.Int.ilog10"] = function(d, v)
+  if v == 0 or (d.signed and v < 0) then
+    error(MARK .. "ilog10: the number must be above zero", 2)
+  end
+  local n = 0
+  while not ult(v, 10) do
+    v = udiv(v, 10)
+    n = n + 1
+  end
+  return n
+end
+
+ext["std.num.Int.next_power_of_two"] = function(d, v)
+  local p = 1
+  while ucmp_lt(d, p, v) do
+    p = p << 1
+    if p == 0 then error(MARK .. "next_power_of_two: the result doesn't fit", 2) end
+  end
+  if not d.u64 and (p < 0 or p > d.hi) then
+    error(MARK .. "next_power_of_two: the result doesn't fit", 2)
+  end
+  return p
+end
+
+ext["std.num.Int.count_zeros"] = function(d, v)
+  local x, n = v & d.mask, 0
+  while x ~= 0 do
+    n = n + (x & 1)
+    x = x >> 1
+  end
+  return d.bits - n
+end
+
 -- Rotates the type's bits `n` places left: Lua's `<<` and `>>` are logical
 -- on all 64 bits, and `wrapv` keeps the type's bits (sign-extending).
 local function rotl(d, v, n)
@@ -3783,6 +3900,62 @@ end
 
 ext["std.num.Float.is_nan"] = function(_, v)
   return v ~= v
+end
+
+local function float_fn(name, f)
+  ext["std.num.Float." .. name] = function(d, v, b)
+    return float(d, f(v, b))
+  end
+end
+
+float_fn("sin", math.sin)
+float_fn("cos", math.cos)
+float_fn("tan", math.tan)
+float_fn("asin", math.asin)
+float_fn("acos", math.acos)
+float_fn("atan", math.atan)
+float_fn("atan2", function(a, b) return math.atan(a, b) end)
+float_fn("sinh", function(a) return (math.exp(a) - math.exp(-a)) / 2.0 end)
+float_fn("cosh", function(a) return (math.exp(a) + math.exp(-a)) / 2.0 end)
+float_fn("tanh", function(a)
+  local e = math.exp(2.0 * a)
+  if e == huge then return 1.0 end
+  return (e - 1.0) / (e + 1.0)
+end)
+float_fn("exp", math.exp)
+float_fn("exp2", function(a) return 2.0 ^ a end)
+float_fn("ln", function(a) return math.log(a) end)
+float_fn("log2", function(a) return math.log(a, 2) end)
+float_fn("log10", function(a) return math.log(a, 10) end)
+float_fn("log", function(a, b) return math.log(a) / math.log(b) end)
+float_fn("hypot", function(a, b) return math.sqrt(a * a + b * b) end)
+float_fn("fract", function(a)
+  local t = a >= 0 and floor(a) or ceil(a)
+  return a - t
+end)
+float_fn("signum", function(a)
+  if a ~= a then return a end
+  if a < 0 or (a == 0 and 1 / a < 0) then return -1.0 end
+  return 1.0
+end)
+float_fn("copysign", function(a, b)
+  local neg = b < 0 or (b == 0 and 1 / b < 0)
+  a = math.abs(a)
+  return neg and -a or a
+end)
+float_fn("to_degrees", function(a) return a * (180.0 / math.pi) end)
+float_fn("to_radians", function(a) return a * (math.pi / 180.0) end)
+
+ext["std.num.Float.is_finite"] = function(_, v)
+  return v == v and v ~= huge and v ~= -huge
+end
+
+ext["std.num.Float.is_infinite"] = function(_, v)
+  return v == huge or v == -huge
+end
+
+ext["std.num.Float.is_sign_negative"] = function(_, v)
+  return v < 0 or (v == 0 and 1 / v < 0)
 end
 
 -- ================================================================ constants

@@ -2,3 +2,15 @@
 
 pub const PI: f64 = 3.141592653589793
 pub const EULER: f64 = 2.718281828459045
+/// A full turn in radians: twice `PI`.
+pub const TAU: f64 = 6.283185307179586
+/// The square root of 2.
+pub const SQRT_2: f64 = 1.4142135623730951
+/// The natural logarithm of 2.
+pub const LN_2: f64 = 0.6931471805599453
+/// The natural logarithm of 10.
+pub const LN_10: f64 = 2.302585092994046
+/// One over `PI`.
+pub const INV_PI: f64 = 0.3183098861837907
+/// The golden ratio.
+pub const PHI: f64 = 1.618033988749895

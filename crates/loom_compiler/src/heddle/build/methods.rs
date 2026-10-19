@@ -60,6 +60,42 @@ const BODIES: &[&str] = &[
     "std.num.Int.count_ones",
     "std.num.Int.is_power_of_two",
     "std.num.Int.log2",
+    "std.num.Int.signum",
+    "std.num.Int.rem_euclid",
+    "std.num.Int.div_euclid",
+    "std.num.Int.div_floor",
+    "std.num.Int.div_ceil",
+    "std.num.Int.gcd",
+    "std.num.Int.lcm",
+    "std.num.Int.isqrt",
+    "std.num.Int.ilog10",
+    "std.num.Int.next_power_of_two",
+    "std.num.Int.count_zeros",
+    "std.num.Float.sin",
+    "std.num.Float.cos",
+    "std.num.Float.tan",
+    "std.num.Float.asin",
+    "std.num.Float.acos",
+    "std.num.Float.atan",
+    "std.num.Float.atan2",
+    "std.num.Float.sinh",
+    "std.num.Float.cosh",
+    "std.num.Float.tanh",
+    "std.num.Float.exp",
+    "std.num.Float.exp2",
+    "std.num.Float.ln",
+    "std.num.Float.log2",
+    "std.num.Float.log10",
+    "std.num.Float.log",
+    "std.num.Float.hypot",
+    "std.num.Float.fract",
+    "std.num.Float.signum",
+    "std.num.Float.copysign",
+    "std.num.Float.to_degrees",
+    "std.num.Float.to_radians",
+    "std.num.Float.is_finite",
+    "std.num.Float.is_infinite",
+    "std.num.Float.is_sign_negative",
     "std.num.Int.rotate_left",
     "std.num.Int.rotate_right",
     "std.num.Int.to_string",
@@ -285,6 +321,27 @@ impl<'a> Builder<'a> {
                         };
                         Some(native(self, "int.bits", imm, vec![v, spec], 1))
                     }
+                    "signum" | "rem_euclid" | "div_euclid" | "div_floor" | "div_ceil" | "gcd" | "lcm" | "isqrt"
+                    | "ilog10" | "next_power_of_two" | "count_zeros" => {
+                        let imm = [
+                            "signum",
+                            "rem_euclid",
+                            "div_euclid",
+                            "div_floor",
+                            "div_ceil",
+                            "gcd",
+                            "lcm",
+                            "isqrt",
+                            "ilog10",
+                            "next_power_of_two",
+                            "count_zeros",
+                        ]
+                        .iter()
+                        .position(|n| *n == name)
+                        .unwrap_or(0) as u16;
+                        let other = if args.len() > 1 { reg(1) } else { v };
+                        Some(native(self, "int.math", imm, vec![v, other, spec], 1))
+                    }
                     "rotate_left" | "rotate_right" => {
                         Some(native(self, "int.rotate", u16::from(name == "rotate_right"), vec![v, reg(1), spec], 1))
                     }
@@ -305,12 +362,38 @@ impl<'a> Builder<'a> {
                     "trunc" => 6,
                     "round" => 7,
                     "pow" => 8,
+                    "sin" => 10,
+                    "cos" => 11,
+                    "tan" => 12,
+                    "asin" => 13,
+                    "acos" => 14,
+                    "atan" => 15,
+                    "sinh" => 16,
+                    "cosh" => 17,
+                    "tanh" => 18,
+                    "exp" => 19,
+                    "exp2" => 20,
+                    "ln" => 21,
+                    "log2" => 22,
+                    "log10" => 23,
+                    "atan2" => 24,
+                    "hypot" => 25,
+                    "log" => 26,
+                    "fract" => 27,
+                    "signum" => 28,
+                    "copysign" => 29,
+                    "to_degrees" => 30,
+                    "to_radians" => 31,
+                    "is_finite" => 32,
+                    "is_infinite" => 33,
+                    "is_sign_negative" => 34,
                     _ => 9,
                 };
                 let b = if args.len() > 1 { reg(1) } else { reg(0) };
                 let r = native(self, "float.math", op * 2 + u16::from(f32_), vec![reg(0), b], 1)[0];
                 // The bits come back in an integer register: as a float.
-                Some(vec![if name == "is_nan" { r } else { self.bits_to_float(r, f32_) }])
+                let is_bool = matches!(name, "is_nan" | "is_finite" | "is_infinite" | "is_sign_negative");
+                Some(vec![if is_bool { r } else { self.bits_to_float(r, f32_) }])
             }
             // ---------------------------------------------------------- optionals
             ("std.option.Optional", "take") => {

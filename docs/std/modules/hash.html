@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>std.hash · Loom</title>
+<link rel="stylesheet" href="../../style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="../../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a href="../../lang/index.html">Language</a></li>
+<li><a class="current" href="../../std/index.html">Standard library</a></li>
+<li><a href="../../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Standard library</h3>
+<ul>
+<li><a href="../index.html">Overview</a></li>
+<li><a href="prelude.html">prelude</a></li>
+<li><a href="bitset.html">bitset</a></li>
+<li><a href="cmp.html">cmp</a></li>
+<li><a href="deque.html">deque</a></li>
+<li><a href="env.html">env</a></li>
+<li><a href="error.html">error</a></li>
+<li><a href="fmt.html">fmt</a></li>
+<li><a href="fs.html">fs</a></li>
+<li><a href="io.html">io</a></li>
+<li><a class="current" href="hash.html">hash</a></li>
+<li><a href="iter.html">iter</a></li>
+<li><a href="list.html">list</a></li>
+<li><a href="map.html">map</a></li>
+<li><a href="math.html">math</a></li>
+<li><a href="mem.html">mem</a></li>
+<li><a href="meta.html">meta</a></li>
+<li><a href="num.html">num</a></li>
+<li><a href="ops.html">ops</a></li>
+<li><a href="option.html">option</a></li>
+<li><a href="priority.html">priority</a></li>
+<li><a href="process.html">process</a></li>
+<li><a href="rand.html">rand</a></li>
+<li><a href="set.html">set</a></li>
+<li><a href="slice.html">slice</a></li>
+<li><a href="string.html">string</a></li>
+<li><a href="sync.html">sync</a></li>
+<li><a href="target.html">target</a></li>
+<li><a href="term.html">term</a></li>
+<li><a href="time.html">time</a></li>
+</ul>
+</nav>
+<main>
+<div class="crumb"><a href="../index.html">std</a> / hash</div>
+<h1>std.hash</h1>
+<p class="summary">Hashes that stay the same between versions and machines.</p>
+<h2>Functions</h2>
+<div class="item" id="fnv1a">
+<div class="item-head">
+<span class="sig">fn <strong>fnv1a</strong>(bytes: [u8]) -&gt; u64</span>
+
+</div>
+<p class="item-doc">The FNV-1a hash of <code>bytes</code>: the same on every machine and in every version, unlike <code>Hash.hash</code>, which can change.</p>
+</div>
+<div class="item" id="combine">
+<div class="item-head">
+<span class="sig">fn <strong>combine</strong>(a: u64, b: u64) -&gt; u64</span>
+
+</div>
+<p class="item-doc">A hash of the two hashes together, which depends on their order.</p>
+</div>
+</main>
+</div>
+</body>
+</html>

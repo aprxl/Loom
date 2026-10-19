@@ -43,6 +43,30 @@ pub warp Int[T] {
     /// back in at the top. `n` counts modulo the type's width.
     pub fn rotate_right(self, n: u32) -> T
     pub fn to_string(self) -> String
+    /// `-1`, `0` or `1`.
+    pub fn signum(self) -> T
+    /// The remainder that is never below zero: `(-7).rem_euclid(3)` is `2`.
+    /// Unravels if `m` is 0.
+    pub fn rem_euclid(self, m: T) -> T
+    /// The quotient that goes with `rem_euclid`. Unravels if `m` is 0.
+    pub fn div_euclid(self, m: T) -> T
+    /// The quotient rounded down. Unravels if `m` is 0.
+    pub fn div_floor(self, m: T) -> T
+    /// The quotient rounded up. Unravels if `m` is 0.
+    pub fn div_ceil(self, m: T) -> T
+    /// The greatest number that divides both.
+    pub fn gcd(self, other: T) -> T
+    /// The smallest number both divide. Unravels when it doesn't fit.
+    pub fn lcm(self, other: T) -> T
+    /// The square root, rounded down. Unravels below zero.
+    pub fn isqrt(self) -> T
+    /// The base-10 logarithm, rounded down. Unravels for zero and below.
+    pub fn ilog10(self) -> u32
+    /// The smallest power of two that is not below it. Unravels when it
+    /// doesn't fit.
+    pub fn next_power_of_two(self) -> T
+    /// How many bits are zero.
+    pub fn count_zeros(self) -> u32
 }
 
 /// The methods of every float type, `T`.
@@ -61,4 +85,38 @@ pub warp Float[T] {
     pub fn pow(self, exp: T) -> T
     pub fn is_nan(self) -> bool
     pub fn to_string(self) -> String
+    pub fn sin(self) -> T
+    pub fn cos(self) -> T
+    pub fn tan(self) -> T
+    pub fn asin(self) -> T
+    pub fn acos(self) -> T
+    pub fn atan(self) -> T
+    /// The angle of the point (`other`, `self`), from the x axis.
+    pub fn atan2(self, other: T) -> T
+    pub fn sinh(self) -> T
+    pub fn cosh(self) -> T
+    pub fn tanh(self) -> T
+    /// `e` to the power `self`.
+    pub fn exp(self) -> T
+    /// 2 to the power `self`.
+    pub fn exp2(self) -> T
+    /// The natural logarithm.
+    pub fn ln(self) -> T
+    pub fn log2(self) -> T
+    pub fn log10(self) -> T
+    /// The logarithm in `base`.
+    pub fn log(self, base: T) -> T
+    /// The length of the hypotenuse of a triangle with sides `self` and `other`.
+    pub fn hypot(self, other: T) -> T
+    /// What is left after `trunc`.
+    pub fn fract(self) -> T
+    /// `-1`, or `1`; NaN stays NaN.
+    pub fn signum(self) -> T
+    /// `self` with the sign of `sign`.
+    pub fn copysign(self, sign: T) -> T
+    pub fn to_degrees(self) -> T
+    pub fn to_radians(self) -> T
+    pub fn is_finite(self) -> bool
+    pub fn is_infinite(self) -> bool
+    pub fn is_sign_negative(self) -> bool
 }

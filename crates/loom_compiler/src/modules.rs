@@ -43,6 +43,7 @@ const EMBEDDED_STD: &[(&str, &str)] = &[
     ("fmt", include_str!("../../../runtime/std/fmt.loom")),
     ("fs", include_str!("../../../runtime/std/fs.loom")),
     ("io", include_str!("../../../runtime/std/io.loom")),
+    ("hash", include_str!("../../../runtime/std/hash.loom")),
     ("iter", include_str!("../../../runtime/std/iter.loom")),
     ("list", include_str!("../../../runtime/std/list.loom")),
     ("map", include_str!("../../../runtime/std/map.loom")),

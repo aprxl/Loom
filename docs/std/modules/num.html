@@ -27,6 +27,7 @@
 <li><a href="fmt.html">fmt</a></li>
 <li><a href="fs.html">fs</a></li>
 <li><a href="io.html">io</a></li>
+<li><a href="hash.html">hash</a></li>
 <li><a href="iter.html">iter</a></li>
 <li><a href="list.html">list</a></li>
 <li><a href="map.html">map</a></li>
@@ -170,6 +171,83 @@
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
+<div class="member" id="Int.signum">
+<div class="member-head">
+<span class="sig">fn signum(self) -&gt; T</span>
+
+</div>
+<p class="member-doc"><code>-1</code>, <code>0</code> or <code>1</code>.</p>
+</div>
+<div class="member" id="Int.rem_euclid">
+<div class="member-head">
+<span class="sig">fn rem_euclid(self, m: T) -&gt; T</span>
+
+</div>
+<p class="member-doc">The remainder that is never below zero: <code>(-7).rem_euclid(3)</code> is <code>2</code>. Unravels if <code>m</code> is 0.</p>
+</div>
+<div class="member" id="Int.div_euclid">
+<div class="member-head">
+<span class="sig">fn div_euclid(self, m: T) -&gt; T</span>
+
+</div>
+<p class="member-doc">The quotient that goes with <code>rem_euclid</code>. Unravels if <code>m</code> is 0.</p>
+</div>
+<div class="member" id="Int.div_floor">
+<div class="member-head">
+<span class="sig">fn div_floor(self, m: T) -&gt; T</span>
+
+</div>
+<p class="member-doc">The quotient rounded down. Unravels if <code>m</code> is 0.</p>
+</div>
+<div class="member" id="Int.div_ceil">
+<div class="member-head">
+<span class="sig">fn div_ceil(self, m: T) -&gt; T</span>
+
+</div>
+<p class="member-doc">The quotient rounded up. Unravels if <code>m</code> is 0.</p>
+</div>
+<div class="member" id="Int.gcd">
+<div class="member-head">
+<span class="sig">fn gcd(self, other: T) -&gt; T</span>
+
+</div>
+<p class="member-doc">The greatest number that divides both.</p>
+</div>
+<div class="member" id="Int.lcm">
+<div class="member-head">
+<span class="sig">fn lcm(self, other: T) -&gt; T</span>
+
+</div>
+<p class="member-doc">The smallest number both divide. Unravels when it doesn't fit.</p>
+</div>
+<div class="member" id="Int.isqrt">
+<div class="member-head">
+<span class="sig">fn isqrt(self) -&gt; T</span>
+
+</div>
+<p class="member-doc">The square root, rounded down. Unravels below zero.</p>
+</div>
+<div class="member" id="Int.ilog10">
+<div class="member-head">
+<span class="sig">fn ilog10(self) -&gt; u32</span>
+
+</div>
+<p class="member-doc">The base-10 logarithm, rounded down. Unravels for zero and below.</p>
+</div>
+<div class="member" id="Int.next_power_of_two">
+<div class="member-head">
+<span class="sig">fn next_power_of_two(self) -&gt; T</span>
+
+</div>
+<p class="member-doc">The smallest power of two that is not below it. Unravels when it doesn't fit.</p>
+</div>
+<div class="member" id="Int.count_zeros">
+<div class="member-head">
+<span class="sig">fn count_zeros(self) -&gt; u32</span>
+
+</div>
+<p class="member-doc">How many bits are zero.</p>
+</div>
 </div>
 </div>
 <div class="item" id="Float">
@@ -252,6 +330,181 @@
 <div class="member" id="Float.to_string">
 <div class="member-head">
 <span class="sig">fn to_string(self) -&gt; String</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member" id="Float.sin">
+<div class="member-head">
+<span class="sig">fn sin(self) -&gt; T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member" id="Float.cos">
+<div class="member-head">
+<span class="sig">fn cos(self) -&gt; T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member" id="Float.tan">
+<div class="member-head">
+<span class="sig">fn tan(self) -&gt; T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member" id="Float.asin">
+<div class="member-head">
+<span class="sig">fn asin(self) -&gt; T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member" id="Float.acos">
+<div class="member-head">
+<span class="sig">fn acos(self) -&gt; T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member" id="Float.atan">
+<div class="member-head">
+<span class="sig">fn atan(self) -&gt; T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member" id="Float.atan2">
+<div class="member-head">
+<span class="sig">fn atan2(self, other: T) -&gt; T</span>
+
+</div>
+<p class="member-doc">The angle of the point (<code>other</code>, <code>self</code>), from the x axis.</p>
+</div>
+<div class="member" id="Float.sinh">
+<div class="member-head">
+<span class="sig">fn sinh(self) -&gt; T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member" id="Float.cosh">
+<div class="member-head">
+<span class="sig">fn cosh(self) -&gt; T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member" id="Float.tanh">
+<div class="member-head">
+<span class="sig">fn tanh(self) -&gt; T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member" id="Float.exp">
+<div class="member-head">
+<span class="sig">fn exp(self) -&gt; T</span>
+
+</div>
+<p class="member-doc"><code>e</code> to the power <code>self</code>.</p>
+</div>
+<div class="member" id="Float.exp2">
+<div class="member-head">
+<span class="sig">fn exp2(self) -&gt; T</span>
+
+</div>
+<p class="member-doc">2 to the power <code>self</code>.</p>
+</div>
+<div class="member" id="Float.ln">
+<div class="member-head">
+<span class="sig">fn ln(self) -&gt; T</span>
+
+</div>
+<p class="member-doc">The natural logarithm.</p>
+</div>
+<div class="member" id="Float.log2">
+<div class="member-head">
+<span class="sig">fn log2(self) -&gt; T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member" id="Float.log10">
+<div class="member-head">
+<span class="sig">fn log10(self) -&gt; T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member" id="Float.log">
+<div class="member-head">
+<span class="sig">fn log(self, base: T) -&gt; T</span>
+
+</div>
+<p class="member-doc">The logarithm in <code>base</code>.</p>
+</div>
+<div class="member" id="Float.hypot">
+<div class="member-head">
+<span class="sig">fn hypot(self, other: T) -&gt; T</span>
+
+</div>
+<p class="member-doc">The length of the hypotenuse of a triangle with sides <code>self</code> and <code>other</code>.</p>
+</div>
+<div class="member" id="Float.fract">
+<div class="member-head">
+<span class="sig">fn fract(self) -&gt; T</span>
+
+</div>
+<p class="member-doc">What is left after <code>trunc</code>.</p>
+</div>
+<div class="member" id="Float.signum">
+<div class="member-head">
+<span class="sig">fn signum(self) -&gt; T</span>
+
+</div>
+<p class="member-doc"><code>-1</code>, or <code>1</code>; NaN stays NaN.</p>
+</div>
+<div class="member" id="Float.copysign">
+<div class="member-head">
+<span class="sig">fn copysign(self, sign: T) -&gt; T</span>
+
+</div>
+<p class="member-doc"><code>self</code> with the sign of <code>sign</code>.</p>
+</div>
+<div class="member" id="Float.to_degrees">
+<div class="member-head">
+<span class="sig">fn to_degrees(self) -&gt; T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member" id="Float.to_radians">
+<div class="member-head">
+<span class="sig">fn to_radians(self) -&gt; T</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member" id="Float.is_finite">
+<div class="member-head">
+<span class="sig">fn is_finite(self) -&gt; bool</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member" id="Float.is_infinite">
+<div class="member-head">
+<span class="sig">fn is_infinite(self) -&gt; bool</span>
+<span class="badge todo">TODO</span>
+</div>
+<p class="member-doc empty">undocumented</p>
+</div>
+<div class="member" id="Float.is_sign_negative">
+<div class="member-head">
+<span class="sig">fn is_sign_negative(self) -&gt; bool</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
