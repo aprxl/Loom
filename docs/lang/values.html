@@ -76,7 +76,7 @@
 </div>
 <ul><li>The only implicit conversion is lossless integer widening (<code>u8</code> to <code>u16</code>). There is none between signed and unsigned, and none involving floats.</li><li>A number literal takes the type its context expects. With no context it becomes the first numeric type it meets, and otherwise <code>i32</code> (or <code>f64</code>).</li><li>Integer <code>/</code> and <code>%</code> truncate. A zero divisor unravels. A shift by the type's width or more unravels.</li><li>Bit operators bind tighter than comparisons, so <code>flags &amp; MASK == 0</code> means what it looks like.</li></ul>
 <h2 id="text">Text</h2>
-<p><code>str</code> is a view of UTF-8 text and <code>String</code> owns it. A string literal converts to <code>String</code> wherever one is expected. Lengths and positions count bytes, and slicing a string cuts on bytes, unravelling if it lands inside a character. The case and digit tests on <code>char</code> and the case changes on text cover ASCII only.</p>
+<p><code>str</code> is a view of UTF-8 text and <code>String</code> owns it. A string literal converts to <code>String</code> wherever one is expected. Lengths and positions count bytes, and slicing a string cuts on bytes, unravelling if it lands inside a character. The tests on <code>char</code> and the case changes and trimming of text follow Unicode (<code>'é'.is_alphabetic()</code>, <code>"straße".to_upper()</code>); the <code>_ascii</code> variants look at ASCII only.</p>
 <div class="sample" id="sample-values_text">
 <div class="sample-head"><span class="file">samples/values_text.loom</span><span class="tag ok">runs</span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -103,7 +103,7 @@
     print(<span class="s">"ab"</span>.repeat(<span class="n">3</span>))
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>[Hello, Wörld] 13 bytes, 12 characters
-HELLO, WöRLD hello, wörld true some(7)
+HELLO, WÖRLD hello, wörld true some(7)
 Hello
 123!
 [a, b, , c]

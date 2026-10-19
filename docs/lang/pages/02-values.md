@@ -25,7 +25,7 @@ Each arithmetic operator says what happens on overflow:
 
 ## Text
 
-`str` is a view of UTF-8 text and `String` owns it. A string literal converts to `String` wherever one is expected. Lengths and positions count bytes, and slicing a string cuts on bytes, unravelling if it lands inside a character. The case and digit tests on `char` and the case changes on text cover ASCII only.
+`str` is a view of UTF-8 text and `String` owns it. A string literal converts to `String` wherever one is expected. Lengths and positions count bytes, and slicing a string cuts on bytes, unravelling if it lands inside a character. The tests on `char` and the case changes and trimming of text follow Unicode (`'é'.is_alphabetic()`, `"straße".to_upper()`); the `_ascii` variants look at ASCII only.
 
 @sample values_text
 

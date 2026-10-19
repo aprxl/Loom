@@ -2,6 +2,14 @@
 
 Running log of milestone work and decisions. Newest first. Replaces `ledger.log`.
 
+## Standard library, phases 2 and 3 (2026-10-18/19)
+
+Phase 3 done (both backends agree, `tests/run/std_math`): `Int` `signum`, `rem_euclid`, `div_euclid`, `div_floor`, `div_ceil`, `gcd`, `lcm`, `isqrt`, `ilog10`, `next_power_of_two`, `count_zeros` (one native `int.math`, exact on 128 bits, unravels when the result doesn't fit); `Float` trigonometry, `exp`, `exp2`, `ln`, `log2`, `log10`, `log`, `sinh`/`cosh`/`tanh` (written out from `exp` in both runtimes, since Lua has none), `hypot`, `atan2`, `fract`, `signum`, `copysign`, `to_degrees`, `to_radians`, `is_finite`, `is_infinite`, `is_sign_negative`; constants `TAU`, `SQRT_2`, `LN_2`, `LN_10`, `INV_PI`, `PHI`; `std.hash` `fnv1a` and `combine`. `clamp`/`min`/`max` come from `std.cmp`.
+Phase 3 not done: `pow_wrap`/`pow_sat`/`pow_checked` (the operators `+%`, `+|` exist; a method family is unplanned work), `abs_diff`, `to_be_bytes`/`from_be_bytes`, `to_string_radix`, `Int` `MAX`/`MIN`/`BITS` constants, `reverse_bits`, `swap_bytes`, `ilog(base)`, `cbrt`, `mul_add`, `lerp`, `total_cmp`, `to_bits`/`from_bits`, `Float` constants (`EPSILON`, `INF`, `NAN`). Trig results are only checked for agreement on the fixture's values (Lua and Rust both call the platform libm).
+
+Phase 2 done (`tests/run/std_text`, `char_text`): `Char` and `Str` follow Unicode in place (D2): `is_alphabetic`, `is_numeric`, `is_alphanumeric`, `is_whitespace`, `is_upper`, `is_lower`, `to_upper`, `to_lower`, `trim*`, `words`, `to_upper`/`to_lower` on text (letter by letter, `ß` to `SS`, no final-sigma rule); `_ascii` variants keep the old behaviour. The Lua runtime's tables are generated from Rust's own (`crates/loom_vm/tests/unicode_tables.rs`, `LOOM_BLESS=1` after a Rust upgrade), so both backends agree; core.lua grew by about 46 KB, parsed lazily on first non-ASCII use. New `Str` methods written in Loom: `split_once`, `rsplit_once`, `rfind`, `strip_prefix`, `strip_suffix`, `count_of`, `char_indices`, `char_at`, `trim_matches`, `trim_start_matches`, `trim_end_matches`, `eq_ignore_case`, `capitalize`, `pad_left`, `pad_right`, `is_ascii`; `Char.is_ascii`. They return views (`str`) as the plan wants: a Loom-bodied method on `Str` may return a slice of `self`.
+Phase 2 not done: `splitn`/`rsplit`/`split_by`/`matches`, `String` `insert`/`remove`/`truncate`/`retain`/`drain`/`split_off`, `from_utf8`/`to_bytes`, `parse_radix`, `escape`, grapheme clusters and normalisation, the `Fmt` spec/`pad`/`debug_struct`/`dbg`. Gates not measured: ASCII `to_upper` on 1 MB (the ASCII path is unchanged on both backends), non-ASCII at most 4x ASCII, hello-world size growth (core.lua only).
+
 ## Standard library, phases 0, 1 and 4 (started 2026-10-18; design/stdlib-plan.md)
 
 Built is roughly the plan's section 6 first slice for these phases, plus `PriorityQueue` and `BitSet`. Everything below is on both backends, with fixtures `tests/run/std_*`.
