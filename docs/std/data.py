@@ -27,6 +27,7 @@ MODULES = [
     {"name": "Burst", "from": "iter"},
     {"name": "Range", "from": "iter"},
     {"name": "Num", "from": "num"},
+    {"name": "Default", "from": "default"},
     {"name": "then", "from": "option"},
     {"name": "then_some", "from": "option"},
     {"name": "Ordering", "from": "cmp"},
@@ -83,6 +84,20 @@ MODULES = [
     {"name": "min", "suffix": "[T: Ord](a: T, b: T) -> T", "doc": "The smaller of two values (the first, if they are equal)."},
     {"name": "max", "suffix": "[T: Ord](a: T, b: T) -> T", "doc": "The larger of two values (the first, if they are equal)."},
     {"name": "clamp", "suffix": "[T: Ord](x: T, lo: T, hi: T) -> T", "doc": "`x`, or the nearest of `lo` and `hi` when it is outside them."},
+  ],
+},
+
+{
+  "name": "default",
+  "summary": "Values with a default.",
+  "types": [
+    {"kind": "weft", "name": "Default", "doc": "Types that have a value to start from: `0`, `false`, empty text, an empty list. A warp that lists `Default` in its header and doesn't write `default` gets one: each field takes its own default if it has one, and its type's otherwise. A warp with cases takes its first, if it carries nothing.", "example": "warp Config: Default {\n    host: String = \"localhost\"\n    port: u16\n}\n// Config.default() is Config(host: \"localhost\", port: 0)",
+     "methods": [
+       {"sig": "fn default() -> Self", "doc": "The default value."},
+     ]},
+  ],
+  "functions": [
+    {"name": "of", "suffix": "[T: Default]() -> T", "doc": "The default value of `T`: `of[u16]()`."},
   ],
 },
 

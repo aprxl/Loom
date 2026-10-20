@@ -10,6 +10,7 @@
 //!    and building the HIR (`items.rs`, `body.rs`).
 
 mod body;
+mod derive;
 mod items;
 
 use std::collections::{HashMap, HashSet};
@@ -277,8 +278,9 @@ impl<'a> Resolver<'a> {
     fn add_file_module(&mut self, path: String, parent: Option<ModuleId>, file: FileId) -> ModuleId {
         let name = path.rsplit('.').next().unwrap_or(&path).to_string();
         let id = self.add_module(path, Some(file), parent, &name);
-        let parsed = parse(self.db, file);
+        let mut parsed = parse(self.db, file);
         self.diags.extend(parsed.diagnostics);
+        derive::derive_defaults(&mut parsed.module);
         let defs = self.collect_module(id, &parsed.module);
         self.asts[id.index()] = Some(parsed.module);
         self.item_defs[id.index()] = defs;

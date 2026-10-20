@@ -37,6 +37,7 @@ const EMBEDDED_STD: &[(&str, &str)] = &[
     ("prelude", include_str!("../../../runtime/std/prelude.loom")),
     ("bitset", include_str!("../../../runtime/std/bitset.loom")),
     ("cmp", include_str!("../../../runtime/std/cmp.loom")),
+    ("default", include_str!("../../../runtime/std/default.loom")),
     ("deque", include_str!("../../../runtime/std/deque.loom")),
     ("env", include_str!("../../../runtime/std/env.loom")),
     ("error", include_str!("../../../runtime/std/error.loom")),

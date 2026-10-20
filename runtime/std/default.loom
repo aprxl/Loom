@@ -1,0 +1,65 @@
+// Values with a default.
+
+/// Types that have a value to start from: `0`, `false`, empty text, an empty
+/// list. A warp that lists `Default` in its header and doesn't write
+/// `default` gets one: each field takes its own default if it has one, and
+/// its type's otherwise. A warp with cases takes its first, if it carries
+/// nothing.
+///
+/// ```loom
+/// warp Config: Default {
+///     host: String = "localhost"
+///     port: u16
+/// }
+/// // Config.default() is Config(host: "localhost", port: 0)
+/// ```
+pub weft Default {
+    /// The default value.
+    fn default() -> Self
+}
+
+/// The default value of `T`: `of[u16]()`.
+pub fn of[T: Default]() -> T = T.default()
+
+weave[T: Integer] Default into T {
+    fn default() -> T = 0
+}
+weave Default into f32 {
+    fn default() -> f32 = 0.0
+}
+weave Default into f64 {
+    fn default() -> f64 = 0.0
+}
+weave Default into bool {
+    fn default() -> bool = false
+}
+weave Default into char {
+    fn default() -> char = '\0'
+}
+weave Default into String {
+    fn default() -> String = String()
+}
+weave[T] Default into ?T {
+    fn default() -> ?T = none
+}
+weave[T] Default into List[T] {
+    fn default() -> List[T] = List()
+}
+weave[T: Hash] Default into Set[T] {
+    fn default() -> Set[T] = Set()
+}
+weave[K: Hash, V] Default into Map[K, V] {
+    fn default() -> Map[K, V] = Map()
+}
+weave Default into str {
+    fn default() -> str = ""
+}
+weave Default into () {
+    fn default() -> () = ()
+}
+weave[A: Default, B: Default] Default into (A, B) {
+    fn default() -> (A, B) = (A.default(), B.default())
+}
+weave[A: Default, B: Default, C: Default] Default into (A, B, C) {
+    fn default() -> (A, B, C) = (A.default(), B.default(), C.default())
+}

@@ -1023,9 +1023,6 @@ impl<'p> Checker<'p> {
         }
         for &member in &w.members {
             match &self.p.def(member).kind {
-                DefKind::Fn(f) if !f.has_self() => {
-                    self.unsupported(self.p.def(member).span, "weft functions without `self`");
-                }
                 DefKind::Type(t) if t.value.is_some() || !t.bounds.is_empty() || !t.generics.is_empty() => {
                     self.unsupported(self.p.def(member).span, "associated types with bounds or defaults");
                 }

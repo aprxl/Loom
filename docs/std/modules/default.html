@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>std.default · Loom</title>
+<link rel="stylesheet" href="../../style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="../../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a href="../../lang/index.html">Language</a></li>
+<li><a class="current" href="../../std/index.html">Standard library</a></li>
+<li><a href="../../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Standard library</h3>
+<ul>
+<li><a href="../index.html">Overview</a></li>
+<li><a href="prelude.html">prelude</a></li>
+<li><a href="bitset.html">bitset</a></li>
+<li><a href="cmp.html">cmp</a></li>
+<li><a class="current" href="default.html">default</a></li>
+<li><a href="deque.html">deque</a></li>
+<li><a href="env.html">env</a></li>
+<li><a href="error.html">error</a></li>
+<li><a href="fmt.html">fmt</a></li>
+<li><a href="fs.html">fs</a></li>
+<li><a href="io.html">io</a></li>
+<li><a href="hash.html">hash</a></li>
+<li><a href="iter.html">iter</a></li>
+<li><a href="list.html">list</a></li>
+<li><a href="map.html">map</a></li>
+<li><a href="math.html">math</a></li>
+<li><a href="mem.html">mem</a></li>
+<li><a href="meta.html">meta</a></li>
+<li><a href="num.html">num</a></li>
+<li><a href="ops.html">ops</a></li>
+<li><a href="option.html">option</a></li>
+<li><a href="path.html">path</a></li>
+<li><a href="priority.html">priority</a></li>
+<li><a href="process.html">process</a></li>
+<li><a href="rand.html">rand</a></li>
+<li><a href="set.html">set</a></li>
+<li><a href="slice.html">slice</a></li>
+<li><a href="string.html">string</a></li>
+<li><a href="sync.html">sync</a></li>
+<li><a href="target.html">target</a></li>
+<li><a href="term.html">term</a></li>
+<li><a href="time.html">time</a></li>
+</ul>
+</nav>
+<main>
+<div class="crumb"><a href="../index.html">std</a> / default</div>
+<h1>std.default</h1>
+<p class="summary">Values with a default.</p>
+<h2>Types</h2>
+<div class="item" id="Default">
+<div class="item-head">
+<span class="sig">weft <strong>Default</strong></span>
+
+</div>
+<p class="item-doc">Types that have a value to start from: <code>0</code>, <code>false</code>, empty text, an empty list. A warp that lists <code>Default</code> in its header and doesn't write <code>default</code> gets one: each field takes its own default if it has one, and its type's otherwise. A warp with cases takes its first, if it carries nothing.</p>
+<pre><code>warp Config: Default {
+    host: String = "localhost"
+    port: u16
+}
+// Config.default() is Config(host: "localhost", port: 0)</code></pre>
+<div class="members">
+<div class="member" id="Default.default">
+<div class="member-head">
+<span class="sig">fn default() -&gt; Self</span>
+
+</div>
+<p class="member-doc">The default value.</p>
+</div>
+</div>
+</div>
+<h2>Functions</h2>
+<div class="item" id="of">
+<div class="item-head">
+<span class="sig">fn <strong>of</strong>[T: Default]() -&gt; T</span>
+
+</div>
+<p class="item-doc">The default value of <code>T</code>: <code>of[u16]()</code>.</p>
+</div>
+</main>
+</div>
+</body>
+</html>

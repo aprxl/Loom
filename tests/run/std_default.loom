@@ -1,0 +1,38 @@
+use std.io.print
+warp Config: Default {
+    host: String = "localhost"
+    port: u16
+    verbose: bool
+    tags: List[String]
+    ratio: f64
+    note: ?String
+    limit: i64 = 5
+}
+warp Color: Default, Eq, Show {
+    case Red
+    case Green
+}
+warp Inner: Default { n: i32 }
+warp Outer: Default {
+    inner: Inner
+    c: Color
+}
+warp Wrap[T]: Default { v: T }
+fn zero[T: Default]() -> T = T.default()
+fn main() {
+    let c = Config.default()
+    print("{c.host} {c.port} {c.verbose} {c.tags.len()} {c.ratio} {c.note} {c.limit}")
+    print(Color.default() == Color.Red)
+    let o = Outer.default()
+    print(o.inner.n)
+    print(zero[u8]())
+    print(zero[char]() == '\0')
+    print(Wrap[i32].default().v)
+    print(zero[Set[i32]]().len())
+    let m: Map[String, i32] = zero()
+    print(m.len())
+    let t: (i32, String, bool) = std.default.of()
+    print("{t.0} {t.1.len()} {t.2}")
+    let text: str = std.default.of()
+    print(text.len())
+}

@@ -1,0 +1,13 @@
+// A field whose type has no `Default` and no default of its own stops the
+// derive; so does a first case that carries something.
+
+warp NoDefault { n: i32 }
+
+warp Holder: Default { x: NoDefault }           //~ T0108
+
+warp Shape: Default {                            //~ T0113
+    case Circle(r: f64)
+    case Square
+}
+
+fn main() {}
