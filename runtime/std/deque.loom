@@ -1,5 +1,7 @@
 // Double-ended queues.
 
+use std.iter.FromStream
+
 /// A queue with fast pushes and pops at both ends. Two stacks, so every
 /// operation takes constant time except the occasional one that moves half
 /// the items from one side to the other; any run of `n` operations costs
@@ -80,6 +82,17 @@ pub warp Deque[T] {
         var out: List[T] = .front.copy()
         out.reverse()
         out.extend(.back.copy())
+        out
+    }
+}
+
+weave[T] FromStream into Deque[T] {
+    type Item = T
+    fn from_stream(take items: Stream[T]) -> Deque[T] {
+        var out: Deque[T] = Deque.new()
+        for x in items {
+            out.push_back(x)
+        }
         out
     }
 }

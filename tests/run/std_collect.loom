@@ -1,0 +1,35 @@
+use std.deque.Deque
+use std.io.print
+use std.iter.FromStream
+use std.priority.PriorityQueue
+
+/// A user collection: it counts what it is given.
+warp Tally { n: usize }
+
+weave FromStream into Tally {
+    type Item = i32
+    fn from_stream(take items: Stream[i32]) -> Tally = Tally(n: items.count())
+}
+
+fn main() {
+    let words: List[String] = ["b", "a", "b", "c"]
+    print(words.collect_as[Set[String]]().len())
+    let t: Set[i32] = (0..10).map(_ % 3).collect_as()
+    print(t.sorted().join(","))
+    let text: String = "hello".chars().filter(c => c != 'l').collect_as()
+    print(text)
+    let m: Map[str, usize] = ["x", "yy", "x"].indexed().map(p => (p.1, p.0)).collect_as()
+    print("{m.len()} {m.get("x")}")
+    let l: List[i32] = (1..4).collect_as()
+    print(l.join(","))
+    let d: Deque[i32] = (1..4).collect_as()
+    print(d.to_list().join(","))
+    var q: PriorityQueue[i32] = [5, 1, 9, 3].collect_as()
+    print(q.pop())
+    let none_here: Set[i32] = (0..0).collect_as()
+    print(none_here.len())
+    let tally: Tally = (0..7).collect_as()
+    print(tally.n)
+    let empty: String = "".chars().collect_as()
+    print(empty.len())
+}

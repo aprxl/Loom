@@ -241,6 +241,11 @@ MODULES = [
        {"sig": "type Item", "doc": "What it gives."},
        {"sig": "fn next(mut self) -> ?Item", "doc": "The next item, or `none` once there are no more."},
      ]},
+    {"kind": "weft", "name": "FromStream", "doc": "Collections a stream can be gathered into: see `Stream.collect_as`. `Item` is what the collection is made of.", "example": "let unique = words.collect_as[Set[String]]()\nlet text: String = letters.collect_as()",
+     "methods": [
+       {"sig": "type Item", "doc": "What the stream's items must be."},
+       {"sig": "fn from_stream(take items: Stream[Item]) -> Self", "doc": "A collection of the items."},
+     ]},
     {"kind": "warp", "name": "Range", "suffix": "[T]", "builtin": True, "doc": "The type of `a..b`, `a..=b` and `a..`: the values from `a` up to `b`. It has the methods of `Stream` (over its values), and these.",
      "methods": [
        {"sig": "fn chunks(self, n: usize) -> Stream[Range[T]]", "doc": "Ranges of `n` values at a time, one after another: `(0..10).chunks(4)` is `0..4`, `4..8` and `8..10`. Each one is a range too, with all the methods of one, so it can be given to a thread. Unravels if `n` is 0 or the range has no end."},
@@ -275,6 +280,7 @@ MODULES = [
        {"sig": "fn partition(take self, f: T => bool) -> (List[T], List[T])", "doc": "The items `f` says yes to, and the ones it says no to."},
        {"sig": "fn counts(take self) -> Map[T, usize] where T: Hash", "doc": "How many times each item comes up."},
        {"sig": "fn group_by[K: Hash](take self, key: T => K) -> Map[K, List[T]]", "doc": "The items in lists by `key`, in the order the keys first came up."},
+       {"sig": "fn collect_as[C: FromStream](take self) -> C", "doc": "The items gathered into a `C`: `words.collect_as[Set[String]]()`, or `let text: String = chars.collect_as()` when the type is known from where the result goes. The collections that can be made are the ones that weave `FromStream`: `List`, `Set`, `Map` (of pairs), `String` (of characters), `Deque` and `PriorityQueue`."},
        {"sig": "fn collect(take self) -> List[T]", "doc": "A list of the items."},
        {"sig": "fn count(take self) -> usize", "doc": "How many items there are."},
        {"sig": "fn last(take self) -> ?T", "doc": "The last item."},

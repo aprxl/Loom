@@ -21,6 +21,20 @@ pub weft Iter {
     fn next(mut self) -> ?Item
 }
 
+/// Collections a stream can be gathered into: see `Stream.collect_as`.
+/// `Item` is what the collection is made of.
+///
+/// ```loom
+/// let unique = words.collect_as[Set[String]]()
+/// let text: String = letters.collect_as()
+/// ```
+pub weft FromStream {
+    /// What the stream's items must be.
+    type Item
+    /// A collection of the items.
+    fn from_stream(take items: Stream[Item]) -> Self
+}
+
 /// The type of `a..b`, `a..=b` and `a..`: the values from `a` up to `b`.
 /// It has the methods of `Stream` (over its values), and these.
 #builtin
@@ -205,6 +219,14 @@ pub warp Stream[T] {
         m
     }
 
+    /// The items gathered into a `C`: `words.collect_as[Set[String]]()`, or
+    /// `let text: String = chars.collect_as()` when the type is known from
+    /// where the result goes. The collections that can be made are the ones
+    /// that weave `FromStream`: `List`, `Set`, `Map` (of pairs), `String` (of
+    /// characters), `Deque` and `PriorityQueue`.
+    pub fn collect_as[C: FromStream](take self) -> C {
+        C.from_stream(self)
+    }
     /// A list of the items.
     pub fn collect(take self) -> List[T]
     /// How many items there are.

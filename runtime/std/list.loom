@@ -1,5 +1,7 @@
 // Growable arrays.
 
+use std.iter.FromStream
+
 /// A growable array of `T`. Build one with `List()`, `List.filled(x, n)`,
 /// or a literal where a list is expected: `let xs: List[i32] = [1, 2, 3]`.
 /// It has every method of a slice (`[T]`), too.
@@ -115,4 +117,9 @@ pub warp List[T] {
         self.append(mut tail)
         taken
     }
+}
+
+weave[T] FromStream into List[T] {
+    type Item = T
+    fn from_stream(take items: Stream[T]) -> List[T] = items.collect()
 }

@@ -1,6 +1,6 @@
 // Text.
 
-use std.iter.Owned
+use std.iter.{FromStream, Owned}
 
 use std.num.{NumError, Parse}
 
@@ -381,5 +381,16 @@ pub warp Char {
     /// Whether it is one of the 128 ASCII characters.
     pub fn is_ascii(self) -> bool {
         self < '\u{80}'
+    }
+}
+
+weave FromStream into String {
+    type Item = char
+    fn from_stream(take items: Stream[char]) -> String {
+        var out: String = ""
+        for c in items {
+            out.push(c)
+        }
+        out
     }
 }

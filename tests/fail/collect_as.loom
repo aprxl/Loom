@@ -1,0 +1,7 @@
+// `collect_as` needs a collection that weaves `FromStream`. (Items of the
+// wrong type are reported inside `Stream.collect_as`, with the types named.)
+
+fn main() {
+    let words: List[String] = ["a"]
+    let bad: i32 = words.collect_as()            //~ T0108
+}

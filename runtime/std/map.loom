@@ -1,5 +1,7 @@
 // Hash maps.
 
+use std.iter.FromStream
+
 /// A map from `K` to `V` that remembers insertion order: going through it,
 /// and showing it, follow the order keys were first added. Build one with
 /// `Map()`, or a literal where a map is expected:
@@ -96,4 +98,13 @@ pub warp Map[K, V] {
     pub fn first(self) -> ?(K, V) = self.pairs().next()
     /// The newest entry.
     pub fn last(self) -> ?(K, V) = self.pairs().last()
+}
+
+weave[K: Hash, V] FromStream into Map[K, V] {
+    type Item = (K, V)
+    fn from_stream(take items: Stream[(K, V)]) -> Map[K, V] {
+        var out: Map[K, V] = Map()
+        out.extend(items)
+        out
+    }
 }

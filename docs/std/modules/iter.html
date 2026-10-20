@@ -87,6 +87,31 @@
 </div>
 </div>
 </div>
+<div class="item" id="FromStream">
+<div class="item-head">
+<span class="sig">weft <strong>FromStream</strong></span>
+
+</div>
+<p class="item-doc">Collections a stream can be gathered into: see <code>Stream.collect_as</code>. <code>Item</code> is what the collection is made of.</p>
+<pre><code>let unique = words.collect_as[Set[String]]()
+let text: String = letters.collect_as()</code></pre>
+<div class="members">
+<div class="member" id="FromStream.Item">
+<div class="member-head">
+<span class="sig">type Item</span>
+
+</div>
+<p class="member-doc">What the stream's items must be.</p>
+</div>
+<div class="member" id="FromStream.from_stream">
+<div class="member-head">
+<span class="sig">fn from_stream(take items: Stream[Item]) -&gt; Self</span>
+
+</div>
+<p class="member-doc">A collection of the items.</p>
+</div>
+</div>
+</div>
 <div class="item" id="Range">
 <div class="item-head">
 <span class="sig">warp <strong>Range</strong>[T]</span>
@@ -305,6 +330,13 @@
 
 </div>
 <p class="member-doc">The items in lists by <code>key</code>, in the order the keys first came up.</p>
+</div>
+<div class="member" id="Stream.collect_as">
+<div class="member-head">
+<span class="sig">fn collect_as[C: FromStream](take self) -&gt; C</span>
+
+</div>
+<p class="member-doc">The items gathered into a <code>C</code>: <code>words.collect_as[Set[String]]()</code>, or <code>let text: String = chars.collect_as()</code> when the type is known from where the result goes. The collections that can be made are the ones that weave <code>FromStream</code>: <code>List</code>, <code>Set</code>, <code>Map</code> (of pairs), <code>String</code> (of characters), <code>Deque</code> and <code>PriorityQueue</code>.</p>
 </div>
 <div class="member" id="Stream.collect">
 <div class="member-head">

@@ -1,5 +1,7 @@
 // Priority queues.
 
+use std.iter.FromStream
+
 /// A queue that gives the largest item first. For the smallest first, put
 /// `Reverse` around the items (`std.cmp.Reverse`). A binary heap in a list:
 /// `push` and `pop` take `O(log n)`, `peek` takes constant time.
@@ -81,4 +83,9 @@ pub warp PriorityQueue[T: Ord] {
             i = big
         }
     }
+}
+
+weave[T: Ord] FromStream into PriorityQueue[T] {
+    type Item = T
+    fn from_stream(take items: Stream[T]) -> PriorityQueue[T] = PriorityQueue.from_list(items.collect())
 }

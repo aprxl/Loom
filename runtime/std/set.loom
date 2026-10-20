@@ -1,5 +1,7 @@
 // Hash sets.
 
+use std.iter.FromStream
+
 /// A set of `T` that remembers insertion order. Build one with `Set()` or
 /// `Set.of(xs)`. `for x in s` goes through it in order, and a set has the
 /// methods of `Stream` too. Its elements must be `Hash`.
@@ -101,5 +103,14 @@ pub warp Set[T] {
             }
             none => none
         }
+    }
+}
+
+weave[T: Hash] FromStream into Set[T] {
+    type Item = T
+    fn from_stream(take items: Stream[T]) -> Set[T] {
+        var out: Set[T] = Set()
+        out.extend(items)
+        out
     }
 }
