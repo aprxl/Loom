@@ -669,6 +669,8 @@ MODULES = [
   "name": "string",
   "summary": "Text.",
   "types": [
+    {"kind": "warp", "name": "Utf8Error", "suffix": ": Error", "doc": "Why bytes aren't text.",
+     "fields": ["pub valid_up_to: usize"]},
     {"kind": "warp", "name": "String", "builtin": True, "doc": "Owned, growable UTF-8 text. `str` is a view of text; a string literal converts to `String` wherever one is expected. A `String` has every method of `str`, too.",
      "methods": [
        {"sig": "fn with_capacity(n: usize) -> String", "doc": "An empty string with room for `n` bytes."},
@@ -677,6 +679,7 @@ MODULES = [
        {"sig": "fn push_str(mut self, s: str)", "doc": "Adds `s` at the end."},
        {"sig": "fn pop(mut self) -> ?char", "doc": "Takes the last character off, if there is one."},
        {"sig": "fn clear(mut self)", "doc": None},
+       {"sig": "fn from_utf8(bytes: [u8]) -> String ! Utf8Error", "doc": "The text the bytes spell, or where they stop being UTF-8."},
        {"sig": "fn truncate(mut self, n: usize)", "doc": "Keeps the first `n` bytes. Unravels if `n` is past the end or in the middle of a character."},
        {"sig": "fn insert_str(mut self, i: usize, s: str)", "doc": "Puts `s` at byte `i`. Unravels if `i` is past the end or in the middle of a character."},
        {"sig": "fn insert(mut self, i: usize, c: char)", "doc": "Puts `c` at byte `i`."},
@@ -713,6 +716,9 @@ MODULES = [
        {"sig": "fn copy(self) -> String", "doc": None},
        {"sig": "fn parse[T: Parse](self) -> T ! NumError", "doc": "The number the text spells: `\"42\".parse[u8]()`. Decimal, with an optional sign; floats also take a fraction, an exponent, `inf`, `NaN`."},
        {"sig": "fn split_once(self, sep: str) -> ?(str, str)", "doc": "The text before and after the first `sep`."},
+       {"sig": "fn splitn(self, n: usize, sep: str) -> List[String]", "doc": "The pieces between `sep`s, at most `n` of them: the last holds the rest. Unravels if `sep` is empty."},
+       {"sig": "fn rsplit(self, sep: str) -> List[String]", "doc": "The pieces between `sep`s, from the last to the first."},
+       {"sig": "fn split_by(self, f: char => bool) -> List[String]", "doc": "The pieces between the characters `f` says yes to."},
        {"sig": "fn rsplit_once(self, sep: str) -> ?(str, str)", "doc": "The text before and after the last `sep`."},
        {"sig": "fn rfind(self, part: str) -> ?usize", "doc": "The index of the last `part`."},
        {"sig": "fn strip_prefix(self, prefix: str) -> ?str", "doc": "The text after `prefix`, if it starts with it."},

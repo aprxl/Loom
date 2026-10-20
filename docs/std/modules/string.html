@@ -55,6 +55,16 @@
 <h1>std.string</h1>
 <p class="summary">Text.</p>
 <h2>Types</h2>
+<div class="item" id="Utf8Error">
+<div class="item-head">
+<span class="sig">warp <strong>Utf8Error</strong>: Error</span>
+
+</div>
+<p class="item-doc">Why bytes aren't text.</p>
+<ul class="fields">
+<li><span class="sig">pub valid_up_to: usize</span></li>
+</ul>
+</div>
 <div class="item" id="String">
 <div class="item-head">
 <span class="sig">warp <strong>String</strong></span>
@@ -103,6 +113,13 @@
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
+</div>
+<div class="member" id="String.from_utf8">
+<div class="member-head">
+<span class="sig">fn from_utf8(bytes: [u8]) -&gt; String ! Utf8Error</span>
+
+</div>
+<p class="member-doc">The text the bytes spell, or where they stop being UTF-8.</p>
 </div>
 <div class="member" id="String.truncate">
 <div class="member-head">
@@ -343,6 +360,27 @@
 
 </div>
 <p class="member-doc">The text before and after the first <code>sep</code>.</p>
+</div>
+<div class="member" id="Str.splitn">
+<div class="member-head">
+<span class="sig">fn splitn(self, n: usize, sep: str) -&gt; List[String]</span>
+
+</div>
+<p class="member-doc">The pieces between <code>sep</code>s, at most <code>n</code> of them: the last holds the rest. Unravels if <code>sep</code> is empty.</p>
+</div>
+<div class="member" id="Str.rsplit">
+<div class="member-head">
+<span class="sig">fn rsplit(self, sep: str) -&gt; List[String]</span>
+
+</div>
+<p class="member-doc">The pieces between <code>sep</code>s, from the last to the first.</p>
+</div>
+<div class="member" id="Str.split_by">
+<div class="member-head">
+<span class="sig">fn split_by(self, f: char =&gt; bool) -&gt; List[String]</span>
+
+</div>
+<p class="member-doc">The pieces between the characters <code>f</code> says yes to.</p>
 </div>
 <div class="member" id="Str.rsplit_once">
 <div class="member-head">

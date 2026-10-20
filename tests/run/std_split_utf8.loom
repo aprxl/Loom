@@ -1,0 +1,18 @@
+use std.io.print
+fn main() {
+    print("a,b,c,d".splitn(3, ",").join("|"))
+    print("a,b".splitn(5, ",").join("|"))
+    print("a,b,c".rsplit(",").join("|"))
+    print("a1b22c".split_by(c => c.is_digit()).join("|"))
+    print("héllo wörld".split_by(c => c == 'ö').join("|"))
+    let good = String.from_utf8("héllo".bytes().collect()) mend "bad"
+    print(good)
+    let bad = String.from_utf8([104u8, 255u8, 105u8])
+    print(bad.error().map(_.valid_up_to))
+    let cut = String.from_utf8([0xE2u8, 0x82u8])
+    print(cut.error().map(_.valid_up_to))
+    let four = String.from_utf8([0xF0u8, 0x9Fu8, 0x98u8, 0x80u8])
+    print(four.value().map(_.char_count()))
+    print(String.from_utf8([0xC0u8, 0x80u8]).error().is_some())
+    print(String.from_utf8([]).value().map(_.len()))
+}

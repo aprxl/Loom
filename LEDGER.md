@@ -2,6 +2,9 @@
 
 Running log of milestone work and decisions. Newest first. Replaces `ledger.log`.
 
+Mechanical group, second and third chunks (2026-10-20): done: `fs.metadata`/`is_dir`/`is_file`/`file_kind`/`file_size`, `env.current_dir`/`home_dir`/`temp_dir`, `term.columns`/`rows`/`is_tty`, `process.id`, `SystemTime`, `Rng.from_entropy`, `std.path` (`join`, `parent`, `file_name`, `stem`, `extension`, `with_extension`, `normalize`, `is_absolute`; `/` is the separator), `Str` `splitn`/`rsplit`/`split_by`, `String.from_utf8` with `Utf8Error`. `Int` `MAX`/`MIN` already work (`i32.MAX`). Compiler fix: a branch that gives an outer local by name (`if c { "x{y}" } else { body }`) moves it into the join; before, Treadle dropped it first and returned an empty string (`tests/run/if_moves_outer_local`).
+Left from the group, each blocked on something the library can't do yet: `pow_checked`, `abs_diff`, `to_string_radix`, `total_cmp`, `to_bits` need a Loom body on `Int`/`Float` (their `self` is the warp, not the number: `Self` for gauge types is the obstacle) or an optional-returning native; `concat`/`join` on slices of slices need a `where T: [U]` bound; `env.vars` needs a list-of-pairs native; `process.run`/`Child` and `BufReader`/`BufWriter` are their own designs.
+
 ## Standard library, mechanical batch (2026-10-20)
 
 Done (both backends, `tests/run/std_edit`, `std_fs_dirs`): `Slice` `starts_with`, `ends_with`, `count_of`, `rotate_left`, `rotate_right`; `List.extend` takes a stream (the native for slices is gone); `String` `truncate`, `insert`, `insert_str`, `remove`, `retain` (rebuild the text, so each is O(length)); `Int` `pow_wrap`, `pow_sat`; `fs` `create_dir_all`, `rename`, `copy`, `read_dir` (names in order; the in-memory file system of tests lists files, and has no empty directories).
