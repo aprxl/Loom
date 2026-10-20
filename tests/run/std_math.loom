@@ -50,4 +50,8 @@ fn main() {
     print(math.TAU == math.PI * 2.0)
     print(hash.fnv1a("hello".bytes().collect()))
     print(hash.combine(1, 2) != hash.combine(2, 1))
+    print((-9223372036854775807i64 - 1).rem_euclid(-1))
+    print((-9223372036854775807i64 - 1).lcm(0))
+    print(1e200.hypot(1e200) > 1.4e200)
+    print(3e-200.hypot(4e-200) > 4.9e-200)
 }

@@ -75,10 +75,6 @@ fn text_raw<'t>(ctx: &Ctx, ptr: u64, len: u64) -> Result<&'t [u8], Trap> {
     Ok(unsafe { &*t })
 }
 
-fn is_space(b: u8) -> bool {
-    b == b' ' || (9..=13).contains(&b)
-}
-
 /// The position of `needle` in `hay`, if it's there.
 fn position(hay: &[u8], needle: &[u8]) -> Option<usize> {
     if needle.is_empty() {
@@ -114,35 +110,53 @@ fn ends_with(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     Ok(())
 }
 
+/// The character that starts at byte `i` of `s`, and how many bytes it takes;
+/// none where the bytes aren't valid UTF-8.
+fn char_at(s: &[u8], i: usize) -> Option<(char, usize)> {
+    let b = s[i];
+    if b < 0x80 {
+        return Some((char::from(b), 1));
+    }
+    let w = match b {
+        0xC0..=0xDF => 2,
+        0xE0..=0xEF => 3,
+        0xF0..=0xF7 => 4,
+        _ => return None,
+    };
+    let part = s.get(i..i + w)?;
+    std::str::from_utf8(part).ok()?.chars().next().map(|c| (c, w))
+}
+
 /// `str.trim(s)` with `imm` 0 (both ends), 1 (the start) or 2 (the end):
 /// the text left, as an address and a length.
 fn trim(ctx: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
     let s = text(ctx, args[0], args[1])?;
     let mut start = 0;
     let mut end = s.len();
-    // 3, 4 and 5 are the same for ASCII whitespace only.
-    let ascii = imm >= 3;
+    // 3, 4 and 5 are the same for ASCII white space only.
     let side = imm % 3;
-    match std::str::from_utf8(s) {
-        Ok(t) if !ascii => {
-            let kept = match side {
-                0 => t.trim_matches(char::is_whitespace),
-                1 => t.trim_start_matches(char::is_whitespace),
-                _ => t.trim_end_matches(char::is_whitespace),
-            };
-            start = kept.as_ptr() as usize - t.as_ptr() as usize;
-            end = start + kept.len();
-        }
-        _ => {
-            if side != 2 {
-                while start < end && is_space(s[start]) {
-                    start += 1;
-                }
+    let space = |c: Option<(char, usize)>| match c {
+        Some((c, w)) if imm < 3 => c.is_whitespace().then_some(w),
+        Some((c, w)) => (c.is_ascii() && c.is_whitespace()).then_some(w),
+        None => None,
+    };
+    if side != 2 {
+        while start < end {
+            match space(char_at(s, start)) {
+                Some(w) => start += w,
+                None => break,
             }
-            if side != 1 {
-                while end > start && is_space(s[end - 1]) {
-                    end -= 1;
-                }
+        }
+    }
+    if side != 1 {
+        while end > start {
+            let mut at = end - 1;
+            while at > start && s[at] & 0xC0 == 0x80 {
+                at -= 1;
+            }
+            match space(char_at(s, at)) {
+                Some(w) if at + w == end => end = at,
+                _ => break,
             }
         }
     }
@@ -183,7 +197,7 @@ fn case(ctx: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
 /// `to_upper`, 7 `to_lower`. A mapping to more than one character leaves the
 /// character as it is.
 fn char_uni(_: &mut Heap, args: &mut [u64], imm: u16) -> Result<(), Trap> {
-    let Some(c) = char::from_u32(args[0] as u32) else {
+    let Some(c) = u32::try_from(args[0]).ok().and_then(char::from_u32) else {
         args[0] = 0;
         return Ok(());
     };
@@ -771,20 +785,16 @@ fn next_line(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     Ok(())
 }
 
-/// `str.next_word(s, at)`: the next run of characters that aren't ASCII
-/// whitespace from byte `at` (start, length), where the search goes on,
+/// `str.next_word(s, at)`: the next run of characters that aren't white
+/// space from byte `at` (start, length), where the search goes on,
 /// and whether there was one.
 fn next_word(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let s = text(ctx, args[0], args[1])?;
     let mut i = (args[2] as usize).min(s.len());
-    let wide = !s.is_ascii();
-    // The width and whitespace-ness of the character at `i`.
+    // The width and white-space-ness of the character at `i`.
     let at = |i: usize| -> (usize, bool) {
-        if !wide || s[i] < 0x80 {
-            return (1, is_space(s[i]));
-        }
-        match std::str::from_utf8(&s[i..]).ok().and_then(|t| t.chars().next()) {
-            Some(c) => (c.len_utf8(), c.is_whitespace()),
+        match char_at(s, i) {
+            Some((c, w)) => (w, c.is_whitespace()),
             None => (1, false),
         }
     };
@@ -1018,7 +1028,18 @@ fn float_math(_: &mut Heap, args: &mut [u64], imm: u16) -> Result<(), Trap> {
         22 => a.log2(),
         23 => a.log10(),
         24 => a.atan2(b),
-        25 => (a * a + b * b).sqrt(),
+        25 => {
+            // Scaled, so a large or small pair neither overflows nor underflows.
+            let (x, y) = (a.abs(), b.abs());
+            let m = x.max(y);
+            if x.is_infinite() || y.is_infinite() {
+                f64::INFINITY
+            } else if m == 0.0 || m.is_nan() {
+                m
+            } else {
+                m * ((x / m) * (x / m) + (y / m) * (y / m)).sqrt()
+            }
+        }
         26 => a.ln() / b.ln(),
         27 => a - a.trunc(),
         28 => {

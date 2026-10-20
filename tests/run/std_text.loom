@@ -42,4 +42,9 @@ fn main() {
     print("é".rfind(""))
     print("xéxx".trim_end_matches(c => c == 'x'))
     print("日日".trim_matches(c => c == '日').len())
+    print("word é ".repeat(20000).words().count())
+    var rest: String = "  ".repeat(5000)
+    rest.push_str("x")
+    var t = rest.trim_start()
+    print(t.len())
 }

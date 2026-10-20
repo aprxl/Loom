@@ -3474,35 +3474,53 @@ local function trim_by(s, front, back)
   return s:sub(first, last)
 end
 
+--- `s` without the ASCII white space at its start, its end, or both, in one
+--- pass from each end.
+local function trim_ascii(s, front, back)
+  local first, last = 1, #s
+  if front then
+    first = string.find(s, "%S") or last + 1
+  end
+  if back then
+    while last >= first and string.find(s, "^%s", last) do
+      last = last - 1
+    end
+  end
+  return s:sub(first, last)
+end
+
+--- Text that isn't valid UTF-8 is trimmed as bytes.
 ext["std.string.Str.trim"] = function(s)
-  if ascii_only(s) then return (s:match("^%s*(.-)%s*$")) end
+  if ascii_only(s) or not utf8.len(s) then return trim_ascii(s, true, true) end
   return trim_by(s, true, true)
 end
 
 ext["std.string.Str.trim_start"] = function(s)
-  if ascii_only(s) then return (s:match("^%s*(.*)$")) end
+  if ascii_only(s) or not utf8.len(s) then return trim_ascii(s, true, false) end
   return trim_by(s, true, false)
 end
 
 ext["std.string.Str.trim_end"] = function(s)
-  if ascii_only(s) then return (s:match("^(.-)%s*$")) end
+  if ascii_only(s) or not utf8.len(s) then return trim_ascii(s, false, true) end
   return trim_by(s, false, true)
 end
 
 ext["std.string.Str.trim_ascii"] = function(s)
-  return (s:match("^%s*(.-)%s*$"))
+  return trim_ascii(s, true, true)
 end
 
 ext["std.string.Str.trim_ascii_start"] = function(s)
-  return (s:match("^%s*(.*)$"))
+  return trim_ascii(s, true, false)
 end
 
 ext["std.string.Str.trim_ascii_end"] = function(s)
-  return (s:match("^(.-)%s*$"))
+  return trim_ascii(s, false, true)
 end
 
 local function change_case(s, name, ascii)
-  if ascii_only(s) then return (s:gsub(ascii, name == "to_upper" and string.upper or string.lower)) end
+  if ascii_only(s) or not utf8.len(s) then
+    return (s:gsub(ascii, name == "to_upper" and string.upper or string.lower))
+  end
   local out = {}
   for _, c in utf8.codes(s) do
     local to = c >= 128 and mapped(name, c) or nil
@@ -3630,7 +3648,7 @@ end
 
 ext["std.string.Str.words"] = function(s)
   local at, n = 1, #s
-  local ascii = ascii_only(s)
+  local ascii = ascii_only(s) or not utf8.len(s)
   return function()
     if ascii then
       local i, j = string.find(s, "%S+", at)
@@ -3922,7 +3940,8 @@ ext["std.num.Int.signum"] = function(d, v)
 end
 
 ext["std.num.Int.rem_euclid"] = function(d, a, b)
-  local _, m = divmod(d, a, b, "rem_euclid")
+  if b == 0 then error(MARK .. "rem_euclid: division by zero", 2) end
+  local m = rt.rem(d, a, b)
   if d.signed and m < 0 then m = m + (b < 0 and -b or b) end
   return m
 end
@@ -3961,9 +3980,10 @@ ext["std.num.Int.gcd"] = function(d, a, b)
 end
 
 ext["std.num.Int.lcm"] = function(d, a, b)
+  if a == 0 or b == 0 then return 0 end
   local g = gcd(d, a, b)
-  if g == 0 then return 0 end
   local q = rt.div(d, a, g)
+  if d.signed and (q == d.lo or b == d.lo) then error(MARK .. "lcm: the result doesn't fit", 2) end
   if d.signed and q < 0 then q = -q end
   if d.signed and b < 0 then b = -b end
   local fine, r = pcall(rt.mul, d, q, b)
@@ -4126,7 +4146,14 @@ float_fn("ln", function(a) return math.log(a) end)
 float_fn("log2", function(a) return math.log(a, 2) end)
 float_fn("log10", function(a) return math.log(a, 10) end)
 float_fn("log", function(a, b) return math.log(a) / math.log(b) end)
-float_fn("hypot", function(a, b) return math.sqrt(a * a + b * b) end)
+float_fn("hypot", function(a, b)
+  a, b = math.abs(a), math.abs(b)
+  if a == huge or b == huge then return huge end
+  local m = a > b and a or b
+  if m == 0 or m ~= m then return m end
+  a, b = a / m, b / m
+  return m * math.sqrt(a * a + b * b)
+end)
 float_fn("fract", function(a)
   local t = a >= 0 and floor(a) or ceil(a)
   return a - t

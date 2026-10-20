@@ -412,7 +412,8 @@ impl<'a> Builder<'a> {
                     "is_finite" => 32,
                     "is_infinite" => 33,
                     "is_sign_negative" => 34,
-                    _ => 9,
+                    "is_nan" => 9,
+                    _ => return self.internal(span, &format!("no float operation `{name}`")),
                 };
                 let b = if args.len() > 1 { reg(1) } else { reg(0) };
                 let r = native(self, "float.math", op * 2 + u16::from(f32_), vec![reg(0), b], 1)[0];

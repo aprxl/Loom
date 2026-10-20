@@ -326,12 +326,17 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
     // The next line of standard input without its line ending, `nil` at the end.
     let read_line = lua.create_function(move |lua, ()| {
         flush_stdout();
-        let mut line = String::new();
-        let got =
-            if sandbox { 0 } else { std::io::stdin().lock().read_line(&mut line).map_err(mlua::Error::external)? };
+        let mut raw = Vec::new();
+        let got = if sandbox {
+            0
+        } else {
+            std::io::stdin().lock().read_until(b'\n', &mut raw).map_err(mlua::Error::external)?
+        };
         if got == 0 {
             return Ok(None);
         }
+        // Bytes that aren't UTF-8 become U+FFFD, as on Treadle.
+        let line = String::from_utf8_lossy(&raw).into_owned();
         let line = line.strip_suffix('\n').unwrap_or(&line);
         let line = line.strip_suffix('\r').unwrap_or(line);
         Ok(Some(lua.create_string(line)?))
@@ -343,7 +348,7 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
         if !sandbox {
             std::io::stdin().lock().read_to_end(&mut all).map_err(mlua::Error::external)?;
         }
-        lua.create_string(&all)
+        lua.create_string(String::from_utf8_lossy(&all).as_bytes())
     })?;
     table.set("read_all", read_all)?;
     let clock_start = std::time::Instant::now();

@@ -92,12 +92,14 @@ fn now(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 fn read_line(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     ctx.host_check("io.read_line")?;
     ctx.flush();
-    let mut line = String::new();
+    let mut raw = Vec::new();
     let got = if ctx.sandbox {
         0
     } else {
-        std::io::stdin().lock().read_line(&mut line).map_err(|e| Trap::Unravel(e.to_string()))?
+        std::io::stdin().lock().read_until(b'\n', &mut raw).map_err(|e| Trap::Unravel(e.to_string()))?
     };
+    // Bytes that aren't UTF-8 become U+FFFD: a `String` is always text.
+    let line = String::from_utf8_lossy(&raw).into_owned();
     if got == 0 {
         // SAFETY: `dst` is the 24 bytes of a `?String` the compiler gave.
         unsafe { std::ptr::write_bytes(args[0] as *mut u8, 0, 24) };
@@ -116,18 +118,19 @@ fn read_all(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     if !ctx.sandbox {
         std::io::stdin().lock().read_to_end(&mut all).map_err(|e| Trap::Unravel(e.to_string()))?;
     }
-    ctx.new_string(&all, args[0])
+    ctx.new_string(String::from_utf8_lossy(&all).as_bytes(), args[0])
 }
 
 /// `io.write_err(text)`: standard error, after what is waiting for
 /// standard output, so the two keep their order on a terminal.
 fn write_err(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     ctx.host_check("io.write_err")?;
-    let bytes = text(ctx, args[0], args[1])?;
+    // SAFETY: the compiler passes text it built; writing doesn't touch it.
+    let bytes: Vec<u8> = unsafe { ctx.text(args[0], args[1])? }.to_vec();
     ctx.flush();
     if !ctx.sandbox {
         let mut err = std::io::stderr().lock();
-        let _ = err.write_all(bytes.as_bytes());
+        let _ = err.write_all(&bytes);
         let _ = err.flush();
     }
     Ok(())
@@ -232,7 +235,8 @@ fn fs_write_line(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 fn fs_write(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     ctx.host_check("fs.write")?;
     let path = text(ctx, args[0], args[1])?;
-    let bytes = text(ctx, args[2], args[3])?.into_bytes();
+    // SAFETY: as for `write_err`.
+    let bytes: Vec<u8> = unsafe { ctx.text(args[2], args[3])? }.to_vec();
     ctx.open_files.remove(&path);
     let done = if ctx.sandbox {
         ctx.files.insert(path, bytes);
