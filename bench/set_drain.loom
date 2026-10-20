@@ -1,0 +1,30 @@
+// A set and a map used as queues: take the oldest again and again.
+use std.io.print
+
+const SIZE = 100_000
+
+fn main() {
+    var s: Set[u64] = Set()
+    var m: Map[u64, u64] = Map()
+    for i in 0..SIZE as u64 {
+        s.insert(i)
+        m.insert(i, i * 2)
+    }
+    var total = 0u64
+    while true {
+        match s.pop() {
+            some(x) => total += x
+            none => break
+        }
+    }
+    while true {
+        match m.first() {
+            some(p) => {
+                total += p.1
+                m.remove(p.0)
+            }
+            none => break
+        }
+    }
+    print(total)
+}

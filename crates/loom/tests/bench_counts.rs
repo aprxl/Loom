@@ -83,9 +83,12 @@ fn dispatch_counts_hold() {
 #[test]
 fn std_collections_scale() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    for (name, small, large, limit) in
-        [("deque", 50_000, 500_000, 10.5), ("list_ops", 20_000, 200_000, 12.0), ("heap", 10_000, 100_000, 13.0)]
-    {
+    for (name, small, large, limit) in [
+        ("deque", 50_000, 500_000, 10.5),
+        ("list_ops", 20_000, 200_000, 12.0),
+        ("heap", 10_000, 100_000, 13.0),
+        ("set_drain", 10_000, 100_000, 10.5),
+    ] {
         let ratio = dispatched(&root, name, large) as f64 / dispatched(&root, name, small) as f64;
         assert!(ratio <= limit, "{name}: 10x the input cost {ratio:.2}x the instructions (limit {limit}x)");
     }

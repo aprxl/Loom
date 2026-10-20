@@ -186,7 +186,7 @@ impl<'a> Builder<'a> {
             Step::Seq { owned, .. } => 32 + owned.map_or(Some(0), |t| self.size_align(t).map(|s| s.0))?,
             Step::Woven { iter, .. } => self.size_align(iter)?.0.max(8),
             Step::Range(_) | Step::Text(_) => 24,
-            Step::Coll { owned, .. } => 32 + if owned { 48 } else { 0 },
+            Step::Coll { owned, .. } => 32 + if owned { 56 } else { 0 },
             Step::Gen { .. } | Step::Burst { .. } => 16,
             Step::Chunks { .. } => 32,
             Step::RangeChunks(_) => 24,
@@ -739,17 +739,43 @@ impl<'a> Builder<'a> {
 
     /// Fills a box of `Step::Coll` for the map at `header`.
     fn coll_box(&mut self, b: Value, header: Value, coll: Ty) {
-        // The stream walks the entries: no removed ones left in them.
+        // The stream starts at the first entry that is not a removed one, and
+        // the map remembers where that is.
+        let start = self.new_var(VTy::Int);
+        let head = self.word(header, 48);
+        self.write(start, head);
         if let Some(c) = self.coll_of(coll) {
-            self.compact(&c, header);
+            let used = self.word(header, 40);
+            let (look, skip, done) = (self.new_block(), self.new_block(), self.new_block());
+            self.jump(look);
+            self.switch_to(look);
+            let i = self.read(start);
+            let end = self.ucmp(Cmp::Ge, i, used);
+            let check = self.new_block();
+            self.br(end, done, check);
+            self.enter(check);
+            let ebuf = self.load(Mem::W64, header, 0, VTy::Ptr);
+            let ent = self.emit1(InstKind::Index { base: ebuf, index: i, scale: c.esize }, VTy::Ptr);
+            let hash = self.load(Mem::W64, ent, 0, VTy::Int);
+            let zero = self.iconst(0);
+            let removed = self.ucmp(Cmp::Eq, hash, zero);
+            self.br(removed, skip, done);
+            self.enter(skip);
+            let one = self.iconst(1);
+            let next = self.uarith(IntOp::Add, i, one);
+            self.write(start, next);
+            self.jump(look);
+            self.seal(look);
+            self.enter(done);
         }
+        let first = self.read(start);
+        self.store(Mem::W64, header, 48, first);
         self.set_word(b, 0, header);
         let len = self.word(header, 8);
         self.set_word(b, 8, len);
         let buf = self.word(header, 0);
         self.set_word(b, 16, buf);
-        let zero = self.iconst(0);
-        self.set_word(b, 24, zero);
+        self.set_word(b, 24, first);
     }
 
     /// A stream of the map (or set) at `header`, of type `coll`, written at
@@ -783,7 +809,7 @@ impl<'a> Builder<'a> {
     ) -> Option<()> {
         let c = self.coll_of(coll)?;
         let header = self.load(Mem::W64, b, 0, VTy::Ptr);
-        let (len, buf, i) = (self.word(b, 8), self.word(b, 16), self.word(b, 24));
+        let (len, buf) = (self.word(b, 8), self.word(b, 16));
         let (now_len, now_buf) = (self.word(header, 8), self.word(header, 0));
         let resized = self.ucmp(Cmp::Ne, now_len, len);
         let moved = self.ucmp(Cmp::Ne, now_buf, buf);
@@ -801,10 +827,28 @@ impl<'a> Builder<'a> {
             span,
         )?;
         self.enter(ok);
-        let done = self.ucmp(Cmp::Ge, i, len);
+        // The next entry that is not a removed one.
+        let look = self.new_block();
+        self.jump(look);
+        self.switch_to(look);
+        let i = self.word(b, 24);
+        let used = self.word(header, 40);
+        let done = self.ucmp(Cmp::Ge, i, used);
         self.none_if(done);
         let ebuf = self.load(Mem::W64, header, 0, VTy::Ptr);
         let ent = self.emit1(InstKind::Index { base: ebuf, index: i, scale: c.esize }, VTy::Ptr);
+        let hash = self.load(Mem::W64, ent, 0, VTy::Int);
+        let zero = self.iconst(0);
+        let removed = self.ucmp(Cmp::Eq, hash, zero);
+        let (skip, live) = (self.new_block(), self.new_block());
+        self.br(removed, skip, live);
+        self.enter(skip);
+        let one = self.iconst(1);
+        let past = self.uarith(IntOp::Add, i, one);
+        self.set_word(b, 24, past);
+        self.jump(look);
+        self.seal(look);
+        self.enter(live);
         let k = self.load_val(ent, c.koff as i64, c.key, span)?;
         match (what, c.val) {
             (super::map::CollItems::Keys, _) => self.copy_into(out, &k, c.key, span)?,

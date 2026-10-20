@@ -14,7 +14,10 @@
 //! `len` (word 1), the live entries, and `used` (word 5), the entries made,
 //! removed ones included. Whatever walks the entries (a loop, `show`, `==`,
 //! `copy`) first makes `used` equal `len` by moving them down early
-//! (`compact`); only a drop walks them as they are.
+//! (`compact`); only a drop walks them as they are, and so does a stream
+//! (it skips the removed ones). Word 7 (`head`) is the number of the first
+//! entry that may be live: the entries before it are removed ones, so taking
+//! the oldest entry over and over (a queue) does not look at them again.
 //!
 //! Keys hash structurally (`hash.rs`) and compare with `==` (a warp's own
 //! `eq` when it writes one: row P9 of §14).
@@ -404,6 +407,7 @@ impl<'a> Builder<'a> {
             Some(())
         });
         self.store(Mem::W64, header, 40, len);
+        self.store(Mem::W64, header, 48, zero);
         let slots = self.hdr(header, 32);
         self.reindex(c, header, slots);
         self.jump(done);
@@ -490,6 +494,8 @@ impl<'a> Builder<'a> {
         // (Compacting may have changed the source's `used` since its bytes
         // were copied.)
         self.store(Mem::W64, dst, 40, len);
+        let zero = self.iconst(0);
+        self.store(Mem::W64, dst, 48, zero);
         self.store(Mem::W64, dst, 16, len);
         // The index: the same slots, for the same hashes.
         let slots = self.hdr(src, 32);
@@ -935,6 +941,7 @@ impl<'a> Builder<'a> {
                 let zero = self.iconst(0);
                 self.store(Mem::W64, header, 8, zero);
                 self.store(Mem::W64, header, 40, zero);
+                self.store(Mem::W64, header, 48, zero);
                 let slots = self.hdr(header, 32);
                 let has = self.ucmp(Cmp::Ne, slots, zero);
                 let (re, done) = (self.new_block(), self.new_block());

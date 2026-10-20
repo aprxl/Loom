@@ -55,7 +55,7 @@ fn most_checks_are_gone_at_o2() {
         let Ok(size) = size.parse::<u64>() else { continue };
         // These measure the standard library's collections (see
         // `std_collections_scale`), not the optimizer's loops.
-        if matches!(*name, "deque" | "list_ops" | "heap") {
+        if matches!(*name, "deque" | "list_ops" | "heap" | "set_drain") {
             continue;
         }
         let (b0, v0) = checks(&root, name, size, Level::O0);

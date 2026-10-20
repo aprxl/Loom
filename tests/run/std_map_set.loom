@@ -37,4 +37,30 @@ fn main() {
     c.extend(more2)
     print(c.pop())
     print(c.len())
+    var q: Map[i32, i32] = Map()
+    var qs: Set[i32] = Set()
+    for i in 0..40 {
+        q.insert(i, i * 10)
+        qs.insert(i)
+    }
+    var popped = 0
+    for _ in 0..30 {
+        match q.first() {
+            some(p) => {
+                popped += p.1
+                let _ = q.remove(p.0)
+            }
+            none => {}
+        }
+        let _ = qs.pop()
+    }
+    print("{popped} {q.len()} {qs.len()}")
+    print(q.keys().join(","))
+    print(qs.sorted().join(","))
+    q.insert(5, 7)
+    print(q.first())
+    print(q.last())
+    var drained = 0
+    while qs.pop().is_some() { drained += 1 }
+    print(drained)
 }

@@ -995,6 +995,7 @@ local function compact(m)
     if vals then vals[i] = nil end
   end
   m.top = w
+  m.head = 0
 end
 
 local eq
@@ -2972,7 +2973,7 @@ ext["std.map.Map.remove"] = function(dk, dv, m, k)
 end
 
 local function coll_clear(m)
-  m.keys, m.hks, m.idx, m.n, m.top = {}, {}, {}, 0, 0
+  m.keys, m.hks, m.idx, m.n, m.top, m.head = {}, {}, {}, 0, 0, 0
   if m.vals then m.vals = {} end
 end
 
@@ -2980,15 +2981,23 @@ ext["std.map.Map.clear"] = function(_, _, m)
   coll_clear(m)
 end
 
---- Copies of `m`'s entries, one at a time, made by `item(i)`.
+--- Copies of `m`'s entries, one at a time, made by `item(i)`. It skips the
+--- removed entries, and `m.head` remembers the first entry that isn't one.
 local function coll_stream(m, item)
-  compact(m)
-  local i, n = 0, m.n
-  return function()
-    if i >= n then return nil end
-    rt.same_len(m, n, m.vals and "map" or "set")
+  local i, n = m.head or 0, m.n
+  local hks = m.hks
+  while i < m.top and hks[i + 1] == DEAD do
     i = i + 1
-    return true, item(i)
+  end
+  m.head = i
+  return function()
+    rt.same_len(m, n, m.vals and "map" or "set")
+    local hks = m.hks
+    while i < m.top do
+      i = i + 1
+      if hks[i] ~= DEAD then return true, item(i) end
+    end
+    return nil
   end
 end
 

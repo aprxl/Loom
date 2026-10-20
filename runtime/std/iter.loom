@@ -30,8 +30,11 @@ pub warp Range[T] {
     /// methods of one, so it can be given to a thread. Unravels if `n` is 0
     /// or the range has no end.
     pub fn chunks(self, n: usize) -> Stream[Range[T]]
-    /// The values from the last to the first. Needs room for all of them.
+    /// The values from the last to the first. Needs room for all of them, and
+    /// unravels for a range with no end.
     pub fn rev(self) -> Stream[T] {
+        // Unravels for a range with no end, which has no last value.
+        let _ = self.chunks(1)
         Reversed(items: self.collect())
     }
 }
