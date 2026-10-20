@@ -398,6 +398,46 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
             })
         })?,
     )?;
+    table.set(
+        "file_info",
+        lua.create_function(move |_, path: String| {
+            Ok(match std::fs::metadata(&path) {
+                Ok(m) => (if m.is_dir() { 2 } else { 1 }, m.len() as i64),
+                Err(_) => (0, 0),
+            })
+        })?,
+    )?;
+    table.set(
+        "unix_nanos",
+        lua.create_function(move |_, ()| {
+            let since = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
+            Ok(since.map_or(0, |d| d.as_nanos() as i64))
+        })?,
+    )?;
+    table.set("pid", lua.create_function(move |_, ()| Ok(if sandbox { 1 } else { i64::from(std::process::id()) }))?)?;
+    table.set(
+        "cwd",
+        lua.create_function(move |_, ()| {
+            Ok(if sandbox {
+                Some("/".to_string())
+            } else {
+                std::env::current_dir().ok().map(|p| p.to_string_lossy().into_owned())
+            })
+        })?,
+    )?;
+    table.set(
+        "term_info",
+        lua.create_function(move |_, which: i64| {
+            Ok(if sandbox {
+                [80, 24, 0][which.clamp(0, 2) as usize]
+            } else if which < 2 {
+                let (cols, rows) = loom_sys::term::size();
+                i64::from(if which == 0 { cols } else { rows })
+            } else {
+                i64::from(std::io::IsTerminal::is_terminal(&std::io::stdout()))
+            })
+        })?,
+    )?;
     let clock_start = std::time::Instant::now();
     table.set("now", lua.create_function(move |_, ()| Ok(clock_start.elapsed().as_nanos() as i64))?)?;
     // The terminal: each returns an error message when it fails, which the

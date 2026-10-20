@@ -1,5 +1,8 @@
 // Pseudo-random numbers.
 
+use std.process
+use std.time
+
 /// A deterministic xoshiro256** generator: the same seed always gives the
 /// same numbers, on every machine. Not for secrets.
 pub warp Rng {
@@ -22,6 +25,13 @@ pub warp Rng {
             s[i] = z ~ (z >> 31)
         }
         Rng(s0: s[0], s1: s[1], s2: s[2], s3: s[3])
+    }
+
+    /// A generator seeded from the clock and the process, so each run gets
+    /// its own numbers. Not for secrets.
+    pub fn from_entropy() -> Rng {
+        let mix = time.unix_nanos() ~ ((process.id() as u64) << 32) ~ time.monotonic_nanos()
+        Rng.seeded(mix)
     }
 
     /// The next 64 random bits.

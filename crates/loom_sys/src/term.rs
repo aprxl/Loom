@@ -90,3 +90,8 @@ impl Drop for Term {
         self.restore();
     }
 }
+
+/// The terminal's columns and rows, or 80 and 24 when there is none.
+pub fn size() -> (u16, u16) {
+    terminal::size().unwrap_or((80, 24))
+}

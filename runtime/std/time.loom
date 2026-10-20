@@ -66,6 +66,21 @@ pub warp Instant: Eq, Ord {
     pub fn plus(self, d: Duration) -> Instant = Instant(nanos: .nanos + d.nanos)
 }
 
+/// A moment on the system clock, which can be set: for dates and times of day,
+/// not for measuring how long things take (use `Instant` for that).
+pub warp SystemTime: Eq, Ord {
+    nanos: u64
+
+    /// Now.
+    pub fn now() -> SystemTime = SystemTime(nanos: unix_nanos())
+
+    /// Whole seconds since 1 January 1970.
+    pub fn unix_secs(self) -> u64 = .nanos / 1_000_000_000
+
+    /// Nanoseconds since 1 January 1970.
+    pub fn unix_nanos(self) -> u64 = .nanos
+}
+
 /// Runs `f`, and says how long it took.
 pub fn measure[T](f: () => T) -> (T, Duration) {
     let start = Instant.now()
@@ -79,4 +94,6 @@ extern "lua" {
     /// Nanoseconds on a clock that only goes forward, from an arbitrary
     /// start. Differences are what mean something: see `Instant`.
     pub fn monotonic_nanos() -> u64
+    /// Nanoseconds since 1 January 1970 on the system clock.
+    pub fn unix_nanos() -> u64
 }

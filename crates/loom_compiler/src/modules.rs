@@ -53,6 +53,7 @@ const EMBEDDED_STD: &[(&str, &str)] = &[
     ("num", include_str!("../../../runtime/std/num.loom")),
     ("ops", include_str!("../../../runtime/std/ops.loom")),
     ("option", include_str!("../../../runtime/std/option.loom")),
+    ("path", include_str!("../../../runtime/std/path.loom")),
     ("priority", include_str!("../../../runtime/std/priority.loom")),
     ("process", include_str!("../../../runtime/std/process.loom")),
     ("rand", include_str!("../../../runtime/std/rand.loom")),

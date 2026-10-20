@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>std.path · Loom</title>
+<link rel="stylesheet" href="../../style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar">
+<a class="brand" href="../../index.html">Loom <span class="dim">docs</span></a>
+<ul class="sections">
+<li><a href="../../lang/index.html">Language</a></li>
+<li><a class="current" href="../../std/index.html">Standard library</a></li>
+<li><a href="../../lang/diagnostics.html">Diagnostic codes</a></li>
+</ul>
+<h3>Standard library</h3>
+<ul>
+<li><a href="../index.html">Overview</a></li>
+<li><a href="prelude.html">prelude</a></li>
+<li><a href="bitset.html">bitset</a></li>
+<li><a href="cmp.html">cmp</a></li>
+<li><a href="deque.html">deque</a></li>
+<li><a href="env.html">env</a></li>
+<li><a href="error.html">error</a></li>
+<li><a href="fmt.html">fmt</a></li>
+<li><a href="fs.html">fs</a></li>
+<li><a href="io.html">io</a></li>
+<li><a href="hash.html">hash</a></li>
+<li><a href="iter.html">iter</a></li>
+<li><a href="list.html">list</a></li>
+<li><a href="map.html">map</a></li>
+<li><a href="math.html">math</a></li>
+<li><a href="mem.html">mem</a></li>
+<li><a href="meta.html">meta</a></li>
+<li><a href="num.html">num</a></li>
+<li><a href="ops.html">ops</a></li>
+<li><a href="option.html">option</a></li>
+<li><a class="current" href="path.html">path</a></li>
+<li><a href="priority.html">priority</a></li>
+<li><a href="process.html">process</a></li>
+<li><a href="rand.html">rand</a></li>
+<li><a href="set.html">set</a></li>
+<li><a href="slice.html">slice</a></li>
+<li><a href="string.html">string</a></li>
+<li><a href="sync.html">sync</a></li>
+<li><a href="target.html">target</a></li>
+<li><a href="term.html">term</a></li>
+<li><a href="time.html">time</a></li>
+</ul>
+</nav>
+<main>
+<div class="crumb"><a href="../index.html">std</a> / path</div>
+<h1>std.path</h1>
+<p class="summary">File paths, as text. The separator is <code>/</code> on every system (Windows takes it too), so a program and its tests read the same everywhere.</p>
+<h2>Functions</h2>
+<div class="item" id="join">
+<div class="item-head">
+<span class="sig">fn <strong>join</strong>(a: str, b: str) -&gt; String</span>
+
+</div>
+<p class="item-doc"><code>a</code> and <code>b</code> as one path: <code>join("src", "main.loom")</code> is <code>src/main.loom</code>; an absolute <code>b</code> replaces <code>a</code>.</p>
+</div>
+<div class="item" id="is_absolute">
+<div class="item-head">
+<span class="sig">fn <strong>is_absolute</strong>(p: str) -&gt; bool</span>
+
+</div>
+<p class="item-doc">Whether the path starts at the root.</p>
+</div>
+<div class="item" id="file_name">
+<div class="item-head">
+<span class="sig">fn <strong>file_name</strong>(p: str) -&gt; ?str</span>
+
+</div>
+<p class="item-doc">The last part: <code>file_name("a/b.txt")</code> is <code>b.txt</code>. None for <code>""</code> and <code>/</code>.</p>
+</div>
+<div class="item" id="parent">
+<div class="item-head">
+<span class="sig">fn <strong>parent</strong>(p: str) -&gt; ?str</span>
+
+</div>
+<p class="item-doc">Everything before the last part: <code>parent("a/b.txt")</code> is <code>a</code>. None for a path with one part and for the root.</p>
+</div>
+<div class="item" id="stem">
+<div class="item-head">
+<span class="sig">fn <strong>stem</strong>(p: str) -&gt; ?str</span>
+
+</div>
+<p class="item-doc">The last part without its extension: <code>stem("a/b.tar.gz")</code> is <code>b.tar</code>.</p>
+</div>
+<div class="item" id="extension">
+<div class="item-head">
+<span class="sig">fn <strong>extension</strong>(p: str) -&gt; ?str</span>
+
+</div>
+<p class="item-doc">The part after the last dot of the last part: <code>extension("a/b.txt")</code> is <code>txt</code>. None when there is no dot, or the dot starts the name.</p>
+</div>
+<div class="item" id="with_extension">
+<div class="item-head">
+<span class="sig">fn <strong>with_extension</strong>(p: str, ext: str) -&gt; String</span>
+
+</div>
+<p class="item-doc">The path with a different extension: <code>with_extension("a/b.txt", "md")</code> is <code>a/b.md</code>.</p>
+</div>
+<div class="item" id="normalize">
+<div class="item-head">
+<span class="sig">fn <strong>normalize</strong>(p: str) -&gt; String</span>
+
+</div>
+<p class="item-doc">The path without <code>.</code> parts, empty parts, and <code>x/..</code> pairs: <code>normalize("a/./b/../c")</code> is <code>a/c</code>.</p>
+</div>
+</main>
+</div>
+</body>
+</html>

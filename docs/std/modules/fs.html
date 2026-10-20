@@ -37,6 +37,7 @@
 <li><a href="num.html">num</a></li>
 <li><a href="ops.html">ops</a></li>
 <li><a href="option.html">option</a></li>
+<li><a href="path.html">path</a></li>
 <li><a href="priority.html">priority</a></li>
 <li><a href="process.html">process</a></li>
 <li><a href="rand.html">rand</a></li>
@@ -66,6 +67,17 @@
 <li><span class="sig">case Other(message: String)</span></li>
 </ul>
 </div>
+<div class="item" id="Meta">
+<div class="item-head">
+<span class="sig">warp <strong>Meta</strong></span>
+
+</div>
+<p class="item-doc">What is known about a file or a directory.</p>
+<ul class="fields">
+<li><span class="sig">pub size: u64</span></li>
+<li><span class="sig">pub is_dir: bool</span></li>
+</ul>
+</div>
 <div class="item" id="File">
 <div class="item-head">
 <span class="sig">warp <strong>File</strong></span>
@@ -90,6 +102,27 @@
 </div>
 </div>
 <h2>Functions</h2>
+<div class="item" id="metadata">
+<div class="item-head">
+<span class="sig">fn <strong>metadata</strong>(path: str) -&gt; Meta ! IoError</span>
+
+</div>
+<p class="item-doc">The size of the file at <code>path</code>, and whether it is a directory.</p>
+</div>
+<div class="item" id="is_dir">
+<div class="item-head">
+<span class="sig">fn <strong>is_dir</strong>(path: str) -&gt; bool</span>
+
+</div>
+<p class="item-doc">Whether <code>path</code> is a directory.</p>
+</div>
+<div class="item" id="is_file">
+<div class="item-head">
+<span class="sig">fn <strong>is_file</strong>(path: str) -&gt; bool</span>
+
+</div>
+<p class="item-doc">Whether <code>path</code> is a file.</p>
+</div>
 <div class="item" id="read">
 <div class="item-head">
 <span class="sig">fn <strong>read</strong>(path: str) -&gt; List[u8] ! IoError</span>
@@ -124,6 +157,20 @@
 <span class="badge extern">extern</span>
 </div>
 <p class="item-doc">Deletes the file at <code>path</code>.</p>
+</div>
+<div class="item" id="file_kind">
+<div class="item-head">
+<span class="sig">fn <strong>file_kind</strong>(path: str) -&gt; u8</span>
+<span class="badge extern">extern</span>
+</div>
+<p class="item-doc">What kind of thing is at <code>path</code>: 0 nothing, 1 a file, 2 a directory.</p>
+</div>
+<div class="item" id="file_size">
+<div class="item-head">
+<span class="sig">fn <strong>file_size</strong>(path: str) -&gt; u64</span>
+<span class="badge extern">extern</span>
+</div>
+<p class="item-doc">The length of the file at <code>path</code> in bytes, 0 when it can't be read.</p>
 </div>
 <div class="item" id="create_dir_all">
 <div class="item-head">

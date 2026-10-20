@@ -89,6 +89,13 @@ impl<'a> Builder<'a> {
                         self.move_to(*slot, 0, Val::Mem(ptr), join.ty, span)?;
                         *slot
                     }
+                    // A local of an outer scope, given by its name: it moves
+                    // into the join, or its scope would drop it before the
+                    // value is used (`if c { "x" } else { body }`).
+                    Some(slot) if self.f.slot_of.contains_key(&ptr) && self.owned_since(ptr, 0) => {
+                        self.move_to(*slot, 0, Val::Mem(ptr), join.ty, span)?;
+                        *slot
+                    }
                     _ => {
                         if let Some((_, all)) = owner {
                             all.set(false);

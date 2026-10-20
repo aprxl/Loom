@@ -37,6 +37,7 @@
 <li><a href="num.html">num</a></li>
 <li><a href="ops.html">ops</a></li>
 <li><a href="option.html">option</a></li>
+<li><a href="path.html">path</a></li>
 <li><a href="priority.html">priority</a></li>
 <li><a href="process.html">process</a></li>
 <li><a class="current" href="rand.html">rand</a></li>
@@ -67,6 +68,13 @@
 
 </div>
 <p class="member-doc">A generator that always produces the same sequence for <code>seed</code>.</p>
+</div>
+<div class="member" id="Rng.from_entropy">
+<div class="member-head">
+<span class="sig">fn from_entropy() -&gt; Rng</span>
+
+</div>
+<p class="member-doc">A generator seeded from the clock and the process, so each run gets its own numbers. Not for secrets.</p>
 </div>
 <div class="member" id="Rng.next_u64">
 <div class="member-head">

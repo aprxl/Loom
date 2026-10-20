@@ -1,0 +1,21 @@
+use std.io.print
+use std.path
+fn main() {
+    print(path.join("src", "main.loom"))
+    print(path.join("a/", "b"))
+    print(path.join("a", "/b"))
+    print(path.file_name("a/b.txt"))
+    print(path.parent("a/b.txt"))
+    print(path.parent("/x"))
+    print(path.parent("x"))
+    print(path.stem("a/b.tar.gz"))
+    print(path.extension("a/b.tar.gz"))
+    print(path.extension(".bashrc"))
+    print(path.with_extension("a/b.txt", "md"))
+    print(path.with_extension("a/b", "md"))
+    print(path.normalize("a/./b/../c//d"))
+    print(path.normalize("../a/.."))
+    print(path.normalize("/../a"))
+    print(path.is_absolute("/a"))
+    print(path.file_name("a/b/"))
+}

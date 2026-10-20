@@ -115,6 +115,9 @@ MODULES = [
   "functions": [
     {"name": "get", "suffix": "(name: str) -> ?String", "extern": True, "doc": "The environment variable `name`, if it's set."},
     {"name": "args", "suffix": "() -> List[String]", "extern": True, "doc": "The command-line arguments, starting with the program name."},
+    {"name": "current_dir", "suffix": "() -> ?String", "extern": True, "doc": "The directory the program runs in, if it can be found out."},
+    {"name": "home_dir", "suffix": "() -> ?String", "doc": "The user's home directory, if the environment says where it is."},
+    {"name": "temp_dir", "suffix": "() -> String", "doc": "The directory for temporary files."},
   ],
 },
 
@@ -163,6 +166,8 @@ MODULES = [
   "types": [
     {"kind": "warp", "name": "IoError", "suffix": ": Error", "doc": None,
      "cases": ["NotFound(path: String)", "Denied(path: String)", "Other(message: String)"]},
+    {"kind": "warp", "name": "Meta", "doc": "What is known about a file or a directory.",
+     "fields": ["pub size: u64", "pub is_dir: bool"]},
     {"kind": "warp", "name": "File", "builtin": True, "doc": "An open file.",
      "methods": [
        {"sig": "fn append(path: str) -> File ! IoError", "doc": "Opens `path` for appending, creating it if needed."},
@@ -170,11 +175,16 @@ MODULES = [
      ]},
   ],
   "functions": [
+    {"name": "metadata", "suffix": "(path: str) -> Meta ! IoError", "doc": "The size of the file at `path`, and whether it is a directory."},
+    {"name": "is_dir", "suffix": "(path: str) -> bool", "doc": "Whether `path` is a directory."},
+    {"name": "is_file", "suffix": "(path: str) -> bool", "doc": "Whether `path` is a file."},
     {"name": "read", "suffix": "(path: str) -> List[u8] ! IoError", "extern": True, "doc": None},
     {"name": "read_text", "suffix": "(path: str) -> String ! IoError", "extern": True, "doc": None},
     {"name": "write_text", "suffix": "(path: str, text: str) ! IoError", "extern": True, "doc": "Makes the file `path` hold `text`, replacing what was there."},
     {"name": "exists", "suffix": "(path: str) -> bool", "extern": True, "doc": "Whether there is a file or a directory at `path`."},
     {"name": "remove_file", "suffix": "(path: str) ! IoError", "extern": True, "doc": "Deletes the file at `path`."},
+    {"name": "file_kind", "suffix": "(path: str) -> u8", "extern": True, "doc": "What kind of thing is at `path`: 0 nothing, 1 a file, 2 a directory."},
+    {"name": "file_size", "suffix": "(path: str) -> u64", "extern": True, "doc": "The length of the file at `path` in bytes, 0 when it can't be read."},
     {"name": "create_dir_all", "suffix": "(path: str) ! IoError", "extern": True, "doc": "Makes the directory `path` and the ones above it that are missing."},
     {"name": "rename", "suffix": "(from: str, to: str) ! IoError", "extern": True, "doc": "Moves the file `from` to `to`, replacing what is there."},
     {"name": "copy", "suffix": "(from: str, to: str) ! IoError", "extern": True, "doc": "Copies the file `from` to `to`, replacing what is there."},
@@ -521,6 +531,21 @@ MODULES = [
 },
 
 {
+  "name": "path",
+  "summary": "File paths, as text. The separator is `/` on every system (Windows takes it too), so a program and its tests read the same everywhere.",
+  "functions": [
+    {"name": "join", "suffix": "(a: str, b: str) -> String", "doc": "`a` and `b` as one path: `join(\"src\", \"main.loom\")` is `src/main.loom`; an absolute `b` replaces `a`."},
+    {"name": "is_absolute", "suffix": "(p: str) -> bool", "doc": "Whether the path starts at the root."},
+    {"name": "file_name", "suffix": "(p: str) -> ?str", "doc": "The last part: `file_name(\"a/b.txt\")` is `b.txt`. None for `\"\"` and `/`."},
+    {"name": "parent", "suffix": "(p: str) -> ?str", "doc": "Everything before the last part: `parent(\"a/b.txt\")` is `a`. None for a path with one part and for the root."},
+    {"name": "stem", "suffix": "(p: str) -> ?str", "doc": "The last part without its extension: `stem(\"a/b.tar.gz\")` is `b.tar`."},
+    {"name": "extension", "suffix": "(p: str) -> ?str", "doc": "The part after the last dot of the last part: `extension(\"a/b.txt\")` is `txt`. None when there is no dot, or the dot starts the name."},
+    {"name": "with_extension", "suffix": "(p: str, ext: str) -> String", "doc": "The path with a different extension: `with_extension(\"a/b.txt\", \"md\")` is `a/b.md`."},
+    {"name": "normalize", "suffix": "(p: str) -> String", "doc": "The path without `.` parts, empty parts, and `x/..` pairs: `normalize(\"a/./b/../c\")` is `a/c`."},
+  ],
+},
+
+{
   "name": "priority",
   "summary": "Priority queues.",
   "types": [
@@ -544,6 +569,7 @@ MODULES = [
   "summary": "The running program.",
   "functions": [
     {"name": "exit", "suffix": "(code: u8) -> never", "extern": True, "doc": "Ends the program with exit code `code`: it unwinds first, as for an unravel, so its `defer`s run and what it owns is dropped."},
+    {"name": "id", "suffix": "() -> u32", "extern": True, "doc": "The number the system gave this program."},
   ],
 },
 
@@ -554,6 +580,7 @@ MODULES = [
     {"kind": "warp", "name": "Rng", "doc": "A deterministic xoshiro256** generator: the same seed always gives the same numbers, on every machine. Not for secrets.",
      "methods": [
        {"sig": "fn seeded(seed: u64) -> Rng", "doc": "A generator that always produces the same sequence for `seed`."},
+       {"sig": "fn from_entropy() -> Rng", "doc": "A generator seeded from the clock and the process, so each run gets its own numbers. Not for secrets."},
        {"sig": "fn next_u64(mut self) -> u64", "doc": "The next 64 random bits."},
        {"sig": "fn byte(mut self) -> u8", "doc": "A random byte: the top 8 bits of `next_u64`."},
        {"sig": "fn below(mut self, n: u64) -> u64", "doc": "A number from `0` up to but not including `n`, every one equally likely. Unravels if `n` is 0."},
@@ -782,6 +809,9 @@ MODULES = [
   "functions": [
     {"name": "raw_mode", "suffix": "(on: bool)", "extern": True, "doc": "Turns raw mode on or off: keys arrive immediately and aren't echoed."},
     {"name": "poll_keys", "suffix": "(keymap: str) -> u16", "extern": True, "doc": "A bit set of the keys in `keymap` that are held down right now."},
+    {"name": "columns", "suffix": "() -> u16", "extern": True, "doc": "How many columns the terminal has (80 when there is none)."},
+    {"name": "rows", "suffix": "() -> u16", "extern": True, "doc": "How many rows the terminal has (24 when there is none)."},
+    {"name": "is_tty", "suffix": "() -> bool", "extern": True, "doc": "Whether standard output is a terminal, not a file or a pipe."},
   ],
 },
 
@@ -812,6 +842,12 @@ MODULES = [
        {"sig": "fn elapsed(self) -> Duration", "doc": "How long ago this was."},
        {"sig": "fn plus(self, d: Duration) -> Instant", "doc": "The moment `d` after this one."},
      ]},
+    {"kind": "warp", "name": "SystemTime", "suffix": ": Eq, Ord", "doc": "A moment on the system clock, which can be set: for dates and times of day, not for measuring how long things take (use `Instant` for that).",
+     "methods": [
+       {"sig": "fn now() -> SystemTime", "doc": "Now."},
+       {"sig": "fn unix_secs(self) -> u64", "doc": "Whole seconds since 1 January 1970."},
+       {"sig": "fn unix_nanos(self) -> u64", "doc": "Nanoseconds since 1 January 1970."},
+     ]},
   ],
   "functions": [
     {"name": "ns", "suffix": "(n: u64) -> Duration", "doc": None},
@@ -822,6 +858,7 @@ MODULES = [
     {"name": "measure", "suffix": "[T](f: () => T) -> (T, Duration)", "doc": "Runs `f`, and says how long it took."},
     {"name": "sleep", "suffix": "(d: Duration)", "extern": True, "doc": "Pauses the current thread for `d`."},
     {"name": "monotonic_nanos", "suffix": "() -> u64", "extern": True, "doc": "Nanoseconds on a clock that only goes forward, from an arbitrary start. Differences are what mean something: see `Instant`."},
+    {"name": "unix_nanos", "suffix": "() -> u64", "extern": True, "doc": "Nanoseconds since 1 January 1970 on the system clock."},
   ],
 },
 

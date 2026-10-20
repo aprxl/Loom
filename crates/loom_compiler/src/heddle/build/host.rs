@@ -87,6 +87,28 @@ impl<'a> Builder<'a> {
                 self.native("time.sleep", vec![nanos], 0);
                 Some(Val::Regs(Vec::new()))
             }
+            "std.time.unix_nanos" => Some(Val::Regs(self.native("time.unix", Vec::new(), 1))),
+            "std.process.id" => Some(Val::Regs(self.native("process.id", Vec::new(), 1))),
+            "std.env.current_dir" => {
+                let dst = self.temp(ret, span)?;
+                self.native("env.cwd", vec![dst], 0);
+                self.own_temp(dst, ret);
+                Some(Val::Mem(dst))
+            }
+            "std.term.columns" | "std.term.rows" | "std.term.is_tty" => {
+                let imm = match path {
+                    "std.term.columns" => 0,
+                    "std.term.rows" => 1,
+                    _ => 2,
+                };
+                Some(Val::Regs(self.emit(InstKind::Native { name: "term.info", imm, args: Vec::new() }, &[VTy::Int])))
+            }
+            "std.fs.file_kind" | "std.fs.file_size" => {
+                let (v, ty) = arg(self, 0)?;
+                let (p, n) = self.text_of(v, ty, span)?;
+                let name = if path == "std.fs.file_kind" { "fs.kind" } else { "fs.size" };
+                Some(Val::Regs(self.native(name, vec![p, n], 1)))
+            }
             "std.time.monotonic_nanos" => Some(Val::Regs(self.native("time.now", Vec::new(), 1))),
             "std.term.raw_mode" => {
                 let (v, ty) = arg(self, 0)?;

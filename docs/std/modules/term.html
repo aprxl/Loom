@@ -37,6 +37,7 @@
 <li><a href="num.html">num</a></li>
 <li><a href="ops.html">ops</a></li>
 <li><a href="option.html">option</a></li>
+<li><a href="path.html">path</a></li>
 <li><a href="priority.html">priority</a></li>
 <li><a href="process.html">process</a></li>
 <li><a href="rand.html">rand</a></li>
@@ -67,6 +68,27 @@
 <span class="badge extern">extern</span>
 </div>
 <p class="item-doc">A bit set of the keys in <code>keymap</code> that are held down right now.</p>
+</div>
+<div class="item" id="columns">
+<div class="item-head">
+<span class="sig">fn <strong>columns</strong>() -&gt; u16</span>
+<span class="badge extern">extern</span>
+</div>
+<p class="item-doc">How many columns the terminal has (80 when there is none).</p>
+</div>
+<div class="item" id="rows">
+<div class="item-head">
+<span class="sig">fn <strong>rows</strong>() -&gt; u16</span>
+<span class="badge extern">extern</span>
+</div>
+<p class="item-doc">How many rows the terminal has (24 when there is none).</p>
+</div>
+<div class="item" id="is_tty">
+<div class="item-head">
+<span class="sig">fn <strong>is_tty</strong>() -&gt; bool</span>
+<span class="badge extern">extern</span>
+</div>
+<p class="item-doc">Whether standard output is a terminal, not a file or a pipe.</p>
 </div>
 </main>
 </div>

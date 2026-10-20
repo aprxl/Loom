@@ -3279,6 +3279,46 @@ ext["std.fs.read_dir"] = function(path)
   return { true, list }
 end
 
+ext["std.fs.file_kind"] = function(path)
+  if memory then return memory[path] ~= nil and 1 or 0 end
+  return (host.file_info(path))
+end
+
+ext["std.fs.file_size"] = function(path)
+  if memory then return memory[path] and #memory[path] or 0 end
+  return select(2, host.file_info(path))
+end
+
+ext["std.time.unix_nanos"] = function()
+  if not host then needs_host("time.unix") end
+  return host.unix_nanos()
+end
+
+ext["std.process.id"] = function()
+  if not host then needs_host("process.id") end
+  return host.pid()
+end
+
+ext["std.env.current_dir"] = function()
+  if not host then needs_host("env.cwd") end
+  return host.cwd()
+end
+
+ext["std.term.columns"] = function()
+  if not host then needs_host("term.info") end
+  return host.term_info(0)
+end
+
+ext["std.term.rows"] = function()
+  if not host then needs_host("term.info") end
+  return host.term_info(1)
+end
+
+ext["std.term.is_tty"] = function()
+  if not host then needs_host("term.info") end
+  return host.term_info(2) ~= 0
+end
+
 ext["std.fs.remove_file"] = function(path)
   if memory then
     if memory[path] == nil then return io_error(path, nil, 2) end

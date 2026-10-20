@@ -1,0 +1,26 @@
+use std.env
+use std.fs
+use std.io.print
+use std.process
+use std.rand.Rng
+use std.term
+use std.time.SystemTime
+
+fn main() ! any Error {
+    fs.write_text("std_host_probe.txt", "12345")?
+    let meta = fs.metadata("std_host_probe.txt")?
+    print("{meta.size} {meta.is_dir}")
+    print(fs.is_file("std_host_probe.txt"))
+    print(fs.is_dir("std_host_probe.txt"))
+    print(fs.metadata("std_host_probe_missing.txt").error().is_some())
+    fs.remove_file("std_host_probe.txt")?
+    print(env.current_dir().is_some())
+    print(env.temp_dir().len() > 0)
+    print(term.columns() > 0)
+    print(term.rows() > 0)
+    print(process.id() > 0)
+    print(SystemTime.now().unix_secs() > 1_700_000_000)
+    var a = Rng.from_entropy()
+    var b = Rng.from_entropy()
+    print(a.next_u64() != b.next_u64())
+}

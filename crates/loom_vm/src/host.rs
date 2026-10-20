@@ -31,6 +31,12 @@ pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
         "fs.read" => fs_read,
         "fs.write" => fs_write,
         "fs.exists" => fs_exists,
+        "fs.kind" => fs_kind,
+        "fs.size" => fs_size,
+        "time.unix" => unix_nanos,
+        "process.id" => process_id,
+        "env.cwd" => env_cwd,
+        "term.info" => term_info,
         "fs.dir" => fs_dir,
         "fs.move" => fs_move,
         "fs.list" => fs_list,
@@ -348,6 +354,86 @@ fn fs_list(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
         }
         Err(e) => args[0] = failure(ctx, &e, args[2])?,
     }
+    Ok(())
+}
+
+/// `fs.kind(path)`: 0 when there is nothing there, 1 for a file, 2 for a
+/// directory.
+fn fs_kind(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.host_check("fs.kind")?;
+    let path = text(ctx, args[0], args[1])?;
+    args[0] = if ctx.sandbox {
+        u64::from(ctx.files.contains_key(&path))
+    } else {
+        match std::fs::metadata(&path) {
+            Ok(m) if m.is_dir() => 2,
+            Ok(_) => 1,
+            Err(_) => 0,
+        }
+    };
+    Ok(())
+}
+
+/// `fs.size(path)`: the file's length in bytes, 0 when it can't be read.
+fn fs_size(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.host_check("fs.size")?;
+    let path = text(ctx, args[0], args[1])?;
+    args[0] = if ctx.sandbox {
+        ctx.files.get(&path).map_or(0, |f| f.len() as u64)
+    } else {
+        std::fs::metadata(&path).map_or(0, |m| m.len())
+    };
+    Ok(())
+}
+
+/// `time.unix()`: nanoseconds since 1970 on the system clock.
+fn unix_nanos(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.host_check("time.unix")?;
+    let since = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
+    args[0] = since.map_or(0, |d| d.as_nanos() as u64);
+    Ok(())
+}
+
+/// `process.id()`.
+fn process_id(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.host_check("process.id")?;
+    args[0] = if ctx.sandbox { 1 } else { u64::from(std::process::id()) };
+    Ok(())
+}
+
+/// `env.cwd(dst)`: the working directory, as a `?String` at `dst`.
+fn env_cwd(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.host_check("env.cwd")?;
+    let dir = if ctx.sandbox {
+        Some("/".to_string())
+    } else {
+        std::env::current_dir().ok().map(|p| p.to_string_lossy().into_owned())
+    };
+    match dir {
+        Some(d) => ctx.new_string(d.as_bytes(), args[0]),
+        None => {
+            // SAFETY: `dst` is the 24 bytes of a `?String` the compiler gave.
+            unsafe { std::ptr::write_bytes(args[0] as *mut u8, 0, 24) };
+            Ok(())
+        }
+    }
+}
+
+/// `term.info()` with `imm`: 0 the columns, 1 the rows (80 and 24 when
+/// there is no terminal), 2 whether standard output is a terminal.
+fn term_info(ctx: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
+    ctx.host_check("term.info")?;
+    args[0] = if ctx.sandbox {
+        [80, 24, 0][usize::from(imm.min(2))]
+    } else {
+        match imm {
+            0 | 1 => {
+                let (cols, rows) = loom_sys::term::size();
+                u64::from(if imm == 0 { cols } else { rows })
+            }
+            _ => u64::from(std::io::IsTerminal::is_terminal(&std::io::stdout())),
+        }
+    };
     Ok(())
 }
 

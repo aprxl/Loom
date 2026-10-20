@@ -37,6 +37,7 @@
 <li><a href="num.html">num</a></li>
 <li><a href="ops.html">ops</a></li>
 <li><a href="option.html">option</a></li>
+<li><a href="path.html">path</a></li>
 <li><a href="priority.html">priority</a></li>
 <li><a href="process.html">process</a></li>
 <li><a href="rand.html">rand</a></li>
@@ -187,6 +188,36 @@
 </div>
 </div>
 </div>
+<div class="item" id="SystemTime">
+<div class="item-head">
+<span class="sig">warp <strong>SystemTime</strong>: Eq, Ord</span>
+
+</div>
+<p class="item-doc">A moment on the system clock, which can be set: for dates and times of day, not for measuring how long things take (use <code>Instant</code> for that).</p>
+<div class="members">
+<div class="member" id="SystemTime.now">
+<div class="member-head">
+<span class="sig">fn now() -&gt; SystemTime</span>
+
+</div>
+<p class="member-doc">Now.</p>
+</div>
+<div class="member" id="SystemTime.unix_secs">
+<div class="member-head">
+<span class="sig">fn unix_secs(self) -&gt; u64</span>
+
+</div>
+<p class="member-doc">Whole seconds since 1 January 1970.</p>
+</div>
+<div class="member" id="SystemTime.unix_nanos">
+<div class="member-head">
+<span class="sig">fn unix_nanos(self) -&gt; u64</span>
+
+</div>
+<p class="member-doc">Nanoseconds since 1 January 1970.</p>
+</div>
+</div>
+</div>
 <h2>Functions</h2>
 <div class="item" id="ns">
 <div class="item-head">
@@ -243,6 +274,13 @@
 <span class="badge extern">extern</span>
 </div>
 <p class="item-doc">Nanoseconds on a clock that only goes forward, from an arbitrary start. Differences are what mean something: see <code>Instant</code>.</p>
+</div>
+<div class="item" id="unix_nanos">
+<div class="item-head">
+<span class="sig">fn <strong>unix_nanos</strong>() -&gt; u64</span>
+<span class="badge extern">extern</span>
+</div>
+<p class="item-doc">Nanoseconds since 1 January 1970 on the system clock.</p>
 </div>
 </main>
 </div>
