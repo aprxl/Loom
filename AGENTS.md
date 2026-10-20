@@ -256,8 +256,9 @@ chunks, at a fixed grain; there are no per-worker deques or stealing.
 `yield`/`pull` in a loom and `loom(given: …)` wait for V6; I/O is not a
 cancel point yet (design/vm.md §11.4, §17).
 
-Next: V6 spools (and `given`), V7 Lua interop, V8 speed, V9 Treadle by
-default.
+Next: V6 spools (and `given`), V6.5 language gaps the stdlib hit, V7 Lua
+interop, V8 speed, V9 Treadle by default. The deferred work of each, std
+included, is in LEDGER.md ("Roadmap").
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and

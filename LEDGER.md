@@ -2,7 +2,48 @@
 
 Running log of milestone work and decisions. Newest first. Replaces `ledger.log`.
 
-Mechanical group, second and third chunks (2026-10-20): done: `fs.metadata`/`is_dir`/`is_file`/`file_kind`/`file_size`, `env.current_dir`/`home_dir`/`temp_dir`, `term.columns`/`rows`/`is_tty`, `process.id`, `SystemTime`, `Rng.from_entropy`, `std.path` (`join`, `parent`, `file_name`, `stem`, `extension`, `with_extension`, `normalize`, `is_absolute`; `/` is the separator), `Str` `splitn`/`rsplit`/`split_by`, `String.from_utf8` with `Utf8Error`. `Int` `MAX`/`MIN` already work (`i32.MAX`). Compiler fix: a branch that gives an outer local by name (`if c { "x{y}" } else { body }`) moves it into the join; before, Treadle dropped it first and returned an empty string (`tests/run/if_moves_outer_local`).
+## Roadmap: deferred work by milestone (2026-10-20)
+
+Built from the ledger below, `design/stdlib-plan.md`, `design/stdlib-collect-default.md`, and `design/vm-review-v3/v4/v5.md`. Caio is on Treadle (V6 next); the stdlib is paused, so "Std backlog" means nothing blocks it and it waits for a stdlib session. Judgment calls are marked (J).
+
+**V6 (spools, regions, `given`, storable closures)**
+- I/O and `time.sleep` as cancel points (vm.md 11.4; sleep is outside cooperative cancellation today).
+- Storable closures: `scan`, `from_fn`, `successors`, and any adaptor that keeps a user callback; `inspect`-style steps move from builtins to Loom once a lambda can be stored in a warp field or returned (M0106).
+- `mem.swap`/`replace`/`take`/`drop` (needs a rule for moving out of a `mut` parameter; lands with the ownership rules of regions). (J: here, not a separate item, because the rule is a move/region question.)
+- Stdlib phase 6: `Spool`, `Arena`, `SharedArena`, `Pool[T]`; spool-aware collection constructors and `copy`; `Deque`/`SortedMap` nodes in a spool.
+- `given` defaults (D7, a declared default per weft) and the ambient `Writer`, `Rng`, `Clock`, `Logger`, `Pool` givens; `loom(given: pool)`, `yield`/`pull` in a loom (V5 leftovers).
+- Gates: the V6 rows of vm.md section 17 and 16 (`binary_trees` at least 4x; `Arena` alloc at least 10x `heap`, `Pool` alloc/free at most 5 dispatches, an unused `given` costs 0 dispatches).
+
+**V6.5 (new): language gaps the stdlib hit.** Small typeck/weave items, none about memory, so they don't belong in V6. (J: a milestone of its own after V6, because V6 rewrites the checker's ownership side and these touch `Self`, bounds and weaves; doing them in the same pass risks conflicts. Fold into V6 if the checker work overlaps anyway.)
+- `Self` for `Int`/`Float` and gauge types (the `self` of a Loom method body is the warp, not the number): unblocks `pow_checked`, `abs_diff`, `to_string_radix`, `total_cmp`, `to_bits`/`from_bits`, `to_be_bytes`/`from_be_bytes`.
+- Expressing "items are slices" (`where T: [U]`) for `concat`/`join` on slices of slices.
+- Generic wefts (`FromStream[T]` is an associated `Item` instead).
+- A hand-written `Show` on a warp declared in `std` is silently ignored (the debug form is used; `Duration` has `to_string` because of it). Bug: find the cause in the weave recording; give `Duration` its `Show`.
+- `Default` for arrays `[T; N]`, `Deque`, tuple sizes beyond three, and tuple warps (`warp Meters(f64)`).
+- `collect_as`: item-type errors are reported inside std, not at the call site; `str` items for `String`; `BitSet`.
+- `Fmt` specs/`pad`/`debug_struct` and `dbg` (the compiler passes the source text and location; the writer comes from the ambient `Writer` given, so after V6).
+
+**V7 (Lua interop)**: nothing deferred lands here.
+
+**V8 (speed)**: all Treadle perf work, with before/after numbers in `bench/RESULTS.md`.
+- Stream fusion for the new steps (`flat_map`, `peekable`, `step_by`, `filter_map`, `inspect`, `chunks`) in `fuse.rs`; the std gates held by regression guards: `resize` 2.2x (plan 1.1x), `counts` 2.6x, `min_by_key` 8x, `filter_map.sum` 16x, `step_by.sum` 32x (all 1.1-1.25x); `collect_as` against a hand loop (no gate yet); `sort_by` 1.3x `sort`.
+- Bounds checks in std code written in Loom: about 95% kept at `-O2` (index arithmetic on lists); `Map.last` is O(n).
+- Natives off the global lock: text and map natives (`str.*`, `map.find_*`, `char.digit`), `read_line` blocking on stdin under the lock, mutex/atomic CAS fast paths; this also uncaps stdlib phase 5 (`RwLock` and the other sync primitives, which serialise through the lock until then).
+- Threads: per-worker deques with stealing (V5 close-out step 3, never done); chunking beyond exclusive integer ranges (inclusive and open ranges, lists, streams, `chunks_mut`) and an adaptive grain; par_mandelbrot margin over its gate is thin.
+- V4 left on purpose: build the program from the job build's module; bake maps, sets and sums.
+- Map: native `reindex`/run-wise `compact`, hash tags in the index; held shuttles with inline frames (D5); the deferred optimizer passes (specialize lambdas, SROA, self tail calls); re-inlining after the last GVN; gvn root index, `tidy`/`range` repeats, codegen liveness and `Emitter::line` (compile-time ratio 1.6x against the 1.5x design gate); adjacent-opcode counters before superinstructions; PGO; spawn stack free list.
+
+**V9 (Treadle by default)**: verifier hardening before images are loaded from disk: a backward `Jmp` neither ticks nor is rejected, loads/stores through registers are unchecked outside the checked build (reword "verified" in the docs), header reads assume 8-aligned offsets, a waiter on a constant busy-spins. Also: `Instant.now()` at 8 workers is unmeasured.
+
+**Std backlog (no compiler blocker; a stdlib session, any time)**
+- Natives and plain Loom: `reverse_bits`, `swap_bytes`, `ilog(base)`, `cbrt`, `mul_add`, `lerp`, Float constants (`EPSILON`, `INF`, `NAN`), `parse_radix`, `escape`, `matches`, `String` `drain`/`split_off`/`to_bytes`, `env.vars`, `BufReader`/`BufWriter`, `process.run`/`Child` (own designs), `Deque` `for` loop (works over any `Iter`, so it is a weave away); `remove_entry` returning the map's stored key; the `Range.rev` message on an open range.
+- Bugs filed in vm-review-v4 and not seen fixed in git history (verify, then fix): on the Lua backend a nested generator's `defer` doesn't run when the outer one is dropped; `parse[f32]` parses as `f64` and rounds, on both backends (change both together).
+- Phase 7: `std.json` (`Json`, `parse`, derived `ToJson`/`FromJson` by reflection), `Args` and `Random` derives, `assert_eq`/`assert_ne`/`assert_close`/`assert_unravels`/`todo`, `bench`. None exist yet.
+- Accepted differences, left as is: `char_indices` builds its list up front; `min_by_key` keeps the best in a one-item list; `sinh`/`cosh`/`tanh` lose precision for tiny arguments; `fs.exists`/`remove_file` on directories differ per platform; `fract(-0.0)` and `is_sign_negative(NaN)`; Lua `usize` is 63 bits; `Str.chars` on invalid UTF-8 crashes on Lua (U+FFFD on Treadle); indexing on `Deque`, `Grid` and `Duration` arithmetic stay methods only (D4).
+
+## Standard library, mechanical group, chunks 2 and 3 (2026-10-20)
+
+Done: `fs.metadata`/`is_dir`/`is_file`/`file_kind`/`file_size`, `env.current_dir`/`home_dir`/`temp_dir`, `term.columns`/`rows`/`is_tty`, `process.id`, `SystemTime`, `Rng.from_entropy`, `std.path` (`join`, `parent`, `file_name`, `stem`, `extension`, `with_extension`, `normalize`, `is_absolute`; `/` is the separator), `Str` `splitn`/`rsplit`/`split_by`, `String.from_utf8` with `Utf8Error`. `Int` `MAX`/`MIN` already work (`i32.MAX`). Compiler fix: a branch that gives an outer local by name (`if c { "x{y}" } else { body }`) moves it into the join; before, Treadle dropped it first and returned an empty string (`tests/run/if_moves_outer_local`).
 Left from the group, each blocked on something the library can't do yet: `pow_checked`, `abs_diff`, `to_string_radix`, `total_cmp`, `to_bits` need a Loom body on `Int`/`Float` (their `self` is the warp, not the number: `Self` for gauge types is the obstacle) or an optional-returning native; `concat`/`join` on slices of slices need a `where T: [U]` bound; `env.vars` needs a list-of-pairs native; `process.run`/`Child` and `BufReader`/`BufWriter` are their own designs.
 
 ## Standard library, Default (2026-10-20)
