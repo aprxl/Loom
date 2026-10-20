@@ -99,7 +99,11 @@ pub warp Str {
             match self[at..].find(part) {
                 some(i) => {
                     found = some(at + i)
-                    at += i + 1
+                    // On to the next character, never into the middle of one.
+                    match self[at + i..].chars().next() {
+                        some(c) => at += i + c.len_utf8()
+                        none => break
+                    }
                 }
                 none => break
             }
@@ -156,11 +160,13 @@ pub warp Str {
     }
     /// Without the characters at the end that `f` says yes to.
     pub fn trim_end_matches(self, f: char => bool) -> str {
-        var end = self.len()
-        for (i, c) in self.char_indices() {
-            if not f(c) { end = i + c.len_utf8() }
+        var end = 0
+        var at = 0
+        for c in self.chars() {
+            at += c.len_utf8()
+            if not f(c) { end = at }
         }
-        if self.chars().all(f) { self[..0] } else { self[..end] }
+        self[..end]
     }
     /// Whether the two are equal when upper and lower case don't count.
     pub fn eq_ignore_case(self, other: str) -> bool = self.to_lower() == other.to_lower()

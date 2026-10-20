@@ -37,4 +37,9 @@ fn main() {
     print("7".pad_left(3, '0'))
     print("ab".pad_right(4, '.'))
     print("héllo".is_ascii())
+    print("éé".rfind("é"))
+    print("日本日".rsplit_once("日").map(_.1.len()))
+    print("é".rfind(""))
+    print("xéxx".trim_end_matches(c => c == 'x'))
+    print("日日".trim_matches(c => c == '日').len())
 }
