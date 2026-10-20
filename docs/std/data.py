@@ -215,7 +215,7 @@ MODULES = [
     {"kind": "warp", "name": "Range", "suffix": "[T]", "builtin": True, "doc": "The type of `a..b`, `a..=b` and `a..`: the values from `a` up to `b`. It has the methods of `Stream` (over its values), and these.",
      "methods": [
        {"sig": "fn chunks(self, n: usize) -> Stream[Range[T]]", "doc": "Ranges of `n` values at a time, one after another: `(0..10).chunks(4)` is `0..4`, `4..8` and `8..10`. Each one is a range too, with all the methods of one, so it can be given to a thread. Unravels if `n` is 0 or the range has no end."},
-       {"sig": "fn rev(self) -> Stream[T]", "doc": "The values from the last to the first. Needs room for all of them."},
+       {"sig": "fn rev(self) -> Stream[T]", "doc": "The values from the last to the first. Needs room for all of them, and unravels for a range with no end."},
      ]},
     {"kind": "warp", "name": "Stream", "suffix": "[T]", "builtin": True, "doc": "A lazy stream of `T`s: `s.chars()`, `xs.indexed()` and `stream.map(f)` are streams. Nothing is computed until something asks for the next item. Everything else with items has these methods too: arrays, lists and slices, ranges, and types that weave `Iter`. `(1..=10).filter(_ % 2 == 0)` is a stream of the range's items. The methods that make a new stream use up this one: a stream is read once.",
      "methods": [
