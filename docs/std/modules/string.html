@@ -103,6 +103,41 @@
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
+<div class="member" id="String.truncate">
+<div class="member-head">
+<span class="sig">fn truncate(mut self, n: usize)</span>
+
+</div>
+<p class="member-doc">Keeps the first <code>n</code> bytes. Unravels if <code>n</code> is past the end or in the middle of a character.</p>
+</div>
+<div class="member" id="String.insert_str">
+<div class="member-head">
+<span class="sig">fn insert_str(mut self, i: usize, s: str)</span>
+
+</div>
+<p class="member-doc">Puts <code>s</code> at byte <code>i</code>. Unravels if <code>i</code> is past the end or in the middle of a character.</p>
+</div>
+<div class="member" id="String.insert">
+<div class="member-head">
+<span class="sig">fn insert(mut self, i: usize, c: char)</span>
+
+</div>
+<p class="member-doc">Puts <code>c</code> at byte <code>i</code>.</p>
+</div>
+<div class="member" id="String.remove">
+<div class="member-head">
+<span class="sig">fn remove(mut self, i: usize) -&gt; char</span>
+
+</div>
+<p class="member-doc">Takes out the character at byte <code>i</code>. Unravels if there isn't one.</p>
+</div>
+<div class="member" id="String.retain">
+<div class="member-head">
+<span class="sig">fn retain(mut self, keep: char =&gt; bool)</span>
+
+</div>
+<p class="member-doc">Keeps the characters <code>keep</code> says yes to.</p>
+</div>
 </div>
 </div>
 <div class="item" id="Str">

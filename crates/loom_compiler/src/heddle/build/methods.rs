@@ -71,6 +71,8 @@ const BODIES: &[&str] = &[
     "std.num.Int.ilog10",
     "std.num.Int.next_power_of_two",
     "std.num.Int.count_zeros",
+    "std.num.Int.pow_wrap",
+    "std.num.Int.pow_sat",
     "std.num.Float.sin",
     "std.num.Float.cos",
     "std.num.Float.tan",
@@ -347,7 +349,7 @@ impl<'a> Builder<'a> {
                         Some(native(self, "int.bits", imm, vec![v, spec], 1))
                     }
                     "signum" | "rem_euclid" | "div_euclid" | "div_floor" | "div_ceil" | "gcd" | "lcm" | "isqrt"
-                    | "ilog10" | "next_power_of_two" | "count_zeros" => {
+                    | "ilog10" | "next_power_of_two" | "count_zeros" | "pow_wrap" | "pow_sat" => {
                         let imm = [
                             "signum",
                             "rem_euclid",
@@ -360,6 +362,8 @@ impl<'a> Builder<'a> {
                             "ilog10",
                             "next_power_of_two",
                             "count_zeros",
+                            "pow_wrap",
+                            "pow_sat",
                         ]
                         .iter()
                         .position(|n| *n == name)

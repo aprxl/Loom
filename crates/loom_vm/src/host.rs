@@ -31,6 +31,9 @@ pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
         "fs.read" => fs_read,
         "fs.write" => fs_write,
         "fs.exists" => fs_exists,
+        "fs.dir" => fs_dir,
+        "fs.move" => fs_move,
+        "fs.list" => fs_list,
         "fs.remove" => fs_remove,
         _ => return None,
     })
@@ -256,6 +259,95 @@ fn fs_exists(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     ctx.host_check("fs.exists")?;
     let path = text(ctx, args[0], args[1])?;
     args[0] = u64::from(if ctx.sandbox { ctx.files.contains_key(&path) } else { std::path::Path::new(&path).exists() });
+    Ok(())
+}
+
+/// `fs.dir(path, dst)`: makes the directory and the ones above it.
+fn fs_dir(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.host_check("fs.dir")?;
+    let path = text(ctx, args[0], args[1])?;
+    let done = if ctx.sandbox { Ok(()) } else { std::fs::create_dir_all(&path) };
+    args[0] = match done {
+        Ok(()) => FINE,
+        Err(e) => failure(ctx, &e, args[2])?,
+    };
+    Ok(())
+}
+
+/// `fs.move(from, to, dst)` with `imm` 0 renames the file, 1 copies it.
+fn fs_move(ctx: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
+    ctx.host_check("fs.move")?;
+    let from = text(ctx, args[0], args[1])?;
+    let to = text(ctx, args[2], args[3])?;
+    ctx.open_files.remove(&from);
+    ctx.open_files.remove(&to);
+    let done = if ctx.sandbox {
+        match ctx.files.get(&from).cloned() {
+            Some(bytes) => {
+                if imm == 0 {
+                    ctx.files.remove(&from);
+                }
+                ctx.files.insert(to, bytes);
+                Ok(())
+            }
+            None => Err(std::io::Error::from(std::io::ErrorKind::NotFound)),
+        }
+    } else if imm == 0 {
+        std::fs::rename(&from, &to)
+    } else {
+        std::fs::copy(&from, &to).map(|_| ())
+    };
+    args[0] = match done {
+        Ok(()) => FINE,
+        Err(e) => failure(ctx, &e, args[4])?,
+    };
+    Ok(())
+}
+
+/// `fs.list(path, dst)`: the names in the directory, in order, as a
+/// `List[String]` at `dst`.
+fn fs_list(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    ctx.host_check("fs.list")?;
+    let path = text(ctx, args[0], args[1])?;
+    let names: std::io::Result<Vec<String>> = if ctx.sandbox {
+        let prefix = if path.is_empty() || path.ends_with('/') { path.clone() } else { format!("{path}/") };
+        let mut names: Vec<String> = ctx
+            .files
+            .keys()
+            .filter_map(|k| k.strip_prefix(prefix.as_str()))
+            .map(|rest| rest.split('/').next().unwrap_or(rest).to_string())
+            .collect();
+        names.sort();
+        names.dedup();
+        Ok(names)
+    } else {
+        std::fs::read_dir(&path).and_then(|entries| {
+            let mut names = Vec::new();
+            for entry in entries {
+                names.push(entry?.file_name().to_string_lossy().into_owned());
+            }
+            names.sort();
+            Ok(names)
+        })
+    };
+    match names {
+        Ok(names) => {
+            let n = names.len() as u64;
+            let buf = ctx.heap.alloc((n * 24).max(8), 8)?;
+            for (i, name) in names.iter().enumerate() {
+                ctx.new_string(name.as_bytes(), buf + 24 * i as u64)?;
+            }
+            // SAFETY: `dst` is the header of a `List[String]` the compiler gave.
+            unsafe {
+                let d = args[2] as *mut u64;
+                d.write(buf);
+                d.add(1).write(n);
+                d.add(2).write(n);
+            }
+            args[0] = FINE;
+        }
+        Err(e) => args[0] = failure(ctx, &e, args[2])?,
+    }
     Ok(())
 }
 

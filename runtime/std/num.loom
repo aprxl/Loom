@@ -67,6 +67,10 @@ pub warp Int[T] {
     pub fn next_power_of_two(self) -> T
     /// How many bits are zero.
     pub fn count_zeros(self) -> u32
+    /// `self` to the power `exp`, with the bits that don't fit dropped.
+    pub fn pow_wrap(self, exp: u32) -> T
+    /// `self` to the power `exp`, or the nearest number that fits.
+    pub fn pow_sat(self, exp: u32) -> T
 }
 
 /// The methods of every float type, `T`.

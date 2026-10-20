@@ -20,6 +20,46 @@ pub warp String {
     /// Takes the last character off, if there is one.
     pub fn pop(mut self) -> ?char
     pub fn clear(mut self)
+    /// Keeps the first `n` bytes. Unravels if `n` is past the end or in the
+    /// middle of a character.
+    pub fn truncate(mut self, n: usize) {
+        let head: String = self[..n].to_string()
+        self.clear()
+        self.push_str(head)
+    }
+    /// Puts `s` at byte `i`. Unravels if `i` is past the end or in the middle
+    /// of a character.
+    pub fn insert_str(mut self, i: usize, s: str) {
+        let tail: String = self[i..].to_string()
+        self.truncate(i)
+        self.push_str(s)
+        self.push_str(tail)
+    }
+    /// Puts `c` at byte `i`.
+    pub fn insert(mut self, i: usize, c: char) {
+        let one: String = String.of([c])
+        self.insert_str(i, one)
+    }
+    /// Takes out the character at byte `i`. Unravels if there isn't one.
+    pub fn remove(mut self, i: usize) -> char {
+        let c = match self[i..].chars().next() {
+            some(c) => c
+            none => unravel("remove: no character at byte {i}")
+        }
+        let tail: String = self[i + c.len_utf8()..].to_string()
+        self.truncate(i)
+        self.push_str(tail)
+        c
+    }
+    /// Keeps the characters `keep` says yes to.
+    pub fn retain(mut self, keep: char => bool) {
+        var out: String = ""
+        for c in self.chars() {
+            if keep(c) { out.push(c) }
+        }
+        self.clear()
+        self.push_str(out)
+    }
 }
 
 /// The methods of `str`: a view of UTF-8 text. Lengths and positions count

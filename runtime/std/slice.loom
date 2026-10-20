@@ -48,6 +48,49 @@ pub warp Slice[T] {
     /// Views of every run of `n` elements in a row: `[a, b]`, `[b, c]`, …
     /// Unravels if `n` is 0.
     pub fn windows(self, n: usize) -> Stream[[T]]
+    /// Whether the slice starts with `prefix`.
+    pub fn starts_with(self, prefix: [T]) -> bool where T: Eq {
+        if prefix.len() > self.len() { return false }
+        for i in 0..prefix.len() {
+            if self[i] != prefix[i] { return false }
+        }
+        true
+    }
+    /// Whether the slice ends with `suffix`.
+    pub fn ends_with(self, suffix: [T]) -> bool where T: Eq {
+        if suffix.len() > self.len() { return false }
+        let skip = self.len() - suffix.len()
+        for i in 0..suffix.len() {
+            if self[skip + i] != suffix[i] { return false }
+        }
+        true
+    }
+    /// How many elements equal `x`.
+    pub fn count_of(self, x: T) -> usize where T: Eq {
+        var n = 0
+        for i in 0..self.len() {
+            if self[i] == x { n += 1 }
+        }
+        n
+    }
+    /// Moves the elements `n` places towards the start; those pushed out
+    /// come back at the end. `n` counts modulo the length.
+    pub fn rotate_left(mut self, n: usize) {
+        let len = self.len()
+        if len < 2 { return }
+        let k = n % len
+        if k == 0 { return }
+        self[..k].reverse()
+        self[k..].reverse()
+        self.reverse()
+    }
+    /// Moves the elements `n` places towards the end; those pushed out come
+    /// back at the start. `n` counts modulo the length.
+    pub fn rotate_right(mut self, n: usize) {
+        let len = self.len()
+        if len < 2 { return }
+        self.rotate_left(len - n % len)
+    }
     /// The elements from the last to the first.
     pub fn rev(self) -> Stream[T] {
         Reversed(items: self.to_list())

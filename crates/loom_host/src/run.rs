@@ -351,6 +351,53 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
         lua.create_string(String::from_utf8_lossy(&all).as_bytes())
     })?;
     table.set("read_all", read_all)?;
+    // The directory operations Lua has no way to do: each gives `true`, or
+    // `nil`, a message and an errno, as `io.open` does.
+    let failed = |e: std::io::Error| {
+        // The errno the runtime tells `NotFound` (2) and `Denied` (13) by.
+        let errno = match e.kind() {
+            std::io::ErrorKind::NotFound => 2,
+            std::io::ErrorKind::PermissionDenied => 13,
+            _ => e.raw_os_error().unwrap_or(0),
+        };
+        (mlua::Value::Nil, e.to_string(), errno)
+    };
+    table.set(
+        "make_dir",
+        lua.create_function(move |_, path: String| {
+            Ok(match std::fs::create_dir_all(&path) {
+                Ok(()) => (mlua::Value::Boolean(true), String::new(), 0),
+                Err(e) => failed(e),
+            })
+        })?,
+    )?;
+    table.set(
+        "move_file",
+        lua.create_function(move |_, (from, to, keep): (String, String, bool)| {
+            let done = if keep { std::fs::copy(&from, &to).map(|_| ()) } else { std::fs::rename(&from, &to) };
+            Ok(match done {
+                Ok(()) => (mlua::Value::Boolean(true), String::new(), 0),
+                Err(e) => failed(e),
+            })
+        })?,
+    )?;
+    table.set(
+        "list_dir",
+        lua.create_function(move |lua, path: String| {
+            let names: std::io::Result<Vec<String>> = std::fs::read_dir(&path).and_then(|entries| {
+                let mut names = Vec::new();
+                for entry in entries {
+                    names.push(entry?.file_name().to_string_lossy().into_owned());
+                }
+                names.sort();
+                Ok(names)
+            });
+            Ok(match names {
+                Ok(names) => (mlua::Value::Table(lua.create_sequence_from(names)?), String::new(), 0),
+                Err(e) => failed(e),
+            })
+        })?,
+    )?;
     let clock_start = std::time::Instant::now();
     table.set("now", lua.create_function(move |_, ()| Ok(clock_start.elapsed().as_nanos() as i64))?)?;
     // The terminal: each returns an error message when it fails, which the

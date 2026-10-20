@@ -123,6 +123,9 @@ pub const NATIVES: &[NativeSig] = &[
     sig("fs.write_line", 5, 1, NativeImm::None),
     sig("fs.write", 5, 1, NativeImm::None),
     sig("fs.exists", 2, 1, NativeImm::None),
+    sig("fs.dir", 3, 1, NativeImm::None),
+    sig("fs.move", 5, 1, NativeImm::None),
+    sig("fs.list", 3, 1, NativeImm::None),
     sig("fs.remove", 3, 1, NativeImm::None),
     sig("fs.read", 3, 1, NativeImm::None),
     // Maps' fast paths: the entry with a key (text, or one word) in the

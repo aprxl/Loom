@@ -23,7 +23,6 @@ const BODIES: &[&str] = &[
     "std.list.List.remove",
     "std.list.List.clear",
     "std.list.List.truncate",
-    "std.list.List.extend",
     "std.list.List.copy",
     "std.slice.Slice.len",
     "std.slice.Slice.is_empty",
@@ -332,20 +331,6 @@ impl<'a> Builder<'a> {
                 self.store(Mem::W64, header, 8, k);
                 self.jump(done);
                 self.enter(done);
-                self.ret_regs(Vec::new())
-            }
-            "extend" => {
-                // Copies first, then room: the slice may be of this list.
-                let (sbuf, n) = self.view_of(&args[1], tys[1], span)?;
-                let copies = self.alloc_elems(n, elem)?;
-                self.copy_elems(&m, copies, sbuf, n)?;
-                let want = self.uarith(IntOp::Add, len, n);
-                self.grow(&m, header, want);
-                let (buf, _) = self.list_view(header);
-                let at = self.elem_at(buf, len, elem)?;
-                self.move_elems(&m, at, copies, n);
-                self.free_elems(&m, copies, n);
-                self.store(Mem::W64, header, 8, want);
                 self.ret_regs(Vec::new())
             }
             _ => return self.internal(span, &format!("no body for `{path}`")),

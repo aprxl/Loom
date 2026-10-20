@@ -20,8 +20,12 @@ pub warp List[T] {
     pub fn clear(mut self)
     /// Keeps the first `n` elements.
     pub fn truncate(mut self, n: usize)
-    /// Adds a copy of every element of `xs` at the end.
-    pub fn extend(mut self, xs: [T])
+    /// Adds each of the items at the end.
+    pub fn extend(mut self, take items: Stream[T]) {
+        for x in items {
+            self.push(x)
+        }
+    }
     /// A deep copy.
     pub fn copy(self) -> List[T]
     /// Keeps the elements `keep` says yes to, in their order.

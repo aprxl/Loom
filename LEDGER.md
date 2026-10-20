@@ -2,6 +2,11 @@
 
 Running log of milestone work and decisions. Newest first. Replaces `ledger.log`.
 
+## Standard library, mechanical batch (2026-10-20)
+
+Done (both backends, `tests/run/std_edit`, `std_fs_dirs`): `Slice` `starts_with`, `ends_with`, `count_of`, `rotate_left`, `rotate_right`; `List.extend` takes a stream (the native for slices is gone); `String` `truncate`, `insert`, `insert_str`, `remove`, `retain` (rebuild the text, so each is O(length)); `Int` `pow_wrap`, `pow_sat`; `fs` `create_dir_all`, `rename`, `copy`, `read_dir` (names in order; the in-memory file system of tests lists files, and has no empty directories).
+Still open from the mechanical group: `splitn`/`rsplit`/`split_by`, `from_utf8`, `concat`/`join` on slices, `pow_checked`, `abs_diff`, `to_string_radix`, `Int` `MAX`/`MIN` constants, `total_cmp`, `std.path`, `fs.metadata`, `env`/`process`/`term` additions, `Rng.from_entropy`, `SystemTime`. `collect[C]` and `Default` are planned in `design/stdlib-collect-default.md`.
+
 ## Standard library review (2026-10-19)
 
 Three Haiku agents mapped the library code, the Treadle natives and the Lua runtime; each finding was checked before acting. Fixed: `rfind`/`rsplit_once` unraveled on non-ASCII text (stepped one byte); `next_word` and `trim` on Treadle were quadratic (validated the whole text per call) and now decode one character at a time; `trim_end_matches` is one pass; Lua `lcm` of `i64::MIN`, `lcm` with zero, and `rem_euclid(MIN, -1)` now match Treadle; `hypot` is scaled so it neither overflows nor underflows (both backends); Lua text methods no longer crash on invalid UTF-8 (trimmed and cased as bytes, like Treadle); Lua ASCII `trim` no longer backtracks; `read_line` and `read_all` turn invalid UTF-8 into U+FFFD on both backends; `write_err` and `fs.write_text` write the bytes untouched on Treadle; `char.uni` rejects out-of-range code points; an unknown float method is an internal error rather than `is_nan`.

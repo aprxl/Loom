@@ -23,4 +23,12 @@ extern "lua" {
     pub fn exists(path: str) -> bool
     /// Deletes the file at `path`.
     pub fn remove_file(path: str) ! IoError
+    /// Makes the directory `path` and the ones above it that are missing.
+    pub fn create_dir_all(path: str) ! IoError
+    /// Moves the file `from` to `to`, replacing what is there.
+    pub fn rename(from: str, to: str) ! IoError
+    /// Copies the file `from` to `to`, replacing what is there.
+    pub fn copy(from: str, to: str) ! IoError
+    /// The names in the directory `path`, in order.
+    pub fn read_dir(path: str) -> List[String] ! IoError
 }

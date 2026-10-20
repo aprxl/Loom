@@ -859,7 +859,7 @@ fn int_bits(_: &mut Heap, args: &mut [u64], imm: u16) -> Result<(), Trap> {
 }
 
 /// What `int.math` is asked for, by `imm`.
-const INT_MATH: [&str; 11] = [
+const INT_MATH: [&str; 13] = [
     "signum",
     "rem_euclid",
     "div_euclid",
@@ -871,6 +871,8 @@ const INT_MATH: [&str; 11] = [
     "ilog10",
     "next_power_of_two",
     "count_zeros",
+    "pow_wrap",
+    "pow_sat",
 ];
 
 /// `int.math(a, b, type)`: the number methods that need the exact result:
@@ -943,6 +945,20 @@ fn int_math(_: &mut Heap, args: &mut [u64], imm: u16) -> Result<(), Trap> {
                 p <<= 1;
             }
             p
+        }
+        11 => {
+            // The low bits of the exact power.
+            args[0] = ints::wrap(args[0].wrapping_pow(args[1].min(u64::from(u32::MAX)) as u32), s);
+            return Ok(());
+        }
+        12 => {
+            let exact = u32::try_from(args[1]).ok().and_then(|e| a.checked_pow(e));
+            match exact {
+                Some(p) if (lo..=hi).contains(&p) => p,
+                // Too big: the nearest end, by the sign the power has.
+                _ if a < 0 && args[1] % 2 == 1 => lo,
+                _ => hi,
+            }
         }
         _ => {
             let x = args[0] & if bits >= 64 { u64::MAX } else { (1u64 << bits) - 1 };

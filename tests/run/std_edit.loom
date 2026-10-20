@@ -1,0 +1,35 @@
+use std.io.print
+fn main() {
+    var s: String = "héllo"
+    s.insert(0, '>')
+    s.insert_str(4, "--")
+    print(s)
+    print(s.remove(0))
+    s.truncate(4)
+    print(s)
+    s.retain(c => c != 'é')
+    print(s)
+    var xs: List[i32] = [1, 2, 3, 4, 5]
+    xs.rotate_left(2)
+    print(xs.join(","))
+    xs.rotate_right(1)
+    print(xs.join(","))
+    print(xs.starts_with([2, 3]))
+    print(xs.ends_with([4]))
+    print(xs.count_of(3))
+    xs.extend(0..3)
+    xs.extend([9, 9])
+    print(xs.join(","))
+    let ys: List[String] = ["a"]
+    var zs: List[String] = ["z"]
+    zs.extend(ys)
+    print(zs.join(","))
+    print(3u8.pow_wrap(6))
+    print(3u8.pow_sat(6))
+    print(2i8.pow_sat(7))
+    print((-2i8).pow_sat(9))
+    print((-2i8).pow_wrap(7))
+    print(2u64.pow_wrap(64))
+    print(10u64.pow_sat(20))
+    print(5i64.pow_sat(28))
+}

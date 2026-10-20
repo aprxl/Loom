@@ -79,7 +79,7 @@ pub warp Deque[T] {
     pub fn to_list(self) -> List[T] {
         var out: List[T] = .front.copy()
         out.reverse()
-        out.extend(.back)
+        out.extend(.back.copy())
         out
     }
 }

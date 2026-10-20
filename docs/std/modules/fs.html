@@ -125,6 +125,34 @@
 </div>
 <p class="item-doc">Deletes the file at <code>path</code>.</p>
 </div>
+<div class="item" id="create_dir_all">
+<div class="item-head">
+<span class="sig">fn <strong>create_dir_all</strong>(path: str) ! IoError</span>
+<span class="badge extern">extern</span>
+</div>
+<p class="item-doc">Makes the directory <code>path</code> and the ones above it that are missing.</p>
+</div>
+<div class="item" id="rename">
+<div class="item-head">
+<span class="sig">fn <strong>rename</strong>(from: str, to: str) ! IoError</span>
+<span class="badge extern">extern</span>
+</div>
+<p class="item-doc">Moves the file <code>from</code> to <code>to</code>, replacing what is there.</p>
+</div>
+<div class="item" id="copy">
+<div class="item-head">
+<span class="sig">fn <strong>copy</strong>(from: str, to: str) ! IoError</span>
+<span class="badge extern">extern</span>
+</div>
+<p class="item-doc">Copies the file <code>from</code> to <code>to</code>, replacing what is there.</p>
+</div>
+<div class="item" id="read_dir">
+<div class="item-head">
+<span class="sig">fn <strong>read_dir</strong>(path: str) -&gt; List[String] ! IoError</span>
+<span class="badge extern">extern</span>
+</div>
+<p class="item-doc">The names in the directory <code>path</code>, in order.</p>
+</div>
 </main>
 </div>
 </body>

@@ -108,6 +108,32 @@ impl<'a> Builder<'a> {
                 let code = self.native("fs.write", vec![p, n, tp, tn, msg], 1)[0];
                 self.io_result(ret, code, (p, n), None, msg, span)
             }
+            "std.fs.create_dir_all" => {
+                let (v, ty) = arg(self, 0)?;
+                let (p, n) = self.text_of(v, ty, span)?;
+                let msg = self.temp_string(span)?;
+                let code = self.native("fs.dir", vec![p, n, msg], 1)[0];
+                self.io_result(ret, code, (p, n), None, msg, span)
+            }
+            "std.fs.rename" | "std.fs.copy" => {
+                let (v, ty) = arg(self, 0)?;
+                let (p, n) = self.text_of(v, ty, span)?;
+                let (w, wty) = arg(self, 1)?;
+                let (q, m) = self.text_of(w, wty, span)?;
+                let msg = self.temp_string(span)?;
+                let imm = u16::from(path == "std.fs.copy");
+                let code =
+                    self.emit(InstKind::Native { name: "fs.move", imm, args: vec![p, n, q, m, msg] }, &[VTy::Int])[0];
+                self.io_result(ret, code, (p, n), None, msg, span)
+            }
+            "std.fs.read_dir" => {
+                let (v, ty) = arg(self, 0)?;
+                let (p, n) = self.text_of(v, ty, span)?;
+                let TyKind::Result(ok, _) = *self.tcx().kind(ret) else { return None };
+                let got = self.temp(ok, span)?;
+                let code = self.native("fs.list", vec![p, n, got], 1)[0];
+                self.io_result(ret, code, (p, n), Some(got), got, span)
+            }
             "std.fs.exists" => {
                 let (v, ty) = arg(self, 0)?;
                 let (p, n) = self.text_of(v, ty, span)?;

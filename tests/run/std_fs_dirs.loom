@@ -1,0 +1,17 @@
+use std.fs
+use std.io.print
+
+fn main() ! any Error {
+    fs.create_dir_all("std_fs_dirs_probe/a")?
+    fs.write_text("std_fs_dirs_probe/a/one.txt", "1")?
+    fs.write_text("std_fs_dirs_probe/b.txt", "bb")?
+    fs.copy("std_fs_dirs_probe/b.txt", "std_fs_dirs_probe/c.txt")?
+    fs.rename("std_fs_dirs_probe/b.txt", "std_fs_dirs_probe/d.txt")?
+    print(fs.exists("std_fs_dirs_probe/b.txt"))
+    print(fs.read_text("std_fs_dirs_probe/c.txt")?)
+    print(fs.read_dir("std_fs_dirs_probe")?.join(","))
+    print(fs.rename("std_fs_dirs_probe/none", "std_fs_dirs_probe/x").error().is_some())
+    fs.remove_file("std_fs_dirs_probe/a/one.txt")?
+    fs.remove_file("std_fs_dirs_probe/c.txt")?
+    fs.remove_file("std_fs_dirs_probe/d.txt")?
+}

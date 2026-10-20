@@ -187,6 +187,41 @@
 </div>
 <p class="member-doc">Views of every run of <code>n</code> elements in a row: <code>[a, b]</code>, <code>[b, c]</code>, … Unravels if <code>n</code> is 0.</p>
 </div>
+<div class="member" id="Slice.starts_with">
+<div class="member-head">
+<span class="sig">fn starts_with(self, prefix: [T]) -&gt; bool where T: Eq</span>
+
+</div>
+<p class="member-doc">Whether the slice starts with <code>prefix</code>.</p>
+</div>
+<div class="member" id="Slice.ends_with">
+<div class="member-head">
+<span class="sig">fn ends_with(self, suffix: [T]) -&gt; bool where T: Eq</span>
+
+</div>
+<p class="member-doc">Whether the slice ends with <code>suffix</code>.</p>
+</div>
+<div class="member" id="Slice.count_of">
+<div class="member-head">
+<span class="sig">fn count_of(self, x: T) -&gt; usize where T: Eq</span>
+
+</div>
+<p class="member-doc">How many elements equal <code>x</code>.</p>
+</div>
+<div class="member" id="Slice.rotate_left">
+<div class="member-head">
+<span class="sig">fn rotate_left(mut self, n: usize)</span>
+
+</div>
+<p class="member-doc">Moves the elements <code>n</code> places towards the start; those pushed out come back at the end. <code>n</code> counts modulo the length.</p>
+</div>
+<div class="member" id="Slice.rotate_right">
+<div class="member-head">
+<span class="sig">fn rotate_right(mut self, n: usize)</span>
+
+</div>
+<p class="member-doc">Moves the elements <code>n</code> places towards the end; those pushed out come back at the start. <code>n</code> counts modulo the length.</p>
+</div>
 <div class="member" id="Slice.rev">
 <div class="member-head">
 <span class="sig">fn rev(self) -&gt; Stream[T]</span>

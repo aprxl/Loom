@@ -1647,19 +1647,6 @@ ext["std.list.List.truncate"] = function(_, s, k)
   s.n = k
 end
 
-ext["std.list.List.extend"] = function(d, s, xs)
-  local t, o, m = parts(xs)
-  local items = {}
-  for i = 1, m do
-    items[i] = copy(d, t[o + i])
-  end
-  local n = s.n
-  for i = 1, m do
-    s[n + i] = items[i]
-  end
-  s.n = n + m
-end
-
 local function to_list(d, s)
   local t, o, n = parts(s)
   local out = { n = n }
@@ -3229,6 +3216,69 @@ ext["std.fs.exists"] = function(path)
   return false
 end
 
+ext["std.fs.create_dir_all"] = function(path)
+  if memory then return { true, nil } end
+  local ok, message, errno = host.make_dir(path)
+  if not ok then return io_error(path, message, errno) end
+  return { true, nil }
+end
+
+local function move_file(from, to, keep)
+  if memory then
+    local text = memory[from]
+    if text == nil then return io_error(from, nil, 2) end
+    memory[to] = text
+    if not keep then memory[from] = nil end
+    return { true, nil }
+  end
+  for _, path in ipairs({ from, to }) do
+    local h = open_files[path]
+    if h then
+      h:close()
+      open_files[path] = nil
+      open_count = open_count - 1
+    end
+  end
+  local ok, message, errno = host.move_file(from, to, keep)
+  if not ok then return io_error(from, message, errno) end
+  return { true, nil }
+end
+
+ext["std.fs.rename"] = function(from, to)
+  return move_file(from, to, false)
+end
+
+ext["std.fs.copy"] = function(from, to)
+  return move_file(from, to, true)
+end
+
+ext["std.fs.read_dir"] = function(path)
+  local names, message, errno
+  if memory then
+    local prefix = (path == "" or path:sub(-1) == "/") and path or path .. "/"
+    local seen = {}
+    names = {}
+    for key in pairs(memory) do
+      if key:sub(1, #prefix) == prefix then
+        local name = key:sub(#prefix + 1):match("^[^/]*")
+        if not seen[name] then
+          seen[name] = true
+          names[#names + 1] = name
+        end
+      end
+    end
+    table.sort(names)
+  else
+    names, message, errno = host.list_dir(path)
+    if not names then return io_error(path, message, errno) end
+  end
+  local list = { n = #names }
+  for i = 1, #names do
+    list[i] = names[i]
+  end
+  return { true, list }
+end
+
 ext["std.fs.remove_file"] = function(path)
   if memory then
     if memory[path] == nil then return io_error(path, nil, 2) end
@@ -4033,6 +4083,27 @@ ext["std.num.Int.next_power_of_two"] = function(d, v)
     error(MARK .. "next_power_of_two: the result doesn't fit", 2)
   end
   return p
+end
+
+local function pow_by(mul, d, v, e)
+  local r, b = 1, v
+  while e > 0 do
+    if e & 1 == 1 then r = mul(d, r, b) end
+    e = e >> 1
+    if e > 0 then b = mul(d, b, b) end
+  end
+  return r
+end
+
+ext["std.num.Int.pow_wrap"] = function(d, v, e)
+  return pow_by(rt.mul_wrap, d, v, e)
+end
+
+ext["std.num.Int.pow_sat"] = function(d, v, e)
+  local fine, r = pcall(pow_by, rt.mul, d, v, e)
+  if fine then return r end
+  if d.signed and v < 0 and e & 1 == 1 then return d.lo end
+  return d.hi
 end
 
 ext["std.num.Int.count_zeros"] = function(d, v)
