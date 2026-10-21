@@ -21,3 +21,5 @@ set_drain    20000  6786096
 ptr_trees    8      1347717
 arena_trees  8      543692
 arena_alloc  100000 600075
+given_plain  1000   5015
+given_unused 1000   5015

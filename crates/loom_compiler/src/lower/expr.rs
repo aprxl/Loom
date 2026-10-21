@@ -1025,7 +1025,11 @@ impl Lowerer<'_> {
         };
         let in_order = info.args.iter().filter_map(|s| match s {
             ArgSource::Arg(i) => Some(*i),
-            ArgSource::Default | ArgSource::Receiver | ArgSource::Ambient(_) | ArgSource::Heap => None,
+            ArgSource::Default
+            | ArgSource::Receiver
+            | ArgSource::Ambient(_)
+            | ArgSource::Heap
+            | ArgSource::GivenDefault(_) => None,
         });
         if !in_order.clone().is_sorted() {
             for v in lowered.iter_mut() {
@@ -1043,6 +1047,10 @@ impl Lowerer<'_> {
                 ArgSource::Receiver => params.push(receiver.clone().unwrap_or(Expr::Nil)),
                 ArgSource::Ambient(l) => params.push(Expr::Name(self.local_name(*l))),
                 ArgSource::Heap => params.push(Expr::Nil),
+                ArgSource::GivenDefault(id) => {
+                    let target = Expr::field(Expr::name("F"), &self.fn_name(*id));
+                    params.push(Expr::call(target, Vec::new()));
+                }
                 ArgSource::Default => {
                     let Some(default) = f.params.get(k).and_then(|p| p.default.as_ref()) else {
                         params.push(Expr::Nil);
@@ -1363,9 +1371,15 @@ impl Lowerer<'_> {
                 let name = self.local_name(*local);
                 self.push_local(name, v);
             }
-            // The spool under another name, for calls that need one.
+            // The spool under another name, or a value of its own, for calls
+            // that need one.
             HirStmt::Given { local: Some(local), value } => {
-                let v = self.lower_expr(value);
+                let v = if matches!(&value.kind, ExprKind::Local(l) if self.p.local(*l).kind == crate::hir::LocalKind::Spool)
+                {
+                    self.lower_expr(value)
+                } else {
+                    self.lower_owned(value)
+                };
                 let name = self.local_name(*local);
                 self.push_local(name, v);
             }

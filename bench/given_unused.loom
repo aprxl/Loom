@@ -1,0 +1,15 @@
+// The same call, with a `given` it never uses: it must cost nothing.
+use std.io.print
+use std.mem.Spool
+
+const SIZE = 1_000_000
+
+fn step(x: u64) -> u64 given sp: Spool = x * 3 + 1
+
+fn main() {
+    var total = 0u64
+    for i in 0..SIZE as u64 {
+        total = (total + step(i)) % 1000003
+    }
+    print("{total}")
+}

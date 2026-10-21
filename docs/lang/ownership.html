@@ -458,8 +458,42 @@ end of iteration 2</code></pre></div>
 <span class="err">error: own_err_region.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
 <p>Text copied with <code>.copy()</code> goes in the spool the call is given, so an arena's tree can hold names and still go at once.</p>
+<h2 id="given"><code>given</code></h2>
+<p>A function can say what it needs from its caller with a <code>given</code> parameter of a weft: <code>fn welcome(who: str) given g: Greeter</code>. It is passed on by the call, not in the argument list: the innermost <code>given</code> in scope supplies it, <code>given name = value</code> states one from there to the end of the block, and <code>given: x</code> gives one to a single call. A weft marked <code>#given_default(Type)</code> has one when nothing is in scope (a spool's is the heap), so a program that never says <code>given</code> still runs. A function is checked for the type it is given, so an unused <code>given</code> costs nothing. Every function spells its own <code>given</code>s: a private one doesn't infer them from what it calls yet.</p>
+<div class="sample" id="sample-own_given">
+<div class="sample-head"><span class="file">samples/own_given.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">// A weft with a default: a call that is given nothing gets a `Plain`.</span>
+<span class="k">#given_default</span>(<span class="t">Plain</span>)
+<span class="k">weft</span> <span class="t">Greeter</span> {
+    <span class="k">fn</span> greet(<span class="k">self</span>) -&gt; <span class="t">String</span>
+}
+
+<span class="k">warp</span> <span class="t">Plain</span>: <span class="t">Greeter</span>, <span class="t">Default</span> {
+    <span class="k">pub</span> <span class="k">fn</span> greet(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"hello"</span>
+}
+
+<span class="k">warp</span> <span class="t">Loud</span>: <span class="t">Greeter</span> {
+    name: <span class="t">String</span>
+
+    <span class="k">pub</span> <span class="k">fn</span> greet(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"HELLO, {</span>.name<span class="s">}!"</span>
+}
+
+<span class="k">fn</span> welcome(who: str) -&gt; <span class="t">String</span> <span class="k">given</span> g: <span class="t">Greeter</span> = <span class="s">"{</span>g.greet()<span class="s">} {</span>who<span class="s">}"</span>
+
+<span class="k">fn</span> main() {
+    print(welcome(<span class="s">"ann"</span>))          <span class="c">// nothing given: a Plain</span>
+    <span class="k">given</span> g = <span class="t">Loud</span>(<span class="s">"ci"</span>)           <span class="c">// from here to the end of the block</span>
+    print(welcome(<span class="s">"dee"</span>))
+    print(welcome(<span class="s">"eve"</span>, <span class="k">given</span>: <span class="t">Plain</span>()))    <span class="c">// this one call</span>
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>hello ann
+HELLO, ci! dee
+hello eve</code></pre></div>
+</div>
 <h2 id="not-supported-yet">Not supported yet</h2>
-<p>A <code>given</code> other than a spool (a logger, a random number generator), a <code>Pool</code> and <code>SharedArena</code>, and pointers into a spool crossing threads (<a href="diagnostics.html#R0103">R0103</a>) are not built yet and stop with <a href="diagnostics.html#U0102">U0102</a>. Projections (<code>~&gt; mut T</code>), which lend a place, work: see <a href="shuttles.html">Shuttles</a>. See <a href="not-yet.html">Not supported yet</a>.</p>
+<p>A <code>Pool</code> and <code>SharedArena</code>, and pointers into a spool crossing threads (<a href="diagnostics.html#R0103">R0103</a>) are not built yet and stop with <a href="diagnostics.html#U0102">U0102</a>. Projections (<code>~&gt; mut T</code>), which lend a place, work: see <a href="shuttles.html">Shuttles</a>. See <a href="not-yet.html">Not supported yet</a>.</p>
 <h2 id="where-next">Where next</h2>
 <p><a href="gauges.html">Gauges</a> restrict a number to a range.</p>
 <div class="pager">

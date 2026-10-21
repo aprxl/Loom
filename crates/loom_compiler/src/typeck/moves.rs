@@ -692,7 +692,17 @@ impl Checker<'_> {
                     self.dropped(cx, e);
                 }
             }
-            HirStmt::Given { value, .. } => self.mv(cx, value, false),
+            HirStmt::Given { local, value } => {
+                let alias =
+                    matches!(&value.kind, ExprKind::Local(l) if self.p.local(*l).kind == crate::hir::LocalKind::Spool);
+                self.mv(cx, value, !alias);
+                if let Some(local) = local {
+                    cx.depth_of.insert(*local, cx.depth);
+                    cx.scope_of.insert(*local, cx.scopes.len());
+                    fresh(cx, *local);
+                    self.declare(cx, *local);
+                }
+            }
             HirStmt::Spool { local, init } => {
                 self.mv(cx, init, true);
                 cx.depth_of.insert(*local, cx.depth);

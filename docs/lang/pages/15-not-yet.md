@@ -17,7 +17,7 @@ These are planned next, in this order: the rest of threads, then the rest of `gi
 
 ### More of `given`
 
-Spools run (see [Moves](page:ownership)), and so does a `given` that is a spool. Not yet: a `given` of anything else (a logger, a random number generator, a thread pool), a default for a `given`, leaving a private function's `given`s to be inferred, `Pool` and `SharedArena`:
+`given` runs (see [Moves](page:ownership)). Not yet: a thread pool to give a `loom`, leaving a private function's `given`s to be inferred from what it calls, `Pool` and `SharedArena`:
 
 @sample nyet_given
 

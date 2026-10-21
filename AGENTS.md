@@ -271,6 +271,15 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
     but a spool, defaults and inference of `given`s (slice 3), R0103
     (threads), collections in a spool (slice 4).
 
+30. Treadle V6, slice 3 (design/v6-spools.md): `given` for any weft.
+    `given name = value` (or nameless) from there to the end of the block,
+    `given: x` at one call, and a weft's `#given_default(Type)` when nothing
+    is in scope (the call makes it with the type's `default`; a spool's
+    default is the heap). An unused `given` costs no dispatches
+    (`bench/given_unused`). Every function spells its `given`s: a private
+    function doesn't infer them from what it calls (Q9 below). Not done:
+    `loom(given: pool)`, `yield`/`pull` in a `loom` body.
+
 V5 is done. Its gates are asserted by `#[ignore]`d tests (`perf_gates.rs`,
 `compile_time.rs`), with these limits: mandelbrot with `loom for` scales
 about 5.7× on 8 workers (6.1–6.3× best of N in `bench/RESULTS.md`) against

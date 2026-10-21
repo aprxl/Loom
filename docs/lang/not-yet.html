@@ -66,20 +66,21 @@
 <span class="err">error: nyet_threads.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
 <h3 id="more-of-given">More of <code>given</code></h3>
-<p>Spools run (see <a href="ownership.html">Moves</a>), and so does a <code>given</code> that is a spool. Not yet: a <code>given</code> of anything else (a logger, a random number generator, a thread pool), a default for a <code>given</code>, leaving a private function's <code>given</code>s to be inferred, <code>Pool</code> and <code>SharedArena</code>:</p>
+<p><code>given</code> runs (see <a href="ownership.html">Moves</a>). Not yet: a thread pool to give a <code>loom</code>, leaving a private function's <code>given</code>s to be inferred from what it calls, <code>Pool</code> and <code>SharedArena</code>:</p>
 <div class="sample" id="sample-nyet_given">
 <div class="sample-head"><span class="file">samples/nyet_given.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="k">fn</span> main() {
-    <span class="k">given</span> greeting = <span class="s">"hello"</span>
-    print(<span class="s">"done"</span>)
+    <span class="k">loom</span>(<span class="k">given</span>: <span class="n">4</span>) {
+        print(<span class="s">"done"</span>)
+    }
 }</code></pre>
-<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[U0102]: not implemented yet: `given` of something that isn't a spool</span>
-<span class="loc">  --&gt; nyet_given.loom:4:22</span>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[U0102]: not implemented yet: `loom(given: …)`</span>
+<span class="loc">  --&gt; nyet_given.loom:4:10</span>
   |
-4 |     given greeting = "hello"
-  |                      ^^^^^^^ not supported by this compiler yet
+4 |     loom(given: 4) {
+  |          ^^^^^^^^ not supported by this compiler yet
   |
   = note: the type checker grows one milestone at a time; see design/lua-backend.md
 

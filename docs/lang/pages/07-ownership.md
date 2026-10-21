@@ -79,9 +79,15 @@ The region checker keeps pointers from outliving their spool: a value that point
 
 Text copied with `.copy()` goes in the spool the call is given, so an arena's tree can hold names and still go at once.
 
+## `given`
+
+A function can say what it needs from its caller with a `given` parameter of a weft: `fn welcome(who: str) given g: Greeter`. It is passed on by the call, not in the argument list: the innermost `given` in scope supplies it, `given name = value` states one from there to the end of the block, and `given: x` gives one to a single call. A weft marked `#given_default(Type)` has one when nothing is in scope (a spool's is the heap), so a program that never says `given` still runs. A function is checked for the type it is given, so an unused `given` costs nothing. Every function spells its own `given`s: a private one doesn't infer them from what it calls yet.
+
+@sample own_given
+
 ## Not supported yet
 
-A `given` other than a spool (a logger, a random number generator), a `Pool` and `SharedArena`, and pointers into a spool crossing threads ([R0103](diag:R0103)) are not built yet and stop with [U0102](diag:U0102). Projections (`~> mut T`), which lend a place, work: see [Shuttles](page:shuttles). See [Not supported yet](page:not-yet).
+A `Pool` and `SharedArena`, and pointers into a spool crossing threads ([R0103](diag:R0103)) are not built yet and stop with [U0102](diag:U0102). Projections (`~> mut T`), which lend a place, work: see [Shuttles](page:shuttles). See [Not supported yet](page:not-yet).
 
 ## Where next
 

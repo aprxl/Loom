@@ -637,10 +637,18 @@ impl<'a> Builder<'a> {
             // The spool under another name: a view of where it is.
             StmtKind::Given { local, value } => {
                 let Some(local) = local else { return Some(()) };
-                let (place, _) = self.place(value)?;
-                let at = self.place_addr(&place, stmt.span)?;
-                self.bind_ref(*local, at);
-                Some(())
+                // A spool binding is lent: a view of where it is. Anything
+                // else is the given's own, like a `let`.
+                if let hir::ExprKind::Local(l) = &value.kind
+                    && self.p.local(*l).kind == crate::hir::LocalKind::Spool
+                {
+                    let (place, _) = self.place(value)?;
+                    let at = self.place_addr(&place, stmt.span)?;
+                    self.bind_ref(*local, at);
+                    return Some(());
+                }
+                let val = self.expr(value)?;
+                self.bind_local(*local, val, super::pat::Binding::Owned, stmt.span)
             }
         }
     }

@@ -407,6 +407,9 @@ pub enum ArgSource {
     Ambient(LocalId),
     /// A `given` spool the call leaves to the heap.
     Heap,
+    /// A `given` nothing in scope gives, which its weft's `#given_default`
+    /// makes: the `default` of that type, called here.
+    GivenDefault(BodyId),
 }
 
 /// The value a method is called on, or a field is read from.
@@ -549,6 +552,7 @@ struct Std {
     arena: Option<DefId>,
     heap: Option<DefId>,
     spool: Option<DefId>,
+    default: Option<DefId>,
     mutex: Option<DefId>,
     pipe: Option<DefId>,
 }
@@ -707,6 +711,7 @@ impl<'p> Checker<'p> {
             arena: find("std.mem", "Arena"),
             heap: find("std.mem", "Heap"),
             spool: find("std.mem", "Spool"),
+            default: find("std.default", "Default"),
             mutex: find("std.sync", "Mutex"),
             pipe: find("std.sync", "Pipe"),
         };

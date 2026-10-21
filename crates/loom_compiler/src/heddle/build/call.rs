@@ -123,6 +123,15 @@ impl<'a> Builder<'a> {
                     Some(Arg::Val(self.read_place(&place, ty, span)?, ty))
                 }
                 ArgSource::Heap => Some(Arg::Val(Val::Regs(Vec::new()), self.plain_ty(sig.params[k].ty))),
+                // The weft's default type, made here.
+                ArgSource::GivenDefault(id) => {
+                    let dsig = self.typed.results.sigs.get(id)?.clone();
+                    let dabi = self.body_abi(*id, span)?;
+                    let func = self.func_id(super::FnKey::Body(*id));
+                    let ret = self.plain_ty(dsig.ret);
+                    let v = self.emit_call(func, &dabi, Vec::new(), ret, &[], span, ret)?;
+                    Some(Arg::Val(v, ret))
+                }
                 ArgSource::Default => {
                     let default = f.params.get(k).and_then(|p| p.default.as_ref())?;
                     if super::expr::mentions_locals(default) {

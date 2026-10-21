@@ -406,6 +406,11 @@ impl Checker<'_> {
                     match self.ambient(weft) {
                         Some((local, _)) => sources.push(ArgSource::Ambient(local)),
                         None if Some(weft) == self.std.spool => sources.push(ArgSource::Heap),
+                        None if let Some(ty) = self.given_default(weft)
+                            && let Some(id) = self.default_instance(ty) =>
+                        {
+                            sources.push(ArgSource::GivenDefault(id));
+                        }
                         None => {
                             let weft_name = self.p.def(weft).name.clone();
                             self.error(

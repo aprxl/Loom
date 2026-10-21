@@ -158,6 +158,30 @@ impl Checker<'_> {
         }
     }
 
+    /// The type a weft's `#given_default(Type)` names: what a `given` of it
+    /// is when nothing in scope gives one.
+    pub(super) fn given_default(&mut self, weft: DefId) -> Option<Ty> {
+        let d = self.p.def(weft);
+        let attr = d.attrs.iter().find(|a| a.name == "given_default")?;
+        let loom_syntax::ast::ExprKind::Name(name) = &attr.args.first()?.value.kind else { return None };
+        match self.p.module_name(d.module, &name.name)? {
+            crate::hir::Binding::Def(def) if matches!(self.p.def(def).kind, DefKind::Warp(_)) => {
+                Some(self.tcx.intern(TyKind::Adt(def, Vec::new())))
+            }
+            _ => None,
+        }
+    }
+
+    /// The instance of `ty`'s `default`, if it weaves `Default`.
+    pub(super) fn default_instance(&mut self, ty: Ty) -> Option<super::BodyId> {
+        let weft = self.std.default?;
+        let method = self.weft_methods(weft).into_iter().find(|&m| self.p.def(m).name == "default")?;
+        let m = self.weaving(weft, ty)?;
+        let imp = self.impl_of(m.w, method, ty, 0)?;
+        let inst = self.impl_instance(imp, ty, &m.bindings);
+        Some(self.instance(inst))
+    }
+
     /// The innermost `given` in scope that weaves `weft`.
     pub(super) fn ambient(&mut self, weft: DefId) -> Option<(LocalId, Ty)> {
         let found = self.given_scope.iter().rev().copied().collect::<Vec<_>>();
@@ -200,7 +224,7 @@ impl Checker<'_> {
                     None if Some(weft) == self.std.spool => {
                         self.std.heap.map(|d| self.tcx.intern(TyKind::Adt(d, Vec::new())))
                     }
-                    None => None,
+                    None => self.given_default(weft),
                 }
             } else {
                 None
@@ -219,19 +243,7 @@ impl Checker<'_> {
         if self.tcx.is_error(ty) {
             return;
         }
-        let Some(weft) = self.std.spool.filter(|&w| self.weaves(ty, w)) else {
-            self.unsupported(value.span, "`given` of something that isn't a spool");
-            return;
-        };
-        let _ = weft;
-        if !matches!(value.kind, ExprKind::Local(l) if self.p.local(l).kind == LocalKind::Spool) {
-            self.unsupported(value.span, "`given` of anything but a spool binding");
-            return;
-        }
-        let local = local.unwrap_or_else(|| match value.kind {
-            ExprKind::Local(l) => l,
-            _ => unreachable!("checked above"),
-        });
+        let Some(local) = local else { return };
         self.b.local_ty.insert(local, ty);
         self.given_scope.push((local, ty));
     }

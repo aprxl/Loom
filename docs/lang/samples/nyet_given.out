@@ -1,8 +1,8 @@
-error[U0102]: not implemented yet: `given` of something that isn't a spool
-  --> docs/lang/samples/nyet_given.loom:4:22
+error[U0102]: not implemented yet: `loom(given: …)`
+  --> docs/lang/samples/nyet_given.loom:4:10
   |
-4 |     given greeting = "hello"
-  |                      ^^^^^^^ not supported by this compiler yet
+4 |     loom(given: 4) {
+  |          ^^^^^^^^ not supported by this compiler yet
   |
   = note: the type checker grows one milestone at a time; see design/lua-backend.md
 

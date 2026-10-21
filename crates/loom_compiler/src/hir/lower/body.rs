@@ -684,12 +684,15 @@ impl Resolver<'_> {
             }
             ast::StmtKind::Given { name, value } => {
                 let value = self.lower_plain(value);
-                let local = name.as_ref().map(|n| {
-                    let local = self.new_local(&n.name, n.span, false, LocalKind::Given);
-                    self.bind(&n.name, Res::Local(local));
-                    local
-                });
-                StmtKind::Given { local, value }
+                let local = match name {
+                    Some(n) => {
+                        let local = self.new_local(&n.name, n.span, false, LocalKind::Given);
+                        self.bind(&n.name, Res::Local(local));
+                        local
+                    }
+                    None => self.new_local("given", value.span, false, LocalKind::Given),
+                };
+                StmtKind::Given { local: Some(local), value }
             }
             ast::StmtKind::Spool { name, init } => {
                 let init = self.lower_plain(init);

@@ -93,3 +93,12 @@ fn std_collections_scale() {
         assert!(ratio <= limit, "{name}: 10x the input cost {ratio:.2}x the instructions (limit {limit}x)");
     }
 }
+
+/// V6's gate (design/vm.md §16): a `given` a function never uses costs no
+/// dispatches, once the call is inlined.
+#[test]
+fn an_unused_given_costs_nothing() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let (plain, unused) = (dispatched(&root, "given_plain", 1000), dispatched(&root, "given_unused", 1000));
+    assert_eq!(plain, unused, "an unused `given` adds {} dispatches", unused.abs_diff(plain));
+}

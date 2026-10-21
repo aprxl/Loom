@@ -2,6 +2,10 @@
 
 Running log of milestone work and decisions. Newest first. Replaces `ledger.log`.
 
+## V6 slice 3: given in general (2026-10-21)
+
+Done (both backends; `tests/run/given_values`, docs sample `own_given`): `given name = value` for any weft's type, `#given_default(Type)` on a weft (the call makes the default with the type's `default`), the gate that an unused `given` costs 0 dispatches (`bench_counts.rs`, `given_plain` and `given_unused`). Not done: inferring the `given`s of private functions (the design's rule; today every function spells them, which is the honest `pub` rule applied everywhere), `loom(given: pool)` and a `Pool` for threads (it would also clash by name with the planned `Pool[T]` spool), `yield`/`pull` in a `loom` body, the ambient `Writer`/`Rng`/`Clock`/`Logger` of std (the mechanism is in; wiring `print` to a `Writer` would put a `given` on the hottest path).
+
 ## V6 slice 2: spools, regions, given spools (2026-10-21)
 
 Done (both backends; `tests/run/spool_basic`, `spool_tree`, `given_spool`, `tests/fail/region_errors`, `tests/examples/calc`, docs samples `own_spools`, `own_err_region`): `Arena`, `Heap`, `spool`, `put`, `reset`, `^T@s`, hidden region parameter on warps with pointers, `given sp: Spool` and `given:` for spools, `ref warp`, the roots pass (R0101, R0102, R0104), arena-owned `String`s. `examples/calc.loom` runs and leaks nothing in the checked build. Also fixed: on the Lua backend `a is .X(x) and b is .Y(y)` bound `y` in a nested block (it was nil in the body). Gates: an arena `put` is one op (`arena.k`) and costs 0.39 of a heap box (the design's "10x" is for the allocation alone: about 1 ns against 7; asserted as half of the whole), `arena_trees` is 9x PUC Lua (gate 4x), a box 10 ns (gate 15 ns); `bench/RESULTS.md`. Not done: R0103, collections in a spool.
@@ -137,6 +141,8 @@ Then: V6 (spools, regions, `given`, and storable closures: see the standard libr
 ## Pending questions for Caio
 
 - Q8: what happens to `once` values when a thread unravels? (deferred)
+- Q9: should a private function infer its `given`s from what it calls (the design's rule; a fixpoint over the call graph, with an extra hidden parameter per inferred weft), or keep spelling them like a `pub` one? Asked 2026-10-21; until answered they are spelled.
+- Q10: arena pointers and mutation (open question 1, option c: writable only when the target is plain data). Not enforced yet: pointers into a spool are `Copy`, and a field behind one can be written when the pointer is in a `var`.
 - `projects/` (spindle) is untracked: commit it, ignore it, or leave it?
 
 ## V5 close-out result (2026-10-17)

@@ -1,7 +1,8 @@
 use std.io.print
 
 fn main() {
-    given greeting = "hello"
-    print("done")
+    loom(given: 4) {
+        print("done")
+    }
 }
 //@ check-fail U0102
