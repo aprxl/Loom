@@ -33,7 +33,8 @@ The design itself is in the repository: `README.md` and `design/*.md`. Where the
 | Heap pointers: `^e`, `p^`, `^T` | works | [Moves, `once` and `defer`](page:ownership) |
 | Spools: `Arena`, `^T@s`, `given` spools, `ref warp`, the region checker | works | [Moves, `once` and `defer`](page:ownership) |
 | `given` parameters and statements, `#given_default` | works | [Moves, `once` and `defer`](page:ownership) |
-| `loom(given: pool)`, inferred `given`s, `Pool`, `SharedArena` | not yet | [Not supported yet](page:not-yet) |
+| `Pool[T]`, `SharedArena`, pointers into a spool kept from threads | works | [Moves, `once` and `defer`](page:ownership) |
+| `loom(given: pool)`, inferred `given`s, collections in a spool | not yet | [Not supported yet](page:not-yet) |
 | `unsafe`, raw pointers, `extern "C"`, `std.sys`, reading standard input | not yet | [Not supported yet](page:not-yet) |
 
 ## How to read a sample

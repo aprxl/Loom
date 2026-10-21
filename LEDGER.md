@@ -2,6 +2,10 @@
 
 Running log of milestone work and decisions. Newest first. Replaces `ledger.log`.
 
+## V6 slice 4: pools, shared arenas, threads (2026-10-21)
+
+Done (both backends; `tests/run/spool_pool`, `spool_pool_full`, `spool_shared`, `tests/fail/region_threads`, `spool_collections`): `Pool[T]`, `SharedArena`, R0103, the guard against collections in spool warps, `bench/pool_cycle`. Left out on purpose: lists, maps and sets that grow in a spool. A list's header has no room for the spool it belongs to, and the pushes the optimizer inlines compare `len` with `cap`, so the spool-number-in-the-capacity-word of vm.md §12 would put a mask on every push. The cheap sound version is what is built (such a warp is refused); the real one wants a region on `List` like the one warps have, which is a decision for V8's collections work.
+
 ## V6 slice 3: given in general (2026-10-21)
 
 Done (both backends; `tests/run/given_values`, docs sample `own_given`): `given name = value` for any weft's type, `#given_default(Type)` on a weft (the call makes the default with the type's `default`), the gate that an unused `given` costs 0 dispatches (`bench_counts.rs`, `given_plain` and `given_unused`). Not done: inferring the `given`s of private functions (the design's rule; today every function spells them, which is the honest `pub` rule applied everywhere), `loom(given: pool)` and a `Pool` for threads (it would also clash by name with the planned `Pool[T]` spool), `yield`/`pull` in a `loom` body, the ambient `Writer`/`Rng`/`Clock`/`Logger` of std (the mechanism is in; wiring `print` to a `Writer` would put a `given` on the hottest path).

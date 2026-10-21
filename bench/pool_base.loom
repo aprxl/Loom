@@ -1,0 +1,13 @@
+// The loop of `pool_cycle` without the pool: the baseline.
+use std.io.print
+
+const SIZE = 1_000_000
+
+fn main() {
+    var total = 0u64
+    for i in 0..SIZE as u64 {
+        let p = i
+        total += p
+    }
+    print("{total}")
+}

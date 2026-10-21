@@ -1,0 +1,17 @@
+use std.io.print
+use std.mem.{Arena, kib}
+
+warp Cell {
+    n: i32
+}
+
+fn main() {
+    spool a = Arena(1.kib())
+    let p = a.put(Cell(1))
+    loom {
+        let t = thread p.n + 1                //~ R0103
+        let u = thread a.put(Cell(2))         //~ R0103
+        print("{t.join()}")
+        u.join()
+    }
+}

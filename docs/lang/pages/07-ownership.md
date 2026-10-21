@@ -77,7 +77,9 @@ The region checker keeps pointers from outliving their spool: a value that point
 
 @sample own_err_region
 
-Text copied with `.copy()` goes in the spool the call is given, so an arena's tree can hold names and still go at once.
+Text copied with `.copy()` goes in the spool the call is given, so an arena's tree can hold names and still go at once. A list, map or box can't be held by a warp that is in a spool yet ([U0102](diag:U0102)): nothing would free it.
+
+`Pool[T](n)` is a spool of `n` slots of one type: `put` takes a free slot and `free` gives it back, a few instructions each. It holds plain data only. `SharedArena(cap)` is an arena threads may allocate in, and its pointers may cross to them; a pointer into any other spool can't ([R0103](diag:R0103)).
 
 ## `given`
 
@@ -87,7 +89,7 @@ A function can say what it needs from its caller with a `given` parameter of a w
 
 ## Not supported yet
 
-A `Pool` and `SharedArena`, and pointers into a spool crossing threads ([R0103](diag:R0103)) are not built yet and stop with [U0102](diag:U0102). Projections (`~> mut T`), which lend a place, work: see [Shuttles](page:shuttles). See [Not supported yet](page:not-yet).
+Projections (`~> mut T`), which lend a place, work: see [Shuttles](page:shuttles). See [Not supported yet](page:not-yet).
 
 ## Where next
 

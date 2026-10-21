@@ -1,0 +1,29 @@
+// A `Pool[T]`: fixed slots, the freed one is the next given out.
+
+use std.io.print
+use std.mem.Pool
+
+warp Particle {
+    x: i32
+    y: i32
+}
+
+fn main() {
+    spool slots = Pool[Particle](3)
+    let a = slots.put(Particle(1, 2))
+    let b = slots.put(Particle(3, 4))
+    print("{a.x + b.y}")
+    slots.free(a)
+    let c = slots.put(Particle(5, 6))
+    print("{c.x} {b.x}")
+    let d = slots.put(Particle(7, 8))
+    print("{d.y}")
+    slots.reset()
+    var sum = 0
+    for i in 0..10 {
+        let p = slots.put(Particle(i, i))
+        sum += p.x
+        slots.free(p)
+    }
+    print("{sum}")
+}

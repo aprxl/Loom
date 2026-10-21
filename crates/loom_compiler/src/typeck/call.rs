@@ -288,6 +288,15 @@ impl Checker<'_> {
                 None => self.tcx.error,
             };
         }
+        // What goes in an arena is in it: `a.put(Tree.Leaf)` is a `Tree@a`.
+        if let TyKind::Ptr(t, r) = *self.tcx.kind(self.resolve(sig.ret))
+            && matches!(
+                self.p.def_path(def).as_str(),
+                "std.mem.Arena.put" | "std.mem.SharedArena.put" | "std.mem.Pool.put"
+            )
+        {
+            self.adopt_region(t, r, call.span);
+        }
         // `zeros(4)` is a `[f32; 4]` now that its argument said what `n` is.
         self.deep_resolve(sig.ret)
     }

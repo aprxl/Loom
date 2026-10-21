@@ -280,6 +280,15 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
     function doesn't infer them from what it calls (Q9 below). Not done:
     `loom(given: pool)`, `yield`/`pull` in a `loom` body.
 
+31. Treadle V6, slice 4 (design/v6-spools.md): `Pool[T](n)` (`put`,
+    `free`, `reset`; a put, a read and a free cost 6 dispatches, gate in
+    `bench_counts.rs`), `SharedArena(cap)` (allocates under the VM's lock,
+    its pointers may cross to threads), R0103 (any other spool's pointers
+    can't), and a guard that a warp in a spool can't hold a list, map, box
+    or stream (U0102: it would leak). Not done: collections allocated in a
+    spool (their growth would need the spool in the header), `Deque` and
+    `SortedMap` nodes in a spool.
+
 V5 is done. Its gates are asserted by `#[ignore]`d tests (`perf_gates.rs`,
 `compile_time.rs`), with these limits: mandelbrot with `loom for` scales
 about 5.7× on 8 workers (6.1–6.3× best of N in `bench/RESULTS.md`) against

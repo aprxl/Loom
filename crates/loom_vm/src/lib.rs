@@ -25,6 +25,7 @@ mod methods;
 mod natives;
 mod pool;
 mod sched;
+mod slab;
 mod stack;
 mod stats;
 

@@ -17,7 +17,7 @@ These are planned next, in this order: the rest of threads, then the rest of `gi
 
 ### More of `given`
 
-`given` runs (see [Moves](page:ownership)). Not yet: a thread pool to give a `loom`, leaving a private function's `given`s to be inferred from what it calls, `Pool` and `SharedArena`:
+`given` runs (see [Moves](page:ownership)). Not yet: a thread pool to give a `loom`, and leaving a private function's `given`s to be inferred from what it calls:
 
 @sample nyet_given
 
@@ -43,8 +43,7 @@ Also missing:
 - A `for` loop over a projection that lends many places, and `xs[i]` through an `Index` weave.
 - `unsafe` blocks, raw pointers (`*T`), `extern "C"`, `Volatile`. `#layout(...)` is parsed but nothing acts on it.
 - User-written `Spool` weaves.
-- Lists, maps and sets in a spool (`List[i32]@frame`): a `String` made with `.copy()` goes in the spool, other collections go on the heap.
-- A pointer into a spool crossing threads isn't checked yet ([R0103](diag:R0103)).
+- Lists, maps and sets in a spool (`List[i32]@frame`): a `String` made with `.copy()` goes in the spool, and a warp in a spool can't hold the others ([U0102](diag:U0102)).
 
 ## Types and library
 

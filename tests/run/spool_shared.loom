@@ -1,0 +1,21 @@
+// A SharedArena: threads allocate in it, and its pointers cross to them.
+
+use std.io.print
+use std.mem.SharedArena
+
+warp Cell {
+    n: i32
+}
+
+fn main() {
+    spool shared = SharedArena(1024)
+    let first = shared.put(Cell(10))
+    loom {
+        let a = thread shared.put(Cell(first.n + 1))
+        let b = thread shared.put(Cell(first.n + 2))
+        let (x, y) = (a.join(), b.join())
+        print("{x.n + y.n}")
+    }
+    shared.reset()
+    print("done")
+}

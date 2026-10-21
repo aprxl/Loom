@@ -1,0 +1,12 @@
+use std.mem.{Arena, Pool, kib}
+
+warp Bag {
+    items: List[i32]                      //~ U0102
+    next: ?^Bag
+}
+
+fn main() {
+    spool a = Arena(1.kib())
+    let b = a.put(Bag([1], none))
+    spool p = Pool[String](4)             //~ U0102
+}

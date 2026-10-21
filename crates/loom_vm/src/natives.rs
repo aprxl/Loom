@@ -599,6 +599,21 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
             "mem.move" => mem_move,
             "mem.calloc" => mem_calloc,
             "str.new_in" => str_new_in,
+            "sarena.new" => |c, a, _| arena_new(&mut c.heap, a),
+            "sarena.alloc" => |c, a, _| arena_alloc(&mut c.heap, a),
+            "sarena.reset" => |c, a, _| crate::arena::reset(&mut c.heap, a[0]),
+            "sarena.free" => |c, a, _| crate::arena::free(&mut c.heap, a[0]),
+            "pool.new" => |c, a, _| pool_new(&mut c.heap, a),
+            "pool.alloc" => |_, a, _| pool_alloc(a),
+            "pool.free" => |_, a, _| {
+                crate::slab::free(a[0], a[1]);
+                Ok(())
+            },
+            "pool.reset" => |_, a, _| {
+                crate::slab::reset(a[0]);
+                Ok(())
+            },
+            "pool.drop" => |c, a, _| crate::slab::drop_pool(&mut c.heap, a[0]),
             "arena.new" => |c, a, _| arena_new(&mut c.heap, a),
             "arena.alloc" => |c, a, _| arena_alloc(&mut c.heap, a),
             "arena.reset" => |c, a, _| crate::arena::reset(&mut c.heap, a[0]),
@@ -665,6 +680,17 @@ pub(crate) fn resolve_local(name: &str) -> Option<LocalFn> {
         "mem.free" => |h, a, _| heap_free(h, a),
         "mem.grow" => |h, a, _| heap_grow(h, a),
         "mem.calloc" => |h, a, _| heap_calloc(h, a),
+        "pool.new" => |h, a, _| pool_new(h, a),
+        "pool.alloc" => |_, a, _| pool_alloc(a),
+        "pool.free" => |_, a, _| {
+            crate::slab::free(a[0], a[1]);
+            Ok(())
+        },
+        "pool.reset" => |_, a, _| {
+            crate::slab::reset(a[0]);
+            Ok(())
+        },
+        "pool.drop" => |h, a, _| crate::slab::drop_pool(h, a[0]),
         "arena.new" => |h, a, _| arena_new(h, a),
         "arena.alloc" => |h, a, _| arena_alloc(h, a),
         "arena.reset" => |h, a, _| crate::arena::reset(h, a[0]),
@@ -699,6 +725,18 @@ fn str_new_in(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
         d.add(1).write(len);
         d.add(2).write(0);
     }
+    Ok(())
+}
+
+/// `pool.new(slot size, slots) -> pool`.
+fn pool_new(heap: &mut Heap, args: &mut [u64]) -> Result<(), Trap> {
+    args[0] = crate::slab::new(heap, args[0], args[1])?;
+    Ok(())
+}
+
+/// `pool.alloc(pool) -> slot`.
+fn pool_alloc(args: &mut [u64]) -> Result<(), Trap> {
+    args[0] = crate::slab::alloc(args[0])?;
     Ok(())
 }
 

@@ -133,7 +133,7 @@ fn builtin(path: &str) -> Option<Builtin> {
         "std.sync.Atomic" => Builtin::Atomic,
         "std.sync.Mutex" => Builtin::Mutex,
         "std.sync.Pipe" => Builtin::Header(1),
-        "std.fmt.Fmt" | "std.sync.Spun" | "std.mem.Arena" => Builtin::Handle,
+        "std.fmt.Fmt" | "std.sync.Spun" | "std.mem.Arena" | "std.mem.SharedArena" | "std.mem.Pool" => Builtin::Handle,
         "std.mem.Heap" => Builtin::Empty,
         _ => return None,
     })

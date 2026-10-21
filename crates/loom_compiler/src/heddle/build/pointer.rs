@@ -40,13 +40,23 @@ impl<'a> Builder<'a> {
 
     pub(super) fn is_arena(&self, ty: Ty) -> bool {
         matches!(self.tcx().kind(self.tcx().degauge(ty)), TyKind::Adt(def, _)
-            if self.p.def_path(*def) == "std.mem.Arena")
+            if matches!(self.p.def_path(*def).as_str(), "std.mem.Arena" | "std.mem.SharedArena"))
+    }
+
+    /// Whether `ty` is a `SharedArena`: its natives take the VM's lock.
+    pub(super) fn is_shared_arena(&self, ty: Ty) -> bool {
+        matches!(self.tcx().kind(self.tcx().degauge(ty)), TyKind::Adt(def, _)
+            if self.p.def_path(*def) == "std.mem.SharedArena")
     }
 
     /// `size` bytes in the arena whose handle is `h`: its bump as one op
     /// when the size is small, else a call.
-    pub(super) fn arena_alloc(&mut self, h: Value, size: u64) -> Value {
+    pub(super) fn arena_alloc(&mut self, h: Value, size: u64, shared: bool) -> Value {
         let rounded = size.max(1).div_ceil(16) * 16;
+        if shared {
+            let n = self.iconst(size);
+            return self.emit1(InstKind::Native { name: "sarena.alloc", imm: 0, args: vec![h, n] }, VTy::Ptr);
+        }
         if rounded <= 0xFFF0 {
             return self
                 .emit1(InstKind::Native { name: "arena.alloc.k", imm: rounded as u16, args: vec![h] }, VTy::Ptr);
@@ -55,12 +65,62 @@ impl<'a> Builder<'a> {
         self.emit1(InstKind::Native { name: "arena.alloc", imm: 0, args: vec![h, n] }, VTy::Ptr)
     }
 
+    pub(super) fn is_pool(&self, ty: Ty) -> bool {
+        matches!(self.tcx().kind(self.tcx().degauge(ty)), TyKind::Adt(def, _)
+            if self.p.def_path(*def) == "std.mem.Pool")
+    }
+
+    /// `Pool[T](slots)`: the handle, in a temporary that owns it.
+    pub(super) fn pool_new(&mut self, args: &'a [hir::Arg], ty: Ty, span: Span) -> Option<Val> {
+        let Some(arg) = args.first() else { return self.internal(span, "a pool made from nothing") };
+        let TyKind::Adt(_, targs) = self.tcx().kind(self.tcx().degauge(ty)).clone() else { return None };
+        let t = self.tcx().degauge(*targs.first()?);
+        let (size, align) = self.size_align(t)?;
+        if align > 16 {
+            return self.unsupported(span, "a pool of values aligned past 16 bytes");
+        }
+        let slots = self.expr(&arg.value)?;
+        let slots = self.regs(slots, self.tcx().usize, span)?[0];
+        let n = self.iconst(size);
+        let h = self.emit1(InstKind::Native { name: "pool.new", imm: 0, args: vec![n, slots] }, VTy::Int);
+        let at = self.temp(ty, span)?;
+        self.store(Mem::W64, at, 0, h);
+        self.own_temp(at, ty);
+        Some(Val::Mem(at))
+    }
+
+    /// The bodies of `Pool`'s methods: `put`, `free` and `reset`.
+    pub(super) fn pool_method(&mut self, path: &str, args: &[Val], tys: &[Ty], span: Span) -> Option<()> {
+        let Val::Mem(at) = args[0] else { return self.internal(span, "a pool in registers") };
+        let h = self.load(Mem::W64, at, 0, VTy::Int);
+        match path.rsplit('.').next().unwrap_or_default() {
+            "reset" => {
+                self.emit(InstKind::Native { name: "pool.reset", imm: 0, args: vec![h] }, &[]);
+                self.terminate(Term::Ret(Vec::new()));
+            }
+            "put" => {
+                let t = self.tcx().degauge(tys[1]);
+                let p = self.emit1(InstKind::Native { name: "pool.alloc", imm: 0, args: vec![h] }, VTy::Ptr);
+                self.move_to(p, 0, args[1].clone(), t, span)?;
+                self.terminate(Term::Ret(vec![p]));
+            }
+            "free" => {
+                let slot = self.ptr_addr(&args[1], span)?;
+                self.emit(InstKind::Native { name: "pool.free", imm: 0, args: vec![h, slot] }, &[]);
+                self.terminate(Term::Ret(Vec::new()));
+            }
+            name => return self.internal(span, &format!("no body for `Pool.{name}`")),
+        }
+        Some(())
+    }
+
     /// `Arena(capacity)`: the handle, in a temporary that owns it.
     pub(super) fn arena_new(&mut self, args: &'a [hir::Arg], ty: Ty, span: Span) -> Option<Val> {
         let Some(arg) = args.first() else { return self.internal(span, "an arena made from nothing") };
         let cap = self.expr(&arg.value)?;
         let cap = self.regs(cap, self.tcx().usize, span)?[0];
-        let h = self.emit1(InstKind::Native { name: "arena.new", imm: 0, args: vec![cap] }, VTy::Int);
+        let name = if self.is_shared_arena(ty) { "sarena.new" } else { "arena.new" };
+        let h = self.emit1(InstKind::Native { name, imm: 0, args: vec![cap] }, VTy::Int);
         let at = self.temp(ty, span)?;
         self.store(Mem::W64, at, 0, h);
         self.own_temp(at, ty);
@@ -71,9 +131,11 @@ impl<'a> Builder<'a> {
     pub(super) fn arena_method(&mut self, path: &str, args: &[Val], tys: &[Ty], span: Span) -> Option<()> {
         let Val::Mem(at) = args[0] else { return self.internal(span, "an arena in registers") };
         let h = self.load(Mem::W64, at, 0, VTy::Int);
+        let shared = path.starts_with("std.mem.SharedArena.");
         match path.rsplit('.').next().unwrap_or_default() {
             "reset" => {
-                self.emit(InstKind::Native { name: "arena.reset", imm: 0, args: vec![h] }, &[]);
+                let name = if shared { "sarena.reset" } else { "arena.reset" };
+                self.emit(InstKind::Native { name, imm: 0, args: vec![h] }, &[]);
                 self.terminate(Term::Ret(Vec::new()));
             }
             "put" => {
@@ -82,7 +144,7 @@ impl<'a> Builder<'a> {
                 if align > 16 {
                     return self.unsupported(span, "putting a value aligned past 16 bytes in an arena");
                 }
-                let p = self.arena_alloc(h, size);
+                let p = self.arena_alloc(h, size, shared);
                 self.move_to(p, 0, args[1].clone(), t, span)?;
                 self.terminate(Term::Ret(vec![p]));
             }
@@ -123,7 +185,7 @@ impl<'a> Builder<'a> {
                 Val::Regs(_) => return self.internal(span, "a spool in registers"),
             };
             let h = self.load(Mem::W64, at, 0, VTy::Int);
-            let p = self.arena_alloc(h, size);
+            let p = self.arena_alloc(h, size, self.is_shared_arena(ty));
             self.move_to(p, 0, v, from, span)?;
             return Some(Val::Regs(vec![p]));
         }

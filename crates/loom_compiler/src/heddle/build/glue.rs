@@ -130,6 +130,14 @@ impl<'a> Builder<'a> {
                     let h = self.load(Mem::W64, ptr, 0, VTy::Int);
                     self.emit(InstKind::Native { name: "arena.free", imm: 0, args: vec![h] }, &[]);
                 }
+                "std.mem.SharedArena" => {
+                    let h = self.load(Mem::W64, ptr, 0, VTy::Int);
+                    self.emit(InstKind::Native { name: "sarena.free", imm: 0, args: vec![h] }, &[]);
+                }
+                "std.mem.Pool" => {
+                    let h = self.load(Mem::W64, ptr, 0, VTy::Int);
+                    self.emit(InstKind::Native { name: "pool.drop", imm: 0, args: vec![h] }, &[]);
+                }
                 // The value is after the lock word.
                 "std.sync.Mutex" => self.drop_field(ptr, 8, args[0]),
                 "std.map.Map" | "std.set.Set" => {

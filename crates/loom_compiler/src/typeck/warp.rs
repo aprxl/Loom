@@ -195,11 +195,50 @@ impl Checker<'_> {
             });
             cases.push(CaseInfo { def: case, name: cd.name.clone(), tag: i as u32 + 1, fields: payload });
         }
+        // A warp in a spool is never dropped, so what it owns would leak:
+        // text copied into the spool is fine, a list or a map isn't (yet).
+        if own_region == Some(self.tcx.spool) {
+            let tys = fields
+                .iter()
+                .map(|f| (f.def, f.ty))
+                .chain(cases.iter().flat_map(|c| c.fields.iter().flatten().map(|f| (def, f.ty))));
+            for (at, ty) in tys.collect::<Vec<_>>() {
+                if let Some(what) = self.owns_heap(ty) {
+                    let span = self.p.def(at).span;
+                    self.unsupported(span, &format!("{what} in a warp that is in a spool"));
+                }
+            }
+        }
         self.self_ty = saved_self;
         self.subst = saved_subst;
         self.region_ctx = saved_region;
         self.current = saved_current;
         (fields, cases)
+    }
+
+    /// What in a value of `ty` owns heap memory a spool can't take back: a
+    /// collection, a boxed value, a pointer into the heap. (Text can be
+    /// copied into a spool, so `String` is fine.)
+    pub(super) fn owns_heap(&mut self, ty: Ty) -> Option<&'static str> {
+        let ty = self.resolve(ty);
+        match self.tcx.kind(ty).clone() {
+            TyKind::Adt(def, args) => match self.p.def_path(def).as_str() {
+                "std.list.List" => Some("a `List`"),
+                "std.map.Map" => Some("a `Map`"),
+                "std.set.Set" => Some("a `Set`"),
+                "std.iter.Stream" | "std.iter.Shuttle" | "std.iter.Burst" => Some("a stream"),
+                "std.sync.Pipe" | "std.sync.Mutex" => Some("a `Pipe` or `Mutex`"),
+                "std.fs.File" => Some("a `File`"),
+                _ if self.is_builtin_adt(ty) => args.iter().find_map(|&t| self.owns_heap(t)),
+                _ => None,
+            },
+            TyKind::Any(_) | TyKind::Union(_) => Some("an `any` or a union"),
+            TyKind::Ptr(_, r) if r == self.tcx.heap => Some("a pointer into the heap"),
+            TyKind::Optional(t) | TyKind::Array(t, _) => self.owns_heap(t),
+            TyKind::Tuple(items) => items.into_iter().find_map(|t| self.owns_heap(t)),
+            TyKind::Result(t, e) => self.owns_heap(t).or_else(|| self.owns_heap(e)),
+            _ => None,
+        }
     }
 
     /// Whether generic parameter `def` stands for a region (`@a`).

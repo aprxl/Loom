@@ -150,6 +150,19 @@ pub const NATIVES: &[NativeSig] = &[
     sig("arena.alloc.k", 1, 1, NativeImm::None),
     sig("arena.reset", 1, 0, NativeImm::None),
     sig("arena.free", 1, 0, NativeImm::None),
+    // The same for a `SharedArena`, which threads allocate in: they run under
+    // the VM's lock.
+    sig("sarena.new", 1, 1, NativeImm::None),
+    sig("sarena.alloc", 2, 1, NativeImm::None),
+    sig("sarena.reset", 1, 0, NativeImm::None),
+    sig("sarena.free", 1, 0, NativeImm::None),
+    // Pools: `pool.new(slot size, slots) -> pool`, `pool.alloc(pool) ->
+    // slot`, `pool.free(pool, slot)`, `pool.reset(pool)`, `pool.drop(pool)`.
+    sig("pool.new", 2, 1, NativeImm::None),
+    sig("pool.alloc", 1, 1, NativeImm::None),
+    sig("pool.free", 2, 0, NativeImm::None),
+    sig("pool.reset", 1, 0, NativeImm::None),
+    sig("pool.drop", 1, 0, NativeImm::None),
     // `str.new_in(arena, text, length, destination)`: a `String` whose
     // buffer an arena owns (its capacity is 0: it owns nothing).
     sig("str.new_in", 4, 0, NativeImm::None),

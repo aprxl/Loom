@@ -45,12 +45,31 @@ impl Checker<'_> {
     pub(super) fn check_sync_new(&mut self, call: &Expr, ty: Ty, args: &[Arg]) -> Option<Ty> {
         let TyKind::Adt(def, targs) = self.tcx.kind(ty).clone() else { return None };
         // `Arena(capacity)`.
-        if Some(def) == self.std.arena {
+        if Some(def) == self.std.arena || Some(def) == self.std.shared_arena {
             if args.len() != 1 || args[0].label.is_some() {
                 let span = args.first().map_or(call.span, |a| a.span);
                 self.error(codes::T0104, span, "`Arena` is made from its capacity", "write `Arena(1.kib())`");
                 self.check_args_alone(args);
                 return Some(self.tcx.error);
+            }
+            self.check_coerce(&args[0].value, self.tcx.usize);
+            self.b.sync_new.insert(call.id);
+            return Some(ty);
+        }
+        // `Pool[T](slots)`.
+        if Some(def) == self.std.pool {
+            let t = targs.first().copied()?;
+            if args.len() != 1 || args[0].label.is_some() {
+                let span = args.first().map_or(call.span, |a| a.span);
+                self.error(codes::T0104, span, "`Pool[T]` is made from its slot count", "write `Pool[Particle](100)`");
+                self.check_args_alone(args);
+                return Some(self.tcx.error);
+            }
+            let resolved = self.resolve(t);
+            if self.owns_heap(resolved).is_some()
+                || matches!(self.tcx.kind(resolved), TyKind::Adt(d, _) if Some(*d) == self.std.string)
+            {
+                self.unsupported(call.span, "a `Pool` of text, lists or boxes");
             }
             self.check_coerce(&args[0].value, self.tcx.usize);
             self.b.sync_new.insert(call.id);

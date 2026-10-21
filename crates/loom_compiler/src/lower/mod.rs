@@ -118,6 +118,8 @@ pub const RUNTIME_WARPS: &[&str] = &[
     "std.sync.Mutex",
     "std.sync.Pipe",
     "std.mem.Arena",
+    "std.mem.SharedArena",
+    "std.mem.Pool",
 ];
 
 /// Lowers a type-checked program, which starts at `main`, after running its
@@ -508,6 +510,8 @@ impl<'a> Lowerer<'a> {
                         | "std.sync.Pipe"
                         | "std.sync.Mutex"
                         | "std.mem.Arena"
+                        | "std.mem.SharedArena"
+                        | "std.mem.Pool"
                         | "std.mem.Heap"
                 ) =>
             {

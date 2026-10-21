@@ -147,7 +147,9 @@ impl<'a> Builder<'a> {
             }
             TyKind::Adt(def, _) => match self.p.def_path(def).as_str() {
                 "std.slice.Slice" => Some(view_parts()),
-                "std.fmt.Fmt" | "std.sync.Spun" | "std.mem.Arena" => scalar(VTy::Int, Mem::W64),
+                "std.fmt.Fmt" | "std.sync.Spun" | "std.mem.Arena" | "std.mem.SharedArena" | "std.mem.Pool" => {
+                    scalar(VTy::Int, Mem::W64)
+                }
                 "std.mem.Heap" => Some(Vec::new()),
                 _ if self.is_builtin(def) => None,
                 _ => {
@@ -207,7 +209,7 @@ impl<'a> Builder<'a> {
                     _ => false,
                 },
                 "std.string.String" | "std.list.List" | "std.map.Map" | "std.set.Set" | "std.iter.Stream" => true,
-                "std.mem.Arena" => true,
+                "std.mem.Arena" | "std.mem.SharedArena" | "std.mem.Pool" => true,
                 "std.iter.Shuttle" | "std.iter.Burst" | "std.fs.File" | "std.sync.Pipe" => true,
                 _ if self.is_builtin(def) => false,
                 _ => match self.warp_info(ty) {

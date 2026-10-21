@@ -2163,6 +2163,24 @@ rt.ext["std.mem.Arena.put"] = function(_, _, v)
   return { v }
 end
 
+rt.ext["std.mem.SharedArena.reset"] = rt.ext["std.mem.Arena.reset"]
+rt.ext["std.mem.SharedArena.put"] = rt.ext["std.mem.Arena.put"]
+
+-- Pools. `{slots, in use}`: Lua has a collector, so a pool only counts, and
+-- is full when the count says so.
+rt.ext["std.mem.Pool.put"] = function(_, p, v)
+  local live = (p[2] or 0) + 1
+  if live > p[1] then error(MARK .. "the pool is full", 2) end
+  p[2] = live
+  return { v }
+end
+rt.ext["std.mem.Pool.free"] = function(_, p)
+  p[2] = (p[2] or 1) - 1
+end
+rt.ext["std.mem.Pool.reset"] = function(_, p)
+  p[2] = 0
+end
+
 -- Shuttles. A shuttle is `{co, ...}`: a coroutine running the function's
 -- body, which `yield v` suspends with `true, v` and `pull` with `false`.
 -- The driver resumes a pending `pull` with `true, input` for a push, or

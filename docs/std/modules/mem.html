@@ -93,6 +93,59 @@
 </div>
 </div>
 </div>
+<div class="item" id="SharedArena">
+<div class="item-head">
+<span class="sig">warp <strong>SharedArena</strong>: Spool</span>
+<span class="badge builtin">builtin</span>
+</div>
+<p class="item-doc">An <code>Arena</code> that threads may allocate in: its pointers can cross threads, and allocating takes the VM's lock.</p>
+<div class="members">
+<div class="member" id="SharedArena.reset">
+<div class="member-head">
+<span class="sig">fn reset(mut self)</span>
+
+</div>
+<p class="member-doc">Frees everything allocated so far.</p>
+</div>
+<div class="member" id="SharedArena.put">
+<div class="member-head">
+<span class="sig">fn put[T](self, take value: T) -&gt; ^T@self</span>
+
+</div>
+<p class="member-doc">Moves <code>value</code> into the arena and gives a pointer to it.</p>
+</div>
+</div>
+</div>
+<div class="item" id="Pool_T_">
+<div class="item-head">
+<span class="sig">warp <strong>Pool[T]</strong>: Spool</span>
+<span class="badge builtin">builtin</span>
+</div>
+<p class="item-doc">A spool of <code>n</code> slots, each one <code>T</code>: allocating and freeing a slot is a few instructions, and a freed slot is the next one given out. It holds plain data (no text, lists or boxes), because dropping the pool does not drop what is still in it.</p>
+<div class="members">
+<div class="member" id="Pool_T_.put">
+<div class="member-head">
+<span class="sig">fn put(self, take value: T) -&gt; ^T@self</span>
+
+</div>
+<p class="member-doc">Moves <code>value</code> into a free slot and gives a pointer to it. The pool being full unravels.</p>
+</div>
+<div class="member" id="Pool_T_.free">
+<div class="member-head">
+<span class="sig">fn free(self, p: ^T@self)</span>
+
+</div>
+<p class="member-doc">Gives the slot back. The pointer, and any copy of it, must not be used again.</p>
+</div>
+<div class="member" id="Pool_T_.reset">
+<div class="member-head">
+<span class="sig">fn reset(mut self)</span>
+
+</div>
+<p class="member-doc">Frees every slot.</p>
+</div>
+</div>
+</div>
 <h2>Functions</h2>
 <div class="item" id="kib">
 <div class="item-head">

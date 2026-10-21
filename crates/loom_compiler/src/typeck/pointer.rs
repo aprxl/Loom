@@ -50,7 +50,11 @@ impl Checker<'_> {
     pub(super) fn region_of_spool_ty(&self, ty: Ty) -> Option<Ty> {
         match *self.tcx.kind(ty) {
             TyKind::Adt(def, _) if Some(def) == self.std.heap => Some(self.tcx.heap),
-            TyKind::Adt(def, _) if Some(def) == self.std.arena => Some(self.tcx.spool),
+            TyKind::Adt(def, _)
+                if Some(def) == self.std.arena || Some(def) == self.std.pool || Some(def) == self.std.shared_arena =>
+            {
+                Some(self.tcx.spool)
+            }
             _ => None,
         }
     }
@@ -136,7 +140,10 @@ impl Checker<'_> {
         self.b.spools = true;
         let ty = self.check_expr(init, None);
         let ty = self.resolve(ty);
-        if !self.tcx.is_error(ty) && !matches!(*self.tcx.kind(ty), TyKind::Adt(def, _) if Some(def) == self.std.arena) {
+        if !self.tcx.is_error(ty)
+            && !matches!(*self.tcx.kind(ty), TyKind::Adt(def, _)
+                if Some(def) == self.std.arena || Some(def) == self.std.pool || Some(def) == self.std.shared_arena)
+        {
             let shown = self.show(ty);
             self.error(
                 codes::T0101,

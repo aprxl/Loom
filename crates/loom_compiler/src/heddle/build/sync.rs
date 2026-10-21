@@ -26,6 +26,9 @@ impl<'a> Builder<'a> {
         if self.is_arena(ty) {
             return self.arena_new(args, ty, span);
         }
+        if self.is_pool(ty) {
+            return self.pool_new(args, ty, span);
+        }
         let t = self.atomic_elem(ty, span)?;
         let Some(arg) = args.first() else { return self.internal(span, "an atomic made from nothing") };
         if self.is_pipe(ty) {

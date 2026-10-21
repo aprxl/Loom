@@ -74,6 +74,8 @@ struct Cx {
     depth: u32,
     /// `given name = spool`: the spool.
     alias: HashMap<LocalId, LocalId>,
+    /// Inside a `thread`: how deep the blocks were where it started.
+    thread_base: Option<u32>,
 }
 
 impl Checker<'_> {
@@ -154,8 +156,40 @@ impl Checker<'_> {
         }
     }
 
+    /// Whether the spool local `spool` is a `SharedArena`, which threads may use.
+    fn is_shared(&self, spool: LocalId) -> bool {
+        let ty = self.b.local_ty.get(&spool).map(|&t| self.resolve(t));
+        matches!(ty.map(|t| self.tcx.kind(t)), Some(TyKind::Adt(def, _)) if Some(*def) == self.std.shared_arena)
+    }
+
+    /// A thread uses `l`, declared outside it: it can't be a spool, or point
+    /// into one, that threads can't share.
+    fn thread_use(&mut self, cx: &Cx, l: LocalId, span: Span) {
+        let Some(base) = cx.thread_base else { return };
+        if cx.depth_of.get(&l).is_some_and(|&d| d > base) {
+            return;
+        }
+        let spools: Vec<LocalId> = match self.resolve_spool(cx, l) {
+            Some(s) => vec![s],
+            None => cx.flow.roots.get(&l).map(|r| r.iter().map(|&(s, _)| s).collect()).unwrap_or_default(),
+        };
+        for s in spools {
+            if self.is_shared(s) {
+                continue;
+            }
+            let (name, spool) = (self.p.local(l).name.clone(), self.p.local(s).name.clone());
+            let diag =
+                Diagnostic::error(codes::R0103, format!("`{name}` reaches the spool `{spool}` from another thread"))
+                    .primary(span, "used by a thread here")
+                    .secondary(self.p.local(s).span, "spool declared here")
+                    .help("allocate in a `SharedArena`, which threads may use");
+            self.report_once(diag);
+        }
+    }
+
     /// A read of local `l`: it must not point into a spool that was reset.
     fn use_local(&mut self, cx: &Cx, l: LocalId, span: Span) {
+        self.thread_use(cx, l, span);
         let Some(roots) = cx.flow.roots.get(&l) else { return };
         for &(r, made) in roots {
             let Some(&(n, at)) = cx.flow.resets.get(&r) else { continue };
@@ -386,8 +420,10 @@ impl Checker<'_> {
                 Roots::new()
             }
             ExprKind::Thread { body, .. } => {
-                self.rv(cx, body);
-                Roots::new()
+                let saved = cx.thread_base.replace(cx.depth);
+                let r = self.rv(cx, body);
+                cx.thread_base = saved;
+                r
             }
             ExprKind::Loom { body, .. } => {
                 self.rblock(cx, body);
@@ -469,7 +505,7 @@ impl Checker<'_> {
         };
         let recv_roots = receiver.map(|r| self.rv(cx, r)).unwrap_or_default();
         let arg_roots: Vec<Roots> = args.iter().map(|a| self.rv(cx, &a.value)).collect();
-        let Some(info) = self.b.calls.get(&call.id).cloned() else {
+        let Some(info) = self.b.calls.get(&call.id).cloned().filter(|i| i.callee != super::generic::UNKNOWN) else {
             // A construction: its fields are in whatever its arguments are.
             let mut out = Roots::new();
             arg_roots.iter().for_each(|r| join(&mut out, r));

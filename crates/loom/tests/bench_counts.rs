@@ -102,3 +102,14 @@ fn an_unused_given_costs_nothing() {
     let (plain, unused) = (dispatched(&root, "given_plain", 1000), dispatched(&root, "given_unused", 1000));
     assert_eq!(plain, unused, "an unused `given` adds {} dispatches", unused.abs_diff(plain));
 }
+
+/// V6's gate (design/vm.md §16): a `Pool` slot taken and given back costs at
+/// most 5 dispatches, and reading it one more (`pool_base` has no read).
+#[test]
+fn a_pool_cycle_costs_five_dispatches() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    // Per round: the difference between two sizes, so the setup cancels.
+    let round = |name: &str| (dispatched(&root, name, 2000) - dispatched(&root, name, 1000)) as f64 / 1000.0;
+    let per = round("pool_cycle") - round("pool_base");
+    assert!(per <= 6.0, "a put, a read and a free cost {per} dispatches (at most 6)");
+}
