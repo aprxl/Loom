@@ -18,52 +18,80 @@ R0102 are not in `codes.rs`), no arena in the VM.
 regions travel through the existing generic machinery (`subst`, unify,
 per-instance checking).
 
-**Two views of a region.** The checker needs the precise region; code
-generation needs only the spool *kind*. They are kept apart because a
-`LocalId` is per body: local #3 of two functions would intern as the same
-type, and a caller's local means nothing inside a callee.
+**Types carry the region kind, not the spool.** `Region` is `Heap` (an
+owning pointer: move-only, dropping frees), `Spool` (any arena: `Copy`, owns
+nothing, drop does nothing) or `Any` (the region of a read or `mut`
+parameter written without one: of unknown kind, only ever borrowed, so
+never dropped and never allocated into). Which spool a value points into is
+not in its type: a `LocalId` is per body, and a caller's local means nothing
+inside a callee. Layout is the same for all three. Passing `Heap` or `Spool`
+where `Any` is expected is a free coercion, so `eval(e: ^Expr)` is one
+instance for every tree.
 
-- *Checker types* (`TyKind::Region(Region)`): `Heap`, `Static`,
-  `Param(def)` (a region parameter, or a `given` spool of a signature), and
-  `Spool(body, local)` (a `spool` binding, scoped to its body, never leaving
-  it). At a call, regions in the callee's signature are substituted by the
-  caller's: `Param(out)` becomes the caller's `Spool(body, small)`.
-- *Instance keys, layout, glue and Heddle* see only the kind: `Heap`
-  (owning pointer: move-only, drop frees) or `Spool` (any non-heap spool:
-  `Copy`, drop does nothing). An instance is made per kind, not per spool
-  binding, so `fold` is one instance for `raw` and `small`, and `Expr@raw`
-  and `Expr@small` share layout and glue. (Per-kind: `Arena` bumps inline,
-  `heap` calls the allocator; 03-memory says to monomorphize per spool type.)
+**`given sp: Spool` is a hidden region parameter and a hidden value.** The
+kind it is instantiated with (`Heap`, or `Spool` for an `Arena`) is a
+generic argument of the instance, so `parse` has an instance for heap trees
+and one for arena trees: the `Heap` one frees nodes one at a time, the
+`Spool` one bumps a pointer. At a call, the argument (`given: raw`) or the
+innermost `given` in scope (else `heap`) picks the kind. `@sp` in the
+function's types is that kind.
 
-**Warps follow their region.** A warp that allocates (a `^` field, or a
-`String`/`List`/`Map` field, directly or through another such warp) has one
-hidden region parameter: `Expr` is `Adt(Expr, [r])`. It is a real
-`GenericParamKind::Region`, synthesized in HIR lowering (as `derive.rs` adds
-`Default`) and defaulting to `@heap`; `display` omits `@heap`, so existing
-programs, diagnostics, `tests/run` output and `bench/counts.txt` don't move
-(checked when it lands). Written without an argument, `Expr` is `Expr@heap` in
-return, field and `take` positions, and "any region" (a fresh region
-parameter on the function) in read and `mut` parameter positions
-(03-memory). Slice 1 has no hidden parameter yet: only `Heap` exists.
+**Warps follow their region.** A warp with a `^` field, directly or through
+another such warp, has one hidden region parameter: `Expr` is
+`Adt(Expr, [kind])`, where kind is `Heap`, `Spool` or `Any`. A `String` or
+`List` field does not need it: the buffer's spool number lives in its
+capacity word, so its drop is right in any region. The parameter is a real
+`GenericParamKind::Region` made while names are resolved (as `derive.rs`
+adds `Default`) and shown only when it is not `@heap`, so existing programs
+and diagnostics don't change. A pointer and its target share a region:
+`^Expr` is `Ptr(Expr[r], r)`. Written without a region, `Expr` is `@heap` in
+return, field and `take` positions, and in a read parameter it is `Any`
+(03-memory).
+
+**Which spool is the region checker's job, not the type's** (below).
 
 **Ambient spool.** `^e`, `.copy()`, templates that make a `String` and
 collection constructors allocate in the ambient spool: the innermost `given`
 of type `Spool` in scope, `heap` when there is none. A `given sp: Spool` is a
 hidden parameter and a region parameter of its own (`@sp`).
 
-**Region checking reuses `moves.rs`.** M0106 (a borrow outlives what it
-borrows) and M0105 (a borrow used after what it borrows changed) already
-track "roots" and `check_escape`. A value whose type mentions region `s`
-gets `s` as a root:
+**Region checking is a pass over typed HIR** (`typeck/regions.rs`, in the
+style of `moves.rs`, sharing its idea of roots). Each local of a type with a
+`Spool` region has a set of root spools, worked out from where it came from:
+`^e` in the ambient spool `X` is rooted in `X`; a call returning `@out` is
+rooted in whatever the call's `given: out` was; a pattern binding or a field
+read keeps the roots of what it came from. Then:
 
-- R0101 is M0106 with the spool local as the root: the value leaves the
-  scope of `s` (returned, stored in something that outlives it, captured by
-  an escaping lambda).
-- R0102 is M0105 where `s.reset()` counts as the change to `s`.
-- R0103: a pointer to a non-shared spool crosses a `thread`/`loom` boundary
-  (05-concurrency; extends C0404/C0405's rule).
+- R0101: a value rooted in a spool `X` leaves `X`'s scope: returned, stored
+  in something that outlives it, or captured by an escaping lambda.
+- R0102: `X.reset()` while a value rooted in `X` is used later.
+- R0103: a pointer into a non-shared spool crosses a `thread`/`loom`
+  boundary (05-concurrency; extends C0404/C0405's rule).
 
-No new pass. The codes are added to `codes.rs` with the slice that uses them.
+Types don't say that two pointers share a spool, so the pass enforces it:
+
+- *Arguments meet the signature's names.* An argument whose parameter type
+  names `@x` must be rooted in the spool passed or implied for `x`. (Else
+  `fn left(e: ^Expr@sp) -> ^Expr@sp given sp` called with `given: small`
+  on a `raw` tree returns something rooted in `raw` and typed as `small`'s.)
+- *Stores stay in one region.* Storing a value rooted in `Y` into a place
+  rooted in `X` is an error unless `X` is `Y`, or the value is heap or static
+  (03-memory: each value lives in one region).
+- *Loop bodies are gone through twice*, so `loop { render(given: frame);
+  frame.reset() }` catches a value from one round used after the next
+  round's reset.
+
+`Any` is for read parameters only and is never `Copy` or droppable; the free
+coercion `Heap | Spool -> Any` applies to read-parameter arguments. An
+omitted region on a `mut` parameter is a real region parameter inferred from
+the argument (else `p = ^Node(..)` in `fn f(mut p: ^Node)` would write a
+heap pointer into an arena slot).
+
+Moves: a move out of a pointer's target (path element `^`) is allowed when
+the pointer is `Heap`, and is M0103 when it is `Spool` or `Any` (arena
+pointers are `Copy`: two owners of one `String` otherwise).
+
+The codes are added to `codes.rs` with the slice that uses them.
 
 **Aliased mutation through arena pointers** (open question 1). Decided,
 pending Caio's veto: option (c). Fields behind an arena pointer can be
@@ -114,7 +142,9 @@ templates and `Show` (`"{x}"`).
    (`^e` is one alloc plus its stores, `p^` one load); alloc+free of a small
    box at most 15 ns in `perf_gates.rs` (`#[ignore]`d, asserted); a
    `binary_trees` heap version in `bench/`.
-2. **Spools and regions.** `Spool` weft, `Arena`, `spool x`, `heap`, `^T@s`,
+2. **Spools and regions.** (A `given` is passed on implicitly at calls:
+   the innermost one in scope. Inferring them for private functions is
+   slice 3.) `str.copy()` and `String.copy()` allocate in the ambient spool. `Spool` weft, `Arena`, `spool x`, `heap`, `^T@s`,
    `@s` on types, hidden region parameters on warps, region-polymorphic read
    parameters, `ref warp`, `given sp: Spool` and `given:` arguments for
    spools, the ambient spool, R0101/R0102/R0103, checked-build generations,
