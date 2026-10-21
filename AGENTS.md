@@ -27,7 +27,7 @@ thread pool, and put the numbers in `bench/RESULTS.md`:
 
 ```
 cargo test --release -p loom --test compile_time -- --ignored --nocapture   # -O2 vs -O0, slowest example
-cargo test --release -p loom --test perf_gates -- --ignored --nocapture     # spawn+join < 2 us and par_mandelbrot >= 5.6x on 8 workers
+cargo test --release -p loom --test perf_gates -- --ignored --nocapture --test-threads=1   # spawn+join < 2 us, par_mandelbrot >= 5.6x on 8 workers, a box < 15 ns, an arena put < half a box, arena trees >= 4x Lua
 ```
 
 ## Agent workflow

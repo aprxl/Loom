@@ -226,6 +226,14 @@ impl Checker<'_> {
     /// Goes through `e`, in the order it runs; gives the spools its value
     /// points into.
     fn rv(&mut self, cx: &mut Cx, e: &Expr) -> Roots {
+        let roots = self.rv_inner(cx, e);
+        // A number read through a pointer, a length, a flag: nothing in a
+        // spool, whatever it was taken from.
+        let holds = self.b.expr_ty.get(&e.id).is_none_or(|&t| self.in_spool(t));
+        if holds { roots } else { Roots::new() }
+    }
+
+    fn rv_inner(&mut self, cx: &mut Cx, e: &Expr) -> Roots {
         match &e.kind {
             ExprKind::Local(l) => {
                 self.use_local(cx, *l, e.span);

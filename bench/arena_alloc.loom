@@ -1,0 +1,16 @@
+// One small value put in an arena, read, and the arena reset now and then.
+use std.io.print
+use std.mem.{Arena, kib}
+
+const SIZE = 10_000_000
+
+fn main() {
+    spool a = Arena(64.kib())
+    var total = 0u64
+    for i in 0..SIZE as u64 {
+        let p = a.put(i)
+        total += p^
+        if i % 4096 == 0 { a.reset() }
+    }
+    print("{total}")
+}

@@ -18,4 +18,6 @@ deque        50000  6949479
 list_ops     20000  7628190
 heap         10000  3493072
 set_drain    20000  6786096
-ptr_trees    8      1373153
+ptr_trees    8      1347717
+arena_trees  8      543692
+arena_alloc  100000 600075

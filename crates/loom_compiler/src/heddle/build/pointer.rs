@@ -43,6 +43,18 @@ impl<'a> Builder<'a> {
             if self.p.def_path(*def) == "std.mem.Arena")
     }
 
+    /// `size` bytes in the arena whose handle is `h`: its bump as one op
+    /// when the size is small, else a call.
+    pub(super) fn arena_alloc(&mut self, h: Value, size: u64) -> Value {
+        let rounded = size.max(1).div_ceil(16) * 16;
+        if rounded <= 0xFFF0 {
+            return self
+                .emit1(InstKind::Native { name: "arena.alloc.k", imm: rounded as u16, args: vec![h] }, VTy::Ptr);
+        }
+        let n = self.iconst(size);
+        self.emit1(InstKind::Native { name: "arena.alloc", imm: 0, args: vec![h, n] }, VTy::Ptr)
+    }
+
     /// `Arena(capacity)`: the handle, in a temporary that owns it.
     pub(super) fn arena_new(&mut self, args: &'a [hir::Arg], ty: Ty, span: Span) -> Option<Val> {
         let Some(arg) = args.first() else { return self.internal(span, "an arena made from nothing") };
@@ -70,8 +82,7 @@ impl<'a> Builder<'a> {
                 if align > 16 {
                     return self.unsupported(span, "putting a value aligned past 16 bytes in an arena");
                 }
-                let n = self.iconst(size);
-                let p = self.emit1(InstKind::Native { name: "arena.alloc", imm: 0, args: vec![h, n] }, VTy::Ptr);
+                let p = self.arena_alloc(h, size);
                 self.move_to(p, 0, args[1].clone(), t, span)?;
                 self.terminate(Term::Ret(vec![p]));
             }
@@ -112,8 +123,7 @@ impl<'a> Builder<'a> {
                 Val::Regs(_) => return self.internal(span, "a spool in registers"),
             };
             let h = self.load(Mem::W64, at, 0, VTy::Int);
-            let n = self.iconst(size);
-            let p = self.emit1(InstKind::Native { name: "arena.alloc", imm: 0, args: vec![h, n] }, VTy::Ptr);
+            let p = self.arena_alloc(h, size);
             self.move_to(p, 0, v, from, span)?;
             return Some(Val::Regs(vec![p]));
         }

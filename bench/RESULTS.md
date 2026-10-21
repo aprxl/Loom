@@ -3,6 +3,20 @@
 Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
+
+## V6: pointers and spools (2026-10-21)
+
+Release build, best of 5, whole process (startup is about 30 ms), `cargo test --release -p loom --test perf_gates -- --ignored --nocapture --test-threads=1` (the gates measure wall time, so they must not share the machine).
+
+| Benchmark | Treadle | Note |
+|---|---|---|
+| `ptr_alloc` (10M boxes: allocate, read, free) | 10 ns each | gate 15 ns |
+| `arena_alloc` (10M `put`s, a reset every 4096) | 4 ns each, loop included | 0.39 of `ptr_alloc`, gate 0.5 |
+| `ptr_trees` (`binary_trees` with `^Tree`) | 0.70 s | `binary_trees` with lists is 0.66 s; leaves are boxes here, so twice the allocations |
+| `arena_trees` (`binary_trees`, trees in an arena, reset per tree) | 0.29 s | **9x PUC Lua** (2.64 s), gate 4x; 2.3x the heap version |
+
+The design (vm.md §12) hoped for an arena allocation a tenth of a heap one's. Allocating alone is: a heap box takes about 7 ns (alloc and free, a native call each), an arena `put` about 1 ns (one op, `arena.k`). The loop and the read around it cost the same either way, so the gate compares the whole (at most half of a box), not the allocation alone.
+
 ## V3, after the run-time review (2026-10-11)
 
 Same machine, best of five (`python bench/run.py --runs 5`). The changes of

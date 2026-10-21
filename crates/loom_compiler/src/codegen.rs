@@ -2123,6 +2123,10 @@ impl Emitter<'_> {
                 };
                 self.put(span, word(op, dst, self.r(args[0]), 0));
             }
+            // An arena's bump is an op of its own.
+            K::Native { name: "arena.alloc.k", imm, args } => {
+                self.put(span, word(Op::ArenaAllocK, dst, self.r(args[0]), *imm));
+            }
             K::Native { name, imm, args } => {
                 // At once: an argument may sit where another goes.
                 let moves = args.iter().enumerate().map(|(i, &a)| (self.scratch + i as u16, self.r(a))).collect();

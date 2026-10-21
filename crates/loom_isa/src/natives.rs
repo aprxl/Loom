@@ -145,6 +145,9 @@ pub const NATIVES: &[NativeSig] = &[
     // address`, `arena.reset(arena)` and `arena.free(arena)`.
     sig("arena.new", 1, 1, NativeImm::None),
     sig("arena.alloc", 2, 1, NativeImm::None),
+    // `arena.alloc.k(arena)` with the size (a multiple of 16, at most 65520)
+    // as the immediate: an op of its own, never a call.
+    sig("arena.alloc.k", 1, 1, NativeImm::None),
     sig("arena.reset", 1, 0, NativeImm::None),
     sig("arena.free", 1, 0, NativeImm::None),
     // `str.new_in(arena, text, length, destination)`: a `String` whose

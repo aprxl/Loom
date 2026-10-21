@@ -1,0 +1,42 @@
+// binary_trees with the trees in an arena: built, checked, and gone at once.
+use std.io.print
+use std.mem.{Arena, Spool, mib}
+
+const SIZE = 16
+
+warp Tree {
+    case Leaf
+    case Node(left: ^Tree, right: ^Tree)
+}
+
+fn make(depth: u32) -> ^Tree@sp given sp: Spool {
+    if depth == 0 { return ^Tree.Leaf }
+    ^Tree.Node(make(depth - 1), make(depth - 1))
+}
+
+fn check(t: ^Tree) -> u32 = match t {
+    .Leaf => 1
+    .Node(l, r) => 1 + check(l) + check(r)
+}
+
+fn main() {
+    let max_depth = SIZE
+    spool stretch_space = Arena(4.mib())
+    let stretch = make(max_depth + 1, given: stretch_space)
+    print("stretch tree of depth {max_depth + 1}\t check: {check(stretch)}")
+    spool long_space = Arena(4.mib())
+    let long_lived = make(max_depth, given: long_space)
+    spool scratch = Arena(1.mib())
+    var depth = 4u32
+    while depth <= max_depth {
+        let iterations = 1u32 << (max_depth - depth + 4)
+        var total = 0u32
+        for _ in 0..iterations {
+            total += check(make(depth, given: scratch))
+            scratch.reset()
+        }
+        print("{iterations}\t trees of depth {depth}\t check: {total}")
+        depth += 2
+    }
+    print("long lived tree of depth {max_depth}\t check: {check(long_lived)}")
+}

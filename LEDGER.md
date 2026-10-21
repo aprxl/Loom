@@ -4,7 +4,7 @@ Running log of milestone work and decisions. Newest first. Replaces `ledger.log`
 
 ## V6 slice 2: spools, regions, given spools (2026-10-21)
 
-Done (both backends; `tests/run/spool_basic`, `spool_tree`, `given_spool`, `tests/fail/region_errors`, `tests/examples/calc`, docs samples `own_spools`, `own_err_region`): `Arena`, `Heap`, `spool`, `put`, `reset`, `^T@s`, hidden region parameter on warps with pointers, `given sp: Spool` and `given:` for spools, `ref warp`, the roots pass (R0101, R0102, R0104), arena-owned `String`s. `examples/calc.loom` runs and leaks nothing in the checked build. Also fixed: on the Lua backend `a is .X(x) and b is .Y(y)` bound `y` in a nested block (it was nil in the body). Not done: the inline bump op and the `Arena` gate, `binary_trees` with arenas, R0103, collections in a spool.
+Done (both backends; `tests/run/spool_basic`, `spool_tree`, `given_spool`, `tests/fail/region_errors`, `tests/examples/calc`, docs samples `own_spools`, `own_err_region`): `Arena`, `Heap`, `spool`, `put`, `reset`, `^T@s`, hidden region parameter on warps with pointers, `given sp: Spool` and `given:` for spools, `ref warp`, the roots pass (R0101, R0102, R0104), arena-owned `String`s. `examples/calc.loom` runs and leaks nothing in the checked build. Also fixed: on the Lua backend `a is .X(x) and b is .Y(y)` bound `y` in a nested block (it was nil in the body). Gates: an arena `put` is one op (`arena.k`) and costs 0.39 of a heap box (the design's "10x" is for the allocation alone: about 1 ns against 7; asserted as half of the whole), `arena_trees` is 9x PUC Lua (gate 4x), a box 10 ns (gate 15 ns); `bench/RESULTS.md`. Not done: R0103, collections in a spool.
 
 ## V6 slice 1: heap pointers (2026-10-21)
 

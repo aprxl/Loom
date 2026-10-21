@@ -1546,6 +1546,28 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
                             Op::StXC16 => st_x!(checked, u16),
                             Op::StXC32 => st_x!(checked, u32),
                             Op::StXC64 => st_x!(checked, u64),
+                            Op::ArenaAllocK => {
+                                let header = r!(b(w));
+                                mem_check!(header, 40);
+                                // SAFETY: the compiler passes an arena `arena.new` made
+                                // and `arena.free` hasn't freed: five words, the first
+                                // two where the next object goes and where the chunk ends.
+                                let (cur, end) = unsafe {
+                                    let h = header as *const u64;
+                                    (h.read(), h.add(1).read())
+                                };
+                                let size = c(w) as u64;
+                                if end - cur >= size {
+                                    // SAFETY: as above.
+                                    unsafe { (header as *mut u64).write(cur + size) };
+                                    set!(a(w), cur)
+                                } else {
+                                    match crate::arena::alloc(heap!(env), header, size) {
+                                        Ok(p) => set!(a(w), p),
+                                        Err(trap) => throw!(trap),
+                                    }
+                                }
+                            }
                             Op::FreeBufF => {
                                 let ext = ext!();
                                 free_buf!((fp as u64).wrapping_add(ext >> 32), ext & 0xFFFF_FFFF, 1u64 << a(w))

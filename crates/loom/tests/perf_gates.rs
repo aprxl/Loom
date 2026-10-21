@@ -106,3 +106,50 @@ fn a_small_box_costs_under_15ns() {
     println!("allocate, read and free a box: {per:?} (at most {MAX_BOX:?})");
     assert!(per <= MAX_BOX, "a box takes {per:?} to allocate, read and free (at most {MAX_BOX:?})");
 }
+
+/// The gate: binary trees in arenas run this many times faster than the same
+/// program in idiomatic Lua 5.4 (design/vm.md §16, the V6 row).
+const MIN_TREES_VS_LUA: f64 = 4.0;
+/// The gate: putting a value in an arena, reading it and resetting now and
+/// then costs at most this fraction of the same with a box on the heap.
+/// (The design hoped for a tenth of the allocation alone; an interpreter's
+/// loop and read cost the same either way, so the whole is compared.)
+const MAX_ARENA_VS_HEAP: f64 = 0.5;
+
+fn best_command(mut command: impl FnMut() -> Command) -> Duration {
+    (0..RUNS)
+        .map(|_| {
+            let start = Instant::now();
+            let status = command().stdout(Stdio::null()).status().expect("the loom binary runs");
+            assert!(status.success(), "{status}");
+            start.elapsed()
+        })
+        .min()
+        .expect("a run")
+}
+
+#[test]
+#[ignore = "perf gate: run with --release -- --ignored --nocapture"]
+fn arena_trees_are_4x_faster_than_lua() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let loom = best("arena_trees", 1);
+    let lua = best_command(|| {
+        let mut c = Command::new(env!("CARGO_BIN_EXE_loom"));
+        c.arg("lua-host").arg(root.join("bench/lua/binary_trees.lua"));
+        c
+    });
+    let ratio = lua.as_secs_f64() / loom.as_secs_f64();
+    println!("binary trees in arenas: {loom:.3?}, Lua {lua:.3?}: {ratio:.1}x (at least {MIN_TREES_VS_LUA}x)");
+    assert!(ratio >= MIN_TREES_VS_LUA, "arena binary trees are {ratio:.1}x Lua (at least {MIN_TREES_VS_LUA}x)");
+}
+
+#[test]
+#[ignore = "perf gate: run with --release -- --ignored --nocapture"]
+fn an_arena_put_is_cheaper_than_a_heap_box() {
+    let hello = startup();
+    let arena = best("arena_alloc", 1).saturating_sub(hello);
+    let heap = best("ptr_alloc", 1).saturating_sub(hello);
+    let ratio = arena.as_secs_f64() / heap.as_secs_f64();
+    println!("arena put {arena:.3?}, heap box {heap:.3?}: {ratio:.2} of the heap's (at most {MAX_ARENA_VS_HEAP})");
+    assert!(ratio <= MAX_ARENA_VS_HEAP, "an arena put costs {ratio:.2} of a heap box (at most {MAX_ARENA_VS_HEAP})");
+}

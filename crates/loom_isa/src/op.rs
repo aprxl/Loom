@@ -590,6 +590,9 @@ ops! {
     // its header in the frame, or at a register's address
     FreeBufF = "freebuf.f", FB;
     FreeBuf = "freebuf", RB;
+    // allocate c bytes (a multiple of 16) in the arena whose handle is in b:
+    // a bump of its pointer, or a new chunk
+    ArenaAllocK = "arena.k", ABU;
     // blocks of memory: copy `ext` bytes from b's address to a's; zero them
     Copy = "copy", ABZ;
     Zero = "zero", AZ;

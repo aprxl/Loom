@@ -1804,9 +1804,9 @@ impl<'p> Checker<'p> {
             None if self.regions_only(actual, target) => {
                 let (want, have) = (self.show(target), self.show(actual));
                 self.diags.push(
-                    Diagnostic::error(codes::R0101, format!("a value in a spool where `{want}` is wanted"))
+                    Diagnostic::error(codes::R0101, format!("`{have}` is in another region than `{want}`"))
                         .primary(e.span, format!("this is `{have}`"))
-                        .note(format!("`{want}` means a pointer into the heap, which the value doesn't outlive"))
+                        .note("`^T` with no region is a pointer into the heap; `^T@s` one into the spool `s`")
                         .help("take `given out: Spool` and return `^T@out`"),
                 );
                 false

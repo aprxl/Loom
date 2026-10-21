@@ -157,7 +157,11 @@ impl Checker<'_> {
             }
             ExprKind::Type(_) => self.unsupported(span, "types used as values"),
             ExprKind::Assoc { base, name } => {
+                // `Tree.Leaf`: the region of a warp that holds pointers is
+                // settled by where the value goes.
+                self.infer_args = true;
                 let ty = self.lower_ty(base);
+                self.infer_args = false;
                 self.check_assoc_value(e, ty, &name.name, name.span)
             }
             ExprKind::BuiltinCase(_) => self.unsupported(span, "`some`, `ok` and `err`"),
