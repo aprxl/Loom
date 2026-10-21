@@ -271,6 +271,9 @@ impl<'a> Builder<'a> {
         for (k, source) in info.args.iter().enumerate() {
             by_param.push(match source {
                 crate::typeck::ArgSource::Receiver => worked[0].take(),
+                crate::typeck::ArgSource::Ambient(_) | crate::typeck::ArgSource::Heap => {
+                    return self.unsupported(span, "`given` parameters of a generator");
+                }
                 crate::typeck::ArgSource::Arg(i) => worked[i + usize::from(info.receiver.is_some())].take(),
                 crate::typeck::ArgSource::Default => {
                     let default = f.params.get(k).and_then(|p| p.default.as_ref())?;
@@ -523,6 +526,9 @@ impl<'a> Builder<'a> {
                     v?
                 }
                 crate::typeck::ArgSource::Receiver => return self.internal(span, "a generator with a receiver"),
+                crate::typeck::ArgSource::Ambient(_) | crate::typeck::ArgSource::Heap => {
+                    return self.unsupported(span, "`given` parameters of a generator");
+                }
             };
             by_param.push(v);
         }

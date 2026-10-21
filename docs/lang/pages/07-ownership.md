@@ -65,9 +65,23 @@ A **fallback defer**, `defer tx => tx.rollback()`, names a `once` value and runs
 
 A `take` pointer that a `match` takes apart hands its parts to the arms by value, so the arms can move them into a new node.
 
+## Spools
+
+A pointer into the heap owns its box and frees it. When many values live and die together (the nodes of a tree, a frame of a game) a **spool** is cheaper: `spool frame = Arena(1.kib())` makes one, `frame.put(v)` moves a value into it, and `^e` allocates in the spool a function is `given`. A pointer into a spool is `Copy` and owns nothing; `frame.reset()` takes every allocation back at once, and the spool ends with its scope.
+
+`^T@s` is a pointer into the spool `s`, and `fn tree() -> ^Node@sp given sp: Spool` is a function that builds in whichever spool the caller gives (`tree(4, given: frame)`), or the heap if the call gives none. A parameter written `^Node` takes a tree from any spool. A warp that holds pointers (`Node`) is `Node@s` for the spool its nodes are in.
+
+@sample own_spools
+
+The region checker keeps pointers from outliving their spool: a value that points into a spool can't be returned out of the block the spool ends with ([R0101](diag:R0101)), used after the spool was reset ([R0102](diag:R0102)), or passed where a parameter names another spool ([R0104](diag:R0104)). A spool can't be moved ([M0107](diag:M0107)).
+
+@sample own_err_region
+
+Text copied with `.copy()` goes in the spool the call is given, so an arena's tree can hold names and still go at once.
+
 ## Not supported yet
 
-`ref warp`, spools, region pointers (`^T@s`) and `given` belong to this part of the design and stop with [U0102](diag:U0102). Projections (`~> mut T`), which lend a place, work: see [Shuttles](page:shuttles). See [Not supported yet](page:not-yet).
+A `given` other than a spool (a logger, a random number generator), a `Pool` and `SharedArena`, and pointers into a spool crossing threads ([R0103](diag:R0103)) are not built yet and stop with [U0102](diag:U0102). Projections (`~> mut T`), which lend a place, work: see [Shuttles](page:shuttles). See [Not supported yet](page:not-yet).
 
 ## Where next
 

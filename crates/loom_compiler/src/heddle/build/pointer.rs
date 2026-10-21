@@ -9,7 +9,7 @@ use loom_syntax::source::Span;
 
 use super::Builder;
 use super::value::{Place, Val};
-use crate::heddle::{Cmp, InstKind, Mem, VTy, Value};
+use crate::heddle::{Cmp, InstKind, Mem, Term, VTy, Value};
 use crate::hir;
 use crate::ty::{Ty, TyKind};
 
@@ -29,12 +29,55 @@ impl<'a> Builder<'a> {
         Some((size.max(1), align.max(1)))
     }
 
-    /// The address the pointer value `v` holds.
-    pub(super) fn ptr_addr(&mut self, v: &Val, span: Span) -> Option<Value> {
+    /// The address the pointer value `v` holds: in a register for a pointer
+    /// into a spool, in a word of memory for one that owns its box.
+    pub(super) fn ptr_addr(&mut self, v: &Val, _span: Span) -> Option<Value> {
         match v {
             &Val::Mem(at) => Some(self.load(Mem::W64, at, 0, VTy::Ptr)),
-            Val::Regs(_) => self.internal(span, "a pointer in registers"),
+            Val::Regs(vals) => vals.first().copied(),
         }
+    }
+
+    pub(super) fn is_arena(&self, ty: Ty) -> bool {
+        matches!(self.tcx().kind(self.tcx().degauge(ty)), TyKind::Adt(def, _)
+            if self.p.def_path(*def) == "std.mem.Arena")
+    }
+
+    /// `Arena(capacity)`: the handle, in a temporary that owns it.
+    pub(super) fn arena_new(&mut self, args: &'a [hir::Arg], ty: Ty, span: Span) -> Option<Val> {
+        let Some(arg) = args.first() else { return self.internal(span, "an arena made from nothing") };
+        let cap = self.expr(&arg.value)?;
+        let cap = self.regs(cap, self.tcx().usize, span)?[0];
+        let h = self.emit1(InstKind::Native { name: "arena.new", imm: 0, args: vec![cap] }, VTy::Int);
+        let at = self.temp(ty, span)?;
+        self.store(Mem::W64, at, 0, h);
+        self.own_temp(at, ty);
+        Some(Val::Mem(at))
+    }
+
+    /// The bodies of `Arena`'s methods: `reset` and `put`.
+    pub(super) fn arena_method(&mut self, path: &str, args: &[Val], tys: &[Ty], span: Span) -> Option<()> {
+        let Val::Mem(at) = args[0] else { return self.internal(span, "an arena in registers") };
+        let h = self.load(Mem::W64, at, 0, VTy::Int);
+        match path.rsplit('.').next().unwrap_or_default() {
+            "reset" => {
+                self.emit(InstKind::Native { name: "arena.reset", imm: 0, args: vec![h] }, &[]);
+                self.terminate(Term::Ret(Vec::new()));
+            }
+            "put" => {
+                let t = self.tcx().degauge(tys[1]);
+                let (size, align) = self.size_align(t)?;
+                if align > 16 {
+                    return self.unsupported(span, "putting a value aligned past 16 bytes in an arena");
+                }
+                let n = self.iconst(size);
+                let p = self.emit1(InstKind::Native { name: "arena.alloc", imm: 0, args: vec![h, n] }, VTy::Ptr);
+                self.move_to(p, 0, args[1].clone(), t, span)?;
+                self.terminate(Term::Ret(vec![p]));
+            }
+            name => return self.internal(span, &format!("no body for `Arena.{name}`")),
+        }
+        Some(())
     }
 
     /// The value a pointer value points at.
@@ -52,10 +95,28 @@ impl<'a> Builder<'a> {
     }
 
     /// `^operand`: a box holding the operand's value, and a pointer to it.
-    pub(super) fn alloc_expr(&mut self, operand: &'a hir::Expr, ptr: Ty, span: Span) -> Option<Val> {
+    pub(super) fn alloc_expr(&mut self, id: hir::HirId, operand: &'a hir::Expr, ptr: Ty, span: Span) -> Option<Val> {
         let Some(target) = self.target_ty(ptr) else { return self.internal(span, "allocating a non-pointer") };
         let v = self.expr(operand)?;
         let from = self.coerced_ty(operand);
+        // In an arena: its next bytes, and a pointer that owns nothing.
+        if let Some(&arena) = self.tables().allocs.get(&id) {
+            let (size, align) = self.size_align(target)?;
+            if align > 16 {
+                return self.unsupported(span, "allocating a value aligned past 16 bytes in an arena");
+            }
+            let ty = self.local_ty(arena);
+            let place = self.local_place(arena, span)?;
+            let at = match self.read_place(&place, ty, span)? {
+                Val::Mem(at) => at,
+                Val::Regs(_) => return self.internal(span, "a spool in registers"),
+            };
+            let h = self.load(Mem::W64, at, 0, VTy::Int);
+            let n = self.iconst(size);
+            let p = self.emit1(InstKind::Native { name: "arena.alloc", imm: 0, args: vec![h, n] }, VTy::Ptr);
+            self.move_to(p, 0, v, from, span)?;
+            return Some(Val::Regs(vec![p]));
+        }
         let (size, align) = self.ptr_box(target)?;
         let (n, a) = (self.iconst(size), self.iconst(align));
         let b = self.emit1(InstKind::Native { name: "mem.alloc", imm: 0, args: vec![n, a] }, VTy::Ptr);

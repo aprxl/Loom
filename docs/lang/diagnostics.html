@@ -147,6 +147,14 @@
 <tr id="M0104"><td><code>M0104</code></td><td><code>mut</code> access overlaps another use</td><td><a href="ownership.html#sample-own_err_overlap">Moves, once and defer</a></td></tr>
 <tr id="M0105"><td><code>M0105</code></td><td>a borrow is used after what it borrows changed</td><td><a href="ownership.html#sample-own_err_borrow">Moves, once and defer</a></td></tr>
 <tr id="M0106"><td><code>M0106</code></td><td>a borrow outlives what it borrows</td><td><a href="ownership.html#sample-own_err_escape">Moves, once and defer</a></td></tr>
+<tr id="M0107"><td><code>M0107</code></td><td>a spool can't be moved</td><td></td></tr>
+</tbody></table>
+<h2 id="group-R01xx">R01xx: regions (design/v6-spools.md)</h2>
+<table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
+<tr id="R0101"><td><code>R0101</code></td><td>a value outlives the spool it points into</td><td></td></tr>
+<tr id="R0102"><td><code>R0102</code></td><td>a value is used after its spool was reset</td><td><a href="ownership.html#sample-own_err_region">Moves, once and defer</a></td></tr>
+<tr id="R0103"><td><code>R0103</code></td><td>a pointer into a spool crosses threads</td><td></td></tr>
+<tr id="R0104"><td><code>R0104</code></td><td>a value is in another spool than its parameter says</td><td></td></tr>
 </tbody></table>
 <h2 id="group-C04xx">C04xx: threads (design/vm.md §11.3)</h2>
 <table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
@@ -165,10 +173,10 @@
 <h2 id="group-U01xx">U01xx: features the v1 compiler doesn't support (see design/lua-backend.md)</h2>
 <table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
 <tr id="U0101"><td><code>U0101</code></td><td>anonymous warp types aren't supported yet</td><td></td></tr>
-<tr id="U0102"><td><code>U0102</code></td><td>not implemented yet</td><td><a href="not-yet.html#sample-nyet_spools">Not supported yet</a></td></tr>
+<tr id="U0102"><td><code>U0102</code></td><td>not implemented yet</td><td><a href="not-yet.html#sample-nyet_given">Not supported yet</a></td></tr>
 <tr id="U0103"><td><code>U0103</code></td><td>over one of Treadle's limits</td><td></td></tr>
 </tbody></table>
-<p>The letters R (regions), I (interop) are set aside for features that aren't built yet. No code uses them.</p>
+<p>The letters I (interop) are set aside for features that aren't built yet. No code uses them.</p>
 </main>
 </div>
 </body>

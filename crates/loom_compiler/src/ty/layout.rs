@@ -133,7 +133,8 @@ fn builtin(path: &str) -> Option<Builtin> {
         "std.sync.Atomic" => Builtin::Atomic,
         "std.sync.Mutex" => Builtin::Mutex,
         "std.sync.Pipe" => Builtin::Header(1),
-        "std.fmt.Fmt" | "std.sync.Spun" => Builtin::Handle,
+        "std.fmt.Fmt" | "std.sync.Spun" | "std.mem.Arena" => Builtin::Handle,
+        "std.mem.Heap" => Builtin::Empty,
         _ => return None,
     })
 }
@@ -150,6 +151,8 @@ enum Builtin {
     Mutex,
     /// A number the runtime gives out: any 8 bytes, 0 included.
     Handle,
+    /// Nothing to hold: the global spool.
+    Empty,
 }
 
 /// Works out layouts, remembering each.
@@ -260,6 +263,7 @@ impl<'a> Layouts<'a> {
                         Layout { size, align, niche: None, shape: Shape::Opaque }
                     }
                     Some(Builtin::Handle) => Layout::scalar(8, None),
+                    Some(Builtin::Empty) => Layout::scalar(0, None),
                     None => {
                         let info = self.info(ty, def)?;
                         self.warp(&info)?

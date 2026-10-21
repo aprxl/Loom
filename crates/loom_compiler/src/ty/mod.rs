@@ -55,6 +55,11 @@ pub enum ConstVal {
 pub enum Region {
     /// The global heap: a pointer into it owns its target.
     Heap,
+    /// Any other spool: a pointer into it is `Copy` and owns nothing.
+    Spool,
+    /// The region of a read parameter written without one: of unknown kind,
+    /// so only ever borrowed.
+    Any,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -137,6 +142,8 @@ pub struct TyCtx {
     pub f64: Ty,
     pub usize: Ty,
     pub heap: Ty,
+    pub spool: Ty,
+    pub any_region: Ty,
     /// What the program is built for: how wide `usize` and `isize` are.
     pub target: crate::target::Target,
     /// Text compile-time values hold ([`ConstVal::Str`]).
@@ -169,6 +176,8 @@ impl TyCtx {
             f64: Ty(0),
             usize: Ty(0),
             heap: Ty(0),
+            spool: Ty(0),
+            any_region: Ty(0),
         };
         tcx.unit = tcx.intern(TyKind::Unit);
         tcx.bool = tcx.intern(TyKind::Bool);
@@ -180,6 +189,8 @@ impl TyCtx {
         tcx.f64 = tcx.intern(TyKind::Float(FloatTy::F64));
         tcx.usize = tcx.intern(TyKind::Int(target.usize()));
         tcx.heap = tcx.intern(TyKind::Region(Region::Heap));
+        tcx.spool = tcx.intern(TyKind::Region(Region::Spool));
+        tcx.any_region = tcx.intern(TyKind::Region(Region::Any));
         tcx
     }
 }
@@ -409,8 +420,14 @@ impl TyCtx {
             TyKind::Value(ConstVal::Case { case, .. } | ConstVal::Unit(case)) => format!(".{}", p.def(*case).name),
             TyKind::Result(t, e) => format!("{} ! {}", self.display_atom(p, *t), self.display_atom(p, *e)),
             TyKind::Ptr(t, r) if *r == self.heap => format!("^{}", self.display_atom(p, *t)),
-            TyKind::Ptr(t, r) => format!("^{}@{}", self.display_atom(p, *t), self.display(p, *r)),
+            TyKind::Ptr(t, r) => {
+                // A warp that holds pointers already says where it is.
+                let (inner, region) = (self.display_atom(p, *t), self.display(p, *r));
+                if inner.ends_with(&format!("@{region}")) { format!("^{inner}") } else { format!("^{inner}@{region}") }
+            }
             TyKind::Region(Region::Heap) => "heap".into(),
+            TyKind::Region(Region::Spool) => "spool".into(),
+            TyKind::Region(Region::Any) => "_".into(),
             TyKind::Range(t) => format!("Range[{}]", self.display(p, *t)),
             TyKind::Fn(params, ret) => {
                 let params: Vec<String> = params.iter().map(|t| self.display(p, *t)).collect();
@@ -426,12 +443,25 @@ impl TyCtx {
             }
             TyKind::Adt(def, args) => {
                 let name = p.def(*def).name.clone();
-                if args.is_empty() {
+                // The hidden region parameter is written `@r`, and not at all
+                // for the heap.
+                let hidden = matches!(&p.def(*def).kind, crate::hir::DefKind::Warp(w)
+                    if crate::hir::hidden_param(p, w).is_some());
+                let (args, region) = match args.split_last() {
+                    Some((&r, rest)) if hidden => (rest, (r != self.heap).then(|| self.display(p, r))),
+                    _ => (&args[..], None),
+                };
+                let mut shown = if args.is_empty() {
                     name
                 } else {
                     let args: Vec<String> = args.iter().map(|t| self.display(p, *t)).collect();
                     format!("{name}[{}]", args.join(", "))
+                };
+                if let Some(r) = region {
+                    shown.push('@');
+                    shown.push_str(&r);
                 }
+                shown
             }
             TyKind::Any(wefts) => {
                 let names: Vec<String> = wefts.iter().map(|w| p.def(*w).name.clone()).collect();

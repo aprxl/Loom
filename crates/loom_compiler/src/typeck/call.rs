@@ -198,7 +198,10 @@ impl Checker<'_> {
         let def = inst.def;
         let generic = !explicit.is_empty() || self.needs_inference(&inst);
         let (sig, id, pending) = if generic {
-            let Some((sig, full, bounds)) = self.generic_sig(inst, explicit, call.span) else {
+            self.given_hints = self.given_hints_for(def, args);
+            let sig = self.generic_sig(inst, explicit, call.span);
+            self.given_hints.clear();
+            let Some((sig, full, bounds)) = sig else {
                 return self.check_args_alone(args);
             };
             (
@@ -306,18 +309,26 @@ impl Checker<'_> {
         let mut slots: Vec<Option<usize>> = vec![None; params.len()];
         let mut ok = true;
         let mut next_positional = 0;
+        // The `given` parameters come last and take no positional argument.
+        let declared = params.iter().take_while(|p| p.given.is_none()).count();
+        let mut next_given = declared;
         for (i, arg) in args.iter().enumerate() {
             if arg.is_given {
-                self.unsupported(arg.span, "`given:` arguments");
-                ok = false;
+                if next_given >= params.len() {
+                    self.error(codes::T0104, arg.span, format!("`{name}` takes no `given`"), "nothing to give it to");
+                    ok = false;
+                    continue;
+                }
+                slots[next_given] = Some(i);
+                next_given += 1;
                 continue;
             }
             let slot = match &arg.label {
                 None => {
                     let slot = next_positional;
                     next_positional += 1;
-                    if slot >= params.len() {
-                        let n = params.len();
+                    if slot >= declared {
+                        let n = declared;
                         self.error(
                             codes::T0104,
                             arg.span,
@@ -389,6 +400,24 @@ impl Checker<'_> {
                     ok = false;
                 }
                 None if param.has_default => sources.push(ArgSource::Default),
+                // The innermost `given` in scope, else the heap for a spool.
+                None if param.given.is_some() => {
+                    let weft = param.given.expect("checked");
+                    match self.ambient(weft) {
+                        Some((local, _)) => sources.push(ArgSource::Ambient(local)),
+                        None if Some(weft) == self.std.spool => sources.push(ArgSource::Heap),
+                        None => {
+                            let weft_name = self.p.def(weft).name.clone();
+                            self.error(
+                                codes::T0104,
+                                span,
+                                format!("`{name}` needs a `{weft_name}` and none is given here"),
+                                "no `given` in scope",
+                            );
+                            ok = false;
+                        }
+                    }
+                }
                 None => {
                     self.error(
                         codes::T0104,

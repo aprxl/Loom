@@ -1,0 +1,9 @@
+error[U0102]: not implemented yet: `given` of something that isn't a spool
+  --> docs/lang/samples/nyet_given.loom:4:22
+  |
+4 |     given greeting = "hello"
+  |                      ^^^^^^^ not supported by this compiler yet
+  |
+  = note: the type checker grows one milestone at a time; see design/lua-backend.md
+
+error: docs/lang/samples/nyet_given.loom failed to type-check (1 error)

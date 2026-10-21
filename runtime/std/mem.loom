@@ -3,6 +3,10 @@
 /// A region to allocate in. `heap` is the global one.
 pub weft Spool {}
 
+/// The global spool: each allocation is freed when its owner is dropped.
+#builtin
+pub warp Heap: Spool {}
+
 /// A spool that allocates by bumping a pointer and frees everything at once.
 #builtin
 pub warp Arena: Spool {
@@ -10,6 +14,11 @@ pub warp Arena: Spool {
 
     /// Frees everything allocated so far.
     pub fn reset(mut self)
+
+    /// Moves `value` into the arena and gives a pointer to it. The pointer
+    /// is `Copy` and owns nothing: it lasts until the arena is reset or
+    /// ends.
+    pub fn put[T](self, take value: T) -> ^T@self
 }
 
 pub fn kib(n: usize) -> usize = n * 1024

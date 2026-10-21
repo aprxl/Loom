@@ -995,8 +995,14 @@ impl<'a> Builder<'a> {
         self.f.ret = Some(sig.ret);
         self.f.sret = sret;
         let depth = self.open_scope();
-        for (((param, sp), pabi), vals) in f.params.iter().zip(&sig.params).zip(&abi.params).zip(params) {
+        let mut params = params.into_iter();
+        for (((param, sp), pabi), vals) in f.params.iter().zip(&sig.params).zip(&abi.params).zip(params.by_ref()) {
             self.bind_param(param.local, sp.mode, pabi, vals, param.span)?;
+        }
+        // Then the `given`s.
+        let n = f.params.len();
+        for (((g, sp), pabi), vals) in f.givens.iter().zip(&sig.params[n..]).zip(&abi.params[n..]).zip(params) {
+            self.bind_param(g.local, sp.mode, pabi, vals, span)?;
         }
         let val = self.expr(body);
         if self.live() {

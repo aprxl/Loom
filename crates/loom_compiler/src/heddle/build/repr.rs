@@ -123,6 +123,7 @@ impl<'a> Builder<'a> {
             TyKind::Float(FloatTy::F64) => scalar(VTy::F64, Mem::W64),
             TyKind::Unit | TyKind::Never => Some(Vec::new()),
             TyKind::Str => Some(view_parts()),
+            TyKind::Ptr(..) => scalar(VTy::Ptr, Mem::W64),
             TyKind::Fn(..) => {
                 Some(vec![Part { vty: VTy::Int, mem: Mem::U32, off: 0 }, Part { vty: VTy::Ptr, mem: Mem::W64, off: 8 }])
             }
@@ -146,7 +147,8 @@ impl<'a> Builder<'a> {
             }
             TyKind::Adt(def, _) => match self.p.def_path(def).as_str() {
                 "std.slice.Slice" => Some(view_parts()),
-                "std.fmt.Fmt" | "std.sync.Spun" => scalar(VTy::Int, Mem::W64),
+                "std.fmt.Fmt" | "std.sync.Spun" | "std.mem.Arena" => scalar(VTy::Int, Mem::W64),
+                "std.mem.Heap" => Some(Vec::new()),
                 _ if self.is_builtin(def) => None,
                 _ => {
                     let info = self.warp_info(ty)?;
@@ -194,7 +196,9 @@ impl<'a> Builder<'a> {
             TyKind::Tuple(items) | TyKind::Union(items) => items.iter().any(|&t| self.needs_drop(t)),
             TyKind::Optional(t) | TyKind::Array(t, _) => self.needs_drop(t),
             TyKind::Result(t, e) => self.needs_drop(t) || self.needs_drop(e),
-            TyKind::Any(_) | TyKind::Ptr(..) => true,
+            TyKind::Any(_) => true,
+            // A pointer into the heap owns its box; one into a spool, nothing.
+            TyKind::Ptr(_, r) => r == self.tcx().heap,
             TyKind::Adt(def, _) => match self.p.def_path(def).as_str() {
                 "std.slice.Slice" | "std.fmt.Fmt" => false,
                 // A mutex owns its value.
@@ -203,6 +207,7 @@ impl<'a> Builder<'a> {
                     _ => false,
                 },
                 "std.string.String" | "std.list.List" | "std.map.Map" | "std.set.Set" | "std.iter.Stream" => true,
+                "std.mem.Arena" => true,
                 "std.iter.Shuttle" | "std.iter.Burst" | "std.fs.File" | "std.sync.Pipe" => true,
                 _ if self.is_builtin(def) => false,
                 _ => match self.warp_info(ty) {

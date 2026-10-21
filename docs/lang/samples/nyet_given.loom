@@ -1,0 +1,7 @@
+use std.io.print
+
+fn main() {
+    given greeting = "hello"
+    print("done")
+}
+//@ check-fail U0102

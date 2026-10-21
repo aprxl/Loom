@@ -454,7 +454,16 @@ fn append(ctx: &mut Ctx, header: u64, more: &[u8]) -> Result<(), Trap> {
         if new_cap > crate::heap::LIMIT {
             return Err(Trap::OutOfMemory);
         }
-        (ctx.heap.realloc(buf, cap, new_cap, 1)?, new_cap)
+        let moved = if cap == 0 && buf != 0 && len > 0 {
+            // Text an arena owns: it moves to a buffer of its own.
+            let moved = ctx.heap.alloc(new_cap, 1)?;
+            // SAFETY: `buf` has `len` bytes, and `moved` room for `new_cap`.
+            unsafe { std::ptr::copy_nonoverlapping(buf as *const u8, moved as *mut u8, len as usize) };
+            moved
+        } else {
+            ctx.heap.realloc(buf, cap, new_cap, 1)?
+        };
+        (moved, new_cap)
     } else {
         (buf, cap)
     };

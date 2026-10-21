@@ -12,6 +12,7 @@
 mod body;
 mod derive;
 mod items;
+pub mod regions;
 
 use std::collections::{HashMap, HashSet};
 
@@ -45,6 +46,7 @@ impl Resolved {
 pub fn resolve(db: &mut SourceDb, root: FileId, loader: &dyn Loader) -> Resolved {
     let mut r = Resolver::new(db, loader);
     r.run(root);
+    regions::add_params(&mut r.p);
     Resolved { program: r.p, diagnostics: r.diags }
 }
 

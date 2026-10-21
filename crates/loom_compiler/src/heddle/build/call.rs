@@ -115,6 +115,14 @@ impl<'a> Builder<'a> {
                     let shift = usize::from(info.receiver.is_some());
                     worked[i + shift].take()
                 }
+                // A `given` the call leaves to the one in scope: that local,
+                // lent; or the heap, which is nothing to pass.
+                ArgSource::Ambient(l) => {
+                    let ty = self.local_ty(*l);
+                    let place = self.local_place(*l, span)?;
+                    Some(Arg::Val(self.read_place(&place, ty, span)?, ty))
+                }
+                ArgSource::Heap => Some(Arg::Val(Val::Regs(Vec::new()), self.plain_ty(sig.params[k].ty))),
                 ArgSource::Default => {
                     let default = f.params.get(k).and_then(|p| p.default.as_ref())?;
                     if super::expr::mentions_locals(default) {

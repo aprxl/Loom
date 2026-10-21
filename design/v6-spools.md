@@ -142,7 +142,15 @@ templates and `Show` (`"{x}"`).
    (`^e` is one alloc plus its stores, `p^` one load); alloc+free of a small
    box at most 15 ns in `perf_gates.rs` (`#[ignore]`d, asserted); a
    `binary_trees` heap version in `bench/`.
-2. **Spools and regions.** (A `given` is passed on implicitly at calls:
+2. **Spools and regions. Done** (functionally; the arena's inline bump op and
+   its gates are below). Model as built: `Region::{Heap, Spool, Any}` in
+   types; `hir/lower/regions.rs` adds the hidden parameter to warps (and
+   weaves) that hold pointers; `given` params are implicit generics (the
+   weft's machinery) lowered first so types can name them; `typeck/regions.rs`
+   is the roots pass with a reset epoch per spool; a `String` in an arena has
+   capacity 0 and is moved to the heap if it grows. Left: R0103, `given` of
+   non-spools, collections in a spool.
+   Original plan: (A `given` is passed on implicitly at calls:
    the innermost one in scope. Inferring them for private functions is
    slice 3.) `str.copy()` and `String.copy()` allocate in the ambient spool. `Spool` weft, `Arena`, `spool x`, `heap`, `^T@s`,
    `@s` on types, hidden region parameters on warps, region-polymorphic read

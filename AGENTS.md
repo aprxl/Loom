@@ -256,6 +256,21 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
     (`perf_gates.rs`, gate 15 ns); `bench/ptr_trees` is `binary_trees` with
     pointers. Spools, `^T@s`, `given` and the region checker are slice 2.
 
+29. Treadle V6, slice 2 (design/v6-spools.md): spools and regions on both
+    backends. `spool x = Arena(cap)` (ended with its scope, never moved,
+    M0107), `x.put(v)`, `x.reset()`, `^T@s`; a warp that holds pointers has a
+    hidden region parameter (`Expr` is `Expr@r`); `given sp: Spool` is an
+    implicit generic over the spool's type (an instance for the heap, one for
+    arenas), passed on by the innermost `given` in scope or `given: x`, and
+    `^e` allocates in it; a read parameter written `^Expr` takes any spool.
+    `String` copies (`.copy()`) go in the ambient arena (capacity 0: the arena
+    owns the bytes). `ref warp` is accepted. The region checker
+    (`typeck/regions.rs`) gives R0101 (outlives its spool), R0102 (used after
+    `reset`) and R0104 (wrong spool for a parameter). `examples/calc.loom`
+    runs, checked by `tests/examples/calc.out`. Not done: `given` of anything
+    but a spool, defaults and inference of `given`s (slice 3), R0103
+    (threads), collections in a spool (slice 4).
+
 V5 is done. Its gates are asserted by `#[ignore]`d tests (`perf_gates.rs`,
 `compile_time.rs`), with these limits: mandelbrot with `loom for` scales
 about 5.7× on 8 workers (6.1–6.3× best of N in `bench/RESULTS.md`) against

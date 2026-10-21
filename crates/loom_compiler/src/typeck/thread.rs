@@ -44,6 +44,18 @@ impl Checker<'_> {
     /// `None` when `ty` isn't a type of `std.sync` with a constructor.
     pub(super) fn check_sync_new(&mut self, call: &Expr, ty: Ty, args: &[Arg]) -> Option<Ty> {
         let TyKind::Adt(def, targs) = self.tcx.kind(ty).clone() else { return None };
+        // `Arena(capacity)`.
+        if Some(def) == self.std.arena {
+            if args.len() != 1 || args[0].label.is_some() {
+                let span = args.first().map_or(call.span, |a| a.span);
+                self.error(codes::T0104, span, "`Arena` is made from its capacity", "write `Arena(1.kib())`");
+                self.check_args_alone(args);
+                return Some(self.tcx.error);
+            }
+            self.check_coerce(&args[0].value, self.tcx.usize);
+            self.b.sync_new.insert(call.id);
+            return Some(ty);
+        }
         let atomic = Some(def) == self.std.atomic;
         let pipe = Some(def) == self.std.pipe;
         if !atomic && !pipe && Some(def) != self.std.mutex {

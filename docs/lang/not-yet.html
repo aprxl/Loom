@@ -42,7 +42,7 @@
 <p>The design in <code>README.md</code> and <code>design/*.md</code> is bigger than what runs. This is the list of what doesn't run, from <code>design/lua-backend.md</code> and from trying it.</p>
 <p>Anything not built stops with a <code>U</code> code, and most stop with <a href="diagnostics.html#U0102">U0102</a>, "not implemented yet". The compiler doesn't guess and doesn't miscompile.</p>
 <h2 id="next-in-line">Next in line</h2>
-<p>These are planned next, in this order: the rest of threads, then spools and the rest of Loom's own VM, Treadle (designed in <code>design/vm.md</code>). Treadle already runs everything: <code>loom run --backend vm file.loom</code>. A program over one of its limits (a frame of more than 65 535 registers, say) stops with <a href="diagnostics.html#U0103">U0103</a>.</p>
+<p>These are planned next, in this order: the rest of threads, then the rest of <code>given</code> and Loom's own VM, Treadle (designed in <code>design/vm.md</code>). Treadle already runs everything: <code>loom run --backend vm file.loom</code>. A program over one of its limits (a frame of more than 65 535 registers, say) stops with <a href="diagnostics.html#U0103">U0103</a>.</p>
 <h3 id="threads">Threads</h3>
 <p><a href="threads.html">Threads</a> run, one at a time: <code>loom { }</code>, <code>thread</code>, <code>.join()</code> and <code>sched_yield()</code>. Not yet: several worker threads at once, <code>loom(given: pool)</code>, and <code>yield</code> or <code>pull</code> inside a <code>loom</code> block (<a href="diagnostics.html#U0102">U0102</a>).</p>
 <div class="sample" id="sample-nyet_threads">
@@ -65,28 +65,25 @@
 
 <span class="err">error: nyet_threads.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
-<h3 id="spools">Spools</h3>
-<p><code>spool</code> bindings, <code>Arena</code>, region pointers (<code>^T@s</code>), and the region checker that goes with them. Pointers into the heap (<code>^e</code>, <code>^T</code>) run: see <a href="ownership.html">Moves</a>. <a href="../std/modules/mem.html">std.mem</a> declares <code>Arena</code> and <code>Spool</code>.</p>
-<div class="sample" id="sample-nyet_spools">
-<div class="sample-head"><span class="file">samples/nyet_spools.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span></div>
-<pre class="code"><code><span class="k">use</span> std.mem.<span class="t">Arena</span>
-
-<span class="k">warp</span> <span class="t">Particle</span> {
-    x: f32
-}
+<h3 id="more-of-given">More of <code>given</code></h3>
+<p>Spools run (see <a href="ownership.html">Moves</a>), and so does a <code>given</code> that is a spool. Not yet: a <code>given</code> of anything else (a logger, a random number generator, a thread pool), a default for a <code>given</code>, leaving a private function's <code>given</code>s to be inferred, <code>Pool</code> and <code>SharedArena</code>:</p>
+<div class="sample" id="sample-nyet_given">
+<div class="sample-head"><span class="file">samples/nyet_given.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="k">fn</span> main() {
-    <span class="k">spool</span> frame = <span class="t">Arena</span>(<span class="n">1024</span>)
+    <span class="k">given</span> greeting = <span class="s">"hello"</span>
+    print(<span class="s">"done"</span>)
 }</code></pre>
-<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[U0102]: not implemented yet: spools</span>
-<span class="loc">  --&gt; nyet_spools.loom:8:19</span>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[U0102]: not implemented yet: `given` of something that isn't a spool</span>
+<span class="loc">  --&gt; nyet_given.loom:4:22</span>
   |
-8 |     spool frame = Arena(1024)
-  |                   ^^^^^^^^^^^ not supported by this compiler yet
+4 |     given greeting = "hello"
+  |                      ^^^^^^^ not supported by this compiler yet
   |
   = note: the type checker grows one milestone at a time; see design/lua-backend.md
 
-<span class="err">error: nyet_spools.loom failed to type-check (1 error)</span></code></pre></div>
+<span class="err">error: nyet_given.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
 <h2 id="compile-time-code">Compile-time code</h2>
 <p>The standard library's <code>std.sys</code> is not built, and neither are <code>T.bits</code> (which needs <code>#layout(bits)</code>), <code>f.ty</code> or <code>T.weaves(W)</code>:</p>
@@ -128,13 +125,13 @@
 <p>Also missing:</p>
 <ul><li><code>const fn</code>s that return types (<code>const fn fixed(...) -&gt; type</code>), and anonymous <code>warp { ... }</code> types (<a href="diagnostics.html#U0101">U0101</a>).</li><li><code>break</code> and <code>continue</code> out of a <code>const for</code>.</li><li><code>const</code> parameters that aren't integers or <code>bool</code>.</li><li><code>embed</code> and <code>embed_text</code>, and the <code>bolt.loom</code> manifest.</li></ul>
 <h2 id="memory-and-safety">Memory and safety</h2>
-<ul><li><code>given</code> parameters, <code>ref warp</code>, a <code>for</code> loop over a projection that lends many places, and <code>xs[i]</code> through an <code>Index</code> weave.</li><li><code>unsafe</code> blocks, raw pointers (<code>*T</code>), <code>extern "C"</code>, <code>Volatile</code>. <code>#layout(...)</code> is parsed but nothing acts on it.</li><li>User-written <code>Spool</code> weaves.</li><li>The region checker. Lambdas, slices and streams can't outlive the locals they borrow (<a href="diagnostics.html#M0106">M0106</a>), but nothing checks region pointers yet.</li></ul>
+<ul><li>A <code>for</code> loop over a projection that lends many places, and <code>xs[i]</code> through an <code>Index</code> weave.</li><li><code>unsafe</code> blocks, raw pointers (<code>*T</code>), <code>extern "C"</code>, <code>Volatile</code>. <code>#layout(...)</code> is parsed but nothing acts on it.</li><li>User-written <code>Spool</code> weaves.</li><li>Lists, maps and sets in a spool (<code>List[i32]@frame</code>): a <code>String</code> made with <code>.copy()</code> goes in the spool, other collections go on the heap.</li><li>A pointer into a spool crossing threads isn't checked yet (<a href="diagnostics.html#R0103">R0103</a>).</li></ul>
 <h2 id="types-and-library">Types and library</h2>
 <ul><li>Integers wider than 64 bits and <code>f16</code>.</li><li>Generic wefts (<code>weft From[T]</code>).</li><li><code>xs.sorted_by(...)</code> on a list or an array (it takes a stream: <code>xs.take(n).sorted_by(...)</code>, or <code>map.pairs().sorted_by(...)</code>), and other list methods the design mentions that std doesn't declare. <a href="../std/modules/list.html">std.list</a> and <a href="../std/modules/slice.html">std.slice</a> list what exists.</li><li>Reading standard input. <a href="../std/modules/io.html">std.io</a> has <code>print</code> and nothing else.</li><li>A <code>mut self</code> method of a scalar type can't be called through <code>any</code> yet, because the <code>any</code> holds its own copy.</li><li>A union of errors doesn't convert to <code>any Error</code>.</li><li>A warp that writes its own <code>eq</code> and <code>hash</code> is still keyed structurally in a <code>Map</code> or <code>Set</code>.</li></ul>
 <h2 id="running-programs">Running programs</h2>
 <ul><li>Ctrl-C handling (exit status 130), <code>process.exit</code>, an instruction budget for <code>loom run</code>, and running a bundle in an outside Lua (<code>--lua PATH</code>).</li><li>Async I/O and composing shuttles (<code>lexer().feed(parser())</code>) aren't in the design for this version.</li><li>The emitted Lua isn't optimized: checks the compiler could prove unneeded are still emitted. Speed comes later, with Loom's own interpreter.</li></ul>
 <h2 id="the-examples">The examples</h2>
-<p><code>examples/tour.loom</code>, <code>examples/widgets.loom</code>, <code>examples/ledger.loom</code>, <code>examples/lexer.loom</code> and <code>examples/chip8.loom</code> compile and run. <code>examples/compile_time.loom</code> fails only at <code>std.sys</code>. <code>examples/calc.loom</code> needs spools, <code>given</code> and <code>ref warp</code>, and <code>examples/parallel.loom</code> needs threads.</p>
+<p><code>examples/tour.loom</code>, <code>examples/widgets.loom</code>, <code>examples/ledger.loom</code>, <code>examples/lexer.loom</code> and <code>examples/chip8.loom</code> compile and run. <code>examples/compile_time.loom</code> fails only at <code>std.sys</code>. <code>examples/calc.loom</code> and <code>examples/parallel.loom</code> run too.</p>
 <div class="pager">
 <a href="threads.html">&larr; Threads</a>
 <a href="diagnostics.html">Diagnostic codes &rarr;</a>

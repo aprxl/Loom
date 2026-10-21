@@ -4,7 +4,7 @@
 //! (function, right-associative), `T@region`, prefix `? ^ * any`, atoms.
 
 use super::{NameCase, Parser};
-use crate::ast::{GenericArg, Ty, TyKind};
+use crate::ast::{GenericArg, Ident, Ty, TyKind};
 use crate::token::{Keyword, Punct, TokenKind};
 
 impl Parser<'_> {
@@ -76,7 +76,11 @@ impl Parser<'_> {
             return base;
         }
         self.bump();
-        let region = self.ident(NameCase::Value, "region name");
+        // `^T@self`: the spool a method is called on.
+        let region = match self.eat_kw(Keyword::SelfValue) {
+            Some(span) => Ident { name: "self".into(), span },
+            None => self.ident(NameCase::Value, "region name"),
+        };
         let span = base.span.to(region.span);
         Ty { kind: TyKind::Region { ty: Box::new(base), region }, span }
     }

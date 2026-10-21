@@ -63,6 +63,13 @@
 </div>
 <p class="item-doc">A region to allocate in. <code>heap</code> is the global one.</p>
 </div>
+<div class="item" id="Heap">
+<div class="item-head">
+<span class="sig">warp <strong>Heap</strong>: Spool</span>
+<span class="badge builtin">builtin</span>
+</div>
+<p class="item-doc">The global spool: each allocation is freed when its owner is dropped.</p>
+</div>
 <div class="item" id="Arena">
 <div class="item-head">
 <span class="sig">warp <strong>Arena</strong>: Spool</span>
@@ -76,6 +83,13 @@
 
 </div>
 <p class="member-doc">Frees everything allocated so far.</p>
+</div>
+<div class="member" id="Arena.put">
+<div class="member-head">
+<span class="sig">fn put[T](self, take value: T) -&gt; ^T@self</span>
+
+</div>
+<p class="member-doc">Moves <code>value</code> into the arena and gives a pointer to it. The pointer is <code>Copy</code> and owns nothing: it lasts until the arena is reset or ends.</p>
 </div>
 </div>
 </div>

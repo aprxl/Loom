@@ -115,6 +115,7 @@ impl Lowerer<'_> {
         let Some(coercion) = self.tables().coercions.get(&e.id) else { return v };
         match coercion {
             Coercion::Widen
+            | Coercion::Region
             | Coercion::StrToString
             | Coercion::StringToStr
             | Coercion::Discard
@@ -428,6 +429,7 @@ impl Lowerer<'_> {
             }
             ExprKind::Const(inner) => self.lower_const(e, inner),
             ExprKind::Intrinsic(hir::Intrinsic::Target) => self.target_value(ty),
+            ExprKind::Intrinsic(hir::Intrinsic::Heap) => Expr::Nil,
             ExprKind::Range { lo, hi, inclusive } => {
                 let bounds: Vec<&hir::Expr> = lo.iter().chain(hi.iter()).map(|b| b.as_ref()).collect();
                 let mut vals = self.lower_operands(&bounds);
@@ -734,10 +736,23 @@ impl Lowerer<'_> {
     fn short_circuit(&mut self, op: BinaryOp, lhs: &hir::Expr, rhs: &hir::Expr) -> Expr {
         let a = self.lower_expr(lhs);
         let mut b = Expr::Nil;
-        let stmts = self.nested(|this| b = this.lower_expr(rhs));
+        let mut stmts = self.nested(|this| b = this.lower_expr(rhs));
         let lua_op = if op == BinaryOp::And { "and" } else { "or" };
         if stmts.is_empty() {
             return Expr::bin(lua_op, a, b);
+        }
+        // What a pattern in `rhs` binds (`l is .A(x) and r is .B(y)`) is
+        // used after the test, so it is declared out here.
+        let mut bound = Vec::new();
+        stmts.retain(|s| match &s.kind {
+            StmtKind::Local(names, values) if values.is_empty() => {
+                bound.extend(names.iter().cloned());
+                false
+            }
+            _ => true,
+        });
+        if !bound.is_empty() {
+            self.push(StmtKind::Local(bound, Vec::new()));
         }
         let t = self.new_temp();
         self.push(StmtKind::Local(vec![t.clone()], vec![a]));
@@ -1010,7 +1025,7 @@ impl Lowerer<'_> {
         };
         let in_order = info.args.iter().filter_map(|s| match s {
             ArgSource::Arg(i) => Some(*i),
-            ArgSource::Default | ArgSource::Receiver => None,
+            ArgSource::Default | ArgSource::Receiver | ArgSource::Ambient(_) | ArgSource::Heap => None,
         });
         if !in_order.clone().is_sorted() {
             for v in lowered.iter_mut() {
@@ -1026,6 +1041,8 @@ impl Lowerer<'_> {
             match source {
                 ArgSource::Arg(i) => params.push(lowered[*i].clone()),
                 ArgSource::Receiver => params.push(receiver.clone().unwrap_or(Expr::Nil)),
+                ArgSource::Ambient(l) => params.push(Expr::Name(self.local_name(*l))),
+                ArgSource::Heap => params.push(Expr::Nil),
                 ArgSource::Default => {
                     let Some(default) = f.params.get(k).and_then(|p| p.default.as_ref()) else {
                         params.push(Expr::Nil);
@@ -1341,9 +1358,18 @@ impl Lowerer<'_> {
             HirStmt::Expr(e) => self.lower_into(e, &Dest::Discard),
             HirStmt::Item(_) => {}
             HirStmt::Defer { binding, body } => self.defer(*binding, body, stmt.span),
-            HirStmt::Given { .. } | HirStmt::Spool { .. } => {
-                self.unsupported(stmt.span, "this statement");
+            HirStmt::Spool { local, init } => {
+                let v = self.lower_owned(init);
+                let name = self.local_name(*local);
+                self.push_local(name, v);
             }
+            // The spool under another name, for calls that need one.
+            HirStmt::Given { local: Some(local), value } => {
+                let v = self.lower_expr(value);
+                let name = self.local_name(*local);
+                self.push_local(name, v);
+            }
+            HirStmt::Given { local: None, .. } => {}
         }
     }
 

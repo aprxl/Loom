@@ -117,6 +117,7 @@ pub const RUNTIME_WARPS: &[&str] = &[
     "std.sync.Atomic",
     "std.sync.Mutex",
     "std.sync.Pipe",
+    "std.mem.Arena",
 ];
 
 /// Lowers a type-checked program, which starts at `main`, after running its
@@ -506,6 +507,8 @@ impl<'a> Lowerer<'a> {
                         | "std.sync.Atomic"
                         | "std.sync.Pipe"
                         | "std.sync.Mutex"
+                        | "std.mem.Arena"
+                        | "std.mem.Heap"
                 ) =>
             {
                 Expr::field(Expr::name("rt"), "opaque")
@@ -699,7 +702,13 @@ impl<'a> Lowerer<'a> {
                     self.unsupported(span, &format!("functions with more than {MAX_PARAMS} parameters"));
                     return;
                 }
-                let params: Vec<String> = f.params.iter().map(|param| self.local_name(param.local)).collect();
+                let params: Vec<String> = f
+                    .params
+                    .iter()
+                    .map(|param| param.local)
+                    .chain(f.givens.iter().map(|g| g.local))
+                    .map(|l| self.local_name(l))
+                    .collect();
                 let body_expr = f.body.as_ref().expect("checked above");
                 let unit = matches!(f.ret, FnRet::Unit | FnRet::Shuttle { .. });
                 let mut body = self.body(span, |this| {

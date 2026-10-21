@@ -141,6 +141,15 @@ pub const NATIVES: &[NativeSig] = &[
     sig("map.find_int", 3, 2, NativeImm::None),
     // `mem.calloc(size, align) -> address`: zeroed.
     sig("mem.calloc", 2, 1, NativeImm::None),
+    // Arenas: `arena.new(capacity) -> arena`, `arena.alloc(arena, size) ->
+    // address`, `arena.reset(arena)` and `arena.free(arena)`.
+    sig("arena.new", 1, 1, NativeImm::None),
+    sig("arena.alloc", 2, 1, NativeImm::None),
+    sig("arena.reset", 1, 0, NativeImm::None),
+    sig("arena.free", 1, 0, NativeImm::None),
+    // `str.new_in(arena, text, length, destination)`: a `String` whose
+    // buffer an arena owns (its capacity is 0: it owns nothing).
+    sig("str.new_in", 4, 0, NativeImm::None),
     // `str.hash(text) -> u64`: Treadle's hash of the text (D8).
     sig("str.hash", 2, 1, NativeImm::None),
     // `mem.move(dst, src, bytes)`: copies bytes that may overlap.

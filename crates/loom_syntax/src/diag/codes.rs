@@ -122,6 +122,13 @@ codes! {
     M0104 = "`mut` access overlaps another use";
     M0105 = "a borrow is used after what it borrows changed";
     M0106 = "a borrow outlives what it borrows";
+    M0107 = "a spool can't be moved";
+
+    // R01xx: regions (design/v6-spools.md)
+    R0101 = "a value outlives the spool it points into";
+    R0102 = "a value is used after its spool was reset";
+    R0103 = "a pointer into a spool crosses threads";
+    R0104 = "a value is in another spool than its parameter says";
 
     // C04xx: threads (design/vm.md §11.3)
     C0401 = "a variable is changed by more than one thread";

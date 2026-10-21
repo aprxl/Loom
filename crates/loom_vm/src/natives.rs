@@ -598,6 +598,11 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
             "mem.grow" => mem_grow,
             "mem.move" => mem_move,
             "mem.calloc" => mem_calloc,
+            "str.new_in" => str_new_in,
+            "arena.new" => |c, a, _| arena_new(&mut c.heap, a),
+            "arena.alloc" => |c, a, _| arena_alloc(&mut c.heap, a),
+            "arena.reset" => |c, a, _| crate::arena::reset(&mut c.heap, a[0]),
+            "arena.free" => |c, a, _| crate::arena::free(&mut c.heap, a[0]),
             "atomic.load" => |c, a, _| crate::atomic::run(&c.heap, a, crate::atomic::Op::Load),
             "atomic.store" => |c, a, _| crate::atomic::run(&c.heap, a, crate::atomic::Op::Store),
             "atomic.swap" => |c, a, _| crate::atomic::run(&c.heap, a, crate::atomic::Op::Swap),
@@ -660,6 +665,10 @@ pub(crate) fn resolve_local(name: &str) -> Option<LocalFn> {
         "mem.free" => |h, a, _| heap_free(h, a),
         "mem.grow" => |h, a, _| heap_grow(h, a),
         "mem.calloc" => |h, a, _| heap_calloc(h, a),
+        "arena.new" => |h, a, _| arena_new(h, a),
+        "arena.alloc" => |h, a, _| arena_alloc(h, a),
+        "arena.reset" => |h, a, _| crate::arena::reset(h, a[0]),
+        "arena.free" => |h, a, _| crate::arena::free(h, a[0]),
         "mem.move" if !cfg!(feature = "checked") => |h, a, _| heap_move(h, a),
         "int.add_chk" => |_, a, _| checked(a, crate::ints::add_t),
         "int.sub_chk" => |_, a, _| checked(a, crate::ints::sub_t),
@@ -669,6 +678,40 @@ pub(crate) fn resolve_local(name: &str) -> Option<LocalFn> {
         "int.to_char_chk" => int_to_char_chk,
         _ => return crate::atomic::resolve(name).or_else(|| crate::methods::resolve_scalar(name)),
     })
+}
+
+/// `str.new_in(arena, text, length, destination)`.
+fn str_new_in(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    // SAFETY: as for `str.new`.
+    let text: *const [u8] = unsafe { ctx.text(args[1], args[2])? };
+    let text = unsafe { &*text };
+    let len = text.len() as u64;
+    let ptr = crate::arena::alloc(&mut ctx.heap, args[0], len)?;
+    // SAFETY: `ptr` is `len` bytes of the arena, which nothing else refers
+    // to; `args[3]` is where the compiler wants the string: three words of
+    // memory it owns. A capacity of 0 says the buffer isn't the string's to free.
+    unsafe {
+        if len > 0 {
+            std::ptr::copy_nonoverlapping(text.as_ptr(), ptr as *mut u8, text.len());
+        }
+        let d = args[3] as *mut u64;
+        d.write(ptr);
+        d.add(1).write(len);
+        d.add(2).write(0);
+    }
+    Ok(())
+}
+
+/// `arena.new(capacity) -> arena`.
+fn arena_new(heap: &mut Heap, args: &mut [u64]) -> Result<(), Trap> {
+    args[0] = crate::arena::new(heap, args[0])?;
+    Ok(())
+}
+
+/// `arena.alloc(arena, size) -> address`.
+fn arena_alloc(heap: &mut Heap, args: &mut [u64]) -> Result<(), Trap> {
+    args[0] = crate::arena::alloc(heap, args[0], args[1])?;
+    Ok(())
 }
 
 /// `mem.alloc(size, align) -> address`.
@@ -754,9 +797,9 @@ fn heap_grow(heap: &mut Heap, args: &mut [u64]) -> Result<(), Trap> {
     let (header, size, align, want) = (args[0], args[1], args[2], args[3]);
     // SAFETY: the compiler passes the address of a list's header, three
     // words it owns (the checked build checks the buffer below).
-    let (ptr, cap) = unsafe {
+    let (ptr, len, cap) = unsafe {
         let h = header as *const u64;
-        (h.read(), h.add(2).read())
+        (h.read(), h.add(1).read(), h.add(2).read())
     };
     if want <= cap {
         return Ok(());
@@ -766,7 +809,15 @@ fn heap_grow(heap: &mut Heap, args: &mut [u64]) -> Result<(), Trap> {
         (Some(o), Some(n)) if n <= crate::heap::LIMIT => (o, n),
         _ => return Err(Trap::OutOfMemory),
     };
-    let moved = heap.realloc(ptr, old_bytes, new_bytes, align)?;
+    let moved = if cap == 0 && ptr != 0 && len > 0 {
+        // A buffer an arena owns: what it holds moves to one of its own.
+        let moved = heap.alloc(new_bytes, align)?;
+        // SAFETY: `ptr` has `len` elements of `size` bytes, and `moved` room for more.
+        unsafe { std::ptr::copy_nonoverlapping(ptr as *const u8, moved as *mut u8, (len * size) as usize) };
+        moved
+    } else {
+        heap.realloc(ptr, old_bytes, new_bytes, align)?
+    };
     // SAFETY: as above.
     unsafe {
         let h = header as *mut u64;

@@ -31,7 +31,8 @@ The design itself is in the repository: `README.md` and `design/*.md`. Where the
 | Threads: `loom`, `thread`, `join`, `sched_yield`, `loom for`, `chunks_mut`, `Atomic`, `Mutex`, `Pipe`, cancel and failure, one at a time | works | [Threads](page:threads) |
 | several worker threads at once | not yet | [Not supported yet](page:not-yet) |
 | Heap pointers: `^e`, `p^`, `^T` | works | [Moves, `once` and `defer`](page:ownership) |
-| Spools, region pointers, `given`, `ref warp` | not yet | [Not supported yet](page:not-yet) |
+| Spools: `Arena`, `^T@s`, `given` spools, `ref warp`, the region checker | works | [Moves, `once` and `defer`](page:ownership) |
+| `given` that isn't a spool, `Pool`, `SharedArena` | not yet | [Not supported yet](page:not-yet) |
 | `unsafe`, raw pointers, `extern "C"`, `std.sys`, reading standard input | not yet | [Not supported yet](page:not-yet) |
 
 ## How to read a sample

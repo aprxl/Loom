@@ -693,7 +693,13 @@ impl Checker<'_> {
                 }
             }
             HirStmt::Given { value, .. } => self.mv(cx, value, false),
-            HirStmt::Spool { init, .. } => self.mv(cx, init, false),
+            HirStmt::Spool { local, init } => {
+                self.mv(cx, init, true);
+                cx.depth_of.insert(*local, cx.depth);
+                cx.scope_of.insert(*local, cx.scopes.len());
+                fresh(cx, *local);
+                self.declare(cx, *local);
+            }
             // The body runs at the end of the scope: what it moves, it
             // moves then. The fallback defer's own variable is its to move.
             HirStmt::Defer { binding, body } => {
@@ -949,6 +955,16 @@ impl Checker<'_> {
         if owning && path.is_empty() {
             cx.live.retain(|t| t.handle != Some(local));
         }
+        if owning && path.is_empty() && self.p.local(local).kind == crate::hir::LocalKind::Spool {
+            let name = self.p.local(local).name.clone();
+            self.report(
+                cx,
+                Diagnostic::error(codes::M0107, format!("the spool `{name}` can't be moved"))
+                    .primary(e.span, "a spool stays where it was made")
+                    .help(format!("lend it: `given: {name}`")),
+            );
+            return;
+        }
         if !owning || self.is_copy_expr(e) {
             return;
         }
@@ -1095,7 +1111,13 @@ impl Checker<'_> {
         let ty = self.deep_resolve(ty);
         match self.tcx.kind(ty) {
             TyKind::Fn(..) => true,
-            TyKind::Adt(def, _) => Some(*def) == self.std.slice || Some(*def) == self.std.stream,
+            // A `ref warp` holds borrows: it lives in locals and parameters.
+            TyKind::Adt(def, _) => {
+                Some(*def) == self.std.slice
+                    || Some(*def) == self.std.stream
+                    || matches!(&self.p.def(*def).kind, crate::hir::DefKind::Warp(w)
+                        if w.modifier == loom_syntax::ast::WarpModifier::Ref)
+            }
             _ => false,
         }
     }
@@ -1698,7 +1720,7 @@ fn capture(cx: &mut MoveCx, local: LocalId) {
 }
 
 /// The locals a pattern binds.
-fn pat_locals(pat: &Pat) -> Vec<LocalId> {
+pub(super) fn pat_locals(pat: &Pat) -> Vec<LocalId> {
     let mut out = Vec::new();
     collect_locals(pat, &mut out);
     out

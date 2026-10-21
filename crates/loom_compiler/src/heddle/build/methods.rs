@@ -275,9 +275,21 @@ impl<'a> Builder<'a> {
                 native(self, "str.split", 0, vec![p, n, q, m, sret?], 0);
                 Some(Vec::new())
             }
-            ("std.string.Str", "to_string" | "copy") => {
+            ("std.string.Str", "to_string") => {
                 let (p, n) = text(self, 0)?;
                 native(self, "str.new", 0, vec![p, n, sret?], 0);
+                Some(Vec::new())
+            }
+            // In the spool it is given: an arena's text goes with the arena.
+            ("std.string.Str", "copy") => {
+                let (p, n) = text(self, 0)?;
+                if self.is_arena(tys[1]) {
+                    let Val::Mem(at) = args[1] else { return self.internal(span, "a spool in registers") };
+                    let h = self.load(Mem::W64, at, 0, VTy::Int);
+                    native(self, "str.new_in", 0, vec![h, p, n, sret?], 0);
+                } else {
+                    native(self, "str.new", 0, vec![p, n, sret?], 0);
+                }
                 Some(Vec::new())
             }
             ("std.string.Str", "parse") => {

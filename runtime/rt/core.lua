@@ -2155,6 +2155,14 @@ atomic["std.sync.Atomic.sub"] = function(d, a, n)
   return before
 end
 
+-- Arenas. Lua has a collector, so a spool only has to stay out of the way: an
+-- arena is `{capacity}`, `put` makes a box like `^e` does, and `reset` frees
+-- nothing.
+rt.ext["std.mem.Arena.reset"] = function() end
+rt.ext["std.mem.Arena.put"] = function(_, _, v)
+  return { v }
+end
+
 -- Shuttles. A shuttle is `{co, ...}`: a coroutine running the function's
 -- body, which `yield v` suspends with `true, v` and `pull` with `false`.
 -- The driver resumes a pending `pull` with `true, input` for a push, or
@@ -3789,7 +3797,11 @@ local function same(s)
   return s
 end
 ext["std.string.Str.to_string"] = same
-ext["std.string.Str.copy"] = same
+-- `copy` takes the spool it is given after the text; Lua has a collector, so
+-- the descriptor of its type is all that comes first and it is not used.
+ext["std.string.Str.copy"] = function(_, s)
+  return s
+end
 
 -- `NumError`'s cases, by tag.
 local EMPTY, INVALID, OVERFLOW = 1, 2, 3

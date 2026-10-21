@@ -39,6 +39,7 @@ mod moves;
 mod pat;
 mod pointer;
 mod reflect;
+mod regions;
 mod seq;
 mod shuttle;
 #[cfg(test)]
@@ -278,6 +279,10 @@ pub struct Body {
     pub lends: HashMap<HirId, PlaceMode>,
     /// Patterns matched against a pointer, which match its target.
     pub pat_derefs: HashSet<HirId>,
+    /// Each `^e` that allocates in an arena: the local that is the arena.
+    pub allocs: HashMap<HirId, LocalId>,
+    /// Whether the body makes a spool (so its regions are checked).
+    pub spools: bool,
 }
 
 /// `f.Frame.size` (or `.align`): about the frame of shuttle function
@@ -347,6 +352,9 @@ pub enum Coercion {
     /// A pointer used as its target: the base of a field access, a method's
     /// receiver, a pattern's or a template's value.
     Deref,
+    /// A value in some region where a read parameter takes any: the same
+    /// bytes, held as a value that owns nothing.
+    Region,
 }
 
 #[derive(Clone, Debug)]
@@ -364,6 +372,9 @@ pub struct SigParam {
     /// For a `const` parameter: its value, a [`TyKind::Value`] in an
     /// instance, or a variable at a call until the argument gives it.
     pub value: Option<Ty>,
+    /// For a `given` parameter: the weft it takes. A call gives it with
+    /// `given: x`, or leaves it to the innermost `given` in scope.
+    pub given: Option<DefId>,
 }
 
 #[derive(Clone, Debug)]
@@ -392,6 +403,10 @@ pub enum ArgSource {
     Default,
     /// The value a method was called on.
     Receiver,
+    /// A `given` parameter the call leaves to the one in scope: this local.
+    Ambient(LocalId),
+    /// A `given` spool the call leaves to the heap.
+    Heap,
 }
 
 /// The value a method is called on, or a field is read from.
@@ -531,6 +546,9 @@ struct Std {
     burst: Option<DefId>,
     spun: Option<DefId>,
     atomic: Option<DefId>,
+    arena: Option<DefId>,
+    heap: Option<DefId>,
+    spool: Option<DefId>,
     mutex: Option<DefId>,
     pipe: Option<DefId>,
 }
@@ -571,6 +589,16 @@ struct Checker<'p> {
     /// Lowering the type in `Pair(1, 2)` or `Pair.new(…)`: a generic warp
     /// without arguments gets variables for them.
     infer_args: bool,
+    /// The region pointers lowered now are in, when the type names one
+    /// (`T@r`): else the heap.
+    region_ctx: Option<Ty>,
+    /// The `given`s in scope, innermost last, with their types.
+    given_scope: Vec<(LocalId, Ty)>,
+    /// What a call's `given` parameters are, as far as the call knows: the
+    /// type of each, in order (see `call_fn_with`).
+    given_hints: Vec<Option<Ty>>,
+    /// The `given` parameters of the signature being lowered.
+    given_tys: Vec<(LocalId, Ty)>,
     /// Types `register_types` has seen.
     registered: HashSet<Ty>,
     /// Diagnostics already reported from generic instances (see `note_instance`).
@@ -676,6 +704,9 @@ impl<'p> Checker<'p> {
             burst: find("std.iter", "Burst"),
             spun: find("std.sync", "Spun"),
             atomic: find("std.sync", "Atomic"),
+            arena: find("std.mem", "Arena"),
+            heap: find("std.mem", "Heap"),
+            spool: find("std.mem", "Spool"),
             mutex: find("std.sync", "Mutex"),
             pipe: find("std.sync", "Pipe"),
         };
@@ -694,6 +725,10 @@ impl<'p> Checker<'p> {
             implicit: generic::Implicit::Off,
             pending: Vec::new(),
             infer_args: false,
+            region_ctx: None,
+            given_scope: Vec::new(),
+            given_hints: Vec::new(),
+            given_tys: Vec::new(),
             registered: HashSet::new(),
             instance_diags: HashSet::new(),
             dyn_methods: HashSet::new(),
@@ -983,7 +1018,7 @@ impl<'p> Checker<'p> {
 
     /// A `weave W into T { … }` item.
     fn check_weave_item(&mut self, def: DefId, w: &hir::WeaveDef) {
-        if let Some(&g) = w.generics.iter().find(|&&g| !self.is_type_param(g)) {
+        if let Some(&g) = w.generics.iter().find(|&&g| !self.is_type_param(g) && !crate::hir::is_hidden(self.p, g)) {
             self.unsupported(self.p.def(g).span, "`const` and region parameters");
             return;
         }
@@ -1072,6 +1107,11 @@ impl<'p> Checker<'p> {
                 self.check_coerce(default, sig_param.ty);
             }
         }
+        let saved_givens = std::mem::take(&mut self.given_scope);
+        for (g, sig_param) in f.givens.iter().zip(&sig.params[f.params.len().min(sig.params.len())..]) {
+            self.b.local_ty.insert(g.local, sig_param.ty);
+            self.given_scope.push((g.local, sig_param.ty));
+        }
         // A shuttle's body runs when it's driven, and gives back nothing.
         self.shuttle = self.shuttle_ctx(f, &sig);
         let body_ty = if self.shuttle.is_some() { self.tcx.unit } else { sig.ret };
@@ -1082,8 +1122,10 @@ impl<'p> Checker<'p> {
             self.ret = None;
         }
         self.shuttle = None;
+        self.given_scope = saved_givens;
         self.finish_body(first_var);
         self.check_moves(f, body_ty == self.tcx.unit);
+        self.check_regions(f);
         self.const_locals.truncate(const_locals);
     }
 
@@ -1148,10 +1190,6 @@ impl<'p> Checker<'p> {
     }
 
     fn lower_sig_with(&mut self, f: &hir::FnDef, span: Span, mut mode: generic::Implicit) -> Option<FnSig> {
-        if !f.givens.is_empty() {
-            self.unsupported(span, "`given` parameters");
-            return None;
-        }
         let mut params = Vec::with_capacity(f.params.len());
         let const_locals = self.const_locals.len();
         let sig = self.lower_sig_params(f, span, &mut mode, &mut params);
@@ -1172,6 +1210,37 @@ impl<'p> Checker<'p> {
         mode: &mut generic::Implicit,
         params: &mut Vec<SigParam>,
     ) -> Option<FnSig> {
+        // The `given` parameters, first: the types after them can name them
+        // (`e: ^Expr@sp`). Each is a weft, so the function is generic over
+        // the type it is given. They follow the others in the signature.
+        let mut hints = std::mem::take(&mut self.given_hints).into_iter();
+        self.given_tys.clear();
+        let mut given_params = Vec::with_capacity(f.givens.len());
+        for g in &f.givens {
+            let Some(weft) = self.weft_of(&g.ty) else {
+                self.unsupported(g.ty.span, "`given` parameters that aren't a weft");
+                return None;
+            };
+            self.implicit = std::mem::take(mode);
+            let ty = self.lower_ty(&g.ty);
+            *mode = std::mem::take(&mut self.implicit);
+            if let Some(hint) = hints.next().flatten() {
+                self.unify(ty, hint);
+            }
+            if self.tcx.is_error(ty) {
+                return None;
+            }
+            self.given_tys.push((g.local, ty));
+            let name = self.p.local(g.local).name.clone();
+            given_params.push(SigParam {
+                name,
+                mode: ParamMode::Read,
+                ty,
+                has_default: false,
+                value: None,
+                given: Some(weft),
+            });
+        }
         for param in &f.params {
             let ty = if param.is_self {
                 match self.self_ty {
@@ -1183,7 +1252,13 @@ impl<'p> Checker<'p> {
                 }
             } else {
                 self.implicit = std::mem::take(mode);
+                // A read parameter without a region takes pointers into any.
+                let saved = std::mem::replace(
+                    &mut self.region_ctx,
+                    (param.mode == ParamMode::Read).then_some(self.tcx.any_region),
+                );
                 let ty = param.ty.as_ref().map_or(self.tcx.error, |t| self.lower_ty(t));
+                self.region_ctx = saved;
                 *mode = std::mem::take(&mut self.implicit);
                 ty
             };
@@ -1219,8 +1294,16 @@ impl<'p> Checker<'p> {
             // A `mut` parameter shares the caller's table; a scalar one (a
             // number, a string, an enum) is copied back after the call.
             let name = self.p.local(param.local).name.clone();
-            params.push(SigParam { name, mode: param.mode, ty, has_default: param.default.is_some(), value });
+            params.push(SigParam {
+                name,
+                mode: param.mode,
+                ty,
+                has_default: param.default.is_some(),
+                value,
+                given: None,
+            });
         }
+        params.extend(given_params);
         let ret = match &f.ret {
             FnRet::Unit => self.tcx.unit,
             FnRet::Value(t) => self.lower_ty(t),
@@ -1304,8 +1387,20 @@ impl<'p> Checker<'p> {
                 let infer = std::mem::take(&mut self.infer_args);
                 match &d.kind {
                     DefKind::Warp(w) => {
-                        let mut lowered = if args.len() == w.generics.len() {
+                        // A warp that holds pointers has a region as its
+                        // last parameter, which a type never writes.
+                        let hidden = crate::hir::hidden_param(self.p, w);
+                        let user = &w.generics[..w.generics.len() - usize::from(hidden.is_some())];
+                        // A weave's target names its region (`Expr@r`, made
+                        // by `hir/lower/regions.rs`).
+                        let explicit = hidden.is_some() && args.len() == user.len() + 1;
+                        let mut lowered = if explicit {
                             match self.generic_args(&w.generics, args) {
+                                Some(args) => args,
+                                None => return self.tcx.error,
+                            }
+                        } else if args.len() == user.len() {
+                            match self.generic_args(user, args) {
                                 Some(args) => args,
                                 None => return self.tcx.error,
                             }
@@ -1313,13 +1408,13 @@ impl<'p> Checker<'p> {
                             // The wrong number, reported below.
                             args.iter().map(|_| self.tcx.error).collect()
                         };
-                        if lowered.is_empty() && !w.generics.is_empty() && infer {
-                            lowered = w.generics.iter().map(|_| self.new_var(infer::VarKind::Type)).collect();
+                        if lowered.is_empty() && !user.is_empty() && infer {
+                            lowered = user.iter().map(|_| self.new_var(infer::VarKind::Type)).collect();
                         }
-                        if lowered.len() != w.generics.len() {
-                            let n = w.generics.len();
+                        if lowered.len() != user.len() + usize::from(explicit) {
+                            let n = user.len();
                             let name = d.name.clone();
-                            let params: Vec<&str> = w.generics.iter().map(|&g| self.p.def(g).name.as_str()).collect();
+                            let params: Vec<&str> = user.iter().map(|&g| self.p.def(g).name.as_str()).collect();
                             let diag = if n == 0 {
                                 Diagnostic::error(codes::T0104, format!("`{name}` takes no type arguments"))
                                     .primary(span, "remove the brackets")
@@ -1336,6 +1431,20 @@ impl<'p> Checker<'p> {
                         // std's `Range[T]` is the type of `a..b`.
                         if Some(*def) == self.std.range_warp && lowered.len() == 1 {
                             return self.tcx.intern(TyKind::Range(lowered[0]));
+                        }
+                        if let Some(h) = hidden.filter(|_| !explicit) {
+                            // Where the type says it (`T@r`), else the region
+                            // the warp is being written in, else a variable
+                            // for a constructor to settle, else the heap.
+                            let region = match self.region_ctx {
+                                Some(r) => r,
+                                None => match self.subst.iter().find(|(g, _)| *g == h) {
+                                    Some(&(_, r)) => r,
+                                    None if infer => self.new_var(infer::VarKind::Type),
+                                    None => self.tcx.heap,
+                                },
+                            };
+                            lowered.push(region);
                         }
                         self.tcx.intern(TyKind::Adt(*def, lowered))
                     }
@@ -1420,11 +1529,21 @@ impl<'p> Checker<'p> {
                 if self.tcx.is_error(elem) { elem } else { self.slice_of(elem) }
             }
             HirTy::Pointer(inner) => {
+                let region = self.region_ctx.unwrap_or(self.tcx.heap);
                 let elem = self.lower_ty(inner);
-                if self.tcx.is_error(elem) { elem } else { self.tcx.intern(TyKind::Ptr(elem, self.tcx.heap)) }
+                if self.tcx.is_error(elem) { elem } else { self.tcx.intern(TyKind::Ptr(elem, region)) }
             }
-            HirTy::Region { region: crate::hir::Region::Heap, ty } => self.lower_ty(ty),
-            HirTy::Region { .. } => self.unsupported(span, "spool regions"),
+            // `T@r`: the pointers in `T` are into `r`.
+            HirTy::Region { ty, region } => {
+                let region = self.region_ty(region, span);
+                if self.tcx.is_error(region) {
+                    return region;
+                }
+                let saved = self.region_ctx.replace(region);
+                let lowered = self.lower_ty(ty);
+                self.region_ctx = saved;
+                lowered
+            }
             HirTy::RawPointer(_) => self.unsupported(span, "raw pointers"),
             HirTy::Union(items) => {
                 let items: Vec<Ty> = items.iter().map(|t| self.lower_ty(t)).collect();
@@ -1569,6 +1688,12 @@ impl<'p> Checker<'p> {
         if (self.has_vars(actual) || self.has_vars(target)) && self.unify(actual, target) {
             return true;
         }
+        // A read parameter written without a region takes values from any.
+        if self.erases_regions(actual, target) {
+            self.b.coerced.insert(e.id, target);
+            self.b.coercions.insert(e.id, Coercion::Region);
+            return true;
+        }
         if let TyKind::Optional(inner) = *self.tcx.kind(target)
             && (self.has_vars(actual) || self.has_vars(inner))
             && self.unify(actual, inner)
@@ -1675,6 +1800,16 @@ impl<'p> Checker<'p> {
                 self.b.coerced.insert(e.id, target);
                 self.b.coercions.insert(e.id, coercion);
                 true
+            }
+            None if self.regions_only(actual, target) => {
+                let (want, have) = (self.show(target), self.show(actual));
+                self.diags.push(
+                    Diagnostic::error(codes::R0101, format!("a value in a spool where `{want}` is wanted"))
+                        .primary(e.span, format!("this is `{have}`"))
+                        .note(format!("`{want}` means a pointer into the heap, which the value doesn't outlive"))
+                        .help("take `given out: Spool` and return `^T@out`"),
+                );
+                false
             }
             None => {
                 self.mismatch(e.span, target, actual);

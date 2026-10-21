@@ -125,12 +125,8 @@ impl Checker<'_> {
         let p = self.p;
         let d = p.def(def);
         let DefKind::Warp(w) = &d.kind else { return None };
-        if w.modifier == loom_syntax::ast::WarpModifier::Ref {
-            self.unsupported(d.span, "`ref` warps");
-            return None;
-        }
         let once = w.modifier == loom_syntax::ast::WarpModifier::Once;
-        if let Some(&param) = w.generics.iter().find(|&&g| self.is_region_param(g)) {
+        if let Some(&param) = w.generics.iter().find(|&&g| self.is_region_param(g) && !crate::hir::is_hidden(p, g)) {
             self.unsupported(p.def(param).span, "region parameters");
             return None;
         }
@@ -158,6 +154,10 @@ impl Checker<'_> {
     ) -> (Vec<FieldInfo>, Vec<CaseInfo>) {
         let p = self.p;
         let saved_self = self.self_ty.replace(this);
+        // The pointers in its fields are into the region it is in.
+        let own_region =
+            crate::hir::hidden_param(p, w).and_then(|h| subst.iter().find(|(g, _)| *g == h).map(|&(_, r)| r));
+        let saved_region = std::mem::replace(&mut self.region_ctx, own_region);
         let saved_subst = std::mem::replace(&mut self.subst, subst);
         let saved_current = self.current.replace(def);
         let mut fields = Vec::new();
@@ -197,6 +197,7 @@ impl Checker<'_> {
         }
         self.self_ty = saved_self;
         self.subst = saved_subst;
+        self.region_ctx = saved_region;
         self.current = saved_current;
         (fields, cases)
     }
@@ -329,7 +330,9 @@ impl Checker<'_> {
                 Some(info) => info.copy,
                 None => self.adt_info(ty).is_some_and(|i| i.copy),
             },
-            TyKind::Fn(..) | TyKind::Any(_) | TyKind::Union(_) | TyKind::Ptr(..) => false,
+            TyKind::Fn(..) | TyKind::Any(_) | TyKind::Union(_) => false,
+            // A pointer into a spool is a copy of an address.
+            TyKind::Ptr(_, r) => r == self.tcx.spool,
             TyKind::Region(_) => true,
             TyKind::Array(t, _) | TyKind::ArrayOf(t, _) => self.is_copy(t),
         }

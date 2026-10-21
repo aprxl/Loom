@@ -126,6 +126,10 @@ impl<'a> Builder<'a> {
                 "std.iter.Stream" => self.drop_stream(ptr),
                 "std.iter.Shuttle" | "std.iter.Burst" => self.drop_shuttle(ptr),
                 "std.sync.Pipe" => self.drop_pipe(ptr),
+                "std.mem.Arena" => {
+                    let h = self.load(Mem::W64, ptr, 0, VTy::Int);
+                    self.emit(InstKind::Native { name: "arena.free", imm: 0, args: vec![h] }, &[]);
+                }
                 // The value is after the lock word.
                 "std.sync.Mutex" => self.drop_field(ptr, 8, args[0]),
                 "std.map.Map" | "std.set.Set" => {

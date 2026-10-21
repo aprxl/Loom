@@ -216,6 +216,15 @@ impl<'a> Builder<'a> {
                 let ptr = self.ty_of(e);
                 self.pointee(&v, ptr, e.span).map(|(x, _)| x)
             }
+            // The same bytes, as a value that owns nothing: in registers if
+            // that is how the target lives.
+            Coercion::Region => {
+                let target = self.coerced_ty(e);
+                match v {
+                    Val::Mem(at) if self.in_regs(target) => self.load_val(at, 0, target, e.span),
+                    v => Some(v),
+                }
+            }
         }
     }
 
@@ -325,7 +334,7 @@ impl<'a> Builder<'a> {
                 Some(Val::Regs(Vec::new()))
             }
             ExprKind::Call { callee, args } => self.call(e, callee, args, ty),
-            ExprKind::Unary { op: UnaryOp::Alloc, operand } => self.alloc_expr(operand, ty, span),
+            ExprKind::Unary { op: UnaryOp::Alloc, operand } => self.alloc_expr(e.id, operand, ty, span),
             ExprKind::Unary { op, operand } => self.unary(*op, operand, ty, span).map(Val::Regs),
             ExprKind::Deref(inner) => {
                 let v = self.expr(inner)?;
@@ -362,7 +371,7 @@ impl<'a> Builder<'a> {
             ExprKind::Lambda { .. } => self.lambda(e),
             ExprKind::Range { lo, hi, inclusive } => self.range_value(lo.as_deref(), hi.as_deref(), *inclusive),
             ExprKind::Intrinsic(hir::Intrinsic::Target) => self.target_value(ty, span),
-            ExprKind::Intrinsic(_) => self.unsupported(span, "`heap`"),
+            ExprKind::Intrinsic(hir::Intrinsic::Heap) => Some(Val::Regs(Vec::new())),
             ExprKind::Yield { place: None, value } => self.yield_expr(value, span),
             ExprKind::Yield { value, .. } => self.yield_place(value, span),
             ExprKind::Pull => self.pull_expr(e, span),
@@ -621,7 +630,18 @@ impl<'a> Builder<'a> {
             StmtKind::Expr(e) => self.expr(e).map(drop),
             StmtKind::Item(_) => Some(()),
             StmtKind::Defer { binding, body } => self.defer(*binding, body, stmt.span),
-            StmtKind::Given { .. } | StmtKind::Spool { .. } => self.unsupported(stmt.span, "`given` and spools"),
+            StmtKind::Spool { local, init } => {
+                let val = self.expr(init)?;
+                self.bind_local(*local, val, super::pat::Binding::Owned, stmt.span)
+            }
+            // The spool under another name: a view of where it is.
+            StmtKind::Given { local, value } => {
+                let Some(local) = local else { return Some(()) };
+                let (place, _) = self.place(value)?;
+                let at = self.place_addr(&place, stmt.span)?;
+                self.bind_ref(*local, at);
+                Some(())
+            }
         }
     }
 

@@ -106,7 +106,7 @@ impl Checker<'_> {
     fn implicit_count(&self, def: DefId) -> usize {
         let DefKind::Fn(f) = &self.p.def(def).kind else { return 0 };
         let wefts: usize = f.params.iter().filter_map(|p| p.ty.as_ref()).map(|t| self.wefts_in(t)).sum();
-        wefts + f.params.iter().filter(|p| p.mode == loom_syntax::ast::ParamMode::Const).count()
+        wefts + f.params.iter().filter(|p| p.mode == loom_syntax::ast::ParamMode::Const).count() + f.givens.len()
     }
 
     fn wefts_in(&self, t: &hir::Ty) -> usize {

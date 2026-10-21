@@ -51,6 +51,7 @@ pub(super) fn writes_body(path: &str) -> bool {
         || super::sync::writes_body(path)
         || path.starts_with("std.map.Map.")
         || path.starts_with("std.set.Set.")
+        || path.starts_with("std.mem.Arena.")
         || matches!(path, "std.fs.File.append" | "std.fs.File.write_line")
 }
 
@@ -104,6 +105,10 @@ impl<'a> Builder<'a> {
         if path.starts_with("std.map.Map.") || path.starts_with("std.set.Set.") {
             let name = path.rsplit('.').next().unwrap_or_default();
             self.coll_method(name, &args, &tys, ret, span)?;
+            return Some(abi.results);
+        }
+        if path.starts_with("std.mem.Arena.") {
+            self.arena_method(&path, &args, &tys, span)?;
             return Some(abi.results);
         }
         // The element type: of `self`, or of the list `filled` makes.

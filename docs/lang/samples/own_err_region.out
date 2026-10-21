@@ -1,0 +1,11 @@
+error[R0102]: `t` points into `frame`, which was reset
+   --> docs/lang/samples/own_err_region.loom:22:11
+   |
+21 |     frame.reset()
+   |     ------------- `frame` reset here
+22 |     count(t)
+   |           ^ used here
+   |
+   = help: move the reset after the last use, or `.copy()` the value into another spool first
+
+error: docs/lang/samples/own_err_region.loom failed to type-check (1 error)

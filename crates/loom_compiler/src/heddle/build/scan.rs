@@ -352,7 +352,7 @@ impl Scanner<'_, '_> {
                         }
                         _ => {}
                     },
-                    ArgSource::Default => {}
+                    ArgSource::Default | ArgSource::Ambient(_) | ArgSource::Heap => {}
                 }
             }
         }

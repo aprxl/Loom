@@ -14,6 +14,7 @@
 //! says why it's sound. The `checked` feature adds run-time checks where the
 //! compiler is trusted (design/vm.md §5.6).
 
+mod arena;
 mod atomic;
 mod exec;
 mod fmt;

@@ -33,6 +33,7 @@ use loom_syntax::source::{FileId, Span};
 use loom_syntax::token::{Keyword, PrimType};
 use loom_syntax::twill::TwillPattern;
 
+pub use lower::regions::{HIDDEN, hidden_param, is_hidden};
 pub use lower::{Resolved, resolve};
 
 macro_rules! id {

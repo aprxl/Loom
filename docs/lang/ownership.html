@@ -381,8 +381,85 @@ end of iteration 2</code></pre></div>
 42</code></pre></div>
 </div>
 <p>A <code>take</code> pointer that a <code>match</code> takes apart hands its parts to the arms by value, so the arms can move them into a new node.</p>
+<h2 id="spools">Spools</h2>
+<p>A pointer into the heap owns its box and frees it. When many values live and die together (the nodes of a tree, a frame of a game) a <strong>spool</strong> is cheaper: <code>spool frame = Arena(1.kib())</code> makes one, <code>frame.put(v)</code> moves a value into it, and <code>^e</code> allocates in the spool a function is <code>given</code>. A pointer into a spool is <code>Copy</code> and owns nothing; <code>frame.reset()</code> takes every allocation back at once, and the spool ends with its scope.</p>
+<p><code>^T@s</code> is a pointer into the spool <code>s</code>, and <code>fn tree() -&gt; ^Node@sp given sp: Spool</code> is a function that builds in whichever spool the caller gives (<code>tree(4, given: frame)</code>), or the heap if the call gives none. A parameter written <code>^Node</code> takes a tree from any spool. A warp that holds pointers (<code>Node</code>) is <code>Node@s</code> for the spool its nodes are in.</p>
+<div class="sample" id="sample-own_spools">
+<div class="sample-head"><span class="file">samples/own_spools.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.mem.{<span class="t">Arena</span>, <span class="t">Spool</span>, kib}
+
+<span class="k">warp</span> <span class="t">Node</span> {
+    <span class="k">case</span> <span class="t">Leaf</span>(i32)
+    <span class="k">case</span> <span class="t">Pair</span>(^<span class="t">Node</span>, ^<span class="t">Node</span>)
+}
+
+<span class="c">// The tree lives in whichever spool the caller gives; with none it is on the heap.</span>
+<span class="k">fn</span> tree(depth: i32) -&gt; ^<span class="t">Node</span>@sp <span class="k">given</span> sp: <span class="t">Spool</span> {
+    <span class="k">if</span> depth == <span class="n">0</span> { <span class="k">return</span> ^<span class="t">Node</span>.<span class="t">Leaf</span>(<span class="n">1</span>) }
+    ^<span class="t">Node</span>.<span class="t">Pair</span>(tree(depth - <span class="n">1</span>), tree(depth - <span class="n">1</span>))
+}
+
+<span class="c">// A parameter without a region takes a tree from any spool.</span>
+<span class="k">fn</span> count(n: ^<span class="t">Node</span>) -&gt; i32 = <span class="k">match</span> n {
+    .<span class="t">Leaf</span>(k) =&gt; k
+    .<span class="t">Pair</span>(a, b) =&gt; count(a) + count(b)
+}
+
+<span class="k">fn</span> main() {
+    <span class="k">spool</span> frame = <span class="t">Arena</span>(<span class="n">1</span>.kib())
+    <span class="k">let</span> t = tree(<span class="n">4</span>, <span class="k">given</span>: frame)
+    print(<span class="s">"{</span>count(t)<span class="s">}"</span>)
+    frame.reset()                       <span class="c">// every node goes at once</span>
+    <span class="k">let</span> u = tree(<span class="n">3</span>, <span class="k">given</span>: frame)
+    print(<span class="s">"{</span>count(u)<span class="s">}"</span>)
+    print(<span class="s">"{</span>count(tree(<span class="n">5</span>))<span class="s">}"</span>)           <span class="c">// no spool: the heap</span>
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>16
+8
+32</code></pre></div>
+</div>
+<p>The region checker keeps pointers from outliving their spool: a value that points into a spool can't be returned out of the block the spool ends with (<a href="diagnostics.html#R0101">R0101</a>), used after the spool was reset (<a href="diagnostics.html#R0102">R0102</a>), or passed where a parameter names another spool (<a href="diagnostics.html#R0104">R0104</a>). A spool can't be moved (<a href="diagnostics.html#M0107">M0107</a>).</p>
+<div class="sample" id="sample-own_err_region">
+<div class="sample-head"><span class="file">samples/own_err_region.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#R0102">R0102</a></span></div>
+<pre class="code"><code><span class="k">use</span> std.mem.{<span class="t">Arena</span>, <span class="t">Spool</span>, kib}
+
+<span class="k">warp</span> <span class="t">Node</span> {
+    <span class="k">case</span> <span class="t">Leaf</span>(i32)
+    <span class="k">case</span> <span class="t">Pair</span>(^<span class="t">Node</span>, ^<span class="t">Node</span>)
+}
+
+<span class="k">fn</span> tree(depth: i32) -&gt; ^<span class="t">Node</span>@sp <span class="k">given</span> sp: <span class="t">Spool</span> {
+    <span class="k">if</span> depth == <span class="n">0</span> { <span class="k">return</span> ^<span class="t">Node</span>.<span class="t">Leaf</span>(<span class="n">1</span>) }
+    ^<span class="t">Node</span>.<span class="t">Pair</span>(tree(depth - <span class="n">1</span>), tree(depth - <span class="n">1</span>))
+}
+
+<span class="k">fn</span> count(n: ^<span class="t">Node</span>) -&gt; i32 = <span class="k">match</span> n {
+    .<span class="t">Leaf</span>(k) =&gt; k
+    .<span class="t">Pair</span>(a, b) =&gt; count(a) + count(b)
+}
+
+<span class="k">fn</span> main() {
+    <span class="k">spool</span> frame = <span class="t">Arena</span>(<span class="n">1</span>.kib())
+    <span class="k">let</span> t = tree(<span class="n">2</span>, <span class="k">given</span>: frame)
+    frame.reset()
+    count(t)
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[R0102]: `t` points into `frame`, which was reset</span>
+<span class="loc">   --&gt; own_err_region.loom:22:11</span>
+   |
+21 |     frame.reset()
+   |     ------------- `frame` reset here
+22 |     count(t)
+   |           ^ used here
+   |
+   = help: move the reset after the last use, or `.copy()` the value into another spool first
+
+<span class="err">error: own_err_region.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<p>Text copied with <code>.copy()</code> goes in the spool the call is given, so an arena's tree can hold names and still go at once.</p>
 <h2 id="not-supported-yet">Not supported yet</h2>
-<p><code>ref warp</code>, spools, region pointers (<code>^T@s</code>) and <code>given</code> belong to this part of the design and stop with <a href="diagnostics.html#U0102">U0102</a>. Projections (<code>~&gt; mut T</code>), which lend a place, work: see <a href="shuttles.html">Shuttles</a>. See <a href="not-yet.html">Not supported yet</a>.</p>
+<p>A <code>given</code> other than a spool (a logger, a random number generator), a <code>Pool</code> and <code>SharedArena</code>, and pointers into a spool crossing threads (<a href="diagnostics.html#R0103">R0103</a>) are not built yet and stop with <a href="diagnostics.html#U0102">U0102</a>. Projections (<code>~&gt; mut T</code>), which lend a place, work: see <a href="shuttles.html">Shuttles</a>. See <a href="not-yet.html">Not supported yet</a>.</p>
 <h2 id="where-next">Where next</h2>
 <p><a href="gauges.html">Gauges</a> restrict a number to a range.</p>
 <div class="pager">

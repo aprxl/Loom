@@ -1,0 +1,52 @@
+use std.io.print
+use std.mem.{Arena, Spool, kib}
+
+warp Expr {
+    case Num(f64)
+    case Neg(^Expr)
+}
+
+fn parse(n: f64) -> ^Expr@sp given sp: Spool = ^Expr.Neg(^Expr.Num(n))
+
+fn dangling() -> ^Expr {
+    spool tmp = Arena(1.kib())
+    parse(1.0, given: tmp)                 //~ R0101
+}
+
+fn too_early() {
+    spool raw = Arena(1.kib())
+    let t = parse(1.0, given: raw)
+    raw.reset()
+    print("{t:?}")                         //~ R0102
+}
+
+fn through_the_loop() {
+    spool frame = Arena(1.kib())
+    let keep = parse(0.0, given: frame)
+    for i in 0..3 {
+        print("{keep:?}")                   //~ R0102
+        frame.reset()
+    }
+}
+
+fn reset_and_rebuild() {
+    spool frame = Arena(1.kib())
+    for i in 0..3 {
+        frame.reset()
+        let fresh = parse(1.0, given: frame)
+        print("{fresh:?}")
+    }
+}
+
+fn left(e: ^Expr@sp) -> ^Expr@sp given sp: Spool = e
+
+fn mixed() {
+    spool a = Arena(1.kib())
+    spool b = Arena(1.kib())
+    let x = parse(1.0, given: a)
+    let y = left(x, given: b)              //~ R0104
+}
+
+fn main() {
+    dangling()
+}

@@ -162,7 +162,7 @@ impl Checker<'_> {
             }
             ExprKind::BuiltinCase(_) => self.unsupported(span, "`some`, `ok` and `err`"),
             ExprKind::Intrinsic(crate::hir::Intrinsic::Target) => self.target_ty(span),
-            ExprKind::Intrinsic(_) => self.unsupported(span, "`heap`"),
+            ExprKind::Intrinsic(crate::hir::Intrinsic::Heap) => self.heap_ty(span),
             ExprKind::LeadingDot(field) => self.check_leading_value(e, field, expected),
             ExprKind::Tuple(items) => self.check_tuple(items, expected),
             ExprKind::Array(items) => self.check_array_lit(e, items, expected),
@@ -329,7 +329,7 @@ impl Checker<'_> {
                 self.check_pat(pat, ty);
                 self.tcx.bool
             }
-            ExprKind::Unary { op, operand } => self.check_unary(*op, operand, span, expected),
+            ExprKind::Unary { op, operand } => self.check_unary(e, *op, operand, span, expected),
             ExprKind::Binary { op, lhs, rhs } => self.check_binary(*op, lhs, rhs, span, expected),
             ExprKind::Chain { first, rest } => {
                 let mut operands = vec![first.as_ref()];
@@ -507,6 +507,13 @@ impl Checker<'_> {
     }
 
     fn check_block_inner(&mut self, block: &Block, expected: Option<Ty>) -> Ty {
+        let givens = self.given_scope.len();
+        let ty = self.check_block_stmts(block, expected);
+        self.given_scope.truncate(givens);
+        ty
+    }
+
+    fn check_block_stmts(&mut self, block: &Block, expected: Option<Ty>) -> Ty {
         let Some((last, rest)) = block.stmts.split_last() else {
             return self.expect_unit_tail(block.span, expected);
         };
@@ -597,12 +604,8 @@ impl Checker<'_> {
             StmtKind::Item(def) => {
                 self.queue_def(*def);
             }
-            StmtKind::Given { value, .. } => {
-                self.unsupported(value.span, "`given`");
-            }
-            StmtKind::Spool { init, .. } => {
-                self.unsupported(init.span, "spools");
-            }
+            StmtKind::Given { local, value } => self.check_given(*local, value),
+            StmtKind::Spool { local, init } => self.check_spool(*local, init),
             // The body runs when the scope ends, however it ends. It can't
             // leave: loops and `mend`s outside it are out of reach.
             StmtKind::Defer { body, .. } => {
@@ -765,7 +768,7 @@ impl Checker<'_> {
 
     // ------------------------------------------------------------ operators
 
-    fn check_unary(&mut self, op: UnaryOp, operand: &Expr, span: Span, expected: Option<Ty>) -> Ty {
+    fn check_unary(&mut self, e: &Expr, op: UnaryOp, operand: &Expr, span: Span, expected: Option<Ty>) -> Ty {
         match op {
             UnaryOp::Neg => {
                 // `-128i8` is checked as one literal.
@@ -820,7 +823,7 @@ impl Checker<'_> {
                 self.require_operand(ty, Operand::Integer, "~", span)
             }
             UnaryOp::Not => self.check_coerce(operand, self.tcx.bool),
-            UnaryOp::Alloc => self.check_alloc(operand, expected),
+            UnaryOp::Alloc => self.check_alloc(e, operand, expected),
         }
     }
 

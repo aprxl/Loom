@@ -7,7 +7,7 @@ Anything not built stops with a `U` code, and most stop with [U0102](diag:U0102)
 
 ## Next in line
 
-These are planned next, in this order: the rest of threads, then spools and the rest of Loom's own VM, Treadle (designed in `design/vm.md`). Treadle already runs everything: `loom run --backend vm file.loom`. A program over one of its limits (a frame of more than 65 535 registers, say) stops with [U0103](diag:U0103).
+These are planned next, in this order: the rest of threads, then the rest of `given` and Loom's own VM, Treadle (designed in `design/vm.md`). Treadle already runs everything: `loom run --backend vm file.loom`. A program over one of its limits (a frame of more than 65 535 registers, say) stops with [U0103](diag:U0103).
 
 ### Threads
 
@@ -15,11 +15,11 @@ These are planned next, in this order: the rest of threads, then spools and the 
 
 @sample nyet_threads
 
-### Spools
+### More of `given`
 
-`spool` bindings, `Arena`, region pointers (`^T@s`), and the region checker that goes with them. Pointers into the heap (`^e`, `^T`) run: see [Moves](page:ownership). [std.mem](std:mem) declares `Arena` and `Spool`.
+Spools run (see [Moves](page:ownership)), and so does a `given` that is a spool. Not yet: a `given` of anything else (a logger, a random number generator, a thread pool), a default for a `given`, leaving a private function's `given`s to be inferred, `Pool` and `SharedArena`:
 
-@sample nyet_spools
+@sample nyet_given
 
 ## Compile-time code
 
@@ -40,10 +40,11 @@ Also missing:
 
 ## Memory and safety
 
-- `given` parameters, `ref warp`, a `for` loop over a projection that lends many places, and `xs[i]` through an `Index` weave.
+- A `for` loop over a projection that lends many places, and `xs[i]` through an `Index` weave.
 - `unsafe` blocks, raw pointers (`*T`), `extern "C"`, `Volatile`. `#layout(...)` is parsed but nothing acts on it.
 - User-written `Spool` weaves.
-- The region checker. Lambdas, slices and streams can't outlive the locals they borrow ([M0106](diag:M0106)), but nothing checks region pointers yet.
+- Lists, maps and sets in a spool (`List[i32]@frame`): a `String` made with `.copy()` goes in the spool, other collections go on the heap.
+- A pointer into a spool crossing threads isn't checked yet ([R0103](diag:R0103)).
 
 ## Types and library
 
@@ -63,4 +64,4 @@ Also missing:
 
 ## The examples
 
-`examples/tour.loom`, `examples/widgets.loom`, `examples/ledger.loom`, `examples/lexer.loom` and `examples/chip8.loom` compile and run. `examples/compile_time.loom` fails only at `std.sys`. `examples/calc.loom` needs spools, `given` and `ref warp`, and `examples/parallel.loom` needs threads.
+`examples/tour.loom`, `examples/widgets.loom`, `examples/ledger.loom`, `examples/lexer.loom` and `examples/chip8.loom` compile and run. `examples/compile_time.loom` fails only at `std.sys`. `examples/calc.loom` and `examples/parallel.loom` run too.

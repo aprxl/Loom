@@ -272,6 +272,16 @@ impl Resolver<'_> {
         self.push_rib(RibKind::Normal);
         let mut self_local = None;
         let mut params = Vec::with_capacity(f.params.len());
+        // A `given`'s name is a region the parameters' types can name.
+        let given_locals: Vec<LocalId> = f
+            .givens
+            .iter()
+            .map(|g| {
+                let local = self.new_local(&g.name.name, g.name.span, false, LocalKind::Given);
+                self.bind(&g.name.name, Res::Local(local));
+                local
+            })
+            .collect();
         for p in &f.params {
             let ty = p.ty.as_ref().map(|t| self.lower_ty(t));
             let default = p.default.as_ref().map(|e| self.lower_expr(e));
@@ -287,6 +297,8 @@ impl Resolver<'_> {
                         );
                     }
                     let local = self.new_local("self", p.span, mutable, LocalKind::SelfParam);
+                    // So a type can name the spool it was called on: `^T@self`.
+                    self.bind("self", Res::Local(local));
                     self_local = Some(local);
                     (local, true)
                 }
@@ -301,12 +313,8 @@ impl Resolver<'_> {
         let givens = f
             .givens
             .iter()
-            .map(|g| {
-                let ty = self.lower_ty(&g.ty);
-                let local = self.new_local(&g.name.name, g.name.span, false, LocalKind::Given);
-                self.bind(&g.name.name, Res::Local(local));
-                GivenParam { local, ty }
-            })
+            .zip(given_locals)
+            .map(|(g, local)| GivenParam { local, ty: self.lower_ty(&g.ty) })
             .collect();
         let ret = match &f.ret {
             ast::FnRet::Unit => FnRet::Unit,
