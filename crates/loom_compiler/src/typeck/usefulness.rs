@@ -86,6 +86,15 @@ impl Checker<'_> {
             return rows.is_empty().then(Vec::new);
         };
         let rows = expand_or(rows);
+        // A column of wildcards only: the rest decides. (A recursive type
+        // behind a pointer would otherwise be taken apart without end.)
+        if !rows.is_empty() && rows.iter().all(|r| matches!(r[0], DPat::Wild)) {
+            let defaults: Vec<Vec<DPat>> = rows.iter().map(|r| r[1..].to_vec()).collect();
+            let w = self.useful(defaults, rest_tys)?;
+            let mut out = vec!["_".to_string()];
+            out.extend(w);
+            return Some(out);
+        }
         // The constructors of the first column's type, if it has finitely
         // many; for integers, the ranges its patterns split it into.
         let ctors = match self.domain(ty) {
@@ -134,7 +143,7 @@ impl Checker<'_> {
 
     /// Takes a pattern apart for checking against a value of `ty`.
     fn dpat(&mut self, pat: &Pat, ty: Ty) -> DPat {
-        let ty = self.deep_resolve(ty);
+        let ty = self.peel_ptr(ty);
         match &pat.kind {
             PatKind::Wild | PatKind::Bind(_) | PatKind::Error => DPat::Wild,
             PatKind::Lit { lit, negative } => match lit {
@@ -233,6 +242,15 @@ impl Checker<'_> {
         }
     }
 
+    /// `ty` resolved, and with the pointers patterns see through removed.
+    fn peel_ptr(&mut self, ty: Ty) -> Ty {
+        let mut ty = self.deep_resolve(ty);
+        while let TyKind::Ptr(inner, _) = *self.tcx.kind(ty) {
+            ty = self.deep_resolve(inner);
+        }
+        ty
+    }
+
     /// The values of an integer or char type, as a range.
     fn domain(&self, ty: Ty) -> Option<(i128, i128)> {
         match self.tcx.kind(self.resolve(ty)) {
@@ -249,6 +267,7 @@ impl Checker<'_> {
 
     /// Every constructor of `ty`, when there are finitely many.
     fn all_ctors(&mut self, ty: Ty) -> Option<Vec<Ctor>> {
+        let ty = self.peel_ptr(ty);
         match self.tcx.kind(ty).clone() {
             TyKind::Bool => Some(vec![Ctor::Bool(true), Ctor::Bool(false)]),
             TyKind::Optional(_) => Some(vec![Ctor::Some, Ctor::None]),
@@ -271,6 +290,7 @@ impl Checker<'_> {
 
     /// The types of constructor `c`'s fields, for a value of `ty`.
     fn ctor_fields(&mut self, c: &Ctor, ty: Ty) -> Vec<Ty> {
+        let ty = self.peel_ptr(ty);
         match (c, self.tcx.kind(ty).clone()) {
             (Ctor::Some, TyKind::Optional(inner)) => vec![inner],
             (Ctor::Ok, TyKind::Result(ok, _)) => vec![ok],
@@ -286,6 +306,7 @@ impl Checker<'_> {
 
     /// A constructor as pattern text, with its fields' texts.
     fn show_ctor(&mut self, c: &Ctor, ty: Ty, fields: &[String]) -> String {
+        let ty = self.peel_ptr(ty);
         let all_blank = fields.iter().all(|f| f == "_");
         match c {
             Ctor::Bool(b) => b.to_string(),

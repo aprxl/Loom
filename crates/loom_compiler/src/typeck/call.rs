@@ -457,9 +457,17 @@ impl Checker<'_> {
         args: &[Arg],
     ) -> Ty {
         let base_ty = self.check_expr(base, None);
-        let base_ty = self.resolve(base_ty);
+        let mut base_ty = self.resolve(base_ty);
         if self.tcx.is_error(base_ty) {
             return self.check_args_alone(args);
+        }
+        // A method of a pointer's target is called on the target; a free
+        // function that takes the pointer itself is found below.
+        if let TyKind::Ptr(inner, _) = *self.tcx.kind(base_ty) {
+            let inner = self.resolve(inner);
+            if matches!(self.tcx.kind(inner), TyKind::Any(_)) || !self.methods_of(inner, name, 0).is_empty() {
+                base_ty = self.auto_deref(base, base_ty);
+            }
         }
         let mutable = self.place(base) == Some(true) || self.place(base).is_none();
         let recv = |ty: Ty| Recv { receiver: Receiver::Expr, ty, expr: Some(base), mutable };
@@ -632,6 +640,7 @@ impl Checker<'_> {
         if self.tcx.is_error(base_ty) {
             return self.tcx.error;
         }
+        let base_ty = self.auto_deref(base, base_ty);
         if let (TyKind::Tuple(items), FieldName::Index(i, span)) = (self.tcx.kind(base_ty).clone(), field) {
             return match items.get(*i as usize) {
                 Some(&ty) => {
@@ -854,9 +863,10 @@ impl Checker<'_> {
         }
         match &e.kind {
             ExprKind::Local(l) => Some(self.p.local(*l).mutable),
-            ExprKind::Field { base, .. } | ExprKind::Index { base, .. } | ExprKind::ConstField { base, .. } => {
-                self.place(base)
-            }
+            ExprKind::Field { base, .. }
+            | ExprKind::Index { base, .. }
+            | ExprKind::ConstField { base, .. }
+            | ExprKind::Deref(base) => self.place(base),
             ExprKind::LeadingDot(_) => match self.b.fields.get(&e.id).map(|f| f.base) {
                 Some(Receiver::Local(l)) => Some(self.p.local(l).mutable),
                 Some(Receiver::Subject(id)) => Some(self.subject_mutable(id)),

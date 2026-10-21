@@ -135,7 +135,7 @@ impl<'a> Builder<'a> {
     /// Whether `e` names a place: a local, or a field or element of one.
     pub(super) fn is_place(&self, e: &hir::Expr) -> bool {
         match &e.kind {
-            ExprKind::Local(_) => true,
+            ExprKind::Local(_) | ExprKind::Deref(_) => true,
             ExprKind::Call { .. } => self.tables().lends.contains_key(&e.id),
             ExprKind::Field { base, .. } | ExprKind::ConstField { base, .. } => {
                 self.tables().fields.contains_key(&e.id) && self.is_place(base)

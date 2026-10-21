@@ -40,6 +40,7 @@ mod lambda;
 mod map;
 mod methods;
 mod pat;
+mod pointer;
 mod repr;
 mod scan;
 mod seq;

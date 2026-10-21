@@ -1,0 +1,68 @@
+// More pointers: owned text in boxes, optional pointers, lists of pointers,
+// assigning through one, equality, copies, and moving out of a box.
+
+use std.io.print
+
+warp Node {
+    value: String
+    next: ?^Node
+}
+
+warp Pair {
+    a: ^i32
+    b: ^String
+}
+
+fn push(take list: ?^Node, take value: String) -> ?^Node = some(^Node(value, list))
+
+fn join(list: ?^Node) -> String = match list {
+    none => ""
+    some(n) => "{n.value} {join(n.next)}"
+}
+
+fn bump(mut p: ^i32) {
+    p^ += 1
+}
+
+fn make(n: i32) -> ^i32 = ^n
+
+fn main() {
+    var list: ?^Node = none
+    list = push(list, "a")
+    list = push(list, "b")
+    list = push(list, "c")
+    print(join(list))
+
+    var n = ^10
+    bump(mut n)
+    bump(mut n)
+    print("{n^}")
+    n^ = 100
+    print("{n}")
+
+    let a = ^[1, 2, 3]
+    let b = ^[1, 2, 3]
+    print("{a == b} {a != b}")
+    print("{a} {a.len()}")
+
+    var boxes: List[^i32] = []
+    for i in 0..4 {
+        boxes.push(make(i * i))
+    }
+    var total = 0
+    for p in boxes {
+        total += p^
+    }
+    print("{total} {boxes.len()}")
+
+    let pair = Pair(^7, ^"seven")
+    print("{pair.a} {pair.b} {pair.b.len()}")
+    print("{pair:?}")
+
+    let s = ^"moved"
+    let t = s^
+    print(t)
+
+    let nested = ^^5
+    print("{nested^^}")
+}

@@ -49,6 +49,14 @@ pub enum ConstVal {
     },
 }
 
+/// Where a pointer's target lives (design/v6-spools.md). A region is a type
+/// so it travels through the generic machinery.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Region {
+    /// The global heap: a pointer into it owns its target.
+    Heap,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum FloatTy {
     F32,
@@ -82,6 +90,10 @@ pub enum TyKind {
     ArrayOf(Ty, Ty),
     /// A value where a type would be: a `const` parameter's argument.
     Value(ConstVal),
+    /// `^T@r`: a pointer to a `T` in region `r` (a [`TyKind::Region`]).
+    Ptr(Ty, Ty),
+    /// A region, standing where a type would: a pointer's second argument.
+    Region(Region),
     /// A gauge (`type Cents = i64 where 0..`): a numeric type of its own,
     /// with the values of its base (the second field, always a concrete
     /// `Int` or `Float`) that its range or predicate allows.
@@ -124,6 +136,7 @@ pub struct TyCtx {
     pub i32: Ty,
     pub f64: Ty,
     pub usize: Ty,
+    pub heap: Ty,
     /// What the program is built for: how wide `usize` and `isize` are.
     pub target: crate::target::Target,
     /// Text compile-time values hold ([`ConstVal::Str`]).
@@ -155,6 +168,7 @@ impl TyCtx {
             i32: Ty(0),
             f64: Ty(0),
             usize: Ty(0),
+            heap: Ty(0),
         };
         tcx.unit = tcx.intern(TyKind::Unit);
         tcx.bool = tcx.intern(TyKind::Bool);
@@ -165,6 +179,7 @@ impl TyCtx {
         tcx.i32 = tcx.intern(TyKind::Int(IntTy::I32));
         tcx.f64 = tcx.intern(TyKind::Float(FloatTy::F64));
         tcx.usize = tcx.intern(TyKind::Int(target.usize()));
+        tcx.heap = tcx.intern(TyKind::Region(Region::Heap));
         tcx
     }
 }
@@ -297,6 +312,7 @@ impl TyCtx {
             }
             TyKind::Result(t, e) => TyKind::Result(self.subst(t, map), self.subst(e, map)),
             TyKind::Range(t) => TyKind::Range(self.subst(t, map)),
+            TyKind::Ptr(t, r) => TyKind::Ptr(self.subst(t, map), self.subst(r, map)),
             TyKind::Fn(params, ret) => {
                 TyKind::Fn(params.into_iter().map(|t| self.subst(t, map)).collect(), self.subst(ret, map))
             }
@@ -331,7 +347,9 @@ impl TyCtx {
                 items.iter().any(|&t| self.has_error(t))
             }
             TyKind::Optional(t) | TyKind::Range(t) | TyKind::Array(t, _) => self.has_error(*t),
-            TyKind::Result(t, e) | TyKind::ArrayOf(t, e) => self.has_error(*t) || self.has_error(*e),
+            TyKind::Result(t, e) | TyKind::ArrayOf(t, e) | TyKind::Ptr(t, e) => {
+                self.has_error(*t) || self.has_error(*e)
+            }
             TyKind::Fn(params, ret) => params.iter().any(|&t| self.has_error(t)) || self.has_error(*ret),
             _ => false,
         }
@@ -343,7 +361,9 @@ impl TyCtx {
             TyKind::Param(_) => true,
             TyKind::Tuple(items) => items.iter().any(|&t| self.has_params(t)),
             TyKind::Optional(t) | TyKind::Range(t) | TyKind::Array(t, _) => self.has_params(*t),
-            TyKind::Result(t, e) | TyKind::ArrayOf(t, e) => self.has_params(*t) || self.has_params(*e),
+            TyKind::Result(t, e) | TyKind::ArrayOf(t, e) | TyKind::Ptr(t, e) => {
+                self.has_params(*t) || self.has_params(*e)
+            }
             TyKind::Fn(params, ret) => params.iter().any(|&t| self.has_params(t)) || self.has_params(*ret),
             TyKind::Adt(_, args) | TyKind::Union(args) => args.iter().any(|&t| self.has_params(t)),
             _ => false,
@@ -388,6 +408,9 @@ impl TyCtx {
             }
             TyKind::Value(ConstVal::Case { case, .. } | ConstVal::Unit(case)) => format!(".{}", p.def(*case).name),
             TyKind::Result(t, e) => format!("{} ! {}", self.display_atom(p, *t), self.display_atom(p, *e)),
+            TyKind::Ptr(t, r) if *r == self.heap => format!("^{}", self.display_atom(p, *t)),
+            TyKind::Ptr(t, r) => format!("^{}@{}", self.display_atom(p, *t), self.display(p, *r)),
+            TyKind::Region(Region::Heap) => "heap".into(),
             TyKind::Range(t) => format!("Range[{}]", self.display(p, *t)),
             TyKind::Fn(params, ret) => {
                 let params: Vec<String> = params.iter().map(|t| self.display(p, *t)).collect();

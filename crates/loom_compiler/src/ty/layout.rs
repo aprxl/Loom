@@ -241,6 +241,13 @@ impl<'a> Layouts<'a> {
                 niche: Some(Niche { offset: 16, bytes: 8, start: 0, count: 1 }),
                 shape: Shape::Opaque,
             },
+            // A heap pointer is an address, never null.
+            TyKind::Ptr(..) => Layout {
+                size: 8,
+                align: 8,
+                niche: Some(Niche { offset: 0, bytes: 8, start: 0, count: 1 }),
+                shape: Shape::Scalar,
+            },
             TyKind::Adt(def, args) => {
                 let (def, args) = (*def, args.clone());
                 match builtin(&self.p.def_path(def)) {
@@ -261,6 +268,7 @@ impl<'a> Layouts<'a> {
             }
             TyKind::ArrayOf(..)
             | TyKind::Value(_)
+            | TyKind::Region(_)
             | TyKind::IntVar(_)
             | TyKind::FloatVar(_)
             | TyKind::Var(_)

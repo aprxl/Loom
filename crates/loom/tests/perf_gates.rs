@@ -69,3 +69,40 @@ fn loom_for_scales_to_8_workers() {
         "par_mandelbrot is {speedup:.2}x faster on {WORKERS} workers (at least {MIN_SPEEDUP:.1}x)"
     );
 }
+
+/// The gate: a small box allocated, read and freed costs less than this
+/// (design/vm.md §16's micro target, asserted).
+const MAX_BOX: Duration = Duration::from_nanos(15);
+/// `ptr_alloc` makes this many boxes.
+const BOXES: u32 = 10_000_000;
+
+/// The best of `RUNS` wall-clock times of a program that only prints: what
+/// starting the VM costs.
+fn startup() -> Duration {
+    let dir = std::env::temp_dir().join("loom_perf_gates");
+    std::fs::create_dir_all(&dir).expect("a temp dir");
+    let path = dir.join("hello.loom");
+    std::fs::write(&path, "use std.io.print\nfn main() { print(\"hi\") }\n").expect("writable");
+    (0..RUNS)
+        .map(|_| {
+            let start = Instant::now();
+            let status = Command::new(env!("CARGO_BIN_EXE_loom"))
+                .args(["run", "--backend", "vm"])
+                .arg(&path)
+                .stdout(Stdio::null())
+                .status()
+                .expect("the loom binary runs");
+            assert!(status.success(), "hello: {status}");
+            start.elapsed()
+        })
+        .min()
+        .expect("a run")
+}
+
+#[test]
+#[ignore = "perf gate: run with --release -- --ignored --nocapture"]
+fn a_small_box_costs_under_15ns() {
+    let per = best("ptr_alloc", 1).saturating_sub(startup()) / BOXES;
+    println!("allocate, read and free a box: {per:?} (at most {MAX_BOX:?})");
+    assert!(per <= MAX_BOX, "a box takes {per:?} to allocate, read and free (at most {MAX_BOX:?})");
+}

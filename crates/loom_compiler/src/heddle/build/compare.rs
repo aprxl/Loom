@@ -147,6 +147,10 @@ impl<'a> Builder<'a> {
                 let len = self.iconst(n);
                 self.elems_eq((*pa, len), (*pb, len), elem, span)
             }
+            TyKind::Ptr(..) => {
+                let ((x, target), (y, _)) = (self.pointee(&a, ty, span)?, self.pointee(&b, ty, span)?);
+                self.eq_vals(x, y, target, span)
+            }
             TyKind::Adt(def, args) => match self.p.def_path(def).as_str() {
                 "std.list.List" => {
                     let (Val::Mem(pa), Val::Mem(pb)) = (&a, &b) else {
@@ -352,6 +356,10 @@ impl<'a> Builder<'a> {
                 self.jump(done);
                 self.enter(done);
                 Some(self.read(r))
+            }
+            TyKind::Ptr(..) => {
+                let ((x, target), (y, _)) = (self.pointee(&a, ty, span)?, self.pointee(&b, ty, span)?);
+                self.cmp_vals(x, y, target, span)
             }
             TyKind::Adt(def, _) if !self.is_builtin(def) => {
                 let (shared, cases) = self.warp_pairs(&a, &b, ty, span)?;

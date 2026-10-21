@@ -1,0 +1,34 @@
+use std.io.print
+
+warp Tree {
+    case Leaf
+    case Node(left: ^Tree, value: i32, right: ^Tree)
+}
+
+fn insert(take t: ^Tree, v: i32) -> ^Tree = match t {
+    .Leaf => ^Tree.Node(^Tree.Leaf, v, ^Tree.Leaf)
+    .Node(l, x, r) => if v < x {
+        ^Tree.Node(l.insert(v), x, r)
+    } else {
+        ^Tree.Node(l, x, r.insert(v))
+    }
+}
+
+fn sum(t: ^Tree) -> i32 = match t {
+    .Leaf => 0
+    .Node(l, x, r) => l.sum() + x + r.sum()
+}
+
+fn main() {
+    var t: ^Tree = ^Tree.Leaf
+    for v in [5, 2, 8, 1, 9, 3] {
+        t = t.insert(v)
+    }
+    print("sum {t.sum()}")
+
+    var n = ^41
+    n^ += 1
+    print("{n^}")
+}
+
+//@ run

@@ -245,6 +245,17 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
     when there are several workers (`task.grain`; `par_spawn` on 8 workers
     0.56 s to 0.07 s); other iterators keep a task per item.
 
+28. Treadle V6, slice 1 (design/v6-spools.md): heap pointers on both
+    backends. `^e` boxes a value, `p^` reads it, `^T` is a type (`?^T` costs
+    nothing on Treadle: the pointer is never null), so warps can hold
+    themselves (`case Node(^Tree, ^Tree)`). A pointer owns its box and moves
+    like any non-`Copy` value. Fields, methods, patterns, `{p}`, `==`, `<`
+    and hashing see through it; a `take` pointer taken apart by `match` hands
+    its parts over by value. Assignment through one (`p.x = 1`, `p^ += 1`)
+    needs a `var`. Boxes cost 10 ns to allocate, read and free
+    (`perf_gates.rs`, gate 15 ns); `bench/ptr_trees` is `binary_trees` with
+    pointers. Spools, `^T@s`, `given` and the region checker are slice 2.
+
 V5 is done. Its gates are asserted by `#[ignore]`d tests (`perf_gates.rs`,
 `compile_time.rs`), with these limits: mandelbrot with `loom for` scales
 about 5.7× on 8 workers (6.1–6.3× best of N in `bench/RESULTS.md`) against

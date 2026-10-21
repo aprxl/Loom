@@ -1,0 +1,20 @@
+use std.io.print
+
+warp Point {
+    x: i32
+    y: i32
+}
+
+fn main() {
+    let n = 5
+    print("{n^}")                  //~ T0101
+
+    let p = ^Point(1, 2)
+    p.x = 3                       //~ T0107
+    let q = p
+    print("{p.x}")                //~ M0101
+
+    let r = ^7
+    r^ = 8                        //~ T0107
+    print("{q.x}")
+}

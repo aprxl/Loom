@@ -329,7 +329,8 @@ impl Checker<'_> {
                 Some(info) => info.copy,
                 None => self.adt_info(ty).is_some_and(|i| i.copy),
             },
-            TyKind::Fn(..) | TyKind::Any(_) | TyKind::Union(_) => false,
+            TyKind::Fn(..) | TyKind::Any(_) | TyKind::Union(_) | TyKind::Ptr(..) => false,
+            TyKind::Region(_) => true,
             TyKind::Array(t, _) | TyKind::ArrayOf(t, _) => self.is_copy(t),
         }
     }

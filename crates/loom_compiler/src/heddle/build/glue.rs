@@ -110,6 +110,7 @@ impl<'a> Builder<'a> {
                 self.enter(done);
             }
             TyKind::Any(_) => self.drop_any(ptr),
+            TyKind::Ptr(..) => self.drop_ptr(ptr, ty, span)?,
             TyKind::Optional(inner) => {
                 let v = super::value::Val::Mem(ptr);
                 let present = self.is_some(&v, ty, span)?;
@@ -289,6 +290,7 @@ impl<'a> Builder<'a> {
                 })?;
             }
             TyKind::Any(_) => self.copy_any(dst, src),
+            TyKind::Ptr(..) => self.copy_ptr(dst, src, ty, span)?,
             TyKind::Optional(inner) => {
                 let present = self.is_some(&Val::Mem(src), ty, span)?;
                 let (yes, done) = (self.new_block(), self.new_block());
@@ -486,6 +488,10 @@ impl<'a> Builder<'a> {
             TyKind::Any(_) => {
                 let Val::Mem(ptr) = v else { return self.internal(span, "an `any` in registers") };
                 self.show_any(sink, ptr, debug);
+            }
+            TyKind::Ptr(..) => {
+                let (x, target) = self.pointee(&v, ty, span)?;
+                self.write_value(sink, x, target, None, debug, span)?;
             }
             // The member it holds, as that member shows.
             TyKind::Union(members) => {

@@ -239,6 +239,14 @@ impl Checker<'_> {
         }
         match &e.kind {
             ExprKind::Local(_) | ExprKind::LeadingDot(_) => self.mv_place(cx, e, owning),
+            ExprKind::Deref(inner) => match self.place_of(cx, e) {
+                Some(_) => self.mv_place(cx, e, owning),
+                None => self.mv(cx, inner, false),
+            },
+            ExprKind::Unary { op: loom_syntax::ast::UnaryOp::Alloc, operand } => {
+                self.mv(cx, operand, true);
+                self.check_escape(cx, operand, Escape::Stored);
+            }
             ExprKind::Field { base, .. } | ExprKind::ConstField { base, .. } => match self.place_of(cx, e) {
                 Some(_) => self.mv_place(cx, e, owning),
                 None => self.mv(cx, base, false),
@@ -544,7 +552,6 @@ impl Checker<'_> {
             | ExprKind::BuiltinCase(_)
             | ExprKind::Intrinsic(_)
             | ExprKind::Pull
-            | ExprKind::Deref(_)
             | ExprKind::Error => {}
         }
     }
@@ -1591,13 +1598,21 @@ impl Checker<'_> {
         }
     }
 
-    /// Where the place `e` starts, and the fields (or `[]` for an element)
-    /// from there. `None` if `e` isn't a place.
+    /// Where the place `e` starts, and the fields (or `[]` for an element,
+    /// `^` for a pointer's target) from there. `None` if `e` isn't a place.
     fn place_of(&self, cx: &MoveCx, e: &Expr) -> Option<(Root, Vec<String>)> {
         match &e.kind {
             ExprKind::Local(l) => Some((Root::Local(*l), Vec::new())),
+            ExprKind::Deref(base) => {
+                let (root, mut path) = self.place_of(cx, base)?;
+                path.push("^".into());
+                Some((root, path))
+            }
             ExprKind::Field { base, field } => {
                 let (root, mut path) = self.place_of(cx, base)?;
+                if self.derefs(base) {
+                    path.push("^".into());
+                }
                 path.push(match field {
                     FieldName::Named(n) => n.name.clone(),
                     FieldName::Index(i, _) => i.to_string(),

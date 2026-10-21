@@ -208,6 +208,11 @@ struct Lowerer<'a> {
     diags: Vec<Diagnostic>,
     /// Type descriptors: the Lua expression that builds each, in order.
     descs: IndexMap<Ty, Expr>,
+    /// Types whose descriptors are being made.
+    desc_busy: std::collections::HashSet<Ty>,
+    /// Pointers to a type being described, whose descriptors are completed
+    /// once it is: the pointer type and its target.
+    ptr_patches: Vec<(Ty, Ty)>,
     /// The operations specialized to a type (`rt.spec`): each is `O[n]`, made
     /// once at the start of the bundle from the descriptor `T[k]`. By
     /// descriptor number and operation, in order.
@@ -267,6 +272,8 @@ impl<'a> Lowerer<'a> {
             typed,
             diags: Vec::new(),
             descs: IndexMap::new(),
+            desc_busy: std::collections::HashSet::new(),
+            ptr_patches: Vec::new(),
             ops: IndexMap::new(),
             externs: IndexMap::new(),
             vtables: IndexMap::new(),
@@ -474,6 +481,7 @@ impl<'a> Lowerer<'a> {
             return Expr::index(Expr::name("T"), Expr::Int(i as i64 + 1));
         }
         let tcx = self.tcx();
+        let busy = self.desc_busy.insert(ty);
         let build = match tcx.kind(ty) {
             TyKind::Int(int) => {
                 Expr::rt("int", vec![Expr::Int(int.bits as i64), Expr::Bool(int.signed), Expr::Bool(int.size)])
@@ -538,6 +546,18 @@ impl<'a> Lowerer<'a> {
                 let inner = self.desc(inner, span);
                 Expr::rt("opt", vec![inner, Expr::Bool(boxed)])
             }
+            // A type that holds a pointer to itself is described once: the
+            // pointer's descriptor gets its target's after they are all made.
+            TyKind::Ptr(inner, _) => {
+                let inner = *inner;
+                if self.desc_busy.contains(&inner) {
+                    self.ptr_patches.push((ty, inner));
+                    Expr::rt("ptr", vec![Expr::Nil])
+                } else {
+                    let d = self.desc(inner, span);
+                    Expr::rt("ptr", vec![d])
+                }
+            }
             TyKind::Result(ok, err) => {
                 let (ok, err) = (*ok, *err);
                 let ok = self.desc(ok, span);
@@ -550,6 +570,9 @@ impl<'a> Lowerer<'a> {
                 Expr::Nil
             }
         };
+        if busy {
+            self.desc_busy.remove(&ty);
+        }
         let (i, _) = self.descs.insert_full(ty, build);
         Expr::index(Expr::name("T"), Expr::Int(i as i64 + 1))
     }
@@ -830,6 +853,12 @@ impl<'a> Lowerer<'a> {
         for (i, (_, build)) in descs.iter().enumerate() {
             let target = Expr::index(Expr::name("T"), Expr::Int(i as i64 + 1));
             printer.stmt(&Stmt { kind: StmtKind::Assign(vec![target], vec![build.clone()]), span: None });
+        }
+        for (pty, inner) in std::mem::take(&mut self.ptr_patches) {
+            let (Some(p), Some(i)) = (descs.get_index_of(&pty), descs.get_index_of(&inner)) else { continue };
+            let slot = |n: usize| Expr::index(Expr::name("T"), Expr::Int(n as i64 + 1));
+            let target = Expr::field(slot(p), "inner");
+            printer.stmt(&Stmt { kind: StmtKind::Assign(vec![target], vec![slot(i)]), span: None });
         }
         // The operations specialized to a type, from its descriptor.
         let ops = std::mem::take(&mut self.ops);

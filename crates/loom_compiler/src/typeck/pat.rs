@@ -21,6 +21,20 @@ impl Checker<'_> {
             _ => ty,
         };
         let span = pat.span;
+        // A pattern that takes a value apart matches a pointer's target.
+        let ty = match pat.kind {
+            PatKind::Case { .. } | PatKind::ConstCase(_) | PatKind::Tuple(_) | PatKind::TypeTest { .. }
+                if matches!(self.tcx.kind(ty), TyKind::Ptr(..)) =>
+            {
+                self.b.pat_derefs.insert(pat.id);
+                let mut ty = ty;
+                while let TyKind::Ptr(inner, _) = *self.tcx.kind(ty) {
+                    ty = self.resolve(inner);
+                }
+                ty
+            }
+            _ => ty,
+        };
         match &pat.kind {
             PatKind::Wild | PatKind::Error => {}
             PatKind::Bind(local) => {

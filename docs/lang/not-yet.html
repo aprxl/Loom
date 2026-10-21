@@ -66,7 +66,7 @@
 <span class="err">error: nyet_threads.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
 <h3 id="spools">Spools</h3>
-<p><code>spool</code> bindings, <code>Arena</code>, <code>^T</code> allocation, region pointers (<code>^T@s</code>), and the region checker that goes with them. <a href="../std/modules/mem.html">std.mem</a> declares <code>Arena</code> and <code>Spool</code>.</p>
+<p><code>spool</code> bindings, <code>Arena</code>, region pointers (<code>^T@s</code>), and the region checker that goes with them. Pointers into the heap (<code>^e</code>, <code>^T</code>) run: see <a href="ownership.html">Moves</a>. <a href="../std/modules/mem.html">std.mem</a> declares <code>Arena</code> and <code>Spool</code>.</p>
 <div class="sample" id="sample-nyet_spools">
 <div class="sample-head"><span class="file">samples/nyet_spools.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span></div>
 <pre class="code"><code><span class="k">use</span> std.mem.<span class="t">Arena</span>

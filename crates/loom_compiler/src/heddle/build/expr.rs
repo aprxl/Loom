@@ -212,6 +212,10 @@ impl<'a> Builder<'a> {
                 let from = self.ty_of(e);
                 self.union_of(target, from, v, e.span)
             }
+            Coercion::Deref => {
+                let ptr = self.ty_of(e);
+                self.pointee(&v, ptr, e.span).map(|(x, _)| x)
+            }
         }
     }
 
@@ -321,7 +325,13 @@ impl<'a> Builder<'a> {
                 Some(Val::Regs(Vec::new()))
             }
             ExprKind::Call { callee, args } => self.call(e, callee, args, ty),
+            ExprKind::Unary { op: UnaryOp::Alloc, operand } => self.alloc_expr(operand, ty, span),
             ExprKind::Unary { op, operand } => self.unary(*op, operand, ty, span).map(Val::Regs),
+            ExprKind::Deref(inner) => {
+                let v = self.expr(inner)?;
+                let ptr = self.coerced_ty(inner);
+                self.pointee(&v, ptr, span).map(|(x, _)| x)
+            }
             ExprKind::Binary { op: BinaryOp::And | BinaryOp::Or, .. } => self.bool_value(e).map(Val::Regs),
             ExprKind::Binary { op, lhs, rhs } => self.binary(*op, lhs, rhs, ty, span).map(Val::Regs),
             ExprKind::Chain { .. } | ExprKind::Is { .. } => self.bool_value(e).map(Val::Regs),
@@ -1136,8 +1146,23 @@ impl<'a> Builder<'a> {
 
     /// The place `e` names, and its type.
     pub(super) fn place(&mut self, e: &'a hir::Expr) -> Option<(Place, Ty)> {
+        let (place, ty) = self.place_of_kind(e)?;
+        // A pointer used as its target: the place it points at.
+        if self.tables().coercions.get(&e.id) == Some(&Coercion::Deref) {
+            let v = self.read_place(&place, ty, e.span)?;
+            return self.pointee_place(&v, ty, e.span);
+        }
+        Some((place, ty))
+    }
+
+    fn place_of_kind(&mut self, e: &'a hir::Expr) -> Option<(Place, Ty)> {
         let span = e.span;
         match &e.kind {
+            ExprKind::Deref(inner) => {
+                let v = self.expr(inner)?;
+                let ptr = self.coerced_ty(inner);
+                self.pointee_place(&v, ptr, span)
+            }
             ExprKind::Local(l) => {
                 let place = self.local_place(*l, span)?;
                 Some((place, self.local_ty(*l)))

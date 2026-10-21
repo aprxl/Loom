@@ -136,6 +136,9 @@ impl Checker<'_> {
         if self.is_once(ty) {
             return Some("a `once` value");
         }
+        if matches!(self.tcx.kind(ty), TyKind::Ptr(..)) {
+            return Some("a pointer");
+        }
         let parts: Vec<Ty> = match self.tcx.kind(ty).clone() {
             TyKind::Tuple(items) | TyKind::Union(items) => items,
             TyKind::Optional(t) | TyKind::Array(t, _) | TyKind::Range(t) => vec![t],

@@ -604,6 +604,12 @@ function rt.opt(inner, boxed)
   return { kind = "opt", inner = inner, boxed = boxed }
 end
 
+--- `^T`: a box `{v}`. `inner` is set after the descriptors are made when the
+--- type contains itself.
+function rt.ptr(inner)
+  return { kind = "ptr", inner = inner }
+end
+
 --- `T ! E`: `{true, v}` or `{false, e}`.
 function rt.res(ok, err)
   return { kind = "res", ok = ok, err = err }
@@ -809,6 +815,8 @@ local function copy_walk(d, v)
   elseif kind == "res" then
     if v[1] then return { true, copy(d.ok, v[2]) } end
     return { false, copy(d.err, v[2]) }
+  elseif kind == "ptr" then
+    return { copy(d.inner, v[1]) }
   elseif kind == "seq" then
     local n, elem = v.n, d.elem
     local t = { n = n }
@@ -1023,6 +1031,8 @@ eq = function(d, a, b)
   elseif kind == "res" then
     if a[1] ~= b[1] then return false end
     return eq(a[1] and d.ok or d.err, a[2], b[2])
+  elseif kind == "ptr" then
+    return eq(d.inner, a[1], b[1])
   elseif kind == "seq" or kind == "slice" then
     local at, ao, an = parts(a)
     local bt, bo, bn = parts(b)
@@ -1090,6 +1100,8 @@ cmp = function(d, a, b)
     end
     if d.boxed then return cmp(d.inner, a[1], b[1]) end
     return cmp(d.inner, a, b)
+  elseif kind == "ptr" then
+    return cmp(d.inner, a[1], b[1])
   elseif kind == "record" then
     return fields_cmp(d.fields, a, b)
   elseif kind == "sum" then
@@ -1355,6 +1367,8 @@ show = function(d, v, debug)
     if d.boxed then inner = v[1] end
     if debug then return "some(" .. show(d.inner, inner, true) .. ")" end
     return show(d.inner, inner, false)
+  elseif kind == "ptr" then
+    return show(d.inner, v[1], debug)
   elseif not debug and d.show then
     -- A hand-written `show` writes into a buffer (a `Fmt`).
     local f = {}

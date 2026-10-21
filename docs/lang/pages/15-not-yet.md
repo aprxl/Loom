@@ -17,7 +17,7 @@ These are planned next, in this order: the rest of threads, then spools and the 
 
 ### Spools
 
-`spool` bindings, `Arena`, `^T` allocation, region pointers (`^T@s`), and the region checker that goes with them. [std.mem](std:mem) declares `Arena` and `Spool`.
+`spool` bindings, `Arena`, region pointers (`^T@s`), and the region checker that goes with them. Pointers into the heap (`^e`, `^T`) run: see [Moves](page:ownership). [std.mem](std:mem) declares `Arena` and `Spool`.
 
 @sample nyet_spools
 

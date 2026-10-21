@@ -178,7 +178,9 @@ impl Checker<'_> {
             TyKind::Adt(_, args) if self.is_builtin_adt(ty) => args,
             TyKind::Adt(..) => self.adt_info(ty).map(|info| info.field_tys()).unwrap_or_default(),
             TyKind::Tuple(items) | TyKind::Union(items) => items,
-            TyKind::Optional(t) | TyKind::Range(t) | TyKind::Array(t, _) | TyKind::Gauge(_, t) => vec![t],
+            TyKind::Optional(t) | TyKind::Range(t) | TyKind::Array(t, _) | TyKind::Gauge(_, t) | TyKind::Ptr(t, _) => {
+                vec![t]
+            }
             TyKind::Result(t, e) => vec![t, e],
             _ => Vec::new(),
         };

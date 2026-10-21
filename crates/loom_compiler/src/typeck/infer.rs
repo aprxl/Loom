@@ -80,6 +80,7 @@ impl Checker<'_> {
             }
             TyKind::Result(t, e) => TyKind::Result(self.deep_resolve(t), self.deep_resolve(e)),
             TyKind::Range(t) => TyKind::Range(self.deep_resolve(t)),
+            TyKind::Ptr(t, r) => TyKind::Ptr(self.deep_resolve(t), self.deep_resolve(r)),
             TyKind::Fn(params, ret) => {
                 TyKind::Fn(params.into_iter().map(|t| self.deep_resolve(t)).collect(), self.deep_resolve(ret))
             }
@@ -141,7 +142,9 @@ impl Checker<'_> {
                 self.unify(x, y) && self.unify(n, m)
             }
             (TyKind::ArrayOf(x, n), TyKind::ArrayOf(y, m)) => self.unify(x, y) && self.unify(n, m),
-            (TyKind::Result(x1, x2), TyKind::Result(y1, y2)) => self.unify(x1, y1) && self.unify(x2, y2),
+            (TyKind::Result(x1, x2), TyKind::Result(y1, y2)) | (TyKind::Ptr(x1, x2), TyKind::Ptr(y1, y2)) => {
+                self.unify(x1, y1) && self.unify(x2, y2)
+            }
             (TyKind::Adt(d1, x), TyKind::Adt(d2, y)) if d1 == d2 && x.len() == y.len() => {
                 x.into_iter().zip(y).all(|(x, y)| self.unify(x, y))
             }
@@ -173,7 +176,9 @@ impl Checker<'_> {
             TyKind::IntVar(v) | TyKind::FloatVar(v) | TyKind::Var(v) => *v == var,
             TyKind::Tuple(items) => items.iter().any(|&t| self.mentions_var(t, var)),
             TyKind::Optional(t) | TyKind::Range(t) | TyKind::Array(t, _) => self.mentions_var(*t, var),
-            TyKind::Result(t, e) | TyKind::ArrayOf(t, e) => self.mentions_var(*t, var) || self.mentions_var(*e, var),
+            TyKind::Result(t, e) | TyKind::ArrayOf(t, e) | TyKind::Ptr(t, e) => {
+                self.mentions_var(*t, var) || self.mentions_var(*e, var)
+            }
             TyKind::Fn(params, ret) => {
                 params.iter().any(|&t| self.mentions_var(t, var)) || self.mentions_var(*ret, var)
             }
@@ -189,7 +194,7 @@ impl Checker<'_> {
             TyKind::IntVar(_) | TyKind::FloatVar(_) | TyKind::Var(_) => true,
             TyKind::Tuple(items) => items.iter().any(|&t| self.has_vars(t)),
             TyKind::Optional(t) | TyKind::Range(t) | TyKind::Array(t, _) => self.has_vars(*t),
-            TyKind::Result(t, e) | TyKind::ArrayOf(t, e) => self.has_vars(*t) || self.has_vars(*e),
+            TyKind::Result(t, e) | TyKind::ArrayOf(t, e) | TyKind::Ptr(t, e) => self.has_vars(*t) || self.has_vars(*e),
             TyKind::Fn(params, ret) => params.iter().any(|&t| self.has_vars(t)) || self.has_vars(*ret),
             TyKind::Adt(_, args) | TyKind::Union(args) => args.iter().any(|&t| self.has_vars(t)),
             _ => false,

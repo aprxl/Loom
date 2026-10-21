@@ -58,9 +58,17 @@ impl Lowerer<'_> {
     /// The type of an expression as checked (before its coercion).
     /// The type of an expression as checked (before its coercion). A gauge
     /// is lowered as its base type.
+    /// The type of `e`'s value as it is used: a pointer used as its target
+    /// (a field's base, a receiver, a template's value) is the target.
     pub(super) fn ty_of(&self, e: &hir::Expr) -> Ty {
         let ty = self.tables().expr_ty.get(&e.id).copied().unwrap_or(self.typed.tcx.error);
-        self.tcx().degauge(ty)
+        let ty = self.tcx().degauge(ty);
+        match self.tcx().kind(ty) {
+            TyKind::Ptr(target, _) if self.tables().coercions.get(&e.id) == Some(&Coercion::Deref) => {
+                self.tcx().degauge(*target)
+            }
+            _ => ty,
+        }
     }
 
     pub(super) fn int_of(&self, ty: Ty) -> Option<IntTy> {
@@ -130,6 +138,7 @@ impl Lowerer<'_> {
                 Expr::rt("any", vec![vt, v])
             }
             Coercion::ToSlice => Expr::rt("view", vec![v]),
+            Coercion::Deref => Expr::index(v, Expr::Int(1)),
             Coercion::ToStream(source) => {
                 let source = source.clone();
                 // An `Iter` changes as its stream goes: a place gives a copy.
@@ -372,6 +381,10 @@ impl Lowerer<'_> {
             }
             ExprKind::Call { callee, args } => self.call(e, callee, args),
             ExprKind::Unary { op, operand } => self.unary(*op, operand, ty),
+            ExprKind::Deref(inner) => {
+                let p = self.lower_expr(inner);
+                Expr::index(p, Expr::Int(1))
+            }
             ExprKind::Binary { op: op @ (BinaryOp::And | BinaryOp::Or), lhs, rhs } => self.short_circuit(*op, lhs, rhs),
             ExprKind::Binary { op, lhs, rhs } => self.binary(*op, lhs, rhs, ty),
             ExprKind::Chain { first, rest } => self.chain(first, rest),
@@ -526,6 +539,11 @@ impl Lowerer<'_> {
             // `-128i8` is one constant.
             return self.lit(lit, true, ty);
         }
+        if op == UnaryOp::Alloc {
+            // A box: the value moves into a table of its own.
+            let v = self.lower_owned(operand);
+            return Expr::Table(vec![v]);
+        }
         let v = self.lower_expr(operand);
         match op {
             UnaryOp::Not => Expr::Unary("not", Box::new(v)),
@@ -538,10 +556,7 @@ impl Lowerer<'_> {
                 let d = self.desc(ty, operand.span);
                 Expr::rt("bnot", vec![d, v])
             }
-            UnaryOp::Alloc => {
-                self.unsupported(operand.span, "`^` allocation");
-                Expr::Nil
-            }
+            UnaryOp::Alloc => Expr::Nil,
         }
     }
 
@@ -704,7 +719,7 @@ impl Lowerer<'_> {
     /// unions, and warps that are tables or that write their own `eq` or `lt`.
     fn compares_structurally(&self, ty: Ty) -> bool {
         match self.tcx().kind(ty) {
-            TyKind::Tuple(_) | TyKind::Optional(_) | TyKind::Array(..) | TyKind::Union(_) => true,
+            TyKind::Tuple(_) | TyKind::Optional(_) | TyKind::Array(..) | TyKind::Union(_) | TyKind::Ptr(..) => true,
             TyKind::Adt(def, _) if self.is_string(*def) => false,
             TyKind::Adt(def, _) => {
                 let unit_only = self.warp(*def).is_some_and(|i| i.unit_only());
@@ -1584,6 +1599,25 @@ impl Lowerer<'_> {
 
     /// The condition under which `pat` matches `v`, or `None` if it always does.
     pub(super) fn pat_test(&mut self, pat: &hir::Pat, v: &Expr, ty: Ty) -> Option<Expr> {
+        if self.tables().pat_derefs.contains(&pat.id) {
+            let (v, ty) = self.peel_pat(v, ty);
+            return self.pat_test_inner(pat, &v, ty);
+        }
+        self.pat_test_inner(pat, v, ty)
+    }
+
+    /// The value and type a pattern matches once the pointers in front of
+    /// it are looked through.
+    pub(super) fn peel_pat(&self, v: &Expr, ty: Ty) -> (Expr, Ty) {
+        let (mut v, mut ty) = (v.clone(), ty);
+        while let TyKind::Ptr(target, _) = *self.tcx().kind(ty) {
+            v = Expr::index(v, Expr::Int(1));
+            ty = self.tcx().degauge(target);
+        }
+        (v, ty)
+    }
+
+    fn pat_test_inner(&mut self, pat: &hir::Pat, v: &Expr, ty: Ty) -> Option<Expr> {
         if let Some(test) = self.warp_pat_test(pat, v, ty) {
             return test;
         }
@@ -1697,6 +1731,7 @@ impl Lowerer<'_> {
                 | ExprKind::Field { .. }
                 | ExprKind::ConstField { .. }
                 | ExprKind::LeadingDot(_)
+                | ExprKind::Deref(_)
                 | ExprKind::Index { .. },
                 AssignOp::Assign,
             ) => {
@@ -1709,6 +1744,7 @@ impl Lowerer<'_> {
                 | ExprKind::Field { .. }
                 | ExprKind::ConstField { .. }
                 | ExprKind::LeadingDot(_)
+                | ExprKind::Deref(_)
                 | ExprKind::Index { .. },
                 AssignOp::Compound(bin),
             ) => {
@@ -1780,7 +1816,7 @@ impl Lowerer<'_> {
                 let part = part(self);
                 overwrites.push((self.local_name(*local), part));
             }
-            ExprKind::Local(_) | ExprKind::Field { .. } | ExprKind::LeadingDot(_) => {
+            ExprKind::Local(_) | ExprKind::Field { .. } | ExprKind::LeadingDot(_) | ExprKind::Deref(_) => {
                 let part = part(self);
                 let place = self.lower_place(target);
                 self.push(StmtKind::Assign(vec![place], vec![part]));

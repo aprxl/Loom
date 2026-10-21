@@ -1,0 +1,35 @@
+// Allocating and freeing with pointers: binary trees of `^Tree`, built and checked, many times.
+use std.io.print
+
+const SIZE = 16
+
+warp Tree {
+    case Leaf
+    case Node(left: ^Tree, right: ^Tree)
+}
+
+fn make(depth: u32) -> ^Tree {
+    if depth == 0 { return ^Tree.Leaf }
+    ^Tree.Node(make(depth - 1), make(depth - 1))
+}
+
+fn check(t: ^Tree) -> u32 = match t {
+    .Leaf => 1
+    .Node(l, r) => 1 + check(l) + check(r)
+}
+
+fn main() {
+    let max_depth = SIZE
+    let stretch = make(max_depth + 1)
+    print("stretch tree of depth {max_depth + 1}\t check: {check(stretch)}")
+    let long_lived = make(max_depth)
+    var depth = 4u32
+    while depth <= max_depth {
+        let iterations = 1u32 << (max_depth - depth + 4)
+        var total = 0u32
+        for _ in 0..iterations { total += check(make(depth)) }
+        print("{iterations}\t trees of depth {depth}\t check: {total}")
+        depth += 2
+    }
+    print("long lived tree of depth {max_depth}\t check: {check(long_lived)}")
+}

@@ -61,6 +61,25 @@ impl<'a> Builder<'a> {
     /// Jumps to `yes` if `pat` matches `v` (a value of type `ty`), and to
     /// `no` if it doesn't.
     pub(super) fn test_pat(&mut self, pat: &'a hir::Pat, v: &Val, ty: Ty, yes: BlockId, no: BlockId) -> Option<()> {
+        if self.tables().pat_derefs.contains(&pat.id) {
+            let (v, ty) = self.peel_pointers(v, ty, pat.span)?;
+            return self.test_pat_inner(pat, &v, ty, yes, no);
+        }
+        self.test_pat_inner(pat, v, ty, yes, no)
+    }
+
+    /// What a pattern that takes a value apart matches when it is matched
+    /// against a pointer: the target.
+    fn peel_pointers(&mut self, v: &Val, ty: Ty, span: Span) -> Option<(Val, Ty)> {
+        let (mut v, mut ty) = (v.clone(), ty);
+        while let Some(target) = self.target_ty(ty) {
+            v = self.pointee(&v, ty, span)?.0;
+            ty = target;
+        }
+        Some((v, ty))
+    }
+
+    fn test_pat_inner(&mut self, pat: &'a hir::Pat, v: &Val, ty: Ty, yes: BlockId, no: BlockId) -> Option<()> {
         let span = pat.span;
         // `x is Cents`, `c: Cents =>`: the gauge's check.
         if let Some(&gauge) = self.tables().gauge_tests.get(&pat.id)
@@ -196,6 +215,14 @@ impl<'a> Builder<'a> {
 
     /// Binds the names of `pat`, which matched `v`, a value of `ty`.
     pub(super) fn bind_with(&mut self, pat: &'a hir::Pat, v: &Val, ty: Ty, how: Binding) -> Option<()> {
+        if self.tables().pat_derefs.contains(&pat.id) {
+            let (v, ty) = self.peel_pointers(v, ty, pat.span)?;
+            return self.bind_inner(pat, &v, ty, how);
+        }
+        self.bind_inner(pat, v, ty, how)
+    }
+
+    fn bind_inner(&mut self, pat: &'a hir::Pat, v: &Val, ty: Ty, how: Binding) -> Option<()> {
         let span = pat.span;
         if self.tables().gauge_tests.contains_key(&pat.id) {
             if let PatKind::TypeTest { local, .. } = &pat.kind {

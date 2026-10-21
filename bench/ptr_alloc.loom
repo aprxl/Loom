@@ -1,0 +1,13 @@
+// One small box allocated, read and freed, over and over.
+use std.io.print
+
+const SIZE = 10_000_000
+
+fn main() {
+    var total = 0u64
+    for i in 0..SIZE as u64 {
+        let p = ^i
+        total += p^
+    }
+    print("{total}")
+}

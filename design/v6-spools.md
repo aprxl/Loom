@@ -1,6 +1,6 @@
 # V6: pointers, spools, regions and `given`
 
-Status: plan (2026-10-21). Specs: [03-memory](03-memory.md), [vm.md](vm.md)
+Status: plan (2026-10-21); slice 1 done (below). Specs: [03-memory](03-memory.md), [vm.md](vm.md)
 §12 and §17 (V6). This file records how the pieces are built and in what order.
 
 ## Where things stand
@@ -93,7 +93,20 @@ also needs what the example uses without a refusal today: auto-deref through
 `^` in method calls and UFCS (`x.fold()`), in `is`/`match` patterns, and in
 templates and `Show` (`"{x}"`).
 
-1. **`^T` on the heap, no spools.** `Ptr(T, Heap)`: `^e`, `p^`, auto-deref
+1. **`^T` on the heap, no spools. Done.** `TyKind::Ptr(elem, region)` with
+   only `Region::Heap`; auto-deref is a `Coercion::Deref` on the base,
+   receiver, scrutinee or template value (typeck `pointer.rs`), patterns
+   record `pat_derefs`; a pointer is one word in memory on Treadle (a zero
+   word is a moved-from pointer) and a one-slot table `{v}` on Lua (the
+   descriptor `rt.ptr`, patched after the fact when a type holds a pointer
+   to itself). Moving out of a box piece by piece works (a pattern's
+   by-value binding zeroes its part). Left for later slices: `.copy()` on
+   pointers, `once` behind a pointer (Q8), `^(…)`, moving the whole target
+   out (`let t = p^` copies for `Copy` and moves otherwise, but is untested
+   with big `once` values), the hidden region parameter on warps. Measured:
+   alloc, read and free of a box 10 ns; `ptr_trees` 0.87 s against
+   `binary_trees` 0.68 s (twice the allocations: leaves are boxes too).
+   Original plan: `Ptr(T, Heap)`: `^e`, `p^`, auto-deref
    (fields, methods, UFCS, patterns, templates, `Show`/`Eq`/`Ord`/`Hash`),
    drop frees the box, recursive warps (`case Node(^Tree, ^Tree)`), moves,
    `mut` through an owning pointer, `?^T` niche; `^(…)` closures stay

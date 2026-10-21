@@ -101,6 +101,7 @@ impl Checker<'_> {
                 for part in parts {
                     if let TemplatePart::Interp { expr, spec } = part {
                         let ty = self.check_expr(expr, None);
+                        let ty = self.auto_deref(expr, ty);
                         if let Some(spec) = spec.as_deref() {
                             self.check_spec(spec, expr.span);
                         }
@@ -310,7 +311,7 @@ impl Checker<'_> {
             ExprKind::ConstField { base, field } => self.check_const_field(e, base, field),
             ExprKind::Try(inner) => self.check_try(e, inner),
             ExprKind::Mend { expr, binding, handler } => self.check_mend(e, expr, *binding, handler),
-            ExprKind::Deref(_) => self.unsupported(span, "spool pointers"),
+            ExprKind::Deref(pointer) => self.check_deref(pointer),
             ExprKind::DotBlock { subject, body } => {
                 // A changeable place is edited in place, and the block's
                 // value is `()`. Anything else is edited as a copy, which is
@@ -819,7 +820,7 @@ impl Checker<'_> {
                 self.require_operand(ty, Operand::Integer, "~", span)
             }
             UnaryOp::Not => self.check_coerce(operand, self.tcx.bool),
-            UnaryOp::Alloc => self.unsupported(span, "`^` allocation"),
+            UnaryOp::Alloc => self.check_alloc(operand, expected),
         }
     }
 
@@ -1134,8 +1135,18 @@ impl Checker<'_> {
                 }
             }
             ExprKind::Deref(_) => {
-                self.unsupported(target.span, "spool pointers");
-                None
+                let ty = self.check_expr(target, None);
+                if self.tcx.is_error(ty) {
+                    return None;
+                }
+                if self.place(target) != Some(true) {
+                    self.diags.push(
+                        Diagnostic::error(codes::T0107, "can't change what this pointer points at")
+                            .primary(target.span, "the pointer can't be changed")
+                            .help("a pointer held in a `var` or a `mut` parameter can be written through"),
+                    );
+                }
+                Some(ty)
             }
             _ => {
                 self.error(codes::T0107, target.span, "can't assign to this", "not a variable");

@@ -37,6 +37,7 @@ mod lambda;
 mod method;
 mod moves;
 mod pat;
+mod pointer;
 mod reflect;
 mod seq;
 mod shuttle;
@@ -275,6 +276,8 @@ pub struct Body {
     /// Calls of projections (`fn at(mut self, i: usize) ~> mut T`): each is
     /// a place, for the statement it's in, and whether it can be changed.
     pub lends: HashMap<HirId, PlaceMode>,
+    /// Patterns matched against a pointer, which match its target.
+    pub pat_derefs: HashSet<HirId>,
 }
 
 /// `f.Frame.size` (or `.align`): about the frame of shuttle function
@@ -341,6 +344,9 @@ pub enum Coercion {
     /// An array, list, slice, range or `Iter` where a `Stream` of its
     /// items is expected.
     ToStream(IterSource),
+    /// A pointer used as its target: the base of a field access, a method's
+    /// receiver, a pattern's or a template's value.
+    Deref,
 }
 
 #[derive(Clone, Debug)]
@@ -1413,7 +1419,12 @@ impl<'p> Checker<'p> {
                 let elem = self.lower_ty(elem);
                 if self.tcx.is_error(elem) { elem } else { self.slice_of(elem) }
             }
-            HirTy::Pointer(_) | HirTy::Region { .. } => self.unsupported(span, "spool pointers"),
+            HirTy::Pointer(inner) => {
+                let elem = self.lower_ty(inner);
+                if self.tcx.is_error(elem) { elem } else { self.tcx.intern(TyKind::Ptr(elem, self.tcx.heap)) }
+            }
+            HirTy::Region { region: crate::hir::Region::Heap, ty } => self.lower_ty(ty),
+            HirTy::Region { .. } => self.unsupported(span, "spool regions"),
             HirTy::RawPointer(_) => self.unsupported(span, "raw pointers"),
             HirTy::Union(items) => {
                 let items: Vec<Ty> = items.iter().map(|t| self.lower_ty(t)).collect();
@@ -1622,6 +1633,8 @@ impl<'p> Checker<'p> {
                 Some(Coercion::StringToStr)
             }
             (_, TyKind::Optional(inner)) if inner == actual => Some(Coercion::ToOptional),
+            // `f(p)` where `f` takes the target of the pointer `p`.
+            (TyKind::Ptr(inner, _), _) if self.in_argument && inner == target => Some(Coercion::Deref),
             // A union of fewer types: the same on Lua, where each is boxed
             // with its own type; on Treadle, its tag is renumbered.
             (TyKind::Union(have), TyKind::Union(want)) if have.iter().all(|t| want.contains(t)) => {
@@ -1759,6 +1772,12 @@ impl<'p> Checker<'p> {
             && [self.std.show, self.std.eq, self.std.copy, self.std.hash].contains(&w)
         {
             return self.weaves(*inner, weft);
+        }
+        // A pointer shows, compares and hashes like what it points at.
+        if let TyKind::Ptr(target, _) = kind
+            && [self.std.show, self.std.eq, self.std.ord, self.std.hash].contains(&w)
+        {
+            return self.weaves(*target, weft);
         }
         if w == self.std.show {
             scalar

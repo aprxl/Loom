@@ -2,6 +2,10 @@
 
 Running log of milestone work and decisions. Newest first. Replaces `ledger.log`.
 
+## V6 slice 1: heap pointers (2026-10-21)
+
+Done (both backends; `tests/run/ptr_basic`, `ptr_more`, `tests/fail/ptr_errors`, `docs/lang/samples/own_pointers`): `^T`, `^e`, `p^`, auto-deref through fields, methods, patterns, templates, `==`/`<`/hash, recursive warps, `?^T`, assignment through a pointer, moving out of a box by pattern. See design/v6-spools.md for the model and the slices ahead. Gates: allocate, read and free a box 10 ns (gate 15 ns, `perf_gates.rs`); no existing `bench/counts.txt` row moved. Not done: `.copy()` on a pointer, the whole-target move of a `once`, `ref warp`, regions. Decision pending Caio: arena pointers read-only unless the target is plain data (open question 1, option c).
+
 ## Roadmap: deferred work by milestone (2026-10-20)
 
 Built from the ledger below, `design/stdlib-plan.md`, `design/stdlib-collect-default.md`, and `design/vm-review-v3/v4/v5.md`. Caio is on Treadle (V6 next); the stdlib is paused, so "Std backlog" means nothing blocks it and it waits for a stdlib session. Judgment calls are marked (J).

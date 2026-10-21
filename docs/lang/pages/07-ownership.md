@@ -57,9 +57,17 @@ Nothing of this exists at run time: `once` is checked entirely at compile time.
 
 A **fallback defer**, `defer tx => tx.rollback()`, names a `once` value and runs only on exits where that value is still live. It's how the `transfer` function above rolls back on an early exit without doing it after a commit. Giving `tx` a new value re-arms it.
 
+## Pointers
+
+`^e` puts a value in a box on the heap and gives a pointer to it, written `^T`. A pointer owns its box: it moves like any non-`Copy` value, and dropping it drops the value and frees the box. That is how a type holds itself (`^Tree` inside `Tree`). `p^` reads the box. Fields, methods, patterns and `{p}` see through a pointer, so `t.value` and `match t { .Node(l, x, r) => ... }` work on a `^Tree`. A pointer in a `var` can be written through (`p.x = 1`, `p^ += 1`).
+
+@sample own_pointers
+
+A `take` pointer that a `match` takes apart hands its parts to the arms by value, so the arms can move them into a new node.
+
 ## Not supported yet
 
-`ref warp`, spools and region pointers, and `given` all belong to this part of the design and stop with [U0102](diag:U0102). Projections (`~> mut T`), which lend a place, work: see [Shuttles](page:shuttles). See [Not supported yet](page:not-yet).
+`ref warp`, spools, region pointers (`^T@s`) and `given` belong to this part of the design and stop with [U0102](diag:U0102). Projections (`~> mut T`), which lend a place, work: see [Shuttles](page:shuttles). See [Not supported yet](page:not-yet).
 
 ## Where next
 

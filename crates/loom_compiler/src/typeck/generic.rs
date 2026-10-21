@@ -470,7 +470,7 @@ impl Checker<'_> {
         match self.tcx.kind(ty).clone() {
             TyKind::Tuple(items) => items.into_iter().for_each(|t| self.register_type(t)),
             TyKind::Optional(t) | TyKind::Range(t) | TyKind::Array(t, _) => self.register_type(t),
-            TyKind::Result(t, e) => {
+            TyKind::Result(t, e) | TyKind::Ptr(t, e) => {
                 self.register_type(t);
                 self.register_type(e);
             }

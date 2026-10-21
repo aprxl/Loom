@@ -341,8 +341,48 @@ end of iteration 1
 end of iteration 2</code></pre></div>
 </div>
 <p>A <strong>fallback defer</strong>, <code>defer tx =&gt; tx.rollback()</code>, names a <code>once</code> value and runs only on exits where that value is still live. It's how the <code>transfer</code> function above rolls back on an early exit without doing it after a commit. Giving <code>tx</code> a new value re-arms it.</p>
+<h2 id="pointers">Pointers</h2>
+<p><code>^e</code> puts a value in a box on the heap and gives a pointer to it, written <code>^T</code>. A pointer owns its box: it moves like any non-<code>Copy</code> value, and dropping it drops the value and frees the box. That is how a type holds itself (<code>^Tree</code> inside <code>Tree</code>). <code>p^</code> reads the box. Fields, methods, patterns and <code>{p}</code> see through a pointer, so <code>t.value</code> and <code>match t { .Node(l, x, r) =&gt; ... }</code> work on a <code>^Tree</code>. A pointer in a <code>var</code> can be written through (<code>p.x = 1</code>, <code>p^ += 1</code>).</p>
+<div class="sample" id="sample-own_pointers">
+<div class="sample-head"><span class="file">samples/own_pointers.loom</span><span class="tag ok">runs</span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Tree</span> {
+    <span class="k">case</span> <span class="t">Leaf</span>
+    <span class="k">case</span> <span class="t">Node</span>(left: ^<span class="t">Tree</span>, value: i32, right: ^<span class="t">Tree</span>)
+}
+
+<span class="k">fn</span> insert(<span class="k">take</span> t: ^<span class="t">Tree</span>, v: i32) -&gt; ^<span class="t">Tree</span> = <span class="k">match</span> t {
+    .<span class="t">Leaf</span> =&gt; ^<span class="t">Tree</span>.<span class="t">Node</span>(^<span class="t">Tree</span>.<span class="t">Leaf</span>, v, ^<span class="t">Tree</span>.<span class="t">Leaf</span>)
+    .<span class="t">Node</span>(l, x, r) =&gt; <span class="k">if</span> v &lt; x {
+        ^<span class="t">Tree</span>.<span class="t">Node</span>(l.insert(v), x, r)
+    } <span class="k">else</span> {
+        ^<span class="t">Tree</span>.<span class="t">Node</span>(l, x, r.insert(v))
+    }
+}
+
+<span class="k">fn</span> sum(t: ^<span class="t">Tree</span>) -&gt; i32 = <span class="k">match</span> t {
+    .<span class="t">Leaf</span> =&gt; <span class="n">0</span>
+    .<span class="t">Node</span>(l, x, r) =&gt; l.sum() + x + r.sum()
+}
+
+<span class="k">fn</span> main() {
+    <span class="k">var</span> t: ^<span class="t">Tree</span> = ^<span class="t">Tree</span>.<span class="t">Leaf</span>
+    <span class="k">for</span> v <span class="k">in</span> [<span class="n">5</span>, <span class="n">2</span>, <span class="n">8</span>, <span class="n">1</span>, <span class="n">9</span>, <span class="n">3</span>] {
+        t = t.insert(v)
+    }
+    print(<span class="s">"sum {</span>t.sum()<span class="s">}"</span>)
+
+    <span class="k">var</span> n = ^<span class="n">41</span>
+    n^ += <span class="n">1</span>
+    print(<span class="s">"{</span>n^<span class="s">}"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>sum 28
+42</code></pre></div>
+</div>
+<p>A <code>take</code> pointer that a <code>match</code> takes apart hands its parts to the arms by value, so the arms can move them into a new node.</p>
 <h2 id="not-supported-yet">Not supported yet</h2>
-<p><code>ref warp</code>, spools and region pointers, and <code>given</code> all belong to this part of the design and stop with <a href="diagnostics.html#U0102">U0102</a>. Projections (<code>~&gt; mut T</code>), which lend a place, work: see <a href="shuttles.html">Shuttles</a>. See <a href="not-yet.html">Not supported yet</a>.</p>
+<p><code>ref warp</code>, spools, region pointers (<code>^T@s</code>) and <code>given</code> belong to this part of the design and stop with <a href="diagnostics.html#U0102">U0102</a>. Projections (<code>~&gt; mut T</code>), which lend a place, work: see <a href="shuttles.html">Shuttles</a>. See <a href="not-yet.html">Not supported yet</a>.</p>
 <h2 id="where-next">Where next</h2>
 <p><a href="gauges.html">Gauges</a> restrict a number to a range.</p>
 <div class="pager">

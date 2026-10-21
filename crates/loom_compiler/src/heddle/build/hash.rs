@@ -137,6 +137,11 @@ impl<'a> Builder<'a> {
                 self.jump(done);
                 self.enter(done);
             }
+            TyKind::Ptr(..) => {
+                let (x, target) = self.pointee(&v, ty, span)?;
+                let next = self.hash_into(h, x, target, span)?;
+                self.write(r, next);
+            }
             TyKind::Array(..) | TyKind::Adt(..) if self.seq_of(ty).is_some() => {
                 let elem = self.seq_of(ty)?.elem();
                 let (buf, len) = self.view_of(&v, ty, span)?;

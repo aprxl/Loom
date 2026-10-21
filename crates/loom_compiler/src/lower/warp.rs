@@ -20,7 +20,7 @@ use super::lir::{Expr, StmtKind, TableKey};
 use super::{Dest, Lowerer};
 use crate::hir::{self, DefId, DefKind, ExprKind, LocalId, PatKind};
 use crate::ty::{Ty, TyKind};
-use crate::typeck::{Construct, FieldSource, Key, Receiver, WarpInfo};
+use crate::typeck::{Coercion, Construct, FieldSource, Key, Receiver, WarpInfo};
 
 impl Lowerer<'_> {
     pub(super) fn warp(&self, def: DefId) -> Option<&WarpInfo> {
@@ -56,7 +56,7 @@ impl Lowerer<'_> {
             TyKind::Adt(..) if self.seq(ty).is_some() => false,
             // Copy-ness depends on a generic warp's arguments.
             TyKind::Adt(..) => self.typed.results.adts.get(&ty).is_some_and(|w| w.copy),
-            TyKind::Fn(..) | TyKind::Any(_) | TyKind::Union(_) => false,
+            TyKind::Fn(..) | TyKind::Any(_) | TyKind::Union(_) | TyKind::Ptr(..) => false,
             _ => true,
         }
     }
@@ -90,7 +90,7 @@ impl Lowerer<'_> {
     /// and read by every use), or a field of one.
     pub(super) fn is_place(&self, e: &hir::Expr) -> bool {
         match &e.kind {
-            ExprKind::Local(_) => true,
+            ExprKind::Local(_) | ExprKind::Deref(_) => true,
             ExprKind::Call { .. } if self.tables().lends.contains_key(&e.id) => true,
             _ if self.is_const(e) => true,
             ExprKind::Field { base, .. } | ExprKind::ConstField { base, .. } => self.is_place(base),
@@ -264,9 +264,23 @@ impl Lowerer<'_> {
             },
             ExprKind::Index { base, args } => self.index(base, args),
             ExprKind::Call { .. } if self.tables().lends.contains_key(&e.id) => self.lend_place(e),
+            ExprKind::Deref(inner) => {
+                let p = if self.is_place(inner) { self.lower_place(inner) } else { self.lower_expr(inner) };
+                Expr::index(p, Expr::Int(1))
+            }
             ExprKind::Field { base, .. } => {
                 let key = self.tables().fields.get(&e.id).map(|f| f.key.clone());
-                let base = if self.is_place(base) { self.lower_place(base) } else { self.lower_expr(base) };
+                let base = if self.is_place(base) {
+                    let place = self.lower_place(base);
+                    // A pointer used as its target.
+                    if self.tables().coercions.get(&base.id) == Some(&Coercion::Deref) {
+                        Expr::index(place, Expr::Int(1))
+                    } else {
+                        place
+                    }
+                } else {
+                    self.lower_expr(base)
+                };
                 match key {
                     Some(key) => Self::access(base, &key),
                     None => base,
@@ -404,6 +418,15 @@ impl Lowerer<'_> {
     /// Binds the names of a pattern that matched `v`: as new locals, or (for
     /// `is`, whose locals are declared up front) by assignment.
     pub(super) fn bind_pat(&mut self, pat: &hir::Pat, v: &Expr, declare: bool) {
+        if self.tables().pat_derefs.contains(&pat.id) {
+            let ty = self.pat_ty(pat);
+            let (v, _) = self.peel_pat(v, ty);
+            return self.bind_pat_inner(pat, &v, declare);
+        }
+        self.bind_pat_inner(pat, v, declare)
+    }
+
+    fn bind_pat_inner(&mut self, pat: &hir::Pat, v: &Expr, declare: bool) {
         if self.bind_wrapper(pat, v, declare) {
             return;
         }

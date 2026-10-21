@@ -194,7 +194,7 @@ impl<'a> Builder<'a> {
             TyKind::Tuple(items) | TyKind::Union(items) => items.iter().any(|&t| self.needs_drop(t)),
             TyKind::Optional(t) | TyKind::Array(t, _) => self.needs_drop(t),
             TyKind::Result(t, e) => self.needs_drop(t) || self.needs_drop(e),
-            TyKind::Any(_) => true,
+            TyKind::Any(_) | TyKind::Ptr(..) => true,
             TyKind::Adt(def, _) => match self.p.def_path(def).as_str() {
                 "std.slice.Slice" | "std.fmt.Fmt" => false,
                 // A mutex owns its value.
