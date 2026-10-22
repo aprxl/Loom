@@ -14,7 +14,7 @@ Open:
 
 ## V6.5 and V6 loose ends (2026-10-22)
 
-Done: `std.mem.swap`/`replace`/`take` (builtin free functions; both backends; `tests/run/mem_swap`); the arena-mutation rule (T0107: a field behind a pointer into a spool is read-only unless the target is plain data); the hand-written `Show` on std warps was ignored because std weaves of plain types were never checked (now checked for the types a program uses, and std may weave its own wefts into its own types), so `Duration` has `Show`; `Default` for tuples of four and five. Still open from V6.5: `Self` for numbers (`pow_checked`, `abs_diff`, ...), `where T: [U]`, generic wefts, `Default` for arrays (a weave into `[T; N]` is not matched), `collect_as` errors at the call site, `Fmt`. Still open from V6: storable closures, I/O and sleep as cancel points, `loom(given: pool)`, `yield`/`pull` in a `loom` body (done, step 4).
+Done: `std.mem.swap`/`replace`/`take` (builtin free functions; both backends; `tests/run/mem_swap`); the arena-mutation rule (T0107: a field behind a pointer into a spool is read-only unless the target is plain data); the hand-written `Show` on std warps was ignored because std weaves of plain types were never checked (now checked for the types a program uses, and std may weave its own wefts into its own types), so `Duration` has `Show`; `Default` for tuples of four and five. Still open from V6.5: `Self` for numbers (`pow_checked`, `abs_diff`, ...), `where T: [U]`, generic wefts, `Default` for arrays (a weave into `[T; N]` is not matched), `collect_as` errors at the call site, `Fmt`. Still open from V6: storable closures, I/O and sleep as cancel points, `loom(given: pool)`, `yield`/`pull` in a `loom` body (done, 6d47848).
 
 ## Closures without captures (2026-10-22, Caio chose option B)
 
@@ -26,7 +26,7 @@ Done (both backends; `tests/run/spool_pool`, `spool_pool_full`, `spool_shared`, 
 
 ## V6 slice 3: given in general (2026-10-21)
 
-Done (both backends; `tests/run/given_values`, docs sample `own_given`): `given name = value` for any weft's type, `#given_default(Type)` on a weft (the call makes the default with the type's `default`), the gate that an unused `given` costs 0 dispatches (`bench_counts.rs`, `given_plain` and `given_unused`). Not done: inferring the `given`s of private functions (the design's rule; today every function spells them, which is the honest `pub` rule applied everywhere), `loom(given: pool)` and a `Pool` for threads (it would also clash by name with the planned `Pool[T]` spool), `yield`/`pull` in a `loom` body (done, step 4), the ambient `Writer`/`Rng`/`Clock`/`Logger` of std (the mechanism is in; wiring `print` to a `Writer` would put a `given` on the hottest path).
+Done (both backends; `tests/run/given_values`, docs sample `own_given`): `given name = value` for any weft's type, `#given_default(Type)` on a weft (the call makes the default with the type's `default`), the gate that an unused `given` costs 0 dispatches (`bench_counts.rs`, `given_plain` and `given_unused`). Not done: inferring the `given`s of private functions (the design's rule; today every function spells them, which is the honest `pub` rule applied everywhere), `loom(given: pool)` and a `Pool` for threads (it would also clash by name with the planned `Pool[T]` spool), `yield`/`pull` in a `loom` body (done, 6d47848), the ambient `Writer`/`Rng`/`Clock`/`Logger` of std (the mechanism is in; wiring `print` to a `Writer` would put a `given` on the hottest path).
 
 ## V6 slice 2: spools, regions, given spools (2026-10-21)
 
