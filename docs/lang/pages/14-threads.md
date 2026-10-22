@@ -72,5 +72,5 @@ A thread started in a loom that has already failed never runs.
 - A loom block's own `defer`s run when its block ends, before it waits for its threads.
 - Results nobody joined are dropped where the loom ends.
 - A `Spun` is joined once; a second `join` unravels (a `once` result makes the handle `once`, so it's [L0301](diag:L0301) to lose it).
-- `yield` and `pull` can't be inside a loom block yet ([U0102](diag:U0102)).
+- A shuttle can `yield` and `pull` inside a loom block: its threads keep running while it waits, and closing it early cancels them and waits for them.
 - Compile-time code can't start threads ([K0104](diag:K0104)).

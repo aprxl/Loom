@@ -1212,6 +1212,9 @@ A **loom group** is the set of threads a block started. Its rules:
   to its next point. With several workers a running
   thread notices a cancel at its next point too; I/O calls that don't park
   (`print`, `fs`) aren't points.
+  A shuttle can `yield` or `pull` inside a loom: the group stays alive while
+  it is suspended, and closing the shuttle cancels the group's threads and
+  waits for them, as leaving the block early does.
 - A `defer` that unravels in a thread being cancelled replaces the cancel
   with that unravel, as a landing pad does for any unwind (§9.4). It fails
   the group like any unravel.
@@ -1248,11 +1251,10 @@ moved: `take`; otherwise read).
   outer loop and a `?` with no `mend` are C0406; `continue` ends it.
 - **Not yet:** a lambda parameter of a method called on a list that a call
   just made (`xs.filter(f).map(n => thread g(n))`: the list in between is a
-  temporary) isn't checked against the loom, and `yield` and `pull` inside a
-  loom block are U0102 (a suspended shuttle would hold the group). A lambda
-  that contains a `thread` can still leave its loom (only `Spun` itself is tracked, not function types holding
-  one), and a handle joined on only some paths releases what it held on all
-  of them.
+  temporary) isn't checked against the loom. A lambda that contains a `thread`
+  can still leave its loom (only `Spun` itself is tracked, not function types
+  holding one), and a handle joined on only some paths releases what it held
+  on all of them.
 - **A `Spun[T]` holds** the read and `mut` captures it took by reference,
   until it's joined, the way a stream holds the lambdas it was built from:
   `join` takes the handle, and a handle nobody joined holds them until the

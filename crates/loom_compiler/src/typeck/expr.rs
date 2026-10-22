@@ -293,10 +293,6 @@ impl Checker<'_> {
                 self.tcx.never
             }
             ExprKind::Fail(value) => self.check_fail(e, value),
-            // A shuttle suspended inside a loom would hold its group: not yet.
-            ExprKind::Yield { .. } | ExprKind::Pull if self.looms > 0 => {
-                self.unsupported(span, "`yield` and `pull` inside a `loom` block")
-            }
             ExprKind::Yield { place, value } => self.check_yield(value, *place, span),
             ExprKind::Pull => self.check_pull(span),
             ExprKind::Unsafe { .. } => self.unsupported(span, "`unsafe` blocks"),

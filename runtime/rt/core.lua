@@ -1872,6 +1872,7 @@ local watched = {}
 
 local PARK = {}                      -- what a parked task yields
 local CANCEL = MARK .. "\31cancel"   -- what a cancelled task unwinds with
+local CLOSE = MARK .. "\31close"     -- what a closed shuttle unwinds with
 local MAIN = { main = true, sdepth = 0 }
 local current = MAIN
 local ready, rhead, rtail = {}, 1, 0
@@ -2270,7 +2271,12 @@ end
 
 
 function rt.shuttle(body)
-  local co = co_create(body)
+  -- Under a `pcall`, an unwind runs the body's guards in its own coroutine,
+  -- where a park can yield to the driver.
+  local co = co_create(function(...)
+    local ok, e = pcall(body, ...)
+    if not ok then error(e, 0) end
+  end)
   if watch_thread then
     watched[co] = true
     watch_thread(co)
@@ -2289,12 +2295,13 @@ end
 
 function rt.out(v)
   if current.cancelled then error(CANCEL, 0) end
-  co_yield(true, v)
+  if co_yield(true, v) == CLOSE then error(CLOSE, 0) end
 end
 
 function rt.pull(boxed)
   if current.cancelled then error(CANCEL, 0) end
   local has, v = co_yield(false)
+  if has == CLOSE then error(CLOSE, 0) end
   if not has then return nil end
   if boxed then return { v } end
   return v
@@ -2302,6 +2309,7 @@ end
 
 -- Resumes `sh` with `...`: gives "out" and the value, "pull", or "done".
 local function resume(sh, ...)
+  sh.started = true
   local cur = current
   cur.sdepth = cur.sdepth + 1
   local ok, is_out, v = co_resume(sh.co, ...)
@@ -2327,6 +2335,31 @@ local function resume(sh, ...)
   return "pull"
 end
 
+--- Closes `sh` where it waits: resumed with CLOSE, it unwinds from its
+--- `yield` or `pull` in its own coroutine, running its `defer`s and loom
+--- guards, and a park on the way is the task's, as in `resume`. Gives what
+--- a cleanup raised, if anything.
+local function close_shuttle(sh)
+  finish(sh)
+  if not sh.started then
+    local ok, e = co_close(sh.co)
+    return not ok and e or nil
+  end
+  local cur = current
+  cur.sdepth = cur.sdepth + 1
+  local ok, e = co_resume(sh.co, CLOSE)
+  cur.sdepth = cur.sdepth - 1
+  while ok and e == PARK do
+    suspend()
+    cur.sdepth = cur.sdepth + 1
+    ok, e = co_resume(sh.co)
+    cur.sdepth = cur.sdepth - 1
+  end
+  co_close(sh.co)
+  if not ok and e ~= CLOSE then return e end
+  return nil
+end
+
 -- A projection lends one place for a statement: run to its first `yield`,
 -- which gives the place as `{table, key}`, and on to its end once the
 -- statement is done.
@@ -2337,9 +2370,8 @@ local lent_place = {
   __close = function(place, err)
     local sh = place.sh
     if sh.done then return end
-    finish(sh)
-    local ok, e = co_close(sh.co)
-    if not ok and err == nil then error(e, 0) end
+    local e = close_shuttle(sh)
+    if e and err == nil then error(e, 0) end
   end,
 }
 
@@ -2534,9 +2566,8 @@ end
 local closes_shuttle = {
   __close = function(c, err)
     if c.sh.done then return end
-    finish(c.sh)
-    local ok, e = co_close(c.sh.co)
-    if not ok and err == nil then error(e, 0) end
+    local e = close_shuttle(c.sh)
+    if e and err == nil then error(e, 0) end
   end,
 }
 

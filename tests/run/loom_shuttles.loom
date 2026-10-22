@@ -1,0 +1,105 @@
+use std.io.print
+use std.time.{sleep, ms}
+
+fn gen1() ~> i32 {
+    loom {
+        let a = thread { 1 }
+        yield a.join()
+        yield 2
+    }
+}
+
+fn s1() {
+    for x in gen1() {
+        print("{x}")
+    }
+}
+
+fn gen2() ~> i32 {
+    loom {
+        let a = thread { sleep(ms(30)); 3 }
+        yield 1
+        yield a.join()
+    }
+}
+
+fn s2() {
+    for x in gen2() {
+        print("{x}")
+    }
+}
+
+fn gen3() ~> i32 {
+    loom {
+        let a = thread { sleep(ms(20000)); 0 }
+        yield 1
+        yield 2
+        yield 3
+    }
+}
+
+fn s3() {
+    for x in gen3() {
+        print("{x}")
+        break
+    }
+    print("after")
+}
+
+fn doubles() ~> i32 <~ i32 {
+    loom {
+        while pull is some(n) {
+            let t = thread { n * 2 }
+            yield t.join()
+        }
+    }
+}
+
+fn s4() {
+    var d = doubles()
+    for n in [1, 2, 3] {
+        let got = d.push(n).collect()
+        print("pushed {n}: {got}")
+    }
+    for last in d.close() {
+        print("closed: {last}")
+    }
+}
+
+fn s5() {
+    loom {
+        let t = thread {
+            for x in gen1() {
+                print("{x}")
+            }
+        }
+        t.join()
+    }
+}
+
+fn s6() {
+    loom {
+        let t = thread {
+            for x in gen3() {
+                print("{x}")
+                break
+            }
+            print("after")
+        }
+        t.join()
+    }
+}
+
+fn main() {
+    s1()
+    print("--")
+    s2()
+    print("--")
+    s3()
+    print("--")
+    s4()
+    print("--")
+    s5()
+    print("--")
+    s6()
+}

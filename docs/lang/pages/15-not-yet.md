@@ -11,7 +11,7 @@ These are planned next, in this order: the rest of threads, then the rest of `gi
 
 ### Threads
 
-[Threads](page:threads) run, one at a time: `loom { }`, `thread`, `.join()` and `sched_yield()`. Not yet: several worker threads at once, `loom(given: pool)`, and `yield` or `pull` inside a `loom` block ([U0102](diag:U0102)).
+[Threads](page:threads) run, one at a time: `loom { }`, `thread`, `.join()` and `sched_yield()`. Not yet: several worker threads at once, `loom(given: pool)`.
 
 @sample nyet_threads
 

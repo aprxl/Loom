@@ -14,7 +14,7 @@ Open:
 
 ## V6.5 and V6 loose ends (2026-10-22)
 
-Done: `std.mem.swap`/`replace`/`take` (builtin free functions; both backends; `tests/run/mem_swap`); the arena-mutation rule (T0107: a field behind a pointer into a spool is read-only unless the target is plain data); the hand-written `Show` on std warps was ignored because std weaves of plain types were never checked (now checked for the types a program uses, and std may weave its own wefts into its own types), so `Duration` has `Show`; `Default` for tuples of four and five. Still open from V6.5: `Self` for numbers (`pow_checked`, `abs_diff`, ...), `where T: [U]`, generic wefts, `Default` for arrays (a weave into `[T; N]` is not matched), `collect_as` errors at the call site, `Fmt`. Still open from V6: storable closures, I/O and sleep as cancel points, `loom(given: pool)`, `yield`/`pull` in a `loom` body.
+Done: `std.mem.swap`/`replace`/`take` (builtin free functions; both backends; `tests/run/mem_swap`); the arena-mutation rule (T0107: a field behind a pointer into a spool is read-only unless the target is plain data); the hand-written `Show` on std warps was ignored because std weaves of plain types were never checked (now checked for the types a program uses, and std may weave its own wefts into its own types), so `Duration` has `Show`; `Default` for tuples of four and five. Still open from V6.5: `Self` for numbers (`pow_checked`, `abs_diff`, ...), `where T: [U]`, generic wefts, `Default` for arrays (a weave into `[T; N]` is not matched), `collect_as` errors at the call site, `Fmt`. Still open from V6: storable closures, I/O and sleep as cancel points, `loom(given: pool)`, `yield`/`pull` in a `loom` body (done, step 4).
 
 ## Closures without captures (2026-10-22, Caio chose option B)
 
@@ -26,7 +26,7 @@ Done (both backends; `tests/run/spool_pool`, `spool_pool_full`, `spool_shared`, 
 
 ## V6 slice 3: given in general (2026-10-21)
 
-Done (both backends; `tests/run/given_values`, docs sample `own_given`): `given name = value` for any weft's type, `#given_default(Type)` on a weft (the call makes the default with the type's `default`), the gate that an unused `given` costs 0 dispatches (`bench_counts.rs`, `given_plain` and `given_unused`). Not done: inferring the `given`s of private functions (the design's rule; today every function spells them, which is the honest `pub` rule applied everywhere), `loom(given: pool)` and a `Pool` for threads (it would also clash by name with the planned `Pool[T]` spool), `yield`/`pull` in a `loom` body, the ambient `Writer`/`Rng`/`Clock`/`Logger` of std (the mechanism is in; wiring `print` to a `Writer` would put a `given` on the hottest path).
+Done (both backends; `tests/run/given_values`, docs sample `own_given`): `given name = value` for any weft's type, `#given_default(Type)` on a weft (the call makes the default with the type's `default`), the gate that an unused `given` costs 0 dispatches (`bench_counts.rs`, `given_plain` and `given_unused`). Not done: inferring the `given`s of private functions (the design's rule; today every function spells them, which is the honest `pub` rule applied everywhere), `loom(given: pool)` and a `Pool` for threads (it would also clash by name with the planned `Pool[T]` spool), `yield`/`pull` in a `loom` body (done, step 4), the ambient `Writer`/`Rng`/`Clock`/`Logger` of std (the mechanism is in; wiring `print` to a `Writer` would put a `given` on the hottest path).
 
 ## V6 slice 2: spools, regions, given spools (2026-10-21)
 
@@ -45,7 +45,7 @@ Built from the ledger below, `design/stdlib-plan.md`, `design/stdlib-collect-def
 - Storable closures: `scan`, `from_fn`, `successors`, and any adaptor that keeps a user callback; `inspect`-style steps move from builtins to Loom once a lambda can be stored in a warp field or returned (M0106).
 - `mem.swap`/`replace`/`take`/`drop` (needs a rule for moving out of a `mut` parameter; lands with the ownership rules of regions). (J: here, not a separate item, because the rule is a move/region question.)
 - Stdlib phase 6: `Spool`, `Arena`, `SharedArena`, `Pool[T]`; spool-aware collection constructors and `copy`; `Deque`/`SortedMap` nodes in a spool.
-- `given` defaults (D7, a declared default per weft) and the ambient `Writer`, `Rng`, `Clock`, `Logger`, `Pool` givens; `loom(given: pool)`, `yield`/`pull` in a loom (V5 leftovers).
+- `given` defaults (D7, a declared default per weft) and the ambient `Writer`, `Rng`, `Clock`, `Logger`, `Pool` givens; `loom(given: pool)`, `yield`/`pull` in a loom (V5 leftovers; done, step 4).
 - Gates: the V6 rows of vm.md section 17 and 16 (`binary_trees` at least 4x; `Arena` alloc at least 10x `heap`, `Pool` alloc/free at most 5 dispatches, an unused `given` costs 0 dispatches).
 
 **V6.5 (new): language gaps the stdlib hit.** Small typeck/weave items, none about memory, so they don't belong in V6. (J: a milestone of its own after V6, because V6 rewrites the checker's ownership side and these touch `Self`, bounds and weaves; doing them in the same pass risks conflicts. Fold into V6 if the checker work overlaps anyway.)
