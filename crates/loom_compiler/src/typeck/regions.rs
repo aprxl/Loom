@@ -22,9 +22,7 @@ use loom_syntax::diag::codes;
 use loom_syntax::source::Span;
 
 use super::{ArgSource, Checker};
-use crate::hir::{
-    Block, DefId, DefKind, Expr, ExprKind, FnDef, LocalId, LocalKind, Pat, Region, StmtKind, TyKind as HirTy,
-};
+use crate::hir::{Block, DefKind, Expr, ExprKind, FnDef, LocalId, LocalKind, Pat, Region, StmtKind, TyKind as HirTy};
 use crate::ty::{Ty, TyKind};
 
 /// The spools a value is in: a `spool` binding or a `given`, and how many
@@ -97,7 +95,7 @@ impl Checker<'_> {
             },
             _ => body.span,
         };
-        self.leaves(&cx, &roots, tail, "returned");
+        self.leaves(&roots, tail, "returned");
     }
 
     /// Whether `ty` has a pointer, or a warp holding pointers, into a spool.
@@ -127,7 +125,7 @@ impl Checker<'_> {
 
     /// Reports each spool in `roots` that ends in this function, for a value
     /// that leaves it.
-    fn leaves(&mut self, cx: &Cx, roots: &Roots, span: Span, how: &str) {
+    fn leaves(&mut self, roots: &Roots, span: Span, how: &str) {
         for &(r, _) in roots {
             if self.p.local(r).kind != LocalKind::Spool {
                 continue;
@@ -142,7 +140,6 @@ impl Checker<'_> {
                     );
             self.report_once(diag);
         }
-        let _ = cx;
     }
 
     fn report_once(&mut self, diag: Diagnostic) {
@@ -287,13 +284,13 @@ impl Checker<'_> {
             ExprKind::Return(v) => {
                 if let Some(v) = v {
                     let r = self.rv(cx, v);
-                    self.leaves(cx, &r, v.span, "returned");
+                    self.leaves(&r, v.span, "returned");
                 }
                 Roots::new()
             }
             ExprKind::Fail(v) => {
                 let r = self.rv(cx, v);
-                self.leaves(cx, &r, v.span, "failed-with");
+                self.leaves(&r, v.span, "failed-with");
                 Roots::new()
             }
             ExprKind::Assign { target, value, .. } => {
@@ -533,13 +530,12 @@ impl Checker<'_> {
         let mut spools: Vec<Option<LocalId>> = Vec::new();
         if let DefKind::Fn(f) = &self.p.def(def).kind {
             let declared = f.params.len();
-            for (k, source) in info.args.iter().enumerate().skip(declared) {
+            for source in info.args.iter().skip(declared) {
                 spools.push(match source {
                     ArgSource::Arg(i) => self.spool_of(cx, &args[*i].value),
                     ArgSource::Ambient(l) => self.resolve_spool(cx, *l),
                     _ => None,
                 });
-                let _ = k;
             }
             // An argument must be in the spool its parameter's type names.
             for (i, source) in info.args.iter().enumerate().take(declared) {
@@ -587,6 +583,3 @@ fn names_region(t: &crate::hir::Ty, l: LocalId) -> bool {
         _ => false,
     }
 }
-
-#[allow(dead_code)]
-fn _unused(_: DefId) {}
