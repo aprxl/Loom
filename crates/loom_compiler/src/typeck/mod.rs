@@ -1359,6 +1359,15 @@ impl<'p> Checker<'p> {
         Some(FnSig { params: std::mem::take(params), ret })
     }
 
+    /// Whether this is a template: a generic signature lowered before its arguments are known.
+    fn in_template(&self) -> bool {
+        self.subst.iter().any(|&(g, t)| {
+            let kind = self.tcx.kind(self.resolve(t));
+            matches!(kind, TyKind::Param(_) | TyKind::Var(_))
+                || (self.is_const_param(g) && !matches!(kind, TyKind::Value(_)))
+        })
+    }
+
     /// A type computed at compile time: `uint(8)` is `u8`, `int(12)` is
     /// `i12`. In a generic warp's template, where `uint(N.log2())` can't
     /// be worked out, it stands for itself: each instance works it out.
@@ -1371,12 +1380,7 @@ impl<'p> Checker<'p> {
         let [bits] = args else {
             return self.error_ty(codes::T0104, span, "`uint` and `int` take the number of bits");
         };
-        let template = self.subst.iter().any(|&(g, t)| {
-            let kind = self.tcx.kind(self.resolve(t));
-            matches!(kind, TyKind::Param(_) | TyKind::Var(_))
-                || (self.is_const_param(g) && !matches!(kind, TyKind::Value(_)))
-        });
-        if template && self.fold(bits, None).is_none() {
+        if self.in_template() && self.fold(bits, None).is_none() {
             return self.tcx.intern(TyKind::Param(def));
         }
         match self.fold(bits, None) {
@@ -1555,6 +1559,14 @@ impl<'p> Checker<'p> {
                 // `N` is known.
                 if let Some(n) = self.unknown_const_in(len) {
                     return if self.tcx.is_error(elem) { elem } else { self.tcx.array_of(elem, n) };
+                }
+                // `[u8; T.size]` in a template: each instance works out its length.
+                if self.in_template() && self.fold(len, None).is_none() {
+                    return if self.tcx.is_error(elem) {
+                        elem
+                    } else {
+                        self.tcx.intern(TyKind::ArrayOf(elem, self.tcx.error))
+                    };
                 }
                 match self.array_len(len) {
                     Some(n) if !self.tcx.is_error(elem) => self.tcx.intern(TyKind::Array(elem, n)),

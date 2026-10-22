@@ -107,7 +107,11 @@ impl Checker<'_> {
 
     /// An array length: a non-negative integer known at compile time.
     pub(super) fn array_len(&mut self, e: &Expr) -> Option<u64> {
-        match self.const_int(e) {
+        let n = self.const_int(e).or_else(|| match self.fold(e, None) {
+            Some(super::gauge::Val::Int(n)) => Some(n),
+            _ => None,
+        });
+        match n {
             Some(n) if (0..=u32::MAX as i128).contains(&n) => Some(n as u64),
             Some(n) => {
                 self.error(codes::T0102, e.span, format!("an array can't have {n} elements"), "not a length");

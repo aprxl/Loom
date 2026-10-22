@@ -1,0 +1,17 @@
+use std.io.print
+
+warp Holder[T] {
+    v: T
+    fn zeros(self) -> [u8; T.size] {
+        [0; T.size]
+    }
+}
+
+fn main() {
+    let a: u32 = 7
+    let b: u16 = 7
+    let c: u64 = 7
+    print(Holder(a).zeros().len())
+    print(Holder(b).zeros().len())
+    print(Holder(c).zeros().len())
+}
