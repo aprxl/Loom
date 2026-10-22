@@ -26,9 +26,9 @@ use loom_syntax::SourceDb;
 
 const N: u64 = 20_000;
 
-/// The instructions a program dispatches: `setup` builds `xs`, then `work`
-/// runs.
-fn dispatched(setup: &str, work: &str) -> u64 {
+/// The instructions a program dispatches, and what it prints: `setup` builds
+/// `xs`, then `work` runs.
+fn run(setup: &str, work: &str) -> (u64, String) {
     let text = format!("use std.io.print\n\nfn main() {{\n{setup}\n{work}\n}}\n");
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../bench/counts_probe.loom");
     let mut db = SourceDb::new();
@@ -38,10 +38,12 @@ fn dispatched(setup: &str, work: &str) -> u64 {
     let typed = typeck::check_for(&resolved.program, Target::VM);
     assert!(!typed.has_errors(), "{text}\n{:?}", typed.diagnostics);
     let compiled = treadle::compile(&db, &resolved.program, &typed).expect("compiles");
-    let host = Host::captured(Rc::new(RefCell::new(Vec::new())));
-    let mut vm = loom_vm::Vm::new(&compiled.image, host, &loom_vm::Config::default()).expect("loads");
+    let buffer = Rc::new(RefCell::new(Vec::new()));
+    let mut vm =
+        loom_vm::Vm::new(&compiled.image, Host::captured(buffer.clone()), &loom_vm::Config::default()).expect("loads");
     vm.call(compiled.image.entry.expect("an entry"), &[]).expect("runs");
-    vm.dispatched().expect("built with `stats`")
+    let dispatched = vm.dispatched().expect("built with `stats`");
+    (dispatched, String::from_utf8_lossy(&buffer.borrow()).into_owned())
 }
 
 struct Case {
@@ -137,11 +139,15 @@ const CASES: &[Case] = &[
 #[test]
 fn std_methods_match_hand_loops() {
     let verbose = std::env::var_os("LOOM_COUNTS_VERBOSE").is_some();
+    for setup in [COUNTING, SORTED] {
+        let (_, len) = run(setup, "    print(xs.len())");
+        assert_eq!(len.trim(), N.to_string(), "the setup builds N items");
+    }
     let mut failures = Vec::new();
     for case in CASES {
-        let base = dispatched(case.setup, "    print(xs.len())");
-        let std = dispatched(case.setup, case.std).saturating_sub(base).max(1);
-        let hand = dispatched(case.setup, case.hand).saturating_sub(base).max(1);
+        let base = run(case.setup, "    print(xs.len())").0;
+        let std = run(case.setup, case.std).0.saturating_sub(base).max(1);
+        let hand = run(case.setup, case.hand).0.saturating_sub(base).max(1);
         let ratio = std as f64 / hand as f64;
         if verbose {
             eprintln!(
