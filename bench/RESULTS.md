@@ -4,6 +4,28 @@ Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
 
+## Arena and pool fixes, perf gates (2026-10-22)
+
+Release build at a865299, the runtime gates run once, sequentially, on an idle
+machine: `cargo test --release -p loom --test perf_gates -- --ignored --nocapture --test-threads=1`.
+
+| Gate | Measured | Limit |
+|---|---|---|
+| Box allocate, read, free | 10 ns | at most 15 ns |
+| Arena put over heap box | 0.37 | at most 0.5 |
+| Binary trees in arenas, against Lua | 9.7x | at least 4x |
+| `par_mandelbrot`, 8 workers | 6.03x | at least 5.6x |
+| Spawn and join, 8 workers | 937 ns | at most 2 µs |
+
+Compile time, `compile_time` (`-O2` over `-O0`): source to image 1.36 at
+a865299 (asserted at 1.75), slowest example 41 ms (asserted at 200 ms).
+
+`compile_at alone`, printed but not asserted, measured once at each commit:
+2.22 at 37f24c1 (before V6), 2.26 at a865299. The change since 37f24c1 is
++0.04. The 1.63 recorded at V5 close isn't reproduced by this measure at
+37f24c1, so the gap predates V6 or comes from how the number is taken. Not
+investigated yet.
+
 ## V6: pointers and spools (2026-10-21)
 
 Release build, best of 5, whole process (startup is about 30 ms), `cargo test --release -p loom --test perf_gates -- --ignored --nocapture --test-threads=1` (the gates measure wall time, so they must not share the machine).
