@@ -1,7 +1,9 @@
 // Time.
 
+use std.fmt.{Fmt, Show}
+
 /// A span of time, with nanosecond precision.
-pub warp Duration: Eq, Ord {
+pub warp Duration: Eq, Ord, Show {
     pub(get) nanos: u64
 
     /// A span of `nanos` nanoseconds.
@@ -27,6 +29,8 @@ pub warp Duration: Eq, Ord {
     pub fn times(self, n: u64) -> Duration = Duration(nanos: .nanos * n)
     /// A part of it, rounded down. Unravels if `n` is 0.
     pub fn divide(self, n: u64) -> Duration = Duration(nanos: .nanos / n)
+
+    pub fn show(self, mut f: Fmt) = f.put(.to_string())
 
     /// `1.5s`, `250ms`, `40us`, `7ns`: in the largest unit that fits.
     pub fn to_string(self) -> String {

@@ -1,0 +1,5 @@
+use std.io.print
+use std.time.{ms, Duration}
+fn main() {
+    print("{ms(250)} {Duration.from_nanos(7)}")
+}

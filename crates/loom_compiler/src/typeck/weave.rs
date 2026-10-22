@@ -522,7 +522,8 @@ impl Checker<'_> {
     /// type, so two programs can't weave the same thing differently.
     fn orphan_ok(&self, w: &Weaving) -> bool {
         let local = |def: DefId| !self.is_std_module(self.p.def(def).module);
-        if local(w.weft) {
+        // std weaves its own wefts into its own types.
+        if !local(w.site) || local(w.weft) {
             return true;
         }
         matches!(self.tcx.kind(w.target), TyKind::Adt(def, _) if local(*def))

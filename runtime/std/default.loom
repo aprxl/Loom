@@ -63,3 +63,9 @@ weave[A: Default, B: Default] Default into (A, B) {
 weave[A: Default, B: Default, C: Default] Default into (A, B, C) {
     fn default() -> (A, B, C) = (A.default(), B.default(), C.default())
 }
+weave[A: Default, B: Default, C: Default, D: Default] Default into (A, B, C, D) {
+    fn default() -> (A, B, C, D) = (A.default(), B.default(), C.default(), D.default())
+}
+weave[A: Default, B: Default, C: Default, D: Default, E: Default] Default into (A, B, C, D, E) {
+    fn default() -> (A, B, C, D, E) = (A.default(), B.default(), C.default(), D.default(), E.default())
+}

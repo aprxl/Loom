@@ -485,12 +485,31 @@ impl Checker<'_> {
                     self.register_type(t);
                 }
                 self.instantiate_op_fns(ty);
+                self.check_std_op_weaves(ty);
             }
             _ => {}
         }
     }
 
     /// The hand-written `show`, `eq` and `lt` a generic weave gives `ty`.
+    /// A hand-written `show`, `eq` or `lt` of a plain warp std declares is
+    /// only known once its weave is checked, which nothing asks for by
+    /// name: check the weaves of the std types a program uses.
+    fn check_std_op_weaves(&mut self, ty: Ty) {
+        for weft in [self.std.show, self.std.eq, self.std.ord].into_iter().flatten() {
+            let Some(m) = self.weaving(weft, ty) else { continue };
+            let site = self.weavings[m.w].site;
+            if !self.tcx.has_params(self.weavings[m.w].target)
+                && self.is_std_module(self.p.def(site).module)
+                && self.std_weaves.insert(site)
+            {
+                let saved = self.current.replace(site);
+                self.check_weaves_at(site);
+                self.current = saved;
+            }
+        }
+    }
+
     fn instantiate_op_fns(&mut self, ty: Ty) {
         if self.r.op_fns.contains_key(&ty) {
             return;

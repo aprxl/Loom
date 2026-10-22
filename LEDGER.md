@@ -2,6 +2,10 @@
 
 Running log of milestone work and decisions. Newest first. Replaces `ledger.log`.
 
+## V6.5 and V6 loose ends (2026-10-22)
+
+Done: `std.mem.swap`/`replace`/`take` (builtin free functions; both backends; `tests/run/mem_swap`); the arena-mutation rule (T0107: a field behind a pointer into a spool is read-only unless the target is plain data); the hand-written `Show` on std warps was ignored because std weaves of plain types were never checked (now checked for the types a program uses, and std may weave its own wefts into its own types), so `Duration` has `Show`; `Default` for tuples of four and five. Still open from V6.5: `Self` for numbers (`pow_checked`, `abs_diff`, ...), `where T: [U]`, generic wefts, `Default` for arrays (a weave into `[T; N]` is not matched), `collect_as` errors at the call site, `Fmt`. Still open from V6: storable closures, I/O and sleep as cancel points, `loom(given: pool)`, `yield`/`pull` in a `loom` body.
+
 ## V6 slice 4: pools, shared arenas, threads (2026-10-21)
 
 Done (both backends; `tests/run/spool_pool`, `spool_pool_full`, `spool_shared`, `tests/fail/region_threads`, `spool_collections`): `Pool[T]`, `SharedArena`, R0103, the guard against collections in spool warps, `bench/pool_cycle`. Left out on purpose: lists, maps and sets that grow in a spool. A list's header has no room for the spool it belongs to, and the pushes the optimizer inlines compare `len` with `cap`, so the spool-number-in-the-capacity-word of vm.md §12 would put a mask on every push. The cheap sound version is what is built (such a warp is refused); the real one wants a region on `List` like the one warps have, which is a decision for V8's collections work.

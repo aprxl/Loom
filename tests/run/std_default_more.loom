@@ -1,0 +1,9 @@
+use std.io.print
+use std.default
+
+fn main() {
+    let t: (i32, bool, str, f64) = default.of()
+    print("{t}")
+    let u: (i32, i32, i32, i32, String) = default.of()
+    print("{u}")
+}

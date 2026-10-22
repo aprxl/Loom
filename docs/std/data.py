@@ -862,7 +862,7 @@ MODULES = [
   "name": "time",
   "summary": "Time.",
   "types": [
-    {"kind": "warp", "name": "Duration", "suffix": ": Eq, Ord", "doc": "A span of time, with nanosecond precision.",
+    {"kind": "warp", "name": "Duration", "suffix": ": Eq, Ord, Show", "doc": "A span of time, with nanosecond precision.",
      "fields": ["pub(get) nanos: u64"],
      "methods": [
        {"sig": "fn from_nanos(nanos: u64) -> Duration", "doc": "A span of `nanos` nanoseconds."},
@@ -876,6 +876,7 @@ MODULES = [
        {"sig": "fn minus(self, other: Duration) -> Duration", "doc": "The difference. Unravels when `other` is longer."},
        {"sig": "fn times(self, n: u64) -> Duration", "doc": "`n` times as long. Unravels when it doesn't fit."},
        {"sig": "fn divide(self, n: u64) -> Duration", "doc": "A part of it, rounded down. Unravels if `n` is 0."},
+       {"sig": "fn show(self, mut f: Fmt)", "doc": None},
        {"sig": "fn to_string(self) -> String", "doc": "`1.5s`, `250ms`, `40us`, `7ns`: in the largest unit that fits."},
      ]},
     {"kind": "warp", "name": "Instant", "suffix": ": Eq, Ord", "doc": "A moment on a clock that only goes forward, for measuring how long things take.",

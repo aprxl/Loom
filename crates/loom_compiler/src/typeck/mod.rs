@@ -600,6 +600,8 @@ struct Checker<'p> {
     region_ctx: Option<Ty>,
     /// The `given`s in scope, innermost last, with their types.
     given_scope: Vec<(LocalId, Ty)>,
+    /// The sites of std weaves checked for a type a program uses.
+    std_weaves: HashSet<DefId>,
     /// What a call's `given` parameters are, as far as the call knows: the
     /// type of each, in order (see `call_fn_with`).
     given_hints: Vec<Option<Ty>>,
@@ -736,6 +738,7 @@ impl<'p> Checker<'p> {
             infer_args: false,
             region_ctx: None,
             given_scope: Vec::new(),
+            std_weaves: HashSet::new(),
             given_hints: Vec::new(),
             given_tys: Vec::new(),
             registered: HashSet::new(),
