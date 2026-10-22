@@ -1916,6 +1916,14 @@ fn sleep_task(env: &mut Env, nanos: u64) -> Result<Moved, Trap> {
         if let Some(trap) = checkpoint(env) {
             return Err(trap);
         }
+        // A sleep is a cancellation point: a thread told to stop wakes up.
+        if env.pool.is_none_or(Pool::cancel_seen) {
+            let _held = env.pool.map(Pool::lock);
+            sched!(env).current = env.current;
+            if sched!(env).is_cancelled() {
+                return Err(Trap::Cancel);
+            }
+        }
         let left = duration.saturating_sub(start.elapsed());
         if left.is_zero() {
             return Ok(Moved::No);

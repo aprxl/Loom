@@ -152,7 +152,7 @@ If the block exits early through `?`, `return`, `break`, or a thread that
 unraveled, the loom:
 
 1. **cancels** the unfinished threads, cooperatively, at their next
-   cancellation point: a `yield`, `pull`, `join`, `sched_yield()`, a wait on
+   cancellation point: a `yield`, `pull`, `join`, `sched_yield()`, a `time.sleep` (on Treadle), a wait on
    a `Mutex` (`lock`) or a `Pipe` (`send`, `recv`), or the wait for a
    constant another thread is computing. **I/O is not a cancel point yet**:
    a thread that is inside a file or terminal call isn't interrupted, and
