@@ -11,11 +11,11 @@ pub warp Utf8Error: Error {
     pub valid_up_to: usize
 }
 
+#region
 /// Owned, growable UTF-8 text. `str` is a view of text; a string literal
 /// converts to `String` wherever one is expected. A `String` has every
 /// method of `str`, too.
 #builtin
-#region
 pub warp String {
     /// An empty string with room for `n` bytes.
     pub fn with_capacity(n: usize) -> String

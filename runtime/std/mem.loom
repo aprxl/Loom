@@ -12,14 +12,14 @@ pub warp Heap: Spool {}
 pub warp Arena: Spool {
     capacity: usize
 
-    /// Frees everything allocated so far.
     #spool_reset
+    /// Frees everything allocated so far.
     pub fn reset(mut self)
 
+    #spool_put
     /// Moves `value` into the arena and gives a pointer to it. The pointer
     /// is `Copy` and owns nothing: it lasts until the arena is reset or
     /// ends.
-    #spool_put
     pub fn put[T](self, take value: T) -> ^T@self
 }
 
@@ -27,12 +27,12 @@ pub warp Arena: Spool {
 /// and allocating takes the VM's lock.
 #builtin
 pub warp SharedArena: Spool {
-    /// Frees everything allocated so far.
     #spool_reset
+    /// Frees everything allocated so far.
     pub fn reset(mut self)
 
-    /// Moves `value` into the arena and gives a pointer to it.
     #spool_put
+    /// Moves `value` into the arena and gives a pointer to it.
     pub fn put[T](self, take value: T) -> ^T@self
 }
 
@@ -42,17 +42,17 @@ pub warp SharedArena: Spool {
 /// drop what is still in it.
 #builtin
 pub warp Pool[T]: Spool {
+    #spool_put
     /// Moves `value` into a free slot and gives a pointer to it. The pool
     /// being full unravels.
-    #spool_put
     pub fn put(self, take value: T) -> ^T@self
 
     /// Gives the slot back. The pointer, and any copy of it, must not be used
     /// again.
     pub fn free(self, p: ^T@self)
 
-    /// Frees every slot.
     #spool_reset
+    /// Frees every slot.
     pub fn reset(mut self)
 }
 

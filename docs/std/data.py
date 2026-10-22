@@ -755,7 +755,7 @@ MODULES = [
        {"sig": "fn to_ascii_upper(self) -> String", "doc": "With only the ASCII letters in upper case."},
        {"sig": "fn to_ascii_lower(self) -> String", "doc": "With only the ASCII letters in lower case."},
        {"sig": "fn to_string(self) -> String", "doc": None},
-       {"sig": "fn copy(self) -> String given sp: Spool", "doc": "A `String` of its own, in the spool the call is given (the heap, when there is none): text in an arena goes when the arena does."},
+       {"sig": "fn copy(self) -> String@sp given sp: Spool", "doc": "A `String` of its own, in the spool the call is given (the heap, when there is none): text in an arena goes when the arena does."},
        {"sig": "fn parse[T: Parse](self) -> T ! NumError", "doc": "The number the text spells: `\"42\".parse[u8]()`. Decimal, with an optional sign; floats also take a fraction, an exponent, `inf`, `NaN`."},
        {"sig": "fn split_once(self, sep: str) -> ?(str, str)", "doc": "The text before and after the first `sep`."},
        {"sig": "fn splitn(self, n: usize, sep: str) -> List[String]", "doc": "The pieces between `sep`s, at most `n` of them: the last holds the rest. Unravels if `sep` is empty."},
