@@ -188,6 +188,10 @@ pub(crate) enum Step {
 pub(crate) enum TaskOp {
     Spawn,
     Sleep,
+    /// `io.read_line`: a line of standard input, read without the pool's lock.
+    ReadLine,
+    /// `io.read_all`: the rest of standard input, read without the pool's lock.
+    ReadAll,
     Join,
     Yield,
     LoomNew,
@@ -865,6 +869,7 @@ impl Sched {
         Ok(Step::Park { again: false })
     }
 
+    /// Whether any task sleeps.
     pub fn has_timers(&self) -> bool {
         !self.timers.is_empty()
     }

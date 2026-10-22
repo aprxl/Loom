@@ -560,6 +560,8 @@ pub(crate) fn resolve_task(name: &str) -> Option<crate::sched::TaskOp> {
         "mutex.unlock" => T::MutexUnlock,
         "const.begin" => T::ConstBegin,
         "time.sleep" => T::Sleep,
+        "io.read_line" => T::ReadLine,
+        "io.read_all" => T::ReadAll,
         _ => return None,
     })
 }

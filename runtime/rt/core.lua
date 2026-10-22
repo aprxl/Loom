@@ -1551,16 +1551,6 @@ rt.ext["std.io.write_err"] = function(s)
   host.write_err(s)
 end
 
-rt.ext["std.io.read_line"] = function()
-  if not host then needs_host("io.read_line") end
-  return host.read_line()
-end
-
-rt.ext["std.io.read_all"] = function()
-  if not host then needs_host("io.read_all") end
-  return host.read_all()
-end
-
 rt.ext["std.time.monotonic_nanos"] = function()
   if not host then needs_host("time.now") end
   return host.now()
@@ -1979,6 +1969,20 @@ rt.ext["std.time.sleep"] = function(d)
   cur.waiting = true
   sleepers[#sleepers + 1] = cur
   park()
+end
+
+rt.ext["std.io.read_line"] = function()
+  if not host then needs_host("io.read_line") end
+  local line = host.read_line()
+  if current.cancelled then error(CANCEL, 0) end
+  return line
+end
+
+rt.ext["std.io.read_all"] = function()
+  if not host then needs_host("io.read_all") end
+  local text = host.read_all()
+  if current.cancelled then error(CANCEL, 0) end
+  return text
 end
 
 --- Waits for `t` to finish. Not a cancellation point: a task leaving a loom

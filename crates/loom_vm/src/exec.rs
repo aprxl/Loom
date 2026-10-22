@@ -36,6 +36,7 @@
 #![allow(unsafe_code)]
 
 use loom_isa::word::{a, b, bc_i32, bc_u32, c, c_i16, unpack_cast};
+use std::io::{BufRead as _, Read as _};
 use std::sync::Arc;
 
 use loom_isa::{Image, LINK_SLOTS, Op};
@@ -1931,6 +1932,40 @@ fn sleep_task(env: &mut Env, nanos: u64) -> Result<Moved, Trap> {
     }
 }
 
+/// `io.read_line` and `io.read_all`: standard input is read without the
+/// pool's lock, so other tasks run meanwhile; a cancel is noticed when the
+/// read returns.
+fn read_task(env: &mut Env, op: TaskOp, dst: u64) -> Result<Moved, Trap> {
+    let line = op == TaskOp::ReadLine;
+    let sandbox = {
+        let _held = env.pool.map(Pool::lock);
+        ctx!(env).host_check(if line { "io.read_line" } else { "io.read_all" })?;
+        ctx!(env).enter(&mut env.local);
+        ctx!(env).flush();
+        ctx!(env).exit(&mut env.local);
+        ctx!(env).sandbox
+    };
+    let mut raw = Vec::new();
+    if !sandbox {
+        let mut stdin = std::io::stdin().lock();
+        let read =
+            if line { stdin.read_until(b'\n', &mut raw).map(drop) } else { stdin.read_to_end(&mut raw).map(drop) };
+        read.map_err(|e| Trap::Unravel(e.to_string()))?;
+    }
+    let _held = env.pool.map(Pool::lock);
+    if env.pool.is_some() {
+        sched!(env).current = env.current;
+        if sched!(env).is_cancelled() {
+            return Err(Trap::Cancel);
+        }
+    }
+    ctx!(env).enter(&mut env.local);
+    let done =
+        if line { crate::host::line_to(ctx!(env), &raw, dst) } else { crate::host::all_to(ctx!(env), &raw, dst) };
+    ctx!(env).exit(&mut env.local);
+    done.map(|()| Moved::No)
+}
+
 /// A task operation (`calln` of `task.*` or `loom.*`), out of the dispatch
 /// loop's way: the loop's code is sensitive to what's in it (see the
 /// comments at the top of `run`). With several workers, it runs under the
@@ -1941,6 +1976,9 @@ fn run_task_op(env: &mut Env, op: TaskOp, args: &mut [u64], pc: *const u64, fp: 
     let pool = env.pool;
     if op == TaskOp::Sleep && pool.is_none() {
         return sleep_task(env, args[0]);
+    }
+    if matches!(op, TaskOp::ReadLine | TaskOp::ReadAll) {
+        return read_task(env, op, args[0]);
     }
     if op == TaskOp::Grain {
         args[0] = pool.map_or(1, |p| (args[0] / (p.workers as u64 * GRAIN_SPLIT)).max(1));
@@ -1979,6 +2017,7 @@ fn task_op<'p>(
     let at = pc.wrapping_sub(1);
     let step = match op {
         TaskOp::Idle => Step::Park { again: false },
+        TaskOp::ReadLine | TaskOp::ReadAll => unreachable!("reads run outside the scheduler lock"),
         TaskOp::Sleep => {
             if cfg!(feature = "stats") {
                 env.st_runtime.native_locks[5] += 1;

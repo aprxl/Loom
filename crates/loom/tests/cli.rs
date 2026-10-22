@@ -894,3 +894,54 @@ fn ctrl_c_ends_a_sleep() {
     }
     let _ = std::fs::remove_file(&path);
 }
+
+#[test]
+fn a_blocking_read_frees_its_worker() {
+    let path = temp_source(
+        "read-frees-worker",
+        "use std.io.{print, read_line}\nuse std.time.{sleep, ms}\nfn main() {\n    loom {\n        let a = thread { print(read_line()) }\n        let b = thread { sleep(ms(50)); print(\"tick\") }\n        a.join()\n        b.join()\n    }\n}\n",
+    );
+    let mut child = Command::new(env!("CARGO_BIN_EXE_loom"))
+        .args(["--color", "never", "run", "--backend", "vm", path.to_str().expect("utf-8 path")])
+        .env("LOOM_THREADS", "2")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("the loom binary runs");
+    let mut stdin = child.stdin.take().expect("stdin");
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    std::io::Write::write_all(&mut stdin, b"line\n").expect("input");
+    drop(stdin);
+    let out = child.wait_with_output().expect("finishes");
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert_eq!(text(&out.stdout), "tick\nline\n");
+    let _ = std::fs::remove_file(&path);
+}
+
+/// A read is a cancellation point: a thread that unravels while another reads
+/// cancels it, and the read's text is never printed. On Lua a read blocks the
+/// whole program, so no other thread runs during it: only Treadle is tested here.
+#[test]
+fn a_read_is_a_cancellation_point() {
+    let path = temp_source(
+        "read-cancel",
+        "use std.io.{print, read_line}\nfn main() {\n    loom {\n        let a = thread { let l = read_line(); print(\"read\") }\n        let b = thread { unravel(\"stop\") }\n    }\n}\n",
+    );
+    let mut child = Command::new(env!("CARGO_BIN_EXE_loom"))
+        .args(["--color", "never", "run", "--backend", "vm", path.to_str().expect("utf-8 path")])
+        .env("LOOM_THREADS", "2")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("the loom binary runs");
+    let mut stdin = child.stdin.take().expect("stdin");
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    std::io::Write::write_all(&mut stdin, b"x\n").expect("input");
+    drop(stdin);
+    let out = child.wait_with_output().expect("finishes");
+    assert!(!out.status.success(), "the thread's unravel ends the run");
+    assert!(!text(&out.stdout).contains("read"), "the read went on after the cancel: {}", text(&out.stdout));
+    let _ = std::fs::remove_file(&path);
+}

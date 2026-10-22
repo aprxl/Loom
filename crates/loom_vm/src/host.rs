@@ -9,7 +9,7 @@
 
 #![allow(unsafe_code)]
 
-use std::io::{BufRead as _, Read as _, Write};
+use std::io::Write;
 
 use crate::Trap;
 use crate::natives::{Ctx, NativeFn};
@@ -20,8 +20,6 @@ pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
         "env.get" => env_get,
         "env.args" => env_args,
         "time.now" => now,
-        "io.read_line" => read_line,
-        "io.read_all" => read_all,
         "io.write_err" => write_err,
         "process.exit" => exit,
         "term.raw_mode" => raw_mode,
@@ -96,38 +94,23 @@ fn now(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     Ok(())
 }
 
-/// `io.read_line(dst)`: the next line of standard input, without its line
-/// ending, as a `?String` at `dst`; `none` at the end of the input.
-fn read_line(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    ctx.host_check("io.read_line")?;
-    ctx.flush();
-    let mut raw = Vec::new();
-    let got = if ctx.sandbox {
-        0
-    } else {
-        std::io::stdin().lock().read_until(b'\n', &mut raw).map_err(|e| Trap::Unravel(e.to_string()))?
-    };
+/// `io.read_line`'s result at `dst`: `raw` (a line or nothing) as a `?String`.
+pub(crate) fn line_to(ctx: &mut Ctx, raw: &[u8], dst: u64) -> Result<(), Trap> {
     // Bytes that aren't UTF-8 become U+FFFD: a `String` is always text.
-    let line = String::from_utf8_lossy(&raw).into_owned();
-    if got == 0 {
+    let line = String::from_utf8_lossy(raw).into_owned();
+    if raw.is_empty() {
         // SAFETY: `dst` is the 24 bytes of a `?String` the compiler gave.
-        unsafe { std::ptr::write_bytes(args[0] as *mut u8, 0, 24) };
+        unsafe { std::ptr::write_bytes(dst as *mut u8, 0, 24) };
         return Ok(());
     }
     let trimmed = line.strip_suffix('\n').unwrap_or(&line);
     let trimmed = trimmed.strip_suffix('\r').unwrap_or(trimmed);
-    ctx.new_string(trimmed.as_bytes(), args[0])
+    ctx.new_string(trimmed.as_bytes(), dst)
 }
 
-/// `io.read_all(dst)`: the rest of standard input, as a `String` at `dst`.
-fn read_all(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    ctx.host_check("io.read_all")?;
-    ctx.flush();
-    let mut all = Vec::new();
-    if !ctx.sandbox {
-        std::io::stdin().lock().read_to_end(&mut all).map_err(|e| Trap::Unravel(e.to_string()))?;
-    }
-    ctx.new_string(String::from_utf8_lossy(&all).as_bytes(), args[0])
+/// `io.read_all`'s result at `dst`.
+pub(crate) fn all_to(ctx: &mut Ctx, raw: &[u8], dst: u64) -> Result<(), Trap> {
+    ctx.new_string(String::from_utf8_lossy(raw).as_bytes(), dst)
 }
 
 /// `io.write_err(text)`: standard error, after what is waiting for
