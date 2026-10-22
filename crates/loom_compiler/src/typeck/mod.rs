@@ -1615,6 +1615,8 @@ impl<'p> Checker<'p> {
             TyKind::Adt(def, args) if Some(def) == self.std.range_warp && args.len() == 1 => {
                 self.tcx.intern(TyKind::Range(args[0]))
             }
+            TyKind::Adt(def, args) if Some(def) == self.std.int_warp && args.len() == 1 => args[0],
+            TyKind::Adt(def, args) if Some(def) == self.std.float_warp && args.len() == 1 => args[0],
             _ => ty,
         }
     }

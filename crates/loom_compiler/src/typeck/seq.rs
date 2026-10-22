@@ -281,13 +281,13 @@ impl Checker<'_> {
                 && matches!(self.tcx.kind(ty), TyKind::Gauge(def, _) if self.r.gauges.get(def).is_some_and(|g| g.range.is_some()));
             let mut found = self.prim_method(base, name)?;
             if keeps {
-                let warp = match self.tcx.kind(found.self_ty) {
-                    TyKind::Adt(w, _) => *w,
-                    _ => return Some(found),
+                let warp = match self.tcx.kind(base) {
+                    TyKind::Float(_) | TyKind::FloatVar(_) => self.std.float_warp?,
+                    _ => self.std.int_warp?,
                 };
                 let self_ty = self.tcx.intern(TyKind::Adt(warp, vec![ty]));
                 found.inst = self.member_instance(found.inst.def, self_ty);
-                found.self_ty = self_ty;
+                found.self_ty = ty;
             }
             return Some(found);
         }

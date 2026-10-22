@@ -58,6 +58,8 @@ pub warp Int[T] {
     pub fn gcd(self, other: T) -> T
     /// The smallest number both divide. Unravels when it doesn't fit.
     pub fn lcm(self, other: T) -> T
+    /// The distance between `self` and `other`.
+    pub fn abs_diff(self, other: T) -> T = if self > other { self - other } else { other - self }
     /// The square root, rounded down. Unravels below zero.
     pub fn isqrt(self) -> T
     /// The base-10 logarithm, rounded down. Unravels for zero and below.

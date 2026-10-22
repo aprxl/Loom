@@ -1,0 +1,9 @@
+use std.io.print
+
+fn main() {
+    print(3.abs_diff(10))
+    let a: i64 = -2
+    print(a.abs_diff(5))
+    let b: u8 = 200
+    print(b.abs_diff(50))
+}

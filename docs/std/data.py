@@ -479,6 +479,7 @@ MODULES = [
        {"sig": "fn div_ceil(self, m: T) -> T", "doc": "The quotient rounded up. Unravels if `m` is 0."},
        {"sig": "fn gcd(self, other: T) -> T", "doc": "The greatest number that divides both."},
        {"sig": "fn lcm(self, other: T) -> T", "doc": "The smallest number both divide. Unravels when it doesn't fit."},
+       {"sig": "fn abs_diff(self, other: T) -> T", "doc": "The distance between `self` and `other`."},
        {"sig": "fn isqrt(self) -> T", "doc": "The square root, rounded down. Unravels below zero."},
        {"sig": "fn ilog10(self) -> u32", "doc": "The base-10 logarithm, rounded down. Unravels for zero and below."},
        {"sig": "fn next_power_of_two(self) -> T", "doc": "The smallest power of two that is not below it. Unravels when it doesn't fit."},
