@@ -216,6 +216,10 @@ impl TyCtx {
         if let Some(&ty) = self.ids.get(&kind) {
             return ty;
         }
+        // A weave over `[T; N]` finds the length among the interned types.
+        if let TyKind::Array(_, n) = &kind {
+            self.intern(TyKind::Value(ConstVal::Int(i128::from(*n))));
+        }
         let ty = Ty(self.kinds.len() as u32);
         self.kinds.push(kind.clone());
         self.ids.insert(kind, ty);

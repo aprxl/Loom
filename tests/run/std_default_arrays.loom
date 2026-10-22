@@ -1,0 +1,13 @@
+use std.io.print
+use std.mem.take
+
+fn main() {
+    var a = [1, 2, 3]
+    let b = take(mut a)
+    print("{b}")
+    print("{a}")
+    let s: [String; 2] = std.default.of()
+    print("{s:?}")
+    let g: [[u8; 2]; 2] = std.default.of()
+    print("{g:?}")
+}

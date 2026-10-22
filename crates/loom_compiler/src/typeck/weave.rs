@@ -23,7 +23,7 @@ use loom_syntax::source::Span;
 
 use super::{BodyId, Checker, FnSig, Forward, Instance};
 use crate::hir::{self, Binding, DefId, DefKind};
-use crate::ty::{Ty, TyKind};
+use crate::ty::{ConstVal, Ty, TyKind};
 
 /// A weft woven into a type.
 #[derive(Clone, Debug)]
@@ -226,6 +226,11 @@ impl Checker<'_> {
                 a1.clone().into_iter().zip(a2.clone()).all(|(p, t)| self.match_pattern(p, t, bindings))
             }
             (TyKind::Optional(p), TyKind::Optional(t)) => self.match_pattern(*p, *t, bindings),
+            (TyKind::Array(p, a), TyKind::Array(t, b)) if a == b => self.match_pattern(*p, *t, bindings),
+            (TyKind::ArrayOf(p, n), TyKind::Array(t, len)) => {
+                let Some(len) = self.tcx.find(&TyKind::Value(ConstVal::Int(i128::from(*len)))) else { return false };
+                self.match_pattern(*p, *t, bindings) && self.match_pattern(*n, len, bindings)
+            }
             _ => pattern == ty,
         }
     }
