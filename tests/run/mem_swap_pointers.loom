@@ -1,0 +1,29 @@
+// std.mem: swap and replace move pointers, not what they point to. A spool
+// pointer copies for free, so an alias taken before the call still reaches
+// the value it was made for.
+
+use std.io.print
+use std.mem.{replace, swap, Arena, kib}
+
+fn main() {
+    var a = ^1
+    var b = ^2
+    swap(mut a, mut b)
+    print("{a^} {b^}")
+
+    var c = ^3
+    let old = replace(mut c, ^4)
+    print("{old^} {c^}")
+
+    spool frame = Arena(1.kib())
+    var p = frame.put(10)
+    var q = frame.put(20)
+    let view = p
+    swap(mut p, mut q)
+    print("{p^} {q^} {view^}")
+
+    var r = frame.put(30)
+    let kept = r
+    let was = replace(mut r, frame.put(40))
+    print("{was^} {r^} {kept^}")
+}

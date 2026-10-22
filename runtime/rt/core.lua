@@ -2156,10 +2156,11 @@ atomic["std.sync.Atomic.sub"] = function(d, a, n)
 end
 
 -- `mem.swap` and `mem.replace`: a table is changed in place (the caller's
--- `mut` argument is the table); anything else comes back after the result,
--- like the scalar `mut` parameters of the other runtime functions.
+-- `mut` argument is the table); anything else, a pointer included, comes back
+-- after the result, like the scalar `mut` parameters of the other runtime
+-- functions. A pointer's box is never changed: the pointers themselves move.
 local function in_place(d, x)
-  return type(x) == "table" and d.kind ~= "opt"
+  return type(x) == "table" and d.kind ~= "opt" and d.kind ~= "ptr"
 end
 
 rt.ext["std.mem.swap"] = function(d, a, b)
