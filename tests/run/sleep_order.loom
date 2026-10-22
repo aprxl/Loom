@@ -1,0 +1,10 @@
+use std.time.{sleep, ms}
+use std.io.print
+fn main() {
+    loom {
+        let a = thread { sleep(ms(30)); 1 }
+        let b = thread { sleep(ms(10)); 2 }
+        print("{a.join() + b.join()}")
+    }
+    print("done")
+}

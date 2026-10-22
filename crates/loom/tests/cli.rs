@@ -832,17 +832,19 @@ fn stdin_and_stderr_work_on_both_backends() {
 /// twenty seconds is woken when its loom is leaving, so the run is quick.
 #[test]
 fn a_sleeping_thread_is_cancelled() {
-    let path = temp_source(
-        "sleep-cancel",
-        "use std.time.{sleep, ms}\nfn main() {\n    loom {\n        let a = thread { sleep(ms(20000)); 1 }\n        let b = thread { sleep(ms(50)); unravel(\"stop\") }\n        a.join()\n    }\n}\n",
-    );
-    let start = std::time::Instant::now();
-    let out = loom(&["run", "--backend", "vm", path.to_str().expect("utf-8 path")]);
-    let _ = std::fs::remove_file(&path);
-    assert!(!out.status.success(), "the thread's unravel ends the run");
-    assert!(
-        start.elapsed() < std::time::Duration::from_secs(10),
-        "the sleeper was not cancelled: {:?}",
-        start.elapsed()
-    );
+    for backend in ["vm", "lua"] {
+        let path = temp_source(
+            "sleep-cancel",
+            "use std.time.{sleep, ms}\nfn main() {\n    loom {\n        let a = thread { sleep(ms(20000)); 1 }\n        let b = thread { sleep(ms(50)); unravel(\"stop\") }\n        a.join()\n    }\n}\n",
+        );
+        let start = std::time::Instant::now();
+        let out = loom(&["run", "--backend", backend, path.to_str().expect("utf-8 path")]);
+        let _ = std::fs::remove_file(&path);
+        assert!(!out.status.success(), "{backend}: the thread's unravel ends the run");
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(10),
+            "{backend}: the sleeper was not cancelled: {:?}",
+            start.elapsed()
+        );
+    }
 }

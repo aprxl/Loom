@@ -1542,11 +1542,6 @@ rt.ext["std.process.exit"] = function(code)
   error(MARK .. "\31exit " .. code, 0)
 end
 
-rt.ext["std.time.sleep"] = function(d)
-  if not host then needs_host("time.sleep") end
-  host.sleep(d.nanos)
-end
-
 rt.ext["std.io.write_out"] = function(s)
   write(s)
 end
@@ -1890,6 +1885,7 @@ local CANCEL = MARK .. "\31cancel"   -- what a cancelled task unwinds with
 local MAIN = { main = true, sdepth = 0 }
 local current = MAIN
 local ready, rhead, rtail = {}, 1, 0
+local sleepers = {} -- tasks parked in `time.sleep`, each with its `sleep_at`
 
 local function enqueue(t)
   rtail = rtail + 1
@@ -1903,6 +1899,16 @@ local function wake(t)
     t.waiting_on = nil
     enqueue(t)
   end
+end
+
+local function unsleep(t)
+  for i = 1, #sleepers do
+    if sleepers[i] == t then
+      table.remove(sleepers, i)
+      break
+    end
+  end
+  t.sleep_at = nil
 end
 
 --- Whoever runs `t` carries on when it parks or finishes.
@@ -1920,6 +1926,16 @@ local function suspend()
   local cur = current
   if cur.main and cur.sdepth == 0 then
     while true do
+      if rhead > rtail and #sleepers > 0 then
+        local first = sleepers[1]
+        for i = 2, #sleepers do
+          if sleepers[i].sleep_at < first.sleep_at then first = sleepers[i] end
+        end
+        local left = first.sleep_at - host.now()
+        if left > 0 then host.sleep(left) end
+        unsleep(first)
+        wake(first)
+      end
       if rhead > rtail then
         -- Nothing can run: the program's own task unravels where it waits,
         -- no longer in anyone's list.
@@ -1952,6 +1968,19 @@ local function park()
   if current.cancelled then error(CANCEL, 0) end
 end
 
+rt.ext["std.time.sleep"] = function(d)
+  if not host then needs_host("time.sleep") end
+  local cur = current
+  if cur.main and cur.sdepth == 0 and rhead > rtail and #sleepers == 0 then
+    host.sleep(d.nanos) -- nothing else can run
+    return
+  end
+  cur.sleep_at = host.now() + d.nanos
+  cur.waiting = true
+  sleepers[#sleepers + 1] = cur
+  park()
+end
+
 --- Waits for `t` to finish. Not a cancellation point: a task leaving a loom
 --- waits for its threads on the way out of a cancel too.
 local function wait_for(t)
@@ -1976,6 +2005,7 @@ local function cancel(t)
       end
     end
   end
+  if t.sleep_at then unsleep(t) end
   wake(t)
 end
 
