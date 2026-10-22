@@ -2,6 +2,18 @@
 
 Running log of milestone work and decisions. Newest first. Replaces `ledger.log`.
 
+## V6 review fixes and open items (2026-10-22)
+
+Done, each its own commit with fixtures on both backends where the behaviour is visible: `mem.swap`/`replace` move spool pointers by reference (9d04867); `owns_heap` looks into user warps, and `put` rejects text, lists and boxes (8b8b6df); the region checks cover `SharedArena` and `Pool` through `#spool_put`/`#spool_reset` markers, and an unknown attribute is N0101 (6ccdd31); documented but unbuilt attributes give U0102 (4d30018); text copied into a spool is typed by its region, `String@sp`, so R0101 and R0102 apply to it (c638e67); a zero-slot `Pool` has no slots (82c3e31); arena sizes are checked and an arena past 8 GiB unravels out of memory on both backends (a865299); the cleanup items (a4f36ea, 7779f67, 5f911e2, 283860f) and one builder for the hidden region parameter (fafedcc, byte-identical Lua, Heddle and bytecode across the corpus).
+
+Open:
+- Item 11: the `usize` maximum literal. `loom check` and the Lua run reject `18446744073709551615` as not fitting `usize`, while `run --backend vm` accepts it. Both should behave the same, with Lua as the oracle unless it's wrong.
+- Item 12: spool text and heap text get separate `any Show` vtables in Lua (`calc.loom`). Key vtables on the region-erased type so they share one. Plan first.
+- Item 13: `Pool` capacity on both backends. Treadle already checks `slot * slots`. Lua has no check, so `Pool[T](1 << 62)` prints there and runs out of memory on Treadle. Plan first.
+- Not tracked: `Pool.free` doesn't give R0102, and a copy of a spool pointer survives `free` (`^T@s` is `Copy`). See Q11.
+- `compile_at alone` (`compile_time`, printed, not asserted): 2.22 at 37f24c1, 2.26 at HEAD, against a 1.5 target. The 1.63 recorded at V5 close isn't reproduced by this measure. Not investigated.
+- The perf gates pass (bench/RESULTS.md, 821e7cc).
+
 ## V6.5 and V6 loose ends (2026-10-22)
 
 Done: `std.mem.swap`/`replace`/`take` (builtin free functions; both backends; `tests/run/mem_swap`); the arena-mutation rule (T0107: a field behind a pointer into a spool is read-only unless the target is plain data); the hand-written `Show` on std warps was ignored because std weaves of plain types were never checked (now checked for the types a program uses, and std may weave its own wefts into its own types), so `Duration` has `Show`; `Default` for tuples of four and five. Still open from V6.5: `Self` for numbers (`pow_checked`, `abs_diff`, ...), `where T: [U]`, generic wefts, `Default` for arrays (a weave into `[T; N]` is not matched), `collect_as` errors at the call site, `Fmt`. Still open from V6: storable closures, I/O and sleep as cancel points, `loom(given: pool)`, `yield`/`pull` in a `loom` body.
@@ -155,6 +167,7 @@ Then: V6 (spools, regions, `given`, and storable closures: see the standard libr
 - Q8: what happens to `once` values when a thread unravels? (deferred)
 - Q9: should a private function infer its `given`s from what it calls (the design's rule; a fixpoint over the call graph, with an extra hidden parameter per inferred weft), or keep spelling them like a `pub` one? Asked 2026-10-21; until answered they are spelled.
 - Q10: arena pointers and mutation (open question 1, option c: writable only when the target is plain data). Not enforced yet: pointers into a spool are `Copy`, and a field behind one can be written when the pointer is in a `var`.
+- Q11: should `Pool.free` give R0102 for a use after free? Today a use after `free` compiles, and so does a copy of the pointer taken before `free`, because `^T@s` is `Copy`. Making `free` take by move does nothing, so the fix is either to make spool pointers move-only (a change to how they are copied everywhere) or to track slots per pool, which the region pass can't do precisely. Asked 2026-10-22.
 - `projects/` (spindle) is untracked: commit it, ignore it, or leave it?
 
 ## V5 close-out result (2026-10-17)
