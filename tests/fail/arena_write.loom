@@ -1,0 +1,18 @@
+use std.mem.{Arena, kib}
+
+warp Plain {
+    x: i32
+}
+
+warp Rich {
+    x: i32
+    name: String
+}
+
+fn main() {
+    spool a = Arena(1.kib())
+    var p = a.put(Plain(1))
+    p.x = 2
+    var r = a.put(Rich(1, "n"))
+    r.x = 3                      //~ T0107
+}

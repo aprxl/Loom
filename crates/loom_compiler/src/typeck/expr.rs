@@ -1110,6 +1110,7 @@ impl Checker<'_> {
                 if self.tcx.is_error(ty) {
                     return None;
                 }
+                self.check_arena_write(target);
                 if self.place(target) != Some(true) {
                     self.diags.push(
                         Diagnostic::error(codes::T0107, "can't change this field")
@@ -1146,6 +1147,7 @@ impl Checker<'_> {
                 if self.tcx.is_error(ty) {
                     return None;
                 }
+                self.check_arena_write(target);
                 if self.place(target) != Some(true) {
                     self.diags.push(
                         Diagnostic::error(codes::T0107, "can't change what this pointer points at")

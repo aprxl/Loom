@@ -79,6 +79,8 @@ The region checker keeps pointers from outliving their spool: a value that point
 
 Text copied with `.copy()` goes in the spool the call is given, so an arena's tree can hold names and still go at once. A list, map or box can't be held by a warp that is in a spool yet ([U0102](diag:U0102)): nothing would free it.
 
+A pointer into a spool is `Copy`, so two copies see the same value: a field behind one can be written only when the warp is plain data (no text, lists or cases that own anything); otherwise it is read-only ([T0107](diag:T0107)).
+
 `Pool[T](n)` is a spool of `n` slots of one type: `put` takes a free slot and `free` gives it back, a few instructions each. It holds plain data only. `SharedArena(cap)` is an arena threads may allocate in, and its pointers may cross to them; a pointer into any other spool can't ([R0103](diag:R0103)).
 
 ## `given`

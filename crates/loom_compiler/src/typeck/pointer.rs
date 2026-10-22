@@ -286,6 +286,38 @@ impl Checker<'_> {
         }
     }
 
+    /// Writing to `target` goes through a pointer into a spool whose target
+    /// isn't plain data (open question 1, option (c)): two copies of the
+    /// pointer could then see a case change under a borrow.
+    pub(super) fn check_arena_write(&mut self, target: &Expr) {
+        let mut e = target;
+        loop {
+            let (inner, ptr_expr) = match &e.kind {
+                ExprKind::Field { base, .. } | ExprKind::ConstField { base, .. } | ExprKind::Index { base, .. } => {
+                    (base.as_ref(), self.b.coercions.get(&base.id) == Some(&Coercion::Deref))
+                }
+                ExprKind::Deref(inner) => (inner.as_ref(), true),
+                _ => return,
+            };
+            if ptr_expr && let Some(&t) = self.b.expr_ty.get(&inner.id) {
+                let t = self.resolve(t);
+                if let TyKind::Ptr(target_ty, r) = *self.tcx.kind(t)
+                    && r == self.tcx.spool
+                    && !self.is_copy(target_ty)
+                {
+                    self.error(
+                        codes::T0107,
+                        target.span,
+                        "can't change what a pointer into a spool points at",
+                        "it holds more than plain data",
+                    );
+                    return;
+                }
+            }
+            e = inner;
+        }
+    }
+
     /// Whether `e` is the target of a pointer: `p^`, a field of one, or
     /// something a pointer is dereferenced to for a field access.
     pub(super) fn derefs(&self, e: &Expr) -> bool {
