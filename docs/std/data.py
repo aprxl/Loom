@@ -488,6 +488,8 @@ MODULES = [
        {"sig": "fn pow_wrap(self, exp: u32) -> T", "doc": "`self` to the power `exp`, with the bits that don't fit dropped."},
        {"sig": "fn pow_sat(self, exp: u32) -> T", "doc": "`self` to the power `exp`, or the nearest number that fits."},
        {"sig": "fn pow_checked(self, exp: u32) -> ?T", "doc": "`self` to the power `exp`, or `none` when it doesn't fit."},
+       {"sig": "fn to_be_bytes(self) -> [u8; T.size]", "doc": "The bytes of `self`, most significant first."},
+       {"sig": "fn from_be_bytes(bytes: [u8; T.size]) -> T", "doc": "The integer whose bytes, most significant first, are `bytes`."},
      ]},
     {"kind": "warp", "name": "Float", "suffix": "[T]", "builtin": True, "doc": "The methods of every float type, `T`.",
      "methods": [

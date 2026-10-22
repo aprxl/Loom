@@ -110,6 +110,22 @@ pub warp Int[T] {
         }
         some(acc)
     }
+    /// The bytes of `self`, most significant first.
+    pub fn to_be_bytes(self) -> [u8; T.size] {
+        var out: [u8; T.size] = [0; T.size]
+        for i in 0..T.size {
+            out[i] = ((self >> ((T.size - 1 - i) * 8)) & 0xFF) as u8
+        }
+        out
+    }
+    /// The integer whose bytes, most significant first, are `bytes`.
+    pub fn from_be_bytes(bytes: [u8; T.size]) -> T {
+        var v: T = 0
+        for i in 0..T.size {
+            v = v | ((bytes[i] as T) << ((T.size - 1 - i) * 8))
+        }
+        v
+    }
 }
 
 /// The methods of every float type, `T`.

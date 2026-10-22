@@ -1,0 +1,15 @@
+use std.io.print
+
+fn main() {
+    let x: u32 = 0x01020304
+    let bs = x.to_be_bytes()
+    for b in bs { print(b) }
+    let y: i16 = -2
+    for b in y.to_be_bytes() { print(b) }
+    print(u32.from_be_bytes(bs) == x)
+    print(i16.from_be_bytes(y.to_be_bytes()) == y)
+    let z: u8 = 200
+    print(u8.from_be_bytes(z.to_be_bytes()) == z)
+    let w: u64 = 0x0102030405060708
+    print(u64.from_be_bytes(w.to_be_bytes()) == w)
+}
