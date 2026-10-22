@@ -6,4 +6,13 @@ fn main() {
     print(a.abs_diff(5))
     let b: u8 = 200
     print(b.abs_diff(50))
+    print(2.pow_checked(10))
+    let c: i8 = 2
+    print(c.pow_checked(7))
+    print(3.pow_checked(0))
+    print(255.to_string_radix(16))
+    let n: i8 = -128
+    print(n.to_string_radix(2))
+    print(0.to_string_radix(36))
+    print(35.to_string_radix(36))
 }

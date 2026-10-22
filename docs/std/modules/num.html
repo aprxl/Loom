@@ -173,6 +173,13 @@
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
+<div class="member" id="Int.to_string_radix">
+<div class="member-head">
+<span class="sig">fn to_string_radix(self, radix: u32) -&gt; String</span>
+
+</div>
+<p class="member-doc">The digits of <code>self</code> in base <code>radix</code>, lowercase, with a leading <code>-</code> when negative. Unravels unless <code>radix</code> is 2 to 36.</p>
+</div>
 <div class="member" id="Int.signum">
 <div class="member-head">
 <span class="sig">fn signum(self) -&gt; T</span>
@@ -227,7 +234,7 @@
 <span class="sig">fn abs_diff(self, other: T) -&gt; T</span>
 
 </div>
-<p class="member-doc">The distance between <code>self</code> and <code>other</code>.</p>
+<p class="member-doc">The distance between <code>self</code> and <code>other</code>. Unravels when it doesn't fit.</p>
 </div>
 <div class="member" id="Int.isqrt">
 <div class="member-head">
@@ -270,6 +277,13 @@
 
 </div>
 <p class="member-doc"><code>self</code> to the power <code>exp</code>, or the nearest number that fits.</p>
+</div>
+<div class="member" id="Int.pow_checked">
+<div class="member-head">
+<span class="sig">fn pow_checked(self, exp: u32) -&gt; ?T</span>
+
+</div>
+<p class="member-doc"><code>self</code> to the power <code>exp</code>, or <code>none</code> when it doesn't fit.</p>
 </div>
 </div>
 </div>

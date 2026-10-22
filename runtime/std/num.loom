@@ -43,6 +43,31 @@ pub warp Int[T] {
     /// back in at the top. `n` counts modulo the type's width.
     pub fn rotate_right(self, n: u32) -> T
     pub fn to_string(self) -> String
+    /// The digits of `self` in base `radix`, lowercase, with a leading `-` when negative. Unravels unless `radix` is 2 to 36.
+    pub fn to_string_radix(self, radix: u32) -> String {
+        assert(radix >= 2 and radix <= 36, "to_string_radix: the radix is 2 to 36")
+        let r = radix as T
+        var v = self
+        var digits: List[char] = List()
+        loop {
+            let rem = v % r
+            let d = if rem < 0 { 0 - rem } else { rem }
+            digits.push(match "0123456789abcdefghijklmnopqrstuvwxyz".char_at(d as usize) {
+                some(c) => c
+                none => unravel("to_string_radix: digit out of range")
+            })
+            v = v / r
+            if v == 0 { break }
+        }
+        var out = String()
+        if self < 0 { out.push('-') }
+        var i = digits.len()
+        while i > 0 {
+            i -= 1
+            out.push(digits[i])
+        }
+        out
+    }
     /// `-1`, `0` or `1`.
     pub fn signum(self) -> T
     /// The remainder that is never below zero: `(-7).rem_euclid(3)` is `2`.
@@ -58,7 +83,7 @@ pub warp Int[T] {
     pub fn gcd(self, other: T) -> T
     /// The smallest number both divide. Unravels when it doesn't fit.
     pub fn lcm(self, other: T) -> T
-    /// The distance between `self` and `other`.
+    /// The distance between `self` and `other`. Unravels when it doesn't fit.
     pub fn abs_diff(self, other: T) -> T = if self > other { self - other } else { other - self }
     /// The square root, rounded down. Unravels below zero.
     pub fn isqrt(self) -> T
@@ -73,6 +98,18 @@ pub warp Int[T] {
     pub fn pow_wrap(self, exp: u32) -> T
     /// `self` to the power `exp`, or the nearest number that fits.
     pub fn pow_sat(self, exp: u32) -> T
+    /// `self` to the power `exp`, or `none` when it doesn't fit.
+    pub fn pow_checked(self, exp: u32) -> ?T {
+        var acc: T = 1
+        var base = self
+        var e = exp
+        while e > 0 {
+            if e & 1 == 1 { acc = (acc *? base)? }
+            e = e >> 1
+            if e > 0 { base = (base *? base)? }
+        }
+        some(acc)
+    }
 }
 
 /// The methods of every float type, `T`.
