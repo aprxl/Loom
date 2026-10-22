@@ -32,16 +32,22 @@ pub(super) fn add_params(p: &mut Program) {
             break;
         }
     }
+    // A builtin marked `#region` (text, whose spool copies are typed) gets the
+    // parameter without holding pointers: warps that hold it don't follow.
+    let marked: Vec<DefId> = (0..p.defs.len() as u32)
+        .map(DefId)
+        .filter(|&d| matches!(p.def(d).kind, DefKind::Warp(_)) && p.def(d).attrs.iter().any(|a| a.name == "region"))
+        .collect();
+    let mut give: Vec<DefId> = regional.into_iter().chain(marked).collect();
+    give.sort();
     let weaves: Vec<DefId> = (0..p.defs.len() as u32)
         .map(DefId)
         .filter(|&d| match &p.def(d).kind {
-            DefKind::Weave(wv) => matches!(&wv.target.kind, TyKind::Def { def, .. } if regional.contains(def)),
+            DefKind::Weave(wv) => matches!(&wv.target.kind, TyKind::Def { def, .. } if give.contains(def)),
             _ => false,
         })
         .collect();
-    let mut regional: Vec<DefId> = regional.into_iter().collect();
-    regional.sort();
-    for w in regional {
+    for w in give {
         let (span, vis, module) = {
             let d = p.def(w);
             (d.span, d.vis, d.module)

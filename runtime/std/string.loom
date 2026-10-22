@@ -15,6 +15,7 @@ pub warp Utf8Error: Error {
 /// converts to `String` wherever one is expected. A `String` has every
 /// method of `str`, too.
 #builtin
+#region
 pub warp String {
     /// An empty string with room for `n` bytes.
     pub fn with_capacity(n: usize) -> String
@@ -162,7 +163,7 @@ pub warp Str {
     pub fn to_string(self) -> String
     /// A `String` of its own, in the spool the call is given (the heap, when
     /// there is none): text in an arena goes when the arena does.
-    pub fn copy(self) -> String given sp: Spool
+    pub fn copy(self) -> String@sp given sp: Spool
     /// The number the text spells: `"42".parse[u8]()`. Decimal, with an
     /// optional sign; floats also take a fraction, an exponent, `inf`, `NaN`.
     pub fn parse[T: Parse](self) -> T ! NumError

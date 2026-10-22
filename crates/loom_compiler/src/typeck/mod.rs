@@ -1447,12 +1447,15 @@ impl<'p> Checker<'p> {
                         if let Some(h) = hidden.filter(|_| !explicit) {
                             // Where the type says it (`T@r`), else the region
                             // the warp is being written in, else a variable
-                            // for a constructor to settle, else the heap.
+                            // for a constructor to settle, else the heap. Text
+                            // is heap unless written in a spool's warp: a read
+                            // parameter's `Any` is for pointers only.
+                            let text = d.attrs.iter().any(|a| a.name == "region");
                             let region = match self.region_ctx {
-                                Some(r) => r,
-                                None => match self.subst.iter().find(|(g, _)| *g == h) {
+                                Some(r) if !(text && r == self.tcx.any_region) => r,
+                                _ => match self.subst.iter().find(|(g, _)| *g == h) {
                                     Some(&(_, r)) => r,
-                                    None if infer => self.new_var(infer::VarKind::Type),
+                                    None if infer && !text => self.new_var(infer::VarKind::Type),
                                     None => self.tcx.heap,
                                 },
                             };
@@ -1988,7 +1991,7 @@ impl<'p> Checker<'p> {
 
     fn string_ty(&mut self) -> Ty {
         match self.std.string {
-            Some(def) => self.tcx.intern(TyKind::Adt(def, Vec::new())),
+            Some(def) => self.tcx.intern(TyKind::Adt(def, vec![self.tcx.heap])),
             None => self.tcx.error,
         }
     }

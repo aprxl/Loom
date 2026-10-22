@@ -1,0 +1,28 @@
+// Text copied into a spool: its methods, comparisons with heap text, and a
+// heap copy of it that leaves the spool.
+
+use std.io.print
+use std.mem.{Arena, kib}
+
+fn head(s: str) -> str = s[0..2]
+
+fn out() -> String {
+    spool a = Arena(1.kib())
+    let t = "nails".to_string().copy(given: a)
+    t.copy()
+}
+
+fn main() {
+    spool a = Arena(1.kib())
+    let t = "nails".to_string().copy(given: a)
+    let h = "nails".to_string()
+    print("{t.len()} {t.contains("ai")} {t.trim()} {t.to_upper()}")
+    print("{t == h} {h == t} {t == "nails"}")
+    var n = 0
+    for c in t.chars() {
+        n += 1
+    }
+    print("{n}")
+    print("{head(t)} {head(h)}")
+    print(out())
+}

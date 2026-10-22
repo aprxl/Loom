@@ -483,7 +483,7 @@ impl Checker<'_> {
     }
 
     fn string_ty_opt(&mut self) -> Option<Ty> {
-        self.std.string.map(|d| self.tcx.intern(TyKind::Adt(d, Vec::new())))
+        self.std.string.map(|d| self.tcx.intern(TyKind::Adt(d, vec![self.tcx.heap])))
     }
 
     /// The element type a `for` loop over `ty` binds, if it's a sequence.

@@ -101,6 +101,12 @@ impl Checker<'_> {
         !self.generic_params(def).is_empty() || self.implicit_count(def) > 0
     }
 
+    /// Whether `def` has a generic parameter the program wrote, not only the
+    /// hidden region a builtin such as `String` carries.
+    pub(super) fn has_written_generics(&self, def: DefId) -> bool {
+        self.generic_params(def).iter().any(|&g| !crate::hir::is_hidden(self.p, g)) || self.implicit_count(def) > 0
+    }
+
     /// How many parameter types of function `def` are wefts, plus how many
     /// of its parameters are `const`.
     fn implicit_count(&self, def: DefId) -> usize {

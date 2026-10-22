@@ -932,7 +932,9 @@ impl Lowerer<'_> {
         if runtime {
             let targs = self.typed.results.instance(info.callee).args.clone();
             for t in targs {
-                descs.push(self.desc(t, callee.span));
+                if !matches!(self.tcx().kind(t), crate::ty::TyKind::Region(_)) {
+                    descs.push(self.desc(t, callee.span));
+                }
             }
         }
         let target = if runtime {

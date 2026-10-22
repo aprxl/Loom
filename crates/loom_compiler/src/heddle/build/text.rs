@@ -234,7 +234,7 @@ impl<'a> Builder<'a> {
     pub(super) fn string_ty(&self) -> Option<Ty> {
         let m = self.p.modules.iter().find(|m| m.path == "std.string")?;
         let def = *m.items.get("String")?;
-        self.tcx().find(&TyKind::Adt(def, Vec::new()))
+        self.tcx().find(&TyKind::Adt(def, vec![self.tcx().heap]))
     }
 
     /// A template as a value: a new `String`.

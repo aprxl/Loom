@@ -598,7 +598,7 @@ impl Resolver<'_> {
 
 /// Whether `attrs` has `#builtin`.
 /// The attributes Loom reads. Any other `#name` is a misspelling.
-const KNOWN_ATTRS: &[&str] = &["builtin", "disjoint", "given_default", "spool_put", "spool_reset"];
+const KNOWN_ATTRS: &[&str] = &["builtin", "disjoint", "given_default", "region", "spool_put", "spool_reset"];
 
 /// The attributes the design documents that Loom doesn't read yet. Ignoring
 /// one would miscompile (`#layout`), so using one is an error.

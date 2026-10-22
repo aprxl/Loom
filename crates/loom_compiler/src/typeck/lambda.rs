@@ -153,7 +153,7 @@ impl Checker<'_> {
 
     /// A function's name used as a value: its instance, typed as a function.
     pub(super) fn fn_value(&mut self, e: &Expr, def: DefId) -> Ty {
-        if self.is_generic(def) {
+        if self.has_written_generics(def) {
             return self.unsupported(e.span, "generic functions used as values");
         }
         let id = self.instance(Instance::of(def));

@@ -338,7 +338,7 @@ impl Checker<'_> {
             ExprKind::Chain { first, rest } => {
                 let mut operands = vec![first.as_ref()];
                 operands.extend(rest.iter().map(|(_, e)| e));
-                let ty = self.unify_operands(&operands);
+                let ty = self.unify_operands(&operands, true);
                 for (op, _) in rest {
                     self.require_comparable(*op, ty, span);
                 }
@@ -350,7 +350,7 @@ impl Checker<'_> {
                 if lo.is_none() {
                     return self.unsupported(span, "ranges without a start");
                 }
-                let elem = self.unify_operands(&operands);
+                let elem = self.unify_operands(&operands, false);
                 if !matches!(self.tcx.kind(elem), TyKind::Int(_) | TyKind::IntVar(_) | TyKind::Char | TyKind::Error) {
                     let shown = self.show(elem);
                     self.error(codes::T0103, span, format!("a range needs integers or chars, not `{shown}`"), "here");
@@ -842,7 +842,7 @@ impl Checker<'_> {
                 self.tcx.bool
             }
             B::Eq | B::Ne | B::Lt | B::Le | B::Gt | B::Ge => {
-                let ty = self.unify_operands(&[lhs, rhs]);
+                let ty = self.unify_operands(&[lhs, rhs], true);
                 self.require_comparable(op, ty, span);
                 self.tcx.bool
             }
@@ -885,7 +885,7 @@ impl Checker<'_> {
                         self.coerce(rhs, b, target);
                         target
                     }
-                    _ => self.unify_operands(&[lhs, rhs]),
+                    _ => self.unify_operands(&[lhs, rhs], false),
                 };
                 let ty = self.require_operand(ty, need, op.as_str(), span);
                 if matches!(op, B::AddChecked | B::SubChecked | B::MulChecked) && !self.tcx.is_error(ty) {
@@ -913,8 +913,9 @@ impl Checker<'_> {
 
     /// Checks operands that must end up with one type. Open literal types
     /// take the type of the typed operands, and a narrower integer widens to
-    /// a wider one: `u8_value < 1000u16` compares as `u16`.
-    fn unify_operands(&mut self, operands: &[&Expr]) -> Ty {
+    /// a wider one: `u8_value < 1000u16` compares as `u16`. With `compare`,
+    /// text compares the same in any spool, so a `String` is taken as heap.
+    fn unify_operands(&mut self, operands: &[&Expr], compare: bool) -> Ty {
         // A leading dot needs a type to look in: `light == .Red` finds
         // `.Red` in the other operand's type, so it's checked last. So does
         // `none`, which needs to know which optional it is.
@@ -946,7 +947,8 @@ impl Checker<'_> {
             .map(|e| {
                 (!leading(e)).then(|| {
                     let ty = self.check_expr(e, None);
-                    self.tcx.degauge(self.resolve(ty))
+                    let ty = self.tcx.degauge(self.resolve(ty));
+                    if compare { self.heap_text(ty) } else { ty }
                 })
             })
             .collect();
@@ -954,7 +956,8 @@ impl Checker<'_> {
         for (e, ty) in operands.iter().zip(tys.iter_mut()) {
             if ty.is_none() {
                 let t = self.check_expr(e, hint);
-                *ty = Some(self.tcx.degauge(self.resolve(t)));
+                let t = self.tcx.degauge(self.resolve(t));
+                *ty = Some(if compare { self.heap_text(t) } else { t });
             }
         }
         let tys: Vec<Ty> = tys.into_iter().flatten().collect();
@@ -990,6 +993,16 @@ impl Checker<'_> {
         let what = if need == Operand::Integer { "integers" } else { "numbers" };
         self.error(codes::T0103, span, format!("`{op}` doesn't work on `{shown}`"), format!("`{op}` works on {what}"));
         self.tcx.error
+    }
+
+    /// `ty` with a `String` taken as heap text.
+    fn heap_text(&mut self, ty: Ty) -> Ty {
+        match *self.tcx.kind(ty) {
+            TyKind::Adt(def, _) if Some(def) == self.std.string => {
+                self.tcx.intern(TyKind::Adt(def, vec![self.tcx.heap]))
+            }
+            _ => ty,
+        }
     }
 
     fn require_comparable(&mut self, op: BinaryOp, ty: Ty, span: Span) {
