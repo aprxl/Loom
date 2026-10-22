@@ -92,6 +92,8 @@ const EXTERNS: &[&str] = &[
     "std.sync.sched_yield",
     "std.term.raw_mode",
     "std.term.poll_keys",
+    "std.mem.swap",
+    "std.mem.replace",
 ];
 
 /// The `#builtin` warps of std whose methods the runtime implements, every

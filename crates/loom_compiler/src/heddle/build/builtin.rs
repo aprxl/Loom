@@ -51,6 +51,7 @@ pub(super) fn writes_body(path: &str) -> bool {
         || super::sync::writes_body(path)
         || path.starts_with("std.map.Map.")
         || path.starts_with("std.set.Set.")
+        || matches!(path, "std.mem.swap" | "std.mem.replace")
         || path.starts_with("std.mem.Arena.")
         || path.starts_with("std.mem.SharedArena.")
         || path.starts_with("std.mem.Pool.")
@@ -107,6 +108,10 @@ impl<'a> Builder<'a> {
         if path.starts_with("std.map.Map.") || path.starts_with("std.set.Set.") {
             let name = path.rsplit('.').next().unwrap_or_default();
             self.coll_method(name, &args, &tys, ret, span)?;
+            return Some(abi.results);
+        }
+        if matches!(path.as_str(), "std.mem.swap" | "std.mem.replace") {
+            self.mem_fn(&path, &args, &tys, sret, span)?;
             return Some(abi.results);
         }
         if path.starts_with("std.mem.Arena.") || path.starts_with("std.mem.SharedArena.") {

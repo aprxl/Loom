@@ -52,3 +52,14 @@ pub warp Pool[T]: Spool {
 
 pub fn kib(n: usize) -> usize = n * 1024
 pub fn mib(n: usize) -> usize = n * 1024 * 1024
+
+/// Exchanges the values of `a` and `b`.
+#builtin
+pub fn swap[T](mut a: T, mut b: T)
+
+/// Puts `value` in `dest` and gives the value that was there.
+#builtin
+pub fn replace[T](mut dest: T, take value: T) -> T
+
+/// Gives the value in `dest`, leaving its default behind.
+pub fn take[T: Default](mut dest: T) -> T = replace(mut dest, T.default())

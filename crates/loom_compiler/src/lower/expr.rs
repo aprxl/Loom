@@ -920,6 +920,9 @@ impl Lowerer<'_> {
         // Externs, and the methods of warps the runtime implements (`Fmt.put`).
         let runtime = f.abi.is_some()
             || (f.body.is_none()
+                && p.def(def).parent.is_none()
+                && p.def(def).attrs.iter().any(|a| a.name == "builtin"))
+            || (f.body.is_none()
                 && p.def(def).parent.is_some_and(|w| {
                     matches!(p.def(w).kind, DefKind::Warp(_)) && p.def(w).attrs.iter().any(|a| a.name == "builtin")
                 }));

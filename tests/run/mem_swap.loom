@@ -1,0 +1,36 @@
+// std.mem: swap, replace and take move values between places.
+
+use std.io.print
+use std.mem.{replace, swap, take}
+
+warp Card {
+    name: String
+    n: i32
+}
+
+fn main() {
+    var a = 1
+    var b = 2
+    swap(mut a, mut b)
+    print("{a} {b}")
+
+    var x = Card("ace", 1)
+    var y = Card("king", 13)
+    swap(mut x, mut y)
+    print("{x.name} {y.name} {x.n} {y.n}")
+
+    let old = replace(mut x, Card("queen", 12))
+    print("{old.name} {x.name}")
+
+    var names: List[String] = ["a".to_string(), "b".to_string()]
+    let taken = take(mut names)
+    print("{taken} {names.len()}")
+
+    var s = "one".to_string()
+    let was = replace(mut s, "two".to_string())
+    print("{was} {s}")
+
+    var o: ?i32 = some(5)
+    let prev = take(mut o)
+    print("{prev} {o}")
+}

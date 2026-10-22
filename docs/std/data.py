@@ -428,6 +428,9 @@ MODULES = [
   "functions": [
     {"name": "kib", "suffix": "(n: usize) -> usize", "doc": None},
     {"name": "mib", "suffix": "(n: usize) -> usize", "doc": None},
+    {"name": "swap", "builtin": True, "suffix": "[T](mut a: T, mut b: T)", "doc": "Exchanges the values of `a` and `b`."},
+    {"name": "replace", "builtin": True, "suffix": "[T](mut dest: T, take value: T) -> T", "doc": "Puts `value` in `dest` and gives the value that was there."},
+    {"name": "take", "suffix": "[T: Default](mut dest: T) -> T", "doc": "Gives the value in `dest`, leaving its default behind."},
   ],
 },
 

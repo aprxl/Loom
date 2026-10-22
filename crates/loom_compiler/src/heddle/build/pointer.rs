@@ -65,6 +65,52 @@ impl<'a> Builder<'a> {
         self.emit1(InstKind::Native { name: "arena.alloc", imm: 0, args: vec![h, n] }, VTy::Ptr)
     }
 
+    /// `mem.swap` and `mem.replace`: the bytes of two places exchanged, or of
+    /// a place and a value. Nothing is dropped: each value is where one is.
+    pub(super) fn mem_fn(
+        &mut self,
+        path: &str,
+        args: &[Val],
+        tys: &[Ty],
+        sret: Option<Value>,
+        span: Span,
+    ) -> Option<()> {
+        let t = self.tcx().degauge(tys[0]);
+        let (Val::Mem(a), size) = (args[0].clone(), self.size_align(t)?.0) else {
+            return self.internal(span, "a `mut` argument in registers");
+        };
+        if path == "std.mem.swap" {
+            let Val::Mem(b) = args[1] else { return self.internal(span, "a `mut` argument in registers") };
+            if size > 0 {
+                let align = self.size_align(t)?.1;
+                let slot = self.raw_slot(size, align);
+                let tmp = self.slot_addr(slot);
+                self.emit(InstKind::Copy { dst: tmp, src: a, size }, &[]);
+                self.emit(InstKind::Copy { dst: a, src: b, size }, &[]);
+                self.emit(InstKind::Copy { dst: b, src: tmp, size }, &[]);
+            }
+            self.terminate(Term::Ret(Vec::new()));
+            return Some(());
+        }
+        // The old value leaves `a` first (into the result), then the new one
+        // goes in.
+        let results = match sret {
+            Some(out) => {
+                if size > 0 {
+                    self.emit(InstKind::Copy { dst: out, src: a, size }, &[]);
+                }
+                Vec::new()
+            }
+            None => {
+                let v = self.load_val(a, 0, t, span)?;
+                self.regs(v, t, span)?
+            }
+        };
+        self.move_to(a, 0, args[1].clone(), t, span)?;
+        self.terminate(Term::Ret(results));
+        Some(())
+    }
+
     pub(super) fn is_pool(&self, ty: Ty) -> bool {
         matches!(self.tcx().kind(self.tcx().degauge(ty)), TyKind::Adt(def, _)
             if self.p.def_path(*def) == "std.mem.Pool")

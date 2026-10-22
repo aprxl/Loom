@@ -2155,6 +2155,34 @@ atomic["std.sync.Atomic.sub"] = function(d, a, n)
   return before
 end
 
+-- `mem.swap` and `mem.replace`: a table is changed in place (the caller's
+-- `mut` argument is the table); anything else comes back after the result,
+-- like the scalar `mut` parameters of the other runtime functions.
+local function in_place(d, x)
+  return type(x) == "table" and d.kind ~= "opt"
+end
+
+rt.ext["std.mem.swap"] = function(d, a, b)
+  if in_place(d, a) and in_place(d, b) then
+    local t = {}
+    for k, v in pairs(a) do t[k] = v end
+    rt.overwrite(a, b)
+    rt.overwrite(b, t)
+    return nil, a, b
+  end
+  return nil, b, a
+end
+
+rt.ext["std.mem.replace"] = function(d, dest, value)
+  if in_place(d, dest) and in_place(d, value) then
+    local old = {}
+    for k, v in pairs(dest) do old[k] = v end
+    rt.overwrite(dest, value)
+    return old, dest
+  end
+  return dest, value
+end
+
 -- Arenas. Lua has a collector, so a spool only has to stay out of the way: an
 -- arena is `{capacity}`, `put` makes a box like `^e` does, and `reset` frees
 -- nothing.
