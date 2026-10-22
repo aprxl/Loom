@@ -7,7 +7,7 @@ Running log of milestone work and decisions. Newest first. Replaces `ledger.log`
 Done, each its own commit with fixtures on both backends where the behaviour is visible: `mem.swap`/`replace` move spool pointers by reference (9d04867); `owns_heap` looks into user warps, and `put` rejects text, lists and boxes (8b8b6df); the region checks cover `SharedArena` and `Pool` through `#spool_put`/`#spool_reset` markers, and an unknown attribute is N0101 (6ccdd31); documented but unbuilt attributes give U0102 (4d30018); text copied into a spool is typed by its region, `String@sp`, so R0101 and R0102 apply to it (c638e67); a zero-slot `Pool` has no slots (82c3e31); arena sizes are checked and an arena past 8 GiB unravels out of memory on both backends (a865299); the cleanup items (a4f36ea, 7779f67, 5f911e2, 283860f) and one builder for the hidden region parameter (fafedcc, byte-identical Lua, Heddle and bytecode across the corpus); the `usize` maximum literal is by design, Lua's `usize` is 63 bits and Treadle's 64, so `tests/fail/usize_literal.loom` pins it (f0762ab); `std_counts` asserts its setups build N items (f10b8e1); Lua shares one vtable for spool and heap text (468df7f, Treadle unchanged); a `Pool` on Lua takes its slot size from `loom_vm::slot_size` and unravels past 8 GiB as Treadle does, with `pool_huge`, `pool_past_limit` and `pool_under_limit` (Treadle's bytecode and Heddle for the old corpus unchanged).
 
 Open:
-- Item 14: Lua accepts a `Pool` of elements aligned past 16 bytes, and Treadle rejects them with U0102 (`heddle/build/pointer.rs`, `pool_new`). The Lua lowering should reject them the same way, or Treadle should take them. Plan first.
+- Item 14 (closed, unreachable): no Loom type is aligned past 8 bytes. The widest integer is 8 bytes (`int_bytes`), a scalar's alignment is its size, and handles and headers are 8. So the Treadle guards on `Pool`, `put` and arena allocation could not fire, and Lua accepts every type Treadle does. The guards are gone; a `debug_assert` in `Layouts::of` (ty/layout.rs) trips if a future type breaks the 16-byte bound.
 - Not tracked: `Pool.free` doesn't give R0102, and a copy of a spool pointer survives `free` (`^T@s` is `Copy`). See Q11.
 - `compile_at alone` (`compile_time`, printed, not asserted): 2.22 at 37f24c1, 2.26 at HEAD, against a 1.5 target. The 1.63 recorded at V5 close isn't reproduced by this measure. Not investigated.
 - The perf gates pass (bench/RESULTS.md, 821e7cc).
@@ -163,8 +163,8 @@ Then: V6 (spools, regions, `given`, and storable closures: see the standard libr
 ## Pending questions for Caio
 
 - Q8: what happens to `once` values when a thread unravels? (deferred)
-- Q9: should a private function infer its `given`s from what it calls (the design's rule; a fixpoint over the call graph, with an extra hidden parameter per inferred weft), or keep spelling them like a `pub` one? Asked 2026-10-21; until answered they are spelled.
-- Q10: arena pointers and mutation (open question 1, option c: writable only when the target is plain data). Not enforced yet: pointers into a spool are `Copy`, and a field behind one can be written when the pointer is in a `var`.
+- Q9 (settled, Caio 2026-10-22): a private function spells its `given`s like a `pub` one; no inference.
+- Q10 (done, T0107): arena pointers and mutation. A field behind an arena pointer is writable only when the target is plain data (option c); other targets are read-only through it.
 - Q11: should `Pool.free` give R0102 for a use after free? Today a use after `free` compiles, and so does a copy of the pointer taken before `free`, because `^T@s` is `Copy`. Making `free` take by move does nothing, so the fix is either to make spool pointers move-only (a change to how they are copied everywhere) or to track slots per pool, which the region pass can't do precisely. Asked 2026-10-22.
 - `projects/` (spindle) is untracked: commit it, ignore it, or leave it?
 

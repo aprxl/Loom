@@ -121,10 +121,7 @@ impl<'a> Builder<'a> {
         let Some(arg) = args.first() else { return self.internal(span, "a pool made from nothing") };
         let TyKind::Adt(_, targs) = self.tcx().kind(self.tcx().degauge(ty)).clone() else { return None };
         let t = self.tcx().degauge(*targs.first()?);
-        let (size, align) = self.size_align(t)?;
-        if align > 16 {
-            return self.unsupported(span, "a pool of values aligned past 16 bytes");
-        }
+        let (size, _) = self.size_align(t)?;
         let slots = self.expr(&arg.value)?;
         let slots = self.regs(slots, self.tcx().usize, span)?[0];
         let n = self.iconst(size);
@@ -186,10 +183,7 @@ impl<'a> Builder<'a> {
             }
             "put" => {
                 let t = self.tcx().degauge(tys[1]);
-                let (size, align) = self.size_align(t)?;
-                if align > 16 {
-                    return self.unsupported(span, "putting a value aligned past 16 bytes in an arena");
-                }
+                let (size, _) = self.size_align(t)?;
                 let p = self.arena_alloc(h, size, shared);
                 self.move_to(p, 0, args[1].clone(), t, span)?;
                 self.terminate(Term::Ret(vec![p]));
@@ -220,10 +214,7 @@ impl<'a> Builder<'a> {
         let from = self.coerced_ty(operand);
         // In an arena: its next bytes, and a pointer that owns nothing.
         if let Some(&arena) = self.tables().allocs.get(&id) {
-            let (size, align) = self.size_align(target)?;
-            if align > 16 {
-                return self.unsupported(span, "allocating a value aligned past 16 bytes in an arena");
-            }
+            let (size, _) = self.size_align(target)?;
             let ty = self.local_ty(arena);
             let place = self.local_place(arena, span)?;
             let at = match self.read_place(&place, ty, span)? {

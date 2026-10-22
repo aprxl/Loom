@@ -179,6 +179,7 @@ impl<'a> Layouts<'a> {
                 return None;
             }
             let layout = self.compute(ty);
+            debug_assert!(layout.as_ref().is_none_or(|l| l.align <= 16), "no type is aligned past 16 bytes");
             self.busy.remove(&ty);
             self.cache.insert(ty, layout);
         }
