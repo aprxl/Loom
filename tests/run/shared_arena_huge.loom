@@ -1,0 +1,15 @@
+// A shared arena bigger than the host's memory can't be made: it unravels
+// when it is, on both backends.
+use std.io.print
+use std.mem.SharedArena
+
+warp Particle {
+    x: i32
+}
+
+fn main() {
+    print("before")
+    spool a = SharedArena(1 << 62)
+    let p = a.put(Particle(1))
+    print("{p.x}")
+}

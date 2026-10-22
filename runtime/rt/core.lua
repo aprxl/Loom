@@ -2192,6 +2192,13 @@ rt.ext["std.mem.Arena.put"] = function(_, _, v)
   return { v }
 end
 
+-- Its first chunk is made with the arena, so an arena past the host's memory
+-- limit (8 GiB, as on Treadle) can't be made.
+function rt.arena_new(capacity)
+  if capacity > (8 << 30) then error(MARK .. "out of memory", 2) end
+  return { capacity }
+end
+
 rt.ext["std.mem.SharedArena.reset"] = rt.ext["std.mem.Arena.reset"]
 rt.ext["std.mem.SharedArena.put"] = rt.ext["std.mem.Arena.put"]
 

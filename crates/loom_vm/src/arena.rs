@@ -38,13 +38,14 @@ fn words(header: u64) -> *mut u64 {
     header as *mut u64
 }
 
-fn round(n: u64) -> u64 {
-    (n + 15) & !15
+fn round(n: u64) -> Result<u64, Trap> {
+    n.checked_add(15).map(|m| m & !15).ok_or(Trap::OutOfMemory)
 }
 
 /// A chunk of `data` bytes of data, linked to nothing.
 fn new_chunk(heap: &mut Heap, data: u64) -> Result<u64, Trap> {
-    let chunk = heap.alloc(CHUNK_HEADER + data, 16)?;
+    let size = CHUNK_HEADER.checked_add(data).ok_or(Trap::OutOfMemory)?;
+    let chunk = heap.alloc(size, 16)?;
     // SAFETY: `chunk` is a new object of `CHUNK_HEADER + data` bytes.
     unsafe {
         let w = words(chunk);
@@ -57,7 +58,7 @@ fn new_chunk(heap: &mut Heap, data: u64) -> Result<u64, Trap> {
 /// `arena.new(capacity) -> arena`: an arena whose first chunk holds
 /// `capacity` bytes.
 pub(crate) fn new(heap: &mut Heap, capacity: u64) -> Result<u64, Trap> {
-    let data = round(capacity.max(MIN_CHUNK));
+    let data = round(capacity.max(MIN_CHUNK))?;
     let header = heap.alloc(HEADER, 16)?;
     let chunk = match new_chunk(heap, data) {
         Ok(chunk) => chunk,
@@ -81,7 +82,7 @@ pub(crate) fn new(heap: &mut Heap, capacity: u64) -> Result<u64, Trap> {
 
 /// `arena.alloc(arena, size) -> address`: `size` bytes, 16-aligned.
 pub(crate) fn alloc(heap: &mut Heap, header: u64, size: u64) -> Result<u64, Trap> {
-    let size = round(size.max(1));
+    let size = round(size.max(1))?;
     // SAFETY: `header` is an arena `new` made and `free` hasn't freed (the
     // compiler drops an arena once, at the end of its scope); its words are
     // the state described above.
@@ -109,7 +110,8 @@ unsafe fn grow(heap: &mut Heap, w: *mut u64, size: u64) -> Result<u64, Trap> {
     unsafe {
         let last = w.add(CHUNK).read();
         let last_size = (last as *const u64).add(1).read();
-        let data = round((last_size * 2).max(size));
+        let doubled = last_size.checked_mul(2).ok_or(Trap::OutOfMemory)?;
+        let data = round(doubled.max(size))?;
         let chunk = new_chunk(heap, data)?;
         (last as *mut u64).write(chunk);
         w.add(CHUNK).write(chunk);

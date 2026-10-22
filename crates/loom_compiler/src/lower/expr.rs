@@ -327,9 +327,13 @@ impl Lowerer<'_> {
             // `Atomic[T](value)`: its value in a table.
             ExprKind::Call { args, .. } if self.tables().sync_new.contains(&e.id) => {
                 let value = self.lower_owned(&args[0].value);
-                let pipe =
-                    matches!(self.tcx().kind(ty), TyKind::Adt(def, _) if self.p.def_path(*def) == "std.sync.Pipe");
-                if pipe { Expr::rt("pipe_new", vec![value]) } else { Expr::Table(vec![value]) }
+                let TyKind::Adt(def, _) = self.tcx().kind(ty) else { return Expr::Table(vec![value]) };
+                match self.p.def_path(*def).as_str() {
+                    "std.sync.Pipe" => Expr::rt("pipe_new", vec![value]),
+                    // An arena's first chunk is made with it: the runtime checks its size.
+                    "std.mem.Arena" | "std.mem.SharedArena" => Expr::rt("arena_new", vec![value]),
+                    _ => Expr::Table(vec![value]),
+                }
             }
             ExprKind::Call { .. } if self.tables().new_lists.contains(&e.id) => match self.coll(ty) {
                 Some(Coll::Map(..)) => Expr::rt("map_new", Vec::new()),
