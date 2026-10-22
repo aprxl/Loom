@@ -905,6 +905,7 @@ impl<'p> Checker<'p> {
             // A generic function is only checked for particular types, and
             // nothing gives a test any.
             DefKind::Fn(f) if inst.args.is_empty() && self.is_generic(inst.def) => {
+                self.check_fn_bounds(f);
                 if f.qualifier == FnQualifier::Test {
                     self.diags.push(
                         Diagnostic::error(codes::T0119, "a test can't have generic parameters or `given`s")
@@ -1038,6 +1039,26 @@ impl<'p> Checker<'p> {
             return;
         }
         self.check_weaves_at(def);
+    }
+
+    /// Every bound a function names, on its generics and in its `where`
+    /// clause, must be a weft.
+    fn check_fn_bounds(&mut self, f: &hir::FnDef) {
+        let p = self.p;
+        for &g in &f.generics {
+            if let DefKind::GenericParam(gp) = &p.def(g).kind
+                && let hir::GenericParamKind::Type { bounds } = &gp.kind
+            {
+                for b in bounds {
+                    self.weft_arg_problem(b);
+                }
+            }
+        }
+        for pred in &f.where_clause {
+            for b in &pred.bounds {
+                self.weft_arg_problem(b);
+            }
+        }
     }
 
     /// Reports a type used where a weft must be, if it isn't one. Returns
