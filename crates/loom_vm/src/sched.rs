@@ -221,6 +221,8 @@ pub(crate) enum Wait {
     Send(usize),
     /// The receivers of a pipe.
     Recv(usize),
+    /// A sleeper, until its timer is due.
+    Sleep,
 }
 
 /// A pipe: a ring of `cap` items of `elem` bytes in the VM's heap, and who
@@ -303,6 +305,8 @@ pub(crate) struct Task {
     /// Parked at an instruction it runs again when it's woken (its saved
     /// `pc` is the instruction's own), rather than going on after it.
     pub reexec: bool,
+    /// Woken from a sleep by Ctrl-C: it raises the interrupt when it next runs.
+    woken_by_interrupt: bool,
     pub waiting: bool,
     pub waiting_on: Option<Wait>,
     /// Tasks waiting for this one to finish.
@@ -348,6 +352,7 @@ impl Task {
             failed: false,
             cancellable: false,
             reexec: false,
+            woken_by_interrupt: false,
             waiting: false,
             waiting_on: None,
             waiters: Vec::new(),
@@ -409,6 +414,8 @@ pub(crate) struct Sched {
     /// How many tasks are in `ready`, for the workers that spin without
     /// the pool's lock.
     pub queued: Arc<AtomicUsize>,
+    /// Sleeping tasks and when each is due (few, so unordered).
+    timers: Vec<(std::time::Instant, usize)>,
 }
 
 /// The task of a worker that has none.
@@ -440,6 +447,7 @@ impl Sched {
             eager: true,
             pipes: Vec::new(),
             free_pipes: Vec::new(),
+            timers: Vec::new(),
             pending: None,
             cancel_seen: Arc::new(AtomicBool::new(false)),
             queued: Arc::new(AtomicUsize::new(0)),
@@ -537,6 +545,9 @@ impl Sched {
         {
             return Some((trap, again));
         }
+        if std::mem::take(&mut t.woken_by_interrupt) && !std::mem::replace(&mut t.interrupted, true) {
+            return Some((Trap::Interrupt, again));
+        }
         let cancelled = was_parked && t.cancelled;
         let wake = if cancelled { t.wake_from.take() } else { None };
         if cancelled && let Some(source) = wake {
@@ -597,6 +608,7 @@ impl Sched {
             Wait::Send(p) => self.pipes[p].senders.pop_front(),
             Wait::Recv(p) => self.pipes[p].receivers.pop_front(),
             Wait::Task(_) => unreachable!("task completion wakes all its waiters"),
+            Wait::Sleep => unreachable!("a sleep is not a resource"),
         };
         if let Some(t) = next {
             self.tasks[t].wake_from = Some(source);
@@ -622,6 +634,7 @@ impl Sched {
             Wait::Mutex(addr) => self.lockers.entry(addr).or_default().push_back(cur),
             Wait::Send(p) => self.pipes[p].senders.push_back(cur),
             Wait::Recv(p) => self.pipes[p].receivers.push_back(cur),
+            Wait::Sleep => unreachable!("sleepers park through `sleep`"),
         }
         Step::Park { again: true }
     }
@@ -640,6 +653,7 @@ impl Sched {
             }
             Wait::Send(p) => self.pipes[p].senders.retain(|&w| w != t),
             Wait::Recv(p) => self.pipes[p].receivers.retain(|&w| w != t),
+            Wait::Sleep => self.timers.retain(|&(_, w)| w != t),
         }
     }
 
@@ -835,6 +849,52 @@ impl Sched {
         self.tasks[cur].cancellable = true;
         self.ready_back(cur);
         Ok(Step::Park { again: false })
+    }
+
+    /// `time.sleep`: the running task waits until `until`, where a cancel finds it.
+    pub fn sleep(&mut self, until: std::time::Instant) -> Result<Step, Trap> {
+        let cur = self.current;
+        if self.tasks[cur].cancelled {
+            return Err(Trap::Cancel);
+        }
+        let t = &mut self.tasks[cur];
+        t.waiting = true;
+        t.waiting_on = Some(Wait::Sleep);
+        t.cancellable = true;
+        self.timers.push((until, cur));
+        Ok(Step::Park { again: false })
+    }
+
+    pub fn has_timers(&self) -> bool {
+        !self.timers.is_empty()
+    }
+
+    /// Wakes the sleepers that are due (all of them on Ctrl-C, so the
+    /// interrupt reaches them). Gives the earliest time still ahead, and
+    /// whether it woke at least one sleeper.
+    pub fn fire_timers(&mut self, interrupted: bool) -> (Option<std::time::Instant>, bool) {
+        if self.timers.is_empty() {
+            return (None, false);
+        }
+        let now = std::time::Instant::now();
+        let mut next: Option<std::time::Instant> = None;
+        let mut woke = false;
+        let mut i = 0;
+        while i < self.timers.len() {
+            let (at, t) = self.timers[i];
+            if interrupted || at <= now {
+                self.timers.swap_remove(i);
+                if interrupted {
+                    self.tasks[t].woken_by_interrupt = true;
+                }
+                self.wake(t);
+                woke = true;
+            } else {
+                next = Some(next.map_or(at, |n| n.min(at)));
+                i += 1;
+            }
+        }
+        (next, woke)
     }
 
     /// `mutex.lock(addr)`, the lock word at `addr` being `word`: 0 when it's

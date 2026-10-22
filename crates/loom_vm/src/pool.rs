@@ -82,6 +82,16 @@ impl Pool {
         self.cv.wait(guard).unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
+    /// `wait`, but no later than `deadline`.
+    pub fn wait_until<'a>(
+        &'a self,
+        guard: MutexGuard<'a, PoolState>,
+        deadline: std::time::Instant,
+    ) -> MutexGuard<'a, PoolState> {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        self.cv.wait_timeout(guard, left).unwrap_or_else(std::sync::PoisonError::into_inner).0
+    }
+
     /// `ready` tasks are ready: the workers that spin will see them, and
     /// a sleeper is woken if the spinners and the sleepers already woken are
     /// fewer than the tasks (a notify with nobody asleep still costs a

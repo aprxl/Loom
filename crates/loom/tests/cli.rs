@@ -848,3 +848,49 @@ fn a_sleeping_thread_is_cancelled() {
         );
     }
 }
+
+#[test]
+fn sleepers_park_instead_of_holding_workers() {
+    let path = temp_source(
+        "sleep-park",
+        "use std.time.{sleep, ms}\nfn main() {\n    loom {\n        let a = thread { sleep(ms(300)); 1 }\n        let b = thread { sleep(ms(300)); 1 }\n        let c = thread { sleep(ms(300)); 1 }\n        a.join()\n        b.join()\n        c.join()\n    }\n}\n",
+    );
+    for backend in ["vm", "lua"] {
+        let started = std::time::Instant::now();
+        let out = Command::new(env!("CARGO_BIN_EXE_loom"))
+            .args(["--color", "never", "run", "--backend", backend, path.to_str().expect("utf-8 path")])
+            .env("LOOM_THREADS", "2")
+            .output()
+            .expect("the loom binary runs");
+        assert!(out.status.success(), "{backend}: {}", text(&out.stderr));
+        assert!(
+            started.elapsed() < std::time::Duration::from_millis(500),
+            "{backend}: the sleepers held their workers: {:?}",
+            started.elapsed()
+        );
+    }
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn ctrl_c_ends_a_sleep() {
+    let path = temp_source(
+        "interrupt_sleeper",
+        "use std.time.{sleep, ms}\nfn main() {\n    loom {\n        let a = thread { sleep(ms(20000)); 1 }\n        sleep(ms(20000))\n    }\n}\n",
+    );
+    for backend in ["vm", "lua"] {
+        let started = std::time::Instant::now();
+        let out = Command::new(env!("CARGO_BIN_EXE_loom"))
+            .args(["--color", "never", "run", "--backend", backend, path.to_str().expect("utf-8 path")])
+            .env("LOOM_INTERRUPT_AFTER_MS", "200")
+            .output()
+            .expect("the loom binary runs");
+        assert_eq!(out.status.code(), Some(130), "{backend}: {}", text(&out.stderr));
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(2),
+            "{backend}: the sleep did not end on Ctrl-C: {:?}",
+            started.elapsed()
+        );
+    }
+    let _ = std::fs::remove_file(&path);
+}

@@ -1834,6 +1834,10 @@ fn arrived(env: &mut Env, pc: *const u64) -> Option<(Trap, *const u64)> {
 /// How many turns an idle worker looks for a ready task before it sleeps.
 const SPINS: u32 = 4000;
 
+/// The longest a sleeping worker or task blocks before it looks again, so
+/// Ctrl-C reaches it.
+const SLEEP_SLICE: std::time::Duration = std::time::Duration::from_millis(50);
+
 /// The task this worker runs next, when it has none (it parked or ended):
 /// the next ready one, waiting for one with several workers. `None` when
 /// the program is over. The last worker to go idle, with nothing ready,
@@ -1842,6 +1846,7 @@ fn choose<'p>(
     sched: *mut Sched,
     pool: Option<&'p Pool>,
     guard: &mut Option<std::sync::MutexGuard<'p, PoolState>>,
+    interrupt: Option<&std::sync::atomic::AtomicBool>,
 ) -> Option<usize> {
     // No reference to the shared scheduler may survive releasing the
     // guard. In particular, an &mut parameter would exclude other workers
@@ -1853,6 +1858,18 @@ fn choose<'p>(
     let mut spins = SPINS;
     loop {
         // SAFETY: the caller (or the preceding wait) holds the pool guard.
+        let (due, woke) = if unsafe { (&*sched).has_timers() } {
+            let interrupted = interrupt.is_some_and(|i| i.load(std::sync::atomic::Ordering::Relaxed));
+            // SAFETY: the caller (or the preceding wait) holds the pool guard.
+            unsafe { (&mut *sched).fire_timers(interrupted) }
+        } else {
+            (None, false)
+        };
+        if woke && let Some(state) = guard.as_mut() {
+            // SAFETY: the guard is held.
+            pool.wake_one(state, unsafe { (&*sched).ready_len() });
+        }
+        // SAFETY: the caller (or the preceding wait) holds the pool guard.
         if let Some(task) = unsafe { (&mut *sched).pop_ready() } {
             return Some(task);
         }
@@ -1860,7 +1877,7 @@ fn choose<'p>(
             return None;
         }
         let state = guard.as_mut()?;
-        if state.idle + 1 >= pool.workers {
+        if state.idle + 1 >= pool.workers && due.is_none() {
             // SAFETY: the guard remains held; this borrow ends before any wait.
             unsafe { (&mut *sched).declare_deadlock() };
             continue;
@@ -1878,7 +1895,11 @@ fn choose<'p>(
         }
         state.sleepers += 1;
         let held = guard.take()?;
-        let mut held = pool.wait(held);
+        let mut held = match due {
+            // At most a slice, so Ctrl-C reaches a sleeper.
+            Some(at) => pool.wait_until(held, at.min(std::time::Instant::now() + SLEEP_SLICE)),
+            None => pool.wait(held),
+        };
         held.sleepers -= 1;
         held.notified = held.notified.saturating_sub(1);
         held.idle -= 1;
@@ -1891,44 +1912,22 @@ fn choose<'p>(
 /// Host access and flushing happen before blocking; ordinary cancellation
 /// remains cooperative at the language's existing cancellation points.
 fn sleep_task(env: &mut Env, nanos: u64) -> Result<Moved, Trap> {
-    {
-        let _held = env.pool.map(Pool::lock);
-        if cfg!(feature = "stats") && env.pool.is_some() {
-            env.st_runtime.native_locks[5] += 1;
-        }
-        ctx!(env).host_check("time.sleep")?;
-        if ctx!(env).sandbox {
-            return Ok(Moved::No);
-        }
-        if env.pool.is_some() {
-            ctx!(env).enter(&mut env.local);
-            ctx!(env).flush();
-            ctx!(env).exit(&mut env.local);
-            ctx!(env).flush();
-        } else {
-            ctx!(env).flush();
-        }
+    ctx!(env).host_check("time.sleep")?;
+    if ctx!(env).sandbox {
+        return Ok(Moved::No);
     }
+    ctx!(env).flush();
     let start = std::time::Instant::now();
     let duration = std::time::Duration::from_nanos(nanos);
-    let slice = std::time::Duration::from_millis(50);
     loop {
         if let Some(trap) = checkpoint(env) {
             return Err(trap);
-        }
-        // A sleep is a cancellation point: a thread told to stop wakes up.
-        if env.pool.is_none_or(Pool::cancel_seen) {
-            let _held = env.pool.map(Pool::lock);
-            sched!(env).current = env.current;
-            if sched!(env).is_cancelled() {
-                return Err(Trap::Cancel);
-            }
         }
         let left = duration.saturating_sub(start.elapsed());
         if left.is_zero() {
             return Ok(Moved::No);
         }
-        std::thread::sleep(left.min(slice));
+        std::thread::sleep(left.min(SLEEP_SLICE));
     }
 }
 
@@ -1940,7 +1939,7 @@ fn sleep_task(env: &mut Env, nanos: u64) -> Result<Moved, Trap> {
 #[inline(never)]
 fn run_task_op(env: &mut Env, op: TaskOp, args: &mut [u64], pc: *const u64, fp: *mut u64) -> Result<Moved, Trap> {
     let pool = env.pool;
-    if op == TaskOp::Sleep {
+    if op == TaskOp::Sleep && pool.is_none() {
         return sleep_task(env, args[0]);
     }
     if op == TaskOp::Grain {
@@ -1980,7 +1979,21 @@ fn task_op<'p>(
     let at = pc.wrapping_sub(1);
     let step = match op {
         TaskOp::Idle => Step::Park { again: false },
-        TaskOp::Sleep => unreachable!("sleep runs outside the scheduler lock"),
+        TaskOp::Sleep => {
+            if cfg!(feature = "stats") {
+                env.st_runtime.native_locks[5] += 1;
+            }
+            ctx!(env).host_check("time.sleep")?;
+            if ctx!(env).sandbox {
+                return Ok(Moved::No);
+            }
+            ctx!(env).enter(&mut env.local);
+            ctx!(env).flush();
+            ctx!(env).exit(&mut env.local);
+            ctx!(env).flush();
+            let nanos = std::time::Duration::from_nanos(args[0]).min(std::time::Duration::from_secs(1 << 32));
+            sched!(env).sleep(std::time::Instant::now() + nanos)?
+        }
         TaskOp::Spawn => {
             if ctx!(env).refuse_host {
                 return Err(Trap::Refused("thread"));
@@ -2142,7 +2155,7 @@ fn task_op<'p>(
     sched!(env).save(resume, fp, env.seg_end, &mut run);
     let next = match started {
         Some(task) => Some(task),
-        None => choose(env.sched, pool, guard),
+        None => choose(env.sched, pool, guard, env.interrupt.as_deref()),
     };
     let Some(next) = next else { return Ok(Moved::Halt) };
     let (npc, nfp, nend) = sched!(env).load(next, &mut run);
@@ -2174,7 +2187,7 @@ fn thread_ended(env: &mut Env, trap: Option<Trap>) -> Moved {
     ctx!(env).append_out(&mut left);
     sched!(env).drop_stack(cur);
     sched!(env).current = IDLE;
-    let moved = match choose(env.sched, pool, &mut guard) {
+    let moved = match choose(env.sched, pool, &mut guard, env.interrupt.as_deref()) {
         None => Moved::Halt,
         Some(next) => {
             let (msg, bufs, out) = state!(env);

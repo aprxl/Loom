@@ -828,7 +828,7 @@ interrupt a program:
 Then it resets the counter: every 65 536 ticks in a normal run, so Ctrl-C is
 noticed within about a millisecond. The cost is a read, a decrement and a
 write of the counter in `Env` and one predicted branch per loop iteration.
-Natives that wait (`time.sleep`) check the same flag themselves, in slices.
+Natives that wait check the same flag themselves, in slices (`time.sleep` is one; §11).
 
 Cancellation (V5) is *not* checked at ticks. 05-concurrency.md says a thread is
 cancelled at its next `yield`, `pull`, `join`, I/O call or `sched_yield()`,
@@ -1341,8 +1341,12 @@ for V6.
   it directly, once; allocation, scalar leaves and sequentially consistent
   atomics run on worker-local interfaces without it. Atomic add/sub use
   checked compare-exchange loops, so overflow leaves the value unchanged.
-  Sleeping flushes under the lock, then blocks its worker outside it (there
-  is no timer queue yet). Mutex/Pipe state and other shared-context natives
+  `time.sleep` parks the task on a timer, where a cancel finds it, and its
+  worker runs something else. A worker with nothing ready waits on the pool's
+  condition no longer than the earliest timer, and in slices of 50 ms, so
+  Ctrl-C wakes every sleeper and each raises it once. Without a pool (one
+  worker) a sleep blocks: nothing else could run. Mutex/Pipe state and other
+  shared-context natives
   still use the lock; the dispatch loops run without it. A worker with no task
   waits on a condition; the last to go idle with the program's own task
   waiting declares the deadlock; the first fault, or the program's task
