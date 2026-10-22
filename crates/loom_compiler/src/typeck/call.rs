@@ -585,6 +585,9 @@ impl Checker<'_> {
             return self.call_fn(call, inst, args, None);
         }
         let Some(info) = self.adt_info(ty) else {
+            if let Some(inst) = self.prim_assoc(ty, name) {
+                return self.call_fn(call, inst, args, None);
+            }
             // `bool.to_json(b)`: a method a weave gives a built-in type.
             match self.find_method(ty, name, span) {
                 Lookup::One(found) => return self.call_fn(call, found.inst, args, None),

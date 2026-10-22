@@ -124,6 +124,7 @@ const BODIES: &[&str] = &[
     "std.num.Float.round",
     "std.num.Float.pow",
     "std.num.Float.to_bits",
+    "std.num.Float.from_bits",
     "std.num.Float.is_nan",
     "std.num.Float.to_string",
     "std.option.Optional.take",
@@ -396,6 +397,8 @@ impl<'a> Builder<'a> {
                 let f32_ = self.float_of(tys[0]) == Some(crate::ty::FloatTy::F32);
                 Some(vec![native(self, "float.bits", u16::from(f32_), vec![reg(0)], 1)[0]])
             }
+            // A float's register already holds its bits (`f32` in the low half).
+            ("std.num.Float", "from_bits") => Some(vec![reg(0)]),
             ("std.num.Float", _) => {
                 let f32_ = self.float_of(tys[0]) == Some(crate::ty::FloatTy::F32);
                 let op: u16 = match name {

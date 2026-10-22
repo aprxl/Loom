@@ -4392,6 +4392,11 @@ ext["std.num.Float.to_bits"] = function(d, v)
   return (string.unpack("<i8", string.pack("<d", v)))
 end
 
+ext["std.num.Float.from_bits"] = function(d, bits)
+  if d.name == "f32" then return (string.unpack("<f", string.pack("<I4", bits))) end
+  return (string.unpack("<d", string.pack("<i8", bits)))
+end
+
 ext["std.num.Float.is_nan"] = function(_, v)
   return v ~= v
 end

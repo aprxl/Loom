@@ -16,7 +16,7 @@ use loom_syntax::source::Span;
 use super::infer::VarKind;
 use super::method::Found;
 use super::warp::Member;
-use super::{Checker, Coercion};
+use super::{Checker, Coercion, Instance};
 use crate::hir::{DefKind, Expr, ExprKind, GenericArg};
 use crate::ty::{Ty, TyKind};
 
@@ -308,6 +308,19 @@ impl Checker<'_> {
         let inst = self.member_instance(m, self_ty);
         let self_ty = self.builtin_self(self_ty);
         Some(Found { inst, path: Vec::new(), self_ty, via, stream: None })
+    }
+
+    /// `f64.from_bits(b)`: an associated function of a number's builtin warp.
+    pub(super) fn prim_assoc(&mut self, ty: Ty, name: &str) -> Option<Instance> {
+        let ty = self.resolve(ty);
+        let warp = match self.tcx.kind(ty) {
+            TyKind::Int(_) | TyKind::IntVar(_) => self.std.int_warp?,
+            TyKind::Float(_) | TyKind::FloatVar(_) => self.std.float_warp?,
+            _ => return None,
+        };
+        let Some(Member::AssocFn(f)) = self.member(warp, name) else { return None };
+        let self_ty = self.tcx.intern(TyKind::Adt(warp, vec![ty]));
+        Some(self.member_instance(f, self_ty))
     }
 
     /// An index: any unsigned integer, used as a `usize`.

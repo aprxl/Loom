@@ -164,6 +164,8 @@ pub warp Float[T] {
     pub fn is_sign_negative(self) -> bool
     /// The IEEE 754 bit pattern.
     pub fn to_bits(self) -> uint(T.size * 8)
+    /// The float with IEEE 754 bit pattern `bits`.
+    pub fn from_bits(bits: uint(T.size * 8)) -> T
     /// Orders every value, NaNs included: -NaN < -inf < … < -0 < +0 < … < inf < NaN.
     pub fn total_cmp(self, other: T) -> Ordering {
         let top: uint(T.size * 8) = 1 << (T.size * 8 - 1)

@@ -528,6 +528,7 @@ MODULES = [
        {"sig": "fn is_infinite(self) -> bool", "doc": None},
        {"sig": "fn is_sign_negative(self) -> bool", "doc": None},
        {"sig": "fn to_bits(self) -> uint(T.size * 8)", "doc": "The IEEE 754 bit pattern."},
+       {"sig": "fn from_bits(bits: uint(T.size * 8)) -> T", "doc": "The float with IEEE 754 bit pattern `bits`."},
        {"sig": "fn total_cmp(self, other: T) -> Ordering", "doc": "Orders every value, NaNs included: -NaN < -inf < … < -0 < +0 < … < inf < NaN."},
      ]},
   ],
