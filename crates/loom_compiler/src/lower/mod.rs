@@ -223,8 +223,9 @@ struct Lowerer<'a> {
     /// descriptor number and operation, in order.
     ops: IndexMap<(usize, usize, &'static str), ()>,
     externs: IndexMap<String, usize>,
-    /// Vtables, by type and wefts, with the type's descriptor.
-    vtables: IndexMap<(Ty, Vec<DefId>), Expr>,
+    /// Vtables, by `vtable_kind` and wefts, with a type that got each and its
+    /// descriptor.
+    vtables: IndexMap<(TyKind, Vec<DefId>), (Ty, Expr)>,
     /// Lowered functions, in the order they were reached.
     fns: Vec<Stmt>,
     /// How each constant is computed (`CI.name = function() … end`).
@@ -590,8 +591,24 @@ impl<'a> Lowerer<'a> {
     /// it. It's written out after the functions it points to.
     fn vtable(&mut self, ty: Ty, wefts: Vec<DefId>, span: Span) -> Expr {
         let desc = self.desc(ty, span);
-        let (i, _) = self.vtables.insert_full((ty, wefts), desc);
+        let (i, _) = self.vtables.insert_full((self.vtable_kind(ty), wefts), (ty, desc));
         Expr::index(Expr::name("VT"), Expr::Int(i as i64 + 1))
+    }
+
+    /// What a vtable is keyed on. Text in a spool (`String@s`) takes the
+    /// heap's region: text's methods don't depend on it, so both share one.
+    fn vtable_kind(&self, ty: Ty) -> TyKind {
+        let tcx = self.tcx();
+        match tcx.kind(ty) {
+            TyKind::Adt(def, args) if self.is_string(*def) => {
+                let mut args = args.clone();
+                if let Some(region) = args.last_mut() {
+                    *region = tcx.heap;
+                }
+                TyKind::Adt(*def, args)
+            }
+            kind => kind.clone(),
+        }
     }
 
     /// `rt.record`, `rt.sum` or `rt.enum` for a warp, with its fields'
@@ -898,7 +915,7 @@ impl<'a> Lowerer<'a> {
             limits::fix(stmt, &mut tables);
             printer.stmt(stmt);
         }
-        for (i, ((ty, wefts), desc)) in self.vtables.iter().enumerate() {
+        for (i, ((_, wefts), (ty, desc))) in self.vtables.iter().enumerate() {
             let mut entries = vec![(lir::TableKey::Name("d".into()), desc.clone())];
             let key = (*ty, wefts.clone());
             for &(method, id) in self.typed.results.vtables.get(&key).into_iter().flatten() {
