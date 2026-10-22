@@ -1,0 +1,10 @@
+// A pool bigger than the host's memory can't be made: it unravels when it
+// is, on both backends.
+use std.io.print
+use std.mem.Pool
+
+fn main() {
+    print("before")
+    spool p = Pool[u64](1 << 62)
+    print("made")
+}

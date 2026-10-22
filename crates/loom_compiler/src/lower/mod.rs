@@ -40,6 +40,7 @@ use loom_syntax::source::{SourceDb, Span};
 use loom_sys::srcmap::{Mapping, SourceMap};
 
 use crate::hir::{DefId, DefKind, FnRet, HirId, LocalId, Program};
+use crate::ty::layout::Layouts;
 use crate::ty::{FloatTy, Ty, TyKind};
 use crate::typeck::{Body, BodyId, Typed};
 use lir::{Expr, Printer, Stmt, StmtKind};
@@ -608,6 +609,20 @@ impl<'a> Lowerer<'a> {
                 TyKind::Adt(*def, args)
             }
             kind => kind.clone(),
+        }
+    }
+
+    /// The slot of a `Pool` of `t`, sized as Treadle sizes it.
+    fn pool_slot(&mut self, t: Ty, span: Span) -> u64 {
+        let t = self.tcx().degauge(t);
+        let typed = self.typed;
+        let size = Layouts::new(&typed.tcx, self.p, &typed.results).of(t).map(|l| l.size);
+        match size {
+            Some(size) => loom_vm::slot_size(size),
+            None => {
+                self.unsupported(span, "a pool of this type");
+                0
+            }
         }
     }
 

@@ -1,0 +1,10 @@
+// One slot more than the host's memory holds: 16-byte slots, 2^29 + 1 of them.
+// It unravels on both backends, and Treadle doesn't reserve the memory first.
+use std.io.print
+use std.mem.Pool
+
+fn main() {
+    print("before")
+    spool p = Pool[u64]((1 << 33) / 16 + 1)
+    print("made")
+}

@@ -29,6 +29,7 @@ mod slab;
 mod stack;
 mod stats;
 
+pub use slab::slot_size;
 pub use stats::{NATIVE_CATEGORIES, RuntimeStats};
 
 use std::sync::Arc;

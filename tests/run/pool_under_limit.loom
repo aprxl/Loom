@@ -1,0 +1,8 @@
+// A pool well under the host's memory is made on both backends.
+use std.io.print
+use std.mem.Pool
+
+fn main() {
+    spool p = Pool[u64](1000)
+    print("made")
+}

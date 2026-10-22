@@ -22,7 +22,9 @@ fn words(header: u64) -> *mut u64 {
     header as *mut u64
 }
 
-fn slot_size(size: u64) -> u64 {
+/// The bytes a pool's slot takes for values of `size` bytes: whole 16-byte
+/// units. The Lua backend uses it too, so both run out of memory together.
+pub fn slot_size(size: u64) -> u64 {
     size.max(1).div_ceil(16).max(1) * 16
 }
 
