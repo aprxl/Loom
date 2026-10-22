@@ -1,0 +1,6 @@
+use std.io.print
+
+fn main() {
+    let n: usize = 18446744073709551615    //~ T0102
+    print("{n}")
+}

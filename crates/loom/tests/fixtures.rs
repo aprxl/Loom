@@ -55,7 +55,7 @@ fn compile(path: &Path) -> (SourceDb, Vec<Diagnostic>, Option<lower::Bundle>) {
     if resolved.has_errors() {
         return (db, resolved.diagnostics, None);
     }
-    let typed = typeck::check(&resolved.program);
+    let typed = typeck::check_for(&resolved.program, Target::LUA);
     if typed.has_errors() {
         return (db, typed.diagnostics, None);
     }

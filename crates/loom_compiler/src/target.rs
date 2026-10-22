@@ -69,6 +69,8 @@ mod tests {
     fn usize_follows_the_pointer_width() {
         assert_eq!(Target::LUA.usize().max(), (1i128 << 63) - 1);
         assert_eq!(Target::VM.usize().max(), u64::MAX as i128);
+        assert!(Target::LUA.usize().contains((1i128 << 63) - 1));
+        assert!(Target::VM.usize().contains((1i128 << 63) - 1));
         assert_eq!(Target::VM.isize().min(), i64::MIN as i128);
         assert!(Target::VM.usize().size && !Target::VM.usize().signed);
     }
