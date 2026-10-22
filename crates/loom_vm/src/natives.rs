@@ -710,6 +710,8 @@ pub(crate) fn resolve_local(name: &str) -> Option<LocalFn> {
 fn str_new_in(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     // SAFETY: as for `str.new`.
     let text: *const [u8] = unsafe { ctx.text(args[1], args[2])? };
+    // SAFETY: `text` is the pointer `ctx.text` checked above, and the arena
+    // allocation below only adds memory, so the bytes stay where they are.
     let text = unsafe { &*text };
     let len = text.len() as u64;
     let ptr = crate::arena::alloc(&mut ctx.heap, args[0], len)?;
