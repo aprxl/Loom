@@ -1835,8 +1835,8 @@ fn arrived(env: &mut Env, pc: *const u64) -> Option<(Trap, *const u64)> {
 /// How many turns an idle worker looks for a ready task before it sleeps.
 const SPINS: u32 = 4000;
 
-/// The longest a sleeping worker or task blocks before it looks again, so
-/// Ctrl-C reaches it.
+/// The longest the only worker, or a worker with nothing ready, blocks before
+/// it looks again, so Ctrl-C reaches a sleeper.
 const SLEEP_SLICE: std::time::Duration = std::time::Duration::from_millis(50);
 
 /// The task this worker runs next, when it has none (it parked or ended):
@@ -1854,7 +1854,21 @@ fn choose<'p>(
     // even during the intervals in which this function waits unlocked.
     let Some(pool) = pool else {
         // SAFETY: without a pool, this is the only worker.
-        return Some(unsafe { (&mut *sched).next_ready() });
+        let sched = unsafe { &mut *sched };
+        loop {
+            let interrupted = interrupt.is_some_and(|i| i.load(std::sync::atomic::Ordering::Relaxed));
+            let (due, _) = sched.fire_timers(interrupted);
+            if let Some(next) = sched.pop_ready() {
+                return Some(next);
+            }
+            match due {
+                // Nothing runs until a sleeper is due.
+                Some(at) => {
+                    std::thread::sleep(at.saturating_duration_since(std::time::Instant::now()).min(SLEEP_SLICE))
+                }
+                None => return Some(sched.next_ready()),
+            }
+        }
     };
     let mut spins = SPINS;
     loop {
@@ -1909,29 +1923,6 @@ fn choose<'p>(
     }
 }
 
-/// A sleeping task occupies its worker, but never the scheduler lock.
-/// Host access and flushing happen before blocking; ordinary cancellation
-/// remains cooperative at the language's existing cancellation points.
-fn sleep_task(env: &mut Env, nanos: u64) -> Result<Moved, Trap> {
-    ctx!(env).host_check("time.sleep")?;
-    if ctx!(env).sandbox {
-        return Ok(Moved::No);
-    }
-    ctx!(env).flush();
-    let start = std::time::Instant::now();
-    let duration = std::time::Duration::from_nanos(nanos);
-    loop {
-        if let Some(trap) = checkpoint(env) {
-            return Err(trap);
-        }
-        let left = duration.saturating_sub(start.elapsed());
-        if left.is_zero() {
-            return Ok(Moved::No);
-        }
-        std::thread::sleep(left.min(SLEEP_SLICE));
-    }
-}
-
 /// `io.read_line` and `io.read_all`: standard input is read without the
 /// pool's lock, so other tasks run meanwhile; a cancel is noticed when the
 /// read returns.
@@ -1974,9 +1965,6 @@ fn read_task(env: &mut Env, op: TaskOp, dst: u64) -> Result<Moved, Trap> {
 #[inline(never)]
 fn run_task_op(env: &mut Env, op: TaskOp, args: &mut [u64], pc: *const u64, fp: *mut u64) -> Result<Moved, Trap> {
     let pool = env.pool;
-    if op == TaskOp::Sleep && pool.is_none() {
-        return sleep_task(env, args[0]);
-    }
     if matches!(op, TaskOp::ReadLine | TaskOp::ReadAll) {
         return read_task(env, op, args[0]);
     }

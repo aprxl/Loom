@@ -1344,9 +1344,9 @@ for V6.
   `time.sleep` parks the task on a timer, where a cancel finds it, and its
   worker runs something else. A worker with nothing ready waits on the pool's
   condition no longer than the earliest timer, and in slices of 50 ms, so
-  Ctrl-C wakes every sleeper and each raises it once. Without a pool (one
-  worker) a sleep blocks: nothing else could run. Mutex/Pipe state and other
-  shared-context natives
+  Ctrl-C wakes every sleeper and each raises it once. With one worker (no
+  pool) the same timers apply: the worker sleeps until the earliest one when
+  nothing is ready. Mutex/Pipe state and other shared-context natives
   still use the lock; the dispatch loops run without it. A worker with no task
   waits on a condition; the last to go idle with the program's own task
   waiting declares the deadlock; the first fault, or the program's task

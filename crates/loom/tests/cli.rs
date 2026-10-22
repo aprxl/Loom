@@ -832,18 +832,24 @@ fn stdin_and_stderr_work_on_both_backends() {
 /// twenty seconds is woken when its loom is leaving, so the run is quick.
 #[test]
 fn a_sleeping_thread_is_cancelled() {
-    for backend in ["vm", "lua"] {
+    for (backend, threads) in [("vm", None), ("vm", Some("1")), ("lua", None)] {
+        let label = format!("{backend} {}", threads.unwrap_or("default workers"));
         let path = temp_source(
             "sleep-cancel",
             "use std.time.{sleep, ms}\nfn main() {\n    loom {\n        let a = thread { sleep(ms(20000)); 1 }\n        let b = thread { sleep(ms(50)); unravel(\"stop\") }\n        a.join()\n    }\n}\n",
         );
+        let mut command = Command::new(env!("CARGO_BIN_EXE_loom"));
+        command.args(["--color", "never", "run", "--backend", backend, path.to_str().expect("utf-8 path")]);
+        if let Some(n) = threads {
+            command.env("LOOM_THREADS", n);
+        }
         let start = std::time::Instant::now();
-        let out = loom(&["run", "--backend", backend, path.to_str().expect("utf-8 path")]);
+        let out = command.output().expect("the loom binary runs");
         let _ = std::fs::remove_file(&path);
-        assert!(!out.status.success(), "{backend}: the thread's unravel ends the run");
+        assert!(!out.status.success(), "{label}: the thread's unravel ends the run");
         assert!(
             start.elapsed() < std::time::Duration::from_secs(10),
-            "{backend}: the sleeper was not cancelled: {:?}",
+            "{label}: the sleeper was not cancelled: {:?}",
             start.elapsed()
         );
     }
@@ -878,17 +884,21 @@ fn ctrl_c_ends_a_sleep() {
         "interrupt_sleeper",
         "use std.time.{sleep, ms}\nfn main() {\n    loom {\n        let a = thread { sleep(ms(20000)); 1 }\n        sleep(ms(20000))\n    }\n}\n",
     );
-    for backend in ["vm", "lua"] {
-        let started = std::time::Instant::now();
-        let out = Command::new(env!("CARGO_BIN_EXE_loom"))
+    for (backend, threads) in [("vm", None), ("vm", Some("1")), ("lua", None)] {
+        let label = format!("{backend} {}", threads.unwrap_or("default workers"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_loom"));
+        command
             .args(["--color", "never", "run", "--backend", backend, path.to_str().expect("utf-8 path")])
-            .env("LOOM_INTERRUPT_AFTER_MS", "200")
-            .output()
-            .expect("the loom binary runs");
-        assert_eq!(out.status.code(), Some(130), "{backend}: {}", text(&out.stderr));
+            .env("LOOM_INTERRUPT_AFTER_MS", "200");
+        if let Some(n) = threads {
+            command.env("LOOM_THREADS", n);
+        }
+        let started = std::time::Instant::now();
+        let out = command.output().expect("the loom binary runs");
+        assert_eq!(out.status.code(), Some(130), "{label}: {}", text(&out.stderr));
         assert!(
             started.elapsed() < std::time::Duration::from_secs(2),
-            "{backend}: the sleep did not end on Ctrl-C: {:?}",
+            "{label}: the sleep did not end on Ctrl-C: {:?}",
             started.elapsed()
         );
     }
