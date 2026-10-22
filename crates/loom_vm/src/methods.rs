@@ -21,6 +21,7 @@ pub(crate) fn resolve_scalar(name: &str) -> Option<LocalFn> {
         "int.rotate" => int_rotate,
         "int.math" => int_math,
         "float.math" => float_math,
+        "float.bits" => float_bits,
         _ => return None,
     })
 }
@@ -56,6 +57,7 @@ pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
         "int.rotate" => |c, a, i| int_rotate(&mut c.heap, a, i),
         "int.math" => |c, a, i| int_math(&mut c.heap, a, i),
         "float.math" => |c, a, i| float_math(&mut c.heap, a, i),
+        "float.bits" => |c, a, i| float_bits(&mut c.heap, a, i),
         _ => return None,
     })
 }
@@ -992,6 +994,15 @@ fn int_rotate(_: &mut Heap, args: &mut [u64], imm: u16) -> Result<(), Trap> {
     let x = args[0] & mask;
     let r = if n == 0 { x } else { ((x << n) | (x >> (bits - n))) & mask };
     args[0] = ints::wrap(r, s);
+    Ok(())
+}
+
+/// `float.bits(v)`: a float's bit pattern is its register's, except that an
+/// `f32` (`imm` 1) keeps only the low half of its register.
+fn float_bits(_: &mut Heap, args: &mut [u64], imm: u16) -> Result<(), Trap> {
+    if imm == 1 {
+        args[0] &= u64::from(u32::MAX);
+    }
     Ok(())
 }
 

@@ -1371,10 +1371,11 @@ impl<'p> Checker<'p> {
         let [bits] = args else {
             return self.error_ty(codes::T0104, span, "`uint` and `int` take the number of bits");
         };
-        let template = self
-            .subst
-            .iter()
-            .any(|&(g, t)| self.is_const_param(g) && !matches!(self.tcx.kind(self.resolve(t)), TyKind::Value(_)));
+        let template = self.subst.iter().any(|&(g, t)| {
+            let kind = self.tcx.kind(self.resolve(t));
+            matches!(kind, TyKind::Param(_) | TyKind::Var(_))
+                || (self.is_const_param(g) && !matches!(kind, TyKind::Value(_)))
+        });
         if template && self.fold(bits, None).is_none() {
             return self.tcx.intern(TyKind::Param(def));
         }

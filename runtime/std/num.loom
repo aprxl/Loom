@@ -162,4 +162,15 @@ pub warp Float[T] {
     pub fn is_finite(self) -> bool
     pub fn is_infinite(self) -> bool
     pub fn is_sign_negative(self) -> bool
+    /// The IEEE 754 bit pattern.
+    pub fn to_bits(self) -> uint(T.size * 8)
+    /// Orders every value, NaNs included: -NaN < -inf < … < -0 < +0 < … < inf < NaN.
+    pub fn total_cmp(self, other: T) -> Ordering {
+        let top: uint(T.size * 8) = 1 << (T.size * 8 - 1)
+        let a = self.to_bits()
+        let b = other.to_bits()
+        let ka = if a & top != 0 { ~a } else { a | top }
+        let kb = if b & top != 0 { ~b } else { b | top }
+        ka.cmp(kb)
+    }
 }

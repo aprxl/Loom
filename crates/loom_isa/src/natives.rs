@@ -105,6 +105,7 @@ pub const NATIVES: &[NativeSig] = &[
     sig("int.rotate", 3, 1, NativeImm::None),
     sig("int.math", 3, 1, NativeImm::None),
     sig("float.math", 2, 1, NativeImm::None),
+    sig("float.bits", 1, 1, NativeImm::None),
     // The host (loom_vm's `host`): the environment, files, time and the
     // terminal. The file ones give 3 when they work, or the case of
     // `IoError` they failed with.
