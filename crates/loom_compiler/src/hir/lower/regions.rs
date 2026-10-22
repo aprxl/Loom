@@ -48,22 +48,7 @@ pub(super) fn add_params(p: &mut Program) {
         })
         .collect();
     for w in give {
-        let (span, vis, module) = {
-            let d = p.def(w);
-            (d.span, d.vis, d.module)
-        };
-        let id = DefId(p.defs.len() as u32);
-        p.defs.push(crate::hir::Def {
-            name: HIDDEN.to_string(),
-            span,
-            vis,
-            module,
-            parent: Some(w),
-            docs: Vec::new(),
-            attrs: Vec::new(),
-            is_type: true,
-            kind: DefKind::GenericParam(GenericParamDef { kind: GenericParamKind::Region }),
-        });
+        let id = push_hidden_param(p, w);
         if let DefKind::Warp(def) = &mut p.defs[w.index()].kind {
             def.generics.push(id);
         }
@@ -71,22 +56,7 @@ pub(super) fn add_params(p: &mut Program) {
     // A `weave W into Expr` holds for `Expr` in every region: its target
     // names the weave's own region parameter.
     for wv in weaves {
-        let (span, vis, module) = {
-            let d = p.def(wv);
-            (d.span, d.vis, d.module)
-        };
-        let id = DefId(p.defs.len() as u32);
-        p.defs.push(crate::hir::Def {
-            name: HIDDEN.to_string(),
-            span,
-            vis,
-            module,
-            parent: Some(wv),
-            docs: Vec::new(),
-            attrs: Vec::new(),
-            is_type: true,
-            kind: DefKind::GenericParam(GenericParamDef { kind: GenericParamKind::Region }),
-        });
+        let id = push_hidden_param(p, wv);
         if let DefKind::Weave(weave) = &mut p.defs[wv.index()].kind {
             weave.generics.push(id);
             let target_span = weave.target.span;
@@ -95,6 +65,27 @@ pub(super) fn add_params(p: &mut Program) {
             }
         }
     }
+}
+
+/// A new region parameter of `owner`, named [`HIDDEN`].
+fn push_hidden_param(p: &mut Program, owner: DefId) -> DefId {
+    let (span, vis, module) = {
+        let d = p.def(owner);
+        (d.span, d.vis, d.module)
+    };
+    let id = DefId(p.defs.len() as u32);
+    p.defs.push(crate::hir::Def {
+        name: HIDDEN.to_string(),
+        span,
+        vis,
+        module,
+        parent: Some(owner),
+        docs: Vec::new(),
+        attrs: Vec::new(),
+        is_type: true,
+        kind: DefKind::GenericParam(GenericParamDef { kind: GenericParamKind::Region }),
+    });
+    id
 }
 
 fn is_builtin(p: &Program, d: DefId) -> bool {
