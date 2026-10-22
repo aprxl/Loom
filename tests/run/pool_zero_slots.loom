@@ -1,0 +1,15 @@
+// A pool of no slots is full before anything is put in it: its first put
+// unravels, on both backends.
+use std.io.print
+use std.mem.Pool
+
+warp Particle {
+    x: i32
+}
+
+fn main() {
+    spool slots = Pool[Particle](0)
+    print("made")
+    let p = slots.put(Particle(1))
+    print("{p.x}")
+}

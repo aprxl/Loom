@@ -29,7 +29,7 @@ fn slot_size(size: u64) -> u64 {
 /// `pool.new(slot size, slots) -> pool`.
 pub(crate) fn new(heap: &mut Heap, size: u64, slots: u64) -> Result<u64, Trap> {
     let slot = slot_size(size);
-    let bytes = slot.checked_mul(slots.max(1)).ok_or(Trap::OutOfMemory)?;
+    let bytes = slot.checked_mul(slots).ok_or(Trap::OutOfMemory)?;
     let header = heap.alloc(HEADER, 16)?;
     let block = match heap.alloc(bytes, 16) {
         Ok(b) => b,
