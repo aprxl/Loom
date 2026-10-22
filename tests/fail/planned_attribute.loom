@@ -1,0 +1,15 @@
+#layout(C)                              //~ U0102
+warp Pair {
+    a: i32
+    b: i32
+}
+
+#inline                                 //~ U0102
+fn twice(x: i32) -> i32 = x * 2
+
+#deprecated("use double")               //~ U0102
+fn dup(x: i32) -> i32 = x * 2
+
+fn main() {
+    let p = Pair(1, twice(2))
+}

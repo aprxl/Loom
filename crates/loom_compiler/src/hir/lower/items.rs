@@ -77,8 +77,11 @@ impl Resolver<'_> {
 
     fn finish_def(&mut self, def: DefId, attrs: &[ast::Attr], kind: DefKind) {
         for a in attrs {
-            if !KNOWN_ATTRS.contains(&a.name.name.as_str()) {
-                self.error(codes::N0101, a.span, format!("unknown attribute `#{}`", a.name.name), "no such attribute");
+            let name = a.name.name.as_str();
+            if PLANNED_ATTRS.contains(&name) {
+                self.error(codes::U0102, a.span, format!("`#{name}` isn't implemented yet"), "not implemented yet");
+            } else if !KNOWN_ATTRS.contains(&name) {
+                self.error(codes::N0101, a.span, format!("unknown attribute `#{name}`"), "no such attribute");
             }
         }
         let attrs =
@@ -596,6 +599,10 @@ impl Resolver<'_> {
 /// Whether `attrs` has `#builtin`.
 /// The attributes Loom reads. Any other `#name` is a misspelling.
 const KNOWN_ATTRS: &[&str] = &["builtin", "disjoint", "given_default", "spool_put", "spool_reset"];
+
+/// The attributes the design documents that Loom doesn't read yet. Ignoring
+/// one would miscompile (`#layout`), so using one is an error.
+const PLANNED_ATTRS: &[&str] = &["layout", "inline", "deprecated", "test"];
 
 fn is_builtin(attrs: &[ast::Attr]) -> bool {
     attrs.iter().any(|a| a.name.name == "builtin")
