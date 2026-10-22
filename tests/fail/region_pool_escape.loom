@@ -1,0 +1,15 @@
+use std.io.print
+use std.mem.{Pool, kib}
+
+warp Particle {
+    x: i32
+}
+
+fn dangling() -> ^Particle {
+    spool tmp = Pool[Particle](2)
+    tmp.put(Particle(1))                 //~ R0101
+}
+
+fn main() {
+    dangling()
+}

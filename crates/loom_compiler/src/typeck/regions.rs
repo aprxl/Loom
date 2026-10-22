@@ -512,24 +512,22 @@ impl Checker<'_> {
             return out;
         };
         let def = self.r.instance(info.callee).def;
-        let path = self.p.def_path(def);
+        let p = self.p;
+        let attrs = &p.def(def).attrs;
         let spool_of_receiver = receiver.and_then(|r| self.spool_of(cx, r));
-        match path.as_str() {
-            "std.mem.Arena.reset" => {
-                if let Some(spool) = spool_of_receiver {
-                    let n = cx.flow.resets.get(&spool).map_or(0, |r| r.0);
-                    cx.flow.resets.insert(spool, (n + 1, call.span));
-                }
-                return Roots::new();
+        if attrs.iter().any(|a| a.name == "spool_reset") {
+            if let Some(spool) = spool_of_receiver {
+                let n = cx.flow.resets.get(&spool).map_or(0, |r| r.0);
+                cx.flow.resets.insert(spool, (n + 1, call.span));
             }
-            "std.mem.Arena.put" => {
-                let mut out = arg_roots.iter().flatten().copied().collect::<Roots>();
-                if let Some(spool) = spool_of_receiver {
-                    join(&mut out, &[cx.flow.root(spool)]);
-                }
-                return out;
+            return Roots::new();
+        }
+        if attrs.iter().any(|a| a.name == "spool_put") {
+            let mut out = arg_roots.iter().flatten().copied().collect::<Roots>();
+            if let Some(spool) = spool_of_receiver {
+                join(&mut out, &[cx.flow.root(spool)]);
             }
-            _ => {}
+            return out;
         }
         // The spools the call's `given`s are, in order.
         let mut spools: Vec<Option<LocalId>> = Vec::new();

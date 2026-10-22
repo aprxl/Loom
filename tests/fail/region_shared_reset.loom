@@ -1,0 +1,17 @@
+use std.io.print
+use std.mem.{SharedArena, kib}
+
+warp Particle {
+    x: i32
+}
+
+fn too_early() {
+    spool raw = SharedArena(1.kib())
+    let t = raw.put(Particle(1))
+    raw.reset()
+    print("{t.x}")                       //~ R0102
+}
+
+fn main() {
+    too_early()
+}

@@ -1,0 +1,15 @@
+use std.io.print
+use std.mem.{SharedArena, kib}
+
+warp Particle {
+    x: i32
+}
+
+fn dangling() -> ^Particle {
+    spool tmp = SharedArena(1.kib())
+    tmp.put(Particle(1))                 //~ R0101
+}
+
+fn main() {
+    dangling()
+}

@@ -1,0 +1,25 @@
+// SharedArena and Pool: put, read, reset and rebuild, all legal.
+
+use std.io.print
+use std.mem.{SharedArena, Pool, kib}
+
+warp Particle {
+    x: i32
+}
+
+fn main() {
+    spool shared = SharedArena(1.kib())
+    let a = shared.put(Particle(1))
+    let b = shared.put(Particle(2))
+    print("{a.x + b.x}")
+    shared.reset()
+    let c = shared.put(Particle(3))
+    print("{c.x}")
+
+    spool slots = Pool[Particle](2)
+    let d = slots.put(Particle(4))
+    print("{d.x}")
+    slots.reset()
+    let e = slots.put(Particle(5))
+    print("{e.x}")
+}

@@ -76,6 +76,11 @@ impl Resolver<'_> {
     }
 
     fn finish_def(&mut self, def: DefId, attrs: &[ast::Attr], kind: DefKind) {
+        for a in attrs {
+            if !KNOWN_ATTRS.contains(&a.name.name.as_str()) {
+                self.error(codes::N0101, a.span, format!("unknown attribute `#{}`", a.name.name), "no such attribute");
+            }
+        }
         let attrs =
             attrs.iter().map(|a| Attr { name: a.name.name.clone(), args: a.args.clone(), span: a.span }).collect();
         let d = &mut self.p.defs[def.index()];
@@ -589,6 +594,9 @@ impl Resolver<'_> {
 }
 
 /// Whether `attrs` has `#builtin`.
+/// The attributes Loom reads. Any other `#name` is a misspelling.
+const KNOWN_ATTRS: &[&str] = &["builtin", "disjoint", "given_default", "spool_put", "spool_reset"];
+
 fn is_builtin(attrs: &[ast::Attr]) -> bool {
     attrs.iter().any(|a| a.name.name == "builtin")
 }

@@ -290,10 +290,7 @@ impl Checker<'_> {
         }
         // What goes in an arena is in it: `a.put(Tree.Leaf)` is a `Tree@a`.
         if let TyKind::Ptr(t, r) = *self.tcx.kind(self.resolve(sig.ret))
-            && matches!(
-                self.p.def_path(def).as_str(),
-                "std.mem.Arena.put" | "std.mem.SharedArena.put" | "std.mem.Pool.put"
-            )
+            && self.p.def(def).attrs.iter().any(|a| a.name == "spool_put")
         {
             self.adopt_region(t, r, call.span);
             if let Some(what) = self.owns_heap(t) {
