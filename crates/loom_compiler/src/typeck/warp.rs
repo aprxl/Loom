@@ -220,6 +220,11 @@ impl Checker<'_> {
     /// collection, a boxed value, a pointer into the heap. (Text can be
     /// copied into a spool, so `String` is fine.)
     pub(super) fn owns_heap(&mut self, ty: Ty) -> Option<&'static str> {
+        self.owns_heap_in(ty, &mut Vec::new())
+    }
+
+    /// [`Checker::owns_heap`], with the user warps looked into so far.
+    fn owns_heap_in(&mut self, ty: Ty, seen: &mut Vec<Ty>) -> Option<&'static str> {
         let ty = self.resolve(ty);
         match self.tcx.kind(ty).clone() {
             TyKind::Adt(def, args) => match self.p.def_path(def).as_str() {
@@ -229,16 +234,41 @@ impl Checker<'_> {
                 "std.iter.Stream" | "std.iter.Shuttle" | "std.iter.Burst" => Some("a stream"),
                 "std.sync.Pipe" | "std.sync.Mutex" => Some("a `Pipe` or `Mutex`"),
                 "std.fs.File" => Some("a `File`"),
-                _ if self.is_builtin_adt(ty) => args.iter().find_map(|&t| self.owns_heap(t)),
-                _ => None,
+                _ if self.is_builtin_adt(ty) => args.iter().find_map(|&t| self.owns_heap_in(t, seen)),
+                _ => self.warp_owns_heap(ty, def, &args, seen),
             },
             TyKind::Any(_) | TyKind::Union(_) => Some("an `any` or a union"),
             TyKind::Ptr(_, r) if r == self.tcx.heap => Some("a pointer into the heap"),
-            TyKind::Optional(t) | TyKind::Array(t, _) => self.owns_heap(t),
-            TyKind::Tuple(items) => items.into_iter().find_map(|t| self.owns_heap(t)),
-            TyKind::Result(t, e) => self.owns_heap(t).or_else(|| self.owns_heap(e)),
+            TyKind::Ptr(t, _) => self.owns_heap_in(t, seen),
+            TyKind::Optional(t) | TyKind::Array(t, _) => self.owns_heap_in(t, seen),
+            TyKind::Tuple(items) => items.into_iter().find_map(|t| self.owns_heap_in(t, seen)),
+            TyKind::Result(t, e) => self.owns_heap_in(t, seen).or_else(|| self.owns_heap_in(e, seen)),
             _ => None,
         }
+    }
+
+    /// What the fields and cases of user warp `ty` (warp `def` with
+    /// arguments `args`) own. A warp already looked into gives nothing new:
+    /// its first look has the answer.
+    fn warp_owns_heap(&mut self, ty: Ty, def: DefId, args: &[Ty], seen: &mut Vec<Ty>) -> Option<&'static str> {
+        if seen.contains(&ty) {
+            return None;
+        }
+        seen.push(ty);
+        let p = self.p;
+        let DefKind::Warp(w) = &p.def(def).kind else { return None };
+        let map: Vec<(DefId, Ty)> = w.generics.iter().copied().zip(args.iter().copied()).collect();
+        let info = self.warp_info(def)?;
+        let tys: Vec<Ty> = info
+            .fields
+            .iter()
+            .map(|f| f.ty)
+            .chain(info.cases.iter().flat_map(|c| c.fields.iter().flatten().map(|f| f.ty)))
+            .collect();
+        tys.into_iter().find_map(|t| {
+            let t = self.tcx.subst(t, &map);
+            self.owns_heap_in(t, seen)
+        })
     }
 
     /// Whether generic parameter `def` stands for a region (`@a`).

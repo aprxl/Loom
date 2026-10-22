@@ -296,6 +296,9 @@ impl Checker<'_> {
             )
         {
             self.adopt_region(t, r, call.span);
+            if let Some(what) = self.owns_heap(t) {
+                self.unsupported(call.span, &format!("{what} in a spool"));
+            }
         }
         // `zeros(4)` is a `[f32; 4]` now that its argument said what `n` is.
         self.deep_resolve(sig.ret)

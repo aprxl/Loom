@@ -1,0 +1,10 @@
+use std.mem.Pool
+
+warp Ring {
+    v: i32
+    next: ?^Ring
+}
+
+fn main() {
+    spool slots = Pool[Ring](2)         //~ U0102
+}

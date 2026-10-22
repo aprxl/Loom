@@ -1,0 +1,15 @@
+use std.mem.{Arena, kib}
+
+warp Item {
+    names: List[String]
+}
+
+warp Holder {
+    item: Item                          //~ U0102
+    p: ^i32
+}
+
+fn main() {
+    spool frame = Arena(1.kib())
+    let h = frame.put(Holder(Item([]), frame.put(1)))         //~ U0102
+}

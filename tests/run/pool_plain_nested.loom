@@ -1,0 +1,30 @@
+// Plain data nests (warps of warps and arrays, a generic warp of them) may be
+// pooled and put in a spool.
+
+use std.io.print
+use std.mem.{Arena, Pool, kib}
+
+warp Point {
+    x: i32
+    y: i32
+}
+
+warp Shape {
+    corner: Point
+    tags: [i32; 3]
+}
+
+warp Wrap[T] {
+    inner: T
+}
+
+fn main() {
+    spool slots = Pool[Wrap[Shape]](2)
+    let w = slots.put(Wrap(Shape(Point(1, 2), [3, 4, 5])))
+    print("{w.inner.corner.y} {w.inner.tags[2]}")
+    slots.free(w)
+
+    spool frame = Arena(1.kib())
+    let s = frame.put(Shape(Point(7, 8), [1, 1, 1]))
+    print("{s.corner.x + s.corner.y}")
+}

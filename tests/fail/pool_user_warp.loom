@@ -1,0 +1,9 @@
+use std.mem.Pool
+
+warp Item {
+    names: List[String]
+}
+
+fn main() {
+    spool slots = Pool[Item](4)         //~ U0102
+}

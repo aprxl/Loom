@@ -1,0 +1,23 @@
+// A warp that points to its own kind, in a spool: the walk over the pointers
+// ends at the last node, and the spool holds no heap memory to leak.
+
+use std.io.print
+use std.mem.{Arena, kib}
+
+warp Node {
+    v: i32
+    next: ?^Node
+}
+
+fn total(n: ?^Node) -> i32 = match n {
+    none => 0
+    some(p) => p.v + total(p.next)
+}
+
+fn main() {
+    spool frame = Arena(1.kib())
+    let c = frame.put(Node(3, none))
+    let b = frame.put(Node(2, some(c)))
+    let a = frame.put(Node(1, some(b)))
+    print("{total(some(a))}")
+}
