@@ -469,6 +469,13 @@ impl Parser<'_> {
             TokenKind::Prim(_) => !self.nth_is_punct(1, Punct::Dot),
             TokenKind::Keyword(Keyword::Any) | TokenKind::Punct(Punct::Question | Punct::Caret | Punct::Star) => true,
             TokenKind::TypeIdent => !(self.nth_is_punct(1, Punct::LParen) || self.nth_is_punct(1, Punct::Dot)),
+            // `[T; N]`: an array type, when what follows the `[` starts a type.
+            TokenKind::Punct(Punct::LBracket) => match self.nth_kind(1) {
+                TokenKind::Prim(_) => !self.nth_is_punct(2, Punct::Dot),
+                TokenKind::TypeIdent => !(self.nth_is_punct(2, Punct::LParen) || self.nth_is_punct(2, Punct::Dot)),
+                TokenKind::Punct(Punct::LBracket) => true,
+                _ => false,
+            },
             _ => false,
         };
         if is_type { GenericArg::Type(self.ty()) } else { GenericArg::Expr(self.expr()) }

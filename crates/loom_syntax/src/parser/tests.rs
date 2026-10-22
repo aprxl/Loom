@@ -855,3 +855,11 @@ fn elide(src: &str) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
+
+#[test]
+fn array_types_in_index_brackets() {
+    assert_eq!(e("of[[String; 2]]()"), "(call (index of (type [String; 2])))");
+    assert_eq!(e("of[[[u8; 2]; 2]]()"), "(call (index of (type [[u8; 2]; 2])))");
+    assert_eq!(e("m[[1, 2]]"), "(index m (array 1 2))");
+    assert_eq!(e("xs[[i][0]]"), "(index xs (index (array i) 0))");
+}

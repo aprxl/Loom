@@ -1,5 +1,6 @@
 use std.io.print
 use std.mem.take
+use std.default.of
 
 fn main() {
     var a = [1, 2, 3]
@@ -10,4 +11,8 @@ fn main() {
     print("{s:?}")
     let g: [[u8; 2]; 2] = std.default.of()
     print("{g:?}")
+    let x = of[[String; 2]]()
+    print("{x:?}")
+    let y = of[[[u8; 2]; 2]]()
+    print("{y:?}")
 }
