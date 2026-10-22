@@ -418,7 +418,7 @@ MODULES = [
        {"sig": "fn reset(mut self)", "doc": "Frees everything allocated so far."},
        {"sig": "fn put[T](self, take value: T) -> ^T@self", "doc": "Moves `value` into the arena and gives a pointer to it."},
      ]},
-    {"kind": "warp", "name": "Pool[T]", "suffix": ": Spool", "builtin": True, "doc": "A spool of `n` slots, each one `T`: allocating and freeing a slot is a few instructions, and a freed slot is the next one given out. It holds plain data (no text, lists or boxes), because dropping the pool does not drop what is still in it.",
+    {"kind": "warp", "name": "Pool", "suffix": "[T]: Spool", "builtin": True, "doc": "A spool of `n` slots, each one `T`: allocating and freeing a slot is a few instructions, and a freed slot is the next one given out. It holds plain data (no text, lists or boxes), because dropping the pool does not drop what is still in it.",
      "methods": [
        {"sig": "fn put(self, take value: T) -> ^T@self", "doc": "Moves `value` into a free slot and gives a pointer to it. The pool being full unravels."},
        {"sig": "fn free(self, p: ^T@self)", "doc": "Gives the slot back. The pointer, and any copy of it, must not be used again."},
