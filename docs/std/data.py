@@ -268,6 +268,7 @@ MODULES = [
        {"sig": "fn inspect(take self, f: T => ()) -> Stream[T]", "doc": "The items, calling `f` with each as it goes by."},
        {"sig": "fn flat_map[U](take self, f: T => Stream[U]) -> Stream[U]", "doc": "The items of the streams `f` makes from each item, one after another."},
        {"sig": "fn peekable(take self) -> Peekable[T]", "doc": "A stream that lets you look at the next item before taking it."},
+       {"sig": "fn scan[S, U](take self, take init: S, take f: (S, T) => ?(S, U)) -> Stream[U]", "doc": "Items made from a running state: `f(state, item)` gives the new state and the next item, or `none` to stop. `f` can't capture anything; what it needs travels in the state."},
        {"sig": "fn cycle(take self) -> Stream[T]", "doc": "The items again and again, for ever. Nothing if there are none."},
        {"sig": "fn chunks(take self, n: usize) -> Stream[List[T]]", "doc": "Lists of `n` items at a time; the last may be shorter. Unravels if `n` is 0."},
        {"sig": "fn nth(take self, n: usize) -> ?T", "doc": "The item after skipping `n`."},
@@ -325,6 +326,10 @@ MODULES = [
      "methods": [
        {"sig": "type Item = T", "doc": None},
      ]},
+  ],
+  "functions": [
+    {"name": "from_fn", "suffix": "[S, T](take init: S, take f: S => ?(S, T)) -> Stream[T]", "doc": "Items made from a state: `f(state)` gives the new state and the next item, or `none` to stop. `f` can't capture anything; what it needs travels in the state."},
+    {"name": "successors", "suffix": "[T: Copy](take first: ?T, take f: T => ?T) -> Stream[T]", "doc": "`first`, then `f` of it, and so on until `f` gives `none`."},
   ],
 },
 

@@ -102,6 +102,12 @@ pub warp Stream[T] {
     pub fn peekable(take self) -> Peekable[T] {
         Peekable(src: self, buf: [], peeked: false)
     }
+    /// Items made from a running state: `f(state, item)` gives the new state
+    /// and the next item, or `none` to stop. `f` can't capture anything; what
+    /// it needs travels in the state.
+    pub fn scan[S, U](take self, take init: S, take f: (S, T) => ?(S, U)) -> Stream[U] {
+        Scan(src: self, state: some(init), f: f)
+    }
     /// The items again and again, for ever. Nothing if there are none.
     pub fn cycle(take self) -> Stream[T] {
         Cycle(items: self.collect(), at: 0)
@@ -370,6 +376,63 @@ pub warp Peekable[T]: Iter {
         }
     }
 }
+
+/// The items of `scan`.
+warp Scan[T, S, U]: Iter {
+    src: Stream[T]
+    state: ?S
+    f: (S, T) => ?(S, U)
+
+    type Item = U
+
+    fn next(mut self) -> ?U {
+        let s = .state.take() mend return none
+        let x = .src.next() mend return none
+        let g = self.f
+        let (s2, u) = g(s, x) mend return none
+        .state = some(s2)
+        some(u)
+    }
+}
+
+/// The items of `from_fn`.
+warp FromFn[S, T]: Iter {
+    state: ?S
+    f: S => ?(S, T)
+
+    type Item = T
+
+    fn next(mut self) -> ?T {
+        let s = .state.take() mend return none
+        let g = self.f
+        let (s2, x) = g(s) mend return none
+        .state = some(s2)
+        some(x)
+    }
+}
+
+/// The items of `successors`.
+warp Successors[T: Copy]: Iter {
+    next_item: ?T
+    f: T => ?T
+
+    type Item = T
+
+    fn next(mut self) -> ?T {
+        let cur = .next_item.take() mend return none
+        let g = self.f
+        .next_item = g(cur)
+        some(cur)
+    }
+}
+
+/// Items made from a state: `f(state)` gives the new state and the next
+/// item, or `none` to stop. `f` can't capture anything; what it needs
+/// travels in the state.
+pub fn from_fn[S, T](take init: S, take f: S => ?(S, T)) -> Stream[T] = FromFn(state: some(init), f: f)
+
+/// `first`, then `f` of it, and so on until `f` gives `none`.
+pub fn successors[T: Copy](take first: ?T, take f: T => ?T) -> Stream[T] = Successors(next_item: first, f: f)
 
 /// The items of `cycle`.
 warp Cycle[T]: Iter {

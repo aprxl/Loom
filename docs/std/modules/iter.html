@@ -247,6 +247,13 @@ let text: String = letters.collect_as()</code></pre>
 </div>
 <p class="member-doc">A stream that lets you look at the next item before taking it.</p>
 </div>
+<div class="member" id="Stream.scan">
+<div class="member-head">
+<span class="sig">fn scan[S, U](take self, take init: S, take f: (S, T) =&gt; ?(S, U)) -&gt; Stream[U]</span>
+
+</div>
+<p class="member-doc">Items made from a running state: <code>f(state, item)</code> gives the new state and the next item, or <code>none</code> to stop. <code>f</code> can't capture anything; what it needs travels in the state.</p>
+</div>
 <div class="member" id="Stream.cycle">
 <div class="member-head">
 <span class="sig">fn cycle(take self) -&gt; Stream[T]</span>
@@ -573,6 +580,21 @@ let text: String = letters.collect_as()</code></pre>
 <p class="member-doc empty">undocumented</p>
 </div>
 </div>
+</div>
+<h2>Functions</h2>
+<div class="item" id="from_fn">
+<div class="item-head">
+<span class="sig">fn <strong>from_fn</strong>[S, T](take init: S, take f: S =&gt; ?(S, T)) -&gt; Stream[T]</span>
+
+</div>
+<p class="item-doc">Items made from a state: <code>f(state)</code> gives the new state and the next item, or <code>none</code> to stop. <code>f</code> can't capture anything; what it needs travels in the state.</p>
+</div>
+<div class="item" id="successors">
+<div class="item-head">
+<span class="sig">fn <strong>successors</strong>[T: Copy](take first: ?T, take f: T =&gt; ?T) -&gt; Stream[T]</span>
+
+</div>
+<p class="item-doc"><code>first</code>, then <code>f</code> of it, and so on until <code>f</code> gives <code>none</code>.</p>
 </div>
 </main>
 </div>

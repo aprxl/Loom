@@ -369,7 +369,9 @@ impl Checker<'_> {
                 Some(info) => info.copy,
                 None => self.adt_info(ty).is_some_and(|i| i.copy),
             },
-            TyKind::Fn(..) | TyKind::Any(_) | TyKind::Union(_) => false,
+            // A function value is a copy of a borrow (its escapes are checked).
+            TyKind::Fn(..) => true,
+            TyKind::Any(_) | TyKind::Union(_) => false,
             // A pointer into a spool is a copy of an address.
             TyKind::Ptr(_, r) => r == self.tcx.spool,
             TyKind::Region(_) => true,
