@@ -186,6 +186,40 @@ impl Checker<'_> {
         params.into_iter().zip(inst.args.iter().copied()).collect()
     }
 
+    /// The `where` bounds that are slice types (`where T: [U]` on a generic
+    /// parameter): a shape the parameter has, not a weft it weaves.
+    pub(super) fn shape_bounds<'f>(&self, f: &'f hir::FnDef) -> Vec<(DefId, &'f hir::Ty)> {
+        let mut shapes = Vec::new();
+        for pred in &f.where_clause {
+            let HirTy::Def { def, .. } = &pred.ty.kind else { continue };
+            if !matches!(self.p.def(*def).kind, DefKind::GenericParam(_)) {
+                continue;
+            }
+            for b in &pred.bounds {
+                if matches!(b.kind, HirTy::Slice(_)) {
+                    shapes.push((*def, b));
+                }
+            }
+        }
+        shapes
+    }
+
+    /// In a template, each parameter with a slice bound stands for that
+    /// slice (`T` is `[U]` in `where T: [U]`), so the body is checked
+    /// against it. A concrete instance already has its types.
+    pub(super) fn apply_shapes(&mut self, f: &hir::FnDef) {
+        for (g, b) in self.shape_bounds(f) {
+            let template =
+                self.subst.iter().any(|&(d, t)| d == g && matches!(self.tcx.kind(t), TyKind::Param(p) if *p == g));
+            if template {
+                let want = self.lower_ty(b);
+                if let Some(entry) = self.subst.iter_mut().find(|(d, _)| *d == g) {
+                    entry.1 = want;
+                }
+            }
+        }
+    }
+
     /// The arguments of `inst` for weft-typed parameters: those after its
     /// generic parameters'.
     pub(super) fn implicit_args(&self, inst: &Instance) -> Implicit {
@@ -250,6 +284,22 @@ impl Checker<'_> {
         let subst = self.instance_subst(&template);
         let saved_subst = std::mem::replace(&mut self.subst, subst.clone());
         let saved_implicit = std::mem::replace(&mut self.implicit, Implicit::Fresh(Vec::new()));
+        for (g, b) in self.shape_bounds(f) {
+            let want = self.lower_ty(b);
+            let ty = self.subst.iter().find(|(d, _)| *d == g).map_or(self.tcx.error, |&(_, t)| t);
+            if !self.unify(ty, want) {
+                let (ty, want) = (self.deep_resolve(ty), self.deep_resolve(want));
+                let (shown, want_shown) = (self.show(ty), self.show(want));
+                let (name, param) = (p.def(inst.def).name.clone(), p.def(g).name.clone());
+                self.diags.push(
+                    Diagnostic::error(codes::T0108, format!("`{shown}` isn't `{want_shown}`"))
+                        .primary(span, format!("`{name}` needs `{param}` to be `{want_shown}`")),
+                );
+                self.implicit = saved_implicit;
+                self.subst = saved_subst;
+                return None;
+            }
+        }
         let this = template.self_ty.or_else(|| self.parent_warp_ty(template.def));
         let saved_self = std::mem::replace(&mut self.self_ty, this);
         let saved_current = self.current;

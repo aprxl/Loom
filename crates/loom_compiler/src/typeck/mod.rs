@@ -1054,8 +1054,12 @@ impl<'p> Checker<'p> {
                 }
             }
         }
+        let shapes = self.shape_bounds(f);
         for pred in &f.where_clause {
             for b in &pred.bounds {
+                if shapes.iter().any(|&(_, s)| std::ptr::eq(s, b)) {
+                    continue;
+                }
                 self.weft_arg_problem(b);
             }
         }
@@ -1110,6 +1114,7 @@ impl<'p> Checker<'p> {
 
     fn check_fn(&mut self, id: BodyId, inst: &Instance, f: &hir::FnDef) {
         self.subst = self.instance_subst(inst);
+        self.apply_shapes(f);
         self.self_ty = self.instance_self(inst);
         self.self_local = f.params.first().filter(|p| p.is_self).map(|p| p.local);
         self.check_fn_body(id, f);

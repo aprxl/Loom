@@ -1,0 +1,11 @@
+use std.io.print
+
+fn flat[T, U](xs: [T]) -> usize where T: [U] {
+    let mut n = 0
+    for i in 0..xs.len() { n = n + xs[i].len() }
+    n
+}
+
+fn main() {
+    print(flat([[1, 2], [3]]))
+}
