@@ -56,6 +56,15 @@ pub warp Slice[T] {
         }
         true
     }
+    /// The inner slices, one after another.
+    pub fn concat[U](self) -> List[U] where T: [U] {
+        let mut out = List()
+        for i in 0..self.len() {
+            let s = self[i]
+            for j in 0..s.len() { out.push(s[j]) }
+        }
+        out
+    }
     /// Whether the slice ends with `suffix`.
     pub fn ends_with(self, suffix: [T]) -> bool where T: Eq {
         if suffix.len() > self.len() { return false }

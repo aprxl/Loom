@@ -50,7 +50,7 @@ Built from the ledger below, `design/stdlib-plan.md`, `design/stdlib-collect-def
 
 **V6.5 (new): language gaps the stdlib hit.** Small typeck/weave items, none about memory, so they don't belong in V6. (J: a milestone of its own after V6, because V6 rewrites the checker's ownership side and these touch `Self`, bounds and weaves; doing them in the same pass risks conflicts. Fold into V6 if the checker work overlaps anyway.)
 - `Self` for `Int`/`Float` and gauge types (the `self` of a Loom method body is the warp, not the number): unblocks `pow_checked`, `abs_diff`, `to_string_radix`, `total_cmp`, `to_bits`/`from_bits`, `to_be_bytes`/`from_be_bytes`.
-- Expressing "items are slices" (`where T: [U]`) for `concat`/`join` on slices of slices.
+- Expressing "items are slices" (`where T: [U]`) for `concat`/`join` on slices of slices. (done: shape bounds, and `concat` on `Slice`; slice `join(sep: [U])` deferred: the name clashes with the text `join` that List/Stream calls resolve to.)
 - Generic wefts (`FromStream[T]` is an associated `Item` instead).
 - A hand-written `Show` on a warp declared in `std` is silently ignored (the debug form is used; `Duration` has `to_string` because of it). Bug: find the cause in the weave recording; give `Duration` its `Show`.
 - `Default` for arrays `[T; N]`, `Deque`, tuple sizes beyond three, and tuple warps (`warp Meters(f64)`).

@@ -1,0 +1,2 @@
+// `concat` takes slices of slices: the items of `[1, 2]` aren't slices.
+fn main() { [1, 2].concat() }    //~ T0108
