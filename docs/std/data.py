@@ -173,6 +173,9 @@ MODULES = [
        {"sig": "fn put(mut self, x: any Show)", "doc": "Writes `x` the way `{x}` would."},
      ]},
   ],
+  "functions": [
+    {"name": "dbg", "suffix": "[T: Show](take x: T, at: str = \"\", expr: str = \"\") -> T", "doc": "Writes `[file:line:col] expr = value` to standard error and gives `x` back: `let n = dbg(a + b) * 2`."},
+  ],
 },
 
 {

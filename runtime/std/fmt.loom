@@ -1,5 +1,7 @@
 // Formatting.
 
+use std.io.write_err
+
 /// Something that can be written as text: `print`, `{x}` in templates.
 pub weft Show {
     /// Writes the value to `f`. A warp that doesn't write its own gets its
@@ -14,4 +16,11 @@ pub weft Show {
 pub warp Fmt {
     /// Writes `x` the way `{x}` would.
     pub fn put(mut self, x: any Show)
+}
+
+/// Writes `[file:line:col] expr = value` to standard error and gives `x`
+/// back: `let n = dbg(a + b) * 2`.
+pub fn dbg[T: Show](take x: T, at: str = "", expr: str = "") -> T {
+    write_err("[{at}] {expr} = {x}\n")
+    x
 }

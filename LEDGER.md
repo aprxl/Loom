@@ -51,11 +51,11 @@ Built from the ledger below, `design/stdlib-plan.md`, `design/stdlib-collect-def
 **V6.5 (new): language gaps the stdlib hit.** Small typeck/weave items, none about memory, so they don't belong in V6. (J: a milestone of its own after V6, because V6 rewrites the checker's ownership side and these touch `Self`, bounds and weaves; doing them in the same pass risks conflicts. Fold into V6 if the checker work overlaps anyway.)
 - `Self` for `Int`/`Float` and gauge types (the `self` of a Loom method body is the warp, not the number): unblocks `pow_checked`, `abs_diff`, `to_string_radix`, `total_cmp`, `to_bits`/`from_bits`, `to_be_bytes`/`from_be_bytes`.
 - Expressing "items are slices" (`where T: [U]`) for `concat`/`join` on slices of slices. (done: shape bounds, and `concat` and `join` on `Slice` (method lookup skips it when the items can't be slices, so text `join` still applies).)
-- Generic wefts (`FromStream[T]` is an associated `Item` instead).
+- Generic wefts (`FromStream[T]` is an associated `Item` instead). (deferred by Caio 2026-10-23.)
 - A hand-written `Show` on a warp declared in `std` is silently ignored (the debug form is used; `Duration` has `to_string` because of it). Bug: find the cause in the weave recording; give `Duration` its `Show`.
 - `Default` for arrays `[T; N]`, `Deque`, tuple sizes beyond three, and tuple warps (`warp Meters(f64)`).
 - `collect_as`: item-type errors are reported inside std, not at the call site; `str` items for `String`; `BitSet`.
-- `Fmt` specs/`pad`/`debug_struct` and `dbg` (the compiler passes the source text and location; the writer comes from the ambient `Writer` given, so after V6).
+- `Fmt` specs/`pad`/`debug_struct` and `dbg` (the compiler passes the source text and location; the writer comes from the ambient `Writer` given, so after V6). (done: `dbg`, to stderr; `Fmt.spec`/`pad`/`debug_struct` deferred by Caio 2026-10-23; spec padding on user `Show` already works.)
 
 **V7 (Lua interop)**: nothing deferred lands here.
 

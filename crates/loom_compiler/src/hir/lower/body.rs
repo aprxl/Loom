@@ -445,8 +445,31 @@ impl Resolver<'_> {
         }
         let saved = std::mem::replace(&mut self.in_cond, false);
         let callee = self.boxed(callee);
-        let args = self.lower_args(args);
+        let mut args = self.lower_args(args);
         self.in_cond = saved;
+        // `dbg(x)` also gets where it is and what it is, for what it writes.
+        if let ExprKind::Def { def, .. } = callee.kind
+            && self.p.def(def).name == "dbg"
+            && let [arg] = args.as_slice()
+            && arg.label.is_none()
+            && self.p.def_path(def) == "std.fmt.dbg"
+        {
+            let arg_span = arg.span;
+            let at = self.db.line_col(arg_span);
+            let at = format!("{}:{}:{}", self.db.file(arg_span.file).name(), at.line, at.col);
+            let expr = self.db.slice(arg_span).to_string();
+            let labeled = |this: &mut Self, label: &str, text: String| Arg {
+                label: Some(Ident { name: label.to_string(), span: arg_span }),
+                is_given: false,
+                mutable: false,
+                value: this.expr(ExprKind::Lit(ast::Lit::Str(text)), arg_span),
+                span: arg_span,
+            };
+            let at = labeled(self, "at", at);
+            let expr = labeled(self, "expr", expr);
+            args.push(at);
+            args.push(expr);
+        }
         let call = self.expr(ExprKind::Call { callee, args }, span);
         if wraps {
             let params = self.fx.hole_frames.pop().unwrap_or_default();
