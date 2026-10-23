@@ -281,7 +281,7 @@ MODULES = [
        {"sig": "fn partition(take self, f: T => bool) -> (List[T], List[T])", "doc": "The items `f` says yes to, and the ones it says no to."},
        {"sig": "fn counts(take self) -> Map[T, usize] where T: Hash", "doc": "How many times each item comes up."},
        {"sig": "fn group_by[K: Hash](take self, key: T => K) -> Map[K, List[T]]", "doc": "The items in lists by `key`, in the order the keys first came up."},
-       {"sig": "fn collect_as[C: FromStream](take self) -> C", "doc": "The items gathered into a `C`: `words.collect_as[Set[String]]()`, or `let text: String = chars.collect_as()` when the type is known from where the result goes. The collections that can be made are the ones that weave `FromStream`: `List`, `Set`, `Map` (of pairs), `String` (of characters), `Deque` and `PriorityQueue`."},
+       {"sig": "fn collect_as[C: FromStream](take self) -> C where T: C.Item", "doc": "The items gathered into a `C`: `words.collect_as[Set[String]]()`, or `let text: String = chars.collect_as()` when the type is known from where the result goes. The collections that can be made are the ones that weave `FromStream`: `List`, `Set`, `Map` (of pairs), `String` (of characters), `Deque` and `PriorityQueue`."},
        {"sig": "fn collect(take self) -> List[T]", "doc": "A list of the items."},
        {"sig": "fn count(take self) -> usize", "doc": "How many items there are."},
        {"sig": "fn last(take self) -> ?T", "doc": "The last item."},

@@ -392,6 +392,49 @@ impl Checker<'_> {
         ok
     }
 
+    /// Each `where` bound that is an associated type (`where T: C.Item`) is
+    /// an equation: the parameter has the type the projection names, once
+    /// the instance's types are known.
+    pub(super) fn check_equations(&mut self, inst: &Instance, span: Span) -> bool {
+        let p = self.p;
+        let DefKind::Fn(f) = &p.def(inst.def).kind else { return true };
+        let name = p.def(inst.def).name.clone();
+        let mut ok = true;
+        for pred in &f.where_clause {
+            let HirTy::Def { def: param, .. } = &pred.ty.kind else { continue };
+            if !matches!(p.def(*param).kind, DefKind::GenericParam(_)) {
+                continue;
+            }
+            for b in &pred.bounds {
+                let HirTy::Assoc { base, name: assoc } = &b.kind else { continue };
+                let subst = self.instance_subst(inst);
+                let saved_subst = std::mem::replace(&mut self.subst, subst);
+                let saved_self = std::mem::replace(&mut self.self_ty, inst.self_ty);
+                let saved_implicit = std::mem::take(&mut self.implicit);
+                let have = self.lower_ty(&pred.ty);
+                let want = self.lower_ty(b);
+                let base_ty = self.lower_ty(base);
+                self.implicit = saved_implicit;
+                self.self_ty = saved_self;
+                self.subst = saved_subst;
+                if !self.unify(have, want) {
+                    let (have, want, base_ty) =
+                        (self.deep_resolve(have), self.deep_resolve(want), self.deep_resolve(base_ty));
+                    let (have_shown, want_shown, base_shown) = (self.show(have), self.show(want), self.show(base_ty));
+                    let param_name = p.def(*param).name.clone();
+                    let proj = format!("{base_shown}.{}", assoc.name);
+                    self.diags.push(
+                        Diagnostic::error(codes::T0108, format!("`{name}` needs `{param_name}` to be `{proj}`"))
+                            .primary(span, format!("`{param_name}` is `{have_shown}` here"))
+                            .note(format!("`{proj}` is `{want_shown}`")),
+                    );
+                    ok = false;
+                }
+            }
+        }
+        ok
+    }
+
     /// Whether the value `ty` inferred for `const` parameter `param` fits
     /// its type `decl`; reports it if not.
     fn check_const_value(&mut self, ty: Ty, decl: Ty, param: &str, span: Span) -> bool {
@@ -469,6 +512,10 @@ impl Checker<'_> {
                 continue;
             }
             if !self.check_bounds(pending.inst.def, pending.span, &pending.bounds) {
+                continue;
+            }
+            let resolved = Instance { args: args.clone(), self_ty, ..pending.inst.clone() };
+            if !self.check_equations(&resolved, pending.span) {
                 continue;
             }
             let id = self.instance(Instance { args, self_ty, ..pending.inst });

@@ -340,7 +340,7 @@ let text: String = letters.collect_as()</code></pre>
 </div>
 <div class="member" id="Stream.collect_as">
 <div class="member-head">
-<span class="sig">fn collect_as[C: FromStream](take self) -&gt; C</span>
+<span class="sig">fn collect_as[C: FromStream](take self) -&gt; C where T: C.Item</span>
 
 </div>
 <p class="member-doc">The items gathered into a <code>C</code>: <code>words.collect_as[Set[String]]()</code>, or <code>let text: String = chars.collect_as()</code> when the type is known from where the result goes. The collections that can be made are the ones that weave <code>FromStream</code>: <code>List</code>, <code>Set</code>, <code>Map</code> (of pairs), <code>String</code> (of characters), <code>Deque</code> and <code>PriorityQueue</code>.</p>

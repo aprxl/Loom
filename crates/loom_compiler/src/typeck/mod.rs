@@ -1060,6 +1060,10 @@ impl<'p> Checker<'p> {
                 if shapes.iter().any(|&(_, s)| std::ptr::eq(s, b)) {
                     continue;
                 }
+                let on_param = matches!(&pred.ty.kind, HirTy::Def { def, .. } if matches!(self.p.def(*def).kind, DefKind::GenericParam(_)));
+                if on_param && matches!(b.kind, HirTy::Assoc { .. }) {
+                    continue;
+                }
                 self.weft_arg_problem(b);
             }
         }

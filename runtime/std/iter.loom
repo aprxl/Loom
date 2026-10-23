@@ -230,7 +230,7 @@ pub warp Stream[T] {
     /// where the result goes. The collections that can be made are the ones
     /// that weave `FromStream`: `List`, `Set`, `Map` (of pairs), `String` (of
     /// characters), `Deque` and `PriorityQueue`.
-    pub fn collect_as[C: FromStream](take self) -> C {
+    pub fn collect_as[C: FromStream](take self) -> C where T: C.Item {
         C.from_stream(self)
     }
     /// A list of the items.
