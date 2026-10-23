@@ -1,0 +1,21 @@
+use std.io.print
+use std.fmt.{Fmt, Show}
+
+warp P: Show {
+    n: i32
+    pub fn show(self, mut f: Fmt) {
+        f.put("P(")
+        f.put(.n)
+        f.put(")")
+    }
+}
+
+fn main() {
+    let p = P(n: 3)
+    print("[{p}]")
+    print("[{p:>8}]")
+    print("[{p:<8}]")
+    print("[{p:^8}]")
+    print("[{p:*>8}]")
+    print("[{p:2}]")
+}
