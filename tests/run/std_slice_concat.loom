@@ -3,4 +3,5 @@ use std.io.print
 fn main() {
     let xss: List[[i32]] = [[1, 2], [3]]
     print(xss.concat())
+    print(xss.join([0]))
 }

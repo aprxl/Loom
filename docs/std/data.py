@@ -700,6 +700,7 @@ MODULES = [
        {"sig": "fn windows(self, n: usize) -> Stream[[T]]", "doc": "Views of every run of `n` elements in a row: `[a, b]`, `[b, c]`, … Unravels if `n` is 0."},
        {"sig": "fn starts_with(self, prefix: [T]) -> bool where T: Eq", "doc": "Whether the slice starts with `prefix`."},
        {"sig": "fn concat[U](self) -> List[U] where T: [U]", "doc": "The inner slices, one after another."},
+       {"sig": "fn join[U](self, sep: [U]) -> List[U] where T: [U]", "doc": "The inner slices with `sep` between them."},
        {"sig": "fn ends_with(self, suffix: [T]) -> bool where T: Eq", "doc": "Whether the slice ends with `suffix`."},
        {"sig": "fn count_of(self, x: T) -> usize where T: Eq", "doc": "How many elements equal `x`."},
        {"sig": "fn rotate_left(mut self, n: usize)", "doc": "Moves the elements `n` places towards the start; those pushed out come back at the end. `n` counts modulo the length."},

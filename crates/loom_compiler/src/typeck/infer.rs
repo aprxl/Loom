@@ -94,7 +94,7 @@ impl Checker<'_> {
         self.tcx.intern(kind)
     }
 
-    fn var_of(&self, ty: Ty) -> Option<(u32, VarKind)> {
+    pub(super) fn var_of(&self, ty: Ty) -> Option<(u32, VarKind)> {
         match self.tcx.kind(ty) {
             TyKind::IntVar(v) | TyKind::FloatVar(v) | TyKind::Var(v) => Some((*v, self.vars[*v as usize].kind)),
             _ => None,

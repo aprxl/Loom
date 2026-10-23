@@ -65,6 +65,16 @@ pub warp Slice[T] {
         }
         out
     }
+    /// The inner slices with `sep` between them.
+    pub fn join[U](self, sep: [U]) -> List[U] where T: [U] {
+        let mut out = List()
+        for i in 0..self.len() {
+            if i > 0 { for j in 0..sep.len() { out.push(sep[j]) } }
+            let s = self[i]
+            for j in 0..s.len() { out.push(s[j]) }
+        }
+        out
+    }
     /// Whether the slice ends with `suffix`.
     pub fn ends_with(self, suffix: [T]) -> bool where T: Eq {
         if suffix.len() > self.len() { return false }

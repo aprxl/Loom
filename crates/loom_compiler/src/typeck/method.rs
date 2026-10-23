@@ -17,8 +17,10 @@ use loom_syntax::Diagnostic;
 use loom_syntax::diag::codes;
 use loom_syntax::source::Span;
 
+use super::infer::VarKind;
 use super::warp::{Key, Member};
 use super::{Checker, Instance};
+use crate::hir::DefKind;
 use crate::ty::Ty;
 
 /// How deep `through` fields are followed; deeper chains are surely cycles.
@@ -77,15 +79,25 @@ impl Checker<'_> {
     /// level that has one.
     pub(super) fn methods_of(&mut self, ty: Ty, name: &str, depth: u32) -> Vec<Found> {
         let ty = self.resolve(ty);
+        let mut rejected = None;
         if let Some(def) = self.warp_def(ty)
             && let Some(Member::Method(m)) = self.member(def, name)
         {
             let via = format!("{}.{name}", self.p.def(def).name);
-            return vec![Found { inst: self.member_instance(m, ty), path: Vec::new(), self_ty: ty, via, stream: None }];
+            let found = Found { inst: self.member_instance(m, ty), path: Vec::new(), self_ty: ty, via, stream: None };
+            if self.shape_fits(&found, ty) {
+                return vec![found];
+            }
+            rejected = Some(found);
         }
         // Arrays and lists have the methods of slices, and primitive types
         // the methods std gives them.
-        if let Some(found) = self.slice_method(ty, name).or_else(|| self.prim_method(ty, name)) {
+        match self.slice_method(ty, name) {
+            Some(f) if self.shape_fits(&f, ty) => return vec![f],
+            Some(f) => rejected = Some(f),
+            None => {}
+        }
+        if let Some(found) = self.prim_method(ty, name) {
             return vec![found];
         }
         let woven = self.weave_methods(ty, name, depth);
@@ -105,7 +117,22 @@ impl Checker<'_> {
         if let Some(found) = self.stream_method(ty, name) {
             return vec![found];
         }
-        self.forwarded(ty, name, depth)
+        let forwarded = self.forwarded(ty, name, depth);
+        match rejected {
+            Some(found) if forwarded.is_empty() => vec![found],
+            _ => forwarded,
+        }
+    }
+
+    /// A slice method with a shape bound (`where T: [U]`) is only a candidate when the elements can be slices; otherwise lookup goes on (to `Stream.join`).
+    fn shape_fits(&mut self, f: &Found, ty: Ty) -> bool {
+        let DefKind::Fn(fd) = &self.p.def(f.inst.def).kind else { return true };
+        if self.shape_bounds(fd).is_empty() {
+            return true;
+        }
+        let Some(seq) = self.seq(ty) else { return true };
+        let elem = self.resolve(seq.elem());
+        matches!(self.var_of(elem), Some((_, VarKind::Type))) || self.seq(elem).is_some()
     }
 
     /// Rule 4: the methods `name` of `ty`'s `through` fields.
