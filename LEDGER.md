@@ -26,7 +26,8 @@ Done (both backends; `tests/run/spool_pool`, `spool_pool_full`, `spool_shared`, 
 
 ## V6 slice 3: given in general (2026-10-21)
 
-Done (both backends; `tests/run/given_values`, docs sample `own_given`): `given name = value` for any weft's type, `#given_default(Type)` on a weft (the call makes the default with the type's `default`), the gate that an unused `given` costs 0 dispatches (`bench_counts.rs`, `given_plain` and `given_unused`). Not done: inferring the `given`s of private functions (the design's rule; today every function spells them, which is the honest `pub` rule applied everywhere), `loom(given: pool)` and a `Pool` for threads (it would also clash by name with the planned `Pool[T]` spool), `yield`/`pull` in a `loom` body (done, 6d47848), the ambient `Writer`/`Rng`/`Clock`/`Logger` of std (the mechanism is in; wiring `print` to a `Writer` would put a `given` on the hottest path).
+Done (both backends; `tests/run/given_values`, docs sample `own_given`): `given name = value` for any weft's type, `#given_default(Type)` on a weft (the call makes the default with the type's `default`), the gate that an unused `given` costs 0 dispatches (`bench_counts.rs`, `given_plain` and `given_unused`). Not done: inferring the `given`s of private functions (the design's rule; today every function spells them, which is the honest `pub` rule applied everywhere), `loom(given: pool)` and a `Pool` for threads (it would also clash by name with the planned `Pool[T]` spool), `yield`/`pull` in a `loom` body (done, 6d47848), the ambient `Rng`/`Clock`/`Logger` of std (the mechanism is in).
+Done (2026-10-23): ambient `Writer` for `print` (`Stdout` default, `Buffer`); a `print` with none given compiles as before (`tests/run/given_writer`).
 
 ## V6 slice 2: spools, regions, given spools (2026-10-21)
 

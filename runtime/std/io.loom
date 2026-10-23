@@ -1,8 +1,26 @@
 // Console input and output.
 
+#given_default(Stdout)
+/// Where `print` writes: standard output, unless a `given` says otherwise
+/// (`given out = Buffer()` keeps what is printed).
+pub weft Writer {
+    fn write_str(mut self, s: str)
+}
+
+/// Standard output.
+pub warp Stdout: Writer, Default {
+    pub fn write_str(mut self, s: str) = write_out(s)
+}
+
+/// Keeps what is written to it, in `text`.
+pub warp Buffer: Writer, Default {
+    pub text: String = ""
+    pub fn write_str(mut self, s: str) = .text.push_str(s)
+}
+
 extern "lua" {
     /// Writes `x` and a newline to standard output.
-    pub fn print(x: any Show)
+    pub fn print(x: any Show) given out: Writer
     /// Standard output, as is: no newline.
     pub fn write_out(text: str)
     /// Standard error, as is: no newline.

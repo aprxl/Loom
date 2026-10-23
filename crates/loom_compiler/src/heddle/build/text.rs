@@ -58,12 +58,49 @@ impl<'a> Builder<'a> {
         self.sink(MSG)
     }
 
+    /// `print` with a `Writer` in scope: the line is made whole, then the
+    /// writer's `write_str` is called with it, on the writer in scope.
+    fn print_via_writer(&mut self, writer: BodyId, info: &Call, pieces: Vec<Piece<'a>>, span: Span) -> Option<Val> {
+        let string = self.string_ty()?;
+        let buf = self.new_sink();
+        self.write_pieces(buf, pieces)?;
+        self.write_text(buf, "\n");
+        let dst = self.temp(string, span)?;
+        self.emit(InstKind::Native { name: "sink.string", imm: 0, args: vec![buf.0, dst] }, &[]);
+        self.own_temp(dst, string);
+        let (p, n) = self.text_of(Val::Mem(dst), string, span)?;
+        let ambient = info.args.iter().find_map(|s| match s {
+            ArgSource::Ambient(l) => Some(*l),
+            _ => None,
+        })?;
+        let place = self.local_place(ambient, span)?;
+        let sig = self.typed.results.sigs.get(&writer)?.clone();
+        let abi = self.body_abi(writer, span)?;
+        let func = self.func_id(super::FnKey::Body(writer));
+        let modes: Vec<_> = sig.params.iter().map(|p| p.mode).collect();
+        let (str_ty, unit) = (self.tcx().str, self.tcx().unit);
+        let args =
+            vec![Some(super::call::Arg::Place(place)), Some(super::call::Arg::Val(Val::Regs(vec![p, n]), str_ty))];
+        self.emit_call(func, &abi, args, unit, &modes, span, unit)?;
+        Some(Val::Regs(Vec::new()))
+    }
+
     /// A call of an `extern "lua"` function of std.
-    pub(super) fn extern_call(&mut self, def: DefId, info: &Call, args: &'a [hir::Arg], span: Span) -> Option<Val> {
+    pub(super) fn extern_call(
+        &mut self,
+        def: DefId,
+        info: &Call,
+        args: &'a [hir::Arg],
+        span: Span,
+        writer: Option<BodyId>,
+    ) -> Option<Val> {
         let path = self.p.def_path(def);
         match path.as_str() {
             "std.io.print" => {
                 let pieces = self.param_pieces(def, info, args, 0, span)?;
+                if let Some(writer) = writer {
+                    return self.print_via_writer(writer, info, pieces, span);
+                }
                 let out = self.sink(OUT);
                 // With threads, a piece's `show` may park, and the line
                 // would be torn by what the others print: the line is made

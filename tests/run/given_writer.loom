@@ -1,0 +1,17 @@
+use std.io.{print, write_out, Buffer, Stdout, Writer}
+
+fn report(n: i32) given out: Writer {
+    print("n = {n}")
+}
+
+fn main() {
+    print("before")
+    given out = Buffer()
+    print("captured {1 + 1}")
+    report(5)
+    {
+        given direct = Stdout()
+        print("direct")
+    }
+    write_out("buffer: {out.text.len()}\n")
+}

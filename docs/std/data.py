@@ -213,8 +213,23 @@ MODULES = [
 {
   "name": "io",
   "summary": "Console input and output.",
+  "types": [
+    {"kind": "weft", "name": "Writer", "doc": "Where `print` writes: standard output, unless a `given` says otherwise (`given out = Buffer()` keeps what is printed).",
+     "methods": [
+       {"sig": "fn write_str(mut self, s: str)", "doc": None},
+     ]},
+    {"kind": "warp", "name": "Stdout", "suffix": ": Writer, Default", "doc": "Standard output.",
+     "methods": [
+       {"sig": "fn write_str(mut self, s: str)", "doc": None},
+     ]},
+    {"kind": "warp", "name": "Buffer", "suffix": ": Writer, Default", "doc": "Keeps what is written to it, in `text`.",
+     "fields": ["pub text: String = \"\""],
+     "methods": [
+       {"sig": "fn write_str(mut self, s: str)", "doc": None},
+     ]},
+  ],
   "functions": [
-    {"name": "print", "suffix": "(x: any Show)", "extern": True, "doc": "Writes `x` and a newline to standard output."},
+    {"name": "print", "suffix": "(x: any Show) given out: Writer", "extern": True, "doc": "Writes `x` and a newline to standard output."},
     {"name": "write_out", "suffix": "(text: str)", "extern": True, "doc": "Standard output, as is: no newline."},
     {"name": "write_err", "suffix": "(text: str)", "extern": True, "doc": "Standard error, as is: no newline."},
     {"name": "read_line", "suffix": "() -> ?String", "extern": True, "doc": "The next line of standard input, without its line ending; `none` once the input has ended."},

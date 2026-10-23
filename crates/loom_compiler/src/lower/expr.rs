@@ -938,7 +938,7 @@ impl Lowerer<'_> {
         // The runtime's generic methods (`List[T].push`) get the descriptor
         // of each type argument first.
         let mut descs = Vec::new();
-        if runtime {
+        if runtime && !(p.def(def).name == "print" && p.def_path(def) == "std.io.print") {
             let targs = self.typed.results.instance(info.callee).args.clone();
             for t in targs {
                 if !matches!(self.tcx().kind(t), crate::ty::TyKind::Region(_)) {
@@ -1043,6 +1043,7 @@ impl Lowerer<'_> {
             | ArgSource::Receiver
             | ArgSource::Ambient(_)
             | ArgSource::Heap
+            | ArgSource::Absent
             | ArgSource::GivenDefault(_) => None,
         });
         if !in_order.clone().is_sorted() {
@@ -1061,6 +1062,7 @@ impl Lowerer<'_> {
                 ArgSource::Receiver => params.push(receiver.clone().unwrap_or(Expr::Nil)),
                 ArgSource::Ambient(l) => params.push(Expr::Name(self.local_name(*l))),
                 ArgSource::Heap => params.push(Expr::Nil),
+                ArgSource::Absent => {}
                 ArgSource::GivenDefault(id) => {
                     let target = Expr::field(Expr::name("F"), &self.fn_name(*id));
                     params.push(Expr::call(target, Vec::new()));
@@ -1099,6 +1101,27 @@ impl Lowerer<'_> {
                 }
                 _ => {}
             }
+        }
+        // `print` with a `Writer` in scope: the writer's `write_str`, given
+        // the line `print` would write (`rt.show` of the value, and a
+        // newline), and the writer in scope. The value is taken once.
+        if let Some(&writer) = self.tables().print_writers.get(&call.id)
+            && let [text, place] = descs.as_slice()
+        {
+            let value = Expr::name("value");
+            let shown = Expr::call(
+                Expr::field(Expr::name("rt"), "show"),
+                vec![
+                    Expr::field(Expr::index(value.clone(), Expr::Int(2)), "d"),
+                    Expr::index(value.clone(), Expr::Int(1)),
+                    Expr::Bool(false),
+                ],
+            );
+            let line = Expr::bin("..", shown, Expr::Str(b"\n".to_vec()));
+            let write = Expr::field(Expr::name("F"), &self.fn_name(writer));
+            let body =
+                vec![Stmt { kind: StmtKind::Return(Some(Expr::call(write, vec![place.clone(), line]))), span: None }];
+            return Expr::call(Expr::Function(vec!["value".to_string()], body), vec![text.clone()]);
         }
         let call_expr = Expr::call(target, descs);
 

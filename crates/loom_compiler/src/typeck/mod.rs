@@ -218,6 +218,8 @@ pub struct Body {
     pub coerced: HashMap<HirId, Ty>,
     /// For each call: which argument (or default) feeds each parameter.
     pub calls: HashMap<HirId, Call>,
+    /// For a `print` whose `given` is in scope: the `write_str` it calls.
+    pub print_writers: HashMap<HirId, BodyId>,
     /// Expressions that build a warp value: constructor calls, `Shape.Dot`,
     /// `.Circle(r)`.
     pub constructs: HashMap<HirId, Construct>,
@@ -407,6 +409,9 @@ pub enum ArgSource {
     Ambient(LocalId),
     /// A `given` spool the call leaves to the heap.
     Heap,
+    /// A `given` nothing reads: `print`'s `Writer` when none is in scope (the
+    /// backends write to standard output directly).
+    Absent,
     /// A `given` nothing in scope gives, which its weft's `#given_default`
     /// makes: the `default` of that type, called here.
     GivenDefault(BodyId),

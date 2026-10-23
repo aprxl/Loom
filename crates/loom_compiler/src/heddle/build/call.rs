@@ -55,7 +55,8 @@ impl<'a> Builder<'a> {
         let def = self.typed.results.instance(info.callee).def;
         let DefKind::Fn(f) = &p.def(def).kind else { return self.unsupported(span, "this call") };
         if f.abi.is_some() {
-            return self.extern_call(def, &info, args, span);
+            let writer = self.tables().print_writers.get(&e.id).copied();
+            return self.extern_call(def, &info, args, span, writer);
         }
         // A stream made by adaptors and used up here: one loop (see
         // `fuse.rs`).
@@ -122,7 +123,9 @@ impl<'a> Builder<'a> {
                     let place = self.local_place(*l, span)?;
                     Some(Arg::Val(self.read_place(&place, ty, span)?, ty))
                 }
-                ArgSource::Heap => Some(Arg::Val(Val::Regs(Vec::new()), self.plain_ty(sig.params[k].ty))),
+                ArgSource::Heap | ArgSource::Absent => {
+                    Some(Arg::Val(Val::Regs(Vec::new()), self.plain_ty(sig.params[k].ty)))
+                }
                 // The weft's default type, made here.
                 ArgSource::GivenDefault(id) => {
                     let dsig = self.typed.results.sigs.get(id)?.clone();

@@ -271,9 +271,21 @@ impl Checker<'_> {
             }
             None => None,
         };
-        let Some(mut sources) = self.match_args(&name, params, args, call.span) else { return sig.ret };
+        let absent = self.p.def(def).name == "print" && self.p.def_path(def) == "std.io.print";
+        let Some(mut sources) = self.match_args(&name, params, args, call.span, absent) else { return sig.ret };
         if receiver.is_some() {
             sources.insert(0, ArgSource::Receiver);
+        }
+        // `print` writes where its `given` says: the writer's `write_str`.
+        if self.p.def(def).name == "print"
+            && self.p.def_path(def) == "std.io.print"
+            && let Some(writer) = sig.params.iter().find_map(|p| p.given)
+            && sources.iter().any(|s| matches!(s, ArgSource::Ambient(_)))
+            && let Some((_, ty)) = self.ambient(writer)
+            && let Lookup::One(found) = self.find_method(ty, "write_str", call.span)
+        {
+            let id = self.instance(found.inst);
+            self.b.print_writers.insert(call.id, id);
         }
         self.b.calls.insert(call.id, Call { callee, args: sources, receiver, through: Vec::new(), dynamic });
         if let Some(pending) = pending {
@@ -314,7 +326,14 @@ impl Checker<'_> {
 
     /// Matches arguments to parameters, positional first, then by name, and
     /// checks each. `None` if the call can't be made (already reported).
-    fn match_args(&mut self, name: &str, params: &[SigParam], args: &[Arg], span: Span) -> Option<Vec<ArgSource>> {
+    fn match_args(
+        &mut self,
+        name: &str,
+        params: &[SigParam],
+        args: &[Arg],
+        span: Span,
+        absent: bool,
+    ) -> Option<Vec<ArgSource>> {
         let mut slots: Vec<Option<usize>> = vec![None; params.len()];
         let mut ok = true;
         let mut next_positional = 0;
@@ -415,6 +434,7 @@ impl Checker<'_> {
                     match self.ambient(weft) {
                         Some((local, _)) => sources.push(ArgSource::Ambient(local)),
                         None if Some(weft) == self.std.spool => sources.push(ArgSource::Heap),
+                        None if absent => sources.push(ArgSource::Absent),
                         None if let Some(ty) = self.given_default(weft)
                             && let Some(id) = self.default_instance(ty) =>
                         {

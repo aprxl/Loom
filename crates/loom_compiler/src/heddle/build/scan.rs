@@ -339,6 +339,12 @@ impl Scanner<'_, '_> {
                 ExprKind::Index { base, .. } => base.as_ref(),
                 _ => callee,
             };
+            // A `print` into a writer passes the writer's place to `write_str`.
+            if tables.print_writers.contains_key(&e.id)
+                && let Some(ArgSource::Ambient(l)) = info.args.iter().find(|s| matches!(s, ArgSource::Ambient(_)))
+            {
+                self.scan.in_memory.insert(*l);
+            }
             for (k, source) in info.args.iter().enumerate() {
                 if sig.params.get(k).map(|p| p.mode) != Some(ParamMode::Mut) {
                     continue;
@@ -352,7 +358,11 @@ impl Scanner<'_, '_> {
                         }
                         _ => {}
                     },
-                    ArgSource::Default | ArgSource::Ambient(_) | ArgSource::Heap | ArgSource::GivenDefault(_) => {}
+                    ArgSource::Default
+                    | ArgSource::Ambient(_)
+                    | ArgSource::Heap
+                    | ArgSource::Absent
+                    | ArgSource::GivenDefault(_) => {}
                 }
             }
         }
