@@ -25,6 +25,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use super::opt::term_uses;
 use super::{BitOp, Block, BlockId, Cmp, Edge, Func, Inst, InstKind, Mem, Term, VTy, Value};
 
 /// The state of a shuttle that has finished.
@@ -541,7 +542,7 @@ fn value_liveness(f: &Func) -> Vec<Bits> {
             for u in term_uses(t) {
                 uses(u, &defs[b], &mut ue[b]);
             }
-            succs[b] = t.edges().iter().map(|e| e.block.0 as usize).collect();
+            succs[b] = t.edges().map(|e| e.block.0 as usize).collect();
         }
     }
     let mut live_in = ue.clone();
@@ -564,20 +565,6 @@ fn value_liveness(f: &Func) -> Vec<Bits> {
         }
     }
     live_in
-}
-
-/// What a terminator reads, its edges' arguments included.
-fn term_uses(t: &Term) -> Vec<Value> {
-    let mut out = match t {
-        Term::Br { cond, .. } => vec![*cond],
-        Term::Ret(vs) => vs.clone(),
-        Term::Unravel { ptr, len } => vec![*ptr, *len],
-        _ => Vec::new(),
-    };
-    for e in t.edges() {
-        out.extend(&e.args);
-    }
-    out
 }
 
 struct SlotLiveness {
@@ -662,7 +649,7 @@ fn slot_liveness(f: &Func) -> SlotLiveness {
             for u in term_uses(t) {
                 use_slots(u, &kill[b], &mut ue[b], &mut seen[b]);
             }
-            succs[b] = t.edges().iter().map(|e| e.block.0 as usize).collect();
+            succs[b] = t.edges().map(|e| e.block.0 as usize).collect();
         }
         succs[b].extend(block.pads().iter().map(|p| p.0 as usize));
     }
@@ -763,7 +750,7 @@ fn update_ssa(f: &mut Func, defs: &HashMap<Value, HashMap<usize, Value>>) -> Res
                 let reads: Vec<Value> = if i < n_insts {
                     super::inst_uses(&f.blocks[b].insts[i].kind).collect()
                 } else {
-                    f.blocks[b].term.as_ref().map(term_uses).unwrap_or_default()
+                    f.blocks[b].term.as_ref().map(|t| term_uses(t).collect()).unwrap_or_default()
                 };
                 if !reads.contains(&v) {
                     continue;

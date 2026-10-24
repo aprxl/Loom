@@ -105,10 +105,9 @@ impl Sccp<'_> {
                 Lat::Const(c) => (if c != 0 { 0 } else { 1 }, 1),
                 Lat::Bottom => (0, 2),
             },
-            t => (0, t.edges().len()),
+            t => (0, t.edges().count()),
         };
-        let edges = term.edges();
-        for (k, e) in edges.into_iter().enumerate().skip(first).take(count) {
+        for (k, e) in term.edges().enumerate().skip(first).take(count) {
             let t = e.block.0 as usize;
             self.edges.insert((b, k));
             for (&p, &a) in f.blocks[t].params.iter().zip(&e.args) {

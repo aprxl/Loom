@@ -155,7 +155,7 @@ impl Cx<'_> {
         }
         let Some(pi) = f.blocks[h].params.iter().position(|&x| x == p) else { return Vec::new() };
         let enters = |from: usize| -> Option<Value> {
-            f.blocks[from].term.as_ref()?.edges().into_iter().find(|e| e.block.0 as usize == h).map(|e| e.args[pi])
+            f.blocks[from].term.as_ref()?.edges().find(|e| e.block.0 as usize == h).map(|e| e.args[pi])
         };
         let (Some(first), Some(next)) = (enters(pre), enters(latch)) else { return Vec::new() };
         if self.constant(first) != Some(0) {

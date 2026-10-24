@@ -359,7 +359,7 @@ impl Ranges<'_> {
                     let mut joined: Option<Iv> = None;
                     for &q in self.cfg.preds[b].iter().filter(|&&q| self.cfg.reached(q)) {
                         let Some(t) = &self.f.blocks[q].term else { continue };
-                        for e in t.edges().into_iter().filter(|e| e.block.0 as usize == b) {
+                        for e in t.edges().filter(|e| e.block.0 as usize == b) {
                             let a = e.args[n];
                             if self.consts[a.0 as usize].is_none() && self.iv[a.0 as usize].is_none() {
                                 continue;
@@ -418,7 +418,7 @@ impl Ranges<'_> {
                     let mut joined: Option<Iv> = None;
                     for &q in self.cfg.preds[b].iter().filter(|&&q| self.cfg.reached(q)) {
                         let Some(t) = &self.f.blocks[q].term else { continue };
-                        for e in t.edges().into_iter().filter(|e| e.block.0 as usize == b) {
+                        for e in t.edges().filter(|e| e.block.0 as usize == b) {
                             let a = e.args[n];
                             if self.consts[a.0 as usize].is_none() && self.iv[a.0 as usize].is_none() {
                                 continue;

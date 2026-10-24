@@ -522,7 +522,7 @@ fn slot_uses(f: &Func, big: &[bool]) -> (FxHashMap<Value, usize>, FxHashSet<Valu
 }
 
 fn succs(f: &Func, b: usize) -> Vec<usize> {
-    f.blocks[b].term.as_ref().map(|t| t.edges().iter().map(|e| e.block.0 as usize).collect()).unwrap_or_default()
+    f.blocks[b].term.as_ref().map(|t| t.edges().map(|e| e.block.0 as usize).collect()).unwrap_or_default()
 }
 
 /// `f` with the constants made inside loops (numbers, text and data

@@ -172,17 +172,14 @@ fn is_stub(f: &Func) -> bool {
 }
 
 /// The values a terminator reads, its edges' arguments included.
-pub(crate) fn term_uses(t: &Term) -> Vec<Value> {
-    let mut out = match t {
-        Term::Br { cond, .. } => vec![*cond],
-        Term::Ret(vs) => vs.clone(),
-        Term::Unravel { ptr, len } => vec![*ptr, *len],
-        Term::Jump(_) | Term::UnravelMsg | Term::Crash(_) | Term::Resume | Term::Suspend { .. } => Vec::new(),
+pub(crate) fn term_uses(t: &Term) -> impl Iterator<Item = Value> + '_ {
+    let (fixed, list): ([Option<Value>; 2], &[Value]) = match t {
+        Term::Br { cond, .. } => ([Some(*cond), None], &[]),
+        Term::Ret(vs) => ([None, None], vs),
+        Term::Unravel { ptr, len } => ([Some(*ptr), Some(*len)], &[]),
+        Term::Jump(_) | Term::UnravelMsg | Term::Crash(_) | Term::Resume | Term::Suspend { .. } => ([None, None], &[]),
     };
-    for e in t.edges() {
-        out.extend(&e.args);
-    }
-    out
+    fixed.into_iter().flatten().chain(list.iter().copied()).chain(t.edges().flat_map(|e| e.args.iter().copied()))
 }
 
 /// Replaces every value `t` reads (its edges' arguments included) with

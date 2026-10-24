@@ -285,7 +285,6 @@ fn carry_last(f: &mut Func) {
         // (parameter, the value passed for it) on this block's edges.
         let pairs: Vec<(Value, Value)> = term
             .edges()
-            .iter()
             .flat_map(|e| f.blocks[e.block.0 as usize].params.iter().copied().zip(e.args.iter().copied()))
             .filter(|(p, a)| p != a)
             .collect();

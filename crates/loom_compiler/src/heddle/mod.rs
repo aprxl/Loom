@@ -407,13 +407,14 @@ pub enum Term {
 }
 
 impl Term {
-    pub fn edges(&self) -> Vec<&Edge> {
-        match self {
-            Term::Jump(e) => vec![e],
-            Term::Br { then, else_, .. } => vec![then, else_],
-            Term::Suspend { resume, close, .. } => vec![resume, close],
-            _ => Vec::new(),
-        }
+    pub fn edges(&self) -> impl Iterator<Item = &Edge> + Clone {
+        let (a, b) = match self {
+            Term::Jump(e) => (Some(e), None),
+            Term::Br { then, else_, .. } => (Some(then), Some(else_)),
+            Term::Suspend { resume, close, .. } => (Some(resume), Some(close)),
+            _ => (None, None),
+        };
+        a.into_iter().chain(b)
     }
 
     pub fn edges_mut(&mut self) -> Vec<&mut Edge> {

@@ -311,11 +311,8 @@ fn dominators(f: &Func, preds: &[Vec<usize>]) -> Vec<Option<usize>> {
     let mut stack = vec![(0usize, 0usize)];
     seen[0] = true;
     while let Some((b, next)) = stack.pop() {
-        let succs: Vec<usize> = f.blocks[b]
-            .term
-            .as_ref()
-            .map(|t| t.edges().iter().map(|e| e.block.0 as usize).collect())
-            .unwrap_or_default();
+        let succs: Vec<usize> =
+            f.blocks[b].term.as_ref().map(|t| t.edges().map(|e| e.block.0 as usize).collect()).unwrap_or_default();
         if next < succs.len() {
             stack.push((b, next + 1));
             let s = succs[next];
