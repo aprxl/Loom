@@ -43,6 +43,7 @@ use loom_isa::word::{cast_spec, word, word_i32};
 use loom_isa::{Func as IsaFunc, Image, IntSpec, LINK_SLOTS, Line, NO_SITE, Op, Site as IsaSite};
 use loom_syntax::source::{SourceDb, Span};
 
+use crate::heddle::opt::term_uses;
 use crate::heddle::{BitOp, Cmp, Edge, FOp, Func, InstKind, IntOp, Mem, Module, Policy, Term, Value, inst_uses};
 use crate::ty::{FloatTy, IntTy};
 
@@ -636,20 +637,6 @@ fn in_loops(f: &Func) -> Vec<bool> {
         }
     }
     (0..n).map(|b| size[comp[b]] > 1 || next[b].contains(&b)).collect()
-}
-
-/// The values read by an instruction, a terminator, and its edges.
-fn term_uses(t: &Term) -> Vec<Value> {
-    let mut out = match t {
-        Term::Br { cond, .. } => vec![*cond],
-        Term::Ret(vs) => vs.clone(),
-        Term::Unravel { ptr, len } => vec![*ptr, *len],
-        _ => Vec::new(),
-    };
-    for e in t.edges() {
-        out.extend(&e.args);
-    }
-    out
 }
 
 /// Comparisons that become part of their block's branch.

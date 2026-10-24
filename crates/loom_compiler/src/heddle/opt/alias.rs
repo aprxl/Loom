@@ -63,16 +63,21 @@ impl Alias {
     pub fn new(f: &Func) -> Alias {
         let mut kind: Vec<Option<InstKind>> = vec![None; f.types.len()];
         for inst in f.blocks.iter().flat_map(|b| &b.insts) {
-            if let [r] = inst.results.as_slice() {
+            if let [r] = inst.results.as_slice()
+                && (matches!(
+                    inst.kind,
+                    InstKind::Offset { .. }
+                        | InstKind::Slot(_)
+                        | InstKind::Global(_)
+                        | InstKind::Elem { .. }
+                        | InstKind::Index { .. }
+                        | InstKind::Load { .. }
+                ) || allocates(&inst.kind))
+            {
                 kind[r.0 as usize] = Some(inst.kind.clone());
             }
         }
         let mut alias = Alias { kind, escapes: vec![false; f.slots.len()], leaked: vec![false; f.slots.len()] };
-        let escape = |alias: &mut Alias, v: Value| {
-            if let (Root::Slot(n), _) = alias.root(v) {
-                alias.escapes[n as usize] = true;
-            }
-        };
         // Only what the entry reaches: once a landing pad runs, the code
         // that runs normally never does again, so what a pad does with a
         // slot's address (pass it to a drop) can't change what it reads.
@@ -86,7 +91,16 @@ impl Alias {
         for b in f.blocks.iter().zip(&reached).filter(|(_, r)| **r).map(|(b, _)| b) {
             for inst in &b.insts {
                 use InstKind as K;
-                let escaping: Vec<Value> = match &inst.kind {
+                let passed: &[Value] = match &inst.kind {
+                    K::Call { args, .. } => args,
+                    K::Native { name, args, .. }
+                        if super::gvn::QUIET_NATIVES.contains(name) || super::gvn::PURE_NATIVES.contains(name) =>
+                    {
+                        args
+                    }
+                    _ => &[],
+                };
+                match &inst.kind {
                     // Addresses read or written through, and addresses
                     // derived from (followed by `root`).
                     K::Load { .. }
@@ -96,37 +110,17 @@ impl Alias {
                     | K::Elem { .. }
                     | K::Offset { .. }
                     | K::Index { .. }
-                    | K::Bounds { .. } => Vec::new(),
-                    K::Store { val, .. } => vec![*val],
+                    | K::Bounds { .. } => {}
+                    K::Store { val, .. } => escape_all(&mut alias, std::slice::from_ref(val).iter().copied(), passed),
                     // Writes the header it's given (words 0 and 2) and
                     // keeps no address: the header doesn't escape.
-                    K::Native { name: "mem.grow", args, .. } => args[1..].to_vec(),
-                    other => crate::heddle::inst_uses(other).collect(),
-                };
-                let passed = match &inst.kind {
-                    K::Call { args, .. } => args.clone(),
-                    K::Native { name, args, .. }
-                        if super::gvn::QUIET_NATIVES.contains(name) || super::gvn::PURE_NATIVES.contains(name) =>
-                    {
-                        args.clone()
+                    K::Native { name: "mem.grow", args, .. } => {
+                        escape_all(&mut alias, args[1..].iter().copied(), passed)
                     }
-                    _ => Vec::new(),
-                };
-                for v in escaping {
-                    escape(&mut alias, v);
-                    if !passed.contains(&v)
-                        && let (Root::Slot(n), _) = alias.root(v)
-                    {
-                        alias.leaked[n as usize] = true;
-                    }
+                    other => escape_all(&mut alias, crate::heddle::inst_uses(other), passed),
                 }
             }
-            for v in b.term.iter().flat_map(super::term_uses) {
-                escape(&mut alias, v);
-                if let (Root::Slot(n), _) = alias.root(v) {
-                    alias.leaked[n as usize] = true;
-                }
-            }
+            escape_all(&mut alias, b.term.iter().flat_map(super::term_uses), &[]);
         }
         alias
     }
@@ -189,6 +183,20 @@ impl Alias {
                 o >= start && o.wrapping_add(size as i64) <= start.wrapping_add(24)
             }
             _ => false,
+        }
+    }
+}
+
+/// Notes that each of `values` escapes (its slot's address does), and leaks
+/// too, unless `passed` holds it: a call or a quiet native passes it on only
+/// to what it can't keep.
+fn escape_all(alias: &mut Alias, values: impl Iterator<Item = Value>, passed: &[Value]) {
+    for v in values {
+        if let (Root::Slot(n), _) = alias.root(v) {
+            alias.escapes[n as usize] = true;
+            if !passed.contains(&v) {
+                alias.leaked[n as usize] = true;
+            }
         }
     }
 }
