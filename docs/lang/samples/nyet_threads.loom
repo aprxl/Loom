@@ -1,9 +1,0 @@
-fn main() {
-    // A loom on a pool of its own: not yet. (A loom runs its threads one
-    // at a time.)
-    let pool = 4
-    loom(given: pool) {
-        ()
-    }
-}
-//@ check-fail U0102

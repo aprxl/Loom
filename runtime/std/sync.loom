@@ -72,3 +72,10 @@ pub warp Pipe[T] {
     /// does nothing.
     pub fn close(self)
 }
+
+/// How many workers may run a `loom`'s threads at once:
+/// `loom(given: Crew(workers: 2)) { … }`. A thread that waits holds no
+/// worker. Unravels at the `loom` if `workers` is 0.
+pub warp Crew {
+    pub workers: usize
+}

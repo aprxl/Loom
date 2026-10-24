@@ -1225,7 +1225,28 @@ impl Lowerer<'_> {
                 let body = self.nested(|this| this.block_into(block, dest));
                 self.push(StmtKind::Do(body));
             }
-            ExprKind::Loom { body, .. } => self.loom_block(body, dest),
+            ExprKind::Loom { args, body, .. } => {
+                // `loom(given: Crew(workers: n))`: a crew with no workers is
+                // refused here. Any other crew runs as a plain loom, since Lua
+                // runs one thread at a time.
+                if let Some(arg) = args.first() {
+                    let crew = self.lower_owned(&arg.value);
+                    let name = self.new_temp();
+                    self.push(StmtKind::Local(vec![name.clone()], vec![crew]));
+                    let none = Expr::bin("==", Expr::field(Expr::name(name), "workers"), Expr::Int(0));
+                    let message = Expr::bin(
+                        "..",
+                        Expr::field(Expr::name("rt"), "MARK"),
+                        Expr::Str(b"a crew needs at least one worker".to_vec()),
+                    );
+                    let raise = Stmt {
+                        kind: StmtKind::Call(Expr::call(Expr::name("error"), vec![message, Expr::Int(2)])),
+                        span: None,
+                    };
+                    self.push(StmtKind::If(vec![(none, vec![raise])], None));
+                }
+                self.loom_block(body, dest);
+            }
             // `const if`: only the branch taken.
             ExprKind::If { then, else_, deferred: Some(_), .. } => {
                 match (self.tables().const_ifs.get(&e.id).copied(), else_) {

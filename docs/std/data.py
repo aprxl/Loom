@@ -858,6 +858,7 @@ MODULES = [
        {"sig": "fn recv(self) -> ?T", "doc": "Takes the oldest item, waiting while the pipe is empty. `none` once it's closed and there's nothing left."},
        {"sig": "fn close(self)", "doc": "Closes the pipe: what's in it can still be received, nothing more can be sent, and the threads that wait on it wake. Closing it again does nothing."},
      ]},
+    {"kind": "warp", "name": "Crew", "doc": "How many workers may run a `loom`'s threads at once: `loom(given: Crew(workers: 2)) { … }`. A thread that waits holds no worker. Unravels at the `loom` if `workers` is 0.", "fields": ["pub workers: usize"]},
   ],
   "functions": [
     {"name": "sched_yield", "suffix": "()", "extern": True, "doc": "Lets the other threads that can run go first: the running thread goes to the back of the queue."},

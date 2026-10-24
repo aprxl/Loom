@@ -19,9 +19,27 @@ use loom_syntax::source::Span;
 
 impl Checker<'_> {
     pub(super) fn check_loom(&mut self, args: &[Arg], body: &Block, expected: Option<Ty>) -> Ty {
-        if let Some(arg) = args.first() {
-            self.check_block(body, expected);
-            return self.unsupported(arg.span, "`loom(given: …)`");
+        match args {
+            [] => {}
+            [arg]
+                if arg.is_given
+                    && let Some(def) = self.std.crew =>
+            {
+                let crew = self.tcx.intern(TyKind::Adt(def, Vec::new()));
+                self.check_coerce(&arg.value, crew);
+            }
+            _ => {
+                let span = args.first().map_or(body.span, |a| a.span);
+                self.error(
+                    codes::T0104,
+                    span,
+                    "a `loom` takes one `given` crew",
+                    "write `loom(given: Crew(workers: 2))`",
+                );
+                self.check_args_alone(args);
+                self.check_block(body, expected);
+                return self.tcx.error;
+            }
         }
         self.looms += 1;
         let ty = self.check_block(body, expected);

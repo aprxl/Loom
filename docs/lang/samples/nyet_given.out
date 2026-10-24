@@ -1,9 +1,0 @@
-error[U0102]: not implemented yet: `loom(given: …)`
-  --> docs/lang/samples/nyet_given.loom:4:10
-  |
-4 |     loom(given: 4) {
-  |          ^^^^^^^^ not supported by this compiler yet
-  |
-  = note: the type checker grows one milestone at a time; see design/lua-backend.md
-
-error: docs/lang/samples/nyet_given.loom failed to type-check (1 error)

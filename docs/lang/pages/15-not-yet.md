@@ -11,15 +11,11 @@ These are planned next, in this order: the rest of threads, then the rest of `gi
 
 ### Threads
 
-[Threads](page:threads) run, one at a time: `loom { }`, `thread`, `.join()` and `sched_yield()`. Not yet: several worker threads at once, `loom(given: pool)`.
-
-@sample nyet_threads
+[Threads](page:threads) run, one at a time: `loom { }`, `thread`, `.join()` and `sched_yield()`. Not yet: several worker threads at once.
 
 ### More of `given`
 
-`given` runs (see [Moves](page:ownership)). Not yet: a thread pool to give a `loom`, and leaving a private function's `given`s to be inferred from what it calls:
-
-@sample nyet_given
+`given` runs (see [Moves](page:ownership)). Not yet: leaving a private function's `given`s to be inferred from what it calls.
 
 ## Compile-time code
 

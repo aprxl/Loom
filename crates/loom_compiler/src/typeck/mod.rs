@@ -562,6 +562,7 @@ struct Std {
     default: Option<DefId>,
     mutex: Option<DefId>,
     pipe: Option<DefId>,
+    crew: Option<DefId>,
 }
 
 /// Where the enclosing loop's `break`s go.
@@ -725,6 +726,7 @@ impl<'p> Checker<'p> {
             default: find("std.default", "Default"),
             mutex: find("std.sync", "Mutex"),
             pipe: find("std.sync", "Pipe"),
+            crew: find("std.sync", "Crew"),
         };
         Checker {
             p,

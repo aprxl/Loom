@@ -196,6 +196,7 @@ pub const NATIVES: &[NativeSig] = &[
     // result nobody took that needs dropping, then (0, 0).
     // `loom.free(group, mode)` ends the group and raises its failure.
     sig("loom.new", 0, 1, NativeImm::None),
+    sig("loom.crew", 1, 1, NativeImm::None),
     sig("loom.leave", 2, 0, NativeImm::None),
     sig("loom.leftover", 1, 2, NativeImm::None),
     sig("loom.free", 2, 0, NativeImm::None),

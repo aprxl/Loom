@@ -547,6 +547,7 @@ pub(crate) fn resolve_task(name: &str) -> Option<crate::sched::TaskOp> {
         "task.cancelled" => T::Cancelled,
         "task.grain" => T::Grain,
         "loom.new" => T::LoomNew,
+        "loom.crew" => T::LoomCrew,
         "loom.leave" => T::LoomLeave,
         "loom.leftover" => T::LoomLeftover,
         "loom.free" => T::LoomFree,

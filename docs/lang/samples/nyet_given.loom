@@ -1,8 +1,0 @@
-use std.io.print
-
-fn main() {
-    loom(given: 4) {
-        print("done")
-    }
-}
-//@ check-fail U0102

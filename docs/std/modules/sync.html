@@ -169,6 +169,16 @@
 </div>
 </div>
 </div>
+<div class="item" id="Crew">
+<div class="item-head">
+<span class="sig">warp <strong>Crew</strong></span>
+
+</div>
+<p class="item-doc">How many workers may run a <code>loom</code>'s threads at once: <code>loom(given: Crew(workers: 2)) { … }</code>. A thread that waits holds no worker. Unravels at the <code>loom</code> if <code>workers</code> is 0.</p>
+<ul class="fields">
+<li><span class="sig">pub workers: usize</span></li>
+</ul>
+</div>
 <h2>Functions</h2>
 <div class="item" id="sched_yield">
 <div class="item-head">

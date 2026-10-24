@@ -1,0 +1,35 @@
+// A crew caps how many workers run its loom's threads at once: with two
+// workers, no more than two of the eight threads are running together.
+
+use std.io.print
+use std.sync.{Atomic, Crew}
+
+fn main() {
+    let running = Atomic[usize](0)
+    let peak = Atomic[usize](0)
+    loom(given: Crew(workers: 2)) {
+        for _ in 0..8 {
+            thread {
+                let now = running.add(1) + 1
+                loop {
+                    let seen = peak.load()
+                    if now <= seen { break }
+                    if peak.compare_exchange(seen, now).0 { break }
+                }
+                var acc: usize = 0
+                for i in 0..10000 {
+                    acc = (acc + i) % 1000
+                }
+                running.sub(1)
+            }
+        }
+        ()
+    }
+    print(peak.load() <= 2)
+    print(peak.load() >= 1)
+    let joined = loom {
+        let h = thread { 21 * 2 }
+        h.join()
+    }
+    print(joined)
+}

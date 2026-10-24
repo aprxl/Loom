@@ -2053,6 +2053,10 @@ fn task_op<'p>(
             args[0] = sched!(env).loom_new();
             Step::Next
         }
+        TaskOp::LoomCrew => {
+            args[0] = sched!(env).loom_crew(args[0])?;
+            Step::Next
+        }
         TaskOp::LoomLeave => sched!(env).leave(args[0], args[1])?,
         TaskOp::LoomLeftover => {
             let (function, address) = sched!(env).leftover(args[0])?;

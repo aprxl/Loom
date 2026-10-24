@@ -195,6 +195,7 @@ pub(crate) enum TaskOp {
     Join,
     Yield,
     LoomNew,
+    LoomCrew,
     LoomLeave,
     LoomLeftover,
     LoomFree,
@@ -316,6 +317,10 @@ pub(crate) struct Task {
     /// Tasks waiting for this one to finish.
     pub waiters: Vec<usize>,
     pub group: usize,
+    /// Holds one of its group's worker slots (see `pop_ready`).
+    pub on_worker: bool,
+    /// Its group has a crew, so it waits for a free worker slot.
+    pub in_crew: bool,
     /// Where the result is written (the entry function does it), and how
     /// many bytes.
     pub result: u64,
@@ -361,6 +366,8 @@ impl Task {
             waiting_on: None,
             waiters: Vec::new(),
             group: 0,
+            on_worker: false,
+            in_crew: false,
             result: 0,
             result_bytes: 0,
             env: 0,
@@ -388,6 +395,10 @@ pub(crate) struct Group {
     pub failure: Option<Trap>,
     pub epoch: u32,
     live: bool,
+    /// The most workers its tasks may run on at once (0: no crew).
+    pub cap: u32,
+    /// How many of its tasks hold one of those workers.
+    pub active: u32,
 }
 
 #[derive(Debug)]
@@ -420,6 +431,8 @@ pub(crate) struct Sched {
     pub queued: Arc<AtomicUsize>,
     /// Sleeping tasks and when each is due (few, so unordered).
     timers: Vec<(std::time::Instant, usize)>,
+    /// How many live groups have a crew (`cap > 0`).
+    capped: usize,
 }
 
 /// The task of a worker that has none.
@@ -452,6 +465,7 @@ impl Sched {
             pipes: Vec::new(),
             free_pipes: Vec::new(),
             timers: Vec::new(),
+            capped: 0,
             pending: None,
             cancel_seen: Arc::new(AtomicBool::new(false)),
             queued: Arc::new(AtomicUsize::new(0)),
@@ -463,6 +477,7 @@ impl Sched {
         self.tasks.truncate(1);
         self.tasks[0] = Task { live: true, ..Task::empty() };
         self.groups.clear();
+        self.capped = 0;
         self.free_tasks.clear();
         self.free_groups.clear();
         self.current = 0;
@@ -514,11 +529,38 @@ impl Sched {
         std::mem::take(&mut self.tasks[index].out)
     }
 
-    /// The next task that's ready, if there is one.
+    /// The next task that's ready, if there is one. With crews, a task in a
+    /// crew waits until its group has a free worker slot, and the first one
+    /// that has one is taken, with that slot.
     pub fn pop_ready(&mut self) -> Option<usize> {
-        let next = self.ready.pop_front();
+        if self.capped == 0 {
+            let next = self.ready.pop_front();
+            self.queued.store(self.ready.len(), Ordering::Relaxed);
+            return next;
+        }
+        let (groups, tasks) = (&self.groups, &self.tasks);
+        let pos = self
+            .ready
+            .iter()
+            .position(|&t| !tasks[t].in_crew || groups[tasks[t].group].active < groups[tasks[t].group].cap)?;
+        let t = self.ready.remove(pos)?;
         self.queued.store(self.ready.len(), Ordering::Relaxed);
-        next
+        if self.tasks[t].in_crew {
+            let g = self.tasks[t].group;
+            self.groups[g].active += 1;
+            self.tasks[t].on_worker = true;
+        }
+        Some(t)
+    }
+
+    /// A task that stops running on its worker (it parks, sleeps, yields,
+    /// ends or spawns) gives its group's slot back.
+    fn release_slot(&mut self, t: usize) {
+        if self.tasks[t].on_worker {
+            self.tasks[t].on_worker = false;
+            let g = self.tasks[t].group;
+            self.groups[g].active -= 1;
+        }
     }
 
     fn ready_back(&mut self, t: usize) {
@@ -628,6 +670,7 @@ impl Sched {
     /// The running task waits in `list`, at the back.
     fn park_in(&mut self, list: Wait, cancellable: bool) -> Step {
         let cur = self.current;
+        self.release_slot(cur);
         let t = &mut self.tasks[cur];
         t.waiting = true;
         t.waiting_on = Some(list);
@@ -724,6 +767,19 @@ impl Sched {
 
     // ------------------------------------------------------------ operations
 
+    /// `loom(given: Crew(workers: n))`: a new group, whose tasks run on at
+    /// most `workers` workers at once.
+    pub fn loom_crew(&mut self, workers: u64) -> Result<u64, Trap> {
+        if workers == 0 {
+            return Err(Trap::Unravel("a crew needs at least one worker".to_string()));
+        }
+        let h = self.loom_new();
+        let g = self.group_index(h)?;
+        self.groups[g].cap = u32::try_from(workers).unwrap_or(u32::MAX);
+        self.capped += 1;
+        Ok(h)
+    }
+
     pub fn loom_new(&mut self) -> u64 {
         let g = Group { live: true, ..Group::default() };
         match self.free_groups.pop() {
@@ -789,6 +845,9 @@ impl Sched {
     pub fn free(&mut self, heap: &mut Heap, g: u64, mode_: u64) -> Result<(), Trap> {
         let g = self.group_index(g)?;
         let group = std::mem::take(&mut self.groups[g]);
+        if group.cap > 0 {
+            self.capped -= 1;
+        }
         self.groups[g].epoch = group.epoch;
         self.free_groups.push(g);
         for &t in &group.tasks {
@@ -851,6 +910,7 @@ impl Sched {
             return Err(Trap::Cancel);
         }
         self.tasks[cur].cancellable = true;
+        self.release_slot(cur);
         self.ready_back(cur);
         Ok(Step::Park { again: false })
     }
@@ -861,6 +921,7 @@ impl Sched {
         if self.tasks[cur].cancelled {
             return Err(Trap::Cancel);
         }
+        self.release_slot(cur);
         let t = &mut self.tasks[cur];
         t.waiting = true;
         t.waiting_on = Some(Wait::Sleep);
@@ -1085,6 +1146,8 @@ impl Sched {
         let mut task = Task {
             live: true,
             group: g,
+            on_worker: false,
+            in_crew: self.groups[g].cap > 0,
             result,
             result_bytes,
             env,
@@ -1152,7 +1215,9 @@ impl Sched {
         }
         // The spawner waits at the front, and carries on when the new task
         // parks or ends.
-        self.ready_front(self.current);
+        let cur = self.current;
+        self.release_slot(cur);
+        self.ready_front(cur);
         Ok((h, Step::Start(index)))
     }
 
@@ -1170,6 +1235,7 @@ impl Sched {
     /// caller's to drop once it has switched away.
     pub fn finish(&mut self, heap: &mut Heap, trap: Option<Trap>) -> Result<(), Trap> {
         let cur = self.current;
+        self.release_slot(cur);
         let g = self.tasks[cur].group;
         if let Some(source) = self.tasks[cur].wake_from.take() {
             self.wake_resource(source);

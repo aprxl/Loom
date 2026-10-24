@@ -86,11 +86,20 @@ impl<'a> Builder<'a> {
         ty: Ty,
     ) -> Option<Val> {
         let span = e.span;
-        if let Some(arg) = args.first() {
-            return self.unsupported(arg.span, "`loom(given: …)`");
-        }
+        let g = match args.first() {
+            None => self.emit1(InstKind::Native { name: "loom.new", imm: 0, args: Vec::new() }, VTy::Int),
+            Some(arg) => {
+                // `Crew(workers: n)`: its `workers` is the group's cap.
+                let crew_ty = self.ty_of(&arg.value);
+                let crew = self.expr(&arg.value)?;
+                let pos = self.field_pos(crew_ty, None, &crate::typeck::Key::Name("workers".to_string()), span)?;
+                let workers = self.field_of(&crew, &pos, span)?;
+                let usize_ty = self.tcx().usize;
+                let w = self.regs(workers, usize_ty, span)?[0];
+                self.emit1(InstKind::Native { name: "loom.crew", imm: 0, args: vec![w] }, VTy::Int)
+            }
+        };
         let slot = self.raw_slot(8, 8);
-        let g = self.emit1(InstKind::Native { name: "loom.new", imm: 0, args: Vec::new() }, VTy::Int);
         let at = self.slot_addr(slot);
         self.store(Mem::W64, at, 0, g);
         self.f.locals.insert(group, Storage::Slot(slot));
