@@ -52,7 +52,9 @@ struct User {
 struct Sccp<'f> {
     f: &'f Func,
     lat: Vec<Lat>,
-    users: Vec<Vec<User>>,
+    /// Each value's users are `users[starts[v]..starts[v + 1]]`.
+    users: Vec<User>,
+    starts: Vec<u32>,
     run: Vec<bool>,
     edges: FxHashSet<(usize, usize)>,
     blocks: Vec<usize>,
@@ -148,23 +150,41 @@ fn foldable(k: &InstKind) -> bool {
     )
 }
 
-fn sccp_func(f: &mut Func) -> bool {
-    let n = f.types.len();
-    let mut users: Vec<Vec<User>> = vec![Vec::new(); n];
+/// Calls `visit` with each value a block reads and where it reads it, in
+/// block order.
+fn for_each_use(f: &Func, mut visit: impl FnMut(Value, User)) {
     for (b, block) in f.blocks.iter().enumerate() {
         for (i, inst) in block.insts.iter().enumerate() {
             for u in crate::heddle::inst_uses(&inst.kind) {
-                users[u.0 as usize].push(User { block: b, inst: Some(i) });
+                visit(u, User { block: b, inst: Some(i) });
             }
         }
         for u in block.term.iter().flat_map(super::term_uses) {
-            users[u.0 as usize].push(User { block: b, inst: None });
+            visit(u, User { block: b, inst: None });
         }
     }
+}
+
+fn sccp_func(f: &mut Func) -> bool {
+    let n = f.types.len();
+    // Every value's users, in one table: counted, then filled in the same order.
+    let mut starts = vec![0u32; n + 1];
+    for_each_use(f, |u, _| starts[u.0 as usize + 1] += 1);
+    for v in 0..n {
+        starts[v + 1] += starts[v];
+    }
+    let mut cursor = starts.clone();
+    let mut users = vec![User { block: 0, inst: None }; starts[n] as usize];
+    for_each_use(f, |u, user| {
+        let at = &mut cursor[u.0 as usize];
+        users[*at as usize] = user;
+        *at += 1;
+    });
     let mut s = Sccp {
         f,
         lat: vec![Lat::Top; n],
         users,
+        starts,
         run: vec![false; f.blocks.len()],
         edges: FxHashSet::default(),
         blocks: Vec::new(),
@@ -176,7 +196,7 @@ fn sccp_func(f: &mut Func) -> bool {
     s.reach(0);
     loop {
         if let Some(b) = s.blocks.pop() {
-            for pad in f.blocks[b].pads() {
+            for pad in f.blocks[b].unwinds() {
                 s.reach(pad.0 as usize);
             }
             for i in 0..f.blocks[b].insts.len() {
@@ -184,8 +204,9 @@ fn sccp_func(f: &mut Func) -> bool {
             }
             s.term(b);
         } else if let Some(v) = s.values.pop() {
-            for k in 0..s.users[v.0 as usize].len() {
-                let u = s.users[v.0 as usize][k];
+            let v = v.0 as usize;
+            for k in s.starts[v] as usize..s.starts[v + 1] as usize {
+                let u = s.users[k];
                 if !s.run[u.block] {
                     continue;
                 }

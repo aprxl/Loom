@@ -442,6 +442,11 @@ pub struct Block {
 }
 
 impl Block {
+    /// The landing pads its instructions and terminator unwind to, repeats included.
+    pub fn unwinds(&self) -> impl Iterator<Item = BlockId> + '_ {
+        self.insts.iter().filter_map(|i| i.unwind).chain(self.term_unwind)
+    }
+
     /// The landing pads its instructions and terminator unwind to.
     pub fn pads(&self) -> Vec<BlockId> {
         let mut out: Vec<BlockId> = self.insts.iter().filter_map(|i| i.unwind).chain(self.term_unwind).collect();

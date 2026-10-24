@@ -412,9 +412,11 @@ fn writes(k: &InstKind) -> bool {
 pub fn tidy(f: &mut Func) {
     // Blocks nothing reaches first: their jumps would count.
     drop_unreached(f);
-    merge_chains(f);
+    let merged = merge_chains(f);
     drop_dead(f);
-    drop_unreached(f);
+    if merged {
+        drop_unreached(f);
+    }
 }
 
 /// Removes the blocks nothing reaches, from the entry or by unwinding from
@@ -429,7 +431,7 @@ fn drop_unreached(f: &mut Func) {
         }
         let block = &f.blocks[b];
         stack.extend(block.term.iter().flat_map(|t| t.edges()).map(|e| e.block.0 as usize));
-        stack.extend(block.pads().into_iter().map(|p| p.0 as usize));
+        stack.extend(block.unwinds().map(|p| p.0 as usize));
     }
     if seen.iter().all(|&s| s) {
         return;
@@ -461,8 +463,9 @@ fn drop_unreached(f: &mut Func) {
     }
 }
 
-/// Merges each block that only a `jump` reaches into the block it's in.
-fn merge_chains(f: &mut Func) {
+/// Merges each block that only a `jump` reaches into the block it's in, and
+/// whether any did.
+fn merge_chains(f: &mut Func) -> bool {
     let n = f.blocks.len();
     let mut preds = vec![0usize; n];
     let mut pads = vec![false; n];
@@ -470,12 +473,13 @@ fn merge_chains(f: &mut Func) {
         for e in b.term.iter().flat_map(|t| t.edges()) {
             preds[e.block.0 as usize] += 1;
         }
-        for p in b.pads() {
+        for p in b.unwinds() {
             pads[p.0 as usize] = true;
         }
     }
     // Merging moves a block's edges to the block it joins: the counts hold.
     let mut to: FxHashMap<Value, Value> = FxHashMap::default();
+    let mut merged = false;
     for a in 0..n {
         while let Some(Term::Jump(e)) = &f.blocks[a].term {
             let b = e.block.0 as usize;
@@ -483,6 +487,7 @@ fn merge_chains(f: &mut Func) {
                 break;
             }
             let Some(Term::Jump(edge)) = f.blocks[a].term.take() else { unreachable!("a jump") };
+            merged = true;
             let moved = std::mem::take(&mut f.blocks[b]);
             to.extend(moved.params.iter().copied().zip(edge.args));
             let block = &mut f.blocks[a];
@@ -495,7 +500,7 @@ fn merge_chains(f: &mut Func) {
         }
     }
     if to.is_empty() {
-        return;
+        return merged;
     }
     let subst = |mut v: Value| {
         while let Some(&w) = to.get(&v) {
@@ -511,6 +516,7 @@ fn merge_chains(f: &mut Func) {
             super::rewrite_term(t, subst);
         }
     }
+    merged
 }
 
 /// Whether `k` only computes its results: no effect, and it can't trap.

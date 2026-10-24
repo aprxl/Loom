@@ -8,7 +8,7 @@
 //!   a pad reads no value but the function's parameters, its own, and
 //!   those computed before every instruction that unwinds to it.
 
-use std::collections::HashMap;
+use crate::fxhash::FxHashSet;
 
 use super::{BlockId, Func, Module, Value};
 
@@ -26,12 +26,12 @@ type Def = (usize, Option<usize>);
 
 fn verify_func(f: &Func) -> Result<(), String> {
     let n = f.blocks.len();
-    let mut defs: HashMap<Value, Def> = HashMap::new();
+    let mut defs: Vec<Option<Def>> = vec![None; f.types.len()];
     let mut define = |v: Value, at: Def| -> Result<(), String> {
         if v.0 as usize >= f.types.len() {
             return Err(format!("v{} has no type", v.0));
         }
-        match defs.insert(v, at) {
+        match defs[v.0 as usize].replace(at) {
             Some(_) => Err(format!("v{} is defined twice", v.0)),
             None => Ok(()),
         }
@@ -78,7 +78,7 @@ fn verify_func(f: &Func) -> Result<(), String> {
                 ));
             }
             for (&arg, &param) in e.args.iter().zip(&target.params) {
-                if defs.contains_key(&arg) && f.ty(arg) != f.ty(param) {
+                if defs.get(arg.0 as usize).is_some_and(Option::is_some) && f.ty(arg) != f.ty(param) {
                     return Err(format!("b{b} passes v{} to a parameter of another type", arg.0));
                 }
             }
@@ -99,12 +99,12 @@ fn verify_func(f: &Func) -> Result<(), String> {
     // parameters, what the pads themselves compute, and what's computed
     // before every instruction that unwinds to them (an inlined function's
     // pads read its arguments).
-    let pad_blocks: std::collections::HashSet<usize> = pad_reach(f);
-    let params: std::collections::HashSet<Value> = f.params().iter().copied().collect();
+    let pad_blocks: FxHashSet<usize> = pad_reach(f);
+    let params: FxHashSet<Value> = f.params().iter().copied().collect();
     let sources = unwind_sources(f, &pad_blocks);
     for &b in &pad_blocks {
         let block = &f.blocks[b];
-        let mut seen: std::collections::HashSet<Value> = block.params.iter().copied().collect();
+        let mut seen: FxHashSet<Value> = block.params.iter().copied().collect();
         let mut reads: Vec<Value> = Vec::new();
         for inst in &block.insts {
             for u in uses(&inst.kind) {
@@ -119,7 +119,7 @@ fn verify_func(f: &Func) -> Result<(), String> {
             if params.contains(&u) || pad_defined(f, &pad_blocks, u) {
                 continue;
             }
-            let Some(&(db, di)) = defs.get(&u) else {
+            let Some((db, di)) = defs.get(u.0 as usize).copied().flatten() else {
                 return Err(format!("v{} is used in b{b} but never defined", u.0));
             };
             // Before each instruction (or terminator, at the block's end)
@@ -141,7 +141,11 @@ fn verify_func(f: &Func) -> Result<(), String> {
     // Whether the use at (block, index) sees `v`; the terminator is at
     // index `insts.len()`.
     let check = |v: Value, block: usize, index: usize| -> Result<(), String> {
-        let &(db, di) = defs.get(&v).ok_or_else(|| format!("v{} is used in b{block} but never defined", v.0))?;
+        let (db, di) = defs
+            .get(v.0 as usize)
+            .copied()
+            .flatten()
+            .ok_or_else(|| format!("v{} is used in b{block} but never defined", v.0))?;
         if idom[block].is_none() {
             return Ok(()); // unreachable: nothing runs it
         }
@@ -248,8 +252,8 @@ pub(crate) fn uses(k: &super::InstKind) -> Uses<'_> {
 
 /// The blocks only unwinding reaches: every landing pad, and what they
 /// jump to.
-fn pad_reach(f: &Func) -> std::collections::HashSet<usize> {
-    let mut out = std::collections::HashSet::new();
+fn pad_reach(f: &Func) -> FxHashSet<usize> {
+    let mut out = FxHashSet::default();
     let mut stack: Vec<usize> = f.blocks.iter().flat_map(|b| b.pads()).map(|p| p.0 as usize).collect();
     while let Some(b) = stack.pop() {
         if b >= f.blocks.len() || !out.insert(b) {
@@ -266,13 +270,13 @@ fn pad_reach(f: &Func) -> std::collections::HashSet<usize> {
 /// For each block only unwinding reaches, every place that unwinds to it
 /// (straight, or to a pad that jumps to it): a block, and the index of the
 /// instruction (the block's length for its terminator).
-fn unwind_sources(f: &Func, pads: &std::collections::HashSet<usize>) -> Vec<Vec<(usize, usize)>> {
+fn unwind_sources(f: &Func, pads: &FxHashSet<usize>) -> Vec<Vec<(usize, usize)>> {
     let mut out = vec![Vec::new(); f.blocks.len()];
     for (b, block) in f.blocks.iter().enumerate() {
         let mut add = |pad: BlockId, at: usize| {
             // Every block the pad reaches by jumping.
             let mut stack = vec![pad.0 as usize];
-            let mut seen = std::collections::HashSet::new();
+            let mut seen = FxHashSet::default();
             while let Some(x) = stack.pop() {
                 if x >= f.blocks.len() || !pads.contains(&x) || !seen.insert(x) {
                     continue;
@@ -294,7 +298,7 @@ fn unwind_sources(f: &Func, pads: &std::collections::HashSet<usize>) -> Vec<Vec<
 }
 
 /// Whether `v` is defined in one of the landing pads.
-fn pad_defined(f: &Func, pads: &std::collections::HashSet<usize>, v: Value) -> bool {
+fn pad_defined(f: &Func, pads: &FxHashSet<usize>, v: Value) -> bool {
     pads.iter().any(|&b| {
         let block = &f.blocks[b];
         block.params.contains(&v) || block.insts.iter().any(|i| i.results.contains(&v))
