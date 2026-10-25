@@ -9,6 +9,8 @@ A warp with fields is a record. Fields can have defaults. A method takes `self`,
 
 **Construction is a call.** `Point(3, 4)` takes the fields in order, and `Point(y: 2)` names one and leaves the rest at their defaults. There are no `Point { x: 1 }` literals, so `if x == Foo {` is never ambiguous.
 
+A named argument with nothing after the colon passes the variable of that name: `Point(x:, y:)` is `Point(x: x, y: y)`, and `connect(host:, port: 8080)` mixes the two. It works in patterns too: `let Point(x:, y:) = p` binds `x` and `y`.
+
 @sample types_records
 
 - **The leading dot.** `.x` means "relative to the thing in context". In a method that's `self`, so `.x` is `self.x` and `.0` is `self.0`. In a dot-block it's the block's subject. Where a type is expected, it's one of that type's cases: `.Red` is `Color.Red`.

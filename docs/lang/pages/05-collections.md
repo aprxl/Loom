@@ -15,6 +15,10 @@ An index whose type can't reach past the end (a `u4` into a `[u8; 16]`) needs no
 
 The methods are listed in [std.list](std:list#List) and [std.slice](std:slice#Slice). On slices and lists, `map` and `filter` are eager and make new lists. The stream methods are lazy.
 
+Inside `x[...]`, `#` is the length of `x`: `xs[#-1]` is the last element, `xs[1..#-1]` leaves out the first and last, and `xs[#-3..]` is the last three. On text it's the length in bytes. `x` has to be a name or a field (`self.items[#-1]`), so it's never evaluated twice; for anything else, bind it with `let` first. `xs[#-1]` on an empty list unravels, because `#-1` overflows.
+
+A list comprehension builds a list from a loop: `[for n in 1..=10 if n % 2 == 0 => n * n]` is `[4, 16, 36, 64, 100]`. The `if` is optional, the pattern is a `for` pattern, and the result is always a `List`. It is the loop that pushes each element, so `?`, moves and borrows inside it work as they would in that loop.
+
 ## Maps and sets
 
 `Map[K, V]` and `Set[T]` remember the order things were first added, and going through one, or showing it, follows that order. Keys must weave `Hash`, which a warp gets by listing it. `m[k]` unravels when the key is missing, and `m.get(k)` gives an optional. `m[k] = v` adds or replaces. `[:]` is the empty map literal.

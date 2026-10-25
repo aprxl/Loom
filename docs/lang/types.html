@@ -43,6 +43,7 @@
 <h2 id="records">Records</h2>
 <p>A warp with fields is a record. Fields can have defaults. A method takes <code>self</code>, and a function without <code>self</code> is an associated function, called on the type: <code>Point.origin()</code>.</p>
 <p><strong>Construction is a call.</strong> <code>Point(3, 4)</code> takes the fields in order, and <code>Point(y: 2)</code> names one and leaves the rest at their defaults. There are no <code>Point { x: 1 }</code> literals, so <code>if x == Foo {</code> is never ambiguous.</p>
+<p>A named argument with nothing after the colon passes the variable of that name: <code>Point(x:, y:)</code> is <code>Point(x: x, y: y)</code>, and <code>connect(host:, port: 8080)</code> mixes the two. It works in patterns too: <code>let Point(x:, y:) = p</code> binds <code>x</code> and <code>y</code>.</p>
 <div class="sample" id="sample-types_records">
 <div class="sample-head"><span class="file">samples/types_records.loom</span><span class="tag ok">runs</span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
