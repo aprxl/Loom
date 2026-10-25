@@ -550,27 +550,50 @@ fn pure(k: &InstKind) -> bool {
 /// Drops pure instructions whose results nothing reads, until there are
 /// none.
 fn drop_dead(f: &mut Func) {
+    let mut read = vec![0u32; f.types.len()];
+    for b in &f.blocks {
+        for inst in &b.insts {
+            for u in crate::heddle::inst_uses(&inst.kind) {
+                read[u.0 as usize] += 1;
+            }
+        }
+        for v in b.term.iter().flat_map(super::term_uses) {
+            read[v.0 as usize] += 1;
+        }
+    }
+    let mut dead: Vec<Vec<bool>> = f.blocks.iter().map(|b| vec![false; b.insts.len()]).collect();
+    let mut any = false;
+    // Backwards, so a chain of dead instructions mostly goes in one sweep.
     loop {
-        let mut read = vec![false; f.types.len()];
-        for b in &f.blocks {
-            for inst in &b.insts {
+        let mut changed = false;
+        for (b, block) in f.blocks.iter().enumerate().rev() {
+            for (i, inst) in block.insts.iter().enumerate().rev() {
+                if dead[b][i]
+                    || !pure(&inst.kind)
+                    || inst.results.is_empty()
+                    || inst.results.iter().any(|r| read[r.0 as usize] != 0)
+                {
+                    continue;
+                }
+                dead[b][i] = true;
+                changed = true;
                 for u in crate::heddle::inst_uses(&inst.kind) {
-                    read[u.0 as usize] = true;
+                    read[u.0 as usize] -= 1;
                 }
             }
-            for v in b.term.iter().flat_map(super::term_uses) {
-                read[v.0 as usize] = true;
-            }
-        }
-        let mut changed = false;
-        for b in &mut f.blocks {
-            let before = b.insts.len();
-            b.insts
-                .retain(|i| !(pure(&i.kind) && !i.results.is_empty() && i.results.iter().all(|r| !read[r.0 as usize])));
-            changed |= b.insts.len() != before;
         }
         if !changed {
-            return;
+            break;
+        }
+        any = true;
+    }
+    if any {
+        for (block, dead) in f.blocks.iter_mut().zip(&dead) {
+            let mut i = 0;
+            block.insts.retain(|_| {
+                i += 1;
+                !dead[i - 1]
+            });
         }
     }
 }
