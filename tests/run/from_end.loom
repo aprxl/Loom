@@ -1,0 +1,36 @@
+// `#` inside `x[…]` is the length of `x`: `x[#-1]` is the last element.
+use std.io.print
+
+warp Bag { items: List[i32] }
+
+fn main() {
+    let xs = [1, 2, 3, 4, 5]
+    let last = xs[#-1]
+    let middle = xs[1..#-1]
+    let tail = xs[#-3..]
+    print("{last} {middle} {tail}")
+
+    let bag = Bag(items: [7, 8, 9])
+    let top = bag.items[#-1]
+    print("{top}")
+
+    var ys = [1, 2, 3]
+    ys[#-1] = 9
+    ys[#-1] += 1
+    print("{ys}")
+
+    let s = "hello"
+    let t = s[#-3..]
+    print("{t}")
+
+    let picks = [0, 2, 1]
+    let nested = xs[picks[#-1]]
+    print("{nested}")
+
+    let g = xs[((n: usize) => n - 1)(2)]
+    print("{g}")
+
+    let len = 3
+    let at = xs[len]
+    print("{at}")
+}

@@ -20,7 +20,7 @@
 //! | 28 | prefix `- ~ ^` |
 //! | —  | postfix: calls, `[…]`, `.`, `?`, `^`, `.{ }` |
 
-use super::{NameCase, Parser};
+use super::{LenBase, NameCase, Parser};
 use crate::ast::{
     Arg, Arm, BinaryOp, Block, CastKind, Expr, ExprKind, FieldName, GenericArg, Ident, LambdaParam, Lit, Pat, PatKind,
     PlaceMode, Stmt, StmtKind, TemplatePart, UnaryOp,
@@ -165,6 +165,7 @@ pub(super) fn can_start_expr(kind: &TokenKind) -> bool {
                 | Punct::LBrace
                 | Punct::DotDot
                 | Punct::DotDotEq
+                | Punct::Hash
         ),
         _ => false,
     }
@@ -357,7 +358,10 @@ impl Parser<'_> {
                     e = Expr { kind: ExprKind::Call { callee: Box::new(e), args }, span };
                 }
                 TokenKind::Punct(Punct::LBracket) => {
+                    let len_base = if is_path(&e) { LenBase::Path(e.clone()) } else { LenBase::NotPath };
+                    let saved = std::mem::replace(&mut self.len_base, len_base);
                     let (args, close) = self.index_args();
+                    self.len_base = saved;
                     let span = e.span.to(close);
                     e = Expr { kind: ExprKind::Index { base: Box::new(e), args }, span };
                 }
@@ -593,6 +597,7 @@ impl Parser<'_> {
             }
             TokenKind::Punct(Punct::LParen) => self.paren_or_lambda(),
             TokenKind::Punct(Punct::LBracket) => self.array_like(),
+            TokenKind::Punct(Punct::Hash) => self.len_expr(),
             TokenKind::Punct(Punct::LBrace) => {
                 let block = self.block();
                 let span = block.span;
@@ -806,7 +811,7 @@ impl Parser<'_> {
         let start = self.peek().span;
         let name = self.ident(NameCase::Value, "parameter");
         self.expect_punct(Punct::FatArrow);
-        let body = self.stmt_expr();
+        let body = self.lambda_body();
         let span = start.to(body.span);
         let params = vec![LambdaParam { take, name, ty: None }];
         Expr { kind: ExprKind::Lambda { params, body: Box::new(body) }, span }
@@ -876,7 +881,7 @@ impl Parser<'_> {
         });
         self.expect_close(Punct::RParen, open);
         self.expect_punct(Punct::FatArrow);
-        let body = self.stmt_expr();
+        let body = self.lambda_body();
         let span = open.to(body.span);
         Expr { kind: ExprKind::Lambda { params, body: Box::new(body) }, span }
     }
@@ -930,6 +935,45 @@ impl Parser<'_> {
         });
         self.expect_close(Punct::RBracket, open);
         Expr { kind, span: self.span_from(open) }
+    }
+
+    /// `#` in `x[…]`: the length of `x`, as `x.len()`.
+    fn len_expr(&mut self) -> Expr {
+        let span = self.bump().span;
+        match &self.len_base {
+            LenBase::Path(base) => {
+                let base = base.clone();
+                let field = FieldName::Named(Ident { name: "len".to_string(), span });
+                let callee = Expr { kind: ExprKind::Field { base: Box::new(base), field }, span };
+                Expr { kind: ExprKind::Call { callee: Box::new(callee), args: Vec::new() }, span }
+            }
+            LenBase::NotPath => {
+                self.error_at(
+                    codes::S0200,
+                    span,
+                    "`#` needs the indexed value to be a name or a field, like `xs[#-1]`",
+                    "bind it with `let` first",
+                );
+                Expr { kind: ExprKind::Error, span }
+            }
+            LenBase::Outside => {
+                self.error_at(
+                    codes::S0200,
+                    span,
+                    "`#` is the length of the value being indexed, and only means something inside `[...]`",
+                    "not inside brackets",
+                );
+                Expr { kind: ExprKind::Error, span }
+            }
+        }
+    }
+
+    /// A lambda's body: `#` in it doesn't refer to brackets around the lambda.
+    fn lambda_body(&mut self) -> Expr {
+        let saved = std::mem::replace(&mut self.len_base, LenBase::Outside);
+        let body = self.stmt_expr();
+        self.len_base = saved;
+        body
     }
 
     /// After `[` at `for`: `for pat in iter [if cond] => elem`, up to the `]`.
@@ -1151,6 +1195,15 @@ impl Parser<'_> {
 fn binary(op: BinaryOp, lhs: Expr, rhs: Expr) -> Expr {
     let span = lhs.span.to(rhs.span);
     Expr { kind: ExprKind::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs) }, span }
+}
+
+/// `x`, `self`, or a field chain ending in one of them: evaluating it again has no effect.
+fn is_path(e: &Expr) -> bool {
+    match &e.kind {
+        ExprKind::Name(_) | ExprKind::SelfValue => true,
+        ExprKind::Field { base, .. } => is_path(base),
+        _ => false,
+    }
 }
 
 /// `[for pat in iter if cond => elem]`, as the block that fills a list:

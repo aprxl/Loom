@@ -23,7 +23,7 @@ mod ty;
 
 use std::collections::HashMap;
 
-use crate::ast::{Ident, Module};
+use crate::ast::{Expr, Ident, Module};
 use crate::diag::{Code, Diagnostic, codes};
 use crate::lexer::lex;
 use crate::source::{FileId, SourceDb, Span};
@@ -50,6 +50,14 @@ pub fn parse(db: &SourceDb, file: FileId) -> Parsed {
     let mut diagnostics = lexed.diagnostics;
     diagnostics.extend(parser.diags);
     Parsed { module, diagnostics }
+}
+
+/// What a `#` means where it's parsed: the length of the value that an
+/// enclosing `x[…]` indexes.
+enum LenBase {
+    Outside,
+    Path(Expr),
+    NotPath,
 }
 
 /// Which identifier case a declaration expects.
@@ -80,6 +88,8 @@ pub(crate) struct Parser<'a> {
     no_block_range: bool,
     /// In match guards: `x => …` isn't a lambda.
     no_lambda: bool,
+    /// In `x[…]`: what a `#` there stands for.
+    len_base: LenBase,
     /// In the elements of `[…]`: `k: loop { … }` is a map entry, not a
     /// labeled loop.
     no_label: bool,
@@ -128,6 +138,7 @@ impl<'a> Parser<'a> {
             stmt_indent: 0,
             no_block_range: false,
             no_lambda: false,
+            len_base: LenBase::Outside,
             no_label: false,
             labels: Vec::new(),
             last_error_at: None,
