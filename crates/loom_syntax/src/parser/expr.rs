@@ -441,6 +441,7 @@ impl Parser<'_> {
             let value = self.expr();
             return Arg { label: None, is_given: true, mutable: false, value, span: self.span_from(start) };
         }
+        let ident_label = self.nth_is_punct(1, Punct::Colon) && matches!(self.kind(), TokenKind::Ident);
         let label =
             if self.nth_is_punct(1, Punct::Colon) && matches!(self.kind(), TokenKind::Ident | TokenKind::Keyword(_)) {
                 let tok = self.bump();
@@ -449,8 +450,12 @@ impl Parser<'_> {
             } else {
                 None
             };
+        let shorthand = ident_label && (self.at_punct(Punct::Comma) || self.at_punct(Punct::RParen));
         let mutable = self.eat_kw(Keyword::Mut).is_some();
-        let value = self.expr();
+        let value = match &label {
+            Some(name) if shorthand => Expr { kind: ExprKind::Name(name.clone()), span: name.span },
+            _ => self.expr(),
+        };
         Arg { label, is_given: false, mutable, value, span: self.span_from(start) }
     }
 

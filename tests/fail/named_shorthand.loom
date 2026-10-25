@@ -1,0 +1,9 @@
+use std.io.print
+
+warp Point { x: i32, y: i32 }
+
+fn main() {
+    let x = 1
+    let p = Point(x:, y:)                  //~ N0101
+    print("{p.x}")
+}

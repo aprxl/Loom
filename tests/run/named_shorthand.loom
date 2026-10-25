@@ -1,0 +1,39 @@
+// `name:` with nothing after it means `name: name`, in a call and in a
+// pattern: a record or a case is built and taken apart without repeating names.
+use std.io.print
+
+warp Point { x: i32, y: i32 }
+
+warp Shape {
+    case Circle(radius: f64)
+    case Square(side: f64)
+}
+
+fn connect(host: str, port: i32) -> String = "{host}:{port}"
+
+fn describe(s: Shape) -> String = match s {
+    .Circle(radius:) => "circle {radius}",
+    .Square(side:) => "square {side}",
+}
+
+fn main() {
+    let x = 3
+    let y = -4
+    let p = Point(x:, y:)
+    print("{p.x} {p.y}")
+    let Point(x:, y:) = p
+    print("{x} {y}")
+
+    let host = "example.com"
+    print(connect(host:, port: 8080))
+    print(connect(
+        host:
+            "localhost",
+        port: 80,
+    ))
+
+    print(describe(Shape.Circle(radius: 2.0)))
+    let radius = 1.5
+    print(describe(Shape.Circle(radius:)))
+    print(describe(.Square(side: 3.0)))
+}

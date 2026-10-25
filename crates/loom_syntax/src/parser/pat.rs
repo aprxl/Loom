@@ -224,7 +224,12 @@ impl Parser<'_> {
                 } else {
                     None
                 };
-                let pat = p.pat_top(true);
+                let pat = match &label {
+                    Some(name) if p.at_punct(Punct::Comma) || p.at_punct(Punct::RParen) => {
+                        Pat { kind: PatKind::Bind { name: name.clone(), mutable: false }, span: name.span }
+                    }
+                    _ => p.pat_top(true),
+                };
                 Some(FieldPat { label, pat, span: p.span_from(field_start) })
             })
         });
