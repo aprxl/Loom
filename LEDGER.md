@@ -69,6 +69,7 @@ Built from the ledger below, `design/stdlib-plan.md`, `design/stdlib-collect-def
 - Threads: per-worker deques with stealing (V5 close-out step 3, never done); chunking beyond exclusive integer ranges (inclusive and open ranges, lists, streams, `chunks_mut`) and an adaptive grain; par_mandelbrot margin over its gate is thin.
 - V4 left on purpose: build the program from the job build's module; bake maps, sets and sums.
 - Map: native `reindex`/run-wise `compact`, hash tags in the index; held shuttles with inline frames (D5); the deferred optimizer passes (specialize lambdas, SROA, self tail calls); re-inlining after the last GVN; gvn root index, `tidy`/`range` repeats, codegen liveness and `Emitter::line` (compile-time ratio 1.6x against the 1.5x design gate); adjacent-opcode counters before superinstructions; PGO; spawn stack free list.
+- Copy elimination: a block-valued `let` (e.g. a list comprehension) moves its result through an extra slot (copy + zero) that -O2 keeps.
 
 **V9 (Treadle by default)**: verifier hardening before images are loaded from disk: a backward `Jmp` neither ticks nor is rejected, loads/stores through registers are unchecked outside the checked build (reword "verified" in the docs), header reads assume 8-aligned offsets, a waiter on a constant busy-spins. Also: `Instant.now()` at 8 workers is unmeasured.
 

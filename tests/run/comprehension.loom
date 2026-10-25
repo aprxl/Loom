@@ -1,0 +1,37 @@
+// List comprehensions: `[for pat in iter if cond => elem]` builds a List from
+// a loop, with or without a filter, and `?` works inside the element.
+use std.io.print
+
+warp User { name: String }
+
+warp Oops: Error { case Bad(n: i32) }
+
+fn twice(n: i32) -> i32 ! Oops {
+    if n < 0 { fail .Bad(n: n) }
+    n * 2
+}
+
+fn doubled(xs: List[i32]) -> List[i32] ! Oops = [for x in xs => twice(x)?]
+
+fn main() {
+    let squares = [for n in 1..=10 if n % 2 == 0 => n * n]
+    print("{squares}")
+
+    let users = [User(name: "ann"), User(name: "bo")]
+    let names: List[String] = [for u in users => u.name.copy()]
+    print("{names}")
+
+    let empty = [for n in 1..=3 if false => n]
+    print("{empty} {empty.len()}")
+
+    let grid = [for r in 0..3 => [for c in 0..3 if c <= r => r * 3 + c]]
+    print("{grid}")
+
+    let pairs = [(1, "one"), (2, "two")]
+    let labels = [for (a, b) in pairs => "{a}={b}"]
+    print("{labels}")
+
+    let good = doubled([1, 2, 3]) mend []
+    let bad = doubled([1, -2, 3]) mend []
+    print("{good} {bad}")
+}

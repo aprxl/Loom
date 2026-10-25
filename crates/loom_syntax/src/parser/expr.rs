@@ -22,8 +22,8 @@
 
 use super::{NameCase, Parser};
 use crate::ast::{
-    Arg, Arm, BinaryOp, CastKind, Expr, ExprKind, FieldName, GenericArg, Ident, LambdaParam, Lit, PlaceMode,
-    TemplatePart, UnaryOp,
+    Arg, Arm, BinaryOp, Block, CastKind, Expr, ExprKind, FieldName, GenericArg, Ident, LambdaParam, Lit, Pat, PatKind,
+    PlaceMode, Stmt, StmtKind, TemplatePart, UnaryOp,
 };
 use crate::diag::{Diagnostic, codes};
 use crate::source::Span;
@@ -884,6 +884,12 @@ impl Parser<'_> {
     /// `[a, b]`, `[v; n]`, `[k: v, …]`, `[]`, `[:]`.
     fn array_like(&mut self) -> Expr {
         let open = self.bump().span;
+        if self.at_kw(Keyword::For) {
+            let (pat, iter, cond, elem) = self.with_nl(false, |p| p.comprehension());
+            let close = self.expect_close(Punct::RBracket, open);
+            let span = open.to(close);
+            return Expr { kind: comprehension(pat, iter, cond, elem, span), span };
+        }
         let kind = self.with_nl(false, |p| {
             // `[k: loop { … }]` is a map entry, like `f(k: loop { … })` is a named argument.
             p.no_label = true;
@@ -924,6 +930,22 @@ impl Parser<'_> {
         });
         self.expect_close(Punct::RBracket, open);
         Expr { kind, span: self.span_from(open) }
+    }
+
+    /// After `[` at `for`: `for pat in iter [if cond] => elem`, up to the `]`.
+    fn comprehension(&mut self) -> (Pat, Expr, Option<Expr>, Expr) {
+        self.bump();
+        self.no_label = true;
+        let pat = self.pat_top(false);
+        self.expect_kw(Keyword::In);
+        let saved = self.no_lambda;
+        self.no_lambda = true;
+        let iter = self.head_expr();
+        let cond = if self.eat_kw(Keyword::If).is_some() { Some(self.expr()) } else { None };
+        self.no_lambda = saved;
+        self.expect_punct(Punct::FatArrow);
+        let elem = self.expr();
+        (pat, iter, cond, elem)
     }
 
     // ------------------------------------------------------------ control flow
@@ -1129,4 +1151,57 @@ impl Parser<'_> {
 fn binary(op: BinaryOp, lhs: Expr, rhs: Expr) -> Expr {
     let span = lhs.span.to(rhs.span);
     Expr { kind: ExprKind::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs) }, span }
+}
+
+/// `[for pat in iter if cond => elem]`, as the block that fills a list:
+/// `{ var <list> = std.list.List(); for pat in iter { <list>.push(elem) }; <list> }`.
+fn comprehension(pat: Pat, iter: Expr, cond: Option<Expr>, elem: Expr, span: Span) -> ExprKind {
+    let ident = |text: &str| Ident { name: text.to_string(), span };
+    let var = |text: &str| Expr { kind: ExprKind::Name(ident(text)), span };
+    let field = |base: Expr, text: &str| Expr {
+        kind: ExprKind::Field { base: Box::new(base), field: FieldName::Named(ident(text)) },
+        span,
+    };
+    let stmt = |kind: StmtKind| Stmt { kind, span };
+    let list = "<list>";
+    let arg_span = elem.span;
+    let push = Expr {
+        kind: ExprKind::Call {
+            callee: Box::new(field(var(list), "push")),
+            args: vec![Arg { label: None, is_given: false, mutable: false, value: elem, span: arg_span }],
+        },
+        span,
+    };
+    let push = stmt(StmtKind::Expr(push));
+    let body = match cond {
+        Some(cond) => {
+            let then = Block { stmts: vec![push], span };
+            let guarded =
+                Expr { kind: ExprKind::If { cond: Box::new(cond), then, else_: None, is_const: false }, span };
+            Block { stmts: vec![stmt(StmtKind::Expr(guarded))], span }
+        }
+        None => Block { stmts: vec![push], span },
+    };
+    let filled = Expr {
+        kind: ExprKind::For {
+            label: None,
+            pat: Box::new(pat),
+            iter: Box::new(iter),
+            body,
+            is_const: false,
+            is_loom: false,
+        },
+        span,
+    };
+    let ctor = Expr {
+        kind: ExprKind::Call { callee: Box::new(field(field(var("std"), "list"), "List")), args: Vec::new() },
+        span,
+    };
+    let declare = stmt(StmtKind::Let {
+        mutable: true,
+        pat: Pat { kind: PatKind::Bind { name: ident(list), mutable: false }, span },
+        ty: None,
+        init: ctor,
+    });
+    ExprKind::Block(Block { stmts: vec![declare, stmt(StmtKind::Expr(filled)), stmt(StmtKind::Expr(var(list)))], span })
 }
