@@ -140,7 +140,7 @@ def parse_module(path):
                 if rest.startswith("{") and rest != "{}":
                     track_braces(rest, "type", it)
                 handled = True
-            elif ctx == "top" and s == 'extern "lua" {':
+            elif ctx == "top" and s == 'extern "host" {':
                 stack.append(("extern", None))
                 handled = True
             elif m := re.match(r"(pub )?(?:const fn|fn) (\w+)(.*)$", s):

@@ -227,7 +227,7 @@ pub struct FnDef {
     pub where_clause: Vec<WherePred>,
     /// `None` for signatures (wefts, extern blocks, builtins).
     pub body: Option<Expr>,
-    /// `Some("lua")` inside `extern "lua" { … }`.
+    /// `Some("host")` inside `extern "host" { … }`.
     pub abi: Option<String>,
 }
 

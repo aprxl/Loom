@@ -32,7 +32,7 @@ pub warp File {
     pub fn write_line(mut self, line: str) ! IoError
 }
 
-extern "lua" {
+extern "host" {
     pub fn read(path: str) -> List[u8] ! IoError
     pub fn read_text(path: str) -> String ! IoError
     /// Makes the file `path` hold `text`, replacing what was there.

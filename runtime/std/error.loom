@@ -51,7 +51,7 @@ pub warp Fallible[T, E] {
 /// The error a `?` on an empty optional produces.
 pub warp Missing: Error
 
-extern "lua" {
+extern "host" {
     /// Gives up: unwinds the current thread, running `defer`s on the way out.
     pub fn unravel(message: str) -> never
     /// Unravels with `message` unless `condition` holds. In a `const`

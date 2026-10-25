@@ -1429,6 +1429,8 @@ On Treadle:
 
 ## 13. Lua interop
 
+Deferred indefinitely (2026-10-25); see LEDGER.md.
+
 - `extern "lua"` in user code, guarded as the Lua plan's M7 describes. On
   Treadle it calls into an embedded Lua 5.4 (the vendored mlua), started on
   first use.
@@ -1974,6 +1976,8 @@ Passing:
 5. Speed: the V6 row of §16.
 
 ### V7: Lua interop (about 2k)
+
+Deferred indefinitely (2026-10-25); see LEDGER.md.
 
 In: all of §13.
 

@@ -18,7 +18,7 @@ pub warp Buffer: Writer, Default {
     pub fn write_str(mut self, s: str) = .text.push_str(s)
 }
 
-extern "lua" {
+extern "host" {
     /// Writes `x` and a newline to standard output.
     pub fn print(x: any Show) given out: Writer
     /// Standard output, as is: no newline.

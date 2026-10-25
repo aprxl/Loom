@@ -316,7 +316,7 @@ impl Parser<'_> {
                 abi
             }
             _ => {
-                self.error_expected("an ABI string, like `\"C\"` or `\"lua\"`");
+                self.error_expected("an ABI string, like `\"host\"`");
                 String::new()
             }
         };

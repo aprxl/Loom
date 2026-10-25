@@ -85,7 +85,7 @@ impl<'a> Builder<'a> {
         Some(Val::Regs(Vec::new()))
     }
 
-    /// A call of an `extern "lua"` function of std.
+    /// A call of an `extern "host"` function of std.
     pub(super) fn extern_call(
         &mut self,
         def: DefId,

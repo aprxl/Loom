@@ -48,7 +48,7 @@ pub warp Spun[T] {
     pub fn join(take self) -> T
 }
 
-extern "lua" {
+extern "host" {
     /// Lets the other threads that can run go first: the running thread
     /// goes to the back of the queue.
     pub fn sched_yield()

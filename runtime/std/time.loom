@@ -92,7 +92,7 @@ pub fn measure[T](f: () => T) -> (T, Duration) {
     (value, start.elapsed())
 }
 
-extern "lua" {
+extern "host" {
     /// Pauses the current thread for `d`.
     pub fn sleep(d: Duration)
     /// Nanoseconds on a clock that only goes forward, from an arbitrary

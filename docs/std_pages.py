@@ -170,7 +170,7 @@ rather than given one here.</p>
 </div>
 <div class="legend">
 <div><span class="badge builtin">builtin</span> implemented directly by the compiler or the runtime, not in Loom.</div>
-<div><span class="badge extern">extern</span> declared as <code>extern "lua"</code>, calling straight into the host.</div>
+<div><span class="badge extern">extern</span> declared as <code>extern "host"</code>, calling straight into the host.</div>
 <div><span class="badge todo">TODO</span> no doc comment in the source yet.</div>
 </div>
 <footer>Generated from <code>runtime/std/*.loom</code>. Run <code>python docs/gen.py</code> after changing the standard library.</footer>"""

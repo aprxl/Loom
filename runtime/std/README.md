@@ -1,6 +1,6 @@
 # std
 
-The Loom standard library, written in Loom (plus `extern "lua"` declarations
+The Loom standard library, written in Loom (plus `extern "host"` declarations
 for the primitives that live in `runtime/rt`). Modules are embedded into the
 `loom` binary (the list is in `crates/loom_compiler/src/modules.rs`); set
 `LOOM_STD_DIR` to load them from disk while developing.

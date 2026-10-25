@@ -1503,7 +1503,7 @@ end
 
 -- ================================================================ std externs
 
--- `extern "lua"` functions of std, by path. The compiler only emits calls to
+-- `extern "host"` functions of std, by path. The compiler only emits calls to
 -- functions listed here (see `lower::EXTERNS`).
 rt.ext = {}
 
