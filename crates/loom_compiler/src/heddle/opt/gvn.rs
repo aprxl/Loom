@@ -13,7 +13,8 @@
 //! it: what was known there still is, but for what the loop may write (a
 //! call in it may write anything but a slot whose address never escapes).
 //! A store or a copy forgets what it may change (see `alias`), and a store
-//! is then known to have put its value there. Memory in a slot (or the
+//! is then known to have put its value there; a copy carries what was known
+//! of its source's words to its destination. Memory in a slot (or the
 //! program's data) is known by where it is, whichever of the values for
 //! that address reads it.
 //!
@@ -534,6 +535,25 @@ impl Gvn<'_> {
         self.undo.push(Undo::Mem(key, old));
     }
 
+    /// The words known to be at `src` (an address kept by `addr`) within
+    /// its first `size` bytes: their offset, width and value.
+    fn known_words(&self, src: Value, size: u64) -> Vec<(i32, Mem, Value)> {
+        let word = |k: &MemKey, v: &Value| match *k {
+            MemKey::Load { ptr, off, mem } if ptr == src && off >= 0 && off as u64 + mem.bytes() <= size => {
+                Some((off, mem, *v))
+            }
+            _ => None,
+        };
+        let root = self.alias.root(src).0;
+        let mut words: Vec<_> = if matches!(root, Root::Slot(n) if !self.alias.escapes[n as usize]) {
+            self.mem.at_root(root).filter_map(|k| self.mem.get(k).and_then(|v| word(k, v))).collect()
+        } else {
+            self.mem.iter().filter_map(|(k, v)| word(k, v)).collect()
+        };
+        words.sort_by_key(|&(off, _, _)| off);
+        words
+    }
+
     /// Forgets the known memory `keep` says no to.
     fn forget(&mut self, keep: impl Fn(&Alias, &MemKey) -> bool) {
         let gone: Vec<MemKey> = self.mem.keys().filter(|k| !keep(&self.alias, k)).cloned().collect();
@@ -938,12 +958,22 @@ fn visit(g: &mut Gvn, f: &Func, b: usize, dead: &mut [bool], zero: &mut [bool], 
                 dead[i] = true;
             }
             Role::Write(access) => {
+                let carried = match kind {
+                    InstKind::Copy { src, size, .. } => g.known_words(g.addr(src), size),
+                    _ => Vec::new(),
+                };
                 g.invalidate(access, true);
                 match kind {
                     InstKind::Store { ptr, off, mem, val } => {
                         g.remember(MemKey::Load { ptr: g.addr(ptr), off, mem }, val)
                     }
                     InstKind::Zero { dst, size } => g.remember(MemKey::Zero { ptr: g.addr(dst), off: 0, size }, dst),
+                    InstKind::Copy { dst, .. } => {
+                        let to = g.addr(dst);
+                        for (off, mem, val) in carried {
+                            g.remember(MemKey::Load { ptr: to, off, mem }, val);
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -1050,5 +1080,52 @@ mod tests {
                 assert_eq!(got, expected);
             }
         }
+    }
+
+    /// `slot0` holds two words, copied to `slot1`; then `after` runs, and
+    /// the words at `slot1 + 8` and `slot1` are returned.
+    fn copy_func(after: Option<InstKind>) -> Func {
+        let inst = |kind, result: Option<u32>| Inst {
+            kind,
+            results: result.map(Value).into_iter().collect(),
+            span: None,
+            unwind: None,
+            site: None,
+        };
+        let (a, b) = (Value(0), Value(1));
+        let store = |ptr, off, val| InstKind::Store { mem: Mem::W64, ptr, off, val };
+        let mut insts = vec![
+            inst(InstKind::Slot(0), Some(0)),
+            inst(InstKind::Slot(1), Some(1)),
+            inst(InstKind::Iconst(5), Some(2)),
+            inst(InstKind::Iconst(6), Some(3)),
+            inst(store(a, 0, Value(2)), None),
+            inst(store(a, 8, Value(3)), None),
+            inst(InstKind::Copy { dst: b, src: a, size: 16 }, None),
+        ];
+        insts.extend(after.map(|kind| inst(kind, None)));
+        insts.push(inst(InstKind::Load { ptr: b, off: 8, mem: Mem::W64 }, Some(4)));
+        insts.push(inst(InstKind::Load { ptr: b, off: 0, mem: Mem::W64 }, Some(5)));
+        Func {
+            blocks: vec![Block { insts, term: Some(Term::Ret(vec![Value(4), Value(5)])), ..Block::default() }],
+            types: vec![VTy::Ptr, VTy::Ptr, VTy::Int, VTy::Int, VTy::Int, VTy::Int],
+            slots: vec![Slot { size: 16, align: 8 }; 2],
+            ..Func::default()
+        }
+    }
+
+    #[test]
+    fn a_copy_carries_the_words_known_of_its_source() {
+        let mut f = copy_func(None);
+        assert!(gvn_func(&mut f, &[]));
+        // The loads of `slot1` are the stored values.
+        assert_eq!(f.blocks[0].term, Some(Term::Ret(vec![Value(3), Value(2)])));
+    }
+
+    #[test]
+    fn a_store_after_a_copy_wins() {
+        let mut f = copy_func(Some(InstKind::Store { mem: Mem::W64, ptr: Value(1), off: 8, val: Value(2) }));
+        assert!(gvn_func(&mut f, &[]));
+        assert_eq!(f.blocks[0].term, Some(Term::Ret(vec![Value(2), Value(2)])));
     }
 }

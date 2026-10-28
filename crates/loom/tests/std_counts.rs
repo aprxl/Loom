@@ -116,7 +116,7 @@ const CASES: &[Case] = &[
         std: "    print(xs.min_by_key(x => x % 17))",
         hand: "    var best = 0u64\n    var best_key = 1000u64\n    for x in xs {\n        if x % 17 < best_key {\n            best = x\n            best_key = x % 17\n        }\n    }\n    print(best)",
         plan: 1.25,
-        guard: 9.0,
+        guard: 7.5,
     },
     Case {
         name: "counts",
@@ -124,7 +124,7 @@ const CASES: &[Case] = &[
         std: "    print(xs.counts().len())",
         hand: "    var m: Map[u64, usize] = Map()\n    for x in xs { m.entry(x, default: 0) += 1 }\n    print(m.len())",
         plan: 1.1,
-        guard: 2.8,
+        guard: 2.5,
     },
     Case {
         name: "sort_by vs sort",

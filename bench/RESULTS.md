@@ -4,6 +4,24 @@ Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
 
+## V8: GVN carries known words across a `copy` (2026-10-28)
+
+A `copy` of a stream header (what moving a stream into its loop does) now
+carries what was known of the source's words to the destination, so the step
+function's number reaches the indirect call, which `devirtualize` turns into a
+direct call that inlining copies in. `std_counts` (dispatch counts, std over
+the hand loop), before and after: `min_by_key` 8.00x to 6.50x (640 112 to
+520 101 instructions), `counts` 2.53x to 2.18x (860 026 to 740 012). The
+others are unchanged (`resize` 2.23, `step_by` 2.00, `filter_map` 2.00).
+Guards tightened to 7.5 and 2.5. `bench/counts.txt`: `deque` 6 949 479 to
+6 949 247, `heap` 3 493 072 to 3 483 065 (-0.29%). Compile time (`compile_time`,
+release): source to image 1.26 to 1.27 (asserted 1.75), `compile_at` alone
+2.03 to 2.06. The perf gates still pass (box 10 ns, arena put 0.38, arena
+trees 9.9x, `par_mandelbrot` 6.27x, spawn and join 994 ns). What is left of a
+list stream's cost is its box, allocated per loop and read through memory
+(scalar replacement, a later item). `projects/wordfreq` on a 10.9 MB corpus:
+identical output, 782 ms.
+
 ## V8: fused pipelines read lists, slices and arrays in place (2026-10-28)
 
 A list, slice or array that isn't a temporary is read by the fused loop

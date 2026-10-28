@@ -14,9 +14,9 @@ streams      30000  1100057
 chip8        30000  662821
 maps         20000  4114296
 lexer        500    5642483
-deque        50000  6949479
+deque        50000  6949247
 list_ops     20000  4853579
-heap         10000  3493072
+heap         10000  3483065
 set_drain    20000  6786096
 ptr_trees    8      1347717
 arena_trees  8      543692
