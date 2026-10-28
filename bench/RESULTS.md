@@ -4,6 +4,18 @@ Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
 
+## V8: a block's tail local hands its slot to the join (2026-10-28)
+
+`let xs = { ...; l }}` and list comprehensions no longer copy and zero the
+tail local into the join's slot. Release build, `--backend vm -O2`, 10 000 000
+iterations of `let xs = [for i in 0..4 => i]; n += xs.len()`, three runs each,
+run twice (ms): before 439 441 447 / 433 431 461 (median 441), after
+425 412 415 / 412 412 412 (median 412), 6.6% faster. `list_ops` dispatch
+count 7 628 190 to 5 632 953 (-26.2%, `bench/counts.txt`). The perf gates still
+pass (box 10 ns, arena put 0.38, arena trees 10.0x, `par_mandelbrot` 6.27x,
+spawn and join 984 ns). `projects/wordfreq` on a 10.9 MB corpus: identical
+output, 794 ms before, 778 ms after.
+
 ## Arena and pool fixes, perf gates (2026-10-22)
 
 Release build at a865299, the runtime gates run once, sequentially, on an idle

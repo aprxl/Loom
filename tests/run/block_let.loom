@@ -1,0 +1,88 @@
+// A block-valued `let` whose tail is one of the block's own locals: the
+// value stays where it was built.
+
+use std.io.print
+
+fn show(xs: [u32]) {
+    print("{xs.len()}")
+}
+
+fn early(n: u32) -> usize {
+    let xs = {
+        var l: List[u32] = List()
+        l.push(n)
+        if n > 5 { return 100 }
+        l.push(n + 1)
+        l
+    }
+    xs.len()
+}
+
+fn pick(c: bool) -> usize {
+    let xs = if c {
+        var a: List[u32] = List()
+        a.push(1)
+        a
+    } else {
+        var b: List[u32] = List()
+        b.push(2)
+        b.push(3)
+        b
+    }
+    xs.len()
+}
+
+fn main() {
+    let xs = {
+        var l: List[u32] = List()
+        l.push(1)
+        l.push(2)
+        l
+    }
+    print("list {xs.len()}")
+
+    let s = {
+        var t = String()
+        t.push_str("he")
+        t.push_str("llo")
+        t
+    }
+    print("string {s} {s.len()}")
+
+    let sq = [for i in 0..5 => i * i]
+    print("comprehension {sq.len()} {sq[4]}")
+
+    let d = {
+        var l: List[u32] = List()
+        defer print("defer ran")
+        l.push(7)
+        l
+    }
+    print("defer block {d.len()}")
+
+    let n = { { var l: List[u32] = List(); l.push(9); l } }
+    print("nested {n.len()}")
+
+    print("if {pick(true)} {pick(false)}")
+
+    let f = {
+        var p = (List[u32](), 1)
+        p.0.push(4)
+        p.0
+    }
+    print("field {f.len()}")
+
+    print("early {early(1)} {early(9)}")
+
+    var total = 0
+    for i in 0..3 {
+        let ys = {
+            var l: List[u32] = List()
+            for j in 0..i { l.push(j) }
+            l
+        }
+        total += ys.len()
+        show(ys)
+    }
+    print("loop total {total}")
+}

@@ -1,0 +1,13 @@
+list 2
+string hello 5
+comprehension 5 16
+defer ran
+defer block 1
+nested 1
+if 1 2
+field 1
+early 2 100
+0
+1
+2
+loop total 3

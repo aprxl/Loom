@@ -15,6 +15,7 @@ use super::value::{Place, Val};
 use std::cell::Cell;
 use std::rc::Rc;
 
+use super::cleanup::{CleanupKind, Stable};
 use super::thread::LoomFor;
 use super::{Builder, LoopCtx, LoopResult, Vals, Var};
 use crate::heddle::{BitOp, Cmp, FOp, InstKind, IntOp, Policy, Term, VTy, Value};
@@ -28,6 +29,11 @@ use crate::typeck::Coercion;
 pub(super) struct Join {
     pub ty: Ty,
     pub kind: JoinKind,
+    /// A block's join: a tail that is one of the block's own locals may
+    /// hand its slot over instead of moving into the join's.
+    pub adopt: bool,
+    /// The slot a local's value stayed in, once one was adopted.
+    adopted: Cell<Option<u32>>,
 }
 
 #[derive(Clone, Debug)]
@@ -68,7 +74,7 @@ impl<'a> Builder<'a> {
                 JoinKind::Mem { addr: self.new_var(VTy::Ptr), slot, owner }
             }
         };
-        Some(Join { ty, kind })
+        Some(Join { ty, kind, adopt: false, adopted: Cell::new(None) })
     }
 
     /// Puts `val` in `join`, leaving the scopes from stack index `from` up:
@@ -84,6 +90,15 @@ impl<'a> Builder<'a> {
                     let shown = self.tcx().display(self.p, join.ty);
                     return self.internal(span, &format!("a value in registers for a join in memory ({shown})"));
                 };
+                if let Some((s, local)) = self.adoptable(join, ptr, from)
+                    && let (Some(_), Some((id, _))) = (slot, owner)
+                {
+                    self.kill_cleanup(local);
+                    self.adopt_slot(*id, s, join.ty);
+                    join.adopted.set(Some(s));
+                    self.write(*addr, ptr);
+                    return Some(());
+                }
                 let at = match slot {
                     Some(slot) if self.owned_since(ptr, from) => {
                         self.move_to(*slot, 0, Val::Mem(ptr), join.ty, span)?;
@@ -113,6 +128,12 @@ impl<'a> Builder<'a> {
     pub(super) fn join_get(&mut self, join: &Join) -> Val {
         match &join.kind {
             JoinKind::Regs(vars) => Val::Regs(self.read_all(vars)),
+            JoinKind::Mem { owner: Some((id, _)), .. } if join.adopted.get().is_some() => {
+                let slot = join.adopted.get().unwrap_or_default();
+                let ptr = self.slot_addr(slot);
+                self.f.temps.insert(ptr, *id);
+                Val::Mem(ptr)
+            }
             // Every branch moved its value into the slot: the slot is the
             // value, a temporary (which a `let` makes the local's own).
             JoinKind::Mem { slot: Some(slot), owner: Some((id, all)), .. } if all.get() => {
@@ -121,6 +142,33 @@ impl<'a> Builder<'a> {
             }
             JoinKind::Mem { addr, .. } => Val::Mem(self.read(*addr)),
         }
+    }
+
+    /// The slot of the block's own local at `ptr` and its drop's id, when
+    /// `join` can take it over rather than copy it: nothing else was put in
+    /// the join, and the local's drop is live in the scopes from stack
+    /// index `from` up.
+    fn adoptable(&self, join: &Join, ptr: Value, from: usize) -> Option<(u32, u32)> {
+        let JoinKind::Mem { slot: Some(_), owner: Some((_, all)), .. } = &join.kind else { return None };
+        if !join.adopt || join.adopted.get().is_some() || self.f.shuttle.is_some() || !all.get() {
+            return None;
+        }
+        if self.f.temps.contains_key(&ptr) {
+            return None;
+        }
+        let s = self.slot_of(ptr)?;
+        let local = self.f.cleanups[from.min(self.f.cleanups.len())..]
+            .iter()
+            .find(|c| c.live && matches!(c.kind, CleanupKind::Drop { at: Stable::Slot(l), .. } if l == s))?;
+        Some((s, local.id))
+    }
+
+    /// The join's cleanup `id` now drops slot `s`, which was a local's.
+    fn adopt_slot(&mut self, id: u32, s: u32, ty: Ty) {
+        if let Some(c) = self.f.cleanups.iter_mut().find(|c| c.id == id) {
+            c.kind = CleanupKind::Drop { at: Stable::Slot(s), ty };
+        }
+        self.f.pads.clear();
     }
 
     /// Whether the value at `ptr` belongs to the scopes from stack index
@@ -278,7 +326,8 @@ impl<'a> Builder<'a> {
             },
             ExprKind::Tuple(items) => self.tuple(e, items, ty),
             ExprKind::Block(block) => {
-                let join = self.join(ty, span)?;
+                let mut join = self.join(ty, span)?;
+                join.adopt = true;
                 self.block_into(block, &join)?;
                 Some(self.join_get(&join))
             }
@@ -920,6 +969,8 @@ impl<'a> Builder<'a> {
                     let join = super::expr::Join {
                         ty,
                         kind: JoinKind::Mem { addr: self.new_var(VTy::Ptr), slot: Some(slot), owner: None },
+                        adopt: false,
+                        adopted: Cell::new(None),
                     };
                     // Everything a loop's value goes through is owned: it moves.
                     let _ = from;
