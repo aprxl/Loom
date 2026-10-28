@@ -1,0 +1,19 @@
+// `join` of text items: lists, slices, `str` items, empty, one element, an
+// empty separator, and a list of numbers (which doesn't take the text path).
+
+use std.io.print
+
+fn main() {
+    let words: List[String] = ["a".to_string(), "bb".to_string(), "ccc".to_string()]
+    print("[{words.join(", ")}]")
+    print("[{words[1..3].join(", ")}]")
+    let strs: List[str] = ["x", "yy"]
+    print("[{strs.join("+")}]")
+    let empty: List[String] = List()
+    print("[{empty.join(", ")}]")
+    let one: List[String] = ["solo".to_string()]
+    print("[{one.join(", ")}]")
+    print("[{words.join("")}]")
+    let nums: List[u32] = [1, 2, 3]
+    print("[{nums.join("-")}]")
+}

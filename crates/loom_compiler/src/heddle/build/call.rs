@@ -15,7 +15,7 @@ use super::{Builder, ParamAbi};
 use crate::heddle::{InstKind, Term};
 use crate::hir::{self, DefKind, ExprKind};
 use crate::ty::{Ty, TyKind};
-use crate::typeck::{ArgSource, Call, Receiver};
+use crate::typeck::{ArgSource, Call, IterSource, Receiver, Seq};
 
 /// An argument, once worked out: a value, or (for `mut`) a place.
 pub(super) enum Arg {
@@ -77,6 +77,19 @@ impl<'a> Builder<'a> {
         let recv_ty = info.args.iter().position(|&s| s == ArgSource::Receiver).map(|k| self.plain_ty(sig.params[k].ty));
         let writebacks = self.f.writebacks.len();
         let mut worked = self.call_args(callee, args, &info, &modes, recv_ty)?;
+        // `join` of text items from a list, slice or array: one native over
+        // its elements, with no stream.
+        if p.def_path(def) == "std.iter.Stream.join"
+            && let Some(IterSource::Seq(elem)) = self.tables().streams.get(&e.id).cloned()
+            && self.is_text_elem(elem)
+            && let [Arg::Val(v, vty), Arg::Val(sep, sep_ty)] = worked.as_slice()
+            && !matches!(v, Val::Mem(m) if self.f.temps.contains_key(m) && !matches!(self.seq_of(*vty), Some(Seq::Slice(_))))
+        {
+            let ret = self.plain_ty(sig.ret);
+            let joined = self.text_join(elem, (v, *vty), (sep, *sep_ty), ret, span)?;
+            self.write_back(writebacks, span)?;
+            return Some(joined);
+        }
         // A `Stream` method called on something else with items: on a
         // stream of them.
         if let Some(source) = self.tables().streams.get(&e.id).cloned()
@@ -295,6 +308,33 @@ impl<'a> Builder<'a> {
                 Arg::Place(Place::At { ptr, off: 0 })
             }
         })
+    }
+
+    /// Whether `elem` is text: a `String` or a `str`.
+    fn is_text_elem(&self, elem: Ty) -> bool {
+        let elem = self.tcx().degauge(elem);
+        self.is_string(elem) || matches!(self.tcx().kind(elem), TyKind::Str)
+    }
+
+    /// `join` over a list, slice or array of text: a native over its elements,
+    /// written into a `String` the way an ordinary call's result is.
+    fn text_join(
+        &mut self,
+        elem: Ty,
+        (v, vty): (&Val, Ty),
+        (sep, sep_ty): (&Val, Ty),
+        ret: Ty,
+        span: Span,
+    ) -> Option<Val> {
+        let elem = self.tcx().degauge(elem);
+        let (size, _) = self.size_align(elem)?;
+        let (buf, len) = self.view_of(v, vty, span)?;
+        let (sp, sn) = self.text_of(sep.clone(), sep_ty, span)?;
+        let size = self.iconst(size);
+        let dst = self.temp(ret, span)?;
+        self.emit(InstKind::Native { name: "seq.join_text", imm: 0, args: vec![buf, len, size, sp, sn, dst] }, &[]);
+        self.own_temp(dst, ret);
+        Some(Val::Mem(dst))
     }
 
     /// Emits a call of `func` with `args` (by parameter) as `abi` says; its

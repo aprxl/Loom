@@ -53,6 +53,7 @@ pub const NATIVES: &[NativeSig] = &[
     sink_fmt("sink.fmt2", 3),
     sig("sink.push", 0, 1, NativeImm::None),
     sig("sink.string", 2, 0, NativeImm::None),
+    sig("seq.join_text", 6, 0, NativeImm::None),
     NativeSig { name: "sink.pad", args: 2, results: 0, imm: NativeImm::Fmt, lead: 2 },
     sig("str.new", 3, 0, NativeImm::None),
     // A `String` of two, three or four texts, one after another: each an

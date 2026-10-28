@@ -585,6 +585,7 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
             "sink.fmt" | "sink.fmt2" => sink_fmt,
             "sink.push" => sink_push,
             "sink.string" => sink_string,
+            "seq.join_text" => seq_join_text,
             "sink.pad" => sink_pad,
             "str.new" => str_new,
             "str.eq" => str_eq,
@@ -904,6 +905,39 @@ fn sink_string(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     ctx.new_string(&text, args[1])?;
     ctx.recycle(text);
     Ok(())
+}
+
+/// `seq.join_text(buf, len, elem size, sep, sep len, destination)`: the texts
+/// of a list, slice or array of `String` or `str`, with `sep` between them.
+fn seq_join_text(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let (buf, len, size) = (args[0], args[1] as usize, args[2]);
+    // SAFETY: the compiler passes a `str` for the separator.
+    let sep: *const [u8] = unsafe { ctx.text(args[3], args[4])? };
+    // SAFETY: `sep` is the text `ctx.text` just checked, which nothing frees
+    // during this native.
+    let sep: &[u8] = unsafe { &*sep };
+    let item = |i: usize| -> (u64, u64) {
+        // SAFETY: `buf` holds `len` elements of `size` bytes, each starting
+        // with a text's address and length.
+        unsafe {
+            let e = (buf + i as u64 * size) as *const u64;
+            (e.read(), e.add(1).read())
+        }
+    };
+    let mut total = len.saturating_sub(1) * sep.len();
+    for i in 0..len {
+        total += item(i).1 as usize;
+    }
+    let mut out = Vec::with_capacity(total);
+    for i in 0..len {
+        if i > 0 {
+            out.extend_from_slice(sep);
+        }
+        let (p, n) = item(i);
+        // SAFETY: every element is a text value the program owns.
+        out.extend_from_slice(unsafe { ctx.text(p, n)? });
+    }
+    ctx.new_string(&out, args[5])
 }
 
 /// `sink.pad(sink, into)`: the buffer's text, padded as the format item's
