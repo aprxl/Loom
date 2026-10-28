@@ -11,7 +11,9 @@
 use crate::Trap;
 use crate::heap::Heap;
 use crate::ints;
-use crate::natives::{Ctx, LocalFn, NativeFn};
+#[cfg(not(feature = "checked"))]
+use crate::natives::Raw;
+use crate::natives::{Ctx, LocalFn, NativeFn, Texts};
 
 pub(crate) fn resolve_scalar(name: &str) -> Option<LocalFn> {
     Some(match name {
@@ -22,6 +24,34 @@ pub(crate) fn resolve_scalar(name: &str) -> Option<LocalFn> {
         "int.math" => int_math,
         "float.math" => float_math,
         "float.bits" => float_bits,
+        #[cfg(not(feature = "checked"))]
+        "str.char_count" => |_, a, i| char_count(&Raw, a, i),
+        #[cfg(not(feature = "checked"))]
+        "str.find" => |_, a, i| find(&Raw, a, i),
+        #[cfg(not(feature = "checked"))]
+        "str.starts_with" => |_, a, i| starts_with(&Raw, a, i),
+        #[cfg(not(feature = "checked"))]
+        "str.ends_with" => |_, a, i| ends_with(&Raw, a, i),
+        #[cfg(not(feature = "checked"))]
+        "str.trim" => |_, a, i| trim(&Raw, a, i),
+        #[cfg(not(feature = "checked"))]
+        "str.parse_int" => |_, a, i| parse_int(&Raw, a, i),
+        #[cfg(not(feature = "checked"))]
+        "str.parse_float" => |_, a, i| parse_float(&Raw, a, i),
+        #[cfg(not(feature = "checked"))]
+        "str.next_char" => |_, a, i| next_char(&Raw, a, i),
+        #[cfg(not(feature = "checked"))]
+        "str.prev_char" => |_, a, i| prev_char(&Raw, a, i),
+        #[cfg(not(feature = "checked"))]
+        "str.next_line" => |_, a, i| next_line(&Raw, a, i),
+        #[cfg(not(feature = "checked"))]
+        "str.next_word" => |_, a, i| next_word(&Raw, a, i),
+        #[cfg(not(feature = "checked"))]
+        "str.hash" => |_, a, i| str_hash_in(&Raw, a, i),
+        #[cfg(not(feature = "checked"))]
+        "map.find_str" => |_, a, i| map_find_str_in(&Raw, a, i),
+        #[cfg(not(feature = "checked"))]
+        "map.find_int" => |_, a, i| map_find_int_in(a, i),
         _ => return None,
     })
 }
@@ -29,31 +59,31 @@ pub(crate) fn resolve_scalar(name: &str) -> Option<LocalFn> {
 /// The natives of this module, by name.
 pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
     Some(match name {
-        "str.char_count" => char_count,
-        "str.find" => find,
-        "str.starts_with" => starts_with,
-        "str.ends_with" => ends_with,
-        "str.trim" => trim,
+        "str.char_count" => |c, a, i| char_count(c, a, i),
+        "str.find" => |c, a, i| find(c, a, i),
+        "str.starts_with" => |c, a, i| starts_with(c, a, i),
+        "str.ends_with" => |c, a, i| ends_with(c, a, i),
+        "str.trim" => |c, a, i| trim(c, a, i),
         "str.case" => case,
         "str.replace" => replace,
         "str.repeat" => repeat,
         "str.split" => split,
-        "str.parse_int" => parse_int,
-        "str.parse_float" => parse_float,
+        "str.parse_int" => |c, a, i| parse_int(c, a, i),
+        "str.parse_float" => |c, a, i| parse_float(c, a, i),
         "string.of" => string_of,
         "string.push_char" => push_char,
         "string.push_str" => push_str,
         "string.pop" => pop,
         "char.digit" => |c, a, i| digit(&mut c.heap, a, i),
         "char.uni" => |c, a, i| char_uni(&mut c.heap, a, i),
-        "str.next_char" => next_char,
-        "str.prev_char" => prev_char,
+        "str.next_char" => |c, a, i| next_char(c, a, i),
+        "str.prev_char" => |c, a, i| prev_char(c, a, i),
         "str.hash" => str_hash,
         "str.concat2" | "str.concat3" | "str.concat4" => concat,
         "map.find_str" => map_find_str,
         "map.find_int" => map_find_int,
-        "str.next_line" => next_line,
-        "str.next_word" => next_word,
+        "str.next_line" => |c, a, i| next_line(c, a, i),
+        "str.next_word" => |c, a, i| next_word(c, a, i),
         "int.bits" => |c, a, i| int_bits(&mut c.heap, a, i),
         "int.rotate" => |c, a, i| int_rotate(&mut c.heap, a, i),
         "int.math" => |c, a, i| int_math(&mut c.heap, a, i),
@@ -64,9 +94,9 @@ pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
 }
 
 /// The text at `ptr`, `len` bytes, which the compiler passes as a text value.
-fn text<'c>(ctx: &'c Ctx, ptr: u64, len: u64) -> Result<&'c [u8], Trap> {
-    // SAFETY: every caller passes a `str` the compiler built.
-    unsafe { ctx.text(ptr, len) }
+fn text<T: Texts>(texts: &T, ptr: u64, len: u64) -> Result<&[u8], Trap> {
+    // Every caller passes a `str` the compiler built.
+    texts.text(ptr, len)
 }
 
 /// The text at `ptr`, as a slice that doesn't borrow `ctx`, for a native
@@ -87,27 +117,27 @@ fn position(hay: &[u8], needle: &[u8]) -> Option<usize> {
 }
 
 /// `str.char_count(s)`.
-fn char_count(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn char_count<T: Texts>(ctx: &T, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let s = text(ctx, args[0], args[1])?;
     args[0] = s.iter().filter(|&&b| b & 0xC0 != 0x80).count() as u64;
     Ok(())
 }
 
 /// `str.find(s, part)`: (where, whether found).
-fn find(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn find<T: Texts>(ctx: &T, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let at = position(text(ctx, args[0], args[1])?, text(ctx, args[2], args[3])?);
     args[0] = at.unwrap_or(0) as u64;
     args[1] = u64::from(at.is_some());
     Ok(())
 }
 
-fn starts_with(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn starts_with<T: Texts>(ctx: &T, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let yes = text(ctx, args[0], args[1])?.starts_with(text(ctx, args[2], args[3])?);
     args[0] = u64::from(yes);
     Ok(())
 }
 
-fn ends_with(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn ends_with<T: Texts>(ctx: &T, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let yes = text(ctx, args[0], args[1])?.ends_with(text(ctx, args[2], args[3])?);
     args[0] = u64::from(yes);
     Ok(())
@@ -132,7 +162,7 @@ fn char_at(s: &[u8], i: usize) -> Option<(char, usize)> {
 
 /// `str.trim(s)` with `imm` 0 (both ends), 1 (the start) or 2 (the end):
 /// the text left, as an address and a length.
-fn trim(ctx: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
+fn trim<T: Texts>(ctx: &T, args: &mut [u64], imm: u16) -> Result<(), Trap> {
     let s = text(ctx, args[0], args[1])?;
     let mut start = 0;
     let mut end = s.len();
@@ -340,7 +370,7 @@ const OVERFLOW: u64 = 2;
 const FINE: u64 = 3;
 
 /// `str.parse_int(s, type)`: (value, `FINE` or the `NumError` tag).
-fn parse_int(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn parse_int<T: Texts>(ctx: &T, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let s = text(ctx, args[0], args[1])?;
     let spec = ints::spec(args[2]);
     let (v, e) = parse_int_text(s, spec);
@@ -386,7 +416,7 @@ fn parse_int_text(s: &[u8], spec: loom_isa::IntSpec) -> (u64, u64) {
 }
 
 /// `str.parse_float(s, is_f32)`: (bits, `FINE` or the `NumError` tag).
-fn parse_float(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn parse_float<T: Texts>(ctx: &T, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let s = text(ctx, args[0], args[1])?;
     let f32_ = args[2] != 0;
     let (v, e) = match parse_float_text(s) {
@@ -660,7 +690,11 @@ fn probe(header: u64, h: u64, esize: u64, same: impl Fn(u64) -> bool) -> u64 {
 // it through the name.
 #[allow(unsafe_code)]
 #[unsafe(export_name = "loom_treadle_map_find_str")]
-fn map_find_str(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn map_find_str(ctx: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
+    map_find_str_in(ctx, args, imm)
+}
+
+fn map_find_str_in<T: Texts>(ctx: &T, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let key = text(ctx, args[1], args[2])?;
     let (koff, esize) = (args[3] & 0xFFFF, args[3] >> 32);
     let h = key_hash(text_hash(key));
@@ -683,7 +717,11 @@ fn map_find_str(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 // it through the name.
 #[allow(unsafe_code)]
 #[unsafe(export_name = "loom_treadle_map_find_int")]
-fn map_find_int(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn map_find_int(_: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
+    map_find_int_in(args, imm)
+}
+
+fn map_find_int_in(args: &mut [u64], _: u16) -> Result<(), Trap> {
     let word = args[1];
     // A one-word key is 1, 2, 4 or 8 bytes (an integer's storage); any other
     // size is read the long way, and never past a word.
@@ -745,14 +783,18 @@ fn concat(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 // it through the name.
 #[allow(unsafe_code)]
 #[unsafe(export_name = "loom_treadle_str_hash")]
-fn str_hash(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn str_hash(ctx: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
+    str_hash_in(ctx, args, imm)
+}
+
+fn str_hash_in<T: Texts>(ctx: &T, args: &mut [u64], _: u16) -> Result<(), Trap> {
     args[0] = text_hash(text(ctx, args[0], args[1])?);
     Ok(())
 }
 
 /// `str.next_char(s, at)`: the `char` at byte `at`, and where the next
 /// starts.
-fn next_char(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn next_char<T: Texts>(ctx: &T, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let s = text(ctx, args[0], args[1])?;
     let at = args[2] as usize;
     // Most text is ASCII: one byte, no decoding.
@@ -780,7 +822,7 @@ fn next_char(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 
 /// `str.prev_char(s, end)`: the `char` that ends at byte `end`, and where it
 /// starts.
-fn prev_char(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn prev_char<T: Texts>(ctx: &T, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let s = text(ctx, args[0], args[1])?;
     let end = (args[2] as usize).min(s.len());
     if end == 0 {
@@ -805,7 +847,7 @@ fn prev_char(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 
 /// `str.next_line(s, at)`: the line from byte `at` (its start and length,
 /// less a `\r` before its `\n`), and where the next starts.
-fn next_line(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn next_line<T: Texts>(ctx: &T, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let s = text(ctx, args[0], args[1])?;
     let at = args[2] as usize;
     let rest = &s[at.min(s.len())..];
@@ -825,7 +867,7 @@ fn next_line(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 /// `str.next_word(s, at)`: the next run of characters that aren't white
 /// space from byte `at` (start, length), where the search goes on,
 /// and whether there was one.
-fn next_word(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn next_word<T: Texts>(ctx: &T, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let s = text(ctx, args[0], args[1])?;
     let mut i = (args[2] as usize).min(s.len());
     // The width and white-space-ness of the character at `i`.

@@ -1,0 +1,20 @@
+// Text and map natives in parallel; they run without the pool's lock.
+use std.io.print
+use std.sync.Atomic
+
+fn main() {
+    let total = Atomic[u64](0)
+    let s = "the quick brown fox jumps over the lazy dog and keeps running through the green field until the sun goes down"
+    loom for i in 0..8 {
+        var m: Map[str, u64] = Map()
+        m["fox"] = 1
+        m["dog"] = 2
+        var n = 0u64
+        for _ in 0..4000000 {
+            if s.contains("zzz") { n += 1 }
+            if m.has("fox") { n += 1 }
+        }
+        total.add(n + i as u64)
+    }
+    print("total {total.load()}")
+}

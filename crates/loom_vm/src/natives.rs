@@ -459,6 +459,38 @@ impl<'i> Ctx<'i> {
     }
 }
 
+/// Where a native gets the text a value names: the context, which checks the
+/// address in the checked build, or [`Raw`], for the natives that run
+/// without the pool's lock.
+pub(crate) trait Texts {
+    fn text(&self, ptr: u64, len: u64) -> Result<&[u8], Trap>;
+}
+
+impl Texts for Ctx<'_> {
+    fn text(&self, ptr: u64, len: u64) -> Result<&[u8], Trap> {
+        // SAFETY: callers pass a text value the compiler built, as `Ctx::text`
+        // requires.
+        unsafe { Ctx::text(self, ptr, len) }
+    }
+}
+
+/// Text read from its address alone, with no context to check it against.
+#[cfg(not(feature = "checked"))]
+pub(crate) struct Raw;
+
+#[cfg(not(feature = "checked"))]
+impl Texts for Raw {
+    fn text(&self, ptr: u64, len: u64) -> Result<&[u8], Trap> {
+        if len == 0 {
+            return Ok(&[]);
+        }
+        // SAFETY: callers pass a text value the compiler built: `len` bytes at
+        // `ptr`, alive until the native returns (the promise `Ctx::text` has
+        // in a build that doesn't check it).
+        Ok(unsafe { std::slice::from_raw_parts(ptr as *const u8, len as usize) })
+    }
+}
+
 /// What a worker of a pool has of its own, which a native it runs works on
 /// in the context's place: the message and sinks of the task it runs, and
 /// its output line (not yet whole).
@@ -589,7 +621,7 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
             "sink.pad" => sink_pad,
             "str.new" => str_new,
             "str.eq" => str_eq,
-            "str.cmp" => str_cmp,
+            "str.cmp" => |c, a, i| str_cmp(c, a, i),
             "int.add_chk" => |_, a, _| checked(a, crate::ints::add_t),
             "int.sub_chk" => |_, a, _| checked(a, crate::ints::sub_t),
             "int.mul_chk" => |_, a, _| checked(a, crate::ints::mul_t),
@@ -706,6 +738,10 @@ pub(crate) fn resolve_local(name: &str) -> Option<LocalFn> {
         "int.cast_chk" => int_cast_chk,
         "float.to_int_chk" => float_to_int_chk,
         "int.to_char_chk" => int_to_char_chk,
+        #[cfg(not(feature = "checked"))]
+        "str.eq" => |_, a, i| str_eq_in(&Raw, a, i),
+        #[cfg(not(feature = "checked"))]
+        "str.cmp" => |_, a, i| str_cmp(&Raw, a, i),
         _ => return crate::atomic::resolve(name).or_else(|| crate::methods::resolve_scalar(name)),
     })
 }
@@ -967,18 +1003,21 @@ fn str_new(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 // it through the name.
 #[allow(unsafe_code)]
 #[unsafe(export_name = "loom_treadle_str_eq")]
-fn str_eq(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    // SAFETY: `str.eq` is passed two text values.
-    let same = unsafe { ctx.text(args[0], args[1])? == ctx.text(args[2], args[3])? };
+fn str_eq(ctx: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
+    str_eq_in(ctx, args, imm)
+}
+
+/// `str.eq` on any source of text.
+fn str_eq_in<T: Texts>(texts: &T, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let same = texts.text(args[0], args[1])? == texts.text(args[2], args[3])?;
     args[0] = u64::from(same);
     Ok(())
 }
 
 /// `str.cmp(a, a length, b, b length)`: -1, 0 or 1 as `a` comes before,
 /// with or after `b`, byte by byte.
-fn str_cmp(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    // SAFETY: `str.cmp` is passed two text values.
-    let order = unsafe { ctx.text(args[0], args[1])?.cmp(ctx.text(args[2], args[3])?) };
+fn str_cmp<T: Texts>(texts: &T, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let order = texts.text(args[0], args[1])?.cmp(texts.text(args[2], args[3])?);
     args[0] = order as i64 as u64;
     Ok(())
 }

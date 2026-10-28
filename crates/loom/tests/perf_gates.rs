@@ -70,6 +70,29 @@ fn loom_for_scales_to_8_workers() {
     );
 }
 
+/// The gate: text and map natives (`contains`, `Map.has`) scale this much on
+/// 8 workers, because they run without the pool's lock.
+const MIN_TEXT_SPEEDUP: f64 = 4.0;
+
+#[test]
+#[ignore = "perf gate: run with --release -- --ignored --nocapture"]
+fn text_natives_scale_to_8_workers() {
+    let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
+    if cores < WORKERS {
+        println!("skipped: {cores} cores, the gate needs {WORKERS}");
+        return;
+    }
+    let (one, many) = (best("par_text", 1), best("par_text", WORKERS));
+    let speedup = one.as_secs_f64() / many.as_secs_f64();
+    println!(
+        "par_text: {one:.3?} on one worker, {many:.3?} on {WORKERS}: {speedup:.2}x (at least {MIN_TEXT_SPEEDUP:.1}x)"
+    );
+    assert!(
+        speedup >= MIN_TEXT_SPEEDUP,
+        "par_text is {speedup:.2}x faster on {WORKERS} workers (at least {MIN_TEXT_SPEEDUP:.1}x)"
+    );
+}
+
 /// The gate: a small box allocated, read and freed costs less than this
 /// (design/vm.md §16's micro target, asserted).
 const MAX_BOX: Duration = Duration::from_nanos(15);

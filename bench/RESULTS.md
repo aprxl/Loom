@@ -4,6 +4,29 @@ Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
 
+## V8: read-only text and map natives run without the pool lock (2026-10-28)
+
+With several workers every native that wasn't a worker-local leaf took the
+pool's one lock. `str.find`, `starts_with`, `ends_with`, `char_count`, `trim`,
+`parse_int`, `parse_float`, `next_char`, `prev_char`, `next_line`, `next_word`,
+`hash`, `eq`, `cmp`, `map.find_str` and `map.find_int` only read the text they
+are given, so in non-checked builds they now run on the worker's own thread
+(`Texts` is implemented by the context, which checks addresses in the checked
+build, and by `Raw`, which doesn't). Scratch programs, `loom for i in 0..8`,
+1 000 000 calls per task, `LOOM_THREADS` 1 and 8, ms:
+
+| Native | 1 worker before | 8 workers before | 1 worker after | 8 workers after |
+|---|---|---|---|---|
+| `s.contains("zzz")` (110 bytes) | 254 | 1440 | 265 | 82 |
+| `m.has("fox")` (`Map[str, u64]`) | 138 | 1270 | 134 | 64 |
+| `x.count_ones()` (control) | 99 | 56 | 95 | 56 |
+
+New gate `text_natives_scale_to_8_workers` (`bench/par_text.loom`, 4 000 000
+iterations of `contains` and `has` per task, best of 5): 1.123 s on one
+worker, 190.8 ms on 8, 5.89x (5.99x, 5.81x in two more runs; gate 4x). The
+other gates are unchanged: box 10 ns, arena put 0.37, arena trees 10.2x,
+`par_mandelbrot` 5.72x, spawn and join 1.16 us.
+
 ## V8: follow-up gvn and sccp run on the functions changed since the last full pass (2026-10-28)
 
 `Module.changed` says which functions a pass changed. `sccp` and `gvn` (the
