@@ -997,12 +997,32 @@ impl<'a> Builder<'a> {
                 self.none_if(done);
                 match what {
                     TextItems::Chars => {
+                        let at_p = self.emit1(InstKind::Index { base: p, index: at, scale: 1 }, VTy::Ptr);
+                        let byte = self.load(Mem::U8, at_p, 0, VTy::Int);
+                        let (c, nx) = (self.new_var(VTy::Int), self.new_var(VTy::Int));
+                        let limit = self.iconst(0x80);
+                        let ascii = self.ucmp(Cmp::Lt, byte, limit);
+                        let (fast, slow, joined) = (self.new_block(), self.new_block(), self.new_block());
+                        self.br(ascii, fast, slow);
+                        self.enter(fast);
+                        self.write(c, byte);
+                        let one = self.iconst(1);
+                        let next = self.uarith(IntOp::Add, at, one);
+                        self.write(nx, next);
+                        self.jump(joined);
+                        self.enter(slow);
                         let r = self.emit(
                             InstKind::Native { name: "str.next_char", imm: 0, args: vec![p, n, at] },
                             &[VTy::Int, VTy::Int],
                         );
-                        self.store(Mem::U32, out, 0, r[0]);
-                        self.set_word(b, 16, r[1]);
+                        self.write(c, r[0]);
+                        self.write(nx, r[1]);
+                        self.jump(joined);
+                        self.enter(joined);
+                        let ch = self.read(c);
+                        self.store(Mem::U32, out, 0, ch);
+                        let at_next = self.read(nx);
+                        self.set_word(b, 16, at_next);
                     }
                     TextItems::Bytes => {
                         let at_p = self.emit1(InstKind::Index { base: p, index: at, scale: 1 }, VTy::Ptr);

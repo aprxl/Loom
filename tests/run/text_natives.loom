@@ -49,4 +49,12 @@ fn main() {
     for c in "aé✓😀z".chars() { total += c as u32 }
     print("{total}")
     print("{"aé✓😀z".chars().count()} {"aé✓😀z".len()}")
+
+    // chars: the ASCII bytes and the multibyte ones, in turn, and a string that ends in a multibyte char
+    var walked: List[char] = []
+    for c in "aé€😀z".chars() { walked.push(c) }
+    print("{walked}")
+    var ends: List[char] = []
+    for c in "x😀".chars() { ends.push(c) }
+    print("{ends}")
 }
