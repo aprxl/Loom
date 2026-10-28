@@ -522,14 +522,49 @@ pub(crate) fn copy_bytes(ctx: &Ctx, dst: u64, src: u64, n: u64) -> Result<(), Tr
     Ok(())
 }
 
-/// The word at `addr` (a mutex's lock word), checked in the checked build.
-pub(crate) fn read_word(ctx: &Ctx, addr: u64) -> Result<u64, Trap> {
-    if !addr.is_multiple_of(8) || (cfg!(feature = "checked") && !ctx.owns(addr, 8)) {
+/// The bit of a mutex's lock word that says a task may be waiting for it. The
+/// rest of the word is 0 when the mutex is free, else the holder's task index
+/// and one.
+pub(crate) const WAITERS: u64 = 1 << 63;
+
+/// The lock word of the mutex at `addr`, checked in the checked build. Every
+/// access to it is atomic: a task takes or gives back an uncontended mutex
+/// without the pool's lock (`try_lock` and `try_unlock`), and the rest, under
+/// the lock, is atomic too.
+pub(crate) fn mutex_word<'a>(ctx: &Ctx, addr: u64) -> Result<&'a std::sync::atomic::AtomicU64, Trap> {
+    if addr == 0 || !addr.is_multiple_of(8) || (cfg!(feature = "checked") && !ctx.owns(addr, 8)) {
         return Err(Trap::Crash("loom internal: a bad mutex word".into()));
     }
-    // SAFETY: the compiler supplies a live, aligned mutex word; all
-    // concurrent mutex-word accesses are under the scheduler lock.
-    Ok(unsafe { (addr as *const u64).read() })
+    // SAFETY: the compiler supplies a live, aligned mutex word, which is only
+    // ever accessed atomically (here, and in `try_lock` and `try_unlock`), and
+    // lives as long as the mutex, which outlives each native invocation.
+    Ok(unsafe { std::sync::atomic::AtomicU64::from_ptr(addr as *mut u64) })
+}
+
+/// Takes the free mutex whose lock word is at `addr` for task `me` (its index
+/// and one), if it is free and nobody waits for it: the same as `mutex.lock`
+/// without the pool's lock. `false` leaves everything to `mutex.lock`.
+#[cfg(not(feature = "checked"))]
+pub(crate) fn try_lock(addr: u64, me: u64) -> bool {
+    if addr == 0 || !addr.is_multiple_of(8) {
+        return false;
+    }
+    // SAFETY: as for `mutex_word`.
+    let word = unsafe { std::sync::atomic::AtomicU64::from_ptr(addr as *mut u64) };
+    word.compare_exchange(0, me, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst).is_ok()
+}
+
+/// Gives back the mutex at `addr` held by task `me`, if nobody waits for it:
+/// the same as `mutex.unlock` without the pool's lock. `false` leaves
+/// everything to `mutex.unlock`.
+#[cfg(not(feature = "checked"))]
+pub(crate) fn try_unlock(addr: u64, me: u64) -> bool {
+    if addr == 0 || !addr.is_multiple_of(8) {
+        return false;
+    }
+    // SAFETY: as for `mutex_word`.
+    let word = unsafe { std::sync::atomic::AtomicU64::from_ptr(addr as *mut u64) };
+    word.compare_exchange(me, 0, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst).is_ok()
 }
 
 /// The word at `addr`, which is in the program's data (a constant's flag).
@@ -555,15 +590,6 @@ fn const_load(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 
 fn const_store(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     data_atomic(ctx, args[0])?.store(args[1], std::sync::atomic::Ordering::Release);
-    Ok(())
-}
-
-/// Sets the word at `addr`.
-pub(crate) fn write_word(ctx: &Ctx, addr: u64, v: u64) -> Result<(), Trap> {
-    read_word(ctx, addr)?;
-    // SAFETY: read_word validated the mutex word; the scheduler lock
-    // excludes concurrent accesses until this write has completed.
-    unsafe { (addr as *mut u64).write(v) };
     Ok(())
 }
 

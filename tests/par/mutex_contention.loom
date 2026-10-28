@@ -1,0 +1,18 @@
+// Eight threads change one shared mutex's value and their own mutex's, again
+// and again: no update is lost, however the lock changes hands.
+
+use std.io.print
+use std.sync.Mutex
+
+fn main() {
+    let shared = Mutex[u64](0)
+    loom for i in 0..8 {
+        let own = Mutex[u64](0)
+        for _ in 0..20000 {
+            shared.lock() += 1
+            own.lock() += 1
+        }
+        print("task {i} own {own.lock()}")
+    }
+    print("shared {shared.lock()}")
+}

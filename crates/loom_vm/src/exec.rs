@@ -1361,6 +1361,26 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
                                     env.st_runtime.native_calls[cat] += 1;
                                 }
                                 if let Some(op) = env.task_natives[b(w)] {
+                                    // An uncontended mutex is taken and given back
+                                    // without the pool's lock; with one worker (no pool)
+                                    // the same compare-exchange takes the same lock.
+                                    #[cfg(not(feature = "checked"))]
+                                    {
+                                        // SAFETY: the verifier checked that the native's
+                                        // registers are inside the frame.
+                                        let addr = unsafe { *fp.add(a(w)) };
+                                        // The running task: `env.current` is kept up to date at
+                                        // every task switch, with a pool or without.
+                                        let me = env.current as u64 + 1;
+                                        let done = match op {
+                                            TaskOp::MutexLock => crate::natives::try_lock(addr, me),
+                                            TaskOp::MutexUnlock => crate::natives::try_unlock(addr, me),
+                                            _ => false,
+                                        };
+                                        if done {
+                                            continue 'run;
+                                        }
+                                    }
                                     throw!(Trap::Task(op));
                                 }
                                 let (native, regs) = env.natives[b(w)];
@@ -2079,12 +2099,8 @@ fn task_op<'p>(
             Step::Next
         }
         TaskOp::MutexLock => {
-            let word = crate::natives::read_word(ctx!(env), args[0])?;
-            let (step, taken) = sched!(env).mutex_lock(args[0], word)?;
-            if let Some(word) = taken {
-                crate::natives::write_word(ctx!(env), args[0], word)?;
-            }
-            step
+            let word = crate::natives::mutex_word(ctx!(env), args[0])?;
+            sched!(env).mutex_lock(args[0], word)?
         }
         TaskOp::PipeNew => {
             args[0] = sched!(env).pipe_new(heap!(env), args[0], args[1], args[2])?;
@@ -2164,13 +2180,8 @@ fn task_op<'p>(
             Step::Next
         }
         TaskOp::MutexUnlock => {
-            // Only the holder gives it back (a statement's cleanup can run
-            // twice, once for each way out).
-            let word = crate::natives::read_word(ctx!(env), args[0])?;
-            if word == sched!(env).current as u64 + 1 {
-                crate::natives::write_word(ctx!(env), args[0], 0)?;
-                sched!(env).mutex_unlock(args[0]);
-            }
+            let word = crate::natives::mutex_word(ctx!(env), args[0])?;
+            sched!(env).mutex_unlock(args[0], word);
             Step::Next
         }
     };

@@ -1,0 +1,17 @@
+// Uncontended mutexes in parallel: each task locks its own, so no lock is
+// taken on the pool.
+use std.io.print
+use std.sync.Atomic
+use std.sync.Mutex
+
+fn main() {
+    let total = Atomic[u64](0)
+    loom for i in 0..8 {
+        let m = Mutex[u64](0)
+        for _ in 0..3000000 {
+            m.lock() += 1
+        }
+        total.add(m.lock() + i as u64)
+    }
+    print("total {total.load()}")
+}

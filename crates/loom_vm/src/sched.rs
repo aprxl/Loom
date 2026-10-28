@@ -22,10 +22,11 @@
 
 use std::collections::VecDeque;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering, Ordering::SeqCst};
 
 use crate::Trap;
 use crate::heap::Heap;
+use crate::natives::WAITERS;
 use crate::stack::Stack;
 
 /// What belongs to the running task, which a switch swaps with the one that
@@ -61,7 +62,7 @@ mod tests {
     fn cancelled_mutex_winner_relays_the_wake() {
         let source = Wait::Mutex(8);
         let mut sched = scheduler_with_waiters(source);
-        sched.mutex_unlock(8);
+        sched.mutex_unlock(8, &AtomicU64::new(1 | WAITERS));
         assert_eq!(sched.pop_ready(), Some(1));
         sched.cancel(1);
         sched.current = 1;
@@ -73,7 +74,7 @@ mod tests {
     #[test]
     fn a_wake_is_retained_until_the_resource_operation_retries() {
         let mut sched = scheduler_with_waiters(Wait::Mutex(8));
-        sched.mutex_unlock(8);
+        sched.mutex_unlock(8, &AtomicU64::new(1 | WAITERS));
         assert_eq!(sched.pop_ready(), Some(1));
         sched.current = 1;
         assert_eq!(sched.arrival(), None);
@@ -963,32 +964,53 @@ impl Sched {
         (next, woke)
     }
 
-    /// `mutex.lock(addr)`, the lock word at `addr` being `word`: 0 when it's
-    /// free, else the holder's task index and one. Gives the word it should
-    /// have now, when the lock was taken.
-    pub fn mutex_lock(&mut self, addr: u64, word: u64) -> Result<(Step, Option<u64>), Trap> {
+    /// `mutex.lock(addr)`, `word` being the lock word at `addr`: 0 when it's
+    /// free, else the holder's task index and one, with [`WAITERS`] set when a
+    /// task may wait for it. The lock is taken, or the task waits at the back
+    /// of the mutex's queue (and sets the bit, so the holder says so when it
+    /// gives the lock back) and tries again when woken.
+    pub fn mutex_lock(&mut self, addr: u64, word: &AtomicU64) -> Result<Step, Trap> {
         // The retry is now under the scheduler lock: it either takes the
         // resource, or finds it unavailable and waits/cancels normally.
         self.tasks[self.current].wake_from = None;
         let me = self.current as u64 + 1;
-        if word == 0 {
-            return Ok((Step::Next, Some(me)));
+        loop {
+            let w = word.load(SeqCst);
+            let holder = w & !WAITERS;
+            if holder == 0 {
+                if word.compare_exchange(w, me | (w & WAITERS), SeqCst, SeqCst).is_ok() {
+                    return Ok(Step::Next);
+                }
+            } else if holder == me {
+                return Err(Trap::Unravel("this thread holds the lock already".into()));
+            } else {
+                // A cancelled task doesn't start to wait (with several workers
+                // it may have been told while it was running).
+                if self.tasks[self.current].cancelled {
+                    return Err(Trap::Cancel);
+                }
+                // Held by another: it waits at the back, and tries again when
+                // woken. (The holder may give the lock back first: then the
+                // exchange fails, and the lock is looked at again.)
+                if word.compare_exchange(w, w | WAITERS, SeqCst, SeqCst).is_ok() {
+                    return Ok(self.park_in(Wait::Mutex(addr), true));
+                }
+            }
         }
-        if word == me {
-            return Err(Trap::Unravel("this thread holds the lock already".into()));
-        }
-        // A cancelled task doesn't start to wait (with several workers it
-        // may have been told while it was running).
-        if self.tasks[self.current].cancelled {
-            return Err(Trap::Cancel);
-        }
-        // Held by another: it waits at the back, and tries again when woken.
-        Ok((self.park_in(Wait::Mutex(addr), true), None))
     }
 
-    /// `mutex.unlock(addr)`: the first of the tasks waiting for it wakes.
-    pub fn mutex_unlock(&mut self, addr: u64) {
+    /// `mutex.unlock(addr)`, `word` being the lock word at `addr`: if the
+    /// running task holds it, the first of the tasks waiting for it wakes, and
+    /// the word is free (still saying so if more tasks wait).
+    pub fn mutex_unlock(&mut self, addr: u64, word: &AtomicU64) {
+        // Only the holder gives it back (a statement's cleanup can run twice,
+        // once for each way out).
+        if word.load(SeqCst) & !WAITERS != self.current as u64 + 1 {
+            return;
+        }
         self.wake_resource(Wait::Mutex(addr));
+        let waiting = self.lockers.get(&addr).is_some_and(|q| !q.is_empty());
+        word.store(if waiting { WAITERS } else { 0 }, SeqCst);
     }
 
     // ------------------------------------------------------------ pipes
