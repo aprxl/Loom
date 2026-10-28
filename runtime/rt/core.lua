@@ -2984,6 +2984,17 @@ local function take_at(m, i)
   if m.vals then m.vals[i] = false end
   local n = m.n - 1
   m.n = n
+  if i == m.top then
+    -- The newest entry went: the removed ones behind it go too.
+    local hks, keys, vals, t = m.hks, m.keys, m.vals, i
+    while t > 0 and hks[t] == DEAD do
+      hks[t], keys[t] = nil, nil
+      if vals then vals[t] = nil end
+      t = t - 1
+    end
+    m.top = t
+    if m.head and m.head > t then m.head = t end
+  end
   if m.top - n > n and m.top > 8 then compact(m) end
 end
 
@@ -3143,6 +3154,28 @@ ext["std.map.Map.values"] = function(_, dv, m)
   return coll_stream(m, function(i) return copy(dv, m.vals[i]) end)
 end
 
+--- The number of the oldest entry of `m`, which has one.
+local function first_at(m)
+  local i, hks = m.head or 0, m.hks
+  while hks[i + 1] == DEAD do
+    i = i + 1
+  end
+  m.head = i
+  return i + 1
+end
+
+ext["std.map.Map.first"] = function(dk, dv, m)
+  if m.n == 0 then return nil end
+  local i = first_at(m)
+  return { copy(dk, m.keys[i]), copy(dv, m.vals[i]) }
+end
+
+ext["std.map.Map.last"] = function(dk, dv, m)
+  if m.n == 0 then return nil end
+  local i = m.top
+  return { copy(dk, m.keys[i]), copy(dv, m.vals[i]) }
+end
+
 local function map_pairs(dk, dv, m)
   return coll_stream(m, function(i) return { copy(dk, m.keys[i]), copy(dv, m.vals[i]) } end)
 end
@@ -3217,6 +3250,14 @@ ext["std.set.Set.remove"] = function(d, s, x)
   if i == nil then return false end
   take_at(s, i)
   return true
+end
+
+ext["std.set.Set.pop"] = function(d, s)
+  if s.n == 0 then return nil end
+  local i = first_at(s)
+  local x = s.keys[i]
+  take_at(s, i)
+  return some(d, x)
 end
 
 ext["std.set.Set.clear"] = function(_, s)

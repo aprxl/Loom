@@ -128,7 +128,7 @@ fn builtin(path: &str) -> Option<Builtin> {
         "std.slice.Slice" => Builtin::Header(2),
         // A `File` is its path.
         "std.string.String" | "std.list.List" | "std.fs.File" => Builtin::Header(3),
-        "std.map.Map" | "std.set.Set" => Builtin::Header(7),
+        "std.map.Map" | "std.set.Set" => Builtin::Header(8),
         "std.iter.Stream" | "std.iter.Shuttle" | "std.iter.Burst" => Builtin::Header(2),
         "std.sync.Atomic" => Builtin::Atomic,
         "std.sync.Mutex" => Builtin::Mutex,

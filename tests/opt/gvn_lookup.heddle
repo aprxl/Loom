@@ -1,22 +1,22 @@
 fn bump(v0: ptr, v1: ptr) -> () {
   s0: inlined Map.has#2
 b0(v0: ptr, v1: ptr):
-    v103 = iconst 171800264712
-    v104 = load.64 v1
-    v105 = load.64 v1+8
-    v106, v107 = native map.find_str #0(v0, v104, v105, v103)
-    v108 = iconst -1
-    v109 = icmp.ne.u v106, v108
-    br v109, b1, b2
+    v111 = iconst 171800264712
+    v112 = load.64 v1
+    v113 = load.64 v1+8
+    v114, v115 = native map.find_str #0(v0, v112, v113, v111)
+    v116 = iconst -1
+    v117 = icmp.ne.u v114, v116
+    br v117, b1, b2
 b1:
     v3 = iconst 1
     v9 = iconst -1
-    v10 = icmp.eq.u v106, v9
+    v10 = icmp.eq.u v114, v9
     br v10, b4, b5
 b2:
     v21 = iconst 1
     v27 = iconst -1
-    v28 = icmp.eq.u v106, v27
+    v28 = icmp.eq.u v114, v27
     br v28, b6, b7
 b3:
     ret
@@ -32,7 +32,7 @@ b4:
     unravel msg
 b5:
     v16 = load.64 v0
-    v17 = index v16, v106 * 40
+    v17 = index v16, v114 * 40
     v18 = offset v17+32
     v19 = load.u32 v18
     v20 = add.u32 v19, v3
@@ -47,7 +47,7 @@ b6:
     native mem.grow #0(v0, v35, v36, v34)
     v37 = load.64 v0
     v38 = index v37, v32 * 40
-    store.64 v38, v107
+    store.64 v38, v115
     v39 = offset v38+8
     copy v39, v1, 24
     zero v1, 24
@@ -57,94 +57,113 @@ b6:
     v42 = add%.u64 v40, v41
     store.64 v0+8, v42
     store.64 v0+40, v34
-    v43 = load.64 v0+32
-    v44 = iconst 2
-    v45 = mul%.u64 v34, v44
-    v46 = icmp.gt.u v45, v43
-    br v46, b8, b9
+    v43 = load.64 v0+56
+    v44 = icmp.lt.u v43, v32
+    br v44, b8, b9
 b7:
     v29 = load.64 v0
-    v30 = index v29, v106 * 40
+    v30 = index v29, v114 * 40
     v31 = offset v30+32
     store.u32 v31, v21
     jump b3
 b8:
-    v47 = mul%.u64 v43, v44
-    v48 = iconst 8
-    v49 = icmp.lt.u v47, v48
-    br v49, b10(v48), b10(v47)
+    v45 = iconst 1
+    v46 = sub%.u64 v32, v45
+    v47 = load.64 v0
+    v48 = index v47, v46 * 40
+    store.64 v48+8, v43
+    jump b9
 b9:
-    v89 = load.64 v0+24
-    v90 = iconst 1
-    v91 = sub%.u64 v43, v90
-    v92 = and v107, v91
-    jump b20(v92)
-b10(v50: int):
-    v52 = iconst 0
-    v53 = icmp.ne.u v43, v52
-    br v53, b11, b12
+    store.64 v0+56, v34
+    v49 = iconst 0
+    v50 = icmp.eq.u v40, v49
+    br v50, b10, b11
+b10:
+    store.64 v0+48, v32
+    jump b11
 b11:
-    v54 = load.64 v0+24
-    v55 = iconst 8
-    v56 = mul%.u64 v43, v55
-    native mem.free #0(v54, v56, v55)
-    jump b12
+    v51 = load.64 v0+32
+    v52 = iconst 2
+    v53 = mul%.u64 v34, v52
+    v54 = icmp.gt.u v53, v51
+    br v54, b12, b13
 b12:
-    v57 = iconst 8
-    v58 = mul.u64 v50, v57
-    v59 = native mem.calloc #0(v58, v57)
-    store.64 v0+24, v59
-    store.64 v0+32, v50
-    v60 = load.64 v0+40
-    v61 = iconst 0
-    jump b13(v61)
-b13(v62: int):
-    v63 = icmp.lt.u v62, v60
-    br v63, b14, b3
-b14:
-    v64 = load.64 v0
-    v65 = index v64, v62 * 40
-    v66 = load.64 v65
-    v67 = iconst 0
-    v68 = icmp.ne.u v66, v67
-    br v68, b15, b16
-b15:
-    v71 = iconst 1
-    v72 = sub%.u64 v50, v71
-    v73 = and v66, v72
-    jump b17(v73)
-b16:
-    v86 = iconst 1
-    v87 = add%.u64 v62, v86
-    jump b13(v87)
-b17(v74: int):
-    v75 = index v59, v74 * 8
-    v76 = load.64 v75
-    v77 = iconst 0
-    v78 = icmp.eq.u v76, v77
-    br v78, b19, b18
-b18:
-    v79 = iconst 1
-    v80 = add%.u64 v74, v79
-    v81 = and v80, v72
-    jump b17(v81)
-b19:
-    v82 = iconst 1
-    v83 = add%.u64 v62, v82
-    store.64 v75, v83
-    jump b16
-b20(v93: int):
-    v94 = index v89, v93 * 8
-    v95 = load.64 v94
-    v96 = iconst 0
-    v97 = icmp.eq.u v95, v96
-    br v97, b22, b21
-b21:
+    v55 = mul%.u64 v51, v52
+    v56 = iconst 8
+    v57 = icmp.lt.u v55, v56
+    br v57, b14(v56), b14(v55)
+b13:
+    v97 = load.64 v0+24
     v98 = iconst 1
-    v99 = add%.u64 v93, v98
-    v100 = and v99, v91
-    jump b20(v100)
+    v99 = sub%.u64 v51, v98
+    v100 = and v115, v99
+    jump b24(v100)
+b14(v58: int):
+    v60 = iconst 0
+    v61 = icmp.ne.u v51, v60
+    br v61, b15, b16
+b15:
+    v62 = load.64 v0+24
+    v63 = iconst 8
+    v64 = mul%.u64 v51, v63
+    native mem.free #0(v62, v64, v63)
+    jump b16
+b16:
+    v65 = iconst 8
+    v66 = mul.u64 v58, v65
+    v67 = native mem.calloc #0(v66, v65)
+    store.64 v0+24, v67
+    store.64 v0+32, v58
+    v68 = load.64 v0+40
+    v69 = iconst 0
+    jump b17(v69)
+b17(v70: int):
+    v71 = icmp.lt.u v70, v68
+    br v71, b18, b3
+b18:
+    v72 = load.64 v0
+    v73 = index v72, v70 * 40
+    v74 = load.64 v73
+    v75 = iconst 0
+    v76 = icmp.ne.u v74, v75
+    br v76, b19, b20
+b19:
+    v79 = iconst 1
+    v80 = sub%.u64 v58, v79
+    v81 = and v74, v80
+    jump b21(v81)
+b20:
+    v94 = iconst 1
+    v95 = add%.u64 v70, v94
+    jump b17(v95)
+b21(v82: int):
+    v83 = index v67, v82 * 8
+    v84 = load.64 v83
+    v85 = iconst 0
+    v86 = icmp.eq.u v84, v85
+    br v86, b23, b22
 b22:
-    store.64 v94, v34
+    v87 = iconst 1
+    v88 = add%.u64 v82, v87
+    v89 = and v88, v80
+    jump b21(v89)
+b23:
+    v90 = iconst 1
+    v91 = add%.u64 v70, v90
+    store.64 v83, v91
+    jump b20
+b24(v101: int):
+    v102 = index v97, v101 * 8
+    v103 = load.64 v102
+    v104 = iconst 0
+    v105 = icmp.eq.u v103, v104
+    br v105, b26, b25
+b25:
+    v106 = iconst 1
+    v107 = add%.u64 v101, v106
+    v108 = and v107, v99
+    jump b24(v108)
+b26:
+    store.64 v102, v34
     jump b3
 }

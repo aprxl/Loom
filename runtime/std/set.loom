@@ -23,6 +23,8 @@ pub warp Set[T] {
     pub fn sorted(self) -> List[T] where T: Ord
     /// A deep copy.
     pub fn copy(self) -> Set[T]
+    /// Takes out the oldest item.
+    pub fn pop(mut self) -> ?T where T: Hash
     /// The items in this set, `other`, or both.
     pub fn union(self, other: Set[T]) -> Set[T] where T: Hash {
         var out = self.copy()
@@ -87,21 +89,6 @@ pub warp Set[T] {
     pub fn extend(mut self, take items: Stream[T]) where T: Hash {
         for x in items {
             self.insert(x)
-        }
-    }
-    /// Takes out the oldest item.
-    pub fn pop(mut self) -> ?T where T: Hash {
-        var first: List[T] = []
-        for x in self {
-            first.push(x)
-            break
-        }
-        match first.pop() {
-            some(x) => {
-                self.remove(x)
-                some(x)
-            }
-            none => none
         }
     }
 }

@@ -186,7 +186,7 @@ impl<'a> Builder<'a> {
             Step::Seq { owned, .. } => 32 + owned.map_or(Some(0), |t| self.size_align(t).map(|s| s.0))?,
             Step::Woven { iter, .. } => self.size_align(iter)?.0.max(8),
             Step::Range(_) | Step::Text(_) => 24,
-            Step::Coll { owned, .. } => 32 + if owned { 56 } else { 0 },
+            Step::Coll { owned, .. } => 32 + if owned { 64 } else { 0 },
             Step::Gen { .. } | Step::Burst { .. } => 16,
             Step::Chunks { .. } => 32,
             Step::RangeChunks(_) => 24,
@@ -711,39 +711,10 @@ impl<'a> Builder<'a> {
         }
     }
 
-    /// Fills a box of `Step::Coll` for the map at `header`.
-    fn coll_box(&mut self, b: Value, header: Value, coll: Ty) {
-        // The stream starts at the first entry that is not a removed one, and
-        // the map remembers where that is.
-        let start = self.new_var(VTy::Int);
-        let head = self.word(header, 48);
-        self.write(start, head);
-        if let Some(c) = self.coll_of(coll) {
-            let used = self.word(header, 40);
-            let (look, skip, done) = (self.new_block(), self.new_block(), self.new_block());
-            self.jump(look);
-            self.switch_to(look);
-            let i = self.read(start);
-            let end = self.ucmp(Cmp::Ge, i, used);
-            let check = self.new_block();
-            self.br(end, done, check);
-            self.enter(check);
-            let ebuf = self.load(Mem::W64, header, 0, VTy::Ptr);
-            let ent = self.emit1(InstKind::Index { base: ebuf, index: i, scale: c.esize }, VTy::Ptr);
-            let hash = self.load(Mem::W64, ent, 0, VTy::Int);
-            let zero = self.iconst(0);
-            let removed = self.ucmp(Cmp::Eq, hash, zero);
-            self.br(removed, skip, done);
-            self.enter(skip);
-            let one = self.iconst(1);
-            let next = self.uarith(IntOp::Add, i, one);
-            self.write(start, next);
-            self.jump(look);
-            self.seal(look);
-            self.enter(done);
-        }
-        let first = self.read(start);
-        self.store(Mem::W64, header, 48, first);
+    /// Fills a box of `Step::Coll` for the map at `header`: the stream
+    /// starts at the oldest entry (`head`), and skips the removed ones.
+    fn coll_box(&mut self, b: Value, header: Value) {
+        let first = self.word(header, 48);
         self.set_word(b, 0, header);
         let len = self.word(header, 8);
         self.set_word(b, 8, len);
@@ -765,7 +736,7 @@ impl<'a> Builder<'a> {
         let item = self.stream_item_ty(sty)?;
         let step = Step::Coll { coll, what, item, owned: false };
         let b = self.new_box(step)?;
-        self.coll_box(b, header, coll);
+        self.coll_box(b, header);
         let _ = span;
         self.stream_at(self.f.sret?, step, b);
         Some(())
@@ -1109,12 +1080,12 @@ impl<'a> Builder<'a> {
                     let b = self.new_box(step)?;
                     let at = self.offset(b, 32);
                     self.move_to(at, 0, Val::Mem(p), from, span)?;
-                    self.coll_box(b, at, from);
+                    self.coll_box(b, at);
                     return self.stream_val(step, b, ty, span);
                 }
                 let step = Step::Coll { coll: from, what, item, owned: false };
                 let b = self.new_box(step)?;
-                self.coll_box(b, p, from);
+                self.coll_box(b, p);
                 self.stream_val(step, b, ty, span)
             }
             IterSource::Shuttle(item) | IterSource::Burst(item) => {

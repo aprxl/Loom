@@ -1,11 +1,11 @@
 //! Maps and sets (design/vm.md §5.2, §10.13), in insertion order.
 //!
 //! A `Map[K, V]` (and a `Set[T]`, which is one with no values) is a header
-//! of five words: the entries' buffer, how many there are and room for, and
-//! an index's buffer and how many slots it has (a power of two, or 0 for
-//! none yet). An entry is a key's hash, the key and the value. The index is
-//! open addressing: a slot is 0, or an entry's number plus one; it's kept
-//! at most half full.
+//! of eight words: the entries' buffer (0), how many there are (1) and room
+//! for (2), an index's buffer (3) and how many slots it has (4; a power of
+//! two, or 0 for none yet), `used` (5), `head` (6) and `tail` (7). An entry
+//! is a key's hash, the key and the value. The index is open addressing: a
+//! slot is 0, or an entry's number plus one; it's kept at most half full.
 //!
 //! Removing an entry is cheap: its hash becomes 0 (a live entry's never is),
 //! so lookups pass over it, and it stays in the entries (and the index)
@@ -15,9 +15,19 @@
 //! removed ones included. Whatever walks the entries (a loop, `show`, `==`,
 //! `copy`) first makes `used` equal `len` by moving them down early
 //! (`compact`); only a drop walks them as they are, and so does a stream
-//! (it skips the removed ones). Word 7 (`head`) is the number of the first
-//! entry that may be live: the entries before it are removed ones, so taking
-//! the oldest entry over and over (a queue) does not look at them again.
+//! (it skips the removed ones). While there are live entries, `head` is the
+//! number of the oldest and `tail` the number of the newest plus one, kept
+//! by every insert and removal: the oldest or the newest entry is read from
+//! them (`Map.first`, `Map.last`, `Set.pop`), and taking either over and over
+//! (a queue, a stack) does not look at the removed ones again. With none,
+//! both are 0.
+//!
+//! A new entry goes after the removed ones, even when the newest live entry
+//! is before them; then the removed entry just behind it (word 1 of its
+//! bytes, which hold nothing of a removed entry) says where they start, so
+//! that taking the new entry out again moves `tail` back past all of them
+//! at once. Every removed entry has a 0 there unless it says so. (An entry
+//! that is only a hash has no room for it: `tail` walks past them.)
 //!
 //! Keys hash structurally (`hash.rs`) and compare with `==` (a warp's own
 //! `eq` when it writes one: row P9 of §14).
@@ -313,6 +323,29 @@ impl<'a> Builder<'a> {
         let more = self.uarith(IntOp::Add, len, one);
         self.store(Mem::W64, header, 8, more);
         self.store(Mem::W64, header, 40, want);
+        if c.esize >= 16 {
+            let old = self.hdr(header, 56);
+            let behind = self.ucmp(Cmp::Lt, old, used);
+            let (hint, after) = (self.new_block(), self.new_block());
+            self.br(behind, hint, after);
+            self.enter(hint);
+            let one = self.iconst(1);
+            let last = self.uarith(IntOp::Sub, used, one);
+            let ebuf = self.hdr_ptr(header, 0);
+            let ent = self.entry(c, ebuf, last);
+            self.store(Mem::W64, ent, 8, old);
+            self.jump(after);
+            self.enter(after);
+        }
+        self.store(Mem::W64, header, 56, want);
+        let zero = self.iconst(0);
+        let was_empty = self.ucmp(Cmp::Eq, len, zero);
+        let (first, rest) = (self.new_block(), self.new_block());
+        self.br(was_empty, first, rest);
+        self.enter(first);
+        self.store(Mem::W64, header, 48, used);
+        self.jump(rest);
+        self.enter(rest);
         // At most half full: else twice the slots (at least 8).
         let slots = self.hdr(header, 32);
         let two = self.iconst(2);
@@ -348,17 +381,51 @@ impl<'a> Builder<'a> {
     }
 
     /// Takes entry `e` out, its key and value already taken (or dropped): its
-    /// hash becomes 0, and when more than half the entries made are removed
-    /// ones, the live ones move down.
+    /// hash becomes 0, `head` and `tail` move past it if it was the oldest or
+    /// the newest, and when more than half the entries made are removed ones,
+    /// the live ones move down.
     fn remove_entry(&mut self, c: &Coll, header: Value, e: Value) {
         let ebuf = self.hdr_ptr(header, 0);
         let ent = self.entry(c, ebuf, e);
         let zero = self.iconst(0);
         self.store(Mem::W64, ent, 0, zero);
+        if c.esize >= 16 {
+            self.store(Mem::W64, ent, 8, zero);
+        }
         let len = self.hdr(header, 8);
         let one = self.iconst(1);
         let left = self.uarith(IntOp::Sub, len, one);
         self.store(Mem::W64, header, 8, left);
+        let none_left = self.ucmp(Cmp::Eq, left, zero);
+        let (empty, some_left, ends) = (self.new_block(), self.new_block(), self.new_block());
+        self.br(none_left, empty, some_left);
+        self.enter(empty);
+        self.store(Mem::W64, header, 48, zero);
+        self.store(Mem::W64, header, 56, zero);
+        self.jump(ends);
+        self.enter(some_left);
+        let head = self.hdr(header, 48);
+        let was_head = self.ucmp(Cmp::Eq, e, head);
+        let (forward, after_head) = (self.new_block(), self.new_block());
+        self.br(was_head, forward, after_head);
+        self.enter(forward);
+        let next = self.live_from(c, ebuf, e, true);
+        self.store(Mem::W64, header, 48, next);
+        self.jump(after_head);
+        self.enter(after_head);
+        let tail = self.hdr(header, 56);
+        let last = self.uarith(IntOp::Sub, tail, one);
+        let was_tail = self.ucmp(Cmp::Eq, e, last);
+        let (back, after_tail) = (self.new_block(), self.new_block());
+        self.br(was_tail, back, after_tail);
+        self.enter(back);
+        let newest = self.live_from(c, ebuf, e, false);
+        let past = self.uarith(IntOp::Add, newest, one);
+        self.store(Mem::W64, header, 56, past);
+        self.jump(after_tail);
+        self.enter(after_tail);
+        self.jump(ends);
+        self.enter(ends);
         let used = self.hdr(header, 40);
         let dead = self.uarith(IntOp::Sub, used, left);
         let many = self.ucmp(Cmp::Gt, dead, left);
@@ -372,6 +439,42 @@ impl<'a> Builder<'a> {
         self.compact(c, header);
         self.jump(done);
         self.enter(done);
+    }
+
+    /// The number of the first live entry after `e` (`up`) or before it,
+    /// which there must be one of. Going down, a removed entry that says
+    /// where a run of them starts is jumped over.
+    fn live_from(&mut self, c: &Coll, ebuf: Value, e: Value, up: bool) -> Value {
+        let at = self.new_var(VTy::Int);
+        self.write(at, e);
+        let (look, skip, found) = (self.new_block(), self.new_block(), self.new_block());
+        self.jump(look);
+        self.switch_to(look);
+        let cur = self.read(at);
+        let one = self.iconst(1);
+        let step = if up { IntOp::Add } else { IntOp::Sub };
+        let moved = self.uarith(step, cur, one);
+        self.write(at, moved);
+        let ent = self.entry(c, ebuf, moved);
+        let h = self.hdr(ent, 0);
+        let zero = self.iconst(0);
+        let live = self.ucmp(Cmp::Ne, h, zero);
+        self.br(live, found, skip);
+        self.enter(skip);
+        if !up && c.esize >= 16 {
+            let start = self.hdr(ent, 8);
+            let says = self.ucmp(Cmp::Ne, start, zero);
+            let (over, on) = (self.new_block(), self.new_block());
+            self.br(says, over, on);
+            self.enter(over);
+            self.write(at, start);
+            self.jump(look);
+            self.enter(on);
+        }
+        self.jump(look);
+        self.seal(look);
+        self.enter(found);
+        self.read(at)
     }
 
     /// Moves the live entries down over the removed ones, in order, and
@@ -408,6 +511,7 @@ impl<'a> Builder<'a> {
         });
         self.store(Mem::W64, header, 40, len);
         self.store(Mem::W64, header, 48, zero);
+        self.store(Mem::W64, header, 56, len);
         let slots = self.hdr(header, 32);
         self.reindex(c, header, slots);
         self.jump(done);
@@ -496,6 +600,7 @@ impl<'a> Builder<'a> {
         self.store(Mem::W64, dst, 40, len);
         let zero = self.iconst(0);
         self.store(Mem::W64, dst, 48, zero);
+        self.store(Mem::W64, dst, 56, len);
         self.store(Mem::W64, dst, 16, len);
         // The index: the same slots, for the same hashes.
         let slots = self.hdr(src, 32);
@@ -936,12 +1041,72 @@ impl<'a> Builder<'a> {
                     }
                 }
             }
+            "first" | "last" => {
+                let vt = c.val?;
+                let TyKind::Optional(pair) = *self.tcx().kind(ret) else {
+                    return self.internal(span, "`first` or `last` of a map without an optional");
+                };
+                let zero = self.iconst(0);
+                let empty = self.ucmp(Cmp::Eq, len, zero);
+                let (no, yes) = (self.new_block(), self.new_block());
+                self.br(empty, no, yes);
+                self.enter(no);
+                let n = self.none(ret, span)?;
+                self.ret_val(n, span)?;
+                self.enter(yes);
+                let e = if name == "first" {
+                    self.hdr(header, 48)
+                } else {
+                    let tail = self.hdr(header, 56);
+                    let one = self.iconst(1);
+                    self.uarith(IntOp::Sub, tail, one)
+                };
+                let ebuf = self.hdr_ptr(header, 0);
+                let ent = self.entry(&c, ebuf, e);
+                let offs = self.field_offsets(pair, span)?;
+                let dst = self.temp(pair, span)?;
+                let k = self.load_val(ent, c.koff as i64, c.key, span)?;
+                let at = self.offset(dst, offs[0] as i64);
+                self.copy_into(at, &k, c.key, span)?;
+                let v = self.load_val(ent, c.voff as i64, vt, span)?;
+                let at = self.offset(dst, offs[1] as i64);
+                self.copy_into(at, &v, vt, span)?;
+                let p = self.load_val(dst, 0, pair, span)?;
+                let p = self.some(ret, pair, p, span)?;
+                self.ret_val(p, span)
+            }
+            "pop" => {
+                // The oldest item of a set, moved out.
+                let zero = self.iconst(0);
+                let empty = self.ucmp(Cmp::Eq, len, zero);
+                let (no, yes) = (self.new_block(), self.new_block());
+                self.br(empty, no, yes);
+                self.enter(no);
+                let n = self.none(ret, span)?;
+                self.ret_val(n, span)?;
+                self.enter(yes);
+                let e = self.hdr(header, 48);
+                let ebuf = self.hdr_ptr(header, 0);
+                let ent = self.entry(&c, ebuf, e);
+                let at = self.offset(ent, c.koff as i64);
+                let dst = self.temp(c.key, span)?;
+                let (size, _) = self.size_align(c.key)?;
+                if size > 0 {
+                    self.emit(InstKind::Copy { dst, src: at, size }, &[]);
+                }
+                self.remove_entry(&c, header, e);
+                let x = self.load_val(dst, 0, c.key, span)?;
+                let x = self.owned_copy(x, c.key, span)?;
+                let x = self.some(ret, c.key, x, span)?;
+                self.ret_val(x, span)
+            }
             "clear" => {
                 self.drop_entries(&c, header);
                 let zero = self.iconst(0);
                 self.store(Mem::W64, header, 8, zero);
                 self.store(Mem::W64, header, 40, zero);
                 self.store(Mem::W64, header, 48, zero);
+                self.store(Mem::W64, header, 56, zero);
                 let slots = self.hdr(header, 32);
                 let has = self.ucmp(Cmp::Ne, slots, zero);
                 let (re, done) = (self.new_block(), self.new_block());

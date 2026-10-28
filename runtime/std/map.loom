@@ -40,6 +40,10 @@ pub warp Map[K, V] {
     pub fn sorted(self) -> List[(K, V)] where K: Ord
     /// A deep copy.
     pub fn copy(self) -> Map[K, V]
+    /// The oldest entry.
+    pub fn first(self) -> ?(K, V)
+    /// The newest entry.
+    pub fn last(self) -> ?(K, V)
     /// A map of `pairs`; a key that comes up again keeps the last value.
     pub fn of(pairs: [(K, V)]) -> Map[K, V] where K: Hash {
         var m: Map[K, V] = Map()
@@ -94,10 +98,6 @@ pub warp Map[K, V] {
             }
         }
     }
-    /// The oldest entry.
-    pub fn first(self) -> ?(K, V) = self.pairs().next()
-    /// The newest entry.
-    pub fn last(self) -> ?(K, V) = self.pairs().last()
 }
 
 weave[K: Hash, V] FromStream into Map[K, V] {

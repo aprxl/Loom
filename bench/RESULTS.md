@@ -4,6 +4,29 @@ Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
 
+## V8: Map.first, Map.last and Set.pop in O(1) (2026-10-28)
+
+The map header gained `tail` (8 words), `head` is exact while the map has
+entries, and a removed entry just behind a newest entry that was added past
+removed ones says where they start (map.rs, header comment). `Map.first`,
+`Map.last` and `Set.pop` read one entry from `head`/`tail` instead of building
+a stream (`Map.last` walked every entry). Best of seven, `--backend vm -O2`,
+ms:
+
+| Benchmark | before | after |
+|---|---|---|
+| `set_drain` (100 000 `pop` and `first`+`remove`) | 91 | 83 |
+| 100 000 inserts, `first`+`remove` until empty, 100 000 more, `last`+`remove` until empty | over 100 000 | 84 |
+| a stack 50 000 deep, 200 000 times `insert`, `last`, `remove` | over 100 000 | 77 |
+| `maps` | 120 | 123 |
+| `word_freq` | 256 | 253 |
+
+(Before, the two `last` programs were stopped at 100 s.) Dispatch counts
+(`bench/counts.txt`): `set_drain` 6 786 096 to 4 866 036 (no stream box, no
+list), `maps` 4 114 296 to 4 554 300 (+10.7%: each insert and each removal
+keeps `head` and `tail`, about 7 dispatches), `word_freq` 1 570 318 to
+1 570 825.
+
 ## V8: per-worker ready deques with stealing (2026-10-28)
 
 `Sched.ready` is a deque per worker. A task started or woken is pushed on a
