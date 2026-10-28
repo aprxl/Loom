@@ -385,6 +385,7 @@ impl<'i> Machine<'i> {
         let pool = (workers > 1)
             .then(|| Pool::new(workers, Arc::clone(&self.sched.cancel_seen), Arc::clone(&self.sched.queued)));
         self.sched.eager = pool.is_none();
+        self.sched.set_workers(workers);
         let init = Init {
             image: self.image,
             code_base: self.code.as_ptr(),
@@ -411,14 +412,16 @@ impl<'i> Machine<'i> {
             Some(pool) => {
                 let init = &init;
                 std::thread::scope(|scope| {
-                    for _ in 1..workers {
+                    for worker in 1..workers {
                         scope.spawn(move || {
+                            crate::sched::set_worker(worker);
                             let mut stack = Stack::empty();
                             let mut ticks = TICKS;
                             let result = run(init, &mut stack, &mut ticks, Start::Idle);
                             report(init, result);
                         });
                     }
+                    crate::sched::set_worker(0);
                     let result = run(init, stack, &mut ticks, Start::Main { entry, args });
                     report(init, result);
                 });

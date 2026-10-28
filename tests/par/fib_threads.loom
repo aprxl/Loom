@@ -1,0 +1,18 @@
+// A thread on every call of a recursive fib: the threads a worker starts are
+// run by it, or by whichever worker takes them, or by the call that joins
+// them, and the sum is the same.
+
+use std.io.print
+
+fn fib(n: u64) -> u64 {
+    if n < 2 { return n }
+    loom {
+        let a = thread fib(n - 1)
+        let b = fib(n - 2)
+        a.join() + b
+    }
+}
+
+fn main() {
+    print("fib {fib(20)}")
+}

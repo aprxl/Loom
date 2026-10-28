@@ -184,6 +184,16 @@ pub(crate) enum Step {
     Start(usize),
 }
 
+thread_local! {
+    /// Which worker this thread is, for the scheduler's per-worker queues.
+    static WORKER: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// This thread is worker `i` of the pool.
+pub(crate) fn set_worker(i: usize) {
+    WORKER.with(|w| w.set(i));
+}
+
 /// The task operations, as the natives `task.*` and `loom.*` name them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TaskOp {
@@ -338,6 +348,8 @@ pub(crate) struct Task {
     pub unrun: bool,
     /// The word of the instruction that started it.
     pub started: usize,
+    /// The worker it last ran on.
+    pub worker: usize,
     pub epoch: u32,
     live: bool,
 }
@@ -377,6 +389,7 @@ impl Task {
             env_drop: 0,
             unrun: false,
             started: 0,
+            worker: 0,
             epoch: 0,
             live: false,
         }
@@ -411,7 +424,10 @@ pub(crate) struct Sched {
     free_groups: Vec<usize>,
     /// The running task: 0 is the program's own.
     pub current: usize,
-    ready: VecDeque<usize>,
+    /// The tasks that are ready, in a queue for each worker (one without a
+    /// pool): a worker takes the newest of its own, else the oldest of
+    /// another's.
+    ready: Vec<VecDeque<usize>>,
     /// The tasks waiting for each locked mutex, by its address.
     lockers: std::collections::BTreeMap<u64, VecDeque<usize>>,
     /// Which task computes each constant (by its flag's address), with
@@ -459,7 +475,7 @@ impl Sched {
             free_tasks: Vec::new(),
             free_groups: Vec::new(),
             current: 0,
-            ready: VecDeque::new(),
+            ready: vec![VecDeque::new()],
             lockers: std::collections::BTreeMap::new(),
             consts: std::collections::BTreeMap::new(),
             eager: true,
@@ -482,7 +498,7 @@ impl Sched {
         self.free_tasks.clear();
         self.free_groups.clear();
         self.current = 0;
-        self.ready.clear();
+        self.ready = vec![VecDeque::new()];
         self.queued.store(0, Ordering::Relaxed);
         self.lockers.clear();
         self.consts.clear();
@@ -516,6 +532,7 @@ impl Sched {
     /// `pc`, `fp` and segment end.
     pub fn load(&mut self, next: usize, run: &mut Running) -> (*const u64, *mut u64, *mut u64) {
         let t = &mut self.tasks[next];
+        t.worker = WORKER.with(std::cell::Cell::get);
         std::mem::swap(&mut t.stack, run.stack);
         std::mem::swap(&mut t.in_flight, run.in_flight);
         std::mem::swap(&mut t.msg, run.msg);
@@ -530,28 +547,60 @@ impl Sched {
         std::mem::take(&mut self.tasks[index].out)
     }
 
-    /// The next task that's ready, if there is one. With crews, a task in a
-    /// crew waits until its group has a free worker slot, and the first one
-    /// that has one is taken, with that slot.
+    /// One ready queue for each of `n` workers.
+    pub fn set_workers(&mut self, n: usize) {
+        self.ready = (0..n.max(1)).map(|_| VecDeque::new()).collect();
+    }
+
+    /// The queue of the worker running this: the only one without a pool.
+    fn own(&self) -> usize {
+        WORKER.with(std::cell::Cell::get).min(self.ready.len() - 1)
+    }
+
+    /// The next task that's ready, if there is one. With one queue, the
+    /// oldest (the reference schedule). With several, the newest of the
+    /// worker's own, else the oldest of another's, the next worker's first.
+    /// With crews, a task in a crew waits until its group has a free worker
+    /// slot, and the first one that has one is taken, with that slot.
     pub fn pop_ready(&mut self) -> Option<usize> {
-        if self.capped == 0 {
-            let next = self.ready.pop_front();
-            self.queued.store(self.ready.len(), Ordering::Relaxed);
-            return next;
-        }
-        let (groups, tasks) = (&self.groups, &self.tasks);
-        let pos = self
-            .ready
-            .iter()
-            .position(|&t| !tasks[t].in_crew || groups[tasks[t].group].active < groups[tasks[t].group].cap)?;
-        let t = self.ready.remove(pos)?;
-        self.queued.store(self.ready.len(), Ordering::Relaxed);
-        if self.tasks[t].in_crew {
+        let (me, n) = (self.own(), self.ready.len());
+        let t = if n == 1 { self.take_ready(0, false) } else { self.take_ready(me, true).or_else(|| self.steal(me)) }?;
+        self.ready_changed();
+        if self.capped > 0 && self.tasks[t].in_crew {
             let g = self.tasks[t].group;
             self.groups[g].active += 1;
             self.tasks[t].on_worker = true;
         }
         Some(t)
+    }
+
+    /// Worker `me` has nothing: it takes half of the tasks of the next worker
+    /// that has any, the oldest, to the back of its own queue (in their
+    /// order), and runs the newest of its queue. With crews it takes one
+    /// task that may run now.
+    fn steal(&mut self, me: usize) -> Option<usize> {
+        let n = self.ready.len();
+        if self.capped > 0 {
+            return (1..n).find_map(|d| self.take_ready((me + d) % n, false));
+        }
+        let victim = (1..n).map(|d| (me + d) % n).find(|&v| !self.ready[v].is_empty())?;
+        for _ in 0..self.ready[victim].len().div_ceil(2) {
+            let t = self.ready[victim].pop_front()?;
+            self.ready[me].push_back(t);
+        }
+        self.ready[me].pop_back()
+    }
+
+    /// Takes a task that may run now out of queue `d`: the newest if `back`,
+    /// else the oldest.
+    fn take_ready(&mut self, d: usize, back: bool) -> Option<usize> {
+        if self.capped == 0 {
+            return if back { self.ready[d].pop_back() } else { self.ready[d].pop_front() };
+        }
+        let (groups, tasks) = (&self.groups, &self.tasks);
+        let free = |&t: &usize| !tasks[t].in_crew || groups[tasks[t].group].active < groups[tasks[t].group].cap;
+        let pos = if back { self.ready[d].iter().rposition(free) } else { self.ready[d].iter().position(free) }?;
+        self.ready[d].remove(pos)
     }
 
     /// A task that stops running on its worker (it parks, sleeps, yields,
@@ -564,19 +613,26 @@ impl Sched {
         }
     }
 
+    /// The count of ready tasks, for the workers that spin without the lock.
+    fn ready_changed(&self) {
+        self.queued.store(self.ready_len(), Ordering::Relaxed);
+    }
+
     fn ready_back(&mut self, t: usize) {
-        self.ready.push_back(t);
-        self.queued.store(self.ready.len(), Ordering::Relaxed);
+        let me = self.own();
+        self.ready[me].push_back(t);
+        self.ready_changed();
     }
 
     fn ready_front(&mut self, t: usize) {
-        self.ready.push_front(t);
-        self.queued.store(self.ready.len(), Ordering::Relaxed);
+        let me = self.own();
+        self.ready[me].push_front(t);
+        self.ready_changed();
     }
 
     /// How many tasks are ready.
     pub fn ready_len(&self) -> usize {
-        self.ready.len()
+        self.ready.iter().map(VecDeque::len).sum()
     }
 
     /// What the task that just got the processor has to do before it goes
@@ -637,7 +693,10 @@ impl Sched {
         if task.waiting {
             task.waiting = false;
             task.waiting_on = None;
-            self.ready_back(t);
+            // On the queue of the worker it last ran on.
+            let home = self.tasks[t].worker.min(self.ready.len() - 1);
+            self.ready[home].push_back(t);
+            self.ready_changed();
         }
     }
 

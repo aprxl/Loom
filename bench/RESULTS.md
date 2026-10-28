@@ -4,6 +4,32 @@ Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
 
+## V8: per-worker ready deques with stealing (2026-10-28)
+
+`Sched.ready` is a deque per worker. A task started or woken is pushed on a
+deque (a spawned task on its spawner's, a woken one on the deque of the worker
+it last ran on); a worker takes the newest task of its own deque, else half of
+the next non-empty deque, the oldest, moved to the back of its own. One worker
+(no pool) keeps one deque and the old FIFO order. Medians of 5 runs at 8
+workers, ms, against the commit before (same minutes, alternating):
+
+| Benchmark | before | after |
+|---|---|---|
+| fib(25), a thread on every call (121 392 tasks) | 914 | 244 (3.7x) |
+| `loom for` over 1M atomic adds | 96 | 86 |
+| 100 000 spawn + join | 168 | 171 |
+| 1M items through a stream (one task each) | 1214 | 1285 (+5.8%) |
+| 64 tasks, the first 8 ten times heavier | 189 | 197 (+4%; +11% at 4 workers) |
+| fib(40), depth 6 / 10 | 306 / 279 | 303 / 279 |
+
+At 2 workers fib(25) with a thread per call went from 680 to 170 ms. The cost
+is the order: with the newest-first own pops a heavy task spawned first can
+run late, which is what the 64-task benchmark (heavy tasks first, built for a
+FIFO queue) shows. Variants measured and dropped: stealing one task (flat
+spawn +35%, stream +55%), a join that runs its own unstarted task (fib(25)
+at 2 workers 1290 ms), a thief that runs its stolen batch oldest first
+(64 tasks +13%, stream +10%), a separate stolen queue (stream +7%).
+
 ## V8: string-building natives run on the worker's heap without the pool lock (2026-10-28)
 
 `concat`, `split`, `replace`, `repeat`, `case`, `string.of`, `push_char`,
