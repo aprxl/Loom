@@ -63,7 +63,7 @@ Built from the ledger below, `design/stdlib-plan.md`, `design/stdlib-collect-def
 
 **V8 (speed)**: all Treadle perf work, with before/after numbers in `bench/RESULTS.md`.
 - Stream fusion for the new steps (`flat_map`, `peekable`, `step_by`, `filter_map`, `inspect`, `chunks`) in `fuse.rs`; the std gates held by regression guards: `resize` 2.2x (plan 1.1x), `counts` 2.6x, `min_by_key` 8x, `filter_map.sum` 16x, `step_by.sum` 32x (all 1.1-1.25x); `collect_as` against a hand loop (no gate yet); `sort_by` 1.3x `sort`.
-- Bounds checks in std code written in Loom: about 95% kept at `-O2` (index arithmetic on lists); `Map.last` is O(n).
+- Bounds checks in std code written in Loom (measured 2026-10-28, executed checks at `-O2` over `-O0`): `list_ops` keeps 80.6%, `heap` 36.4%. Most of what is kept is fused into checked loads and stores (`ldxc`, `stxc`), one dispatch either way, so removing them saves almost no dispatch (the standalone `bounds` ops are 1.8% of the dispatches of a 200 000-item `sort_by`); `sort_by` there costs 1.14x `sort()`. Closed, not worth a pass. Left: `Map.last` is O(n).
 - Optimizer pipeline consolidation (repeated sccp/gvn runs): compile_at is 2.08x, and the target is 1.5x.
 - Natives off the global lock: text and map natives (`str.*`, `map.find_*`, `char.digit`), `read_line` blocking on stdin under the lock, mutex/atomic CAS fast paths; this also uncaps stdlib phase 5 (`RwLock` and the other sync primitives, which serialise through the lock until then).
 - Threads: per-worker deques with stealing (V5 close-out step 3, never done); chunking beyond exclusive integer ranges (inclusive and open ranges, lists, streams, `chunks_mut`) and an adaptive grain; par_mandelbrot margin over its gate is thin.
