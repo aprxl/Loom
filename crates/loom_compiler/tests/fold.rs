@@ -39,6 +39,7 @@ fn func(operand: VTy, result: VTy, a: u64, b: u64, kind: InstKind) -> Func {
 /// it is, or after the `sccp` pass.
 fn run(funcs: &[Func], folded: bool) -> (Vec<Option<u64>>, usize) {
     let mut module = Module {
+        changed: vec![true; funcs.len()],
         funcs: funcs.to_vec(),
         strings: Vec::new(),
         fmts: Vec::new(),

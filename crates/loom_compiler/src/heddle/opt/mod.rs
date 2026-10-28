@@ -44,19 +44,22 @@ const PASSES: &[Pass] = &[
     ("cells", cells::cells),
     ("gvn", gvn::gvn),
     // What GVN found (a load of memory a `zero` wrote) may decide a branch.
-    ("sccp", sccp::sccp),
+    // (Only in the functions GVN changed.)
+    ("sccp_changed", sccp::sccp_changed),
     // Again: what GVN found to call (a lambda passed to a method that was
     // inlined) can be inlined now, and numbered with the rest.
     ("inline", inline::inline),
     ("prune", prune),
-    ("gvn", gvn::gvn),
-    ("sccp", sccp::sccp),
+    // Only in the functions inlining changed.
+    ("gvn_changed", gvn::gvn_changed),
+    ("sccp_changed", sccp::sccp_changed),
     // A parameter all calls give one constant is that constant: GVN has
     // just found what the calls give.
     ("ipcp", ipcp::ipcp),
     ("ranges", range::ranges),
-    // What ranges decided about a comparison decides its branch.
-    ("sccp", sccp::sccp),
+    // What ranges decided about a comparison decides its branch. (Only in
+    // the functions it changed.)
+    ("sccp_changed", sccp::sccp_changed),
     ("licm", licm::licm),
     ("cleanup", tidy::cleanup),
 ];

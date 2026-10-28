@@ -85,6 +85,7 @@ fn func(name: String, params: &[VTy], result: VTy, kind: impl FnOnce(&[Value]) -
 /// Compiles `funcs` and gives a machine to call them on.
 fn compile(funcs: Vec<Func>) -> loom_isa::Image {
     let module = Module {
+        changed: vec![true; funcs.len()],
         funcs,
         strings: Vec::new(),
         fmts: Vec::new(),

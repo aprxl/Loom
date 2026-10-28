@@ -41,15 +41,28 @@ use crate::heddle::{BitOp, Cmp, FOp, Func, InstKind, IntOp, Mem, Module, Term, V
 
 /// Numbers every function's values.
 pub fn gvn(module: &mut Module) {
+    run(module, true);
+}
+
+/// [`gvn`] for the functions changed since the passes last ran on all:
+/// they stay changed after it.
+pub fn gvn_changed(module: &mut Module) {
+    run(module, false);
+}
+
+fn run(module: &mut Module, all: bool) {
     // What each function takes and gives, for calls through a known
     // function value.
     let shapes: Vec<(usize, usize)> = module.funcs.iter().map(|f| (f.params().len(), f.results.len())).collect();
     let summaries = super::modref::summaries(module);
-    for f in &mut module.funcs {
-        let changed = gvn_func(f, &summaries) | devirtualize(f, &shapes);
+    let todo = std::mem::take(&mut module.changed);
+    for (i, f) in module.funcs.iter_mut().enumerate() {
+        let todo = all || todo.get(i).copied().unwrap_or(true);
+        let changed = todo && (gvn_func(f, &summaries) | devirtualize(f, &shapes));
         if changed {
             super::tidy::tidy(f);
         }
+        module.changed.push(if all { changed } else { todo });
     }
 }
 

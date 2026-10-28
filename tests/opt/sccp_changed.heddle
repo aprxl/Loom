@@ -1,0 +1,18 @@
+fn main() -> () {
+b0:
+    v20 = iconst 20
+    v9 = iconst 0
+    native sink.fmt #0(v9, v20)
+    v10 = str "\n"
+    v11 = iconst 1
+    native sink.str #0(v9, v10, v11)
+    v12 = iconst 2147483647
+    v15 = iconst 1
+    v16 = add.i32 v12, v15
+    v17 = iconst 0
+    native sink.fmt #0(v17, v16)
+    v18 = str "\n"
+    v19 = iconst 1
+    native sink.str #0(v17, v18, v19)
+    ret
+}

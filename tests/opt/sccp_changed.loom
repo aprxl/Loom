@@ -1,0 +1,20 @@
+// passes: sccp_changed
+// fns: main
+//
+// `limit` is 10 on every path: `limit * 2` folds, the branch on it goes one
+// way, and the block it can't take goes. `n + 0` is `n`. A checked add that
+// would overflow stays, to unravel when it runs.
+use std.io.print
+
+fn main() {
+    let limit = 10
+    var n = limit * 2
+    if n > 15 {
+        n = n + 0
+    } else {
+        n = 0
+    }
+    print(n)
+    let big = 2147483647
+    if n == 20 { print(big + 1) }
+}

@@ -513,6 +513,9 @@ pub struct Module {
     /// Functions something outside the module calls, besides the entry (a
     /// test run's tests): the optimizer keeps them.
     pub roots: Vec<FuncId>,
+    /// Which functions the last pass that reports it changed, one for each
+    /// function (all true when the module is made: nothing is known yet).
+    pub changed: Vec<bool>,
 }
 
 impl Module {

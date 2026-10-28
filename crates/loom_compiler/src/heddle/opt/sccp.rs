@@ -19,11 +19,24 @@ use super::fold::fold;
 use crate::heddle::{BitOp, Cmp, Func, Inst, InstKind, IntOp, Module, Term, VTy, Value};
 
 pub fn sccp(module: &mut Module) {
-    for f in &mut module.funcs {
-        let changed = sccp_func(f) | simplify(f);
+    run(module, true);
+}
+
+/// [`sccp`] for the functions changed since the passes last ran on all:
+/// they stay changed after it.
+pub fn sccp_changed(module: &mut Module) {
+    run(module, false);
+}
+
+fn run(module: &mut Module, all: bool) {
+    let todo = std::mem::take(&mut module.changed);
+    for (i, f) in module.funcs.iter_mut().enumerate() {
+        let todo = all || todo.get(i).copied().unwrap_or(true);
+        let changed = todo && (sccp_func(f) | simplify(f));
         if changed {
             super::tidy::tidy(f);
         }
+        module.changed.push(if all { changed } else { todo });
     }
 }
 

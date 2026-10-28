@@ -8,6 +8,7 @@ use loom_syntax::SourceDb;
 
 fn generate(func: Func) -> Result<loom_isa::Image, CodegenError> {
     let module = Module {
+        changed: vec![true],
         funcs: vec![func],
         strings: Vec::new(),
         fmts: Vec::new(),

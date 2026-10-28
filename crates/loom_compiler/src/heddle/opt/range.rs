@@ -27,9 +27,13 @@ use crate::heddle::{BitOp, Cmp, Func, InstKind, IntOp, Mem, Module, Policy, Term
 use crate::ty::IntTy;
 
 pub fn ranges(module: &mut Module) {
+    module.changed.clear();
     for f in &mut module.funcs {
-        ranges_func(f);
-        super::tidy::tidy(f);
+        let changed = ranges_func(f);
+        if changed {
+            super::tidy::tidy(f);
+        }
+        module.changed.push(changed);
     }
 }
 
@@ -470,7 +474,8 @@ fn implies(k: Cmp, c: Cmp) -> bool {
         || matches!((k, c), (Cmp::Lt, Cmp::Le | Cmp::Ne) | (Cmp::Gt, Cmp::Ge | Cmp::Ne) | (Cmp::Eq, Cmp::Le | Cmp::Ge))
 }
 
-fn ranges_func(f: &mut Func) {
+/// Whether it changed anything.
+fn ranges_func(f: &mut Func) -> bool {
     let cfg = Cfg::new(f);
     let n = f.types.len();
     let mut consts = vec![None; n];
@@ -572,6 +577,7 @@ fn ranges_func(f: &mut Func) {
         }
     }
     drop(r);
+    let changed = !changes.is_empty();
     for (b, i, change) in changes.into_iter().rev() {
         let inst = &mut f.blocks[b].insts[i];
         match change {
@@ -588,4 +594,5 @@ fn ranges_func(f: &mut Func) {
             }
         }
     }
+    changed
 }

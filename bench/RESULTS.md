@@ -4,6 +4,28 @@ Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
 
+## V8: follow-up gvn and sccp run on the functions changed since the last full pass (2026-10-28)
+
+`Module.changed` says which functions a pass changed. `sccp` and `gvn` (the
+first of each) run on every function and set it exactly; `sccp_changed` and
+`gvn_changed` (the second round, and the one after `ranges`) run only on the
+flagged functions and leave them flagged; `inline` adds the functions it
+changed; `ranges` sets it exactly and tidies only what it changed. Counts
+(`bench_counts`, `std_counts`, `check_counts`) are identical to before. Release,
+quiet, two runs each (`compile_time`): source to image ratio 1.27, 1.27 to
+1.25, 1.25; `compile_at` alone -O2 551.73 and 552.63 ms to 531.53 and 531.86 ms
+(-3.8%), ratio 2.03, 2.04 to 1.98, 1.98.
+
+Per pass, mean per -O2 compile over tests/run, examples and bench (276 files,
+`LOOM_PASS_TIMES=1`, whose printing slows the test itself), in us, before and
+after: inline 100.9, 101.9; prune 5.6, 5.7; sccp 70.9, 71.4; cells 30.1,
+30.1; gvn 193.7, 196.0; sccp (now `sccp_changed`) 54.3, 43.3; inline 37.1,
+37.1; prune 1.7, 1.7; gvn (now `gvn_changed`) 174.9, 148.0; sccp 57.1, 47.4;
+ipcp 8.7, 8.5; ranges 120.2, 110.9; sccp 44.8, 24.0; licm 48.1, 49.3; cleanup
+71.1, 70.6. Total of the passes 1019.2 to 945.9 us (-7.2%). The verify at the
+end of `opt::run` is 43 us; the rest of the optimizer's measured time was the
+timing prints.
+
 ## V8: GVN carries known words across a `copy` (2026-10-28)
 
 A `copy` of a stream header (what moving a stream into its loop does) now

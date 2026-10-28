@@ -49,6 +49,7 @@ pub fn inline(module: &mut Module) {
         }
     }
     taken[module.entry.0 as usize] = true;
+    let before = std::mem::replace(&mut module.changed, vec![false; n]);
     for scc in sccs(&callees) {
         for &me in &scc {
             let mut f = std::mem::take(&mut module.funcs[me]);
@@ -62,7 +63,7 @@ pub fn inline(module: &mut Module) {
                 let size = size(&funcs[g]);
                 if calls[g] == 1 && !taken[g] && size <= ONCE { Some(false) } else { (size <= SMALL).then_some(true) }
             };
-            inline_into(&mut f, &module.funcs, eligible);
+            module.changed[me] = inline_into(&mut f, &module.funcs, eligible) | before.get(me).copied().unwrap_or(true);
             super::tidy::tidy(&mut f);
             module.funcs[me] = f;
         }
@@ -156,7 +157,8 @@ fn sccs(callees: &[Vec<usize>]) -> Vec<Vec<usize>> {
 
 /// Inlines the calls in `f` of the functions of `funcs` that `eligible`
 /// says may be (`Some(true)`: as long as `f` stays within its budget).
-fn inline_into(f: &mut Func, funcs: &[Func], eligible: impl Fn(usize, &[Func]) -> Option<bool>) {
+/// Whether it inlined any.
+fn inline_into(f: &mut Func, funcs: &[Func], eligible: impl Fn(usize, &[Func]) -> Option<bool>) -> bool {
     let budget = size(f) * 2 + GROWTH;
     let slot_budget = f.slots.iter().map(|s| s.size).sum::<u64>() + SLOT_BYTES;
     let mut grown = size(f);
@@ -170,6 +172,7 @@ fn inline_into(f: &mut Func, funcs: &[Func], eligible: impl Fn(usize, &[Func]) -
             stack.extend(f.blocks[b].term.iter().flat_map(|t| t.edges()).map(|e| e.block.0 as usize));
         }
     }
+    let mut inlined = false;
     let mut b = 0;
     while b < f.blocks.len() {
         if copied[b] {
@@ -200,11 +203,13 @@ fn inline_into(f: &mut Func, funcs: &[Func], eligible: impl Fn(usize, &[Func]) -
             grown += size(callee);
         }
         let added = inline_call(f, b, i, callee);
+        inlined = true;
         // The rest of the block, where the call returns, then the copy.
         copied.push(false);
         copied.resize(copied.len() + added, true);
         b += 1;
     }
+    inlined
 }
 
 /// Inlines the call at instruction `i` of block `b`: the block ends by

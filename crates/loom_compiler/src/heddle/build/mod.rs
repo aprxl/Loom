@@ -433,6 +433,7 @@ pub fn build_tests_with(
                 plain: Vec::new(),
                 entry: FuncId(0),
                 roots: Vec::new(),
+                changed: Vec::new(),
             },
             entries,
         ));
@@ -496,8 +497,9 @@ impl<'a> Builder<'a> {
         if !self.diags.is_empty() {
             return Err(self.diags);
         }
-        let funcs = self.funcs.into_iter().map(|f| f.expect("every function queued is built")).collect();
+        let funcs: Vec<Func> = self.funcs.into_iter().map(|f| f.expect("every function queued is built")).collect();
         let module = Module {
+            changed: vec![true; funcs.len()],
             funcs,
             strings: self.strings.into_keys().collect(),
             fmts: self.fmts.into_keys().collect(),
