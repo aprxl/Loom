@@ -1,0 +1,47 @@
+// `sort_by` and `sort_by_key` are stable: entries that compare equal keep the
+// order they came in. Also covers sorted, reversed and empty lists.
+
+use std.io.print
+
+fn rows() -> List[(str, u32)] {
+    var out: List[(str, u32)] = List()
+    out.push(("pear", 2))
+    out.push(("fig", 5))
+    out.push(("apple", 2))
+    out.push(("kiwi", 5))
+    out.push(("date", 1))
+    out.push(("lime", 2))
+    out.push(("plum", 5))
+    out.push(("grape", 1))
+    out.push(("melon", 3))
+    out.push(("cherry", 3))
+    out.push(("lemon", 2))
+    out.push(("banana", 5))
+    out
+}
+
+fn main() {
+    var desc = rows()
+    desc.sort_by((a, b) => a.1 > b.1)
+    print("by count, most first:")
+    for e in desc { print("{e.0} {e.1}") }
+
+    var asc = rows()
+    asc.sort_by_key(e => e.1)
+    print("by count, fewest first:")
+    for e in asc { print("{e.0} {e.1}") }
+
+    var up: List[u32] = List()
+    for i in 1..=20 { up.push(i) }
+    up.sort_by((a, b) => a < b)
+    print("sorted: {up}")
+
+    var down: List[u32] = List()
+    for i in 1..=20 { down.push(21 - i) }
+    down.sort_by((a, b) => a < b)
+    print("reversed: {down}")
+
+    var nothing: List[u32] = List()
+    nothing.sort_by((a, b) => a < b)
+    print("empty: {nothing}")
+}

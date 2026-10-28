@@ -117,14 +117,14 @@ pub warp Slice[T] {
     /// Sorts so that `less(a, b)` says whether `a` goes before `b`. Stable:
     /// elements neither goes before the other keep their order.
     pub fn sort_by(mut self, less: (T, T) => bool) {
-        var order = sorted_order(self.len(), (i, j) => less(self[i], self[j]))
+        var order = sorted_order(self, less)
         apply_order(mut self, mut order)
     }
     /// Sorts by `key` of each element, which is computed once per element.
     /// Stable.
     pub fn sort_by_key[K: Ord](mut self, key: T => K) {
         let keys = self.map(key)
-        var order = sorted_order(self.len(), (i, j) => keys[i] < keys[j])
+        var order = sorted_order(keys, (a, b) => a < b)
         apply_order(mut self, mut order)
     }
     /// Whether every element is at or after the one before it.
@@ -164,12 +164,13 @@ pub warp Slice[T] {
 const RUN: usize = 8
 
 /// The indices `0..n` in an order that stably sorts them by `before`.
-fn sorted_order(n: usize, before: (usize, usize) => bool) -> List[usize] {
+fn sorted_order[T](xs: [T], before: (T, T) => bool) -> List[usize] {
+    let n = xs.len()
     var a: List[usize] = List.filled(0, n)
     for i in 0..n { a[i] = i }
     var sorted = true
     for i in 1..n {
-        if before(i, i - 1) {
+        if before(xs[i], xs[i - 1]) {
             sorted = false
             break
         }
@@ -181,7 +182,7 @@ fn sorted_order(n: usize, before: (usize, usize) => bool) -> List[usize] {
         for i in lo + 1..hi {
             let v = a[i]
             var j = i
-            while j > lo and before(v, a[j - 1]) {
+            while j > lo and before(xs[v], xs[a[j - 1]]) {
                 a[j] = a[j - 1]
                 j -= 1
             }
@@ -200,7 +201,7 @@ fn sorted_order(n: usize, before: (usize, usize) => bool) -> List[usize] {
             var j = mid
             var k = start
             while i < mid and j < end {
-                if before(a[j], a[i]) {
+                if before(xs[a[j]], xs[a[i]]) {
                     b[k] = a[j]
                     j += 1
                 } else {
