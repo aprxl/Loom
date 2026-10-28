@@ -11,9 +11,9 @@
 use crate::Trap;
 use crate::heap::Heap;
 use crate::ints;
+use crate::natives::{Ctx, LocalFn, NativeFn, Strings, Texts};
 #[cfg(not(feature = "checked"))]
-use crate::natives::Raw;
-use crate::natives::{Ctx, LocalFn, NativeFn, Texts};
+use crate::natives::{Own, Raw};
 
 pub(crate) fn resolve_scalar(name: &str) -> Option<LocalFn> {
     Some(match name {
@@ -52,6 +52,24 @@ pub(crate) fn resolve_scalar(name: &str) -> Option<LocalFn> {
         "map.find_str" => |_, a, i| map_find_str_in(&Raw, a, i),
         #[cfg(not(feature = "checked"))]
         "map.find_int" => |_, a, i| map_find_int_in(a, i),
+        #[cfg(not(feature = "checked"))]
+        "str.concat2" | "str.concat3" | "str.concat4" => |h, a, i| concat_in(&mut Own(h), a, i),
+        #[cfg(not(feature = "checked"))]
+        "str.replace" => |h, a, i| replace(&mut Own(h), a, i),
+        #[cfg(not(feature = "checked"))]
+        "str.repeat" => |h, a, i| repeat(&mut Own(h), a, i),
+        #[cfg(not(feature = "checked"))]
+        "str.split" => |h, a, i| split(&mut Own(h), a, i),
+        #[cfg(not(feature = "checked"))]
+        "str.case" => |h, a, i| case(&mut Own(h), a, i),
+        #[cfg(not(feature = "checked"))]
+        "string.of" => |h, a, i| string_of(&mut Own(h), a, i),
+        #[cfg(not(feature = "checked"))]
+        "string.push_char" => |h, a, i| push_char(&mut Own(h), a, i),
+        #[cfg(not(feature = "checked"))]
+        "string.push_str" => |h, a, i| push_str(&mut Own(h), a, i),
+        #[cfg(not(feature = "checked"))]
+        "string.pop" => |_, a, i| pop(a, i),
         _ => return None,
     })
 }
@@ -64,16 +82,16 @@ pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
         "str.starts_with" => |c, a, i| starts_with(c, a, i),
         "str.ends_with" => |c, a, i| ends_with(c, a, i),
         "str.trim" => |c, a, i| trim(c, a, i),
-        "str.case" => case,
-        "str.replace" => replace,
-        "str.repeat" => repeat,
-        "str.split" => split,
+        "str.case" => |c, a, i| case(c, a, i),
+        "str.replace" => |c, a, i| replace(c, a, i),
+        "str.repeat" => |c, a, i| repeat(c, a, i),
+        "str.split" => |c, a, i| split(c, a, i),
         "str.parse_int" => |c, a, i| parse_int(c, a, i),
         "str.parse_float" => |c, a, i| parse_float(c, a, i),
-        "string.of" => string_of,
-        "string.push_char" => push_char,
-        "string.push_str" => push_str,
-        "string.pop" => pop,
+        "string.of" => |c, a, i| string_of(c, a, i),
+        "string.push_char" => |c, a, i| push_char(c, a, i),
+        "string.push_str" => |c, a, i| push_str(c, a, i),
+        "string.pop" => |_, a, i| pop(a, i),
         "char.digit" => |c, a, i| digit(&mut c.heap, a, i),
         "char.uni" => |c, a, i| char_uni(&mut c.heap, a, i),
         "str.next_char" => |c, a, i| next_char(c, a, i),
@@ -102,7 +120,7 @@ fn text<T: Texts>(texts: &T, ptr: u64, len: u64) -> Result<&[u8], Trap> {
 /// The text at `ptr`, as a slice that doesn't borrow `ctx`, for a native
 /// that then allocates (a string of its own): it never frees or moves what
 /// it reads, so the text is there until it returns.
-fn text_raw<'t>(ctx: &Ctx, ptr: u64, len: u64) -> Result<&'t [u8], Trap> {
+fn text_raw<'t, T: Texts>(ctx: &T, ptr: u64, len: u64) -> Result<&'t [u8], Trap> {
     let t: *const [u8] = text(ctx, ptr, len)?;
     // SAFETY: as above: a literal, or a heap object no one frees meanwhile.
     Ok(unsafe { &*t })
@@ -200,7 +218,7 @@ fn trim<T: Texts>(ctx: &T, args: &mut [u64], imm: u16) -> Result<(), Trap> {
 
 /// `str.case(s, dst)`: a `String` of `s` in upper case (`imm` 0) or lower
 /// case (1); with 2 or 3, only its ASCII letters change.
-fn case(ctx: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
+fn case<S: Strings>(ctx: &mut S, args: &mut [u64], imm: u16) -> Result<(), Trap> {
     let s = text_raw(ctx, args[0], args[1])?;
     if imm < 2
         && let Ok(t) = std::str::from_utf8(s)
@@ -213,9 +231,9 @@ fn case(ctx: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
         } else {
             t.chars().flat_map(char::to_lowercase).collect()
         };
-        return ctx.new_string(changed.as_bytes(), args[2]);
+        return ctx.heap().new_string(changed.as_bytes(), args[2]);
     }
-    ctx.new_string_with(s.len(), args[2], |out| {
+    ctx.heap().new_string_with(s.len(), args[2], |out| {
         out.copy_from_slice(s);
         if imm.is_multiple_of(2) {
             out.make_ascii_uppercase();
@@ -252,7 +270,7 @@ fn char_uni(_: &mut Heap, args: &mut [u64], imm: u16) -> Result<(), Trap> {
 }
 
 /// `str.replace(s, from, to, dst)`: every `from` replaced.
-fn replace(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn replace<S: Strings>(ctx: &mut S, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let s = text_raw(ctx, args[0], args[1])?;
     let from = text_raw(ctx, args[2], args[3])?;
     let to = text_raw(ctx, args[4], args[5])?;
@@ -260,7 +278,7 @@ fn replace(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
         // `to` before every character, and at the end, as Rust's does.
         let chars = s.iter().filter(|&&b| b & 0xC0 != 0x80).count();
         let len = s.len() + (chars + 1) * to.len();
-        return ctx.new_string_with(len, args[6], |out| {
+        return ctx.heap().new_string_with(len, args[6], |out| {
             let mut at = 0;
             for &b in s {
                 if b & 0xC0 != 0x80 {
@@ -277,7 +295,7 @@ fn replace(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let finder = memchr::memmem::Finder::new(from);
     let count = finder.find_iter(s).count();
     let len = s.len() - count * from.len() + count * to.len();
-    ctx.new_string_with(len, args[6], |out| {
+    ctx.heap().new_string_with(len, args[6], |out| {
         let (mut at, mut last) = (0, 0);
         for m in finder.find_iter(s) {
             out[at..at + (m - last)].copy_from_slice(&s[last..m]);
@@ -291,7 +309,7 @@ fn replace(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 }
 
 /// `str.repeat(s, n, dst)`.
-fn repeat(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn repeat<S: Strings>(ctx: &mut S, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let s = text_raw(ctx, args[0], args[1])?;
     let n = args[2];
     let len = s.len() as u64;
@@ -299,9 +317,9 @@ fn repeat(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
         return Err(Trap::Unravel(format!("out of memory: the string would be {n} times {len} bytes")));
     }
     if s.is_empty() || n == 0 {
-        return ctx.new_string(&[], args[3]);
+        return ctx.heap().new_string(&[], args[3]);
     }
-    ctx.new_string_with(s.len() * n as usize, args[3], |out| {
+    ctx.heap().new_string_with(s.len() * n as usize, args[3], |out| {
         for chunk in out.chunks_exact_mut(s.len()) {
             chunk.copy_from_slice(s);
         }
@@ -310,7 +328,7 @@ fn repeat(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 
 /// `str.split(s, sep, dst)`: a `List[String]` of the pieces between each
 /// `sep` (or of each character, for an empty one).
-fn split(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn split<S: Strings>(ctx: &mut S, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let s = text_raw(ctx, args[0], args[1])?;
     let sep = text_raw(ctx, args[2], args[3])?;
     let pieces: Vec<&[u8]> = if sep.is_empty() {
@@ -334,9 +352,9 @@ fn split(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
         out
     };
     let n = pieces.len() as u64;
-    let buf = ctx.heap.alloc(n * 24, 8)?;
+    let buf = ctx.heap().alloc(n * 24, 8)?;
     for (i, piece) in pieces.iter().enumerate() {
-        ctx.new_string(piece, buf + 24 * i as u64)?;
+        ctx.heap().new_string(piece, buf + 24 * i as u64)?;
     }
     write_header(args[4], buf, n, n);
     Ok(())
@@ -466,7 +484,7 @@ fn parse_float_text(s: &[u8]) -> Result<f64, u64> {
 }
 
 /// `string.of(chars, n, dst)`: a `String` of `n` `char`s.
-fn string_of(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn string_of<S: Strings>(ctx: &mut S, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let n = args[1] as usize;
     let mut out = String::new();
     for i in 0..n {
@@ -475,11 +493,11 @@ fn string_of(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
         debug_assert!(char::from_u32(c).is_some(), "a `char` is a valid code point");
         out.push(char::from_u32(c).unwrap_or('\u{FFFD}'));
     }
-    ctx.new_string(out.as_bytes(), args[2])
+    ctx.heap().new_string(out.as_bytes(), args[2])
 }
 
 /// Adds `more` to the end of the `String` at `header`.
-fn append(ctx: &mut Ctx, header: u64, more: &[u8]) -> Result<(), Trap> {
+fn append<S: Strings>(ctx: &mut S, header: u64, more: &[u8]) -> Result<(), Trap> {
     let (buf, len, cap) = read_header(header);
     let want = len + more.len() as u64;
     let (buf, cap) = if want > cap {
@@ -489,12 +507,12 @@ fn append(ctx: &mut Ctx, header: u64, more: &[u8]) -> Result<(), Trap> {
         }
         let moved = if cap == 0 && buf != 0 && len > 0 {
             // Text an arena owns: it moves to a buffer of its own.
-            let moved = ctx.heap.alloc(new_cap, 1)?;
+            let moved = ctx.heap().alloc(new_cap, 1)?;
             // SAFETY: `buf` has `len` bytes, and `moved` room for `new_cap`.
             unsafe { std::ptr::copy_nonoverlapping(buf as *const u8, moved as *mut u8, len as usize) };
             moved
         } else {
-            ctx.heap.realloc(buf, cap, new_cap, 1)?
+            ctx.heap().realloc(buf, cap, new_cap, 1)?
         };
         (moved, new_cap)
     } else {
@@ -507,7 +525,7 @@ fn append(ctx: &mut Ctx, header: u64, more: &[u8]) -> Result<(), Trap> {
 }
 
 /// `string.push_char(header, c)`.
-fn push_char(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn push_char<S: Strings>(ctx: &mut S, args: &mut [u64], _: u16) -> Result<(), Trap> {
     debug_assert!(char::from_u32(args[1] as u32).is_some(), "a `char` is a valid code point");
     // An ASCII character is one byte, written in place when there's room.
     if args[1] < 0x80 {
@@ -526,7 +544,7 @@ fn push_char(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 }
 
 /// `string.push_str(header, s)`.
-fn push_str(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn push_str<S: Strings>(ctx: &mut S, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let more = text_raw(ctx, args[1], args[2])?;
     // Growing may move the buffer: text that's in it (`s.push_str(s_view)`)
     // is copied first. Anything else can't move.
@@ -540,7 +558,7 @@ fn push_str(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 }
 
 /// `string.pop(header)`: (the last `char`, whether there was one).
-fn pop(_: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn pop(args: &mut [u64], _: u16) -> Result<(), Trap> {
     let (buf, len, cap) = read_header(args[0]);
     if len == 0 {
         args[0] = 0;
@@ -757,7 +775,11 @@ fn map_find_int_in(args: &mut [u64], _: u16) -> Result<(), Trap> {
 // it through the name.
 #[allow(unsafe_code)]
 #[unsafe(export_name = "loom_treadle_concat")]
-fn concat(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn concat(ctx: &mut Ctx, args: &mut [u64], imm: u16) -> Result<(), Trap> {
+    concat_in(ctx, args, imm)
+}
+
+fn concat_in<S: Strings>(ctx: &mut S, args: &mut [u64], _: u16) -> Result<(), Trap> {
     // Two, three or four pieces: each looked at once.
     let n = ((args.len() - 1) / 2).min(4);
     let mut pieces: [&[u8]; 4] = [&[]; 4];
@@ -766,7 +788,7 @@ fn concat(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
         *piece = text_raw(ctx, args[2 * k], args[2 * k + 1])?;
         len += piece.len() as u64;
     }
-    let buf = ctx.heap.alloc(len, 1)?;
+    let buf = ctx.heap().alloc(len, 1)?;
     let mut at = buf;
     for piece in &pieces[..n] {
         // SAFETY: `buf` is a new object of `len` bytes, the pieces' total,

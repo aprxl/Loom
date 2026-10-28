@@ -1,0 +1,21 @@
+// String building in parallel: `push_str`, `push_char` and `to_upper` build
+// strings on the worker's own heap, without the pool's lock.
+use std.io.print
+use std.sync.Atomic
+
+fn main() {
+    let total = Atomic[u64](0)
+    loom for i in 0..8 {
+        var n = 0u64
+        for _ in 0..3000000 {
+            var s: String = ""
+            s.push_str("abcdefghij")
+            s.push('k')
+            s.push('l')
+            let t = s.to_upper()
+            n += t.len() as u64
+        }
+        total.add(n + i as u64)
+    }
+    print("total {total.load()}")
+}

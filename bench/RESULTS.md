@@ -4,6 +4,28 @@ Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
 
+## V8: string-building natives run on the worker's heap without the pool lock (2026-10-28)
+
+`concat`, `split`, `replace`, `repeat`, `case`, `string.of`, `push_char`,
+`push_str`, `pop` and `str.new` allocate, but only on a heap and from text they
+are given, so on a pool they now run on the worker's own heap (`Strings` is
+implemented by the context and by `Own`, a worker's heap; non-checked builds).
+`bench/par_build.loom`: 8 tasks, each building a `String` with `push_str`
+and two `push`es and calling `to_upper`, `LOOM_THREADS` 1 and 8, ms (1 000 000
+iterations per task, 3 runs):
+
+| | 1 worker | 8 workers |
+|---|---|---|
+| before | 633, 460, 451 | 6639, 6589, 6729 |
+| after | 476, 459, 467 | 125, 123, 122 |
+
+New gate `string_building_scales_to_8_workers` (3 000 000 iterations per
+task, best of 5): 1.208 s on one worker, 202.9 ms on 8, 5.95x (5.86x, 5.97x
+earlier; gate 4x). `text_natives_scale_to_8_workers` 6.05x. The other gates:
+box 10 ns, arena put 0.36, arena trees 9.9x, `par_mandelbrot` 5.93x, spawn and
+join 1.13 us. `projects/wordfreq` on 10.9 MB: output identical at 1 and 8
+workers, no change in time.
+
 ## V8: read-only text and map natives run without the pool lock (2026-10-28)
 
 With several workers every native that wasn't a worker-local leaf took the

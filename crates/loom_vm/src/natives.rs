@@ -384,42 +384,9 @@ impl<'i> Ctx<'i> {
         }
     }
 
-    /// Writes a `String` of `len` bytes at `dst`, which `fill` writes in
-    /// place: no buffer of its own to copy from.
-    pub(crate) fn new_string_with(&mut self, len: usize, dst: u64, fill: impl FnOnce(&mut [u8])) -> Result<(), Trap> {
-        let ptr = self.heap.alloc(len as u64, 1)?;
-        // SAFETY: `ptr` is a new object of `len` bytes (or, for none, never
-        // read), which nothing else refers to; `dst` is where the compiler
-        // wants the string: three words of memory it owns.
-        unsafe {
-            if len > 0 {
-                fill(std::slice::from_raw_parts_mut(ptr as *mut u8, len));
-            }
-            let d = dst as *mut u64;
-            d.write(ptr);
-            d.add(1).write(len as u64);
-            d.add(2).write(len as u64);
-        }
-        Ok(())
-    }
-
-    /// Writes a `String` holding `text` at `dst`.
+    /// Writes a `String` holding `text` at `dst` (see [`Heap::new_string`]).
     pub(crate) fn new_string(&mut self, text: &[u8], dst: u64) -> Result<(), Trap> {
-        let len = text.len() as u64;
-        let ptr = self.heap.alloc(len, 1)?;
-        // SAFETY: `ptr` is a new object of `len` bytes (or, for none, never
-        // read), and `dst` is where the compiler wants the string: three
-        // words of memory it owns.
-        unsafe {
-            if len > 0 {
-                std::ptr::copy_nonoverlapping(text.as_ptr(), ptr as *mut u8, text.len());
-            }
-            let d = dst as *mut u64;
-            d.write(ptr);
-            d.add(1).write(len);
-            d.add(2).write(len);
-        }
-        Ok(())
+        self.heap.new_string(text, dst)
     }
 
     /// Formats `args` as format item `item` says, onto the end of sink
@@ -474,6 +441,18 @@ impl Texts for Ctx<'_> {
     }
 }
 
+/// What a native that builds strings works on: a source of text, and the heap
+/// the strings go in.
+pub(crate) trait Strings: Texts {
+    fn heap(&mut self) -> &mut Heap;
+}
+
+impl Strings for Ctx<'_> {
+    fn heap(&mut self) -> &mut Heap {
+        &mut self.heap
+    }
+}
+
 /// Text read from its address alone, with no context to check it against.
 #[cfg(not(feature = "checked"))]
 pub(crate) struct Raw;
@@ -488,6 +467,25 @@ impl Texts for Raw {
         // `ptr`, alive until the native returns (the promise `Ctx::text` has
         // in a build that doesn't check it).
         Ok(unsafe { std::slice::from_raw_parts(ptr as *const u8, len as usize) })
+    }
+}
+
+/// A worker's own heap, for the natives that build strings without the pool's
+/// lock.
+#[cfg(not(feature = "checked"))]
+pub(crate) struct Own<'h>(pub &'h mut Heap);
+
+#[cfg(not(feature = "checked"))]
+impl Texts for Own<'_> {
+    fn text(&self, ptr: u64, len: u64) -> Result<&[u8], Trap> {
+        Raw.text(ptr, len)
+    }
+}
+
+#[cfg(not(feature = "checked"))]
+impl Strings for Own<'_> {
+    fn heap(&mut self) -> &mut Heap {
+        self.0
     }
 }
 
@@ -619,7 +617,7 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
             "sink.string" => sink_string,
             "seq.join_text" => seq_join_text,
             "sink.pad" => sink_pad,
-            "str.new" => str_new,
+            "str.new" => |c, a, i| str_new(c, a, i),
             "str.eq" => str_eq,
             "str.cmp" => |c, a, i| str_cmp(c, a, i),
             "int.add_chk" => |_, a, _| checked(a, crate::ints::add_t),
@@ -738,6 +736,8 @@ pub(crate) fn resolve_local(name: &str) -> Option<LocalFn> {
         "int.cast_chk" => int_cast_chk,
         "float.to_int_chk" => float_to_int_chk,
         "int.to_char_chk" => int_to_char_chk,
+        #[cfg(not(feature = "checked"))]
+        "str.new" => |h, a, i| str_new(&mut Own(h), a, i),
         #[cfg(not(feature = "checked"))]
         "str.eq" => |_, a, i| str_eq_in(&Raw, a, i),
         #[cfg(not(feature = "checked"))]
@@ -991,11 +991,11 @@ fn sink_pad(ctx: &mut Ctx, args: &mut [u64], item: u16) -> Result<(), Trap> {
 }
 
 /// `str.new(text address, length, destination)`: a `String` of the text.
-fn str_new(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn str_new<S: Strings>(ctx: &mut S, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let text: *const [u8] = ctx.text(args[0], args[1])?;
     // SAFETY: `str.new` is passed a text value, which allocating doesn't
     // move or free.
-    let text: *const [u8] = unsafe { ctx.text(args[0], args[1])? };
-    ctx.new_string(unsafe { &*text }, args[2])
+    ctx.heap().new_string(unsafe { &*text }, args[2])
 }
 
 /// `str.eq(a, a length, b, b length)`: whether the texts are the same.
