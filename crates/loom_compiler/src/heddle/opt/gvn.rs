@@ -54,11 +54,13 @@ fn run(module: &mut Module, all: bool) {
     // What each function takes and gives, for calls through a known
     // function value.
     let shapes: Vec<(usize, usize)> = module.funcs.iter().map(|f| (f.params().len(), f.results.len())).collect();
-    let summaries = super::modref::summaries(module);
+    // No function changes before its own turn, so these hold for it.
+    let aliases: Vec<Alias> = module.funcs.iter().map(Alias::new).collect();
+    let summaries = super::modref::summaries_with(module, &aliases);
     let todo = std::mem::take(&mut module.changed);
-    for (i, f) in module.funcs.iter_mut().enumerate() {
+    for (i, (f, alias)) in module.funcs.iter_mut().zip(aliases).enumerate() {
         let todo = all || todo.get(i).copied().unwrap_or(true);
-        let changed = todo && (gvn_func(f, &summaries) | devirtualize(f, &shapes));
+        let changed = todo && (gvn_func(f, alias, &summaries) | devirtualize(f, &shapes));
         if changed {
             super::tidy::tidy(f);
         }
@@ -687,10 +689,10 @@ impl Gvn<'_> {
     }
 }
 
-fn gvn_func(f: &mut Func, summaries: &[Vec<Writes>]) -> bool {
+fn gvn_func(f: &mut Func, alias: Alias, summaries: &[Vec<Writes>]) -> bool {
     let cfg = Cfg::new(f);
     let mut g = Gvn {
-        alias: Alias::new(f),
+        alias,
         cfg: &cfg,
         summaries,
         repl: (0..f.types.len() as u32).map(Value).collect(),
@@ -1130,7 +1132,8 @@ mod tests {
     #[test]
     fn a_copy_carries_the_words_known_of_its_source() {
         let mut f = copy_func(None);
-        assert!(gvn_func(&mut f, &[]));
+        let alias = Alias::new(&f);
+        assert!(gvn_func(&mut f, alias, &[]));
         // The loads of `slot1` are the stored values.
         assert_eq!(f.blocks[0].term, Some(Term::Ret(vec![Value(3), Value(2)])));
     }
@@ -1138,7 +1141,8 @@ mod tests {
     #[test]
     fn a_store_after_a_copy_wins() {
         let mut f = copy_func(Some(InstKind::Store { mem: Mem::W64, ptr: Value(1), off: 8, val: Value(2) }));
-        assert!(gvn_func(&mut f, &[]));
+        let alias = Alias::new(&f);
+        assert!(gvn_func(&mut f, alias, &[]));
         assert_eq!(f.blocks[0].term, Some(Term::Ret(vec![Value(2), Value(2)])));
     }
 }

@@ -47,11 +47,11 @@ fn quiet(name: &str) -> bool {
     super::gvn::QUIET_NATIVES.contains(&name) || super::gvn::PURE_NATIVES.contains(&name)
 }
 
-/// The summaries of every function of `module`, by function and parameter.
-pub fn summaries(module: &Module) -> Vec<Vec<Writes>> {
+/// The summaries of every function of `module`, by function and parameter;
+/// `aliases` are the functions' (`Alias::new`).
+pub fn summaries_with(module: &Module, aliases: &[Alias]) -> Vec<Vec<Writes>> {
     let mut out: Vec<Vec<Writes>> =
         module.funcs.iter().map(|f| vec![Writes::Ranges(Vec::new()); f.params().len()]).collect();
-    let aliases: Vec<Alias> = module.funcs.iter().map(Alias::new).collect();
     for round in 0.. {
         let mut changed = false;
         for (i, f) in module.funcs.iter().enumerate() {
