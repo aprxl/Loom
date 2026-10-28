@@ -161,6 +161,7 @@ pub warp Str {
     /// With only the ASCII letters in lower case.
     pub fn to_ascii_lower(self) -> String
     pub fn to_string(self) -> String
+    fn char_before(self, end: usize) -> (char, usize)
     /// A `String` of its own, in the spool the call is given (the heap, when
     /// there is none): text in an arena goes when the arena does.
     pub fn copy(self) -> String@sp given sp: Spool
@@ -289,11 +290,11 @@ pub warp Str {
     }
     /// Without the characters at the end that `f` says yes to.
     pub fn trim_end_matches(self, f: char => bool) -> str {
-        var end = 0
-        var at = 0
-        for c in self.chars() {
-            at += c.len_utf8()
-            if not f(c) { end = at }
+        var end = self.len()
+        while end > 0 {
+            let (c, start) = self.char_before(end)
+            if not f(c) { break }
+            end = start
         }
         self[..end]
     }

@@ -38,6 +38,7 @@ const BODIES: &[&str] = &[
     "std.string.Str.repeat",
     "std.string.Str.split",
     "std.string.Str.to_string",
+    "std.string.Str.char_before",
     "std.string.Str.copy",
     "std.string.Str.parse",
     "std.string.Char.is_digit",
@@ -281,6 +282,10 @@ impl<'a> Builder<'a> {
                 let (p, n) = text(self, 0)?;
                 native(self, "str.new", 0, vec![p, n, sret?], 0);
                 Some(Vec::new())
+            }
+            ("std.string.Str", "char_before") => {
+                let (p, n) = text(self, 0)?;
+                Some(native(self, "str.prev_char", 0, vec![p, n, reg(1)], 2))
             }
             // In the spool it is given: an arena's text goes with the arena.
             ("std.string.Str", "copy") => {

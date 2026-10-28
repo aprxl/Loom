@@ -57,4 +57,13 @@ fn main() {
     var ends: List[char] = []
     for c in "x😀".chars() { ends.push(c) }
     print("{ends}")
+
+    // trim_end_matches scans back from the end; trim_matches trims both ends
+    print("[{"''don't''".trim_matches(c => c == '\'')}]")
+    print("[{"'''".trim_matches(c => c == '\'')}]")
+    print("[{"".trim_matches(c => c == '\'')}]")
+    print("[{"héé".trim_end_matches(c => c == 'é')}]")
+    print("[{"a😀😀".trim_end_matches(c => c == '😀')}]")
+    print("[{"😀a😀".trim_end_matches(c => c == 'a')}]")
+    print("[{"abc".trim_end_matches(c => false)}]")
 }

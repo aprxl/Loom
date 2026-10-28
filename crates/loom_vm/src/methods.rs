@@ -47,6 +47,7 @@ pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
         "char.digit" => |c, a, i| digit(&mut c.heap, a, i),
         "char.uni" => |c, a, i| char_uni(&mut c.heap, a, i),
         "str.next_char" => next_char,
+        "str.prev_char" => prev_char,
         "str.hash" => str_hash,
         "str.concat2" | "str.concat3" | "str.concat4" => concat,
         "map.find_str" => map_find_str,
@@ -774,6 +775,31 @@ fn next_char(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let c = std::str::from_utf8(&rest[..width]).ok().and_then(|t| t.chars().next()).unwrap_or('\u{FFFD}');
     args[0] = u64::from(c);
     args[1] = (at + width.max(1)) as u64;
+    Ok(())
+}
+
+/// `str.prev_char(s, end)`: the `char` that ends at byte `end`, and where it
+/// starts.
+fn prev_char(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let s = text(ctx, args[0], args[1])?;
+    let end = (args[2] as usize).min(s.len());
+    if end == 0 {
+        args[0] = 0xFFFD;
+        args[1] = 0;
+        return Ok(());
+    }
+    if s[end - 1] < 0x80 {
+        args[0] = u64::from(s[end - 1]);
+        args[1] = end as u64 - 1;
+        return Ok(());
+    }
+    let mut start = end - 1;
+    while start > 0 && end - start < 4 && s[start] & 0xC0 == 0x80 {
+        start -= 1;
+    }
+    let c = std::str::from_utf8(&s[start..end]).ok().and_then(|t| t.chars().next()).unwrap_or('\u{FFFD}');
+    args[0] = u64::from(c);
+    args[1] = start as u64;
     Ok(())
 }
 

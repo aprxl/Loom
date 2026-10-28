@@ -225,6 +225,7 @@ pub(super) const QUIET_NATIVES: &[&str] = &[
     "str.ends_with",
     "str.trim",
     "str.next_char",
+    "str.prev_char",
     "str.next_line",
     "str.next_word",
     "str.hash",

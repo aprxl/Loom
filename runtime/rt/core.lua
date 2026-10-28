@@ -3922,6 +3922,13 @@ local function same(s)
   return s
 end
 ext["std.string.Str.to_string"] = same
+
+-- The `char` that ends at byte `e` (0-based), and where it starts.
+ext["std.string.Str.char_before"] = function(s, e)
+  if e == 0 then return { 0xFFFD, 0 } end
+  local at = utf8.offset(s, -1, e + 1)
+  return { utf8.codepoint(s, at), at - 1 }
+end
 -- `copy` takes the spool it is given after the text; Lua has a collector, so
 -- the descriptor of its type is all that comes first and it is not used.
 ext["std.string.Str.copy"] = function(_, s)
