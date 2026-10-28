@@ -1,0 +1,437 @@
+// The evaluator: forms in, values out.
+//
+// A symbol is looked up through the frames that enclose it. A list is either
+// a special form, recognised by its name before anything is looked up, or a
+// call: evaluate the operator and then the operands, left to right, and apply.
+//
+// Evaluation is made of steps. A step either finishes with a value, or hands
+// back a form that is still to run, in a frame. The forms in tail position
+// (the last thing a closure body, `if` branch, `cond` clause, `begin` or `let`
+// does) come back that way, and `finish` loops on them. So a loop written as
+// a tail call runs in constant Loom stack, however many times it goes round.
+
+use heap.Heap
+use value.{Val, Step, truthy}
+use errors.LispError
+use reader.read_all
+use printer.render
+use builtins.{names, call_prim, eqv}
+use programs.prelude
+
+/// A fresh global frame: every primitive bound, and the prelude evaluated in it.
+pub fn boot(mut h: Heap) -> usize ! LispError {
+    let global = h.new_frame(none)
+    for name in names() {
+        let s = h.sym(name)
+        h.define(global, s, Val.Prim(s))
+    }
+    let _ = eval_text(mut h, global, prelude())?
+    global
+}
+
+/// Evaluates every form in `src` in frame `env`. The value is the last form's.
+pub fn eval_text(mut h: Heap, env: usize, src: str) -> Val ! LispError {
+    let forms = read_all(mut h, src)?
+    var last = Val.Nil
+    for form in forms {
+        last = eval(mut h, form, env)?
+    }
+    last
+}
+
+/// Evaluates `x` in frame `env`.
+pub fn eval(mut h: Heap, x: Val, env: usize) -> Val ! LispError {
+    let first = step(mut h, x, env)?
+    finish(mut h, first)
+}
+
+/// Keeps stepping while a step hands back a form, and returns the final value.
+fn finish(mut h: Heap, first: Step) -> Val ! LispError {
+    var at = first
+    loop {
+        match at {
+            .Done(v) => return v
+            .Again(form, env) => at = step(mut h, form, env)?
+        }
+    }
+}
+
+/// One step of evaluation: a symbol, a list, or a self-evaluating value.
+fn step(mut h: Heap, x: Val, env: usize) -> Step ! LispError {
+    match x {
+        .Sym(s) => Step.Done(h.lookup(env, s) mend fail .Unbound(h.name(s)))
+        .Pair(p) => form_step(mut h, p, env)
+        _ => Step.Done(x)
+    }
+}
+
+/// A list: a special form, or a call.
+fn form_step(mut h: Heap, p: usize, env: usize) -> Step ! LispError {
+    let head = h.car(p)
+    let rest = h.cdr(p)
+    if head is .Sym(s) and h.is_special(s) {
+        return special(mut h, h.name(s), rest, env)
+    }
+    let f = eval(mut h, head, env)?
+    let forms = h.to_list(rest)?
+    if f is .Macro(c) {
+        // A macro gets its operands as data. The form it returns runs in their place.
+        let expansion = enter(mut h, c, forms)?
+        let code = finish(mut h, expansion)?
+        return Step.Again(code, env)
+    }
+    let args = eval_all(mut h, forms, env)?
+    match f {
+        .Closure(c) => enter(mut h, c, args),
+        _ => Step.Done(apply(mut h, f, args)?)
+    }
+}
+
+/// Evaluates each of `forms` in order.
+fn eval_all(mut h: Heap, forms: [Val], env: usize) -> List[Val] ! LispError {
+    var out: List[Val] = List()
+    for form in forms {
+        out.push(eval(mut h, form, env)?)
+    }
+    out
+}
+
+/// Calls `f` on the evaluated arguments, and runs it to a value.
+pub fn apply(mut h: Heap, f: Val, args: List[Val]) -> Val ! LispError {
+    match f {
+        .Prim(s) => {
+            let name = h.name(s)
+            call_prim(mut h, name, args)
+        }
+        .Closure(c) => {
+            let first = enter(mut h, c, args)?
+            finish(mut h, first)
+        }
+        _ => fail .NotCallable(render(h, f, true))
+    }
+}
+
+/// Binds a closure's parameters in a new frame, and starts its body.
+fn enter(mut h: Heap, c: usize, args: List[Val]) -> Step ! LispError {
+    let slots = h.params(c)
+    if slots.len() != args.len() {
+        fail .Arity("a procedure".to_string(), slots.len(), args.len())
+    }
+    let outer = h.env_of(c)
+    let frame = h.new_frame(some(outer))
+    for i in 0..slots.len() {
+        h.define(frame, slots[i], args[i])
+    }
+    let body = h.body(c)
+    body_step(mut h, body, frame)
+}
+
+/// Runs `forms` in frame `env`. All but the last are evaluated now; the last
+/// is handed back as a tail position. An empty body is `()`.
+fn body_step(mut h: Heap, forms: [Val], env: usize) -> Step ! LispError {
+    if forms.len() == 0 { return Step.Done(Val.Nil) }
+    var i = 0
+    while i + 1 < forms.len() {
+        let _ = eval(mut h, forms[i], env)?
+        i += 1
+    }
+    Step.Again(forms[i], env)
+}
+
+// ---------------------------------------------------------------- special forms
+
+/// The special forms. Each one checks its own shape and names itself when it's wrong.
+fn special(mut h: Heap, name: str, rest: Val, env: usize) -> Step ! LispError {
+    match name {
+        "quote" => {
+            let xs = shape(h, name, rest, 1)?
+            Step.Done(xs[0])
+        }
+        "if" => {
+            let xs = h.to_list(rest)?
+            if xs.len() < 2 or xs.len() > 3 {
+                fail .Syntax("`if` takes a test, a branch, and an optional second branch".to_string())
+            }
+            if truthy(eval(mut h, xs[0], env)?) {
+                Step.Again(xs[1], env)
+            } else if xs.len() == 3 {
+                Step.Again(xs[2], env)
+            } else {
+                Step.Done(Val.Nil)
+            }
+        }
+        "define" => {
+            let xs = h.to_list(rest)?
+            if xs.len() < 2 { fail .Syntax("`define` takes a name and a value".to_string()) }
+            match xs[0] {
+                .Sym(s) => {
+                    let v = eval(mut h, xs[1], env)?
+                    h.define(env, s, v)
+                    Step.Done(Val.Sym(s))
+                }
+                .Pair(p) => {
+                    // (define (f a b) body...) is (define f (lambda (a b) body...))
+                    let s = sym_of(h.car(p))?
+                    let params = h.cdr(p)
+                    let fn_value = make_lambda(mut h, params, tail(xs, 1), env)?
+                    h.define(env, s, fn_value)
+                    Step.Done(Val.Sym(s))
+                }
+                _ => fail .Syntax("`define` needs a name".to_string())
+            }
+        }
+        "quasiquote" => {
+            let xs = shape(h, name, rest, 1)?
+            Step.Done(quasi(mut h, xs[0], env)?)
+        }
+        "defmacro" => {
+            let xs = h.to_list(rest)?
+            if xs.len() < 3 { fail .Syntax("`defmacro` takes a name, parameters and a body".to_string()) }
+            let s = sym_of(xs[0])?
+            let made = make_lambda(mut h, xs[1], tail(xs, 2), env)?
+            let m = match made {
+                .Closure(c) => Val.Macro(c)
+                _ => fail .Syntax("`defmacro` needs a parameter list".to_string())
+            }
+            h.define(env, s, m)
+            Step.Done(Val.Sym(s))
+        }
+        "set!" => {
+            let xs = shape(h, name, rest, 2)?
+            let s = sym_of(xs[0])?
+            let v = eval(mut h, xs[1], env)?
+            if not h.assign(env, s, v) { fail .Unbound(h.name(s)) }
+            Step.Done(Val.Nil)
+        }
+        "lambda" => {
+            let xs = h.to_list(rest)?
+            if xs.len() < 2 { fail .Syntax("`lambda` takes parameters and a body".to_string()) }
+            Step.Done(make_lambda(mut h, xs[0], tail(xs, 1), env)?)
+        }
+        "begin" => {
+            let forms = h.to_list(rest)?
+            body_step(mut h, forms, env)
+        }
+        "let" | "let*" | "letrec" => {
+            // `let` evaluates its values in the outer frame. `let*` and `letrec`
+            // evaluate them in the new one, in order, so later values see earlier ones.
+            let xs = h.to_list(rest)?
+            // A named `let` starts with its name. The test binds the name first in
+            // its condition: a binding placed after another test in an `and` chain
+            // comes out nil (a compiler bug, not a Spindle one).
+            let first = if xs.len() > 0 { xs[0] } else { Val.Nil }
+            if first is .Sym(loop_name) and name == "let" {
+                return named_let(mut h, loop_name, xs, env)
+            }
+            if xs.len() < 2 { fail .Syntax("`{name}` takes bindings and a body".to_string()) }
+            let frame = h.new_frame(some(env))
+            let binds = h.to_list(xs[0])?
+            for b in binds {
+                let pair = h.to_list(b)?
+                if pair.len() != 2 { fail .Syntax("a binding is (name value)".to_string()) }
+                let s = sym_of(pair[0])?
+                let scope = if name == "let" { env } else { frame }
+                let v = eval(mut h, pair[1], scope)?
+                h.define(frame, s, v)
+            }
+            body_step(mut h, tail(xs, 1), frame)
+        }
+        "when" => {
+            let xs = h.to_list(rest)?
+            if xs.len() == 0 { fail .Syntax("`when` needs a test".to_string()) }
+            if truthy(eval(mut h, xs[0], env)?) {
+                body_step(mut h, tail(xs, 1), env)
+            } else {
+                Step.Done(Val.Nil)
+            }
+        }
+        "case" => {
+            // (case key ((datum ...) body ...) ... (else body ...)): the first clause
+            // holding a datum that's `eqv` to the key runs.
+            let xs = h.to_list(rest)?
+            if xs.len() == 0 { fail .Syntax("`case` needs a key".to_string()) }
+            let key = eval(mut h, xs[0], env)?
+            for clause in tail(xs, 1) {
+                let parts = h.to_list(clause)?
+                if parts.len() == 0 { fail .Syntax("an empty `case` clause".to_string()) }
+                var hit = is_else(h, parts[0])
+                if not hit {
+                    for datum in h.to_list(parts[0])? {
+                        if eqv(key, datum) { hit = true }
+                    }
+                }
+                if hit { return body_step(mut h, tail(parts, 1), env) }
+            }
+            Step.Done(Val.Nil)
+        }
+        "cond" => {
+            let clauses = h.to_list(rest)?
+            for clause in clauses {
+                let parts = h.to_list(clause)?
+                if parts.len() == 0 { fail .Syntax("an empty `cond` clause".to_string()) }
+                if is_else(h, parts[0]) or truthy(eval(mut h, parts[0], env)?) {
+                    return body_step(mut h, tail(parts, 1), env)
+                }
+            }
+            Step.Done(Val.Nil)
+        }
+        "and" => {
+            let forms = h.to_list(rest)?
+            if forms.len() == 0 { return Step.Done(Val.Bool(true)) }
+            var i = 0
+            while i + 1 < forms.len() {
+                let v = eval(mut h, forms[i], env)?
+                if not truthy(v) { return Step.Done(v) }
+                i += 1
+            }
+            Step.Again(forms[i], env)
+        }
+        "or" => {
+            let forms = h.to_list(rest)?
+            if forms.len() == 0 { return Step.Done(Val.Bool(false)) }
+            var i = 0
+            while i + 1 < forms.len() {
+                let v = eval(mut h, forms[i], env)?
+                if truthy(v) { return Step.Done(v) }
+                i += 1
+            }
+            Step.Again(forms[i], env)
+        }
+        "while" => {
+            let xs = h.to_list(rest)?
+            if xs.len() == 0 { fail .Syntax("`while` needs a test".to_string()) }
+            let body = tail(xs, 1)
+            while truthy(eval(mut h, xs[0], env)?) {
+                let st = body_step(mut h, body, env)?
+                let _ = finish(mut h, st)?
+            }
+            Step.Done(Val.Nil)
+        }
+        "apply" => {
+            let xs = shape(h, name, rest, 2)?
+            let f = eval(mut h, xs[0], env)?
+            let spread = eval(mut h, xs[1], env)?
+            let args = h.to_list(spread)?
+            Step.Done(apply(mut h, f, args)?)
+        }
+        "try" => {
+            // (try thunk handler): run the thunk; if it fails, call the handler
+            // with the error's message instead.
+            let xs = shape(h, name, rest, 2)?
+            let thunk = eval(mut h, xs[0], env)?
+            let handler = eval(mut h, xs[1], env)?
+            match apply(mut h, thunk, List()) {
+                ok(v) => Step.Done(v)
+                err(e) => {
+                    let msg = h.string(e.message())
+                    var args: List[Val] = List()
+                    args.push(msg)
+                    Step.Done(apply(mut h, handler, args)?)
+                }
+            }
+        }
+        _ => fail .Syntax(name.to_string())
+    }
+}
+
+/// (let name ((var init) ...) body ...): a procedure `name`, bound in a new
+/// frame and called once with the initial values. Its body may call `name` to loop.
+fn named_let(mut h: Heap, loop_name: usize, xs: List[Val], env: usize) -> Step ! LispError {
+    if xs.len() < 3 { fail .Syntax("a named `let` takes a name, bindings and a body".to_string()) }
+    let binds = h.to_list(xs[1])?
+    var slots: List[Val] = List()
+    var inits: List[Val] = List()
+    for b in binds {
+        let pair = h.to_list(b)?
+        if pair.len() != 2 { fail .Syntax("a binding is (name value)".to_string()) }
+        slots.push(pair[0])
+        inits.push(eval(mut h, pair[1], env)?)
+    }
+    let frame = h.new_frame(some(env))
+    let params = h.list(slots)
+    let proc = make_lambda(mut h, params, tail(xs, 2), frame)?
+    h.define(frame, loop_name, proc)
+    match proc {
+        .Closure(c) => enter(mut h, c, inits)
+        _ => fail .Syntax("a named `let` needs a procedure".to_string())
+    }
+}
+
+/// A closure over `env`. `params` is a list of names; `body` is the forms to run.
+fn make_lambda(mut h: Heap, params: Val, take body: List[Val], env: usize) -> Val ! LispError {
+    var slots: List[usize] = List()
+    let ps = h.to_list(params)?
+    for p in ps {
+        slots.push(sym_of(p)?)
+    }
+    h.closure(slots, body, env)
+}
+
+/// The parts of a special form, which must be exactly `n` of them.
+fn shape(h: Heap, form: str, rest: Val, n: usize) -> List[Val] ! LispError {
+    let xs = h.to_list(rest)?
+    if xs.len() != n {
+        fail .Syntax("`{form}` takes {n} part(s), but got {xs.len()}".to_string())
+    }
+    xs
+}
+
+fn sym_of(v: Val) -> usize ! LispError = match v {
+    .Sym(s) => s
+    _ => fail .Syntax("expected a name".to_string())
+}
+
+fn is_else(h: Heap, v: Val) -> bool = v is .Sym(s) and h.name(s) == "else"
+
+/// Quasi-quote: `x` as data, except that `,e` becomes the value of `e`, and
+/// `,@e` becomes the elements of the list `e`, spliced in.
+fn quasi(mut h: Heap, x: Val, env: usize) -> Val ! LispError {
+    if is_tagged(h, x, "unquote") {
+        let e = operand(h, x)?
+        return eval(mut h, e, env)
+    }
+    match x {
+        .Pair(_) => {
+            var out: List[Val] = List()
+            let items = h.to_list(x)?
+            for item in items {
+                if is_tagged(h, item, "unquote-splicing") {
+                    let e = operand(h, item)?
+                    let spread = eval(mut h, e, env)?
+                    let elements = h.to_list(spread)?
+                    for v in elements {
+                        out.push(v)
+                    }
+                } else {
+                    out.push(quasi(mut h, item, env)?)
+                }
+            }
+            h.list(out)
+        }
+        _ => x
+    }
+}
+
+/// Whether `x` is a list headed by the symbol `tag`, as `(unquote e)` is.
+fn is_tagged(h: Heap, x: Val, tag: str) -> bool = match x {
+    .Pair(p) => h.car(p) is .Sym(s) and h.name(s) == tag.to_string()
+    _ => false
+}
+
+/// The one operand of a tagged form such as `(unquote e)`.
+fn operand(h: Heap, x: Val) -> Val ! LispError {
+    let parts = h.to_list(x)?
+    if parts.len() != 2 { fail .Syntax("a `,` takes exactly one form".to_string()) }
+    parts[1]
+}
+
+/// Everything from index `from` on.
+fn tail(xs: [Val], from: usize) -> List[Val] {
+    var out: List[Val] = List()
+    var i = from
+    while i < xs.len() {
+        out.push(xs[i])
+        i += 1
+    }
+    out
+}

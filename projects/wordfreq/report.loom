@@ -1,0 +1,7 @@
+// Report: the entries that occur most.
+
+/// The `n` entries with the highest counts, the highest first. Entries with
+/// the same count go in byte order of their keys.
+pub fn top(counts: Map[String, u32], n: usize) -> List[(String, u32)] {
+    counts.pairs().sorted_by((a, b) => a.1 > b.1 or (a.1 == b.1 and a.0 < b.0)).take(n).collect()
+}

@@ -1,0 +1,74 @@
+// How values look as text.
+//
+// `render(h, v, true)` is the `write` form: strings in quotes, the way a REPL
+// shows a result. `render(h, v, false)` is the `display` form that `print`
+// uses, so `(print "hi")` shows `hi`.
+
+use heap.Heap
+use value.Val
+
+/// The text of `v`. `quoted` puts strings in double quotes.
+pub fn render(h: Heap, v: Val, quoted: bool) -> String {
+    var out = String()
+    write_val(h, v, quoted, mut out)
+    out
+}
+
+/// What kind of value `v` is, for error messages.
+pub fn kind(v: Val) -> str = match v {
+    .Nil => "the empty list"
+    .Bool(_) => "a boolean"
+    .Int(_) => "a number"
+    .Sym(_) => "a symbol"
+    .Str(_) => "a string"
+    .Pair(_) => "a list"
+    .Vec(_) => "a vector"
+    .Table(_) => "a table"
+    .Prim(_) => "a builtin"
+    .Closure(_) => "a procedure"
+    .Macro(_) => "a macro"
+}
+
+fn write_val(h: Heap, v: Val, quoted: bool, mut out: String) {
+    match v {
+        .Nil => out.push_str("()")
+        .Bool(b) => out.push_str(if b { "#t" } else { "#f" })
+        .Int(n) => out.push_str("{n}")
+        .Sym(s) => out.push_str(h.name(s))
+        .Str(s) => {
+            if quoted { out.push('"') }
+            out.push_str(h.text(s))
+            if quoted { out.push('"') }
+        }
+        .Pair(p) => write_list(h, p, quoted, mut out)
+        .Vec(v) => write_vector(h, v, quoted, mut out)
+        .Table(t) => out.push_str("#<table, {h.table_count(t)} entries>")
+        .Prim(s) => out.push_str("#<builtin {h.name(s)}>")
+        .Closure(_) => out.push_str("#<procedure>")
+        .Macro(_) => out.push_str("#<macro>")
+    }
+}
+
+/// `(a b c)`: the elements of the list that starts at cell `head`.
+fn write_list(h: Heap, head: usize, quoted: bool, mut out: String) {
+    out.push('(')
+    var at: Val = .Pair(head)
+    var first = true
+    while at is .Pair(p) {
+        if not first { out.push(' ') }
+        first = false
+        write_val(h, h.car(p), quoted, mut out)
+        at = h.cdr(p)
+    }
+    out.push(')')
+}
+
+/// `#(a b c)`: a vector's elements, in order.
+fn write_vector(h: Heap, v: usize, quoted: bool, mut out: String) {
+    out.push_str("#(")
+    for i in 0..h.vec_len(v) {
+        if i > 0 { out.push(' ') }
+        write_val(h, h.vec_get(v, i), quoted, mut out)
+    }
+    out.push(')')
+}

@@ -1,0 +1,72 @@
+// Tests for the words, the counts and the report; `loom test tests.loom` runs them.
+
+use tokens.tokens
+use count.{count, ngrams, stats}
+use report.top
+
+test tokens_split_on_everything_but_word_characters() {
+    var out: List[String] = List()
+    tokens("Don't stop, 42 times!", mut out)
+    assert(out.join("|") == "don't|stop|42|times", "punctuation and apostrophes")
+}
+
+test tokens_drop_apostrophes_at_the_ends() {
+    var out: List[String] = List()
+    tokens("'quoted' ''' 'a", mut out)
+    assert(out.join("|") == "quoted|a", "apostrophes at the ends")
+}
+
+test tokens_treat_non_ascii_as_a_separator() {
+    var out: List[String] = List()
+    tokens("café naïve", mut out)
+    assert(out.join("|") == "caf|na|ve", "non-ASCII separates")
+}
+
+test tokens_lowercase_ascii_and_keep_digits() {
+    var out: List[String] = List()
+    tokens("ABC123 xY", mut out)
+    assert(out.join("|") == "abc123|xy", "case and digits")
+}
+
+test tokens_of_nothing_is_nothing() {
+    var out: List[String] = List()
+    tokens("", mut out)
+    tokens("...  '' ", mut out)
+    assert(out.len() == 0, "empty and punctuation-only text")
+}
+
+test count_counts_each_word() {
+    let counts = count(["a", "b", "a"])
+    assert(counts["a"] == 2, "a occurs twice")
+    assert(counts["b"] == 1, "b occurs once")
+    assert(counts.len() == 2, "two distinct words")
+}
+
+test ngrams_join_neighbouring_words() {
+    let grams = ngrams(["a", "b", "c", "b", "c"], 2)
+    assert(grams["a b"] == 1, "first run")
+    assert(grams["b c"] == 2, "repeated run")
+    assert(grams.len() == 3, "three distinct runs")
+}
+
+test ngrams_longer_than_the_text_is_empty() {
+    assert(ngrams(["a", "b"], 3).len() == 0, "n above the word count")
+}
+
+test stats_take_the_first_longest_word() {
+    let totals = stats(["hi", "there", "you", "again", "there"], 4, 2, 30)
+    assert(totals.words == 5, "words")
+    assert(totals.unique == 4, "unique")
+    assert(totals.lines == 2, "lines")
+    assert(totals.bytes == 30, "bytes")
+    assert(totals.longest == "there", "first of the longest")
+}
+
+test top_sorts_by_count_then_key() {
+    let counts = count(["b", "a", "c", "b", "a", "d"])
+    let best = top(counts, 3)
+    assert(best.len() == 3, "truncated to n")
+    assert(best[0].0 == "a" and best[0].1 == 2, "tie goes to the smaller key")
+    assert(best[1].0 == "b" and best[1].1 == 2, "second of the tie")
+    assert(best[2].0 == "c" and best[2].1 == 1, "smallest count last")
+}

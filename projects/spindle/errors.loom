@@ -1,0 +1,28 @@
+// The errors a Spindle program can raise. Each one reads as a sentence when
+// it's reported, and `message` is that sentence.
+
+pub warp LispError: Error {
+    case Unbound(name: String)
+    case NotCallable(what: String)
+    case Arity(name: String, want: usize, got: usize)
+    case Mismatch(expected: String, got: String)
+    case Syntax(String)
+    case DivZero
+    case Overflow
+    case Index(i: usize, len: usize)
+    case Read(String)
+    case Raised(String)
+
+    fn message(self) -> String = match self {
+        .Unbound(name) => "unbound symbol `{name}`"
+        .NotCallable(what) => "{what} is not a procedure"
+        .Arity(name, want, got) => "{name} takes {want} argument(s), but got {got}"
+        .Mismatch(expected, got) => "expected {expected}, got {got}"
+        .Syntax(what) => "bad syntax: {what}"
+        .DivZero => "division by zero"
+        .Overflow => "integer overflow"
+        .Index(i, len) => "index {i} is out of range for length {len}"
+        .Read(what) => "read error: {what}"
+        .Raised(text) => text.copy()
+    }
+}

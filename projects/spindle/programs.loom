@@ -1,0 +1,338 @@
+// The Lisp that ships with Spindle: a prelude of list helpers, and the demos
+// that `spindle` runs when it's given no file.
+//
+// The demos show what the language can do, and each one runs in its own frame,
+// so their definitions don't leak into each other.
+
+/// Definitions every program can use. They're evaluated once, at boot.
+pub fn prelude() -> str = """
+(define (map f xs) (if (null? xs) '() (cons (f (car xs)) (map f (cdr xs)))))
+(define (filter keep? xs)
+  (cond ((null? xs) '())
+        ((keep? (car xs)) (cons (car xs) (filter keep? (cdr xs))))
+        (else (filter keep? (cdr xs)))))
+(define (foldl f acc xs) (if (null? xs) acc (foldl f (f acc (car xs)) (cdr xs))))
+(define (reverse xs) (foldl (lambda (acc x) (cons x acc)) '() xs))
+(define (range lo hi) (if (>= lo hi) '() (cons lo (range (+ lo 1) hi))))
+(define (for-each f xs) (if (null? xs) #t (begin (f (car xs)) (for-each f (cdr xs)))))
+(define (sum xs) (foldl + 0 xs))
+(define (cadr xs) (car (cdr xs)))
+(define (even? n) (= (mod n 2) 0))
+(define (odd? n) (not (even? n)))
+(define (abs n) (if (< n 0) (- 0 n) n))
+(define (max a b) (if (> a b) a b))
+(define (min a b) (if (< a b) a b))
+(define (compose f g) (lambda (x) (f (g x))))
+
+;; N-Queens: how many ways to place n queens on an n-by-n board with none attacking.
+;; `placed` holds the columns of the queens in the rows above, nearest row first.
+(define (safe? col placed)
+  (define (clash? rest dist)
+    (cond ((null? rest) #f)
+          ((or (= (car rest) col) (= (abs (- (car rest) col)) dist)) #t)
+          (else (clash? (cdr rest) (+ dist 1)))))
+  (not (clash? placed 1)))
+(define (queens n)
+  (define (place row placed)
+    (if (= row n)
+        1
+        (sum (map (lambda (col)
+                    (if (safe? col placed) (place (+ row 1) (cons col placed)) 0))
+                  (range 0 n)))))
+  (place 0 '()))
+
+;; List helpers.
+(define (take n xs) (if (or (= n 0) (null? xs)) '() (cons (car xs) (take (- n 1) (cdr xs)))))
+(define (drop n xs) (if (or (= n 0) (null? xs)) xs (drop (- n 1) (cdr xs))))
+(define (zip xs ys) (if (or (null? xs) (null? ys)) '() (cons (list (car xs) (car ys)) (zip (cdr xs) (cdr ys)))))
+(define (last xs) (if (null? (cdr xs)) (car xs) (last (cdr xs))))
+(define (iota n) (range 0 n))
+(define (member x xs) (cond ((null? xs) #f) ((equal? x (car xs)) xs) (else (member x (cdr xs)))))
+(define (flatten xs)
+  (cond ((null? xs) '())
+        ((pair? (car xs)) (append (flatten (car xs)) (flatten (cdr xs))))
+        (else (cons (car xs) (flatten (cdr xs))))))
+(define (all? p xs) (or (null? xs) (and (p (car xs)) (all? p (cdr xs)))))
+(define (any? p xs) (and (not (null? xs)) (or (p (car xs)) (any? p (cdr xs)))))
+"""
+
+/// One demo: a title, and the program it runs.
+pub warp Demo {
+    pub title: str
+    pub source: str
+}
+
+pub fn demos() -> List[Demo] = [
+    Demo(title: "arithmetic and definitions", source: """
+(define x 6)
+(define y (* x 7))
+(print "x * 7 =" y)
+(list (+ 1 2 3) (- 10 4) (* 2 3 4) (/ 17 5) (mod 17 5) (- 9))
+"""),
+    Demo(title: "closures", source: """
+(define (make-counter)
+  (define count 0)
+  (lambda ()
+    (set! count (+ count 1))
+    count))
+(define c1 (make-counter))
+(define c2 (make-counter))
+(c1)
+(c1)
+(print "c1 says" (c1) "and c2 says" (c2))
+(define (make-adder n) (lambda (x) (+ x n)))
+((compose (make-adder 10) (make-adder 100)) 1)
+"""),
+    Demo(title: "recursion", source: """
+(define (fact n) (if (= n 0) 1 (* n (fact (- n 1)))))
+(define (fib n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))
+(define (ack m n)
+  (cond ((= m 0) (+ n 1))
+        ((= n 0) (ack (- m 1) 1))
+        (else (ack (- m 1) (ack m (- n 1))))))
+(print "20! =" (fact 20))
+(print "fib 20 =" (fib 20))
+(ack 2 3)
+"""),
+    Demo(title: "tail calls run in constant stack", source: """
+(define (count-up i n) (if (= i n) i (count-up (+ i 1) n)))
+(print "counted up to" (count-up 0 30000))
+(define (my-even? n) (if (= n 0) #t (my-odd? (- n 1))))
+(define (my-odd? n) (if (= n 0) #f (my-even? (- n 1))))
+(my-even? 30001)
+"""),
+    Demo(title: "overflow is an error, not a wrap", source: """
+(define (fact n) (if (= n 0) 1 (* n (fact (- n 1)))))
+(print "21! =" (fact 21))
+"""),
+    Demo(title: "lists", source: """
+(define squares (map (lambda (n) (* n n)) (range 1 11)))
+(print "squares:" squares)
+(print "even squares:" (filter even? squares))
+(print "sum:" (sum squares))
+(reverse (range 0 5))
+"""),
+    Demo(title: "primes by trial division", source: """
+(define (prime? n)
+  (define (check d)
+    (cond ((> (* d d) n) #t)
+          ((= (mod n d) 0) #f)
+          (else (check (+ d 1)))))
+  (and (> n 1) (check 2)))
+(filter prime? (range 1 60))
+"""),
+    Demo(title: "quicksort over seeded random numbers", source: """
+(define (quicksort xs)
+  (if (null? xs)
+      '()
+      (let ((pivot (car xs)) (others (cdr xs)))
+        (append (quicksort (filter (lambda (x) (< x pivot)) others))
+                (cons pivot (quicksort (filter (lambda (x) (>= x pivot)) others)))))))
+(define noisy (map (lambda (i) (random 100)) (range 0 12)))
+(print "before:" noisy)
+(quicksort noisy)
+"""),
+    Demo(title: "towers of hanoi", source: """
+(define moves 0)
+(define (hanoi n from to via)
+  (if (= n 0)
+      0
+      (begin
+        (hanoi (- n 1) from via to)
+        (set! moves (+ moves 1))
+        (hanoi (- n 1) via to from))))
+(hanoi 10 'left 'right 'middle)
+(print "moves for 10 discs:" moves)
+moves
+"""),
+    Demo(title: "n-queens", source: """
+(print "5 queens:" (queens 5))
+(queens 6)
+"""),
+    Demo(title: "life on a vector grid", source: """
+(define size 6)
+(define (idx r c) (+ (* r size) c))
+(define (cell b r c)
+  (if (and (>= r 0) (< r size) (>= c 0) (< c size))
+      (vector-ref b (idx r c))
+      0))
+(define (neighbours b r c)
+  (+ (cell b (- r 1) (- c 1)) (cell b (- r 1) c) (cell b (- r 1) (+ c 1))
+     (cell b r (- c 1))                          (cell b r (+ c 1))
+     (cell b (+ r 1) (- c 1)) (cell b (+ r 1) c) (cell b (+ r 1) (+ c 1))))
+(define (next-state alive n)
+  (if (= alive 1)
+      (if (or (= n 2) (= n 3)) 1 0)
+      (if (= n 3) 1 0)))
+(define (step b)
+  (define new (make-vector (* size size) 0))
+  (for-each (lambda (r)
+              (for-each (lambda (c)
+                          (vector-set! new (idx r c) (next-state (cell b r c) (neighbours b r c))))
+                        (range 0 size)))
+            (range 0 size))
+  new)
+(define (row b r)
+  (foldl (lambda (acc c) (string-append acc (if (= (cell b r c) 1) "#" "."))) "" (range 0 size)))
+(define (show b gen)
+  (print "generation" gen)
+  (for-each (lambda (r) (print (row b r))) (range 0 size)))
+(define glider (make-vector (* size size) 0))
+(for-each (lambda (p) (vector-set! glider (idx (car p) (cadr p)) 1))
+          '((0 1) (1 2) (2 0) (2 1) (2 2)))
+(show glider 0)
+(show (step glider) 1)
+(show (step (step glider)) 2)
+"""),
+    Demo(title: "brainfuck, in Lisp", source: """
+(define (bf-run src)
+  (define n (string-length src))
+  (define tape (make-vector 300 0))
+  (define jumps (make-vector n 0))
+  (define (pair-up i stack)
+    (cond ((= i n) (if (null? stack) #t (error "a [ is never closed")))
+          ((string=? (string-ref src i) "[") (pair-up (+ i 1) (cons i stack)))
+          ((string=? (string-ref src i) "]")
+           (if (null? stack)
+               (error "a ] has no [")
+               (begin
+                 (vector-set! jumps (car stack) i)
+                 (vector-set! jumps i (car stack))
+                 (pair-up (+ i 1) (cdr stack)))))
+          (else (pair-up (+ i 1) stack))))
+  (pair-up 0 '())
+  (define pc 0)
+  (define ptr 0)
+  (define out "")
+  (while (< pc n)
+    (let ((c (string-ref src pc)))
+      (cond ((string=? c "+") (vector-set! tape ptr (mod (+ (vector-ref tape ptr) 1) 256)))
+            ((string=? c "-") (vector-set! tape ptr (mod (+ (vector-ref tape ptr) 255) 256)))
+            ((string=? c ">") (set! ptr (+ ptr 1)))
+            ((string=? c "<") (set! ptr (- ptr 1)))
+            ((string=? c ".") (set! out (string-append out (code->string (vector-ref tape ptr)))))
+            ((string=? c "[") (if (= (vector-ref tape ptr) 0) (set! pc (vector-ref jumps pc))))
+            ((string=? c "]") (if (not (= (vector-ref tape ptr) 0)) (set! pc (vector-ref jumps pc))))
+            (else #f)))
+    (set! pc (+ pc 1)))
+  out)
+(print (bf-run "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++."))
+(bf-run "+++[>+++<-]>.")
+"""),
+    Demo(title: "word counts in a table", source: """
+(define counts (make-table))
+(define (count-word! w)
+  (table-set! counts w (+ 1 (table-ref counts w 0))))
+(for-each count-word! '(the cat sat on the mat the cat))
+(print "distinct words:" (table-count counts))
+(table-entries counts)
+"""),
+    Demo(title: "macros, and quasi-quote", source: """
+(defmacro unless (test body) `(if ,test #f ,body))
+(defmacro swap! (a b) `(let ((tmp ,a)) (begin (set! ,a ,b) (set! ,b tmp))))
+(defmacro show-form (form) (list 'quote form))
+(define x 1)
+(define y 2)
+(swap! x y)
+(print "after swap:" x y)
+(print "unless:" (unless (< x y) 'ok))
+(print "operands arrive unevaluated:" (show-form (+ x y)))
+(define n 3)
+`(1 ,n ,@(list 4 5) done)
+"""),
+    Demo(title: "let* sees the bindings before it", source: """
+(let* ((a 2) (b (* a 3)) (a (+ a b)))
+  (list a b))
+"""),
+    Demo(title: "list helpers", source: """
+(print "take 2:" (take 2 '(a b c d)))
+(print "drop 2:" (drop 2 '(a b c d)))
+(print "zip:" (zip '(1 2 3) '(x y z)))
+(print "flatten:" (flatten '(1 (2 (3 4)) ((5)))))
+(print "member 3:" (member 3 '(1 2 3 4)))
+(print "all even:" (all? even? '(2 4 6)) "any odd:" (any? odd? '(2 4 6)))
+(last (iota 5))
+"""),
+    Demo(title: "a cave from a drunkard's walk", source: """
+(define w 31)
+(define h 11)
+(define grid (make-vector (* w h) 1))
+(define (at x y) (+ (* y w) x))
+(define (carve! x y) (vector-set! grid (at x y) 0))
+(define (walk x y steps)
+  (if (= steps 0)
+      #t
+      (let ((dir (random 4)))
+        (let ((nx (cond ((= dir 0) (+ x 1)) ((= dir 1) (- x 1)) (else x)))
+              (ny (cond ((= dir 2) (+ y 1)) ((= dir 3) (- y 1)) (else y))))
+          (if (and (> nx 0) (< nx (- w 1)) (> ny 0) (< ny (- h 1)))
+              (begin (carve! nx ny) (walk nx ny (- steps 1)))
+              (walk x y (- steps 1)))))))
+(carve! 1 1)
+(walk 1 1 900)
+(define (row y)
+  (foldl (lambda (acc x) (string-append acc (if (= (vector-ref grid (at x y)) 1) "#" " "))) "" (range 0 w)))
+(for-each (lambda (y) (print (row y))) (range 0 h))
+"""),
+    Demo(title: "named let, case and when", source: """
+(define (classify n)
+  (case (mod n 3)
+    ((0) 'fizz)
+    ((1 2) 'other)
+    (else 'never)))
+(print "classified:" (let loop ((i 1) (acc '()))
+                       (if (> i 6) (reverse acc) (loop (+ i 1) (cons (classify i) acc)))))
+(when (> (length '(a b c)) 2) 'long-enough)
+"""),
+    Demo(title: "while loops with set!", source: """
+(define total 0)
+(define i 0)
+(while (< i 1000)
+  (set! total (+ total i))
+  (set! i (+ i 1)))
+(print "sum below 1000:" total)
+total
+"""),
+    Demo(title: "errors you can catch", source: """
+(define (safe-div a b)
+  (try (lambda () (/ a b))
+       (lambda (msg) (string-append "failed: " msg))))
+(print (safe-div 10 2))
+(print (safe-div 1 0))
+(car '())
+"""),
+    Demo(title: "strings and symbols", source: """
+(define greeting (string-append "spin" "dle" "!"))
+(print greeting "has" (string-length greeting) "characters")
+(print "substring:" (substring greeting 0 4) "third letter:" (string-ref greeting 2))
+(string-append "10! = " (number->string (* 1 2 3 4 5 6 7 8 9 10)))
+(list 'a "b" #t #f (string->number "42"))
+"""),
+    Demo(title: "data is code", source: """
+(define tree '(1 (2 3) (4 (5))))
+(print "quoted:" tree)
+(print "equal?" (equal? (list 1 2) (list 1 2)) "eq?" (eq? 'a 'b))
+(print "symbol text:" (symbol->string 'spindle) "and back:" (string->symbol "lisp"))
+(list-ref '(a b c) 1)
+(apply + (cadr tree))
+"""),
+    Demo(title: "self-checks with assert-equal", source: """
+(assert-equal 6 (+ 1 2 3))
+(assert-equal '(3 2 1) (reverse (range 1 4)))
+(assert-equal "ab" (string-append "a" "b"))
+(assert-equal 4 (queens 6))
+(assert-equal 1 (queens 1))
+"all checks passed"
+"""),
+    Demo(title: "dice from the seeded generator", source: """
+(define (roll) (+ 1 (random 6)))
+(define rolls (map (lambda (i) (roll)) (range 0 10)))
+(print "rolls:" rolls)
+(sum rolls)
+"""),
+    Demo(title: "an unbound name", source: """
+(define (greet who) (string-append "hello " who))
+(print (greet "loom"))
+(greet-everyone "loom")
+"""),
+]

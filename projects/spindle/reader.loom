@@ -1,0 +1,163 @@
+// The reader: text in, values out.
+//
+// It builds the same cons cells the evaluator runs, so quoted data and program
+// text are one thing. A comment runs from `;` to the end of its line. The
+// prefixes are `'x` (which reads as `(quote x)`), `` `x `` (quasiquote), `,x`
+// (unquote) and `,@x` (unquote-splicing). Strings are in double quotes, with
+// `\n`, `\t` and `\"` escapes. Every read error names the line it was found on.
+
+use heap.Heap
+use value.Val
+use errors.LispError
+
+/// Every datum in `src`, in order.
+pub fn read_all(mut h: Heap, src: str) -> List[Val] ! LispError {
+    var r = Reader(chars: src.chars().collect())
+    var forms: List[Val] = List()
+    loop {
+        r.skip_space()
+        if r.peek() is none { break }
+        forms.push(r.datum(mut h)?)
+    }
+    forms
+}
+
+/// A cursor over the characters of one source text.
+warp Reader {
+    chars: List[char]
+    pos: usize = 0
+
+    fn peek(self) -> ?char = .chars.get(.pos)
+
+    /// The line the cursor is on, counting from 1.
+    fn line(self) -> usize {
+        var n = 1
+        var i = 0
+        while i < .pos and i < .chars.len() {
+            if .chars[i] == '\n' { n += 1 }
+            i += 1
+        }
+        n
+    }
+
+    /// A read error at the cursor, with `what` describing it.
+    fn error(self, what: str) -> LispError = .Read("line {.line()}: {what}".to_string())
+
+    /// Skips whitespace and `;` comments.
+    fn skip_space(mut self) {
+        while .peek() is some(c) {
+            if c == ';' {
+                while .peek() is some(d) and d != '\n' { .pos += 1 }
+            } else if c.is_whitespace() {
+                .pos += 1
+            } else {
+                break
+            }
+        }
+    }
+
+    /// One datum: a list, a prefixed form, a string, or an atom.
+    fn datum(mut self, mut h: Heap) -> Val ! LispError {
+        .skip_space()
+        match .peek() {
+            none => fail .error("unexpected end of input")
+            some(')') => fail .error("unexpected `)`")
+            some('(') => {
+                .pos += 1
+                .items(mut h)
+            }
+            some('\'') => {
+                .pos += 1
+                let quoted = .datum(mut h)?
+                wrap(mut h, "quote", quoted)
+            }
+            some('`') => {
+                .pos += 1
+                let quoted = .datum(mut h)?
+                wrap(mut h, "quasiquote", quoted)
+            }
+            some(',') => {
+                .pos += 1
+                let splice = .peek() is some('@')
+                if splice { .pos += 1 }
+                let inner = .datum(mut h)?
+                wrap(mut h, if splice { "unquote-splicing" } else { "unquote" }, inner)
+            }
+            some('"') => {
+                .pos += 1
+                .string(mut h)
+            }
+            some(_) => .atom(mut h)
+        }
+    }
+
+    /// The elements of a list, up to its closing `)`.
+    fn items(mut self, mut h: Heap) -> Val ! LispError {
+        var xs: List[Val] = List()
+        loop {
+            .skip_space()
+            match .peek() {
+                none => fail .error("a list is missing its `)`")
+                some(')') => {
+                    .pos += 1
+                    break
+                }
+                some(_) => xs.push(.datum(mut h)?)
+            }
+        }
+        h.list(xs)
+    }
+
+    /// A string literal. The opening quote has already been read.
+    fn string(mut self, mut h: Heap) -> Val ! LispError {
+        var text = String()
+        loop {
+            match .peek() {
+                none => fail .error("a string is never closed")
+                some('"') => {
+                    .pos += 1
+                    break
+                }
+                some('\\') => {
+                    let c = .chars.get(.pos + 1) mend fail .error("a string is never closed")
+                    text.push(escape(c))
+                    .pos += 2
+                }
+                some(c) => {
+                    text.push(c)
+                    .pos += 1
+                }
+            }
+        }
+        h.string(text)
+    }
+
+    /// A number, `#t`, `#f`, or a symbol: everything up to a delimiter.
+    fn atom(mut self, mut h: Heap) -> Val ! LispError {
+        var text = String()
+        while .peek() is some(c) and not is_delimiter(c) {
+            text.push(c)
+            .pos += 1
+        }
+        if text.is_empty() { fail .error("an unexpected character") }
+        if text == "#t" { return Val.Bool(true) }
+        if text == "#f" { return Val.Bool(false) }
+        if text.parse[i64]() is ok(n) { return Val.Int(n) }
+        Val.Sym(h.sym(text))
+    }
+}
+
+/// `(tag inner)`: the list that a prefix such as `'x` reads as.
+fn wrap(mut h: Heap, tag: str, inner: Val) -> Val {
+    let q = h.sym(tag)
+    h.list([Val.Sym(q), inner])
+}
+
+fn is_delimiter(c: char) -> bool =
+    c.is_whitespace() or c == '(' or c == ')' or c == ';' or c == '"' or c == '\'' or c == '`' or c == ','
+
+fn escape(c: char) -> char = match c {
+    'n' => '\n'
+    't' => '\t'
+    _ => c
+}

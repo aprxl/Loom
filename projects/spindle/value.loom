@@ -1,0 +1,52 @@
+// Values, and the records the heap keeps for them.
+//
+// A value's payloads are numbers or indexes into the heap's tables, so every
+// value is `Copy`: passing one around, or storing it in a cell, never needs a
+// clone. Nothing here knows how to print or evaluate; see printer and eval.
+
+/// A Spindle value. `Sym`, `Str`, `Pair`, `Vec`, `Table`, `Prim`, `Closure`
+/// and `Macro` index the heap's tables. A `Prim` carries the symbol of its
+/// name; a `Macro` is a closure whose operands are passed as data.
+pub warp Val {
+    case Nil
+    case Bool(bool)
+    case Int(i64)
+    case Sym(usize)
+    case Str(usize)
+    case Pair(usize)
+    case Vec(usize)
+    case Table(usize)
+    case Prim(usize)
+    case Closure(usize)
+    case Macro(usize)
+}
+
+/// One step of evaluation: either a finished value, or a form still to run in
+/// a frame. A form in tail position comes back as `Again`, so the evaluator
+/// loops instead of growing the stack.
+pub warp Step {
+    case Done(Val)
+    case Again(Val, usize)
+}
+
+/// A cons cell. `car` and `cdr` read its two halves.
+pub warp Cell {
+    pub car: Val
+    pub cdr: Val
+}
+
+/// A lambda: its parameter symbols, its body forms, and the frame it closed over.
+pub warp Lambda {
+    pub params: List[usize]
+    pub body: List[Val]
+    pub env: usize
+}
+
+/// A frame: the names one scope binds, and the frame it extends.
+pub warp Frame {
+    pub vars: Map[usize, Val] = Map()
+    pub parent: ?usize = none
+}
+
+/// Everything but `#f` is true, as in Scheme. `()` is true too.
+pub fn truthy(v: Val) -> bool = not (v is .Bool(false))

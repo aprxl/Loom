@@ -1,0 +1,399 @@
+// The primitives: the procedures every program starts with.
+//
+// A primitive gets its arguments already evaluated. Integer arithmetic checks
+// for overflow and fails with `Overflow` rather than wrapping: a Lisp user
+// expects 2^63 to be an error, not a surprise. Anything that takes an index
+// checks it against the length first, and a wrong type fails with `Mismatch`
+// naming what was expected.
+
+use heap.Heap
+use value.{Val, truthy}
+use errors.LispError
+use printer.{render, kind}
+use std.io.print
+
+/// Every primitive's name, in the order `boot` binds them.
+pub fn names() -> List[str] = [
+    "+", "-", "*", "/", "mod", "<", ">", "<=", ">=", "=", "random",
+    "eq?", "equal?", "not", "null?", "pair?", "number?", "string?", "symbol?",
+    "cons", "car", "cdr", "list", "list-ref", "length", "append",
+    "vector", "make-vector", "vector-ref", "vector-set!", "vector-length",
+    "make-table", "table-set!", "table-ref", "table-count", "table-entries",
+    "string-append", "string-length", "string-ref", "substring", "string=?",
+    "number->string", "string->number", "code->string",
+    "symbol->string", "string->symbol",
+    "print", "error", "assert-equal",
+]
+
+/// Runs primitive `name` on `args`.
+pub fn call_prim(mut h: Heap, name: str, args: List[Val]) -> Val ! LispError {
+    match name {
+        // ---------------------------------------------------------- numbers
+        "+" => {
+            var acc: i64 = 0
+            for n in ints(args)? {
+                acc = fits(acc +? n)?
+            }
+            Val.Int(acc)
+        }
+        "-" => {
+            let ns = ints(args)?
+            if ns.len() == 0 { fail .Arity(name.to_string(), 1, 0) }
+            if ns.len() == 1 { return Val.Int(fits(0 -? ns[0])?) }
+            var acc = ns[0]
+            for i in 1..ns.len() {
+                acc = fits(acc -? ns[i])?
+            }
+            Val.Int(acc)
+        }
+        "*" => {
+            var acc: i64 = 1
+            for n in ints(args)? {
+                acc = fits(acc *? n)?
+            }
+            Val.Int(acc)
+        }
+        "/" => {
+            let ns = ints(args)?
+            if ns.len() == 0 { fail .Arity(name.to_string(), 1, 0) }
+            var acc = ns[0]
+            for i in 1..ns.len() {
+                if ns[i] == 0 { fail .DivZero }
+                acc = acc / ns[i]
+            }
+            Val.Int(acc)
+        }
+        "mod" => {
+            arity(name, args, 2)?
+            let ns = ints(args)?
+            if ns[1] == 0 { fail .DivZero }
+            Val.Int(ns[0] % ns[1])
+        }
+        "<" => Val.Bool(chain(ints(args)?, (a, b) => a < b))
+        ">" => Val.Bool(chain(ints(args)?, (a, b) => a > b))
+        "<=" => Val.Bool(chain(ints(args)?, (a, b) => a <= b))
+        ">=" => Val.Bool(chain(ints(args)?, (a, b) => a >= b))
+        "=" => Val.Bool(chain(ints(args)?, (a, b) => a == b))
+        "random" => {
+            let n = int_of(one(name, args)?)?
+            if n <= 0 { fail .Mismatch("a positive number".to_string(), n.to_string()) }
+            Val.Int(h.random(n as u64) as i64)
+        }
+        "number->string" => {
+            let n = int_of(one(name, args)?)?
+            h.string(n.to_string())
+        }
+        "string->number" => {
+            let s = h.text(str_of(one(name, args)?)?)
+            match s.parse[i64]() {
+                ok(n) => Val.Int(n)
+                err(_) => Val.Bool(false)
+            }
+        }
+
+        // ---------------------------------------------------- equality, types
+        "eq?" => {
+            arity(name, args, 2)?
+            Val.Bool(eqv(args[0], args[1]))
+        }
+        "equal?" => {
+            arity(name, args, 2)?
+            Val.Bool(equal(h, args[0], args[1]))
+        }
+        "not" => Val.Bool(not truthy(one(name, args)?))
+        "null?" => Val.Bool(one(name, args)? is .Nil)
+        "pair?" => Val.Bool(one(name, args)? is .Pair(_))
+        "number?" => Val.Bool(one(name, args)? is .Int(_))
+        "string?" => Val.Bool(one(name, args)? is .Str(_))
+        "symbol?" => Val.Bool(one(name, args)? is .Sym(_))
+
+        // ---------------------------------------------------------- pairs
+        "cons" => {
+            arity(name, args, 2)?
+            h.cons(args[0], args[1])
+        }
+        "car" => h.car(pair_of(one(name, args)?)?)
+        "cdr" => h.cdr(pair_of(one(name, args)?)?)
+        "list" => h.list(args)
+        "list-ref" => {
+            arity(name, args, 2)?
+            let xs = h.to_list(args[0])?
+            let i = nat(int_of(args[1])?)?
+            if i >= xs.len() { fail .Index(i, xs.len()) }
+            xs[i]
+        }
+        "length" => {
+            let xs = h.to_list(one(name, args)?)?
+            Val.Int(xs.len() as i64)
+        }
+        "append" => {
+            arity(name, args, 2)?
+            let front = h.to_list(args[0])?
+            var out = args[1]
+            var i = front.len()
+            while i > 0 {
+                i -= 1
+                out = h.cons(front[i], out)
+            }
+            out
+        }
+
+        // -------------------------------------------------------- vectors
+        "vector" => h.vector(list_of(args)),
+        "make-vector" => {
+            arity(name, args, 2)?
+            let size = nat(int_of(args[0])?)?
+            var cells: List[Val] = List()
+            for _ in 0..size {
+                cells.push(args[1])
+            }
+            h.vector(cells)
+        }
+        "vector-ref" => {
+            arity(name, args, 2)?
+            let v = vec_of(args[0])?
+            let i = nat(int_of(args[1])?)?
+            let len = h.vec_len(v)
+            if i >= len { fail .Index(i, len) }
+            h.vec_get(v, i)
+        }
+        "vector-set!" => {
+            arity(name, args, 3)?
+            let v = vec_of(args[0])?
+            let i = nat(int_of(args[1])?)?
+            let len = h.vec_len(v)
+            if i >= len { fail .Index(i, len) }
+            h.vec_set(v, i, args[2])
+            Val.Nil
+        }
+        "vector-length" => {
+            let v = vec_of(one(name, args)?)?
+            Val.Int(h.vec_len(v) as i64)
+        }
+
+        // ---------------------------------------------------------- tables
+        // Keys are compared by how they print, so 1 and "1" are different keys.
+        "make-table" => {
+            arity(name, args, 0)?
+            h.table()
+        }
+        "table-set!" => {
+            arity(name, args, 3)?
+            let t = table_of(args[0])?
+            let key = render(h, args[1], true)
+            h.table_set(t, key, args[1], args[2])
+            Val.Nil
+        }
+        "table-ref" => {
+            arity(name, args, 3)?
+            let t = table_of(args[0])?
+            let key = render(h, args[1], true)
+            match h.table_get(t, key) {
+                some(v) => v
+                none => args[2]
+            }
+        }
+        "table-count" => {
+            let t = table_of(one(name, args)?)?
+            Val.Int(h.table_count(t) as i64)
+        }
+        "table-entries" => {
+            let t = table_of(one(name, args)?)?
+            let entries = h.table_entries(t)
+            var out: List[Val] = List()
+            for (k, v) in entries {
+                out.push(h.list([k, v]))
+            }
+            h.list(out)
+        }
+
+        // -------------------------------------------------------- strings
+        "string-append" => {
+            var out = String()
+            for a in args {
+                out.push_str(h.text(str_of(a)?))
+            }
+            h.string(out)
+        }
+        "string-length" => {
+            let s = h.text(str_of(one(name, args)?)?)
+            Val.Int(s.char_count() as i64)
+        }
+        "string-ref" => {
+            arity(name, args, 2)?
+            let s = h.text(str_of(args[0])?)
+            let cs: List[char] = s.chars().collect()
+            let i = nat(int_of(args[1])?)?
+            if i >= cs.len() { fail .Index(i, cs.len()) }
+            var out = String()
+            out.push(cs[i])
+            h.string(out)
+        }
+        "substring" => {
+            arity(name, args, 3)?
+            let s = h.text(str_of(args[0])?)
+            let start = nat(int_of(args[1])?)?
+            let end = nat(int_of(args[2])?)?
+            let len = s.char_count()
+            if start > end or end > len { fail .Index(end, len) }
+            var out = String()
+            var i = 0
+            for c in s.chars() {
+                if i >= start and i < end { out.push(c) }
+                i += 1
+            }
+            h.string(out)
+        }
+        "string=?" => {
+            arity(name, args, 2)?
+            Val.Bool(h.text(str_of(args[0])?) == h.text(str_of(args[1])?))
+        }
+        "code->string" => {
+            let code = int_of(one(name, args)?)?
+            var out = String()
+            out.push(char_of(code)?)
+            h.string(out)
+        }
+
+        // -------------------------------------------------------- symbols
+        "symbol->string" => {
+            let s = sym_of(one(name, args)?)?
+            let text = h.name(s)
+            h.string(text)
+        }
+        "string->symbol" => {
+            let text = h.text(str_of(one(name, args)?)?)
+            Val.Sym(h.sym(text))
+        }
+
+        // ------------------------------------------------- output and checks
+        "print" => {
+            var line = String()
+            var first = true
+            for a in args {
+                if not first { line.push(' ') }
+                first = false
+                line.push_str(render(h, a, false))
+            }
+            print(line)
+            Val.Nil
+        }
+        "error" => fail .Raised(render(h, one(name, args)?, false))
+        "assert-equal" => {
+            arity(name, args, 2)?
+            if not equal(h, args[0], args[1]) {
+                let want = render(h, args[0], true)
+                let got = render(h, args[1], true)
+                fail .Raised("assert-equal: expected {want}, got {got}".to_string())
+            }
+            Val.Nil
+        }
+
+        _ => fail .NotCallable(name.to_string())
+    }
+}
+
+// ---------------------------------------------------------------- helpers
+
+/// Exactly `want` arguments, or an arity error that names the primitive.
+fn arity(name: str, args: [Val], want: usize) ! LispError {
+    if args.len() != want { fail .Arity(name.to_string(), want, args.len()) }
+}
+
+/// The single argument of a one-argument primitive.
+fn one(name: str, args: [Val]) -> Val ! LispError {
+    arity(name, args, 1)?
+    args[0]
+}
+
+/// Every argument as an integer.
+fn ints(args: [Val]) -> List[i64] ! LispError {
+    var out: List[i64] = List()
+    for a in args {
+        out.push(int_of(a)?)
+    }
+    out
+}
+
+fn list_of(args: [Val]) -> List[Val] {
+    var out: List[Val] = List()
+    for a in args { out.push(a) }
+    out
+}
+
+fn int_of(v: Val) -> i64 ! LispError = match v {
+    .Int(n) => n
+    _ => fail .Mismatch("a number".to_string(), kind(v).to_string())
+}
+
+/// A non-negative integer, as an index or a size.
+fn nat(n: i64) -> usize ! LispError {
+    if n < 0 { fail .Mismatch("a non-negative number".to_string(), n.to_string()) }
+    n as usize
+}
+
+/// A character from its code, which must be ASCII here.
+fn char_of(code: i64) -> char ! LispError {
+    if code < 0 or code > 127 { fail .Mismatch("an ASCII code".to_string(), code.to_string()) }
+    code as u8 as char
+}
+
+fn str_of(v: Val) -> usize ! LispError = match v {
+    .Str(s) => s
+    _ => fail .Mismatch("a string".to_string(), kind(v).to_string())
+}
+
+fn sym_of(v: Val) -> usize ! LispError = match v {
+    .Sym(s) => s
+    _ => fail .Mismatch("a symbol".to_string(), kind(v).to_string())
+}
+
+fn vec_of(v: Val) -> usize ! LispError = match v {
+    .Vec(i) => i
+    _ => fail .Mismatch("a vector".to_string(), kind(v).to_string())
+}
+
+fn table_of(v: Val) -> usize ! LispError = match v {
+    .Table(t) => t
+    _ => fail .Mismatch("a table".to_string(), kind(v).to_string())
+}
+
+fn pair_of(v: Val) -> usize ! LispError = match v {
+    .Pair(p) => p
+    _ => fail .Mismatch("a list".to_string(), kind(v).to_string())
+}
+
+/// An integer result, or `Overflow` when the operation left the i64 range.
+fn fits(x: ?i64) -> i64 ! LispError = x mend fail .Overflow
+
+/// Holds for every neighbouring pair of `ns`, as in `(< a b c)`.
+fn chain(ns: [i64], holds: (i64, i64) => bool) -> bool {
+    var i = 1
+    while i < ns.len() {
+        if not holds(ns[i - 1], ns[i]) { return false }
+        i += 1
+    }
+    true
+}
+
+/// `eq?`: the same kind of value with the same payload.
+pub fn eqv(a: Val, b: Val) -> bool = match a {
+    .Nil => b is .Nil
+    .Bool(x) => b is .Bool(y) and x == y
+    .Int(x) => b is .Int(y) and x == y
+    .Sym(x) => b is .Sym(y) and x == y
+    .Str(x) => b is .Str(y) and x == y
+    .Pair(x) => b is .Pair(y) and x == y
+    .Vec(x) => b is .Vec(y) and x == y
+    .Table(x) => b is .Table(y) and x == y
+    .Prim(x) => b is .Prim(y) and x == y
+    .Closure(x) => b is .Closure(y) and x == y
+    .Macro(x) => b is .Macro(y) and x == y
+}
+
+/// `equal?`: like `eq?`, but lists and strings compare by their contents.
+fn equal(h: Heap, a: Val, b: Val) -> bool = match a {
+    .Pair(p) => b is .Pair(q) and equal(h, h.car(p), h.car(q)) and equal(h, h.cdr(p), h.cdr(q))
+    .Str(s) => b is .Str(t) and h.text(s) == h.text(t)
+    _ => eqv(a, b)
+}

@@ -1,0 +1,59 @@
+// Spindle: a small Lisp, written in Loom.
+//
+//   loom run main.loom                  runs the demos
+//   loom run main.loom -- prog.sp       runs one file and shows its value
+//   loom test tests.loom                runs the tests
+//
+// The language is spread over the other files: value and heap hold the data,
+// reader turns text into values, eval runs them, builtins are the primitives,
+// printer turns values back into text, and programs holds the Lisp that ships
+// with it.
+
+use std.io.print
+use std.env
+use std.fs.read_text
+use std.process.exit
+use heap.Heap
+use eval.{boot, eval_text}
+use printer.render
+use programs.demos
+
+fn main() {
+    var h = Heap.new(7)
+    let global = boot(mut h) mend e => unravel("the prelude failed: {e.message()}")
+
+    let args = env.args()
+    if args.len() > 1 {
+        run_file(mut h, global, args[1])
+    } else {
+        run_demos(mut h, global)
+    }
+}
+
+/// Runs the file at `path` and shows its value. A failure prints its message
+/// and exits with status 1, so a script can tell it went wrong.
+fn run_file(mut h: Heap, global: usize, path: str) {
+    let src = read_text(path) mend e => {
+        print("cannot read {path}")
+        exit(1)
+    }
+    match eval_text(mut h, global, src) {
+        ok(v) => print("=> {render(h, v, true)}")
+        err(e) => {
+            print("error: {e.message()}")
+            exit(1)
+        }
+    }
+}
+
+/// Runs each demo in its own frame under `global`, and reports its value or error.
+fn run_demos(mut h: Heap, global: usize) {
+    for demo in demos() {
+        print("== {demo.title}")
+        let scope = h.new_frame(some(global))
+        match eval_text(mut h, scope, demo.source) {
+            ok(v) => if not (v is .Nil) { print("=> {render(h, v, true)}") }
+            err(e) => print("error: {e.message()}")
+        }
+    }
+}

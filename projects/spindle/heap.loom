@@ -1,0 +1,201 @@
+// The heap: every table a running program points into.
+//
+// Symbols are interned, so two symbols with the same text have the same
+// index and can be compared as numbers. Strings, cons cells, vectors, hash
+// tables, lambdas and frames each live in their own list, and a value holds an
+// index into it. Nothing is ever freed: a Spindle run is short, and a collector
+// would double the size of this file.
+
+use std.rand.Rng
+use value.{Val, Cell, Lambda, Frame}
+use errors.LispError
+
+pub warp Heap {
+    names: List[String] = List()
+    specials: List[bool] = List()   // whether each symbol names a special form
+    ids: Map[String, usize] = Map()
+    texts: List[String] = List()
+    cells: List[Cell] = List()
+    vectors: List[List[Val]] = List()
+    tables: List[Map[String, (Val, Val)]] = List()
+    lambdas: List[Lambda] = List()
+    frames: List[Frame] = List()
+    rng: Rng
+
+    /// An empty heap. `random` gives the same numbers for the same seed.
+    pub fn new(seed: u64) -> Heap = Heap(rng: Rng.seeded(seed))
+
+    // ------------------------------------------------------------ symbols
+
+    /// The symbol for `s`. The same text always gives the same index.
+    pub fn sym(mut self, s: str) -> usize {
+        if .ids.get(s.to_string()) is some(i) { return i }
+        let i = .names.len()
+        .names.push(s.to_string())
+        .specials.push(is_special_name(s))
+        .ids.insert(s.to_string(), i)
+        i
+    }
+
+    /// The text of symbol `i`.
+    pub fn name(self, i: usize) -> String = .names[i].copy()
+
+    /// Whether symbol `i` names a special form. Checked by index, so the
+    /// evaluator never has to copy a name to ask.
+    pub fn is_special(self, i: usize) -> bool = .specials[i]
+
+    // ------------------------------------------------------------ strings
+
+    /// A string value holding a copy of `s`.
+    pub fn string(mut self, s: str) -> Val {
+        .texts.push(s.to_string())
+        .Str(.texts.len() - 1)
+    }
+
+    /// The text of string `i`.
+    pub fn text(self, i: usize) -> String = .texts[i].copy()
+
+    // ------------------------------------------------------------ pairs
+
+    /// A cons cell holding `car` and `cdr`.
+    pub fn cons(mut self, car: Val, cdr: Val) -> Val {
+        .cells.push(Cell(car: car, cdr: cdr))
+        .Pair(.cells.len() - 1)
+    }
+
+    pub fn car(self, p: usize) -> Val = .cells[p].car
+
+    pub fn cdr(self, p: usize) -> Val = .cells[p].cdr
+
+    /// A proper list of `xs`.
+    pub fn list(mut self, xs: [Val]) -> Val {
+        var out = Val.Nil
+        var i = xs.len()
+        while i > 0 {
+            i -= 1
+            out = .cons(xs[i], out)
+        }
+        out
+    }
+
+    /// The elements of the proper list `v`, in order.
+    pub fn to_list(self, v: Val) -> List[Val] ! LispError {
+        var out: List[Val] = List()
+        var at = v
+        while at is .Pair(p) {
+            out.push(.car(p))
+            at = .cdr(p)
+        }
+        if not (at is .Nil) {
+            fail .Mismatch("a proper list".to_string(), "a dotted pair".to_string())
+        }
+        out
+    }
+
+    // ------------------------------------------------------------ vectors
+
+    /// A vector holding `xs`. Its elements can be read and set in place.
+    pub fn vector(mut self, take xs: List[Val]) -> Val {
+        .vectors.push(xs)
+        .Vec(.vectors.len() - 1)
+    }
+
+    pub fn vec_len(self, v: usize) -> usize = .vectors[v].len()
+
+    pub fn vec_get(self, v: usize, i: usize) -> Val = .vectors[v][i]
+
+    pub fn vec_set(mut self, v: usize, i: usize, x: Val) {
+        .vectors[v][i] = x
+    }
+
+    // ------------------------------------------------------------ tables
+
+    /// A new, empty hash table.
+    pub fn table(mut self) -> Val {
+        .tables.push(Map())
+        .Table(.tables.len() - 1)
+    }
+
+    /// The value stored under `text` in table `t`, if there is one.
+    pub fn table_get(self, t: usize, text: str) -> ?Val {
+        if .tables[t].get(text.to_string()) is some((_, v)) { return v }
+        none
+    }
+
+    /// Stores `v` under `text` in table `t`. `key` is kept too, for `table-entries`.
+    pub fn table_set(mut self, t: usize, text: str, key: Val, v: Val) {
+        let _ = .tables[t].insert(text.to_string(), (key, v))
+    }
+
+    pub fn table_count(self, t: usize) -> usize = .tables[t].len()
+
+    /// Every (key, value) pair in table `t`, in order of the keys' printed text.
+    pub fn table_entries(self, t: usize) -> List[(Val, Val)] {
+        var out: List[(Val, Val)] = List()
+        for (_, kv) in .tables[t].sorted() {
+            out.push(kv)
+        }
+        out
+    }
+
+    // ------------------------------------------------------------ closures
+
+    /// A closure over frame `env` with the given parameters and body.
+    pub fn closure(mut self, take params: List[usize], take body: List[Val], env: usize) -> Val {
+        .lambdas.push(Lambda(params: params, body: body, env: env))
+        .Closure(.lambdas.len() - 1)
+    }
+
+    pub fn params(self, c: usize) -> List[usize] = .lambdas[c].params.copy()
+
+    pub fn body(self, c: usize) -> List[Val] = .lambdas[c].body.copy()
+
+    pub fn env_of(self, c: usize) -> usize = .lambdas[c].env
+
+    // ------------------------------------------------------------ frames
+
+    /// A new frame that extends `parent`, or stands alone when there is none.
+    pub fn new_frame(mut self, parent: ?usize) -> usize {
+        .frames.push(Frame(parent: parent))
+        .frames.len() - 1
+    }
+
+    /// Binds `s` to `v` in frame `env`, shadowing any outer binding.
+    pub fn define(mut self, env: usize, s: usize, v: Val) {
+        let _ = .frames[env].vars.insert(s, v)
+    }
+
+    /// The value bound to `s` in `env` or in a frame that `env` extends.
+    pub fn lookup(self, env: usize, s: usize) -> ?Val {
+        var at: ?usize = env
+        while at is some(f) {
+            if .frames[f].vars.get(s) is some(v) { return v }
+            at = .frames[f].parent
+        }
+        none
+    }
+
+    /// Rebinds `s` in the nearest frame that already binds it. False if none does.
+    pub fn assign(mut self, env: usize, s: usize, v: Val) -> bool {
+        var at: ?usize = env
+        while at is some(f) {
+            if .frames[f].vars.has(s) {
+                .frames[f].vars.insert(s, v)
+                return true
+            }
+            at = .frames[f].parent
+        }
+        false
+    }
+
+    // ------------------------------------------------------------ randomness
+
+    /// A number in `0..n`, from the seeded generator. `n` must be positive.
+    pub fn random(mut self, n: u64) -> u64 = .rng.next_u64() % n
+}
+
+/// The names of the special forms. A list headed by one of these is never a call.
+fn is_special_name(s: str) -> bool = match s {
+    "quote" | "quasiquote" | "if" | "when" | "define" | "defmacro" | "set!" | "lambda" | "begin" | "let" | "let*" | "letrec" | "cond" | "case" | "and" | "or" | "while" | "apply" | "try" => true
+    _ => false
+}
