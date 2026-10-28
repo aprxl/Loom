@@ -1,0 +1,17 @@
+// `loom for` over the chunks of a list, one task per chunk of one element:
+// the items are counted before the loop, so a task takes a run of them.
+use std.io.print
+
+fn main() {
+    var data = List.filled(0u64, 1000000)
+    loom for (i, mut x) in data.chunks_mut(1).indexed() {
+        var v = i as u64
+        for _ in 0..100 {
+            v = (v ~ 0x9e3779b97f4a7c15).rotate_left(7) +% 0x2545f4914f6cdd1d
+        }
+        x[0] = v
+    }
+    var sum: u64 = 0
+    for v in data { sum +%= v }
+    print("total {sum}")
+}

@@ -1,0 +1,65 @@
+// `loom for` over lists and their chunks: with several workers a task takes
+// a run of items and works each out from its number, with the same result as
+// a task for each item.
+
+use std.io.print
+use std.sync.Atomic
+
+fn main() {
+    // Each thread changes its own piece; the last is shorter.
+    var data = List.filled(0u64, 1003)
+    loom for (i, mut line) in data.chunks_mut(10).indexed() {
+        for j in 0..line.len() {
+            line[j] = (i as u64) * 100 + j as u64
+        }
+    }
+    var sum = 0u64
+    for v in data { sum += v }
+    print("chunks_mut {sum} {data[1000]} {data[1002]}")
+
+    // Fewer items than a worker's share.
+    var small = List.filled(0u64, 5)
+    loom for (i, mut x) in small.chunks_mut(2).indexed() {
+        x[0] = i as u64 + 1
+    }
+    print("small {small[0]} {small[1]} {small[2]} {small[4]}")
+
+    // No items at all.
+    var nothing: List[u64] = []
+    loom for (i, mut x) in nothing.chunks_mut(3).indexed() {
+        x[0] = i as u64
+    }
+    print("empty {nothing.len()}")
+
+    // Chunks to read, the last shorter.
+    let xs: List[u64] = (1..=25).map(i => i as u64).collect()
+    let total = Atomic[u64](0)
+    let pieces = Atomic[u64](0)
+    let longest = Atomic[u64](0)
+    loom for chunk in xs.chunks(4) {
+        total.add(chunk.sum())
+        pieces.add(1)
+        longest.add(chunk.len() as u64)
+    }
+    print("chunks {total.load()} {pieces.load()} {longest.load()}")
+
+    // The elements themselves, with their numbers.
+    let weighted = Atomic[u64](0)
+    let plain = Atomic[u64](0)
+    loom for (i, x) in xs.indexed() {
+        weighted.add((i as u64) * x)
+    }
+    loom for x in xs {
+        plain.add(x)
+    }
+    print("elements {weighted.load()} {plain.load()}")
+
+    // A slice of an array.
+    let arr = [3u64, 1, 4, 1, 5, 9, 2, 6]
+    let part = Atomic[u64](0)
+    loom for (i, x) in arr.indexed() {
+        part.add((i as u64 + 1) * x)
+    }
+    print("array {part.load()}")
+
+}

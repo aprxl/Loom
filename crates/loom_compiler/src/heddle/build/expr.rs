@@ -1087,6 +1087,11 @@ impl<'a> Builder<'a> {
     }
 
     fn for_expr(&mut self, e: &'a hir::Expr, pat: &'a hir::Pat, iter: &'a hir::Expr, body: &'a Block) -> Option<()> {
+        if let Some((thread, group)) = loom_for_thread(body)
+            && let Some(source) = self.indexed_loom_for(pat, iter, thread)
+        {
+            return self.loom_for_indexed(e, source, body, thread, group);
+        }
         if let Some(g) = self.inlinable_generator(e, iter) {
             return self.for_generator(e, pat, iter, body, g);
         }
