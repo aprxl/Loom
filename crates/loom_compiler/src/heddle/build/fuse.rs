@@ -10,7 +10,9 @@
 //! only when the one after it does. `filter` and `skip` go back for another;
 //! `take_while` ends the loop once one fails. `take(n)` stops asking after
 //! `n`: the loop checks how many each `take` has left before it asks the
-//! source, which is when the stream would have asked it.
+//! source, which is when the stream would have asked it. The adaptors are
+//! `map`, `filter`, `filter_map`, `inspect`, `step_by`, `take_while`,
+//! `skip_while`, `take` and `skip`.
 //!
 //! Only for items, and adaptors' arguments, that own nothing (numbers,
 //! `bool`s, `char`s, `str` views): what owns memory goes through boxes as
@@ -23,6 +25,7 @@
 use loom_syntax::source::Span;
 
 use super::cleanup::{CleanupKind, Stable};
+use super::text::Msg;
 use super::value::Val;
 use super::{Builder, LoopCtx, LoopResult, Var};
 use crate::heddle::{BlockId, Cmp, FOp, InstKind, IntOp, Policy, VTy, Value};
@@ -36,6 +39,9 @@ use crate::typeck::{ArgSource, IterSource, Receiver};
 enum Kind {
     Map,
     Filter,
+    FilterMap,
+    Inspect,
+    StepBy,
     TakeWhile,
     SkipWhile,
     Take,
@@ -118,6 +124,9 @@ impl<'a> Builder<'a> {
         let kind = match self.p.def_path(def).strip_prefix("std.iter.Stream.")? {
             "map" => Kind::Map,
             "filter" => Kind::Filter,
+            "filter_map" => Kind::FilterMap,
+            "inspect" => Kind::Inspect,
+            "step_by" => Kind::StepBy,
             "take_while" => Kind::TakeWhile,
             "skip_while" => Kind::SkipWhile,
             "take" => Kind::Take,
@@ -228,6 +237,19 @@ impl<'a> Builder<'a> {
                     let n = self.new_var(VTy::Int);
                     self.write(n, r[0]);
                     Some(n)
+                }
+                Kind::StepBy => {
+                    let zero = self.iconst(0);
+                    let bad = self.ucmp(Cmp::Eq, r[0], zero);
+                    let (fail, ok) = (self.new_block(), self.new_block());
+                    self.br(bad, fail, ok);
+                    self.enter(fail);
+                    self.unravel_msg(&[Msg::Text("step_by of 0 items")], span)?;
+                    self.enter(ok);
+                    let skip = self.new_var(VTy::Int);
+                    let zero = self.iconst(0);
+                    self.write(skip, zero);
+                    Some(skip)
                 }
                 Kind::SkipWhile => {
                     let skipping = self.new_var(VTy::Int);
@@ -372,6 +394,38 @@ impl<'a> Builder<'a> {
                     let next = self.new_block();
                     self.br(ok, next, head);
                     self.enter(next);
+                }
+                Kind::FilterMap => {
+                    let r = self.call_fn(&args[k], stage.arg_ty, vec![cur], span)?;
+                    let TyKind::Fn(_, opt) = self.tcx().kind(self.tcx().degauge(stage.arg_ty)).clone() else {
+                        return self.internal(span, "a function");
+                    };
+                    let opt = self.tcx().degauge(opt);
+                    let some = self.is_some(&r, opt, span)?;
+                    let next = self.new_block();
+                    self.br(some, next, head);
+                    self.enter(next);
+                    cur = self.unwrap_some(&r, opt, span)?;
+                }
+                Kind::StepBy => {
+                    let var = vars[k].expect("a count");
+                    let left = self.read(var);
+                    let zero = self.iconst(0);
+                    let more = self.ucmp(Cmp::Ne, left, zero);
+                    let (skip, next) = (self.new_block(), self.new_block());
+                    self.br(more, skip, next);
+                    self.enter(skip);
+                    let one = self.iconst(1);
+                    let less = self.uarith(IntOp::Sub, left, one);
+                    self.write(var, less);
+                    self.jump(head);
+                    self.enter(next);
+                    let one = self.iconst(1);
+                    let skips = self.uarith(IntOp::Sub, args[k][0], one);
+                    self.write(var, skips);
+                }
+                Kind::Inspect => {
+                    self.call_fn(&args[k], stage.arg_ty, vec![cur.clone()], span)?;
                 }
                 Kind::TakeWhile => {
                     let ok = pass(self, &args[k], &cur)?;

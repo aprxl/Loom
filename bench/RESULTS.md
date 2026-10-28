@@ -4,6 +4,19 @@ Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
 
+## V8: fused `filter_map`, `step_by` and `inspect` (2026-10-28)
+
+The three adaptors run in the fused loop (`fuse.rs`) instead of through boxed
+stream steps. `std_counts` (dispatch counts, std over the hand loop, 20 000
+items), before and after: `step_by` then `sum` 25.75x to 17.50x (686 755 to
+466 706 instructions; the hand loop jumps by 3, the fused one still pulls every
+item from the list), `filter_map` then `sum` 8.60x to 5.30x (860 080 to
+530 041). Guards tightened to 20 and 6.5. The others are unchanged: `resize`
+2.23, `min_by_key` 8.25, `counts` 2.59, `sort_by` 0.91. `list_ops` dispatch
+count 5 632 953 to 5 316 211 (-5.6%, `bench/counts.txt`). The perf gates still
+pass (box 10 ns, arena put 0.37, arena trees 10.0x, `par_mandelbrot` 6.19x,
+spawn and join 1.16 us).
+
 ## V8: a block's tail local hands its slot to the join (2026-10-28)
 
 `let xs = { ...; l }}` and list comprehensions no longer copy and zero the

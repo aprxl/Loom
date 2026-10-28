@@ -1,0 +1,83 @@
+// `filter_map`, `step_by` and `inspect` in a fused pipeline: each result is
+// printed next to the same thing worked out by hand.
+
+use std.io.print
+
+fn main() {
+    var xs: List[u64] = []
+    for i in 0..20u64 { xs.push(i * 7 % 11) }
+
+    print("step_by(1) {xs.step_by(1).sum()}")
+    var total = 0u64
+    for x in xs { total += x }
+    print("  by hand {total}")
+
+    print("step_by(3) {xs.step_by(3).sum()}")
+    total = 0
+    var i = 0
+    while i < xs.len() {
+        total += xs[i]
+        i += 3
+    }
+    print("  by hand {total}")
+
+    for x in (0..10).step_by(4) { print("range step {x}") }
+    for x in (0..=10).step_by(5) { print("inclusive step {x}") }
+
+    print("step_by(3).take(5) {xs.step_by(3).take(5).sum()}")
+    total = 0
+    var seen = 0
+    i = 0
+    while i < xs.len() and seen < 5 {
+        total += xs[i]
+        seen += 1
+        i += 3
+    }
+    print("  by hand {total}")
+
+    print("take(7).step_by(2) {xs.take(7).step_by(2).count()}")
+    var n = 0
+    i = 0
+    while i < 7 {
+        n += 1
+        i += 2
+    }
+    print("  by hand {n}")
+
+    print("filter_map {xs.filter_map(x => if x % 2 == 0 { some(x / 2) } else { none }).sum()}")
+    total = 0
+    for x in xs {
+        if x % 2 == 0 { total += x / 2 }
+    }
+    print("  by hand {total}")
+
+    let text = "alpha be gamma a deltas"
+    print("word lengths {text.words().filter_map(w => if w.len() > 1 { some(w.len()) } else { none }).sum()}")
+    var lens = 0usize
+    for w in text.words() {
+        if w.len() > 1 { lens += w.len() }
+    }
+    print("  by hand {lens}")
+
+    let chain = xs.map(x => x + 1).filter_map(x => if x % 3 != 0 { some(x * 2) } else { none }).step_by(2).fold(0, (a, x) => a + x)
+    print("map, filter_map, step_by, fold {chain}")
+    var acc = 0u64
+    var keep = 0
+    for x in xs {
+        let y = x + 1
+        if y % 3 != 0 {
+            if keep % 2 == 0 { acc += y * 2 }
+            keep += 1
+        }
+    }
+    print("  by hand {acc}")
+
+    print("inspect {(1..=20).inspect(x => print("saw {x}")).take_while(x => x < 4).count()}")
+
+    print("all after filter_map {xs.filter_map(x => if x > 3 { some(x) } else { none }).all(x => x > 3)}")
+    print("exists after filter_map {xs.filter_map(x => if x > 3 { some(x) } else { none }).exists(x => x == 10)}")
+    print("exists none {xs.filter_map(x => if x > 3 { some(x) } else { none }).exists(x => x == 11)}")
+
+    let empty: List[u64] = []
+    print("empty {empty.step_by(2).sum()} {empty.filter_map(x => some(x)).count()} {(0..0).inspect(x => print("never {x}")).count()}")
+}

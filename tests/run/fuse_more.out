@@ -1,0 +1,29 @@
+step_by(1) 98
+  by hand 98
+step_by(3) 45
+  by hand 45
+range step 0
+range step 4
+range step 8
+inclusive step 0
+inclusive step 5
+inclusive step 10
+step_by(3).take(5) 34
+  by hand 34
+take(7).step_by(2) 4
+  by hand 4
+filter_map 24
+  by hand 24
+word lengths 18
+  by hand 18
+map, filter_map, step_by, fold 56
+  by hand 56
+saw 1
+saw 2
+saw 3
+saw 4
+inspect 3
+all after filter_map true
+exists after filter_map true
+exists none false
+empty 0 0 0
