@@ -3,5 +3,17 @@
 /// The `n` entries with the highest counts, the highest first. Entries with
 /// the same count go in byte order of their keys.
 pub fn top(counts: Map[String, u32], n: usize) -> List[(String, u32)] {
-    counts.pairs().sorted_by((a, b) => a.1 > b.1 or (a.1 == b.1 and a.0 < b.0)).take(n).collect()
+    var best: List[(String, u32)] = []
+    if n == 0 { return best }
+    for e in counts.pairs() {
+        if best.len() == n and not before(e.0, e.1, best[n - 1].0, best[n - 1].1) { continue }
+        var i = best.len()
+        while i > 0 and before(e.0, e.1, best[i - 1].0, best[i - 1].1) { i -= 1 }
+        best.insert(i, (e.0.copy(), e.1))
+        if best.len() > n { best.pop() }
+    }
+    best
 }
+
+/// Whether the entry `(aw, ac)` ranks above `(bw, bc)`: more often, then alphabetically.
+fn before(aw: str, ac: u32, bw: str, bc: u32) -> bool = ac > bc or (ac == bc and aw < bw)
