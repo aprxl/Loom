@@ -286,6 +286,9 @@ pub(crate) mod mode {
 /// needs more: more segments follow as it goes deeper.
 const FIRST_SEGMENT: usize = 2048;
 
+/// How many stacks of finished tasks are kept for each worker.
+const SPARE_STACKS: usize = 64;
+
 #[derive(Debug)]
 pub(crate) struct Task {
     /// While the task isn't running: its stack. (The running task's is the
@@ -421,6 +424,9 @@ pub(crate) struct Sched {
     tasks: Vec<Task>,
     groups: Vec<Group>,
     free_tasks: Vec<usize>,
+    /// Stacks of finished tasks, reset to their first segment, for the next
+    /// spawns; at most [`SPARE_STACKS`] for each worker.
+    spare_stacks: Vec<Stack>,
     free_groups: Vec<usize>,
     /// The running task: 0 is the program's own.
     pub current: usize,
@@ -473,6 +479,7 @@ impl Sched {
             tasks: vec![main],
             groups: Vec::new(),
             free_tasks: Vec::new(),
+            spare_stacks: Vec::new(),
             free_groups: Vec::new(),
             current: 0,
             ready: vec![VecDeque::new()],
@@ -496,6 +503,7 @@ impl Sched {
         self.groups.clear();
         self.capped = 0;
         self.free_tasks.clear();
+        self.spare_stacks.clear();
         self.free_groups.clear();
         self.current = 0;
         self.ready = vec![VecDeque::new()];
@@ -1251,10 +1259,17 @@ impl Sched {
                 Self::release_env(heap, &mut task)?;
             }
         } else {
-            let mut stack = Stack::task(limit, loom_isa::LINK_SLOTS + frame, FIRST_SEGMENT)?;
-            if cfg!(feature = "stats") {
-                self.stats.task_stacks += 1;
-            }
+            let need = loom_isa::LINK_SLOTS + frame;
+            let mut stack = match self.spare_stacks.pop() {
+                Some(spare) if spare.serves(limit, need) => spare,
+                other => {
+                    self.spare_stacks.extend(other);
+                    if cfg!(feature = "stats") {
+                        self.stats.task_stacks += 1;
+                    }
+                    Stack::task(limit, need, FIRST_SEGMENT)?
+                }
+            };
             let (base, seg_end) = stack.bounds();
             // SAFETY: the first segment holds the linkage and the entry's
             // frame, whose first two registers are its parameters.
@@ -1347,8 +1362,12 @@ impl Sched {
     }
 
     /// Takes a finished task's stack out of the interpreter's hands, after
-    /// the switch away from it: dropped with the task's other storage.
+    /// the switch away from it: kept for a later spawn if it is the usual
+    /// size and there is room, else dropped.
     pub fn drop_stack(&mut self, t: usize) {
-        self.tasks[t].stack = Stack::empty();
+        let mut stack = std::mem::replace(&mut self.tasks[t].stack, Stack::empty());
+        if self.spare_stacks.len() < SPARE_STACKS * self.ready.len() && stack.recycle(FIRST_SEGMENT) {
+            self.spare_stacks.push(stack);
+        }
     }
 }

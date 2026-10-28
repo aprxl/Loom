@@ -4,6 +4,24 @@ Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
 
+## V8: a free list of task stacks (2026-10-28)
+
+A finished task's stack goes back to `Sched.spare_stacks` reset to its first
+segment (the other segments are freed, and a stack whose first segment is
+bigger than the usual 2048 slots is freed), at most 64 for each worker, and a
+spawn takes one before allocating. Medians of 7, ms, `--backend vm -O2`
+(`bench/` scratch programs: `a_spawn` is 100 rounds of 1000 spawn+join,
+`fib25 d=25` a thread on every call):
+
+| Benchmark | workers | before | after |
+|---|---|---|---|
+| `a_spawn` | 1 / 2 / 4 / 8 | 84 / 107 / 131 / 155 | 73 / 86 / 104 / 131 |
+| `fib25 d=25` | 1 / 2 / 4 / 8 | 94 / 160 / 207 / 232 | 83 / 125 / 183 / 230 |
+
+Task stacks allocated (`LOOM_STATS=3` on a `vm-stats` build): `a_spawn` 100 000
+to 1 / 217 / 14 / 25 and `fib25 d=25` 121 392 to 24 / 42 / 67 / 119 at 1 / 2 /
+4 / 8 workers. The dispatch counts do not change.
+
 ## V8: Map.first, Map.last and Set.pop in O(1) (2026-10-28)
 
 The map header gained `tail` (8 words), `head` is exact while the map has

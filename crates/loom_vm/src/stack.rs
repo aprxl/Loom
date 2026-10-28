@@ -107,6 +107,29 @@ impl Stack {
         Ok(())
     }
 
+    /// Gives back every segment but the first, and starts again in it: a
+    /// stack that served a finished task, ready for another. `false` (and
+    /// the stack is left alone) when it has no first segment, or one of more
+    /// than `slots` slots.
+    pub fn recycle(&mut self, slots: usize) -> bool {
+        match self.segments.first() {
+            Some(first) if first.len() <= slots => {}
+            _ => return false,
+        }
+        for old in self.segments.drain(1..) {
+            unregister(&old);
+        }
+        self.bytes = self.segments[0].len() * 8;
+        self.current = 0;
+        true
+    }
+
+    /// Whether this stack, from `recycle`, does for a task that needs `need`
+    /// slots in its first segment, within `limit` bytes.
+    pub fn serves(&self, limit: usize, need: usize) -> bool {
+        self.limit == limit && self.first_holds(need)
+    }
+
     /// Whether the first segment holds `need` slots.
     pub fn first_holds(&self, need: usize) -> bool {
         self.segments.first().is_some_and(|segment| segment.len() >= need)
