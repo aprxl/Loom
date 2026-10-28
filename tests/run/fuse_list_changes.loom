@@ -1,0 +1,10 @@
+// A fused pipeline over a list that its own lambda grows unravels, as a
+// `for` loop does.
+use std.io.print
+
+fn main() {
+    var xs: List[u64] = [1, 2, 3]
+    let grow = () => xs.push(9)
+    print("start")
+    print("{xs.step_by(1).map(x => { grow(); x }).sum()}")
+}

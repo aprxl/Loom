@@ -4,6 +4,20 @@ Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
 
+## V8: fused pipelines read lists, slices and arrays in place (2026-10-28)
+
+A list, slice or array that isn't a temporary is read by the fused loop
+directly (the "list changed while a loop went over it" check is kept), with
+no stream box and no indirect step per item; a leading `step_by` jumps the
+index. `std_counts` (dispatch counts, std over the hand loop, 20 000 items),
+before and after: `step_by` then `sum` 17.50x to 2.00x (466 706 to 53 342
+instructions), `filter_map` then `sum` 5.30x to 2.00x (530 041 to 200 008),
+`min_by_key` 8.25x to 8.00x, `counts` 2.59x to 2.53x. Guards tightened to
+2.4. `list_ops` dispatch count 5 316 211 to 4 853 579 (-8.7%,
+`bench/counts.txt`). The perf gates still pass (box 10 ns, arena put 0.38,
+arena trees 9.9x, `par_mandelbrot` 6.19x, spawn and join 1.18 us).
+`projects/wordfreq` on a 10.9 MB corpus: identical output, 769 ms.
+
 ## V8: fused `filter_map`, `step_by` and `inspect` (2026-10-28)
 
 The three adaptors run in the fused loop (`fuse.rs`) instead of through boxed

@@ -80,4 +80,30 @@ fn main() {
 
     let empty: List[u64] = []
     print("empty {empty.step_by(2).sum()} {empty.filter_map(x => some(x)).count()} {(0..0).inspect(x => print("never {x}")).count()}")
+
+    // The same over a slice, an array and lists of different lengths.
+    let part = xs[2..15]
+    print("slice {part.step_by(3).sum()} {part.filter_map(x => if x % 2 == 0 { some(x) } else { none }).sum()} {part.map(_ + 1).step_by(2).count()}")
+    total = 0
+    var k = 2
+    while k < 15 {
+        total += xs[k]
+        k += 3
+    }
+    print("  by hand {total}")
+
+    let arr = [5u64, 1, 4, 1, 5, 9, 2, 6]
+    print("array {arr.step_by(2).sum()} {arr.step_by(3).count()} {arr.filter_map(x => if x > 4 { some(x * 2) } else { none }).sum()}")
+
+    var twelve: List[u64] = []
+    for i in 0..12u64 { twelve.push(i) }
+    var thirteen: List[u64] = []
+    for i in 0..13u64 { thirteen.push(i) }
+    print("step_by(5) of 12: {twelve.step_by(5).sum()} {twelve.step_by(5).count()}")
+    print("step_by(5) of 13: {thirteen.step_by(5).sum()} {thirteen.step_by(5).count()}")
+    for x in thirteen.step_by(6) { print("item {x}") }
+    print("step_by(max) {thirteen.step_by(4000000000000000000).sum()} {thirteen.step_by(4000000000000000000).count()}")
+    print("step_by(1) {thirteen.step_by(1).sum()} {thirteen.step_by(13).count()} {thirteen.step_by(14).count()}")
+    print("empty slice {empty[0..0].step_by(3).count()} {thirteen[13..13].step_by(1).count()}")
+    print("take after step_by {thirteen.step_by(4).take(2).sum()} {thirteen.step_by(4).map(_ * 2).filter(_ > 4).sum()}")
 }

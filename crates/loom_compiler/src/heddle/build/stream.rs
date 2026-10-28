@@ -350,34 +350,8 @@ impl<'a> Builder<'a> {
                 let (buf, len, i) = (self.word(b, 0), self.word(b, 8), self.word(b, 16));
                 let done = self.ucmp(Cmp::Ge, i, len);
                 self.none_if(done);
-                // A list a lambda changed under the stream.
-                let header = self.word(b, 24);
-                let zero = self.iconst(0);
-                let has = self.ucmp(Cmp::Ne, header, zero);
-                let (check, go) = (self.new_block(), self.new_block());
-                self.br(has, check, go);
-                self.enter(check);
-                let hdr = self.load(Mem::W64, b, 24, VTy::Ptr);
-                let (now_buf, now_len) = self.list_view(hdr);
-                let moved = self.ucmp(Cmp::Ne, now_buf, buf);
-                let resized = self.ucmp(Cmp::Ne, now_len, len);
-                let changed = self.emit1(InstKind::Bit { op: BitOp::Or, a: moved, b: resized }, VTy::Int);
-                let (fail, ok) = (self.new_block(), self.new_block());
-                self.br(changed, fail, ok);
-                self.enter(fail);
-                self.unravel_msg(
-                    &[
-                        Msg::Text("the list changed while a loop went over it (len "),
-                        Msg::Int(len),
-                        Msg::Text(", now "),
-                        Msg::Int(now_len),
-                        Msg::Text(")"),
-                    ],
-                    span,
-                )?;
-                self.enter(ok);
-                self.jump(go);
-                self.enter(go);
+                let header = self.load(Mem::W64, b, 24, VTy::Ptr);
+                self.check_seq_unchanged(buf, len, header, span)?;
                 let buf = self.load(Mem::W64, b, 0, VTy::Ptr);
                 let at = self.elem_at(buf, i, elem)?;
                 let x = self.load_val(at, 0, elem, span)?;
@@ -1243,6 +1217,37 @@ impl<'a> Builder<'a> {
         self.seal(head);
         self.enter(exit);
         self.close_scope(depth);
+        Some(())
+    }
+
+    /// A list a lambda changed under the loop that goes over it (`header`,
+    /// the list's, is 0 for an array or a slice): an unravel.
+    pub(super) fn check_seq_unchanged(&mut self, buf: Value, len: Value, header: Value, span: Span) -> Option<()> {
+        let zero = self.iconst(0);
+        let has = self.ucmp(Cmp::Ne, header, zero);
+        let (check, go) = (self.new_block(), self.new_block());
+        self.br(has, check, go);
+        self.enter(check);
+        let (now_buf, now_len) = self.list_view(header);
+        let moved = self.ucmp(Cmp::Ne, now_buf, buf);
+        let resized = self.ucmp(Cmp::Ne, now_len, len);
+        let changed = self.emit1(InstKind::Bit { op: BitOp::Or, a: moved, b: resized }, VTy::Int);
+        let (fail, ok) = (self.new_block(), self.new_block());
+        self.br(changed, fail, ok);
+        self.enter(fail);
+        self.unravel_msg(
+            &[
+                Msg::Text("the list changed while a loop went over it (len "),
+                Msg::Int(len),
+                Msg::Text(", now "),
+                Msg::Int(now_len),
+                Msg::Text(")"),
+            ],
+            span,
+        )?;
+        self.enter(ok);
+        self.jump(go);
+        self.enter(go);
         Some(())
     }
 

@@ -18,6 +18,9 @@
 //! `bool`s, `char`s, `str` views): what owns memory goes through boxes as
 //! before, where the steps drop what they drop.
 //!
+//! A source that's a list, a slice or an array (not a temporary) is read in
+//! place, with no stream box; a leading `step_by` then jumps the index.
+//!
 //! A source that's a range written out (`(0..n).filter(p)`) is no stream
 //! at all: the loop counts, as `for i in 0..n` does, so what's known about
 //! the count (it's below `n`) is known about the items.
@@ -32,7 +35,7 @@ use crate::heddle::{BlockId, Cmp, FOp, InstKind, IntOp, Policy, VTy, Value};
 use crate::hir::{self, ExprKind};
 use crate::ty::IntTy;
 use crate::ty::{Ty, TyKind};
-use crate::typeck::{ArgSource, IterSource, Receiver};
+use crate::typeck::{ArgSource, IterSource, Receiver, Seq};
 
 /// What an adaptor does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -102,6 +105,16 @@ enum Source {
         inclusive: bool,
         left: Option<Var>,
         int: IntTy,
+    },
+    /// A list, slice or array read in place: its elements, how many there
+    /// are, the next index, and the list's header (0 when it isn't a list),
+    /// to see that it doesn't change under the loop.
+    Seq {
+        buf: Value,
+        len: Value,
+        next: Var,
+        header: Value,
+        elem: Ty,
     },
 }
 
@@ -214,17 +227,34 @@ impl<'a> Builder<'a> {
             let v = self.expr(p.source)?;
             self.moved_away(p.source);
             let from = self.coerced_ty(p.source);
-            let v = match &p.of {
-                Some(src) => self.stream_of(src, v, from, p.sty, span)?,
-                None => v,
-            };
-            // The loop owns the source: dropped however it ends.
-            let Val::Mem(s) = self.owned(v, p.sty, span)? else { return None };
-            let depth = self.open_scope();
-            if let Some(slot) = self.f.slot_of.get(&s).copied() {
-                self.add_cleanup(CleanupKind::Drop { at: Stable::Slot(slot), ty: p.sty });
+            let owned_temp = matches!(&v, Val::Mem(m) if self.f.temps.contains_key(m))
+                && !matches!(self.seq_of(from), Some(Seq::Slice(_)));
+            if let Some(IterSource::Seq(elem)) = &p.of
+                && !owned_temp
+            {
+                let (buf, len) = self.view_of(&v, from, span)?;
+                let header = match (self.seq_of(from), &v) {
+                    (Some(Seq::List(_)), &Val::Mem(h)) => h,
+                    _ => self.emit1(InstKind::Iconst(0), VTy::Ptr),
+                };
+                let next = self.new_var(VTy::Int);
+                let zero = self.iconst(0);
+                self.write(next, zero);
+                let depth = self.open_scope();
+                (Source::Seq { buf, len, next, header, elem: self.tcx().degauge(*elem) }, depth)
+            } else {
+                let v = match &p.of {
+                    Some(src) => self.stream_of(src, v, from, p.sty, span)?,
+                    None => v,
+                };
+                // The loop owns the source: dropped however it ends.
+                let Val::Mem(s) = self.owned(v, p.sty, span)? else { return None };
+                let depth = self.open_scope();
+                if let Some(slot) = self.f.slot_of.get(&s).copied() {
+                    self.add_cleanup(CleanupKind::Drop { at: Stable::Slot(slot), ty: p.sty });
+                }
+                (Source::Stream(s), depth)
             }
-            (Source::Stream(s), depth)
         };
         let mut args: Vec<Vec<Value>> = Vec::with_capacity(p.stages.len());
         let mut vars = Vec::with_capacity(p.stages.len());
@@ -350,7 +380,7 @@ impl<'a> Builder<'a> {
         let Started { source, depth, args, vars } = st;
         let x = match source {
             Source::Stream(_) => Some(self.temp(p.item, span)?),
-            Source::Count { .. } => None,
+            Source::Count { .. } | Source::Seq { .. } => None,
         };
         let (head, pull, body, done) = (self.new_block(), self.new_block(), self.new_block(), self.new_block());
         self.jump(head);
@@ -374,6 +404,22 @@ impl<'a> Builder<'a> {
                 self.br(got, body, done);
                 self.enter(body);
                 self.load_val(x, 0, p.item, span)?
+            }
+            (&Source::Seq { buf, len, next, header, elem }, None) => {
+                let i = self.read(next);
+                let over = self.ucmp(Cmp::Ge, i, len);
+                let go = self.new_block();
+                self.br(over, done, go);
+                self.enter(go);
+                self.check_seq_unchanged(buf, len, header, span)?;
+                let at = self.elem_at(buf, i, elem)?;
+                let cur = self.load_val(at, 0, elem, span)?;
+                let one = self.iconst(1);
+                let n = self.uarith(IntOp::Add, i, one);
+                self.write(next, n);
+                self.jump(body);
+                self.enter(body);
+                cur
             }
             _ => {
                 let cur = self.count_next(&source, done);
@@ -406,6 +452,24 @@ impl<'a> Builder<'a> {
                     self.br(some, next, head);
                     self.enter(next);
                     cur = self.unwrap_some(&r, opt, span)?;
+                }
+                Kind::StepBy if k == 0 && matches!(source, Source::Seq { .. }) => {
+                    let Source::Seq { len, next, .. } = source else { unreachable!("a sequence source") };
+                    let at = self.read(next);
+                    let rest = self.uarith(IntOp::Sub, len, at);
+                    let one = self.iconst(1);
+                    let skips = self.uarith(IntOp::Sub, args[k][0], one);
+                    let fits = self.ucmp(Cmp::Lt, skips, rest);
+                    let (jump, end, joined) = (self.new_block(), self.new_block(), self.new_block());
+                    self.br(fits, jump, end);
+                    self.enter(jump);
+                    let to = self.uarith(IntOp::Add, at, skips);
+                    self.write(next, to);
+                    self.jump(joined);
+                    self.enter(end);
+                    self.write(next, len);
+                    self.jump(joined);
+                    self.enter(joined);
                 }
                 Kind::StepBy => {
                     let var = vars[k].expect("a count");
