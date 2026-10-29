@@ -53,6 +53,10 @@ pub(crate) fn resolve_scalar(name: &str) -> Option<LocalFn> {
         #[cfg(not(feature = "checked"))]
         "map.find_int" => |_, a, i| map_find_int_in(a, i),
         #[cfg(not(feature = "checked"))]
+        "map.reindex" => |h, a, _| map_reindex(h, a),
+        #[cfg(not(feature = "checked"))]
+        "map.compact" => |h, a, _| map_compact(h, a),
+        #[cfg(not(feature = "checked"))]
         "str.concat2" | "str.concat3" | "str.concat4" => |h, a, i| concat_in(&mut Own(h), a, i),
         #[cfg(not(feature = "checked"))]
         "str.replace" => |h, a, i| replace(&mut Own(h), a, i),
@@ -100,6 +104,14 @@ pub(crate) fn resolve(name: &str) -> Option<NativeFn> {
         "str.concat2" | "str.concat3" | "str.concat4" => concat,
         "map.find_str" => map_find_str,
         "map.find_int" => map_find_int,
+        "map.reindex" => |c, a, _| {
+            c.check_map(a[0], a[2])?;
+            map_reindex(&mut c.heap, a)
+        },
+        "map.compact" => |c, a, _| {
+            c.check_map(a[0], a[1])?;
+            map_compact(&mut c.heap, a)
+        },
         "str.next_line" => |c, a, i| next_line(c, a, i),
         "str.next_word" => |c, a, i| next_word(c, a, i),
         "int.bits" => |c, a, i| int_bits(&mut c.heap, a, i),
@@ -768,6 +780,105 @@ fn map_find_int_in(args: &mut [u64], _: u16) -> Result<(), Trap> {
     args[0] = e;
     args[1] = h;
     Ok(())
+}
+
+/// `map.reindex(header, slots, esize)`: the map at `header` gets a new, empty
+/// index of `slots` slots (a power of two; the old one is freed), and each
+/// live entry, in order, goes in the first free slot from its hash's place.
+fn map_reindex(heap: &mut Heap, args: &[u64]) -> Result<(), Trap> {
+    reindex(heap, args[0], args[1], args[2])
+}
+
+fn reindex(heap: &mut Heap, header: u64, slots: u64, esize: u64) -> Result<(), Trap> {
+    let broken = |what: &str| Trap::Crash(format!("loom internal: {what}"));
+    let bytes = slots.checked_mul(8).ok_or_else(|| broken("a map index too big"))?;
+    let words = header as *mut u64;
+    // SAFETY: the compiler passes a map's header: eight words.
+    let (ebuf, old, old_slots, used) =
+        unsafe { (words.read(), words.add(3).read(), words.add(4).read(), words.add(5).read()) };
+    if old_slots != 0 {
+        heap.free(old, old_slots * 8, 8)?;
+    }
+    let ibuf = heap.alloc(bytes, 8)?;
+    // SAFETY: `ibuf` is a new object of `bytes` bytes.
+    unsafe {
+        std::ptr::write_bytes(ibuf as *mut u8, 0, bytes as usize);
+        words.add(3).write(ibuf);
+        words.add(4).write(slots);
+    }
+    let (index, mask) = (ibuf as *mut u64, slots.wrapping_sub(1));
+    for e in 0..used {
+        // SAFETY: entry `e` is one of the `used`, and starts with its hash.
+        let hash = unsafe { ((ebuf + e * esize) as *const u64).read() };
+        if hash == 0 {
+            continue;
+        }
+        let mut i = hash & mask;
+        // At most once around: the index is never full, but a bad one mustn't
+        // spin, where Ctrl-C can't reach.
+        for _ in 0..slots {
+            // SAFETY: the index has `slots` words.
+            let slot = unsafe { index.add(i as usize) };
+            // SAFETY: as above.
+            if unsafe { slot.read() } == 0 {
+                // SAFETY: as above.
+                unsafe { slot.write(e + 1) };
+                break;
+            }
+            i = (i + 1) & mask;
+        }
+    }
+    Ok(())
+}
+
+/// `map.compact(header, esize)`: the live entries of the map at `header` move
+/// down over the removed ones, in order (a run at a time), so `used` is `len`,
+/// `head` 0 and `tail` `len`; and the index is built again.
+fn map_compact(heap: &mut Heap, args: &[u64]) -> Result<(), Trap> {
+    let (header, esize) = (args[0], args[1]);
+    let words = header as *mut u64;
+    // SAFETY: the compiler passes a map's header: eight words.
+    let (ebuf, len, used, slots) =
+        unsafe { (words.read(), words.add(1).read(), words.add(5).read(), words.add(4).read()) };
+    if len == used {
+        return Ok(());
+    }
+    let live = |e: u64| {
+        // SAFETY: `e` is one of the `used` entries, which start with a hash.
+        unsafe { ((ebuf + e * esize) as *const u64).read() != 0 }
+    };
+    let (mut kept, mut e) = (0, 0);
+    while e < used {
+        if !live(e) {
+            e += 1;
+            continue;
+        }
+        let start = e;
+        while e < used && live(e) {
+            e += 1;
+        }
+        if kept != start {
+            // SAFETY: both runs are inside the entries, and `kept < start`.
+            unsafe {
+                std::ptr::copy(
+                    (ebuf + start * esize) as *const u8,
+                    (ebuf + kept * esize) as *mut u8,
+                    ((e - start) * esize) as usize,
+                );
+            }
+        }
+        kept += e - start;
+    }
+    if kept != len {
+        return Err(Trap::Crash("loom internal: a map's length is not its live entries".into()));
+    }
+    // SAFETY: as above, the header's `used`, `head` and `tail`.
+    unsafe {
+        words.add(5).write(len);
+        words.add(6).write(0);
+        words.add(7).write(len);
+    }
+    reindex(heap, header, slots, esize)
 }
 
 /// `str.concatN(text, …, dst)`: a `String` of the texts.

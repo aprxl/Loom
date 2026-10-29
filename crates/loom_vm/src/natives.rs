@@ -294,6 +294,29 @@ impl<'i> Ctx<'i> {
             || crate::stack::in_some_stack(addr, len)
     }
 
+    /// With `checked`: whether the map whose header is at `header`, with
+    /// entries of `esize` bytes, is all in live memory.
+    pub(crate) fn check_map(&self, header: u64, esize: u64) -> Result<(), Trap> {
+        if !cfg!(feature = "checked") {
+            return Ok(());
+        }
+        let bad = || Trap::Crash(format!("loom internal: a bad map at {header:#x}"));
+        if !self.owns(header, 64) {
+            return Err(bad());
+        }
+        // SAFETY: the header is live, eight words.
+        let (ebuf, ibuf, slots, used) = unsafe {
+            let p = header as *const u64;
+            (p.read(), p.add(3).read(), p.add(4).read(), p.add(5).read())
+        };
+        let entries = used.checked_mul(esize).ok_or_else(bad)?;
+        let index = slots.checked_mul(8).ok_or_else(bad)?;
+        if (entries > 0 && !self.owns(ebuf, entries)) || (index > 0 && !self.owns(ibuf, index)) {
+            return Err(bad());
+        }
+        Ok(())
+    }
+
     /// With `checked`: whether `len` bytes at `addr` can be read: what
     /// [`owns`](Self::owns) says, text literals, or the program's data.
     fn readable(&self, addr: u64, len: u64) -> bool {

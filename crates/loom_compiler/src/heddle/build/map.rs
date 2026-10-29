@@ -266,41 +266,8 @@ impl<'a> Builder<'a> {
 
     /// Builds the index again, with `slots` slots, from the entries.
     fn reindex(&mut self, c: &Coll, header: Value, slots: Value) {
-        let old = self.hdr(header, 32);
-        let zero = self.iconst(0);
-        let had = self.ucmp(Cmp::Ne, old, zero);
-        let (free, fresh) = (self.new_block(), self.new_block());
-        self.br(had, free, fresh);
-        self.enter(free);
-        let ibuf = self.hdr_ptr(header, 24);
-        let eight = self.iconst(8);
-        let bytes = self.uarith(IntOp::Mul, old, eight);
-        self.emit(InstKind::Native { name: "mem.free", imm: 0, args: vec![ibuf, bytes, eight] }, &[]);
-        self.jump(fresh);
-        self.enter(fresh);
-        let eight = self.iconst(8);
-        let bytes =
-            self.emit1(InstKind::Arith { op: IntOp::Mul, policy: Policy::Trap, ty: U64, a: slots, b: eight }, VTy::Int);
-        let ibuf = self.emit1(InstKind::Native { name: "mem.calloc", imm: 0, args: vec![bytes, eight] }, VTy::Ptr);
-        self.store(Mem::W64, header, 24, ibuf);
-        self.store(Mem::W64, header, 32, slots);
-        let used = self.hdr(header, 40);
-        let zero = self.iconst(0);
-        let _ = self.count_loop(zero, used, |this, e| {
-            let ebuf = this.hdr_ptr(header, 0);
-            let ent = this.entry(c, ebuf, e);
-            let h = this.hdr(ent, 0);
-            // Not the removed ones.
-            let zero = this.iconst(0);
-            let live = this.ucmp(Cmp::Ne, h, zero);
-            let (put, next) = (this.new_block(), this.new_block());
-            this.br(live, put, next);
-            this.enter(put);
-            this.index_put(header, h, e);
-            this.jump(next);
-            this.enter(next);
-            Some(())
-        });
+        let esize = self.iconst(c.esize);
+        self.emit(InstKind::Native { name: "map.reindex", imm: 0, args: vec![header, slots, esize] }, &[]);
     }
 
     /// Adds an entry (`key`, hash `h`, and `val` for a map), which isn't
@@ -486,34 +453,8 @@ impl<'a> Builder<'a> {
         let (work, done) = (self.new_block(), self.new_block());
         self.br(same, done, work);
         self.enter(work);
-        let w = self.new_var(VTy::Int);
-        let zero = self.iconst(0);
-        self.write(w, zero);
-        let _ = self.count_loop(zero, used, |this, e| {
-            let ebuf = this.hdr_ptr(header, 0);
-            let ent = this.entry(c, ebuf, e);
-            let h = this.hdr(ent, 0);
-            let zero = this.iconst(0);
-            let live = this.ucmp(Cmp::Ne, h, zero);
-            let (keep, next) = (this.new_block(), this.new_block());
-            this.br(live, keep, next);
-            this.enter(keep);
-            let at = this.read(w);
-            let to = this.entry(c, ebuf, at);
-            let size = this.iconst(c.esize);
-            this.emit(InstKind::Native { name: "mem.move", imm: 0, args: vec![to, ent, size] }, &[]);
-            let one = this.iconst(1);
-            let more = this.uarith(IntOp::Add, at, one);
-            this.write(w, more);
-            this.jump(next);
-            this.enter(next);
-            Some(())
-        });
-        self.store(Mem::W64, header, 40, len);
-        self.store(Mem::W64, header, 48, zero);
-        self.store(Mem::W64, header, 56, len);
-        let slots = self.hdr(header, 32);
-        self.reindex(c, header, slots);
+        let esize = self.iconst(c.esize);
+        self.emit(InstKind::Native { name: "map.compact", imm: 0, args: vec![header, esize] }, &[]);
         self.jump(done);
         self.enter(done);
     }

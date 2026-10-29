@@ -4,6 +4,27 @@ Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
 
+## V8: native map reindex and compact (2026-10-29)
+
+`map.reindex(header, slots, esize)` frees the old index, makes an empty one of
+`slots` slots and puts the live entries in it in order; `map.compact(header,
+esize)` moves the live entries down a contiguous run at a time (one copy per
+run), sets `used`, `head` and `tail`, and reindexes. Both run on the worker's
+heap without the pool lock; the checked build validates the header, the entries
+and the index first. The Heddle loops are gone. Best of seven, ms,
+`--backend vm -O2`:
+
+| Benchmark | before | after |
+|---|---|---|
+| `maps` | 127 | 116 |
+| `set_drain` | 83 | 75 |
+| `word_freq` | 255 | 251 |
+| 100 000 `String` keys, 300 000 hits, 200 000 misses | 84 | 82 |
+| `tests/run/map_grow` (200 000 entries, halved, grown, thirds, strings, set) | 157 | 141 |
+
+Dispatch counts (`bench/counts.txt`): `maps` 4 554 300 to 3 422 891 (-24.8%),
+`set_drain` 4 866 036 to 3 250 121 (-33.2%), `word_freq` 1 570 825 to 1 569 481.
+
 ## V8: a free list of task stacks (2026-10-28)
 
 A finished task's stack goes back to `Sched.spare_stacks` reset to its first

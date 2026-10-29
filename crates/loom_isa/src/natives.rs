@@ -142,6 +142,12 @@ pub const NATIVES: &[NativeSig] = &[
     // offset and size, and the entry's size).
     sig("map.find_str", 4, 2, NativeImm::None),
     sig("map.find_int", 3, 2, NativeImm::None),
+    // `map.reindex(header, slots, entry size)`: a new, empty index of `slots`
+    // slots, with every live entry in it.
+    sig("map.reindex", 3, 0, NativeImm::None),
+    // `map.compact(header, entry size)`: the live entries moved down over the
+    // removed ones, and the index built again.
+    sig("map.compact", 2, 0, NativeImm::None),
     // `mem.calloc(size, align) -> address`: zeroed.
     sig("mem.calloc", 2, 1, NativeImm::None),
     // Arenas: `arena.new(capacity) -> arena`, `arena.alloc(arena, size) ->
