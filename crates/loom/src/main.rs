@@ -4,11 +4,12 @@
 //! - `build` compiles it to a Lua bundle (plus a source map), or dumps a
 //!   stage with `--emit tokens|ast|hir|lua|heddle|bytecode` (the last two
 //!   are Treadle's, Loom's own VM).
-//! - `run` compiles, writes the bundle to a temporary file, and runs it in a
-//!   child process (`loom lua-host`), whose exit code it passes on. With
-//!   `--backend vm` it runs the program on Treadle instead, in this process.
+//! - `run` compiles the program for Treadle and runs it in this process. With
+//!   `--backend lua` it writes the Lua bundle to a temporary file and runs it
+//!   in a child process (`loom lua-host`) instead, whose exit code it passes on.
 //! - `test` compiles a file's tests (and only then are they compiled) and
-//!   runs each in a child process the same way, which prints a report.
+//!   runs each on Treadle, in one VM; with `--backend lua`, in a child
+//!   process, which prints a report.
 //! - `docs` opens the documentation, which is built into the binary.
 //! - `lua-host` (hidden) runs a bundle, or a test bundle's tests, and
 //!   reports how it ended, with Loom source locations.
@@ -70,11 +71,11 @@ enum Command {
         #[arg(long, value_enum)]
         emit: Option<Emit>,
     },
-    /// Compile a Loom file and run it (on the bundled Lua VM, or on Treadle).
+    /// Compile a Loom file and run it (on Treadle, or with `--backend lua` on the bundled Lua VM).
     Run {
         file: PathBuf,
-        /// What runs the program: Lua, or Treadle, Loom's own VM.
-        #[arg(long, value_enum, default_value_t = Backend::Lua)]
+        /// What runs the program: Treadle, Loom's own VM, or Lua.
+        #[arg(long, value_enum, default_value_t = Backend::Vm)]
         backend: Backend,
         /// Arguments passed to the program.
         #[arg(last = true)]
@@ -85,8 +86,8 @@ enum Command {
     /// Run a file's tests (`test name() { … }`).
     Test {
         file: PathBuf,
-        /// What runs the tests: Lua, or Treadle, Loom's own VM.
-        #[arg(long, value_enum, default_value_t = Backend::Lua)]
+        /// What runs the tests: Treadle, Loom's own VM, or Lua.
+        #[arg(long, value_enum, default_value_t = Backend::Vm)]
         backend: Backend,
     },
     /// Open the documentation (the language and std) in your browser. It's built in, so it works offline.
@@ -128,10 +129,10 @@ enum Emit {
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum Backend {
+    /// Treadle, Loom's own VM (the default).
+    Vm,
     /// Lua 5.4, bundled.
     Lua,
-    /// Treadle, Loom's own VM.
-    Vm,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]

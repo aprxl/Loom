@@ -7,7 +7,7 @@ Anything not built stops with a `U` code, and most stop with [U0102](diag:U0102)
 
 ## Next in line
 
-These are planned next, in this order: the rest of threads, then the rest of `given` and Loom's own VM, Treadle (designed in `design/vm.md`). Treadle already runs everything: `loom run --backend vm file.loom`. A program over one of its limits (a frame of more than 65 535 registers, say) stops with [U0103](diag:U0103).
+These are planned next, in this order: the rest of threads, then the rest of `given` and Loom's own VM, Treadle (designed in `design/vm.md`). Treadle runs everything and is what `loom run file.loom` uses; `--backend lua` runs the Lua backend instead. A program over one of its limits (a frame of more than 65 535 registers, say) stops with [U0103](diag:U0103).
 
 ### Threads
 

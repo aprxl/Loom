@@ -110,7 +110,8 @@ def shown_out(name):
 def execute(loom, name):
     cmd, _, _ = MODES[mode_of(name)]
     args = [loom, cmd, f"{REL}/{name}.loom", "--color", "never"]
-    p = subprocess.run(args, cwd=ROOT, capture_output=True, timeout=120)
+    env = dict(os.environ, LOOM_THREADS="1")  # the reference schedule: thread output is in a fixed order
+    p = subprocess.run(args, cwd=ROOT, capture_output=True, timeout=120, env=env)
     out = p.stdout.decode("utf-8", "replace").replace("\r\n", "\n")
     err = p.stderr.decode("utf-8", "replace").replace("\r\n", "\n")
     return p.returncode, out, err

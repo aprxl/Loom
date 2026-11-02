@@ -35,7 +35,7 @@ A generic warp's field types are worked out again for each list of arguments, si
 
 ## `const if`
 
-`const if cond { ... } else { ... }` is decided while compiling, and the whole `else if` chain with it. The compiler checks, and emits, only the branch it takes. **The others are parsed but never type-checked**, so they can name things that don't exist on this target, such as `std.sys.page_size()` below.
+`const if cond { ... } else { ... }` is decided while compiling, and the whole `else if` chain with it. The compiler checks, and emits, only the branch it takes. **The others are parsed but never type-checked**, so they can name things that don't exist on this target.
 
 @sample ci_basic
 
@@ -54,7 +54,7 @@ A generic warp's field types are worked out again for each list of arguments, si
 
 ## `target`
 
-`target` is a `std.target.Target`, always in scope. It has `os`, `arch`, `endian` and `pointer_bits`, and is known at compile time, so it works in `const if`. On the Lua backend it describes the machine doing the build, and `pointer_bits` is 63. See [std.target](std:target).
+`target` is a `std.target.Target`, always in scope. It has `os`, `arch`, `endian` and `pointer_bits`, and is known at compile time, so it works in `const if`. It describes the machine doing the build, and `pointer_bits` is 64 on Treadle (the Lua backend reports 63). See [std.target](std:target).
 
 @sample ci_target
 

@@ -214,7 +214,7 @@ kept 6</code></pre></div>
 <span class="err">error: cp_err_assert.loom failed to compile (1 error)</span></code></pre></div>
 </div>
 <h2 id="const-if"><code>const if</code></h2>
-<p><code>const if cond { ... } else { ... }</code> is decided while compiling, and the whole <code>else if</code> chain with it. The compiler checks, and emits, only the branch it takes. <strong>The others are parsed but never type-checked</strong>, so they can name things that don't exist on this target, such as <code>std.sys.page_size()</code> below.</p>
+<p><code>const if cond { ... } else { ... }</code> is decided while compiling, and the whole <code>else if</code> chain with it. The compiler checks, and emits, only the branch it takes. <strong>The others are parsed but never type-checked</strong>, so they can name things that don't exist on this target.</p>
 <div class="sample" id="sample-ci_basic">
 <div class="sample-head"><span class="file">samples/ci_basic.loom</span><span class="tag ok">runs</span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -225,10 +225,10 @@ kept 6</code></pre></div>
 <span class="c">/// The branch that isn't taken isn't checked, so it can name things that</span>
 <span class="c">/// don't exist here.</span>
 <span class="k">fun</span> page_size() -&gt; usize {
-    <span class="k">const</span> <span class="k">if</span> target.pointer_bits == <span class="n">63</span> {
+    <span class="k">const</span> <span class="k">if</span> target.pointer_bits == <span class="n">64</span> {
         <span class="n">4096</span>
     } <span class="k">else</span> {
-        std.sys.page_size()
+        <span class="n">8192</span>
     }
 }
 
@@ -328,7 +328,7 @@ three sizes
 37</code></pre></div>
 </div>
 <h2 id="target"><code>target</code></h2>
-<p><code>target</code> is a <code>std.target.Target</code>, always in scope. It has <code>os</code>, <code>arch</code>, <code>endian</code> and <code>pointer_bits</code>, and is known at compile time, so it works in <code>const if</code>. On the Lua backend it describes the machine doing the build, and <code>pointer_bits</code> is 63. See <a href="../std/modules/target.html">std.target</a>.</p>
+<p><code>target</code> is a <code>std.target.Target</code>, always in scope. It has <code>os</code>, <code>arch</code>, <code>endian</code> and <code>pointer_bits</code>, and is known at compile time, so it works in <code>const if</code>. It describes the machine doing the build, and <code>pointer_bits</code> is 64 on Treadle (the Lua backend reports 63). See <a href="../std/modules/target.html">std.target</a>.</p>
 <div class="sample" id="sample-ci_target">
 <div class="sample-head"><span class="file">samples/ci_target.loom</span><span class="tag ok">runs</span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -348,7 +348,7 @@ three sizes
     print(target.endian == .<span class="t">Little</span>)
     print(separator().len())
 }</code></pre>
-<div class="sample-out"><div class="out-head">Output</div><pre><code>63
+<div class="sample-out"><div class="out-head">Output</div><pre><code>64
 true
 1</code></pre></div>
 </div>

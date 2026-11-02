@@ -1,6 +1,6 @@
 //! What `target` describes: the machine the program is built for. That's
-//! the machine doing the build, with 63-bit pointers on the Lua backend
-//! (`usize` is 63 bits) and 64-bit ones on Treadle, Loom's own VM.
+//! the machine doing the build, with 64-bit pointers on Treadle, Loom's own VM
+//! (the default), and 63-bit ones (`usize` is 63 bits) on the Lua backend.
 
 /// An operating system.
 pub warp Os: Eq, Show {

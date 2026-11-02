@@ -289,7 +289,7 @@ fn treadle_unravels_like_lua() {
         "use std.io.print\n\nfun bump(x: u8) -> u8 {\n    let y = x + 10\n    y\n}\n\nfun main() {\n    print(bump(200))\n    print(bump(250))\n}\n",
     );
     let file = path.to_str().expect("utf-8 path");
-    let lua = loom(&["run", file]);
+    let lua = loom(&["run", "--backend", "lua", file]);
     let vm = loom(&["run", "--backend", "vm", file]);
     assert_eq!(vm.status.code(), Some(101));
     assert_eq!(lua.status.code(), Some(101));

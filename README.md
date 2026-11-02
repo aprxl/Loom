@@ -312,23 +312,23 @@ built in `crates/`, following the plan in `design/lua-backend.md`:
   `T.fields`, `v.(f)`, and default methods that derive from a type's shape). `examples/widgets.loom`,
   `examples/tour.loom`, `examples/ledger.loom` and `examples/chip8.loom`
   run start to finish (chip8 wants a ROM: `loom run examples/chip8.loom --
-  game.ch8`). `loom run <file>` runs a program; `loom test <file>` runs its
-  tests; `loom build <file>` writes the Lua; `--emit tokens|ast|hir|lua`
+  game.ch8`). `loom run <file>` runs a program on Treadle; `loom test <file>` runs its
+  tests; `loom build <file>` writes the Lua (`--backend lua` on `run` and
+  `test` runs the Lua backend); `--emit tokens|ast|hir|lua`
   dumps a stage; `loom docs` opens the documentation in your browser. The other examples use more than this; the compiler says
   so rather than guessing.
-- **Treadle**, Loom's own VM, runs next to the Lua backend: a typed,
+- **Treadle**, Loom's own VM, is the default backend: a typed,
   optimizing pipeline and a register interpreter, meant to outrun the
-  interpreters of other languages (`design/vm.md`). It runs everything the
-  Lua backend does but shuttles and compile-time code: `loom run --backend
-  vm`, about 1.6× as fast as PUC Lua 5.4 and 10× the Lua backend on
-  `bench/` (`bench/RESULTS.md`). `loom run --backend vm examples/chip8.loom
+  interpreters of other languages (`design/vm.md`). It runs the whole
+  language: `loom run`, about 1.6× as fast as PUC Lua 5.4 and 10× the Lua backend on
+  `bench/` (`bench/RESULTS.md`). `loom run examples/chip8.loom
   -- examples/digits.ch8` plays a small ROM.
 - **Next:** shuttles on Treadle, then its optimizer, then threads and spools
   on it.
 
 ```bash
 cargo run -p loom -- run tests/run/fizzbuzz.loom
-cargo run -p loom -- run --backend vm tests/run/scalars.loom
+cargo run -p loom -- run --backend lua tests/run/scalars.loom
 cargo run -p loom -- build tests/run/fizzbuzz.loom --emit lua
 cargo run -p loom -- docs
 ```

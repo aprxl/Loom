@@ -168,8 +168,8 @@ language through every layer (type checking, lowering to Lua, the runtime,
     `tests/run/derive_json`). `examples/compile_time.loom` fails only for
     `std.sys`.
 
-Treadle, Loom's own VM (`design/vm.md`, milestones V0–V9), runs next to the
-Lua backend: `loom run --backend vm`. The typed program becomes Heddle
+Treadle, Loom's own VM (`design/vm.md`, milestones V0–V9), is what `loom run`
+and `loom test` use; `--backend lua` selects the Lua backend instead. The typed program becomes Heddle
 (`loom_compiler::heddle`, a typed SSA IR), Heddle becomes bytecode
 (`loom_compiler::codegen`, into `loom_isa`'s images), and `loom_vm` runs it.
 
@@ -183,8 +183,8 @@ Lua backend: `loom run --backend vm`. The typed program becomes Heddle
 
 23. Treadle V1: the sequential language (design/vm.md §17): warps,
     optionals and results, `any`, lists, strings, maps and sets, `defer`,
-    lambdas, generics, streams, constants, gauges, the host, `loom test
-    --backend vm`, backtraces, Ctrl-C (130) and `process.exit`, with memory
+    lambdas, generics, streams, constants, gauges, the host, `loom test`
+    on Treadle, backtraces, Ctrl-C (130) and `process.exit`, with memory
     laid out for real and freed by ownership; the checked build leaks
     nothing, whatever way a run ends (a return, an unravel, an exit,
     Ctrl-C). 1.65× PUC Lua on `bench/` (`bench/RESULTS.md`). The program

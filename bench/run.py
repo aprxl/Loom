@@ -46,7 +46,7 @@ def par(runs, workers):
     print("|---|--:|--:|--:|--:|")
     for name, spawns in PAR_BENCHES.items():
         cmd = [LOOM, "run", "--backend", "vm", f"bench/{name}.loom"]
-        _, oracle = best([LOOM, "run", f"bench/{name}.loom"], 1)
+        _, oracle = best([LOOM, "run", "--backend", "lua", f"bench/{name}.loom"], 1)
         base = None
         for w in workers:
             os.environ["LOOM_THREADS"] = str(w)
@@ -94,7 +94,7 @@ def main():
         ratios.append(ratio)
         row = f"| `{name}` | {lua_t:.3f} s | **{vm_t:.3f} s** | {ratio:.2f}× |"
         if lua_backend:
-            lb_t, _ = best([LOOM, "run", f"bench/{name}.loom"], runs)
+            lb_t, _ = best([LOOM, "run", "--backend", "lua", f"bench/{name}.loom"], runs)
             row += f" {lb_t:.3f} s |"
         print(row, flush=True)
     geo = math.exp(sum(math.log(r) for r in ratios) / len(ratios))

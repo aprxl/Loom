@@ -35,7 +35,7 @@ cargo build --release -p loom
 ```
 
 ```bash
-target/release/loom run --backend vm bench/fib.loom
+target/release/loom run bench/fib.loom
 ```
 
 ```bash

@@ -6,10 +6,10 @@ const SIZES = [1, 2, 4]
 /// The branch that isn't taken isn't checked, so it can name things that
 /// don't exist here.
 fun page_size() -> usize {
-    const if target.pointer_bits == 63 {
+    const if target.pointer_bits == 64 {
         4096
     } else {
-        std.sys.page_size()
+        8192
     }
 }
 

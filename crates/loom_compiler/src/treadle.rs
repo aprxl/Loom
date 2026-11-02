@@ -15,8 +15,9 @@ use crate::{codegen, heddle};
 /// program it can't run yet (U0102).
 pub(crate) fn codegen_diagnostics(error: codegen::CodegenError) -> Vec<Diagnostic> {
     vec![match error {
-        codegen::CodegenError::Limit(message) => Diagnostic::error(codes::U0103, message)
-            .note("the Lua backend has no such limit: `loom run` without `--backend vm`"),
+        codegen::CodegenError::Limit(message) => {
+            Diagnostic::error(codes::U0103, message).note("the Lua backend has no such limit: `loom run --backend lua`")
+        }
         codegen::CodegenError::Bug(message) => {
             Diagnostic::error(codes::U0102, format!("not implemented yet: {message}"))
                 .note("Treadle can't run this yet")
