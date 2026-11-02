@@ -300,9 +300,16 @@ chunks, at a fixed grain; there are no per-worker deques or stealing.
 `yield`/`pull` in a loom and `loom(given: …)` wait for V6; I/O is not a
 cancel point yet (design/vm.md §11.4, §17).
 
-Next: V6.5 language gaps the stdlib hit, V7 Lua interop, V8 speed, V9
-Treadle by default. The deferred work of each, std
-included, is in LEDGER.md ("Roadmap").
+32. Treadle V8, speed: COMPLETE (2026-11-02). Natives off the pool lock (text,
+    string building, mutex, templates, messages, constants, print queues),
+    per-worker deques and stack reuse, O(1) `Map.first`/`last`, native map
+    reindex and compaction, fused list pipelines, and the perf gates in
+    `bench/RESULTS.md`'s "V8 summary" (geomean 2.73x over PUC Lua). The `fn`
+    keyword is `fun`.
+
+Next: V9 Treadle by default (verifier hardening first). The deferred work of
+each milestone, std included, is in LEDGER.md ("Roadmap"); what V8 left is
+under "Later" there.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and

@@ -1990,7 +1990,9 @@ Passing:
 5. `loom_vm` builds without the `lua` feature, and `extern "lua"` in user code
    is then a U code.
 
-### V8: speed (about 3k)
+### V8: speed (about 3k) — done (2026-11-02)
+
+Closed on the list in LEDGER.md (not on the profile-driven items below, which are deferred there), with the numbers in RESULTS.md. The geometric mean against PUC Lua reads 2.73x, below the V8 row of §16.
 
 In: profile-driven superinstructions, the dispatch experiments (D2),
 profile-guided optimization of the `loom` binary, inline short strings, fast

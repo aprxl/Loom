@@ -4,6 +4,51 @@ Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
 
+## V8 summary (2026-11-02)
+
+V8 (speed) is complete; the commits are in LEDGER.md. Geometric mean against PUC
+Lua 5.4 (`python bench/run.py --runs 5`): 2.73x, lowest 1.15x (`word_freq`); the
+V3 table below read 2.42x, lowest 0.99x. Design/vm.md section 16's V8 row (4x, none
+under 2x) was not reached.
+
+Perf gates at the end of V8 (`cargo test --release -p loom --test perf_gates --
+--ignored --nocapture --test-threads=1`, `compile_time` for the last two; ranges are
+what the readings of the last days spanned on this machine):
+
+| Gate | Reading | Limit |
+|---|---|---|
+| Box allocate, read, free | 10 ns | at most 15 ns |
+| Arena put over heap box | 0.37-0.40 | at most 0.5 |
+| Binary trees in arenas against Lua | 9.8-10.9x | at least 4x |
+| `par_mandelbrot`, 8 workers | 5.2-6.1x | at least 5.2x (0.65 a core) |
+| Spawn and join, 8 workers | 0.75-0.84 us | at most 2 us |
+| `par_text` | 5.6-6.4x | at least 4x |
+| `par_build` | 5.0-6.2x (2.9x at a bad moment of the machine) | at least 4x |
+| `par_mutex` | 4.4-5.7x | at least 4x |
+| `par_chunks` (`loom for` over lists) | 7.4-8.3x | at least 4x |
+| `par_fmt` (templates) | 3.6-5.2x | at least 3.5x |
+| `par_print` (800 000 lines a task, to a file) | 3.2-3.8x | at least 3.0x |
+| source to image at `-O2` over `-O0` | 1.25-1.27x | at most 1.75x |
+| `compile_at` alone | 1.95-2.11x | at most 2.15x |
+
+Headline numbers, before to after (details in the sections below):
+
+| Bench | Before | After |
+|---|---|---|
+| `list_ops` dispatches | 7,628,190 | 4,853,579 |
+| `step_by` then `sum`, over the hand loop (dispatches) | 25.75x | 2.00x |
+| `filter_map` then `sum`, over the hand loop | 8.60x | 2.00x |
+| `set_drain` dispatches | 6,786,096 | 3,250,121 |
+| `maps` dispatches | 4,114,296 | 3,422,891 |
+| 100,000-entry stack over `Map.last` | over 100 s | 84 ms |
+| `fib(25)`, a thread on every call, 8 workers | 914 ms | 244 ms |
+| `contains` / `Map.has` on 8 workers, 8 tasks | 1,440 / 1,270 ms | 82 / 64 ms |
+| `par_build` on 8 workers | 6,639 ms | 125 ms |
+| 8 tasks of templates, 8 workers (400k each) | 3,897 ms | 93 ms |
+| 8 tasks printing 800,000 lines to a file, 8 workers | 958 ms | 140 ms |
+| arena `put` in a `loom for` body, 8 workers | 1,330 ms | 136 ms |
+| `compile_at`, `-O2` | 552 ms | 532 ms (-3.8%) |
+
 ## V8: per-worker queues for printed lines (2026-11-02)
 
 A worker queues the whole lines its natives write and hands them to the one
