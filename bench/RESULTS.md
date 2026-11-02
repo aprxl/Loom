@@ -27,7 +27,7 @@ what the readings of the last days spanned on this machine):
 | `par_mutex` | 4.4-5.7x | at least 4x |
 | `par_chunks` (`loom for` over lists) | 7.4-8.3x | at least 4x |
 | `par_fmt` (templates) | 3.6-5.2x | at least 3.5x |
-| `par_print` (800 000 lines a task, to a file) | 3.2-3.8x | at least 3.0x |
+| `par_print` (800 000 lines a task, to a file) | 2.75-3.8x (2.75, 2.88, 3.45, 3.48 on 2026-11-02) | at least 2.5x |
 | source to image at `-O2` over `-O0` | 1.25-1.27x | at most 1.75x |
 | `compile_at` alone | 1.95-2.11x | at most 2.15x |
 

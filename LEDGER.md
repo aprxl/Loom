@@ -74,7 +74,7 @@ Done (commit, headline):
 - Per-worker ready deques with stealing of half (c59ae69): a thread on every call of `fib(25)` on 8 workers 914 to 244 ms (3.7x); and a free list of task stacks (66d5d40): 121,392 stack allocations to 24-119.
 - `Map.first`, `Map.last` and `Set.pop` in O(1) (f0c2252): a 100,000-entry stack over `last` went from over 100 s to 84 ms; native map `reindex` and `compact` (d238381): `maps` -25% and `set_drain` -33% dispatches (`set_drain` 6,786,096 to 3,250,121 over V8).
 - A `spool` (or named `given`, or `const for` pattern) made in a `loom for` body is the task's own (6f5c072): a segfault and a shared arena fixed; arena `put` on 8 workers 1,330 to 136 ms.
-- Gates: `par_mandelbrot` 0.65 a core and templates 3.5x (237c9b9), `print_scales_to_8_workers` 3.0x (322f456), `compile_at` alone at most 2.15x (8552814; source to image 1.25x, `compile_at` 1.95-2.11x, the design's 1.5x deferred).
+- Gates: `par_mandelbrot` 0.65 a core and templates 3.5x (237c9b9), `print_scales_to_8_workers` 2.5x (322f456, lowered from 3.0x on 2026-11-02: readings 2.75-3.8x), `compile_at` alone at most 2.15x (8552814; source to image 1.25x, `compile_at` 1.95-2.11x, the design's 1.5x deferred).
 
 Deferred: see "Later (deferred from V8)" below.
 

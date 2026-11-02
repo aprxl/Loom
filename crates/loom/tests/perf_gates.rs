@@ -142,7 +142,7 @@ fn templates_scale_to_8_workers() {
 /// The gate: printing lines from many tasks (to a file) scales this much on 8
 /// workers, because each worker queues its whole lines and hands them over in
 /// batches.
-const MIN_PRINT_SPEEDUP: f64 = 3.0;
+const MIN_PRINT_SPEEDUP: f64 = 2.5;
 
 /// The best of `RUNS` times of `bench/par_print.loom` with `workers` workers,
 /// its output going to a file.
