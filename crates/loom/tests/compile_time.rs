@@ -24,6 +24,10 @@ const RUNS: usize = 5;
 /// (the front end got faster, which raises the ratio without the optimizer
 /// getting slower). This bound is what fails on an optimizer 7% slower.
 const MAX_RATIO: f64 = 1.75;
+/// `compile_at` alone (the front end left out) reads 1.95-2.11 over the
+/// machines and days it was measured, against the design's 1.5, which is
+/// deferred; this fails on an optimizer about 2% slower than the worst reading.
+const MAX_COMPILE_RATIO: f64 = 2.15;
 /// Design/vm.md §17: no example takes longer than this at `-O2`.
 const MAX_EXAMPLE: Duration = Duration::from_millis(200);
 
@@ -80,17 +84,16 @@ fn optimizer_compile_time() {
         }
     }
     println!("{} files, {} skipped: {skipped:?}", rows.len(), skipped.len());
-    let mut ratio = 0.0;
+    let mut ratios = [0.0; 2];
     for (what, k) in [("source to image", 0), ("compile_at alone", 1)] {
         // The corpus is tests/run and examples, as the design says.
         let corpus = rows.iter().filter(|r| !r.0.starts_with("bench"));
         let (o0, o2) = corpus.fold((Duration::ZERO, Duration::ZERO), |(a, b), r| (a + r.1[k][0], b + r.1[k][1]));
         let r = o2.as_secs_f64() / o0.as_secs_f64();
         println!("{what}: -O0 {o0:.2?}, -O2 {o2:.2?}, ratio {r:.2} (V3 wants at most 1.5)");
-        if k == 0 {
-            ratio = r;
-        }
+        ratios[k] = r;
     }
+    let [ratio, compile_ratio] = ratios;
     rows.sort_by_key(|r| std::cmp::Reverse(r.1[0][1]));
     for (name, t) in rows.iter().take(10) {
         let (a, b) = (t[0][0], t[0][1]);
@@ -102,6 +105,10 @@ fn optimizer_compile_time() {
         println!("  {name:36} -O2 {:>9.2?}", t[0][1]);
     }
     assert!(ratio <= MAX_RATIO, "-O2 takes {ratio:.2}x -O0 from source to image (at most {MAX_RATIO})");
+    assert!(
+        compile_ratio <= MAX_COMPILE_RATIO,
+        "-O2 takes {compile_ratio:.2}x -O0 in `compile_at` alone (at most {MAX_COMPILE_RATIO})"
+    );
     assert!(slowest <= MAX_EXAMPLE, "the slowest example takes {slowest:.2?} at -O2 (at most {MAX_EXAMPLE:?})");
 }
 
