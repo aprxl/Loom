@@ -1,0 +1,57 @@
+// A `spool` or a named `given` made inside a lambda or a `defer` belongs to
+// that body: it is not a variable of the function around it.
+
+use std.io.print
+use std.mem.{Arena, kib}
+
+warp P {
+    x: u64
+}
+
+weft Tagged {
+    fn tag(self) -> u64
+}
+
+warp Tag: Tagged {
+    id: u64
+
+    pub fn tag(self) -> u64 = self.id
+}
+
+fn tag_of() -> u64 given t: Tagged = t.tag()
+
+fn main() {
+    let f = (n: u64) => {
+        spool a = Arena(1.kib())
+        let p = a.put(P(n * 2))
+        p.x + 1
+    }
+    print("{f(5)} {f(7)}")
+
+    let g = (n: u64) => {
+        given t = Tag(n)
+        tag_of() + 1
+    }
+    print("{g(3)} {g(9)}")
+
+    {
+        defer {
+            spool b = Arena(1.kib())
+            let q = b.put(P(40))
+            print("deferred {q.x}")
+        }
+        print("body")
+    }
+    {
+        defer {
+            given t = Tag(11)
+            print("deferred tag {tag_of()}")
+        }
+        print("body 2")
+    }
+
+    const for k in [1, 2, 3] {
+        let h = () => k * 10
+        print("const {h()}")
+    }
+}

@@ -262,8 +262,16 @@ impl Scanner<'_, '_> {
                     self.use_local(l);
                 }
             }
-            StmtKind::Given { value, .. } => self.expr(value),
-            StmtKind::Spool { init, .. } => self.expr(init),
+            StmtKind::Given { local, value } => {
+                self.expr(value);
+                if let Some(l) = local {
+                    self.declare(*l);
+                }
+            }
+            StmtKind::Spool { local, init } => {
+                self.expr(init);
+                self.declare(*local);
+            }
             StmtKind::Item(_) => {}
         }
     }
@@ -307,7 +315,8 @@ impl Scanner<'_, '_> {
             ExprKind::DotBlock { subject, .. } if self.tables().dot_blocks.get(&e.id) == Some(&true) => {
                 self.needs_address(subject);
             }
-            ExprKind::For { is_const: true, body, .. } => {
+            ExprKind::For { is_const: true, pat, body, .. } => {
+                self.pat(pat);
                 // Each item's copy of the body has tables of its own.
                 for id in self.tables().unrolled.get(&e.id).cloned().unwrap_or_default() {
                     let saved = std::mem::replace(&mut self.body, id);

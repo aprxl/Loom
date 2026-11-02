@@ -1,0 +1,28 @@
+// A `spool` made in the body of a `loom for` belongs to its task: it grows
+// and is reset on its own, whatever the number of workers.
+
+use std.io.print
+use std.mem.{Arena, kib}
+use std.sync.Atomic
+
+warp P {
+    x: u64
+}
+
+fn main() {
+    let total = Atomic[u64](0)
+    loom for i in 0..8u64 {
+        spool a = Arena(4.kib())
+        var n = 0u64
+        for _ in 0..30 {
+            for j in 0..2000u64 {
+                let p = a.put(P(i * 1000 + j))
+                n += p.x
+            }
+            a.reset()
+        }
+        print("task {i} {n}")
+        total.add(n)
+    }
+    print("total {total.load()}")
+}

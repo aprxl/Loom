@@ -1,0 +1,31 @@
+// A named `given` made in the body of a `loom for` belongs to its task: each
+// task sees its own value, whatever the number of workers.
+
+use std.io.print
+use std.sync.Atomic
+
+weft Tagged {
+    fn tag(self) -> u64
+}
+
+warp Tag: Tagged {
+    id: u64
+
+    pub fn tag(self) -> u64 = self.id
+}
+
+fn current() -> u64 given t: Tagged = t.tag()
+
+fn main() {
+    let total = Atomic[u64](0)
+    loom for i in 0..8u64 {
+        given t = Tag(i)
+        var n = 0u64
+        for _ in 0..200000 {
+            n += current()
+        }
+        print("task {i} {n}")
+        total.add(n)
+    }
+    print("total {total.load()}")
+}

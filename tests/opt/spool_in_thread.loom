@@ -1,0 +1,23 @@
+// passes: cleanup
+// fns: main.{thread}
+//
+// A `spool` made in the body of a `loom for` lives in the task's own frame
+// (a slot of the thread function), not in a slot of the function around it
+// reached through the environment, which every task would share.
+use std.io.print
+use std.mem.{Arena, kib}
+use std.sync.Atomic
+
+warp P {
+    x: u64
+}
+
+fn main() {
+    let total = Atomic[u64](0)
+    loom for i in 0..4u64 {
+        spool a = Arena(1.kib())
+        let p = a.put(P(i))
+        total.add(p.x)
+    }
+    print("{total.load()}")
+}

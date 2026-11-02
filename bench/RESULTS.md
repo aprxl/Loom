@@ -4,6 +4,23 @@ Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
 
+## V8: a `spool` made in a `loom for` body is the task's own (2026-10-29)
+
+The captures scan (`heddle/build/scan.rs`) never `declare`d the local of a
+`spool`, of a named `given`, or of a `const for`'s pattern, so a use of one
+inside a thread, lambda or `defer` counted as a capture of an outer variable.
+For `loom for` that put the arena handle in a slot of the function around the
+loom, which every task wrote: the tasks shared one arena and raced on its
+bump pointer, `grow` and `reset` (a segfault at 8 MiB or less, any number of
+workers above one). Now the arena is a slot of the task's own frame
+(`tests/opt/spool_in_thread`). Wall ms, 8 tasks, 1 worker / 8 workers:
+
+| Benchmark | before | after |
+|---|---|---|
+| 200 rounds of 100 000 `a.put` in a 64 MiB arena | 633 / 1 330 | 549 / 136 (4.0x) |
+| the same with `str.new_in` copies, 200 rounds | 1 365 / 2 573 | 1 331 / 319 (4.2x) |
+| `par_newin2`: 8 MiB arena, 200 rounds | 1 328 / crash | 1 527 / 326 (4.7x) |
+
 ## V8: templates, messages, `str.new_in` and constants off the pool lock (2026-10-29)
 
 The message, the sinks `sink.push` makes and the line being written are the
@@ -18,7 +35,7 @@ native is done. Wall ms, 8 tasks in `loom for`, best of 3, 1 worker / 8 workers:
 | `par_fmt` (400k templates a task) | 250 / 3 897 | 240 / 93 |
 | `par_fmt` (3.2M a task, the gate's) | 1 534 / about 31 000 | 1 534 / 357 (4.3x; gate 4.0x, 3.8-5.2x over 12 runs) |
 | `par_print` (100 000 lines a task) | 93 / 1 015 | 90 / 155 |
-| `par_newin` (`str.new_in`) | 186 / 2 623 | 182 / 313 (see the next section) |
+| `par_newin` (`str.new_in`) | 186 / 2 623 | 182 / 313 (the arena was shared: see the section above) |
 
 Every call of these natives took the lock before (25.6M of 25.6M in `par_fmt`),
 and none does now.
