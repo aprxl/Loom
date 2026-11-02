@@ -5,14 +5,14 @@ use std.io.print
 warp Countdown: Iter {
     n: u32
     type Item = u32
-    fn next(mut self) -> ?u32 {
+    fun next(mut self) -> ?u32 {
         if .n == 0 { return none }
         .n -= 1
         .n + 1
     }
 }
 
-fn main() {
+fun main() {
     // Streams are lazy: nothing runs until something asks for an item.
     let evens = (1..=20).filter(_ % 2 == 0).map(n => n * n)
     print(evens.take(4).collect())

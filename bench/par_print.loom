@@ -2,7 +2,7 @@
 // the one output in batches, without the pool's lock.
 use std.io.print
 
-fn main() {
+fun main() {
     loom for i in 0..8 {
         for j in 0..800000u64 {
             print("task {i} line {j}")

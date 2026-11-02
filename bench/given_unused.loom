@@ -4,9 +4,9 @@ use std.mem.Spool
 
 const SIZE = 1_000_000
 
-fn step(x: u64) -> u64 given sp: Spool = x * 3 + 1
+fun step(x: u64) -> u64 given sp: Spool = x * 3 + 1
 
-fn main() {
+fun main() {
     var total = 0u64
     for i in 0..SIZE as u64 {
         total = (total + step(i)) % 1000003

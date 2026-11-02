@@ -1,12 +1,12 @@
 use std.io.print
 
 weft Shape {
-    fn area(self) -> f64
-    fn name(self) -> str = "shape"
+    fun area(self) -> f64
+    fun name(self) -> str = "shape"
 }
 
 weft Named {
-    fn name(self) -> str
+    fun name(self) -> str
 }
 
 warp Square { side: f64 }
@@ -16,16 +16,16 @@ weave Shape into Square {}                  //~ T0113
 warp Circle { r: f64 }
 
 weave Shape into Circle {
-    fn area(self) -> i32 = 3                //~ T0114
-    fn volume(self) -> f64 = 0.0            //~ T0114
+    fun area(self) -> i32 = 3                //~ T0114
+    fun volume(self) -> f64 = 0.0            //~ T0114
 }
 
 weave Named into Circle {
-    fn name(self) -> str = "circle"
+    fun name(self) -> str = "circle"
 }
 
 weave Shape into Circle {                   //~ T0115
-    fn area(self) -> f64 = 3.0
+    fun area(self) -> f64 = 3.0
 }
 
 weave Show into bool {}                     //~ T0115
@@ -39,12 +39,12 @@ warp Tagged: Copy { name: String }          //~ T0108
 weave Square into Circle {}                 //~ T0111
 
 weft Loud: Named {
-    fn shout(self) -> str = "!"
+    fun shout(self) -> str = "!"
 }
 
 warp Bell: Loud {}                          //~ T0108
 
-fn main() {
+fun main() {
     let c = Circle(1.0)
     print(c.name())                         //~ T0116
     print(Named.name(c))

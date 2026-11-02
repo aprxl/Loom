@@ -10,20 +10,20 @@
 #builtin
 pub warp Atomic[T] {
     /// The value now.
-    pub fn load(self) -> T
+    pub fun load(self) -> T
     /// Sets the value.
-    pub fn store(self, value: T)
+    pub fun store(self, value: T)
     /// Sets the value, and gives the one it replaced.
-    pub fn swap(self, value: T) -> T
+    pub fun swap(self, value: T) -> T
     /// Sets the value to `desired` if it's `expected`. Gives whether it
     /// did, and the value that was there.
-    pub fn compare_exchange(self, expected: T, desired: T) -> (bool, T)
+    pub fun compare_exchange(self, expected: T, desired: T) -> (bool, T)
     /// Adds `n`, and gives the value before. Unravels if the sum doesn't
     /// fit, leaving the value as it was.
-    pub fn add(self, n: T) -> T where T: Integer
+    pub fun add(self, n: T) -> T where T: Integer
     /// Subtracts `n`, and gives the value before. Unravels if the result
     /// doesn't fit, leaving the value as it was.
-    pub fn sub(self, n: T) -> T where T: Integer
+    pub fun sub(self, n: T) -> T where T: Integer
 }
 
 /// A value that one thread at a time can lock and use.
@@ -34,7 +34,7 @@ pub warp Mutex[T] {
     /// it) and given back when the statement ends, however it ends.
     /// `total.lock() += n` changes it. A thread that locks a mutex it has
     /// locked already unravels.
-    pub fn lock(self) ~> mut T
+    pub fun lock(self) ~> mut T
 }
 
 /// A thread started in a `loom` block: what `thread e` gives. It's `Copy`
@@ -45,13 +45,13 @@ pub warp Spun[T] {
     /// Waits for the thread and gives its result. If a thread of the block
     /// unravelled, this unravels with its message instead. A thread is
     /// joined once: a second `join` unravels.
-    pub fn join(take self) -> T
+    pub fun join(take self) -> T
 }
 
 extern "host" {
     /// Lets the other threads that can run go first: the running thread
     /// goes to the back of the queue.
-    pub fn sched_yield()
+    pub fun sched_yield()
 }
 
 /// A bounded queue: threads send items into it and receive them from it,
@@ -63,14 +63,14 @@ extern "host" {
 pub warp Pipe[T] {
     /// Puts `item` in, waiting while the pipe is full. Unravels if it's
     /// closed (before or while it waits).
-    pub fn send(self, take item: T)
+    pub fun send(self, take item: T)
     /// Takes the oldest item, waiting while the pipe is empty. `none` once
     /// it's closed and there's nothing left.
-    pub fn recv(self) -> ?T
+    pub fun recv(self) -> ?T
     /// Closes the pipe: what's in it can still be received, nothing more
     /// can be sent, and the threads that wait on it wake. Closing it again
     /// does nothing.
-    pub fn close(self)
+    pub fun close(self)
 }
 
 /// How many workers may run a `loom`'s threads at once:

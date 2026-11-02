@@ -5,7 +5,7 @@
 // jump reaches joins the block it's in.
 use std.io.print
 
-fn main() {
+fun main() {
     var n = 3
     if n > 2 {
         n += 1

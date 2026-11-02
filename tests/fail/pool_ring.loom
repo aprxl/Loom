@@ -5,6 +5,6 @@ warp Ring {
     next: ?^Ring
 }
 
-fn main() {
+fun main() {
     spool slots = Pool[Ring](2)         //~ U0102
 }

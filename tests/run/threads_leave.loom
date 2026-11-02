@@ -4,7 +4,7 @@
 use std.io.print
 use std.sync.sched_yield
 
-fn slow(name: str) -> i32 {
+fun slow(name: str) -> i32 {
     defer print("{name} cleanup")
     print("{name} start")
     sched_yield()
@@ -12,7 +12,7 @@ fn slow(name: str) -> i32 {
     7
 }
 
-fn find(x: i32) -> i32 ! str {
+fun find(x: i32) -> i32 ! str {
     let r = loom {
         let a = thread slow("a")
         if x > 0 { fail "too big" }
@@ -21,7 +21,7 @@ fn find(x: i32) -> i32 ! str {
     r
 }
 
-fn main() {
+fun main() {
     let a = find(0) mend e => -1
     print("find(0) = {a}")
     let b = find(1) mend e => -2

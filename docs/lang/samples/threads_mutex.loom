@@ -2,12 +2,12 @@ use std.io.print
 use std.sync.Mutex
 use std.sync.sched_yield
 
-fn pause(id: i32) -> i32 {
+fun pause(id: i32) -> i32 {
     sched_yield()
     id
 }
 
-fn main() {
+fun main() {
     let total = Mutex[i32](0)
     let log = Mutex[List[i32]]([])
     loom {

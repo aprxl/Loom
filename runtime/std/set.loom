@@ -8,25 +8,25 @@ use std.iter.FromStream
 #builtin
 pub warp Set[T] {
     /// A set of the elements of `xs` (each once).
-    pub fn of(xs: [T]) -> Set[T] where T: Hash
-    pub fn len(self) -> usize
-    pub fn is_empty(self) -> bool
+    pub fun of(xs: [T]) -> Set[T] where T: Hash
+    pub fun len(self) -> usize
+    pub fun is_empty(self) -> bool
     /// Whether `x` is in the set.
-    pub fn has(self, x: T) -> bool where T: Hash
+    pub fun has(self, x: T) -> bool where T: Hash
     /// Adds `x`; whether it wasn't there yet.
-    pub fn insert(mut self, take x: T) -> bool where T: Hash
+    pub fun insert(mut self, take x: T) -> bool where T: Hash
     /// Takes `x` out; whether it was there.
-    pub fn remove(mut self, x: T) -> bool where T: Hash
+    pub fun remove(mut self, x: T) -> bool where T: Hash
     /// Removes every element.
-    pub fn clear(mut self)
+    pub fun clear(mut self)
     /// A list of the elements, sorted.
-    pub fn sorted(self) -> List[T] where T: Ord
+    pub fun sorted(self) -> List[T] where T: Ord
     /// A deep copy.
-    pub fn copy(self) -> Set[T]
+    pub fun copy(self) -> Set[T]
     /// Takes out the oldest item.
-    pub fn pop(mut self) -> ?T where T: Hash
+    pub fun pop(mut self) -> ?T where T: Hash
     /// The items in this set, `other`, or both.
-    pub fn union(self, other: Set[T]) -> Set[T] where T: Hash {
+    pub fun union(self, other: Set[T]) -> Set[T] where T: Hash {
         var out = self.copy()
         for x in other {
             out.insert(x)
@@ -34,7 +34,7 @@ pub warp Set[T] {
         out
     }
     /// The items in both sets.
-    pub fn intersection(self, other: Set[T]) -> Set[T] where T: Hash {
+    pub fun intersection(self, other: Set[T]) -> Set[T] where T: Hash {
         var out: Set[T] = Set()
         for x in self {
             if other.has(x) { out.insert(x) }
@@ -42,7 +42,7 @@ pub warp Set[T] {
         out
     }
     /// The items in this set and not in `other`.
-    pub fn difference(self, other: Set[T]) -> Set[T] where T: Hash {
+    pub fun difference(self, other: Set[T]) -> Set[T] where T: Hash {
         var out: Set[T] = Set()
         for x in self {
             if not other.has(x) { out.insert(x) }
@@ -50,7 +50,7 @@ pub warp Set[T] {
         out
     }
     /// The items in one set but not the other.
-    pub fn symmetric_difference(self, other: Set[T]) -> Set[T] where T: Hash {
+    pub fun symmetric_difference(self, other: Set[T]) -> Set[T] where T: Hash {
         var out = self.difference(other)
         for x in other {
             if not self.has(x) { out.insert(x) }
@@ -58,25 +58,25 @@ pub warp Set[T] {
         out
     }
     /// Whether every item is in `other`.
-    pub fn is_subset(self, other: Set[T]) -> bool where T: Hash {
+    pub fun is_subset(self, other: Set[T]) -> bool where T: Hash {
         for x in self {
             if not other.has(x) { return false }
         }
         true
     }
     /// Whether every item of `other` is here.
-    pub fn is_superset(self, other: Set[T]) -> bool where T: Hash {
+    pub fun is_superset(self, other: Set[T]) -> bool where T: Hash {
         other.is_subset(self)
     }
     /// Whether no item is in both.
-    pub fn is_disjoint(self, other: Set[T]) -> bool where T: Hash {
+    pub fun is_disjoint(self, other: Set[T]) -> bool where T: Hash {
         for x in self {
             if other.has(x) { return false }
         }
         true
     }
     /// Keeps the items `keep` says yes to.
-    pub fn retain(mut self, keep: T => bool) where T: Hash {
+    pub fun retain(mut self, keep: T => bool) where T: Hash {
         var dead: List[T] = []
         for x in self {
             if not keep(x) { dead.push(x) }
@@ -86,7 +86,7 @@ pub warp Set[T] {
         }
     }
     /// Adds each item.
-    pub fn extend(mut self, take items: Stream[T]) where T: Hash {
+    pub fun extend(mut self, take items: Stream[T]) where T: Hash {
         for x in items {
             self.insert(x)
         }
@@ -95,7 +95,7 @@ pub warp Set[T] {
 
 weave[T: Hash] FromStream into Set[T] {
     type Item = T
-    fn from_stream(take items: Stream[T]) -> Set[T] {
+    fun from_stream(take items: Stream[T]) -> Set[T] {
         var out: Set[T] = Set()
         out.extend(items)
         out

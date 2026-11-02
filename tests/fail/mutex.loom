@@ -2,7 +2,7 @@
 
 use std.sync.Mutex
 
-fn main() {
+fun main() {
     let a = Mutex[i32](1)
     a.lock() += 1
     let b = Mutex[i32]()                     //~ T0104

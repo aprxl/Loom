@@ -5,16 +5,16 @@
 use std.io.print
 use std.sync.sched_yield
 
-fn square(n: i32) -> i32 = n * n
+fun square(n: i32) -> i32 = n * n
 
-fn worker(name: str, n: i32) {
+fun worker(name: str, n: i32) {
     for i in 0..n {
         print("{name} {i}")
         sched_yield()
     }
 }
 
-fn main() {
+fun main() {
     // Results come back through `join`, in whatever order.
     let total = loom {
         let a = thread square(3)

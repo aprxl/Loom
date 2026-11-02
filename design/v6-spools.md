@@ -72,7 +72,7 @@ Types don't say that two pointers share a spool, so the pass enforces it:
 
 - *Arguments meet the signature's names.* An argument whose parameter type
   names `@x` must be rooted in the spool passed or implied for `x`. (Else
-  `fn left(e: ^Expr@sp) -> ^Expr@sp given sp` called with `given: small`
+  `fun left(e: ^Expr@sp) -> ^Expr@sp given sp` called with `given: small`
   on a `raw` tree returns something rooted in `raw` and typed as `small`'s.)
 - *Stores stay in one region.* Storing a value rooted in `Y` into a place
   rooted in `X` is an error unless `X` is `Y`, or the value is heap or static
@@ -84,7 +84,7 @@ Types don't say that two pointers share a spool, so the pass enforces it:
 `Any` is for read parameters only and is never `Copy` or droppable; the free
 coercion `Heap | Spool -> Any` applies to read-parameter arguments. An
 omitted region on a `mut` parameter is a real region parameter inferred from
-the argument (else `p = ^Node(..)` in `fn f(mut p: ^Node)` would write a
+the argument (else `p = ^Node(..)` in `fun f(mut p: ^Node)` would write a
 heap pointer into an arena slot).
 
 Moves: a move out of a pointer's target (path element `^`) is allowed when

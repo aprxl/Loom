@@ -3,9 +3,9 @@ use std.io.print
 
 const SIZE = 400
 
-fn a(i: usize, j: usize) -> f64 = 1.0 / (((i + j) * (i + j + 1) / 2 + i + 1) as f64)
+fun a(i: usize, j: usize) -> f64 = 1.0 / (((i + j) * (i + j + 1) / 2 + i + 1) as f64)
 
-fn times(v: [f64], mut out: List[f64]) {
+fun times(v: [f64], mut out: List[f64]) {
     let n = v.len()
     for i in 0..n {
         var sum = 0.0
@@ -14,7 +14,7 @@ fn times(v: [f64], mut out: List[f64]) {
     }
 }
 
-fn times_transposed(v: [f64], mut out: List[f64]) {
+fun times_transposed(v: [f64], mut out: List[f64]) {
     let n = v.len()
     for i in 0..n {
         var sum = 0.0
@@ -23,12 +23,12 @@ fn times_transposed(v: [f64], mut out: List[f64]) {
     }
 }
 
-fn times_both(v: [f64], mut out: List[f64], mut tmp: List[f64]) {
+fun times_both(v: [f64], mut out: List[f64], mut tmp: List[f64]) {
     times(v, mut tmp)
     times_transposed(tmp, mut out)
 }
 
-fn main() {
+fun main() {
     var u = List.filled(1.0, SIZE)
     var v = List.filled(0.0, SIZE)
     var tmp = List.filled(0.0, SIZE)

@@ -3,7 +3,7 @@
 
 use std.io.print
 
-fn count(words: [str]) -> Map[String, u32] {
+fun count(words: [str]) -> Map[String, u32] {
     var counts = Map[String, u32]()
     for w in words {
         counts.entry(w.to_string(), default: 0) += 1
@@ -11,7 +11,7 @@ fn count(words: [str]) -> Map[String, u32] {
     counts
 }
 
-fn main() {
+fun main() {
     let text = ["red", "green", "blue", "red", "blue", "red", "teal", "green", "red"]
     var total = Map[String, u32]()
     loom {

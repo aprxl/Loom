@@ -5,7 +5,7 @@ summary: Running a program, the `loom` commands, and the shape of a first progra
 
 @sample start_hello
 
-`print` isn't in the prelude, so the file says where it comes from with `use std.io.print`. `std` itself is always in scope, so `std.io.print("hi")` works without a `use`. Every program starts at `fn main()`.
+`print` isn't in the prelude, so the file says where it comes from with `use std.io.print`. `std` itself is always in scope, so `std.io.print("hi")` works without a `use`. Every program starts at `fun main()`.
 
 A bigger one:
 
@@ -13,7 +13,7 @@ A bigger one:
 
 - `let` is immutable and `var` is mutable. Shadowing is allowed.
 - The last expression of a block is its value, so `a + b` needs no `return`.
-- `fn f(...) -> T = expr` is a function with an expression body.
+- `fun f(...) -> T = expr` is a function with an expression body.
 - Arguments can be named, and a parameter can have a default.
 - A string with `{expr}` in it is a template. `{expr:spec}` adds a format spec: `.3` for three decimals, `>5` to right-align in five columns, `04X` for zero-padded upper-case hex, `?` for the debug form.
 - A newline ends a statement. Use `;` to put several on one line.

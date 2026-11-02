@@ -4,7 +4,7 @@
 
 use std.io.print
 
-fn first_long(take words: List[String]) -> String {
+fun first_long(take words: List[String]) -> String {
     var rest = words
     while rest.pop() is some(w) {
         if w.len() > 2 {
@@ -15,7 +15,7 @@ fn first_long(take words: List[String]) -> String {
 }
 
 // Moving out of what `is` bound, in one branch, leaves the other to drop it.
-fn maybe(take xs: List[String], c: bool) -> String {
+fun maybe(take xs: List[String], c: bool) -> String {
     var r = xs
     if r.pop() is some(w) {
         if c {
@@ -25,7 +25,7 @@ fn maybe(take xs: List[String], c: bool) -> String {
     "n".to_string()
 }
 
-fn main() {
+fun main() {
     var n = 0
     while "ab".to_string().len() + n < 4 {
         n += 1

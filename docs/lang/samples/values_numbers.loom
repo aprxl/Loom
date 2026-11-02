@@ -1,6 +1,6 @@
 use std.io.print
 
-fn main() {
+fun main() {
     // Integers have any width up to 64 bits: `u12` and `i24` are ordinary types.
     let a: u12 = 4095
     print("{a +% 1} {a +| 1} {a +? 1:?}")      // wrap, saturate, checked

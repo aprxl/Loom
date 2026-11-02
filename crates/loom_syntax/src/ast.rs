@@ -202,9 +202,9 @@ pub struct WeaveDecl {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FnQualifier {
     None,
-    /// `const fn`: compile-time only.
+    /// `const fun`: compile-time only.
     Const,
-    /// `unsafe fn`: callers must be inside `unsafe`.
+    /// `unsafe fun`: callers must be inside `unsafe`.
     Unsafe,
     /// `test name() { … }`: run by `loom test`, left out of every other build.
     Test,
@@ -286,7 +286,7 @@ pub enum FnBody {
     Expr(Expr),
 }
 
-/// `extern "C" { fn … }`.
+/// `extern "C" { fun … }`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExternBlock {
     pub abi: String,

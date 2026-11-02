@@ -1,6 +1,6 @@
 use std.io.print
 
-fn word(o: Ordering) -> str {
+fun word(o: Ordering) -> str {
     match o {
         .Less => "less"
         .Equal => "equal"
@@ -8,7 +8,7 @@ fn word(o: Ordering) -> str {
     }
 }
 
-fn main() {
+fun main() {
     let one: f64 = 1.0
     print(one.to_bits())
     let neg_zero: f64 = -0.0

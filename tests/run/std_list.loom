@@ -1,6 +1,6 @@
 use std.io.print
-fn show(xs: [String]) -> String = xs.join(",")
-fn main() {
+fun show(xs: [String]) -> String = xs.join(",")
+fun main() {
     var xs: List[i32] = [1, 1, 2, 3, 3, 3, 4, 5, 6]
     xs.dedup()
     print(xs.join(","))

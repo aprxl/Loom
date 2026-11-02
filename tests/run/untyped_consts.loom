@@ -13,7 +13,7 @@ const QUARTER = TAU / 4
 
 type Percent = u8 where 0..=100
 
-fn main() {
+fun main() {
     let x: f32 = TAU
     let y: f64 = TEN
     let z: u8 = TWENTY

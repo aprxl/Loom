@@ -4,16 +4,16 @@
 use std.io.print
 use std.sync.sched_yield
 
-fn slow(n: i32) -> i32 {
+fun slow(n: i32) -> i32 {
     sched_yield()
     n
 }
 
-fn build(tag: str, a: i32, b: i32) -> String {
+fun build(tag: str, a: i32, b: i32) -> String {
     "{tag}:a{slow(a)}b{slow(b)}c"
 }
 
-fn main() {
+fun main() {
     shows()
     loom {
         let x = thread build("x", 1, 2)
@@ -38,14 +38,14 @@ fn main() {
 warp Napper { n: i32 }
 
 weave Show into Napper {
-    fn show(self, mut f: Fmt) {
+    fun show(self, mut f: Fmt) {
         f.put("nap ")
         sched_yield()
         f.put(self.n)
     }
 }
 
-fn shows() {
+fun shows() {
     loom {
         let a = thread "{Napper(1)}!".len()
         let b = thread "[{Napper(22)}]".len()

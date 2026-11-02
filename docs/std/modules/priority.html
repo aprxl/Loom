@@ -65,63 +65,63 @@
 <div class="members">
 <div class="member" id="PriorityQueue.new">
 <div class="member-head">
-<span class="sig">fn new() -&gt; PriorityQueue[T]</span>
+<span class="sig">fun new() -&gt; PriorityQueue[T]</span>
 
 </div>
 <p class="member-doc">An empty queue.</p>
 </div>
 <div class="member" id="PriorityQueue.from_list">
 <div class="member-head">
-<span class="sig">fn from_list(take items: List[T]) -&gt; PriorityQueue[T]</span>
+<span class="sig">fun from_list(take items: List[T]) -&gt; PriorityQueue[T]</span>
 
 </div>
 <p class="member-doc">A queue of <code>items</code>, made in <code>O(n)</code>.</p>
 </div>
 <div class="member" id="PriorityQueue.len">
 <div class="member-head">
-<span class="sig">fn len(self) -&gt; usize</span>
+<span class="sig">fun len(self) -&gt; usize</span>
 
 </div>
 <p class="member-doc">How many items there are.</p>
 </div>
 <div class="member" id="PriorityQueue.is_empty">
 <div class="member-head">
-<span class="sig">fn is_empty(self) -&gt; bool</span>
+<span class="sig">fun is_empty(self) -&gt; bool</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="PriorityQueue.peek">
 <div class="member-head">
-<span class="sig">fn peek(self) -&gt; ?T</span>
+<span class="sig">fun peek(self) -&gt; ?T</span>
 
 </div>
 <p class="member-doc">A copy of the largest item.</p>
 </div>
 <div class="member" id="PriorityQueue.push">
 <div class="member-head">
-<span class="sig">fn push(mut self, take x: T)</span>
+<span class="sig">fun push(mut self, take x: T)</span>
 
 </div>
 <p class="member-doc">Adds <code>x</code>.</p>
 </div>
 <div class="member" id="PriorityQueue.pop">
 <div class="member-head">
-<span class="sig">fn pop(mut self) -&gt; ?T</span>
+<span class="sig">fun pop(mut self) -&gt; ?T</span>
 
 </div>
 <p class="member-doc">Takes off the largest item.</p>
 </div>
 <div class="member" id="PriorityQueue.clear">
 <div class="member-head">
-<span class="sig">fn clear(mut self)</span>
+<span class="sig">fun clear(mut self)</span>
 
 </div>
 <p class="member-doc">Removes every item.</p>
 </div>
 <div class="member" id="PriorityQueue.into_sorted">
 <div class="member-head">
-<span class="sig">fn into_sorted(take self) -&gt; List[T]</span>
+<span class="sig">fun into_sorted(take self) -&gt; List[T]</span>
 
 </div>
 <p class="member-doc">The items from the largest to the smallest, in a new list; this queue is used up.</p>

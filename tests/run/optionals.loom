@@ -2,14 +2,14 @@
 
 use std.io.print
 
-fn half(n: i32) -> ?i32 = if n % 2 == 0 { n / 2 } else { none }
+fun half(n: i32) -> ?i32 = if n % 2 == 0 { n / 2 } else { none }
 
-fn quarter(n: i32) -> ?i32 {
+fun quarter(n: i32) -> ?i32 {
     let h = half(n)?                     // no `mend` around it: returns `none`
     half(h)
 }
 
-fn describe(x: ?i32) -> String = match x {
+fun describe(x: ?i32) -> String = match x {
     some(0) => "zero"
     some(n) if n < 0 => "negative {n}"
     some(n) => "{n}"
@@ -18,13 +18,13 @@ fn describe(x: ?i32) -> String = match x {
 
 warp Point: Show { x: i32, y: i32 }
 
-fn find(points: (Point, Point), x: i32) -> ?Point {
+fun find(points: (Point, Point), x: i32) -> ?Point {
     if points.0.x == x { return points.0 }
     if points.1.x == x { return points.1 }
     none
 }
 
-fn main() {
+fun main() {
     print(half(10))
     print(half(7))
     print("{quarter(12)} {quarter(6)} {quarter(5)}")

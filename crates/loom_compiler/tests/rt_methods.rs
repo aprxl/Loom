@@ -12,7 +12,7 @@ use mlua::{Table, Value};
 #[test]
 fn every_runtime_method_is_implemented() {
     let mut db = SourceDb::new();
-    let root = db.add("test.loom", "fn main() {}");
+    let root = db.add("test.loom", "fun main() {}");
     let resolved = resolve(&mut db, root, &MemoryLoader::default());
     let p = &resolved.program;
     let vm = Vm::new().expect("vm");

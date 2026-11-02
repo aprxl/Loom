@@ -8,15 +8,15 @@
 // already checked).
 use std.io.print
 
-fn scale(mut xs: List[f64], i: usize, a: f64, b: f64) {
+fun scale(mut xs: List[f64], i: usize, a: f64, b: f64) {
     xs[i] = a * b
 }
 
-fn bump(mut xs: List[i64], i: usize) {
+fun bump(mut xs: List[i64], i: usize) {
     xs[i] += 1
 }
 
-fn main() {
+fun main() {
     var xs: List[f64] = [1.0, 2.0]
     scale(mut xs, 1, 3.0, 4.0)
     var ys: List[i64] = [1, 2]

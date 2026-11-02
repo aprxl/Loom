@@ -1,7 +1,7 @@
 use std.fs
 use std.io.print
 
-fn main() ! any Error {
+fun main() ! any Error {
     let path = "std_fs_probe.txt"
     print(fs.exists(path))
     fs.write_text(path, "one\n")?

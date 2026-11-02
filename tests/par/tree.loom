@@ -3,7 +3,7 @@
 use std.io.print
 use std.sync.Atomic
 
-fn grow(depth: i32, leaves: Atomic[u64]) {
+fun grow(depth: i32, leaves: Atomic[u64]) {
     if depth == 0 {
         leaves.add(1)
         return
@@ -15,7 +15,7 @@ fn grow(depth: i32, leaves: Atomic[u64]) {
     }
 }
 
-fn main() {
+fun main() {
     let leaves = Atomic[u64](0)
     grow(8, leaves)
     print("leaves {leaves.load()}")

@@ -5,11 +5,11 @@ warp Particle {
     x: i32
 }
 
-fn dangling() -> ^Particle {
+fun dangling() -> ^Particle {
     spool tmp = SharedArena(1.kib())
     tmp.put(Particle(1))                 //~ R0101
 }
 
-fn main() {
+fun main() {
     dangling()
 }

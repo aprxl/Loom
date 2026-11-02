@@ -4,55 +4,55 @@
 /// Where `print` writes: standard output, unless a `given` says otherwise
 /// (`given out = Buffer()` keeps what is printed).
 pub weft Writer {
-    fn write_str(mut self, s: str)
+    fun write_str(mut self, s: str)
 }
 
 /// Standard output.
 pub warp Stdout: Writer, Default {
-    pub fn write_str(mut self, s: str) = write_out(s)
+    pub fun write_str(mut self, s: str) = write_out(s)
 }
 
 /// Keeps what is written to it, in `text`.
 pub warp Buffer: Writer, Default {
     pub text: String = ""
-    pub fn write_str(mut self, s: str) = .text.push_str(s)
+    pub fun write_str(mut self, s: str) = .text.push_str(s)
 }
 
 extern "host" {
     /// Writes `x` and a newline to standard output.
-    pub fn print(x: any Show) given out: Writer
+    pub fun print(x: any Show) given out: Writer
     /// Standard output, as is: no newline.
-    pub fn write_out(text: str)
+    pub fun write_out(text: str)
     /// Standard error, as is: no newline.
-    pub fn write_err(text: str)
+    pub fun write_err(text: str)
     /// The next line of standard input, without its line ending; `none`
     /// once the input has ended.
-    pub fn read_line() -> ?String
+    pub fun read_line() -> ?String
     /// Everything left on standard input.
-    pub fn read_all() -> String
+    pub fun read_all() -> String
 }
 
 /// Writes `x` to standard output, with no newline after it.
-pub fn write(x: any Show) {
+pub fun write(x: any Show) {
     write_out("{x}")
 }
 
 /// Writes `x` and a newline to standard error.
-pub fn eprint(x: any Show) {
+pub fun eprint(x: any Show) {
     write_err("{x}\n")
 }
 
 /// Writes `x` to standard error, with no newline after it.
-pub fn ewrite(x: any Show) {
+pub fun ewrite(x: any Show) {
     write_err("{x}")
 }
 
 /// The lines of standard input, one at a time, as they are read.
-pub fn lines() -> Stream[String] = StdinLines()
+pub fun lines() -> Stream[String] = StdinLines()
 
 /// The lines of standard input.
 warp StdinLines: Iter {
     type Item = String
 
-    fn next(mut self) -> ?String = read_line()
+    fun next(mut self) -> ?String = read_line()
 }

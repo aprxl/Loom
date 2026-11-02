@@ -7,7 +7,7 @@ warp Cell {
     n: i32
 }
 
-fn main() {
+fun main() {
     spool shared = SharedArena(1024)
     let first = shared.put(Cell(10))
     loom {

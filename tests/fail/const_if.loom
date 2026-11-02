@@ -1,10 +1,10 @@
 // `const if` and `const for` are decided while compiling, from what the
 // constant folder can work out.
 
-fn is_even(n: i32) -> bool = n % 2 == 0
-fn take_it(take s: String) {}
+fun is_even(n: i32) -> bool = n % 2 == 0
+fun take_it(take s: String) {}
 
-fn main() {
+fun main() {
     var n = 3
     const if n > 2 { }                                   //~ K0105
     const for i in 0..n { }                              //~ K0105

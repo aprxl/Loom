@@ -4,9 +4,9 @@
 use std.io.print
 
 weft Widget {
-    fn size(self) -> (u16, u16)
-    fn name(self) -> str = "widget"
-    fn area(self) -> u32 {
+    fun size(self) -> (u16, u16)
+    fun name(self) -> str = "widget"
+    fun area(self) -> u32 {
         let (w, h) = .size()
         w as u32 * h as u32
     }
@@ -17,11 +17,11 @@ warp Frame: Widget {
     pub h: u16 = 3
     clicks: u32 = 0
 
-    fn size(self) -> (u16, u16) = (.w, .h)
-    fn name(self) -> str = "frame"
-    pub fn grow(mut self, by: u16) { .w += by }
-    pub fn click(mut self) { .clicks += 1 }
-    pub fn click_count(self) -> u32 = .clicks
+    fun size(self) -> (u16, u16) = (.w, .h)
+    fun name(self) -> str = "frame"
+    pub fun grow(mut self, by: u16) { .w += by }
+    pub fun click(mut self) { .clicks += 1 }
+    pub fun click_count(self) -> u32 = .clicks
 }
 
 warp Button: Widget {
@@ -29,8 +29,8 @@ warp Button: Widget {
     label: String
 
     // Only `name` is overridden: `size` comes from the frame.
-    fn name(self) -> str = "button"
-    pub fn describe(self) -> String = "{.name()} '{.label}' {.size().0}x{.size().1}"
+    fun name(self) -> str = "button"
+    pub fun describe(self) -> String = "{.name()} '{.label}' {.size().0}x{.size().1}"
 }
 
 // Forwarding follows `through` fields all the way down.
@@ -39,7 +39,7 @@ warp Toolbar {
     pub count: u8 = 1
 }
 
-fn main() {
+fun main() {
     var b = Button(frame: Frame(w: 10), label: "OK")
     print(b.size())                          // forwarded to b.frame
     print(b.name())                          // Button's own

@@ -33,7 +33,7 @@ def matching_paren(s, start):
 
 
 def cut_body(sig):
-    """`fn f(a: T = 1) -> U = expr` and `fn f() {` -> `fn f(a: T = 1) -> U`."""
+    """`fun f(a: T = 1) -> U = expr` and `fun f() {` -> `fun f(a: T = 1) -> U`."""
     open_paren = sig.find("(")
     rest_from = matching_paren(sig, open_paren) + 1 if open_paren >= 0 else 0
     tail = sig[rest_from:]
@@ -143,7 +143,7 @@ def parse_module(path):
             elif ctx == "top" and s == 'extern "host" {':
                 stack.append(("extern", None))
                 handled = True
-            elif m := re.match(r"(pub )?(?:const fn|fn) (\w+)(.*)$", s):
+            elif m := re.match(r"(pub )?(?:const fun|fun) (\w+)(.*)$", s):
                 head = cut_body(m.group(2) + m.group(3))[len(m.group(2)):]
                 items.append(Item("fn", m.group(2), head, text, None, builtin, ctx == "extern", bool(m.group(1))))
                 track_braces(s, "other")
@@ -156,8 +156,8 @@ def parse_module(path):
                 handled = True
         elif ctx == "type":
             it = stack[-1][1]
-            if m := re.match(r"(pub )?fn (\w+)(.*)$", s):
-                head = cut_body("fn " + m.group(2) + m.group(3))
+            if m := re.match(r"(pub )?fun (\w+)(.*)$", s):
+                head = cut_body("fun " + m.group(2) + m.group(3))
                 it.members.append(Item("fn", m.group(2), head, text, None, builtin, False, bool(m.group(1))))
                 track_braces(s, "other")
                 handled = True
@@ -273,7 +273,7 @@ def audit(modules):
                 continue
 
             def Q(msg, f=f):
-                P(f"fn {f['name']}: {msg}")
+                P(f"fun {f['name']}: {msg}")
 
             if norm(f["suffix"]) != s.head:
                 Q(f"signature {norm(f['suffix'])!r} vs {s.head!r}")

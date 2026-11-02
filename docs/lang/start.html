@@ -44,24 +44,24 @@
 <div class="sample-head"><span class="file">samples/start_hello.loom</span><span class="tag ok">runs</span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     print(<span class="s">"hello, loom"</span>)
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>hello, loom</code></pre></div>
 </div>
-<p><code>print</code> isn't in the prelude, so the file says where it comes from with <code>use std.io.print</code>. <code>std</code> itself is always in scope, so <code>std.io.print("hi")</code> works without a <code>use</code>. Every program starts at <code>fn main()</code>.</p>
+<p><code>print</code> isn't in the prelude, so the file says where it comes from with <code>use std.io.print</code>. <code>std</code> itself is always in scope, so <code>std.io.print("hi")</code> works without a <code>use</code>. Every program starts at <code>fun main()</code>.</p>
 <p>A bigger one:</p>
 <div class="sample" id="sample-start_basics">
 <div class="sample-head"><span class="file">samples/start_basics.loom</span><span class="tag ok">runs</span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fn</span> add(a: i32, b: i32) -&gt; i32 {
+<span class="k">fun</span> add(a: i32, b: i32) -&gt; i32 {
     a + b                                    <span class="c">// the last expression is the result</span>
 }
 
-<span class="k">fn</span> area(w: f64, h: f64 = <span class="n">1.0</span>) -&gt; f64 = w * h  <span class="c">// expression body, default argument</span>
+<span class="k">fun</span> area(w: f64, h: f64 = <span class="n">1.0</span>) -&gt; f64 = w * h  <span class="c">// expression body, default argument</span>
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">let</span> x = <span class="n">5</span>                                <span class="c">// immutable</span>
     <span class="k">var</span> count = <span class="n">0</span>                            <span class="c">// mutable</span>
     count += add(x, <span class="n">2</span>)
@@ -85,7 +85,7 @@ pi = 3.142, [    7], 00FF, "hi"
 4
 positive</code></pre></div>
 </div>
-<ul><li><code>let</code> is immutable and <code>var</code> is mutable. Shadowing is allowed.</li><li>The last expression of a block is its value, so <code>a + b</code> needs no <code>return</code>.</li><li><code>fn f(...) -&gt; T = expr</code> is a function with an expression body.</li><li>Arguments can be named, and a parameter can have a default.</li><li>A string with <code>{expr}</code> in it is a template. <code>{expr:spec}</code> adds a format spec: <code>.3</code> for three decimals, <code>&gt;5</code> to right-align in five columns, <code>04X</code> for zero-padded upper-case hex, <code>?</code> for the debug form.</li><li>A newline ends a statement. Use <code>;</code> to put several on one line.</li><li>Comments are <code>// line</code>, <code>/* block, and /* they nest */ */</code>, and <code>/// doc</code>.</li></ul>
+<ul><li><code>let</code> is immutable and <code>var</code> is mutable. Shadowing is allowed.</li><li>The last expression of a block is its value, so <code>a + b</code> needs no <code>return</code>.</li><li><code>fun f(...) -&gt; T = expr</code> is a function with an expression body.</li><li>Arguments can be named, and a parameter can have a default.</li><li>A string with <code>{expr}</code> in it is a template. <code>{expr:spec}</code> adds a format spec: <code>.3</code> for three decimals, <code>&gt;5</code> to right-align in five columns, <code>04X</code> for zero-padded upper-case hex, <code>?</code> for the debug form.</li><li>A newline ends a statement. Use <code>;</code> to put several on one line.</li><li>Comments are <code>// line</code>, <code>/* block, and /* they nest */ */</code>, and <code>/// doc</code>.</li></ul>
 <h2 id="names-have-a-case">Names have a case</h2>
 <p>The compiler enforces the case of a name, which lets the parser tell <code>Foo[x]</code> (type arguments) from <code>foo[x]</code> (an index).</p>
 <table class="plain"><thead><tr><th>Kind</th><th>Case</th><th>Example</th></tr></thead><tbody><tr><td>values, functions, fields, modules</td><td><code>snake_case</code></td><td><code>port_count</code></td></tr><tr><td>types, wefts, cases</td><td><code>PascalCase</code></td><td><code>Button</code></td></tr><tr><td>constants</td><td><code>SCREAMING_CASE</code>, two or more characters</td><td><code>MAX_SIZE</code></td></tr></tbody></table>

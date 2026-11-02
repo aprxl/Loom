@@ -4,12 +4,12 @@
 // (p1_mut_on_unwind.vm.out is Treadle's.)
 use std.io.print
 
-fn bump(mut n: i32) {
+fun bump(mut n: i32) {
     n = 99
     unravel("stop")
 }
 
-fn main() {
+fun main() {
     var n = 1
     defer print("n is {n}")
     bump(mut n)

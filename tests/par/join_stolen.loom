@@ -4,7 +4,7 @@
 
 use std.io.print
 
-fn work(n: u64) -> u64 {
+fun work(n: u64) -> u64 {
     var x = n
     for i in 0..n {
         x = (x ~ i).rotate_left(5) +% 0x9e3779b97f4a7c15
@@ -12,7 +12,7 @@ fn work(n: u64) -> u64 {
     x % 1000
 }
 
-fn main() {
+fun main() {
     var total: u64 = 0
     loom {
         let hs = (0..16).map(i => thread work(100000 + (i as u64) * 1000)).collect()

@@ -7,7 +7,7 @@ use std.io.print
 /// time. `const if` and `const for` unroll while compiling, so each warp gets
 /// straight-line code with no runtime reflection left in the binary.
 pub weft ToJson {
-    fn to_json(self, mut out: String) {
+    fun to_json(self, mut out: String) {
         const if Self.kind == .Record {
             out.push('{')
             const for (i, f) in Self.fields.indexed() {
@@ -42,16 +42,16 @@ pub weft ToJson {
 
 // Leaves are woven by hand. These are ordinary weaves.
 weave[T: Integer] ToJson into T {
-    fn to_json(self, mut out: String) = out.push_str("{self}")
+    fun to_json(self, mut out: String) = out.push_str("{self}")
 }
 weave ToJson into bool {
-    fn to_json(self, mut out: String) = out.push_str(if self { "true" } else { "false" })
+    fun to_json(self, mut out: String) = out.push_str(if self { "true" } else { "false" })
 }
 weave ToJson into String {
-    fn to_json(self, mut out: String) = out.push_json_str(self)
+    fun to_json(self, mut out: String) = out.push_json_str(self)
 }
 weave[T: ToJson] ToJson into List[T] {
-    fn to_json(self, mut out: String) {
+    fun to_json(self, mut out: String) {
         out.push('[')
         for (i, x) in self.indexed() {
             if i > 0 { out.push(',') }
@@ -61,7 +61,7 @@ weave[T: ToJson] ToJson into List[T] {
     }
 }
 weave[T: ToJson] ToJson into ?T {
-    fn to_json(self, mut out: String) = match self {
+    fun to_json(self, mut out: String) = match self {
         some(x) => x.to_json(mut out)
         none => out.push_str("null")
     }
@@ -69,7 +69,7 @@ weave[T: ToJson] ToJson into ?T {
 
 // Two helpers as free functions. UFCS turns them into String methods
 // without touching String.
-fn push_json_str(mut out: String, s: str) {
+fun push_json_str(mut out: String, s: str) {
     out.push('"')
     for c in s.chars() {
         match c {
@@ -83,7 +83,7 @@ fn push_json_str(mut out: String, s: str) {
     out.push('"')
 }
 
-fn push_json_key(mut out: String, key: str) {
+fun push_json_key(mut out: String, key: str) {
     out.push_json_str(key)
     out.push(':')
 }
@@ -102,7 +102,7 @@ warp User: ToJson {
     email: ?String
 }
 
-fn main() {
+fun main() {
     let ada = User(name: "Ada", age: 36, roles: [.Member(since: 1843), .Admin], email: none)
     var json = String()
     ada.to_json(mut json)

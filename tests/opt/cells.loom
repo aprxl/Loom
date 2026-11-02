@@ -6,7 +6,7 @@
 // says by storing it where the loop exits.
 use std.io.print
 
-fn main() {
+fun main() {
     var xs: List[i32] = List()
     for i in 0..7 { xs.push(i as i32) }
     print("{xs[3]}")

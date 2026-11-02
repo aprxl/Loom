@@ -5,7 +5,7 @@
 use std.io.print
 use std.sync.Atomic
 
-fn main() {
+fun main() {
     let small = Atomic[u8](250)
     defer print("small is {small.load()}")
     let n = Atomic[i64](10)

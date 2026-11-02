@@ -4,7 +4,7 @@
 
 use std.io.print
 
-fn main() {
+fun main() {
     var total: u64 = 0
     for round in 0..200 {
         total += loom {

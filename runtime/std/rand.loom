@@ -12,7 +12,7 @@ pub warp Rng {
     s3: u64
 
     /// A generator that always produces the same sequence for `seed`.
-    pub fn seeded(seed: u64) -> Rng {
+    pub fun seeded(seed: u64) -> Rng {
         // splitmix64 spreads the seed over the four words of state, so
         // nearby seeds give unrelated sequences (and none is all zeros).
         var x = seed
@@ -29,13 +29,13 @@ pub warp Rng {
 
     /// A generator seeded from the clock and the process, so each run gets
     /// its own numbers. Not for secrets.
-    pub fn from_entropy() -> Rng {
+    pub fun from_entropy() -> Rng {
         let mix = time.unix_nanos() ~ ((process.id() as u64) << 32) ~ time.monotonic_nanos()
         Rng.seeded(mix)
     }
 
     /// The next 64 random bits.
-    pub fn next_u64(mut self) -> u64 {
+    pub fun next_u64(mut self) -> u64 {
         let result = (.s1 *% 5).rotate_left(7) *% 9
         let t = .s1 << 17
         .s2 ~= .s0
@@ -48,11 +48,11 @@ pub warp Rng {
     }
 
     /// A random byte: the top 8 bits of `next_u64`.
-    pub fn byte(mut self) -> u8 = (.next_u64() >> 56) as u8
+    pub fun byte(mut self) -> u8 = (.next_u64() >> 56) as u8
 
     /// A number from `0` up to but not including `n`, every one equally
     /// likely. Unravels if `n` is 0.
-    pub fn below(mut self, n: u64) -> u64 {
+    pub fun below(mut self, n: u64) -> u64 {
         assert(n > 0, "below: n is 0")
         // Redraws the few values below 2^64 mod n, which would make small
         // results likelier.
@@ -65,7 +65,7 @@ pub warp Rng {
     }
 
     /// A number from `lo` to `hi`, both included. Unravels if `hi < lo`.
-    pub fn between(mut self, lo: i64, hi: i64) -> i64 {
+    pub fun between(mut self, lo: i64, hi: i64) -> i64 {
         assert(lo <= hi, "between: hi is less than lo")
         let span = (hi as% u64) -% (lo as% u64)
         if span == 0xFFFF_FFFF_FFFF_FFFF { return .next_u64() as% i64 }
@@ -73,13 +73,13 @@ pub warp Rng {
     }
 
     /// A number from 0 up to but not including 1, with 53 random bits.
-    pub fn float(mut self) -> f64 = (.next_u64() >> 11) as f64 * (1.0 / 9007199254740992.0)
+    pub fun float(mut self) -> f64 = (.next_u64() >> 11) as f64 * (1.0 / 9007199254740992.0)
 
     /// `true` with probability `p`.
-    pub fn chance(mut self, p: f64) -> bool = .float() < p
+    pub fun chance(mut self, p: f64) -> bool = .float() < p
 
     /// Puts the items in a random order.
-    pub fn shuffle[T](mut self, mut xs: [T]) {
+    pub fun shuffle[T](mut self, mut xs: [T]) {
         var i = xs.len()
         while i > 1 {
             let j = .below(i as u64) as usize
@@ -89,13 +89,13 @@ pub warp Rng {
     }
 
     /// A copy of a random item, if there are any.
-    pub fn choose[T](mut self, xs: [T]) -> ?T {
+    pub fun choose[T](mut self, xs: [T]) -> ?T {
         if xs.is_empty() { return none }
         xs.get(.below(xs.len() as u64) as usize)
     }
 
     /// Fills `buf` with random bytes.
-    pub fn fill(mut self, mut buf: [u8]) {
+    pub fun fill(mut self, mut buf: [u8]) {
         for i in 0..buf.len() {
             buf[i] = .byte()
         }
@@ -104,7 +104,7 @@ pub warp Rng {
     /// A generator at the current state, which this one then leaves 2^128
     /// steps behind: each call gives a stream that overlaps no other, so
     /// every thread can have its own.
-    pub fn jump(mut self) -> Rng {
+    pub fun jump(mut self) -> Rng {
         let child = Rng(s0: .s0, s1: .s1, s2: .s2, s3: .s3)
         var t0 = 0u64
         var t1 = 0u64

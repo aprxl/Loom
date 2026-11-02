@@ -154,7 +154,7 @@ language through every layer (type checking, lowering to Lua, the runtime,
 18. compile-time code in a sandbox: constants computed by ordinary code,
     `const` expressions, `const assert` anywhere (K0101–K0108), byte
     strings.
-19. `const` parameters: `fn zeros(const n: usize) -> [f32; n]`,
+19. `const` parameters: `fun zeros(const n: usize) -> [f32; n]`,
     `warp Ring[T, const N: usize]`, value generic arguments, `const assert`
     per instance, `uint(n)`/`int(n)`, types inside warps, and `?T.take()`.
     `examples/compile_time.loom` compiles but for `const if`.

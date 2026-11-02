@@ -1,4 +1,4 @@
-fn main() {
+fun main() {
     let f = 1.5
     let a = f +% 1.0                    //~ T0103
     let s = "a" + "b"                   //~ T0103

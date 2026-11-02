@@ -4,7 +4,7 @@
 
 use std.io.print
 
-fn main() {
+fun main() {
     var m: Map[u32, String] = Map()
     for i in 0..20u32 { m[i] = "v{i}" }
     // The front, the middle and the end.

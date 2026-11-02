@@ -249,7 +249,7 @@ impl Resolver<'_> {
             Diagnostic::error(codes::S0213, format!("`{}` has no body", f.name.name))
                 .primary(f.name.span, "a body goes after the signature")
                 .help(
-                    "write it as `fn f() { … }` or `fn f() = …`; only wefts and `extern` blocks list signatures alone",
+                    "write it as `fun f() { … }` or `fun f() = …`; only wefts and `extern` blocks list signatures alone",
                 ),
         );
     }
@@ -276,7 +276,7 @@ impl Resolver<'_> {
         let generics = self.lower_generics(def, &f.generics);
 
         // Parameters are bound one by one, so a type can use an earlier
-        // `const` parameter: `fn zeros(const n: usize) -> [f32; n]`.
+        // `const` parameter: `fun zeros(const n: usize) -> [f32; n]`.
         self.push_rib(RibKind::Normal);
         let mut self_local = None;
         let mut params = Vec::with_capacity(f.params.len());
@@ -466,7 +466,7 @@ impl Resolver<'_> {
                 }
                 PathRes::Error => TyKind::Error,
                 _ => {
-                    self.error(codes::N0111, span, "only a `const fn` can be called in a type", "not a `const fn`");
+                    self.error(codes::N0111, span, "only a `const fun` can be called in a type", "not a `const fun`");
                     TyKind::Error
                 }
             },

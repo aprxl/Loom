@@ -5,13 +5,13 @@ use std.io.print
 
 warp Point: Copy, Show { x: i32, y: i32 }
 
-fn bumped(opt: ?Point) -> ?Point {
+fun bumped(opt: ?Point) -> ?Point {
     var q = opt?
     q.x = 100
     some(q)
 }
 
-fn main() {
+fun main() {
     var opt: ?Point = some(Point(x: 1, y: 2))
     print(bumped(opt))
     print(opt)

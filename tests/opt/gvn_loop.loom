@@ -6,8 +6,8 @@
 // still known, so the loop multiplies by `k` itself, with no loads.
 use std.io.print
 
-fn scaled(n: u64, k: u64) -> u64 = (0..n).map(x => x * k).sum()
+fun scaled(n: u64, k: u64) -> u64 = (0..n).map(x => x * k).sum()
 
-fn main() {
+fun main() {
     print(scaled(4, 3))
 }

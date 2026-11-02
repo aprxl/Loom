@@ -5,7 +5,7 @@
 use std.io.print
 use std.mem.{replace, swap, Arena, kib}
 
-fn main() {
+fun main() {
     var a = ^1
     var b = ^2
     swap(mut a, mut b)

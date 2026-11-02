@@ -69,7 +69,7 @@ A `take` pointer that a `match` takes apart hands its parts to the arms by value
 
 A pointer into the heap owns its box and frees it. When many values live and die together (the nodes of a tree, a frame of a game) a **spool** is cheaper: `spool frame = Arena(1.kib())` makes one, `frame.put(v)` moves a value into it, and `^e` allocates in the spool a function is `given`. A pointer into a spool is `Copy` and owns nothing; `frame.reset()` takes every allocation back at once, and the spool ends with its scope.
 
-`^T@s` is a pointer into the spool `s`, and `fn tree() -> ^Node@sp given sp: Spool` is a function that builds in whichever spool the caller gives (`tree(4, given: frame)`), or the heap if the call gives none. A parameter written `^Node` takes a tree from any spool. A warp that holds pointers (`Node`) is `Node@s` for the spool its nodes are in.
+`^T@s` is a pointer into the spool `s`, and `fun tree() -> ^Node@sp given sp: Spool` is a function that builds in whichever spool the caller gives (`tree(4, given: frame)`), or the heap if the call gives none. A parameter written `^Node` takes a tree from any spool. A warp that holds pointers (`Node`) is `Node@s` for the spool its nodes are in.
 
 @sample own_spools
 
@@ -85,7 +85,7 @@ A pointer into a spool is `Copy`, so two copies see the same value: a field behi
 
 ## `given`
 
-A function can say what it needs from its caller with a `given` parameter of a weft: `fn welcome(who: str) given g: Greeter`. It is passed on by the call, not in the argument list: the innermost `given` in scope supplies it, `given name = value` states one from there to the end of the block, and `given: x` gives one to a single call. A weft marked `#given_default(Type)` has one when nothing is in scope (a spool's is the heap), so a program that never says `given` still runs. A function is checked for the type it is given, so an unused `given` costs nothing. Every function spells its own `given`s: a private one doesn't infer them from what it calls yet.
+A function can say what it needs from its caller with a `given` parameter of a weft: `fun welcome(who: str) given g: Greeter`. It is passed on by the call, not in the argument list: the innermost `given` in scope supplies it, `given name = value` states one from there to the end of the block, and `given: x` gives one to a single call. A weft marked `#given_default(Type)` has one when nothing is in scope (a spool's is the heap), so a program that never says `given` still runs. A function is checked for the type it is given, so an unused `given` costs nothing. Every function spells its own `given`s: a private one doesn't infer them from what it calls yet.
 
 @sample own_given
 

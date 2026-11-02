@@ -2,7 +2,7 @@ use std.io.print
 
 warp Point { x: i32, y: i32 }
 
-fn main() {
+fun main() {
     print(Point.fields.len())
     let fields = Point.fields
 }

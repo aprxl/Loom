@@ -136,7 +136,7 @@ impl Checker<'_> {
             }
             (TyKind::Optional(x), TyKind::Optional(y)) | (TyKind::Range(x), TyKind::Range(y)) => self.unify(x, y),
             (TyKind::Array(x, n), TyKind::Array(y, m)) if n == m => self.unify(x, y),
-            // A length still being inferred: `fn sum[const N: usize](xs: [i32; N])`.
+            // A length still being inferred: `fun sum[const N: usize](xs: [i32; N])`.
             (TyKind::Array(x, n), TyKind::ArrayOf(y, m)) | (TyKind::ArrayOf(y, m), TyKind::Array(x, n)) => {
                 let n = self.tcx.intern(TyKind::Value(crate::ty::ConstVal::Int(i128::from(n))));
                 self.unify(x, y) && self.unify(n, m)

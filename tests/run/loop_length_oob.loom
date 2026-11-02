@@ -2,7 +2,7 @@
 // whatever the optimizer knows of the length.
 use std.io.print
 
-fn main() {
+fun main() {
     var xs: List[i32] = List()
     for i in 0..6 { xs.push(i as i32) }
     print("{xs[5]}")

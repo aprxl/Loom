@@ -1,12 +1,12 @@
 // Arrays, lists and slices: literals, `[x; n]`, indexing and assigning,
 // slicing, `for` and `for mut`, and `List()`.
 use std.io.print
-fn total(xs: [i32]) -> i32 {
+fun total(xs: [i32]) -> i32 {
     var t = 0
     for x in xs { t += x }
     t
 }
-fn main() {
+fun main() {
     var a = [1, 2, 3]
     a[1] = 20
     print("{a} {a[0]} {total(a)}")

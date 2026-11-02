@@ -1,6 +1,6 @@
 // The methods of text, characters, integers and floats, and `?T.take()`.
 use std.io.print
-fn main() {
+fun main() {
     let s = "  Hello, World  "
     print("[{s.trim()}] [{s.trim_start()}] [{s.trim_end()}] {s.len()} {s.is_empty()}")
     let t: String = "héllo wörld"

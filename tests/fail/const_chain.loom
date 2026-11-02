@@ -11,15 +11,15 @@ const NEEDS: u8 = BAD + 1
 const AND_THIS: u8 = NEEDS + BAD
 const assert(AND_THIS > 0)
 
-fn uses() -> u8 = const NEEDS
+fun uses() -> u8 = const NEEDS
 
 use std.io.print
 
 // Its own, unrelated failure is still reported.
-fn two() -> i32 = 2
+fun two() -> i32 = 2
 
 const assert(two() + 1 == 4, "arithmetic")       //~ K0101
 
-fn main() {
+fun main() {
     print(uses())
 }

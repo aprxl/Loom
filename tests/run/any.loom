@@ -5,35 +5,35 @@ use std.io.print
 use std.fmt.{Show, Fmt}
 
 weft Shape: Show {
-    fn area(self) -> f64
-    fn name(self) -> str = "shape"
-    fn grow(mut self, by: f64)
+    fun area(self) -> f64
+    fun name(self) -> str = "shape"
+    fun grow(mut self, by: f64)
 }
 
 warp Circle: Shape, Show {
     r: f64
-    fn area(self) -> f64 = 3.0 * .r * .r
-    fn name(self) -> str = "circle"
-    fn grow(mut self, by: f64) { .r += by }
+    fun area(self) -> f64 = 3.0 * .r * .r
+    fun name(self) -> str = "circle"
+    fun grow(mut self, by: f64) { .r += by }
 }
 
 warp Square: Shape, Show {
     side: f64
-    fn area(self) -> f64 = .side * .side
-    fn grow(mut self, by: f64) { .side += by }
+    fun area(self) -> f64 = .side * .side
+    fun grow(mut self, by: f64) { .side += by }
 }
 
-fn describe(s: any Shape) -> String = "{s.name()} of area {s.area()}"
+fun describe(s: any Shape) -> String = "{s.name()} of area {s.area()}"
 
-fn biggest(take a: any Shape, take b: any Shape) -> any Shape = if a.area() >= b.area() { a } else { b }
+fun biggest(take a: any Shape, take b: any Shape) -> any Shape = if a.area() >= b.area() { a } else { b }
 
-fn kind(s: any Shape) -> str = match s {
+fun kind(s: any Shape) -> str = match s {
     c: Circle => if c.r > 1.0 { "big circle" } else { "small circle" }
     sq: Square => if sq.side > 2.0 { "big square" } else { "square" }
     _ => "something else"
 }
 
-fn main() {
+fun main() {
     var s: any Shape = Circle(r: 1.0)
     print(describe(s))
     s.grow(1.0)                                  // `mut self` through `any`

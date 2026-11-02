@@ -48,7 +48,7 @@
 
 <span class="c">// Generics are checked per instance: `largest` is checked once for `i32`</span>
 <span class="c">// and once for `str`. A function nobody calls isn't checked at all.</span>
-<span class="k">fn</span> largest[T: <span class="t">Ord</span> + <span class="t">Copy</span>](xs: [T]) -&gt; ?T {
+<span class="k">fun</span> largest[T: <span class="t">Ord</span> + <span class="t">Copy</span>](xs: [T]) -&gt; ?T {
     <span class="k">var</span> best: ?T = <span class="k">none</span>
     <span class="k">for</span> x <span class="k">in</span> xs {
         <span class="k">if</span> best <span class="k">is</span> <span class="k">some</span>(b) <span class="k">and</span> b &gt;= x { <span class="k">continue</span> }
@@ -61,22 +61,22 @@
     first: A
     second: B
 
-    <span class="k">fn</span> swap(<span class="k">self</span>) -&gt; <span class="t">Pair</span>[B, A] = <span class="t">Pair</span>(.second, .first)
+    <span class="k">fun</span> swap(<span class="k">self</span>) -&gt; <span class="t">Pair</span>[B, A] = <span class="t">Pair</span>(.second, .first)
 }
 
 <span class="c">// A weave can be generic too.</span>
 <span class="k">weft</span> <span class="t">Twice</span> {
-    <span class="k">fn</span> twice(<span class="k">self</span>) -&gt; <span class="t">String</span>
+    <span class="k">fun</span> twice(<span class="k">self</span>) -&gt; <span class="t">String</span>
 }
 
 <span class="k">weave</span>[T: <span class="t">Show</span>] <span class="t">Twice</span> <span class="k">into</span> <span class="t">List</span>[T] {
-    <span class="k">fn</span> twice(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"{</span><span class="k">self</span><span class="s">}{</span><span class="k">self</span><span class="s">}"</span>
+    <span class="k">fun</span> twice(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"{</span><span class="k">self</span><span class="s">}{</span><span class="k">self</span><span class="s">}"</span>
 }
 
 <span class="c">// A weft used as a parameter type is an implicit generic.</span>
-<span class="k">fn</span> show_all(xs: [<span class="t">Show</span>]) -&gt; <span class="t">String</span> = xs.map(x =&gt; <span class="s">"&lt;{</span>x<span class="s">}&gt;"</span>).join(<span class="s">""</span>)
+<span class="k">fun</span> show_all(xs: [<span class="t">Show</span>]) -&gt; <span class="t">String</span> = xs.map(x =&gt; <span class="s">"&lt;{</span>x<span class="s">}&gt;"</span>).join(<span class="s">""</span>)
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     print(largest([<span class="n">3</span>, <span class="n">9</span>, <span class="n">4</span>]))
     print(largest([<span class="s">"pear"</span>, <span class="s">"apple"</span>]))
     print(largest[i32]([]))                  <span class="c">// explicit type arguments use brackets</span>
@@ -95,7 +95,7 @@ Pair(first: "one", second: 1)
 [1, 2][1, 2]
 &lt;1&gt;&lt;2&gt;&lt;3&gt;</code></pre></div>
 </div>
-<ul><li><strong>Generic warps</strong> (<code>Pair[A, B]</code>) and their methods are compiled per list of arguments too.</li><li><strong>Generic weaves</strong> (<code>weave[T: Show] Twice into List[T]</code>) work the same way.</li><li><strong>Wefts as parameter types are implicit generics.</strong> <code>fn show_all(xs: [Show])</code> means <code>fn show_all[T: Show](xs: [T])</code>, and each use has static dispatch.</li><li>Value parameters (<code>const N: usize</code>) work too: see <a href="const-params.html">Const parameters</a>.</li><li>Generic wefts (<code>weft From[T]</code>) are not supported yet (<a href="diagnostics.html#U0102">U0102</a>).</li></ul>
+<ul><li><strong>Generic warps</strong> (<code>Pair[A, B]</code>) and their methods are compiled per list of arguments too.</li><li><strong>Generic weaves</strong> (<code>weave[T: Show] Twice into List[T]</code>) work the same way.</li><li><strong>Wefts as parameter types are implicit generics.</strong> <code>fun show_all(xs: [Show])</code> means <code>fun show_all[T: Show](xs: [T])</code>, and each use has static dispatch.</li><li>Value parameters (<code>const N: usize</code>) work too: see <a href="const-params.html">Const parameters</a>.</li><li>Generic wefts (<code>weft From[T]</code>) are not supported yet (<a href="diagnostics.html#U0102">U0102</a>).</li></ul>
 <h2 id="any-w"><code>any W</code></h2>
 <p><code>any Widget</code> is a value of some type that weaves <code>Widget</code>. Calls on it go through a table at run time, and a type test (<code>w is l: Label</code>) recovers the concrete type. A value converts to <code>any W</code> where one is expected, and an <code>any</code> of several wefts (<code>any (Widget + Show)</code>) can be used as an <code>any</code> of fewer.</p>
 <div class="sample" id="sample-generics_any">
@@ -103,24 +103,24 @@ Pair(first: "one", second: 1)
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="k">weft</span> <span class="t">Widget</span> {
-    <span class="k">fn</span> name(<span class="k">self</span>) -&gt; <span class="t">String</span>
-    <span class="k">fn</span> width(<span class="k">self</span>) -&gt; u16 = <span class="n">1</span>
+    <span class="k">fun</span> name(<span class="k">self</span>) -&gt; <span class="t">String</span>
+    <span class="k">fun</span> width(<span class="k">self</span>) -&gt; u16 = <span class="n">1</span>
 }
 
 <span class="k">warp</span> <span class="t">Label</span>: <span class="t">Widget</span>, <span class="t">Show</span> {
     text: <span class="t">String</span>
-    <span class="k">fn</span> name(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"label '{</span>.text<span class="s">}'"</span>
-    <span class="k">fn</span> width(<span class="k">self</span>) -&gt; u16 = .text.len() <span class="k">as</span> u16
+    <span class="k">fun</span> name(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"label '{</span>.text<span class="s">}'"</span>
+    <span class="k">fun</span> width(<span class="k">self</span>) -&gt; u16 = .text.len() <span class="k">as</span> u16
 }
 
 <span class="k">warp</span> <span class="t">Spacer</span>: <span class="t">Widget</span> {
-    <span class="k">fn</span> name(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"spacer"</span>
+    <span class="k">fun</span> name(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"spacer"</span>
 }
 
 <span class="c">// Several wefts at once: a value that is both.</span>
-<span class="k">fn</span> describe(w: <span class="k">any</span> (<span class="t">Widget</span> + <span class="t">Show</span>)) -&gt; <span class="t">String</span> = <span class="s">"{</span>w.name()<span class="s">} = {</span>w<span class="s">}"</span>
+<span class="k">fun</span> describe(w: <span class="k">any</span> (<span class="t">Widget</span> + <span class="t">Show</span>)) -&gt; <span class="t">String</span> = <span class="s">"{</span>w.name()<span class="s">} = {</span>w<span class="s">}"</span>
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="c">// `any Widget` holds a value of some type that weaves Widget,</span>
     <span class="c">// and calls go through a table at run time.</span>
     <span class="k">let</span> ui: <span class="t">List</span>[<span class="k">any</span> <span class="t">Widget</span>] = [<span class="t">Label</span>(<span class="s">"hi"</span>), <span class="t">Spacer</span>(), <span class="t">Label</span>(<span class="s">"there"</span>)]

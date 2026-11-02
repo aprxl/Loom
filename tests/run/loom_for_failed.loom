@@ -4,7 +4,7 @@
 
 use std.io.print
 
-fn main() {
+fun main() {
     let words = ["a", "b", "c", "d"]
     loom for s in words.map(w => w.to_upper()) {
         print("item {s}")

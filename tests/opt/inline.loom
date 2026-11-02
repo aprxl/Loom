@@ -7,21 +7,21 @@
 // itself.
 use std.io.print
 
-fn inc(x: i64) -> i64 = x + 1
+fun inc(x: i64) -> i64 = x + 1
 
-fn twice(x: i64) -> i64 = inc(inc(x))
+fun twice(x: i64) -> i64 = inc(inc(x))
 
-fn guarded(x: i64) -> i64 {
+fun guarded(x: i64) -> i64 {
     defer print("left")
     x * 2
 }
 
-fn fact(n: i64) -> i64 {
+fun fact(n: i64) -> i64 {
     if n <= 1 { return 1 }
     n * fact(n - 1)
 }
 
-fn main() {
+fun main() {
     let names: List[i64] = [1, 2]
     print(twice(names[0]) + guarded(names[1]) + fact(5))
 }

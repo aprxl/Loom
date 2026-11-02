@@ -1,10 +1,10 @@
 use std.io.print
 
 warp Grid[const W: u8, const H: u8] {
-    fn area(self) -> u16 = W as u16 * H as u16
+    fun area(self) -> u16 = W as u16 * H as u16
 }
 
-fn main() {
+fun main() {
     // `uint(n)` and `int(n)` are the integer types with `n` bits.
     let small: uint(3) = 7
     let wide: int(12) = -2048

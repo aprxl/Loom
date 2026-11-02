@@ -5,7 +5,7 @@ const SIZE = 4_000_000
 
 const SYLLABLES: [str; 8] = ["ka", "lo", "mi", "ne", "su", "ta", "ro", "vi"]
 
-fn main() {
+fun main() {
     var counts: Map[String, u32] = Map()
     var seed = 42u64
     for _ in 0..SIZE {

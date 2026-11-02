@@ -5,7 +5,7 @@ use std.io.print
 warp Countdown: Iter {
     n: u32
     type Item = u32
-    fn next(mut self) -> ?u32 {
+    fun next(mut self) -> ?u32 {
         if .n == 0 { return none }
         .n -= 1
         .n + 1
@@ -15,7 +15,7 @@ warp Countdown: Iter {
 warp Fib { a: u64 = 0, b: u64 = 1 }
 weave Iter into Fib {
     type Item = u64
-    fn next(mut self) -> ?Item {                 // `Item` is `u64` here
+    fun next(mut self) -> ?Item {                 // `Item` is `u64` here
         let out = .a
         (.a, .b) = (.b, .a + .b)
         out
@@ -26,7 +26,7 @@ weave Iter into Fib {
 warp Maybes { i: u8 = 0 }
 weave Iter into Maybes {
     type Item = ?u8
-    fn next(mut self) -> ??u8 {
+    fun next(mut self) -> ??u8 {
         if .i >= 4 { return none }
         .i += 1
         some(if .i % 2 == 0 { some(.i) } else { none })
@@ -41,7 +41,7 @@ warp Light {
 }
 weave Iter into Light {
     type Item = str
-    fn next(mut self) -> ?str = match self {
+    fun next(mut self) -> ?str = match self {
         .Red => {
             self = .Green
             "red"
@@ -56,18 +56,18 @@ weave Iter into Light {
 
 warp Point: Ord { x: i32, y: i32 }
 
-fn total(take it: Iter) -> u64 {
+fun total(take it: Iter) -> u64 {
     var sum: u64 = 0
     for x in it { sum += x as u64 }
     sum
 }
 
-fn first_of[I: Iter](take it: I) -> ?I.Item {
+fun first_of[I: Iter](take it: I) -> ?I.Item {
     var it = it
     it.next()
 }
 
-fn main() {
+fun main() {
     // `for` over an `Iter` loops over a copy.
     let c = Countdown(3)
     for n in c { print(n) }

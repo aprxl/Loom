@@ -4,7 +4,7 @@
 
 use std.io.print
 
-fn main() {
+fun main() {
     var m: Map[u32, String] = Map()
     m[1] = "one"
     m[2] = "two"

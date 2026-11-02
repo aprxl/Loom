@@ -8,5 +8,5 @@ const FOREVER: u32 = {
     n
 }
 
-fn main() {}
+fun main() {}
 //@ check-fail K0102

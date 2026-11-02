@@ -3,18 +3,18 @@
 
 use std.io.print
 
-fn inner() -> i32 {
+fun inner() -> i32 {
     unravel("deep")
 }
 
-fn outer() -> i32 {
+fun outer() -> i32 {
     loom {
         let t = thread inner()
         t.join()
     }
 }
 
-fn main() {
+fun main() {
     loom {
         let a = thread outer()
         print(a.join())

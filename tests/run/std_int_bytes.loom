@@ -1,6 +1,6 @@
 use std.io.print
 
-fn main() {
+fun main() {
     let x: u32 = 0x01020304
     let bs = x.to_be_bytes()
     for b in bs { print(b) }

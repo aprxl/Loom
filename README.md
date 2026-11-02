@@ -16,23 +16,23 @@ use std.io.print
 use std.math.PI
 
 weft Shape {                                   // behavior: an interface
-    fn area(self) -> f64
-    fn name(self) -> str = "shape"             // default method
+    fun area(self) -> f64
+    fun name(self) -> str = "shape"             // default method
 }
 
 warp Circle: Shape {                           // data, promising Shape up front
     radius: f64
-    fn area(self) -> f64 = PI * .radius * .radius   // `.radius` means `self.radius`
+    fun area(self) -> f64 = PI * .radius * .radius   // `.radius` means `self.radius`
 }
 
 warp Rect { w: f64, h: f64 }
 
 weave Shape into Rect {                        // behavior added after the fact
-    fn area(self) -> f64 = .w * .h
-    fn name(self) -> str = "rect"
+    fun area(self) -> f64 = .w * .h
+    fun name(self) -> str = "rect"
 }
 
-fn main() {
+fun main() {
     let shapes: List[any Shape] = [Circle(1.5), Rect(2, 3)]
     let total = shapes.map(_.area()).sum()     // `_.area()` is a hole lambda
     print("{shapes.len()} shapes, {total:.2} square units")
@@ -108,7 +108,7 @@ parameter.
 warp Button: Widget {
     through frame: Frame         // Button gets Frame's methods, e.g. size()
     label: String
-    fn draw(self, at: Pos, mut c: Canvas) {
+    fun draw(self, at: Pos, mut c: Canvas) {
         .frame.draw(at, mut c)   // a "super call" is just a field call
         c.text(at.{ .x += 2; .y += 1 }, .label)
     }
@@ -151,7 +151,7 @@ into, and the compiler rejects any pointer that would outlive its spool.
 Functions take the spool as an ambient `given`.
 
 ```loom
-fn parse(src: str) -> ^Expr@sp ! ParseError given sp: Spool { ... }
+fun parse(src: str) -> ^Expr@sp ! ParseError given sp: Spool { ... }
 
 spool scratch = Arena(64.kib())
 let tree = parse("2 * (x + 3)", given: scratch)?   // tree: ^Expr@scratch
@@ -197,7 +197,7 @@ have a fixed size known at compile time and are stored inline, with no heap
 allocation.
 
 ```loom
-fn lexer() ~> Token <~ char {
+fun lexer() ~> Token <~ char {
     // `pull` takes the next char in; `yield .Int(n, span)` sends a token out
 }
 

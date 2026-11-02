@@ -8,37 +8,37 @@ pub warp BitSet {
     size: usize
 
     /// A set of `len` numbers, none in it.
-    pub fn new(len: usize) -> BitSet = BitSet(words: List.filled(0, (len + 63) / 64), size: len)
+    pub fun new(len: usize) -> BitSet = BitSet(words: List.filled(0, (len + 63) / 64), size: len)
 
     /// How many numbers it can hold: they are `0` up to this.
-    pub fn len(self) -> usize = .size
+    pub fun len(self) -> usize = .size
 
     /// Puts `i` in. Unravels if `i >= len`.
-    pub fn set(mut self, i: usize) {
+    pub fun set(mut self, i: usize) {
         assert(i < .size, "BitSet.set: index out of bounds")
         .words[i / 64] |= 1u64 << (i % 64) as u64
     }
 
     /// Takes `i` out. Unravels if `i >= len`.
-    pub fn clear(mut self, i: usize) {
+    pub fun clear(mut self, i: usize) {
         assert(i < .size, "BitSet.clear: index out of bounds")
         .words[i / 64] &= ~(1u64 << (i % 64) as u64)
     }
 
     /// Puts `i` in if it is out, and out if it is in.
-    pub fn toggle(mut self, i: usize) {
+    pub fun toggle(mut self, i: usize) {
         assert(i < .size, "BitSet.toggle: index out of bounds")
         .words[i / 64] ~= 1u64 << (i % 64) as u64
     }
 
     /// Whether `i` is in. Unravels if `i >= len`.
-    pub fn test(self, i: usize) -> bool {
+    pub fun test(self, i: usize) -> bool {
         assert(i < .size, "BitSet.test: index out of bounds")
         (.words[i / 64] >> (i % 64) as u64) & 1 == 1
     }
 
     /// How many numbers are in.
-    pub fn count(self) -> usize {
+    pub fun count(self) -> usize {
         var n = 0usize
         for w in .words {
             n += w.count_ones() as usize
@@ -47,7 +47,7 @@ pub warp BitSet {
     }
 
     /// The numbers that are in, from the smallest.
-    pub fn items(self) -> List[usize] {
+    pub fun items(self) -> List[usize] {
         var out: List[usize] = []
         for k in 0..self.words.len() {
             var w = .words[k]
@@ -61,7 +61,7 @@ pub warp BitSet {
 
     /// Keeps the numbers that are also in `other`. The sets must be the
     /// same size.
-    pub fn intersect_with(mut self, other: BitSet) {
+    pub fun intersect_with(mut self, other: BitSet) {
         assert(.size == other.size, "BitSet: the sets are different sizes")
         for k in 0..self.words.len() {
             .words[k] &= other.words[k]
@@ -69,7 +69,7 @@ pub warp BitSet {
     }
 
     /// Adds the numbers in `other`. The sets must be the same size.
-    pub fn union_with(mut self, other: BitSet) {
+    pub fun union_with(mut self, other: BitSet) {
         assert(.size == other.size, "BitSet: the sets are different sizes")
         for k in 0..self.words.len() {
             .words[k] |= other.words[k]
@@ -78,7 +78,7 @@ pub warp BitSet {
 
     /// Takes out the numbers that are in `other`. The sets must be the same
     /// size.
-    pub fn subtract(mut self, other: BitSet) {
+    pub fun subtract(mut self, other: BitSet) {
         assert(.size == other.size, "BitSet: the sets are different sizes")
         for k in 0..self.words.len() {
             .words[k] &= ~other.words[k]

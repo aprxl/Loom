@@ -2,7 +2,7 @@
 use std.io.print
 use std.mem.Pool
 
-fn main() {
+fun main() {
     spool p = Pool[u64](1000)
     print("made")
 }

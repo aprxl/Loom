@@ -5,19 +5,19 @@ use std.io.print
 warp Level {
     case Low
     case High
-    fn toggle(mut self) {
+    fun toggle(mut self) {
         self = match self {
             .Low => .High
             .High => .Low
         }
     }
 }
-fn pick(label: str, i: usize) -> usize {
+fun pick(label: str, i: usize) -> usize {
     print("pick {label}")
     i
 }
-fn bump(mut n: i32) { n += 1 }
-fn main() {
+fun bump(mut n: i32) { n += 1 }
+fun main() {
     var ls: [Level; 3] = [.Low, .Low, .Low]
     ls[pick("a", 1)].toggle()
     print("{ls:?}")

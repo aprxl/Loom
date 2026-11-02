@@ -8,7 +8,7 @@
 // load, where codegen makes check, address and load one instruction.
 use std.io.print
 
-fn count(n: usize) -> u32 {
+fun count(n: usize) -> u32 {
     var xs: List[u32] = List()
     for i in 0..n { xs.push(i as u32) }
     var c = 0u32
@@ -18,6 +18,6 @@ fn count(n: usize) -> u32 {
     c
 }
 
-fn main() {
+fun main() {
     print(count(5))
 }

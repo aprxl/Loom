@@ -45,16 +45,16 @@
 <pre class="code"><code><span class="k">use</span> std.io.print
 <span class="k">use</span> std.sync.sched_yield
 
-<span class="k">fn</span> square(n: i32) -&gt; i32 = n * n
+<span class="k">fun</span> square(n: i32) -&gt; i32 = n * n
 
-<span class="k">fn</span> worker(name: str, steps: i32) {
+<span class="k">fun</span> worker(name: str, steps: i32) {
     <span class="k">for</span> i <span class="k">in</span> <span class="n">0</span>..steps {
         print(<span class="s">"{</span>name<span class="s">} {</span>i<span class="s">}"</span>)
         sched_yield()                    <span class="c">// let the others take a turn</span>
     }
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="c">// `thread` starts a thread; `join` waits for its result. The block's</span>
     <span class="c">// value is its last expression's.</span>
     <span class="k">let</span> total = <span class="k">loom</span> {
@@ -90,7 +90,7 @@ b 1</code></pre></div>
 <div class="sample-head"><span class="file">samples/threads_share.loom</span><span class="tag ok">runs</span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="c">// What's declared outside the loom is shared: a thread reads it, or</span>
     <span class="c">// changes it when no one else touches it until it's joined.</span>
     <span class="k">var</span> count = <span class="n">0</span>
@@ -120,7 +120,7 @@ b 1</code></pre></div>
 <div class="sample-head"><span class="file">samples/threads_err.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#C0401">C0401</a></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">var</span> hits = <span class="n">0</span>
     <span class="k">loom</span> {
         <span class="k">thread</span> { hits += <span class="n">1</span> }
@@ -148,7 +148,7 @@ b 1</code></pre></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 <span class="k">use</span> std.sync.<span class="t">Atomic</span>
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="c">// One thread for each item; the loop ends when they're all done.</span>
     <span class="k">let</span> squares = <span class="t">Atomic</span>[u64](<span class="n">0</span>)
     <span class="k">loom</span> <span class="k">for</span> n <span class="k">in</span> <span class="n">1</span>..=<span class="n">5</span> {
@@ -174,7 +174,7 @@ letters 12</code></pre></div>
 <div class="sample-head"><span class="file">samples/threads_rows.loom</span><span class="tag ok">runs</span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">var</span> grid = <span class="t">List</span>.filled(<span class="n">0</span>, <span class="n">12</span>)
     <span class="k">let</span> width = <span class="n">4</span>
     <span class="c">// One thread for each row: each changes only its own piece.</span>
@@ -195,7 +195,7 @@ letters 12</code></pre></div>
 <span class="k">use</span> std.sync.<span class="t">Atomic</span>
 <span class="k">use</span> std.sync.sched_yield
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">let</span> hits = <span class="t">Atomic</span>[u32](<span class="n">0</span>)
     <span class="k">loom</span> {
         <span class="k">for</span> id <span class="k">in</span> <span class="n">0</span>..<span class="n">3</span> {
@@ -235,12 +235,12 @@ true 0, false 1</code></pre></div>
 <span class="k">use</span> std.sync.<span class="t">Mutex</span>
 <span class="k">use</span> std.sync.sched_yield
 
-<span class="k">fn</span> pause(id: i32) -&gt; i32 {
+<span class="k">fun</span> pause(id: i32) -&gt; i32 {
     sched_yield()
     id
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">let</span> total = <span class="t">Mutex</span>[i32](<span class="n">0</span>)
     <span class="k">let</span> log = <span class="t">Mutex</span>[<span class="t">List</span>[i32]]([])
     <span class="k">loom</span> {
@@ -264,7 +264,7 @@ true 0, false 1</code></pre></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 <span class="k">use</span> std.sync.<span class="t">Pipe</span>
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">let</span> jobs = <span class="t">Pipe</span>[i32](<span class="n">2</span>)
     <span class="k">let</span> results = <span class="t">Pipe</span>[<span class="t">String</span>](<span class="n">2</span>)
     <span class="k">loom</span> {

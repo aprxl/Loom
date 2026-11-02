@@ -1,24 +1,24 @@
 use std.io.print
 
 weft Widget {
-    fn name(self) -> String
-    fn width(self) -> u16 = 1
+    fun name(self) -> String
+    fun width(self) -> u16 = 1
 }
 
 warp Label: Widget, Show {
     text: String
-    fn name(self) -> String = "label '{.text}'"
-    fn width(self) -> u16 = .text.len() as u16
+    fun name(self) -> String = "label '{.text}'"
+    fun width(self) -> u16 = .text.len() as u16
 }
 
 warp Spacer: Widget {
-    fn name(self) -> String = "spacer"
+    fun name(self) -> String = "spacer"
 }
 
 // Several wefts at once: a value that is both.
-fn describe(w: any (Widget + Show)) -> String = "{w.name()} = {w}"
+fun describe(w: any (Widget + Show)) -> String = "{w.name()} = {w}"
 
-fn main() {
+fun main() {
     // `any Widget` holds a value of some type that weaves Widget,
     // and calls go through a table at run time.
     let ui: List[any Widget] = [Label("hi"), Spacer(), Label("there")]

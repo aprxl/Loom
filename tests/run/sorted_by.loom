@@ -3,7 +3,7 @@
 
 use std.io.print
 
-fn main() {
+fun main() {
     let words = ["pear", "fig", "apple", "kiwi", "plum", "date", "lime"]
     // By length: the ones of 4 keep their order.
     let by_len = words.take(100).map(w => w.to_string()).sorted_by((a, b) => a.len() < b.len())

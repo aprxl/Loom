@@ -9,14 +9,14 @@ warp Shape {
     case Square(side: f64)
 }
 
-fn connect(host: str, port: i32) -> String = "{host}:{port}"
+fun connect(host: str, port: i32) -> String = "{host}:{port}"
 
-fn describe(s: Shape) -> String = match s {
+fun describe(s: Shape) -> String = match s {
     .Circle(radius:) => "circle {radius}",
     .Square(side:) => "square {side}",
 }
 
-fn main() {
+fun main() {
     let x = 3
     let y = -4
     let p = Point(x:, y:)

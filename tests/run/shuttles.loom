@@ -3,7 +3,7 @@
 
 use std.io.print
 
-fn fib() ~> u64 {
+fun fib() ~> u64 {
     var (a, b): (u64, u64) = (0, 1)
     loop {
         yield a
@@ -11,7 +11,7 @@ fn fib() ~> u64 {
     }
 }
 
-fn counted(name: str) ~> i32 {
+fun counted(name: str) ~> i32 {
     defer print("{name} closed")
     var i = 0
     while i < 3 {
@@ -21,7 +21,7 @@ fn counted(name: str) ~> i32 {
 }
 
 // Pairs up what it's pushed; an odd one out comes out when it's closed.
-fn pairs() ~> (i32, ?i32) <~ i32 {
+fun pairs() ~> (i32, ?i32) <~ i32 {
     while pull is some(a) {
         match pull {
             some(b) => yield (a, some(b)),
@@ -33,7 +33,7 @@ fn pairs() ~> (i32, ?i32) <~ i32 {
     }
 }
 
-fn summer() <~ i32 {
+fun summer() <~ i32 {
     var total = 0
     defer print("sum: {total}")
     while pull is some(n) {
@@ -41,7 +41,7 @@ fn summer() <~ i32 {
     }
 }
 
-fn maybes() ~> ?i32 {
+fun maybes() ~> ?i32 {
     yield some(1)
     yield none
     yield some(3)
@@ -49,13 +49,13 @@ fn maybes() ~> ?i32 {
 
 warp Point: Copy { x: i32, y: i32 }
 
-fn steps(from: Point, take label: String) ~> String {
+fun steps(from: Point, take label: String) ~> String {
     for i in 1..=2 {
         yield "{label} {from.x + i},{from.y}"
     }
 }
 
-fn main() {
+fun main() {
     // A generator is a stream.
     print(fib().take(10).collect())
     print(fib().skip_while(_ < 50).take(3).collect())

@@ -7,9 +7,9 @@ warp ConfigError: Error {
     case Missing(key: String)
 }
 
-fn setting(key: str) -> u16 ! ConfigError = fail .Missing(key: "{key}")
+fun setting(key: str) -> u16 ! ConfigError = fail .Missing(key: "{key}")
 
-fn main() ! ConfigError {
+fun main() ! ConfigError {
     print("starting")
     let port = setting("port")?
     print("never printed: {port}")

@@ -4,7 +4,7 @@
 
 use std.io.print
 
-fn check(m: Map[u64, u64], label: String) {
+fun check(m: Map[u64, u64], label: String) {
     var order = 0u64
     var sum = 0u64
     var last = 0u64
@@ -18,7 +18,7 @@ fn check(m: Map[u64, u64], label: String) {
     print("{label}: len {m.len()} seen {order} sum {sum} ascending {ascending} first {m.first()} last {m.last()}")
 }
 
-fn main() {
+fun main() {
     var m: Map[u64, u64] = Map()
     for i in 0..200_000u64 { m.insert(i, i * 3) }
     check(m, "grown")

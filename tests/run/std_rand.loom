@@ -1,6 +1,6 @@
 use std.io.print
 use std.rand.Rng
-fn main() {
+fun main() {
     var r = Rng.seeded(42)
     var counts: [u32; 6] = [0; 6]
     for _ in 0..60000 {

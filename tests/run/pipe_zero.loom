@@ -1,6 +1,6 @@
 use std.sync.Pipe
 
-fn main() {
+fun main() {
     let p = Pipe[i32](0)
     p.close()
 }

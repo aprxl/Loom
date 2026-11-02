@@ -1,8 +1,8 @@
 error[P0101]: this `match` doesn't cover every `Shape`
-   --> docs/lang/samples/types_err_match.loom:7:28
+   --> docs/lang/samples/types_err_match.loom:7:29
    |  
- 7 |   fn area(s: Shape) -> f64 = match s {
-   | /----------------------------^
+ 7 |   fun area(s: Shape) -> f64 = match s {
+   | /-----------------------------^
  8 | |     .Circle(r) => 3.14 * r * r
  9 | |     .Rect(w, h) => w * h
 10 | | }

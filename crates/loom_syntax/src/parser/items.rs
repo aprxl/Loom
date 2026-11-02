@@ -23,10 +23,10 @@ enum MemberCtx {
 impl MemberCtx {
     fn expected(self) -> &'static str {
         match self {
-            MemberCtx::Warp => "a field, `case`, `through`, `fn`, `const` or `type`",
-            MemberCtx::Weft => "`fn` or `type`",
-            MemberCtx::Weave => "`fn` or `type`",
-            MemberCtx::Extern => "an `fn` declaration",
+            MemberCtx::Warp => "a field, `case`, `through`, `fun`, `const` or `type`",
+            MemberCtx::Weft => "`fun` or `type`",
+            MemberCtx::Weave => "`fun` or `type`",
+            MemberCtx::Extern => "a `fun` declaration",
         }
     }
 }
@@ -72,7 +72,7 @@ impl Parser<'_> {
     pub(super) fn at_item_start(&self) -> bool {
         match self.kind() {
             TokenKind::Keyword(
-                Keyword::Fn
+                Keyword::Fun
                 | Keyword::Use
                 | Keyword::Warp
                 | Keyword::Weft
@@ -85,8 +85,8 @@ impl Parser<'_> {
                 matches!(self.nth_kind(1), TokenKind::TypeIdent | TokenKind::Ident | TokenKind::ConstIdent)
             }
             TokenKind::Keyword(Keyword::Ref) => self.nth_is_kw(1, Keyword::Warp),
-            TokenKind::Keyword(Keyword::Unsafe) => self.nth_is_kw(1, Keyword::Fn),
-            TokenKind::Keyword(Keyword::Const) => self.nth_is_kw(1, Keyword::Fn) || self.at_const_decl(),
+            TokenKind::Keyword(Keyword::Unsafe) => self.nth_is_kw(1, Keyword::Fun),
+            TokenKind::Keyword(Keyword::Const) => self.nth_is_kw(1, Keyword::Fun) || self.at_const_decl(),
             TokenKind::Ident => (self.at_contextual("once") && self.nth_is_kw(1, Keyword::Warp)) || self.at_test(),
             _ => false,
         }
@@ -120,15 +120,15 @@ impl Parser<'_> {
                 self.bump();
                 ItemKind::Use(self.use_tree())
             }
-            TokenKind::Keyword(Keyword::Const) if self.nth_is_kw(1, Keyword::Fn) => {
+            TokenKind::Keyword(Keyword::Const) if self.nth_is_kw(1, Keyword::Fun) => {
                 ItemKind::Fn(self.fn_decl(NameCase::Value))
             }
             TokenKind::Keyword(Keyword::Const) if self.at_const_decl() => ItemKind::Const(self.const_decl()),
             TokenKind::Keyword(Keyword::Const) => ItemKind::ConstExpr(self.expr()),
-            TokenKind::Keyword(Keyword::Unsafe) if self.nth_is_kw(1, Keyword::Fn) => {
+            TokenKind::Keyword(Keyword::Unsafe) if self.nth_is_kw(1, Keyword::Fun) => {
                 ItemKind::Fn(self.fn_decl(NameCase::Value))
             }
-            TokenKind::Keyword(Keyword::Fn) => ItemKind::Fn(self.fn_decl(NameCase::Value)),
+            TokenKind::Keyword(Keyword::Fun) => ItemKind::Fn(self.fn_decl(NameCase::Value)),
             TokenKind::Ident if self.at_test() => ItemKind::Fn(self.fn_decl(NameCase::Value)),
             TokenKind::Keyword(Keyword::Type) => ItemKind::Type(self.type_decl()),
             TokenKind::Keyword(Keyword::Warp) => ItemKind::Warp(self.warp(WarpModifier::None)),
@@ -144,7 +144,7 @@ impl Parser<'_> {
             TokenKind::Keyword(Keyword::Weave) => ItemKind::Weave(self.weave()),
             TokenKind::Keyword(Keyword::Extern) => ItemKind::Extern(self.extern_block()),
             _ => {
-                self.error_expected("an item (`fn`, `warp`, `weft`, `weave`, `use`, `const` or `type`)");
+                self.error_expected("an item (`fun`, `warp`, `weft`, `weave`, `use`, `const` or `type`)");
                 return None;
             }
         })
@@ -372,9 +372,9 @@ impl Parser<'_> {
         let start = self.peek().span;
         let attrs = self.attrs();
         let vis = self.vis(ctx == MemberCtx::Warp);
-        let is_fn = self.at_kw(Keyword::Fn)
+        let is_fn = self.at_kw(Keyword::Fun)
             || (matches!(self.kind(), TokenKind::Keyword(Keyword::Const | Keyword::Unsafe))
-                && self.nth_is_kw(1, Keyword::Fn));
+                && self.nth_is_kw(1, Keyword::Fun));
         let field_like = matches!(self.kind(), TokenKind::Ident | TokenKind::TypeIdent | TokenKind::ConstIdent)
             && self.nth_is_punct(1, Punct::Colon);
         let kind = match self.kind() {
@@ -468,7 +468,7 @@ impl Parser<'_> {
         if qualifier == FnQualifier::Test {
             self.bump();
         } else {
-            self.expect_kw(Keyword::Fn);
+            self.expect_kw(Keyword::Fun);
         }
         let name = self.ident(name_case, "function");
         let generics = self.generic_params();

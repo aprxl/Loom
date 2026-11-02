@@ -2,7 +2,7 @@
 // `for` loop does.
 use std.io.print
 
-fn main() {
+fun main() {
     var xs: List[u64] = [1, 2, 3]
     let grow = () => xs.push(9)
     print("start")

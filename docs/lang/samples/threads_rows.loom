@@ -1,6 +1,6 @@
 use std.io.print
 
-fn main() {
+fun main() {
     var grid = List.filled(0, 12)
     let width = 4
     // One thread for each row: each changes only its own piece.

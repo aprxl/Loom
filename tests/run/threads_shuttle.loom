@@ -4,7 +4,7 @@
 use std.io.print
 use std.sync.sched_yield
 
-fn count(name: str, n: i32) ~> i32 {
+fun count(name: str, n: i32) ~> i32 {
     for i in 0..n {
         print("{name} yields {i}")
         sched_yield()
@@ -12,7 +12,7 @@ fn count(name: str, n: i32) ~> i32 {
     }
 }
 
-fn drive(name: str) -> i32 {
+fun drive(name: str) -> i32 {
     var sum = 0
     for v in count(name, 3) {
         sum += v
@@ -20,7 +20,7 @@ fn drive(name: str) -> i32 {
     sum
 }
 
-fn main() {
+fun main() {
     let r = loom {
         let a = thread drive("a")
         let b = thread drive("b")

@@ -164,7 +164,7 @@ def page(title, here_dir, sidebar_html, body):
 
 # ------------------------------------------------------------------ highlighting
 
-KEYWORDS = set("""fn let var const type warp weft weave into through case pub if else match for in
+KEYWORDS = set("""fun let var const type warp weft weave into through case pub if else match for in
 while loop break continue return fail is not and or mend defer ref spool given loom thread yield pull
 unsafe extern use as any self Self mut take once test where true false some none ok err""".split())
 

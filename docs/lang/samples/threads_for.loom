@@ -1,7 +1,7 @@
 use std.io.print
 use std.sync.Atomic
 
-fn main() {
+fun main() {
     // One thread for each item; the loop ends when they're all done.
     let squares = Atomic[u64](0)
     loom for n in 1..=5 {

@@ -9,36 +9,36 @@ use std.io.print
 use std.term
 use std.time
 
-fn say() -> i32 {
+fun say() -> i32 {
     print("while compiling")
     1
 }
 
-fn nap() -> i32 {
+fun nap() -> i32 {
     time.sleep(time.ms(1))
     2
 }
 
-fn home() -> i32 {
+fun home() -> i32 {
     let _ = env.get("HOME")
     3
 }
 
-fn raw() -> i32 {
+fun raw() -> i32 {
     term.raw_mode(true)
     4
 }
 
-fn keys() -> i32 = term.poll_keys("ab") as i32
+fun keys() -> i32 = term.poll_keys("ab") as i32
 
-fn clock() -> i32 = (time.monotonic_nanos() % 1) as i32
+fun clock() -> i32 = (time.monotonic_nanos() % 1) as i32
 
-fn line() -> i32 {
+fun line() -> i32 {
     let _ = io.read_line()
     6
 }
 
-fn read() -> i32 {
+fun read() -> i32 {
     let _ = fs.read_text("/nope")
     5
 }
@@ -52,4 +52,4 @@ const READS: i32 = read()                        //~ K0104
 const CLOCK: i32 = clock()                       //~ K0104
 const LINE: i32 = line()                         //~ K0104
 
-fn main() {}
+fun main() {}

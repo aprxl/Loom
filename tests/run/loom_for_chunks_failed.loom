@@ -6,7 +6,7 @@
 use std.io.print
 use std.sync.Atomic
 
-fn main() {
+fun main() {
     let done = Atomic[u32](0)
     loom for i in 0..4000 {
         var rows: List[String] = []

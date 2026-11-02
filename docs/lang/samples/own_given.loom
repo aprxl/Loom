@@ -3,22 +3,22 @@ use std.io.print
 // A weft with a default: a call that is given nothing gets a `Plain`.
 #given_default(Plain)
 weft Greeter {
-    fn greet(self) -> String
+    fun greet(self) -> String
 }
 
 warp Plain: Greeter, Default {
-    pub fn greet(self) -> String = "hello"
+    pub fun greet(self) -> String = "hello"
 }
 
 warp Loud: Greeter {
     name: String
 
-    pub fn greet(self) -> String = "HELLO, {.name}!"
+    pub fun greet(self) -> String = "HELLO, {.name}!"
 }
 
-fn welcome(who: str) -> String given g: Greeter = "{g.greet()} {who}"
+fun welcome(who: str) -> String given g: Greeter = "{g.greet()} {who}"
 
-fn main() {
+fun main() {
     print(welcome("ann"))          // nothing given: a Plain
     given g = Loud("ci")           // from here to the end of the block
     print(welcome("dee"))

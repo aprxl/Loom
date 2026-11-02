@@ -7,9 +7,9 @@
 // memory is below 300.
 use std.io.print
 
-fn fib(n: i32) -> i32 = if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+fun fib(n: i32) -> i32 = if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
 
-fn total(xs: [u32]) -> u64 {
+fun total(xs: [u32]) -> u64 {
     var sum = 0u64
     var i = 0
     while i < xs.len() {
@@ -19,11 +19,11 @@ fn total(xs: [u32]) -> u64 {
     sum
 }
 
-fn clamp_index(i: u8) -> u16 = if i < 255 { i as u16 + 1 } else { 0 }
+fun clamp_index(i: u8) -> u16 = if i < 255 { i as u16 + 1 } else { 0 }
 
-fn small(xs: [u8]) -> bool = xs[0] as u32 < 300
+fun small(xs: [u8]) -> bool = xs[0] as u32 < 300
 
-fn main() {
+fun main() {
     print(fib(10))
     print(total([1, 2, 3]))
     print(clamp_index(4))

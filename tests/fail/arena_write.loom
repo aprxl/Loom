@@ -9,7 +9,7 @@ warp Rich {
     name: String
 }
 
-fn main() {
+fun main() {
     spool a = Arena(1.kib())
     var p = a.put(Plain(1))
     p.x = 2

@@ -6,7 +6,7 @@ use std.rand.Rng
 use std.term
 use std.time.SystemTime
 
-fn main() ! any Error {
+fun main() ! any Error {
     fs.write_text("std_host_probe.txt", "12345")?
     let meta = fs.metadata("std_host_probe.txt")?
     print("{meta.size} {meta.is_dir}")

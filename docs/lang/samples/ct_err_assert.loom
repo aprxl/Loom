@@ -1,9 +1,9 @@
 const LIMIT = 10
 
-fn double(n: i32) -> i32 = n * 2
+fun double(n: i32) -> i32 = n * 2
 
 const assert(double(LIMIT) == 20, "doubling works")
 const assert(double(LIMIT) == 21, "this one is wrong")
 
-fn main() {}
+fun main() {}
 //@ check-fail K0101

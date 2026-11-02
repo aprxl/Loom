@@ -4,19 +4,19 @@
 use std.io.print
 use std.sync.sched_yield
 
-fn items(n: i32) ~> i32 {
+fun items(n: i32) ~> i32 {
     for i in 0..n {
         yield i
     }
 }
 
-fn slow() {
+fun slow() {
     defer print("slow cleanup")
     sched_yield()
     print("slow finished")
 }
 
-fn falls_off() -> i32 {
+fun falls_off() -> i32 {
     loom {
         thread slow()
         ()
@@ -30,11 +30,11 @@ fn falls_off() -> i32 {
     sum
 }
 
-fn boom() -> i32 {
+fun boom() -> i32 {
     unravel("boom")
 }
 
-fn main() {
+fun main() {
     loom {
         let a = thread falls_off()
         let b = thread boom()

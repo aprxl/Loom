@@ -53,7 +53,7 @@ const TABLE: [u32; 16] = {
     t
 }
 
-fn main() {
+fun main() {
     print("{SMALL} {NEG} {MIN} {MAX} {ODD}")
     print("{FLAG} {LETTER} {ZERO} {THIRD} {HUGE}")
     print("{TEXT} {OWNED} {PAIR} {GRID}")

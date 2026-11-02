@@ -1,6 +1,6 @@
 use std.io.print
 use std.path
-fn main() {
+fun main() {
     print(path.join("src", "main.loom"))
     print(path.join("a/", "b"))
     print(path.join("a", "/b"))

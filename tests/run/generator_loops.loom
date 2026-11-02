@@ -6,7 +6,7 @@
 
 use std.io.print
 
-fn upto(n: i32, from: i32 = 0) ~> i32 {
+fun upto(n: i32, from: i32 = 0) ~> i32 {
     defer print("  upto({n}) done")
     var i = from
     while i < n {
@@ -16,7 +16,7 @@ fn upto(n: i32, from: i32 = 0) ~> i32 {
     }
 }
 
-fn evens(n: i32) ~> i32 {
+fun evens(n: i32) ~> i32 {
     defer print("  evens done")
     for x in upto(n) {
         if x % 2 == 0 {
@@ -25,14 +25,14 @@ fn evens(n: i32) ~> i32 {
     }
 }
 
-fn words(take text: String) ~> String {
+fun words(take text: String) ~> String {
     defer print("  words of {text.len()} chars done")
     for w in text.words() {
         yield w.to_upper()
     }
 }
 
-fn pairs[T: Copy + Show](take items: List[T]) ~> (T, T) {
+fun pairs[T: Copy + Show](take items: List[T]) ~> (T, T) {
     var i = 0
     while i + 1 < items.len() {
         yield (items[i], items[i + 1])
@@ -40,7 +40,7 @@ fn pairs[T: Copy + Show](take items: List[T]) ~> (T, T) {
     }
 }
 
-fn first_over(limit: i32) -> i32 {
+fun first_over(limit: i32) -> i32 {
     for x in upto(10) {
         if x > limit {
             return x
@@ -49,7 +49,7 @@ fn first_over(limit: i32) -> i32 {
     -1
 }
 
-fn first_over_held(limit: i32) -> i32 {
+fun first_over_held(limit: i32) -> i32 {
     let g = upto(10)
     for x in g {
         if x > limit {
@@ -59,7 +59,7 @@ fn first_over_held(limit: i32) -> i32 {
     -1
 }
 
-fn main() {
+fun main() {
     print("break:")
     for x in upto(5) {
         if x == 2 { break }

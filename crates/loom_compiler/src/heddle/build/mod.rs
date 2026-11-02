@@ -559,7 +559,7 @@ impl<'a> Builder<'a> {
         let main = p.module(root).items.get("main").copied();
         let Some(def) = main.filter(|&d| matches!(p.def(d).kind, DefKind::Fn(_))) else {
             let mut diag = Diagnostic::error(codes::N0116, "there's no `main` function to run")
-                .help("add `fn main() { … }`, where the program starts");
+                .help("add `fun main() { … }`, where the program starts");
             if !p.module(root).tests.is_empty() {
                 diag = diag.help("`loom test` runs this file's tests");
             }

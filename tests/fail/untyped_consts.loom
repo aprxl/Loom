@@ -6,7 +6,7 @@ const RATIO = 0.5
 
 type Percent = u8 where 0..=100
 
-fn main() {
+fun main() {
     let a: u8 = BIG                         //~ T0102
     let b: i32 = HUGE                       //~ T0102
     let c: Percent = BIG                    //~ T0102 G0201

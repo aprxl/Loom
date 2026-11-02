@@ -22,7 +22,7 @@ warp Cpu {
     i: u12 = 0
     pc: u12 = 0x200
 
-    fn exec(mut self, op: u16) {
+    fun exec(mut self, op: u16) {
         match op {
             0x1nnn => .pc = n
             0x3xkk => if .v[x] == k { .pc +%= 2 }
@@ -39,7 +39,7 @@ warp Cpu {
     }
 }
 
-fn main() {
+fun main() {
     var cpu = Cpu()
     for (k, op) in PROGRAM.indexed() {
         let at = 0x200 + 2 * k

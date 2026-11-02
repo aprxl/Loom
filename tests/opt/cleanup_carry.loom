@@ -6,7 +6,7 @@
 // it can take the old one's register and no move is needed.
 use std.io.print
 
-fn orbit(cx: f64, cy: f64) -> u32 {
+fun orbit(cx: f64, cy: f64) -> u32 {
     var x = 0.0
     var y = 0.0
     var i = 0u32
@@ -19,6 +19,6 @@ fn orbit(cx: f64, cy: f64) -> u32 {
     i
 }
 
-fn main() {
+fun main() {
     print(orbit(0.25, 0.5))
 }

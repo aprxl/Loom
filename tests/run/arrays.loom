@@ -8,17 +8,17 @@ const GRID: usize = SIZE * 2
 
 warp P: Show { x: i32, y: i32 }
 
-fn sum(xs: [i32]) -> i32 {
+fun sum(xs: [i32]) -> i32 {
     var total = 0
     for x in xs { total += x }
     total
 }
 
-fn bump_all(mut xs: [i32]) {
+fun bump_all(mut xs: [i32]) {
     for mut x in xs { x += 1 }
 }
 
-fn main() {
+fun main() {
     // Arrays: fixed length, copied like values.
     var a = [3, 1, 2]
     let b = a

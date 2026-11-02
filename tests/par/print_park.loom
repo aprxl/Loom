@@ -7,14 +7,14 @@ use std.sync.sched_yield
 warp Slow { n: i32 }
 
 weave Show into Slow {
-    fn show(self, mut f: Fmt) {
+    fun show(self, mut f: Fmt) {
         f.put("slow ")
         sched_yield()
         f.put(self.n)
     }
 }
 
-fn main() {
+fun main() {
     loom for i in 0..40 {
         print("a{i} {Slow(i)} b{i}")
     }

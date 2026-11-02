@@ -18,7 +18,7 @@ warp Wrap[T] {
     inner: T
 }
 
-fn main() {
+fun main() {
     spool slots = Pool[Wrap[Shape]](2)
     let w = slots.put(Wrap(Shape(Point(1, 2), [3, 4, 5])))
     print("{w.inner.corner.y} {w.inner.tags[2]}")

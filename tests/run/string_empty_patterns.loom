@@ -4,7 +4,7 @@
 
 use std.io.print
 
-fn main() {
+fun main() {
     print("{"ab".replace("", "-")}")
     print("{"héllo".replace("", "·")}")
     print("{"".replace("", "x")}")

@@ -1,6 +1,6 @@
 use std.io.print
 
-fn classify(n: i32) -> str = match n {
+fun classify(n: i32) -> str = match n {
     0 => "zero"
     1..=9 => "small"
     10 | 20 | 30 => "round"
@@ -8,7 +8,7 @@ fn classify(n: i32) -> str = match n {
     _ => "big"
 }
 
-fn main() {
+fun main() {
     for n in [0, 5, 20, -4, 99] {
         print("{n}: {classify(n)}")
     }

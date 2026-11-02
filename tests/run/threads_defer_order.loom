@@ -4,7 +4,7 @@
 use std.io.print
 use std.sync.sched_yield
 
-fn main() {
+fun main() {
     let shared = 7
     loom {
         defer print("block defer")

@@ -1,16 +1,16 @@
 use std.io.print
 use std.sync.sched_yield
 
-fn square(n: i32) -> i32 = n * n
+fun square(n: i32) -> i32 = n * n
 
-fn worker(name: str, steps: i32) {
+fun worker(name: str, steps: i32) {
     for i in 0..steps {
         print("{name} {i}")
         sched_yield()                    // let the others take a turn
     }
 }
 
-fn main() {
+fun main() {
     // `thread` starts a thread; `join` waits for its result. The block's
     // value is its last expression's.
     let total = loom {

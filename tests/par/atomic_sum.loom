@@ -4,7 +4,7 @@
 use std.io.print
 use std.sync.Atomic
 
-fn work(n: u64) -> u64 {
+fun work(n: u64) -> u64 {
     var acc: u64 = 0
     for k in 0..n {
         acc = acc + k % 7
@@ -12,7 +12,7 @@ fn work(n: u64) -> u64 {
     acc
 }
 
-fn main() {
+fun main() {
     let total = Atomic[u64](0)
     let hits = Atomic[u64](0)
     loom for i in 0..64 {

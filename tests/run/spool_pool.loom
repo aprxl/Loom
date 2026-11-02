@@ -8,7 +8,7 @@ warp Particle {
     y: i32
 }
 
-fn main() {
+fun main() {
     spool slots = Pool[Particle](3)
     let a = slots.put(Particle(1, 2))
     let b = slots.put(Particle(3, 4))

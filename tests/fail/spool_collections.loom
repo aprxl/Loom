@@ -5,7 +5,7 @@ warp Bag {
     next: ?^Bag
 }
 
-fn main() {
+fun main() {
     spool a = Arena(1.kib())
     let b = a.put(Bag([1], none))         //~ U0102
     spool p = Pool[String](4)             //~ U0102

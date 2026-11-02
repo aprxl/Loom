@@ -3,7 +3,7 @@
 use std.io.print
 use std.sync.Pipe
 
-fn main() {
+fun main() {
     let p = Pipe[i32](1)
     p.close()
     print("sending")

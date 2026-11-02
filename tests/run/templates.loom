@@ -1,6 +1,6 @@
 use std.io.print
 
-fn main() {
+fun main() {
     let name = "loom"
     let n = 42
     print("{name:>6}|{name:<6}|{name:^6}|{name:*^8}")

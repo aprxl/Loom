@@ -11,20 +11,20 @@ type Big = u64 where 18446744073709551000..
 const LIMIT = 100
 type Small = i32 where -LIMIT..=LIMIT
 
-fn fee(balance: Cents, amount: Cents) -> Cents =
+fun fee(balance: Cents, amount: Cents) -> Cents =
     if balance >= 1000_00 { 0 } else { (amount / 100).max(25) }   // Cents / 100 is still a Cents
 
-fn parse_cents(s: str) -> ?Cents {
+fun parse_cents(s: str) -> ?Cents {
     let n = s.parse[i64]() mend return none
     if n is Cents { n } else { none }                              // `is` narrows `n`
 }
 
-fn describe(n: i64) -> String = match n {
+fun describe(n: i64) -> String = match n {
     e: Even => "even {e}"
     _ => "odd {n}"
 }
 
-fn main() {
+fun main() {
     let a: Cents = 250
     let b: Cents = 100
     let sum = a + b                          // Cents + Cents: still a Cents

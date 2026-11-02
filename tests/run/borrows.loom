@@ -4,7 +4,7 @@
 
 use std.io.print
 
-fn main() {
+fun main() {
     var xs: List[i32] = [1, 2, 3]
     let before: [i32] = xs[..]
     print(before.len())                     // used before the change: fine

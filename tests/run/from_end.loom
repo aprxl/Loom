@@ -3,7 +3,7 @@ use std.io.print
 
 warp Bag { items: List[i32] }
 
-fn main() {
+fun main() {
     let xs = [1, 2, 3, 4, 5]
     let last = xs[#-1]
     let middle = xs[1..#-1]

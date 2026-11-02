@@ -4,7 +4,7 @@ warp Item {
     names: List[String]
 }
 
-fn main() {
+fun main() {
     spool frame = Arena(1.kib())
     let i = frame.put(Item([]))         //~ U0102
 }

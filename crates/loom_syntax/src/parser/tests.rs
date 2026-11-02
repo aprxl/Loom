@@ -155,14 +155,14 @@ fn is_and_casts() {
 
 #[test]
 fn lambdas_and_holes() {
-    assert_eq!(e("xs.map(x => x * 2)"), "(call (. xs map) (fn (x) (* x 2)))");
-    assert_eq!(e("(a, b) => a + b"), "(fn (a, b) (+ a b))");
-    assert_eq!(e("(p: Point) => p.len()"), "(fn (p: Point) (call (. p len)))");
-    assert_eq!(e("() => 1"), "(fn () 1)");
+    assert_eq!(e("xs.map(x => x * 2)"), "(call (. xs map) (fun (x) (* x 2)))");
+    assert_eq!(e("(a, b) => a + b"), "(fun (a, b) (+ a b))");
+    assert_eq!(e("(p: Point) => p.len()"), "(fun (p: Point) (call (. p len)))");
+    assert_eq!(e("() => 1"), "(fun () 1)");
     assert_eq!(e("xs.filter(_ % 2 == 0)"), "(call (. xs filter) (== (% _ 2) 0))");
-    assert_eq!(e("xs.each(x => total += x)"), "(call (. xs each) (fn (x) (+= total x)))");
-    assert_eq!(e("^(x => x + offset)"), "(alloc (fn (x) (+ x offset)))");
-    assert_eq!(e("take x => x"), "(fn (take x) x)");
+    assert_eq!(e("xs.each(x => total += x)"), "(call (. xs each) (fun (x) (+= total x)))");
+    assert_eq!(e("^(x => x + offset)"), "(alloc (fun (x) (+ x offset)))");
+    assert_eq!(e("take x => x"), "(fun (take x) x)");
 }
 
 #[test]
@@ -285,7 +285,7 @@ fn labeled_loops_are_expressions() {
 
 #[test]
 fn continue_takes_only_known_labels() {
-    let (_, _, diags, codes) = run("fn a() { loop { continue foo } }", |p| p.module());
+    let (_, _, diags, codes) = run("fun a() { loop { continue foo } }", |p| p.module());
     assert_eq!(codes, [codes::S0200]);
     assert!(diags[0].contains("no enclosing loop is labeled `foo`"), "{}", diags[0]);
 }
@@ -313,9 +313,9 @@ fn statements() {
 
 #[test]
 fn nested_items_in_blocks() {
-    let out = stmts("fn helper() -> u8 = 1\nconst LIMIT = 3\nhelper()");
+    let out = stmts("fun helper() -> u8 = 1\nconst LIMIT = 3\nhelper()");
     assert_eq!(out.len(), 3);
-    assert!(out[0].contains("fn helper() -> u8 = 1"), "{out:?}");
+    assert!(out[0].contains("fun helper() -> u8 = 1"), "{out:?}");
     assert!(out[1].contains("const LIMIT 3"), "{out:?}");
     assert_eq!(out[2], "(call helper)");
 }
@@ -438,31 +438,31 @@ fn optional_binds_tighter_than_the_function_arrow() {
 #[test]
 fn function_signatures() {
     let m = module(
-        "fn a() -> u8 = 1\n\
-         fn b() ! IoError {}\n\
-         fn c(take self, mut out: String, x: u8 = 3) -> T ! E {}\n\
-         fn d() ~> Token <~ char {}\n\
-         fn e(mut self, i: usize) ~> mut T {}\n\
-         fn f() <~ Line {}\n\
-         pub fn parse(src: str) -> ^Expr@sp ! ParseError given sp: Spool {}\n\
-         fn g[T: Show + Eq, const N: usize, @r](x: T) -> String where T: Hash = \"\"\n\
-         const fn uint(bits: u8) -> type\n\
-         unsafe fn poke(p: *u8) {}",
+        "fun a() -> u8 = 1\n\
+         fun b() ! IoError {}\n\
+         fun c(take self, mut out: String, x: u8 = 3) -> T ! E {}\n\
+         fun d() ~> Token <~ char {}\n\
+         fun e(mut self, i: usize) ~> mut T {}\n\
+         fun f() <~ Line {}\n\
+         pub fun parse(src: str) -> ^Expr@sp ! ParseError given sp: Spool {}\n\
+         fun g[T: Show + Eq, const N: usize, @r](x: T) -> String where T: Hash = \"\"\n\
+         const fun uint(bits: u8) -> type\n\
+         unsafe fun poke(p: *u8) {}",
     );
     let rendered: Vec<String> = m.items.iter().map(|i| pretty::item(i).trim_end().to_string()).collect();
     assert_eq!(
         rendered,
         [
-            "(fn a() -> u8 = 1)",
-            "(fn b() -> (() ! IoError) (block))",
-            "(fn c(take self, mut out: String, x: u8 = 3) -> (T ! E) (block))",
-            "(fn d() ~> Token <~ char (block))",
-            "(fn e(mut self, i: usize) ~> mut T (block))",
-            "(fn f() <~ Line (block))",
-            "(pub fn parse(src: str) -> (^Expr@sp ! ParseError) given sp: Spool (block))",
-            "(fn g[T: Show + Eq, const N: usize, @r](x: T) -> String where T: Hash = \"\")",
-            "(const fn uint(bits: u8) -> type)",
-            "(unsafe fn poke(p: *u8) (block))",
+            "(fun a() -> u8 = 1)",
+            "(fun b() -> (() ! IoError) (block))",
+            "(fun c(take self, mut out: String, x: u8 = 3) -> (T ! E) (block))",
+            "(fun d() ~> Token <~ char (block))",
+            "(fun e(mut self, i: usize) ~> mut T (block))",
+            "(fun f() <~ Line (block))",
+            "(pub fun parse(src: str) -> (^Expr@sp ! ParseError) given sp: Spool (block))",
+            "(fun g[T: Show + Eq, const N: usize, @r](x: T) -> String where T: Hash = \"\")",
+            "(const fun uint(bits: u8) -> type)",
+            "(unsafe fun poke(p: *u8) (block))",
         ]
     );
 }
@@ -470,7 +470,7 @@ fn function_signatures() {
 #[test]
 fn anonymous_warps_are_unsupported() {
     // One U0101 for the whole `warp { … }`, and the next item still parses.
-    let src = "const fn fixed(bits: u8) -> type = warp {\n    raw: int(bits)\n}\ntype Q16x16 = fixed(32)";
+    let src = "const fun fixed(bits: u8) -> type = warp {\n    raw: int(bits)\n}\ntype Q16x16 = fixed(32)";
     let (m, _, _, codes) = run(src, |p| p.module());
     assert_eq!(codes, [codes::U0101]);
     assert_eq!(m.items.len(), 2);
@@ -483,7 +483,7 @@ fn unit_warps() {
          warp Gone: Error;\n\
          pub warp Empty {}\n\
          warp Nothing()\n\
-         fn f() = fail Missing()\n\
+         fun f() = fail Missing()\n\
          warp Braces\n{\n    x: u8\n}",
     );
     assert_eq!(m.items.len(), 6);
@@ -495,7 +495,7 @@ fn unit_warps() {
     assert_eq!(gone.wefts.len(), 1);
     let ItemKind::Warp(nothing) = &m.items[3].kind else { panic!("expected a warp") };
     assert_eq!(nothing.body, WarpBody::Tuple(Vec::new()));
-    // A `{` on the next line is still the body, as it is for `fn`.
+    // A `{` on the next line is still the body, as it is for `fun`.
     let ItemKind::Warp(braces) = &m.items[5].kind else { panic!("expected a warp") };
     assert!(matches!(&braces.body, WarpBody::Members(members) if members.len() == 1));
 }
@@ -514,7 +514,7 @@ fn warps() {
              const MAX = 3\n    \
              type Idx = uint(4)\n    \
              const assert(MAX > 1)\n    \
-             fn len(self) -> usize = .span.len()\n\
+             fun len(self) -> usize = .span.len()\n\
          }\n\
          warp Meters(f64)\n\
          pub once warp Tx { moves: List[Move] }\n\
@@ -533,11 +533,11 @@ fn warps() {
             MemberKind::Cases(_) => "cases",
             MemberKind::Const(_) => "const",
             MemberKind::Type(_) => "type",
-            MemberKind::Fn(_) => "fn",
+            MemberKind::Fn(_) => "fun",
             MemberKind::ConstExpr(_) => "const-expr",
         })
         .collect();
-    assert_eq!(kinds, ["field", "field", "cases", "cases", "cases", "through", "const", "type", "const-expr", "fn"]);
+    assert_eq!(kinds, ["field", "field", "cases", "cases", "cases", "through", "const", "type", "const-expr", "fun"]);
     let rendered = pretty::item(&m.items[0]);
     assert!(rendered.contains("(pub(get) field span: Span)"), "{rendered}");
     assert!(rendered.contains("(case Ident(String), Int(u64))"), "{rendered}");
@@ -557,31 +557,31 @@ fn wefts_weaves_externs_uses() {
         "use std.io.print\n\
          use std.fs.{File, read as read_file}\n\
          use std.{env, fs}\n\
-         weft Iter: Show {\n    type Item\n    fn next(mut self) -> ?Item\n    fn name(self) -> str = \"iter\"\n}\n\
-         weave[T: Show] Show into List[T] where T: Eq {\n    fn show(self, mut f: Fmt) {}\n}\n\
-         weave Iter into Bytes {\n    type Item = u8\n    fn next(mut self) -> ?u8 = none\n}\n\
-         extern \"C\" {\n    fn GetTickCount() -> u32\n}\n\
+         weft Iter: Show {\n    type Item\n    fun next(mut self) -> ?Item\n    fun name(self) -> str = \"iter\"\n}\n\
+         weave[T: Show] Show into List[T] where T: Eq {\n    fun show(self, mut f: Fmt) {}\n}\n\
+         weave Iter into Bytes {\n    type Item = u8\n    fun next(mut self) -> ?u8 = none\n}\n\
+         extern \"C\" {\n    fun GetTickCount() -> u32\n}\n\
          type Port = u16 where 1..\n\
          type Even = i64 where _ % 2 == 0\n\
          const HOUSE: AccountId = 1\n\
-         #inline\n#layout(bits, big)\nfn t() {}",
+         #inline\n#layout(bits, big)\nfun t() {}",
     );
     let rendered: Vec<String> = m.items.iter().map(|i| pretty::item(i).trim_end().to_string()).collect();
     assert_eq!(rendered[0], "(use std.io.print)");
     assert_eq!(rendered[1], "(use std.fs.{File, read as read_file})");
     assert_eq!(rendered[2], "(use std.{env, fs})");
     assert!(
-        rendered[3].starts_with("(weft Iter: Show\n  (type Item)\n  (fn next(mut self) -> ?Item)"),
+        rendered[3].starts_with("(weft Iter: Show\n  (type Item)\n  (fun next(mut self) -> ?Item)"),
         "{}",
         rendered[3]
     );
     assert!(rendered[4].starts_with("(weave[T: Show] Show into List[T] where T: Eq"), "{}", rendered[4]);
     assert!(rendered[5].starts_with("(weave Iter into Bytes\n  (type Item = u8)"), "{}", rendered[5]);
-    assert!(rendered[6].contains("(fn GetTickCount() -> u32)"), "{}", rendered[6]);
+    assert!(rendered[6].contains("(fun GetTickCount() -> u32)"), "{}", rendered[6]);
     assert_eq!(rendered[7], "(type Port = u16 where (.. 1 _))");
     assert_eq!(rendered[8], "(type Even = i64 where (== (% _ 2) 0))");
     assert_eq!(rendered[9], "(const HOUSE: AccountId 1)");
-    assert_eq!(rendered[10], "#inline()\n#layout(bits big)\n(fn t() (block))");
+    assert_eq!(rendered[10], "#inline()\n#layout(bits big)\n(fun t() (block))");
 }
 
 #[test]
@@ -596,11 +596,11 @@ fn tests_are_items_where_test_is_a_keyword() {
 
 #[test]
 fn attribute_arguments() {
-    let m = module("#foo(key = 1, bits)\nfn a() {}\nwarp W {\n    #disjoint\n    fn f(self) {}\n}");
-    assert_eq!(pretty::item(&m.items[0]), "#foo((= key 1) bits)\n(fn a() (block))\n");
+    let m = module("#foo(key = 1, bits)\nfun a() {}\nwarp W {\n    #disjoint\n    fun f(self) {}\n}");
+    assert_eq!(pretty::item(&m.items[0]), "#foo((= key 1) bits)\n(fun a() (block))\n");
     // Member attributes show up in the dump too.
     assert!(
-        pretty::item(&m.items[1]).contains("  #disjoint()\n  (fn f(self) (block))"),
+        pretty::item(&m.items[1]).contains("  #disjoint()\n  (fun f(self) (block))"),
         "{}",
         pretty::item(&m.items[1])
     );
@@ -615,13 +615,13 @@ fn through_needs_a_colon() {
 
 #[test]
 fn param_modes_go_first() {
-    let m = module("fn f(mut a: T, take b: T, c: T, const n: usize) {}");
+    let m = module("fun f(mut a: T, take b: T, c: T, const n: usize) {}");
     let ItemKind::Fn(f) = &m.items[0].kind else { panic!() };
     let modes: Vec<ParamMode> = f.params.iter().map(|p| p.mode).collect();
     assert_eq!(modes, [ParamMode::Mut, ParamMode::Take, ParamMode::Read, ParamMode::Const]);
 
     // `c: mut Canvas` is accepted with a fix-it.
-    let (m, _, diags, codes) = run("fn draw(c: mut Canvas) {}", |p| p.module());
+    let (m, _, diags, codes) = run("fun draw(c: mut Canvas) {}", |p| p.module());
     assert_eq!(codes, [codes::S0208]);
     assert!(diags[0].contains("write `mut c: …`"), "{}", diags[0]);
     let ItemKind::Fn(f) = &m.items[0].kind else { panic!() };
@@ -632,20 +632,20 @@ fn param_modes_go_first() {
 #[test]
 fn name_cases_are_enforced() {
     assert_eq!(module_codes("warp point {}"), [codes::S0207]);
-    assert_eq!(module_codes("fn Foo() {}"), [codes::S0207]);
+    assert_eq!(module_codes("fun Foo() {}"), [codes::S0207]);
     assert_eq!(module_codes("const max = 1"), [codes::S0207]);
     assert_eq!(module_codes("warp P { case lower }"), [codes::S0207]);
     // Extern declarations keep their foreign names.
-    assert!(module_codes("extern \"C\" { fn GetTickCount() -> u32 }").is_empty());
-    assert_eq!(module_codes("fn f() { pub(get) }"), [codes::S0209]);
-    assert_eq!(module_codes("fn f() {\n    test g() {}\n}"), [codes::S0212]);
+    assert!(module_codes("extern \"C\" { fun GetTickCount() -> u32 }").is_empty());
+    assert_eq!(module_codes("fun f() { pub(get) }"), [codes::S0209]);
+    assert_eq!(module_codes("fun f() {\n    test g() {}\n}"), [codes::S0212]);
 }
 
 // ================================================================ errors and recovery
 
 #[test]
 fn recovers_after_a_bad_statement() {
-    let (m, _, _, codes) = run("fn a() {\n    let x = )\n    let y = 2\n}\nfn b() {}", |p| p.module());
+    let (m, _, _, codes) = run("fun a() {\n    let x = )\n    let y = 2\n}\nfun b() {}", |p| p.module());
     assert_eq!(codes, [codes::S0200]);
     assert_eq!(m.items.len(), 2);
     let body = pretty::item(&m.items[0]);
@@ -654,19 +654,19 @@ fn recovers_after_a_bad_statement() {
 
 #[test]
 fn reports_statements_on_one_line() {
-    assert_eq!(module_codes("fn a() { let a = 1 let b = 2 }"), [codes::S0202]);
+    assert_eq!(module_codes("fun a() { let a = 1 let b = 2 }"), [codes::S0202]);
 }
 
 #[test]
 fn reports_unclosed_delimiters() {
-    let (_, _, diags, codes) = run("fn a() {\n    f(1, 2\n", |p| p.module());
+    let (_, _, diags, codes) = run("fun a() {\n    f(1, 2\n", |p| p.module());
     assert!(codes.contains(&codes::S0201), "{codes:?}");
     assert!(diags.iter().any(|d| d.contains("never closed")), "{diags:?}");
 }
 
 #[test]
 fn a_missing_close_paren_points_at_the_opener() {
-    let (_, _, diags, codes) = run("fn a() {\n    let x = f(1, 2\n    let y = 3\n}", |p| p.module());
+    let (_, _, diags, codes) = run("fun a() {\n    let x = f(1, 2\n    let y = 3\n}", |p| p.module());
     assert_eq!(codes, [codes::S0200]);
     assert!(diags[0].contains("expected `)`, found keyword `let`"), "{}", diags[0]);
     assert!(diags[0].contains("to close this `(`"), "{}", diags[0]);
@@ -674,39 +674,39 @@ fn a_missing_close_paren_points_at_the_opener() {
 
 #[test]
 fn explains_the_continuation_rule() {
-    let (_, _, diags, codes) = run("fn a() {\n    let b = x\n    + y\n}", |p| p.module());
+    let (_, _, diags, codes) = run("fun a() {\n    let b = x\n    + y\n}", |p| p.module());
     assert_eq!(codes, [codes::S0200]);
     assert!(diags[0].contains("only when it's indented deeper"), "{}", diags[0]);
 }
 
 #[test]
 fn lexer_errors_are_not_reported_again() {
-    assert_eq!(module_codes("fn a() { let x = 1 $ 2 }"), [codes::S0100]);
-    assert_eq!(module_codes("fn a() {\n    let x = 'ab' + 1\n}"), [codes::S0107]);
+    assert_eq!(module_codes("fun a() { let x = 1 $ 2 }"), [codes::S0100]);
+    assert_eq!(module_codes("fun a() {\n    let x = 'ab' + 1\n}"), [codes::S0107]);
 }
 
 #[test]
 fn one_error_per_garbage_line() {
-    assert_eq!(module_codes("fn a() {\n    @@@ @@\n    let y = 2\n}"), [codes::S0200]);
+    assert_eq!(module_codes("fun a() {\n    @@@ @@\n    let y = 2\n}"), [codes::S0200]);
     assert_eq!(module_codes("warp A {\n    @@@ @@\n    x: u8\n}"), [codes::S0200]);
-    assert_eq!(module_codes("fn a() {\n    match x {\n        ) ) )\n        _ => 1\n    }\n}"), [codes::S0200]);
+    assert_eq!(module_codes("fun a() {\n    match x {\n        ) ) )\n        _ => 1\n    }\n}"), [codes::S0200]);
 }
 
 #[test]
 fn a_missing_brace_ends_at_the_next_item() {
     // The warp's `}` is missing: one error, and `B` and `c` still parse as items.
-    let (m, _, diags, codes) = run("warp A {\n    x: u8\nwarp B {\n    y: u8\n}\nfn c() {}", |p| p.module());
+    let (m, _, diags, codes) = run("warp A {\n    x: u8\nwarp B {\n    y: u8\n}\nfun c() {}", |p| p.module());
     assert_eq!(codes, [codes::S0201]);
     assert!(diags[0].contains("expected `}` before this line"), "{}", diags[0]);
     assert_eq!(m.items.len(), 3);
     // Same for a `match` whose `}` is missing.
     let (m, _, _, codes) =
-        run("fn a() {\n    let v = match x {\n        1 => 2\n    let w = 3\n    w\n}\nfn b() {}", |p| p.module());
+        run("fun a() {\n    let v = match x {\n        1 => 2\n    let w = 3\n    w\n}\nfun b() {}", |p| p.module());
     assert_eq!(codes, [codes::S0201]);
     assert_eq!(m.items.len(), 2);
     assert!(pretty::item(&m.items[0]).contains("(let w 3)"), "{}", pretty::item(&m.items[0]));
     // A statement keyword indented like an arm is an ordinary error instead.
-    assert_eq!(module_codes("fn a() {\n    match x {\n        let y = 1\n    }\n}"), [codes::S0200]);
+    assert_eq!(module_codes("fun a() {\n    match x {\n        let y = 1\n    }\n}"), [codes::S0200]);
 }
 
 #[test]
@@ -716,15 +716,15 @@ fn deep_nesting_is_an_error_not_a_crash() {
         .stack_size(64 * 1024 * 1024)
         .spawn(|| {
             let deep = |open: &str, mid: &str, close: &str| {
-                format!("fn a() {{ {}{mid}{} }}", open.repeat(5000), close.repeat(5000))
+                format!("fun a() {{ {}{mid}{} }}", open.repeat(5000), close.repeat(5000))
             };
             [
                 deep("(", "1", ")"),
                 deep("[", "1", "]"),
                 deep("{ ", "1", " }"),
                 deep("-", "1", ""),
-                format!("fn a() {{ let x: {}T = y }}", "?".repeat(5000)),
-                format!("fn a() {{ let {}x{} = 1 }}", "(".repeat(5000), ")".repeat(5000)),
+                format!("fun a() {{ let x: {}T = y }}", "?".repeat(5000)),
+                format!("fun a() {{ let {}x{} = 1 }}", "(".repeat(5000), ")".repeat(5000)),
                 format!("use a{}{}", ".{b".repeat(5000), "}".repeat(5000)),
             ]
             .iter()
@@ -738,36 +738,36 @@ fn deep_nesting_is_an_error_not_a_crash() {
         assert_eq!(c, [codes::S0211]);
     }
     // Deep but reasonable nesting is fine.
-    let src = format!("fn a() {{ let x = {}1{} }}", "(".repeat(60), ")".repeat(60));
+    let src = format!("fun a() {{ let x = {}1{} }}", "(".repeat(60), ")".repeat(60));
     assert!(module_codes(&src).is_empty());
 }
 
 #[test]
 fn skips_garbage_between_items() {
-    let (m, _, _, codes) = run("42 + 1\nfn b() {}\n)\nwarp C {}", |p| p.module());
+    let (m, _, _, codes) = run("42 + 1\nfun b() {}\n)\nwarp C {}", |p| p.module());
     assert_eq!(codes, [codes::S0200, codes::S0200]);
     assert_eq!(m.items.len(), 2);
 }
 
 #[test]
 fn rejects_assignments_in_expressions() {
-    assert_eq!(module_codes("fn a() { if x = 5 { } }"), [codes::S0205]);
-    assert_eq!(module_codes("fn a() { let a = b = c }"), [codes::S0205]);
+    assert_eq!(module_codes("fun a() { if x = 5 { } }"), [codes::S0205]);
+    assert_eq!(module_codes("fun a() { let a = b = c }"), [codes::S0205]);
 }
 
 #[test]
 fn rejects_twill_in_expressions() {
-    assert_eq!(module_codes("fn a() { let x = 0x8xy4 }"), [codes::S0204]);
+    assert_eq!(module_codes("fun a() { let x = 0x8xy4 }"), [codes::S0204]);
 }
 
 #[test]
 fn missing_initializer() {
-    assert_eq!(module_codes("fn a() { let x: u8 }"), [codes::S0210]);
+    assert_eq!(module_codes("fun a() { let x: u8 }"), [codes::S0210]);
 }
 
 #[test]
 fn unsafe_requires_a_reason() {
-    assert_eq!(module_codes("fn a() { unsafe { poke() } }"), [codes::S0200]);
+    assert_eq!(module_codes("fun a() { unsafe { poke() } }"), [codes::S0200]);
 }
 
 // ================================================================ the examples
@@ -836,7 +836,7 @@ fn every_doc_block_parses() {
             if as_file.is_empty() {
                 continue;
             }
-            let as_body = attempt(format!("fn snippet() {{\n{src}\n}}\n"));
+            let as_body = attempt(format!("fun snippet() {{\n{src}\n}}\n"));
             assert!(as_body.is_empty(), "{}:{line}:\n{}", path.display(), as_file.join("\n"));
         }
     }
@@ -862,4 +862,14 @@ fn array_types_in_index_brackets() {
     assert_eq!(e("of[[[u8; 2]; 2]]()"), "(call (index of (type [[u8; 2]; 2])))");
     assert_eq!(e("m[[1, 2]]"), "(index m (array 1 2))");
     assert_eq!(e("xs[[i][0]]"), "(index xs (index (array i) 0))");
+}
+
+#[test]
+fn fn_is_not_a_keyword_and_says_to_use_fun() {
+    let (_, _, rendered, codes) = run("fn main() {}\nfun other() {}", |p| p.module());
+    assert_eq!(codes, [codes::S0200]);
+    assert!(rendered[0].contains("found `fn`"), "{}", rendered[0]);
+    assert!(rendered[0].contains("functions are declared with `fun`, not `fn`"), "{}", rendered[0]);
+    // As a name it is an ordinary identifier.
+    assert_eq!(e("fn + 1"), "(+ fn 1)");
 }

@@ -5,16 +5,16 @@ warp Counter: Show {
 }
 
 // `x: T` reads. `mut x: T` edits in place. `take x: T` consumes.
-fn peek(c: Counter) -> i32 = c.n
-fn bump(mut c: Counter) { c.n += 1 }
-fn swap(mut a: i32, mut b: i32) {
+fun peek(c: Counter) -> i32 = c.n
+fun bump(mut c: Counter) { c.n += 1 }
+fun swap(mut a: i32, mut b: i32) {
     let t = a
     a = b
     b = t
 }
-fn keep(take names: List[String]) -> usize = names.len()
+fun keep(take names: List[String]) -> usize = names.len()
 
-fn main() {
+fun main() {
     var c = Counter()
     bump(mut c)                              // `mut` is written at the call, too
     bump(mut c)

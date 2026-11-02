@@ -1,7 +1,7 @@
 use std.fs
 use std.io.print
 
-fn main() ! any Error {
+fun main() ! any Error {
     fs.create_dir_all("std_fs_dirs_probe/a")?
     fs.write_text("std_fs_dirs_probe/a/one.txt", "1")?
     fs.write_text("std_fs_dirs_probe/b.txt", "bb")?

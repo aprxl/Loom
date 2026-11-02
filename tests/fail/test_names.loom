@@ -4,13 +4,13 @@ test twice() {}
 test twice() {}                             //~ N0104
 
 // A function may share a test's name.
-fn plain() -> i32 = 1
+fun plain() -> i32 = 1
 test plain() = assert(plain() == 1)
 
-fn calls() = twice()                        //~ N0101
+fun calls() = twice()                        //~ N0101
 
-fn nests() {
+fun nests() {
     test inner() {}                         //~ S0212
 }
 
-fn main() {}
+fun main() {}

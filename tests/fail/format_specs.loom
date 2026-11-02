@@ -2,7 +2,7 @@
 // the Lua backend gives at most 99 digits after the point.
 use std.io.print
 
-fn main() {
+fun main() {
     let x = 3.25
     let s = "hi"
     print("{x:.99} {s:>65535}")

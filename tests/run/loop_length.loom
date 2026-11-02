@@ -3,13 +3,13 @@
 // shapes where it isn't.
 use std.io.print
 
-fn counted(n: usize) -> List[i32] {
+fun counted(n: usize) -> List[i32] {
     var xs: List[i32] = List()
     for i in 0..n { xs.push(i as i32) }
     xs
 }
 
-fn leave_early() -> List[i32] {
+fun leave_early() -> List[i32] {
     var xs: List[i32] = List()
     for i in 0..10 {
         if i == 4 { break }
@@ -18,7 +18,7 @@ fn leave_early() -> List[i32] {
     xs
 }
 
-fn sometimes() -> List[i32] {
+fun sometimes() -> List[i32] {
     var xs: List[i32] = List()
     for i in 0..10 {
         if i % 2 == 0 { xs.push(i as i32) }
@@ -26,7 +26,7 @@ fn sometimes() -> List[i32] {
     xs
 }
 
-fn twice(n: usize) -> List[i32] {
+fun twice(n: usize) -> List[i32] {
     var xs: List[i32] = List()
     for i in 0..n {
         xs.push(i as i32)
@@ -35,17 +35,17 @@ fn twice(n: usize) -> List[i32] {
     xs
 }
 
-fn after_some() -> List[i32] {
+fun after_some() -> List[i32] {
     var xs: List[i32] = [100, 200]
     for i in 0..3 { xs.push(i as i32) }
     xs
 }
 
-fn add_nine(mut xs: List[i32]) {
+fun add_nine(mut xs: List[i32]) {
     xs.push(9)
 }
 
-fn through_a_call() -> List[i32] {
+fun through_a_call() -> List[i32] {
     var xs: List[i32] = List()
     for i in 0..3 {
         xs.push(i as i32)
@@ -54,7 +54,7 @@ fn through_a_call() -> List[i32] {
     xs
 }
 
-fn nested() -> List[i32] {
+fun nested() -> List[i32] {
     var xs: List[i32] = List()
     for i in 0..3 {
         for j in 0..4 { xs.push((i * 4 + j) as i32) }
@@ -62,14 +62,14 @@ fn nested() -> List[i32] {
     xs
 }
 
-fn sum_to_len(n: usize) -> i32 {
+fun sum_to_len(n: usize) -> i32 {
     let xs = counted(n)
     var total = 0
     for i in 0..xs.len() { total += xs[i] }
     total
 }
 
-fn main() {
+fun main() {
     let a = counted(0)
     let b = counted(5)
     print("{a.len()} {b.len()} {b[4]}")

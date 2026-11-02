@@ -9,14 +9,14 @@ warp Grid {
     cells: List[i32]
     width: usize
 
-    fn at(mut self, x: usize, y: usize) ~> mut i32 {
+    fun at(mut self, x: usize, y: usize) ~> mut i32 {
         let i = y * .width + x
         if i >= .cells.len() { unravel("({x}, {y}) is off the grid") }
         yield mut .cells[i]
         print("  at({x}, {y}) is {.cells[i]} now")
     }
 
-    fn peek(self, i: usize) ~> ref i32 {
+    fun peek(self, i: usize) ~> ref i32 {
         defer print("  peeked {i}")
         yield ref .cells[i]
     }
@@ -24,11 +24,11 @@ warp Grid {
 
 warp P { x: i32, y: i32 }
 
-fn second(mut ps: List[P]) ~> mut P {
+fun second(mut ps: List[P]) ~> mut P {
     yield mut ps[1]
 }
 
-fn at[T](mut xs: List[T], i: usize) ~> mut T {
+fun at[T](mut xs: List[T], i: usize) ~> mut T {
     defer print("  at({i}) done")
     yield mut xs[i % xs.len()]
 }
@@ -36,12 +36,12 @@ fn at[T](mut xs: List[T], i: usize) ~> mut T {
 warp Bag {
     names: List[String]
 
-    fn first(mut self) ~> mut String {
+    fun first(mut self) ~> mut String {
         yield mut .names[0]
     }
 }
 
-fn main() {
+fun main() {
     var g = Grid(cells: [0, 0, 0, 0, 0, 0], width: 3)
     g.at(1, 1) = 5
     g.at(1, 1) += 2

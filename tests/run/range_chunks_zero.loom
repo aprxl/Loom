@@ -2,7 +2,7 @@
 
 use std.io.print
 
-fn main() {
+fun main() {
     print("start")
     let n = 0
     for c in (0..10).chunks(n) {

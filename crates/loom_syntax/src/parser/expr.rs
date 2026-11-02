@@ -705,7 +705,7 @@ impl Parser<'_> {
             Keyword::Unsafe => self.unsafe_block(),
             Keyword::Const => self.const_expr(),
             Keyword::Warp if self.nth_is_punct(1, Punct::LBrace) => {
-                // `const fn fixed(…) -> type = warp { … }`: in the design
+                // `const fun fixed(…) -> type = warp { … }`: in the design
                 // (06-compile-time), but not in v1. Skip it as one unit.
                 self.recover_to_stmt_end();
                 let span = self.span_from(start);

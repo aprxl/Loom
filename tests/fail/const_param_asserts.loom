@@ -5,12 +5,12 @@ warp Ring[T, const N: usize] {
     slots: [?T; N] = [none; N]
 }
 
-fn zeros(const n: usize) -> [f32; n] {
+fun zeros(const n: usize) -> [f32; n] {
     const assert(n < 100, "{n} zeros is too many")      //~ K0101
     [0.0; n]
 }
 
-fn main() {
+fun main() {
     let fine = Ring[u32, 4]()
     let odd = Ring[u32, 100]()
     let few = zeros(3)

@@ -5,13 +5,13 @@ warp Particle {
     x: i32
 }
 
-fn too_early() {
+fun too_early() {
     spool raw = SharedArena(1.kib())
     let t = raw.put(Particle(1))
     raw.reset()
     print("{t.x}")                       //~ R0102
 }
 
-fn main() {
+fun main() {
     too_early()
 }

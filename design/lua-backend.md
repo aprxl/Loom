@@ -141,13 +141,13 @@ value is a type too (`TyKind::Value`): `Ring[u32, 4]` and `Ring[u32, 8]` are
 different types, and `zeros(4)` and `zeros(5)` different instances. An
 array whose length is a `const` parameter is `TyKind::ArrayOf` until the
 length is known (in a template, or at a call before the argument says),
-which is also how `fn sum[const N: usize](xs: [i32; N])` infers `N`.
+which is also how `fun sum[const N: usize](xs: [i32; N])` infers `N`.
 
 - A `const` argument must fold (the constant folder: literals, constants,
   other `const` parameters, arithmetic, comparisons, `log2`,
   `is_power_of_two`, `min`, `max`, `pow`); anything else is K0109. It's
   checked against the parameter's type (T0102).
-- A `const` function parameter (`fn zeros(const n: usize)`) is still
+- A `const` function parameter (`fun zeros(const n: usize)`) is still
   passed at run time like any other; inside the instance, and in
   compile-time code, it's its value.
 - `uint(n)` and `int(n)` are integer types of `n` bits. A generic warp's
@@ -565,5 +565,5 @@ that don't own (`TABLE.len()`, `for x in TABLE`) share it.
 ## Not supported in v1
 
 Raw pointers, `extern "C"`, `#layout(bits)` I/O, f16, integers wider than 64
-bits, user-written `Spool` weaves, anonymous `warp {}` types from `const fn`s (U0101),
+bits, user-written `Spool` weaves, anonymous `warp {}` types from `const fun`s (U0101),
 and `bolt.loom`. Each fails with a `U` code.

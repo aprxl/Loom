@@ -9,4 +9,4 @@ test generic[T]() {}                        //~ T0119
 test plain() {}
 test fallible() ! any Error {}
 
-fn main() {}
+fun main() {}

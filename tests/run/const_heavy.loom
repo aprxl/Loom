@@ -4,7 +4,7 @@
 use std.io.print
 
 /// The sum of the first `n` squares, the long way round.
-fn squares(n: u64) -> u64 {
+fun squares(n: u64) -> u64 {
     var total: u64 = 0
     var i: u64 = 1
     while i <= n {
@@ -15,7 +15,7 @@ fn squares(n: u64) -> u64 {
 }
 
 /// How many numbers below `n` the Collatz walk takes more than 100 steps for.
-fn long_walks(n: u64) -> u32 {
+fun long_walks(n: u64) -> u32 {
     var count: u32 = 0
     var k: u64 = 1
     while k < n {
@@ -34,7 +34,7 @@ fn long_walks(n: u64) -> u32 {
 const SQUARES: u64 = squares(1_500_000)
 const WALKS: u32 = long_walks(15_000)
 
-fn main() {
+fun main() {
     print("squares = {SQUARES}")
     print("long walks = {WALKS}")
 }

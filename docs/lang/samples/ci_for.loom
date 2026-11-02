@@ -2,7 +2,7 @@ use std.io.print
 
 const SIZES = [1, 2, 4]
 
-fn main() {
+fun main() {
     // `const for` is unrolled while compiling: the body is written out
     // once per item, and each copy is checked on its own. `i` is a
     // constant in each copy, so it can size an array.

@@ -75,7 +75,7 @@ def render_type(item):
     if item.get("methods"):
         parts.append('<div class="members">')
         for m in item["methods"]:
-            m_name = re.match(r"(?:fn|type) (\w+)", m["sig"])
+            m_name = re.match(r"(?:fun|type) (\w+)", m["sig"])
             mid = f' id="{tid}.{slug(m_name.group(1))}"' if m_name else ""
             parts.append(f'<div class="member"{mid}>')
             parts.append('<div class="member-head">')
@@ -93,7 +93,7 @@ def render_fn(item):
     return "\n".join([
         f'<div class="item" id="{slug(item["name"])}">',
         '<div class="item-head">',
-        f'<span class="sig">fn <strong>{esc(item["name"])}</strong>{esc(item["suffix"])}</span>',
+        f'<span class="sig">fun <strong>{esc(item["name"])}</strong>{esc(item["suffix"])}</span>',
         badges(item),
         "</div>",
         doc_html(item.get("doc")),

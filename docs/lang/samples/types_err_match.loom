@@ -4,10 +4,10 @@ warp Shape {
     case Dot
 }
 
-fn area(s: Shape) -> f64 = match s {
+fun area(s: Shape) -> f64 = match s {
     .Circle(r) => 3.14 * r * r
     .Rect(w, h) => w * h
 }
 
-fn main() {}
+fun main() {}
 //@ check-fail P0101

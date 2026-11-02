@@ -1,14 +1,14 @@
 use std.io.print
 
 weft Shape {
-    fn area(self) -> f64
-    fn name(self) -> str = "shape"           // a default method
+    fun area(self) -> f64
+    fun name(self) -> str = "shape"           // a default method
 }
 
 // Inline: the warp lists the weft and writes its methods.
 warp Circle: Shape {
     radius: f64
-    fn area(self) -> f64 = 3.0 * .radius * .radius
+    fun area(self) -> f64 = 3.0 * .radius * .radius
 }
 
 warp Rect {
@@ -18,13 +18,13 @@ warp Rect {
 
 // Separate: behavior added afterwards, possibly in another module.
 weave Shape into Rect {
-    fn area(self) -> f64 = .w * .h
-    fn name(self) -> str = "rect"
+    fun area(self) -> f64 = .w * .h
+    fun name(self) -> str = "rect"
 }
 
-fn describe(s: Shape) -> String = "{s.name()} with area {s.area()}"
+fun describe(s: Shape) -> String = "{s.name()} with area {s.area()}"
 
-fn main() {
+fun main() {
     print(describe(Circle(2)))
     print(describe(Rect(2, 3)))
     print(Shape.name(Rect(1, 1)))            // call through the weft

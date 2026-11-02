@@ -1,6 +1,6 @@
 use std.io.print
 
-fn main() {
+fun main() {
     let words: List[String] = ["a", "b"]
     print(words.join("-"))
     let xss: List[[i32]] = [[1], [2]]

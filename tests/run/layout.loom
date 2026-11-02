@@ -17,11 +17,11 @@ warp Header { flag: u8, len: u32, id: u16 }
 type Triple = (u8, u64, u16)
 type Three = [u16; 3]
 
-fn describe[T]() {
+fun describe[T]() {
     print("{T.name}: size {T.size}, align {T.align}")
 }
 
-fn main() {
+fun main() {
     print("u8 {u8.size} {u8.align}, u12 {u12.size}, i24 {i24.size}, u64 {u64.size}")
     print("bool {bool.size}, char {char.size}, f32 {f32.size}, f64 {f64.size}")
     print("str {str.size}, String {String.size}")

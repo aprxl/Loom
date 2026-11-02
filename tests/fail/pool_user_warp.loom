@@ -4,6 +4,6 @@ warp Item {
     names: List[String]
 }
 
-fn main() {
+fun main() {
     spool slots = Pool[Item](4)         //~ U0102
 }

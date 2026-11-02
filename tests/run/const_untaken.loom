@@ -4,9 +4,9 @@
 
 use std.io.print
 
-fn fib(n: u32) -> u32 = if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+fun fib(n: u32) -> u32 = if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
 
-fn f() -> u32 {
+fun f() -> u32 {
     const if false {
         const assert(false, "never checked")
         const fib(1_000_000_000)
@@ -14,6 +14,6 @@ fn f() -> u32 {
     const fib(6)
 }
 
-fn main() {
+fun main() {
     print(f())
 }

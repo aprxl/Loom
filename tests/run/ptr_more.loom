@@ -13,20 +13,20 @@ warp Pair {
     b: ^String
 }
 
-fn push(take list: ?^Node, take value: String) -> ?^Node = some(^Node(value, list))
+fun push(take list: ?^Node, take value: String) -> ?^Node = some(^Node(value, list))
 
-fn join(list: ?^Node) -> String = match list {
+fun join(list: ?^Node) -> String = match list {
     none => ""
     some(n) => "{n.value} {join(n.next)}"
 }
 
-fn bump(mut p: ^i32) {
+fun bump(mut p: ^i32) {
     p^ += 1
 }
 
-fn make(n: i32) -> ^i32 = ^n
+fun make(n: i32) -> ^i32 = ^n
 
-fn main() {
+fun main() {
     var list: ?^Node = none
     list = push(list, "a")
     list = push(list, "b")

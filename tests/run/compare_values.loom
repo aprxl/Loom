@@ -14,16 +14,16 @@ warp Name: Show, Eq, Ord { first: String, last: String }
 warp Loose { v: i32 }
 weave Eq into Loose {
     // Equal when they're close.
-    fn eq(self, other: Loose) -> bool = -1 <= self.v - other.v <= 1
+    fun eq(self, other: Loose) -> bool = -1 <= self.v - other.v <= 1
 }
 warp Rev { v: i32 }
 weave Eq into Rev {}
 weave Ord into Rev {
-    fn lt(self, other: Rev) -> bool = self.v > other.v
+    fun lt(self, other: Rev) -> bool = self.v > other.v
 }
 warp Oops: Show, Error { code: i32 }
 
-fn main() {
+fun main() {
     // Text.
     print("{"abc" == "abc"} {"abc" == "abd"} {"ab" < "abc"} {"b" > "abc"} {"" < "a"}")
     let s: String = "hello"

@@ -1,28 +1,28 @@
 use std.io.print
 
-fn largest[T: Ord](a: T, b: T) -> T = if a < b { b } else { a }
+fun largest[T: Ord](a: T, b: T) -> T = if a < b { b } else { a }
 
-fn nothing[T]() -> u8 = 0
+fun nothing[T]() -> u8 = 0
 
-fn plus_one[T](x: T) -> T = x + 1         //~ T0101 T0103
+fun plus_one[T](x: T) -> T = x + 1         //~ T0101 T0103
 
 warp Pair[A, B] { first: A, second: B }
 
 warp Cat { lives: u8 }
 
 weft Named {
-    fn name(self) -> str
+    fun name(self) -> str
 }
 
-fn greet(who: Named) -> str = who.name()
+fun greet(who: Named) -> str = who.name()
 
 warp Boxed[T] { value: T }
 
 weave[T: Show] Show into Boxed[T] {
-    fn show(self, mut f: Fmt) = f.put(.value)
+    fun show(self, mut f: Fmt) = f.put(.value)
 }
 
-fn main() {
+fun main() {
     let a = largest(Cat(1), Cat(2))         //~ T0108
     let b = largest(1, "x")                 //~ T0101
     let c = largest[u8, u8](1, 2)           //~ T0104

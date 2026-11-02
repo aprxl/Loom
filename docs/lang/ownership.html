@@ -53,16 +53,16 @@
 }
 
 <span class="c">// `x: T` reads. `mut x: T` edits in place. `take x: T` consumes.</span>
-<span class="k">fn</span> peek(c: <span class="t">Counter</span>) -&gt; i32 = c.n
-<span class="k">fn</span> bump(<span class="k">mut</span> c: <span class="t">Counter</span>) { c.n += <span class="n">1</span> }
-<span class="k">fn</span> swap(<span class="k">mut</span> a: i32, <span class="k">mut</span> b: i32) {
+<span class="k">fun</span> peek(c: <span class="t">Counter</span>) -&gt; i32 = c.n
+<span class="k">fun</span> bump(<span class="k">mut</span> c: <span class="t">Counter</span>) { c.n += <span class="n">1</span> }
+<span class="k">fun</span> swap(<span class="k">mut</span> a: i32, <span class="k">mut</span> b: i32) {
     <span class="k">let</span> t = a
     a = b
     b = t
 }
-<span class="k">fn</span> keep(<span class="k">take</span> names: <span class="t">List</span>[<span class="t">String</span>]) -&gt; usize = names.len()
+<span class="k">fun</span> keep(<span class="k">take</span> names: <span class="t">List</span>[<span class="t">String</span>]) -&gt; usize = names.len()
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">var</span> c = <span class="t">Counter</span>()
     bump(<span class="k">mut</span> c)                              <span class="c">// `mut` is written at the call, too</span>
     bump(<span class="k">mut</span> c)
@@ -96,14 +96,14 @@
 <p>Using a variable after it moved is an error, and so is moving a value out of a borrow (a read parameter, a loop's item, a lambda's captured variable) or out of a list's element. The check follows branches and goes through loop bodies twice.</p>
 <div class="sample" id="sample-own_err_moved">
 <div class="sample-head"><span class="file">samples/own_err_moved.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#M0101">M0101</a></span></div>
-<pre class="code"><code><span class="k">fn</span> keep(<span class="k">take</span> s: <span class="t">String</span>) -&gt; <span class="t">String</span> = s
+<pre class="code"><code><span class="k">fun</span> keep(<span class="k">take</span> s: <span class="t">String</span>) -&gt; <span class="t">String</span> = s
 
-<span class="k">fn</span> used_after(<span class="k">take</span> s: <span class="t">String</span>) -&gt; usize {
+<span class="k">fun</span> used_after(<span class="k">take</span> s: <span class="t">String</span>) -&gt; usize {
     <span class="k">let</span> kept = keep(s)
     s.len()
 }
 
-<span class="k">fn</span> main() {}</code></pre>
+<span class="k">fun</span> main() {}</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[M0101]: `s` is used after it was moved</span>
 <span class="loc">  --&gt; own_err_moved.loom:5:5</span>
   |
@@ -119,13 +119,13 @@
 <p>While a variable is lent as <code>mut</code>, nothing else in the call may touch it. The check works per field, so <code>swap(mut p.x, mut p.y)</code> is fine.</p>
 <div class="sample" id="sample-own_err_overlap">
 <div class="sample-head"><span class="file">samples/own_err_overlap.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#M0104">M0104</a></span></div>
-<pre class="code"><code><span class="k">fn</span> swap(<span class="k">mut</span> a: i32, <span class="k">mut</span> b: i32) {
+<pre class="code"><code><span class="k">fun</span> swap(<span class="k">mut</span> a: i32, <span class="k">mut</span> b: i32) {
     <span class="k">let</span> t = a
     a = b
     b = t
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">var</span> n = <span class="n">1</span>
     swap(<span class="k">mut</span> n, <span class="k">mut</span> n)
 }</code></pre>
@@ -146,7 +146,7 @@
 <div class="sample-head"><span class="file">samples/own_err_borrow.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#M0105">M0105</a></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">var</span> xs: <span class="t">List</span>[i32] = [<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]
     <span class="k">let</span> tail = xs[<span class="n">1</span>..]
     xs.push(<span class="n">4</span>)
@@ -168,11 +168,11 @@
 <p>Nor can a borrow outlive what it borrows. A lambda that uses variables around it is passed as an argument or kept in a local, and that's all: returning it, storing it in a warp or a list, or passing it to a <code>take</code> parameter is an error, and so is keeping it in a variable declared outside the block of a variable it uses. The same goes for a slice of a local list, and a stream made from one or from such a lambda. (A lambda that uses nothing around it is a plain function value, and goes anywhere.)</p>
 <div class="sample" id="sample-own_err_escape">
 <div class="sample-head"><span class="file">samples/own_err_escape.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#M0106">M0106</a>, <a href="diagnostics.html#M0106">M0106</a></span></div>
-<pre class="code"><code><span class="k">fn</span> adder(k: i32) -&gt; i32 =&gt; i32 {
+<pre class="code"><code><span class="k">fun</span> adder(k: i32) -&gt; i32 =&gt; i32 {
     x =&gt; x + k
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">var</span> fs: <span class="t">List</span>[i32 =&gt; i32] = <span class="t">List</span>()
     <span class="k">for</span> i <span class="k">in</span> <span class="n">1</span>..=<span class="n">3</span> {
         fs.push(x =&gt; x * i)
@@ -181,8 +181,8 @@
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[M0106]: a lambda that uses `k` can't be returned</span>
 <span class="loc">  --&gt; own_err_escape.loom:2:5</span>
   |
-1 | fn adder(k: i32) -&gt; i32 =&gt; i32 {
-  |          - `k` is here
+1 | fun adder(k: i32) -&gt; i32 =&gt; i32 {
+  |           - `k` is here
 2 |     x =&gt; x + k
   |     ^^^^^^^^^^ returned here, it would outlive `k`
   |
@@ -214,19 +214,19 @@
 <span class="k">pub</span> <span class="k">once</span> <span class="k">warp</span> <span class="t">Tx</span> {
     moves: <span class="t">List</span>[i32] = <span class="t">List</span>()
 
-    <span class="k">pub</span> <span class="k">fn</span> begin() -&gt; <span class="t">Tx</span> = <span class="t">Tx</span>()
-    <span class="k">pub</span> <span class="k">fn</span> credit(<span class="k">mut</span> <span class="k">self</span>, amount: i32) { .moves.push(amount) }
-    <span class="k">pub</span> <span class="k">fn</span> commit(<span class="k">take</span> <span class="k">self</span>) {
+    <span class="k">pub</span> <span class="k">fun</span> begin() -&gt; <span class="t">Tx</span> = <span class="t">Tx</span>()
+    <span class="k">pub</span> <span class="k">fun</span> credit(<span class="k">mut</span> <span class="k">self</span>, amount: i32) { .moves.push(amount) }
+    <span class="k">pub</span> <span class="k">fun</span> commit(<span class="k">take</span> <span class="k">self</span>) {
         <span class="k">let</span> <span class="t">Tx</span>(moves) = <span class="k">self</span>                 <span class="c">// destructuring ties the value off</span>
         print(<span class="s">"committed {</span>moves<span class="s">}"</span>)
     }
-    <span class="k">pub</span> <span class="k">fn</span> rollback(<span class="k">take</span> <span class="k">self</span>) {
+    <span class="k">pub</span> <span class="k">fun</span> rollback(<span class="k">take</span> <span class="k">self</span>) {
         <span class="k">let</span> <span class="t">Tx</span>(_) = <span class="k">self</span>
         print(<span class="s">"rolled back"</span>)
     }
 }
 
-<span class="k">fn</span> transfer(good: bool) {
+<span class="k">fun</span> transfer(good: bool) {
     <span class="k">var</span> tx = <span class="t">Tx</span>.begin()
     <span class="k">defer</span> tx =&gt; tx.rollback()                <span class="c">// runs only if `tx` is still loose</span>
     tx.credit(<span class="n">5</span>)
@@ -234,7 +234,7 @@
     tx.commit()                              <span class="c">// used up: the defer does nothing</span>
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     transfer(<span class="k">true</span>)
     transfer(<span class="k">false</span>)
 }</code></pre>
@@ -247,21 +247,21 @@ rolled back</code></pre></div>
 <pre class="code"><code><span class="k">pub</span> <span class="k">once</span> <span class="k">warp</span> <span class="t">Tx</span> {
     moves: <span class="t">List</span>[i32] = <span class="t">List</span>()
 
-    <span class="k">pub</span> <span class="k">fn</span> begin() -&gt; <span class="t">Tx</span> = <span class="t">Tx</span>()
-    <span class="k">pub</span> <span class="k">fn</span> commit(<span class="k">take</span> <span class="k">self</span>) {
+    <span class="k">pub</span> <span class="k">fun</span> begin() -&gt; <span class="t">Tx</span> = <span class="t">Tx</span>()
+    <span class="k">pub</span> <span class="k">fun</span> commit(<span class="k">take</span> <span class="k">self</span>) {
         <span class="k">let</span> <span class="t">Tx</span>(moves) = <span class="k">self</span>
     }
-    <span class="k">pub</span> <span class="k">fn</span> rollback(<span class="k">take</span> <span class="k">self</span>) {
+    <span class="k">pub</span> <span class="k">fun</span> rollback(<span class="k">take</span> <span class="k">self</span>) {
         <span class="k">let</span> <span class="t">Tx</span>(_) = <span class="k">self</span>
     }
 }
 
-<span class="k">fn</span> forgetful(early: bool) {
+<span class="k">fun</span> forgetful(early: bool) {
     <span class="k">let</span> tx = <span class="t">Tx</span>.begin()
     <span class="k">if</span> early { tx.commit() }
 }
 
-<span class="k">fn</span> main() {}</code></pre>
+<span class="k">fun</span> main() {}</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[L0301]: loose end: `tx` is never tied off</span>
 <span class="loc">   --&gt; own_err_loose.loom:14:9</span>
    |
@@ -283,14 +283,14 @@ rolled back</code></pre></div>
 <div class="sample-head"><span class="file">samples/own_defer.loom</span><span class="tag ok">runs</span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fn</span> plain() {
+<span class="k">fun</span> plain() {
     <span class="k">defer</span> print(<span class="s">"declared first, runs last"</span>)
     <span class="k">defer</span> print(<span class="s">"declared second, runs first"</span>)
     print(<span class="s">"body"</span>)
 }
 
 <span class="c">// The result is worked out before the defers run.</span>
-<span class="k">fn</span> returns(n: i32) -&gt; i32 {
+<span class="k">fun</span> returns(n: i32) -&gt; i32 {
     <span class="k">var</span> x = n
     <span class="k">defer</span> print(<span class="s">"defer sees x = {</span>x<span class="s">}"</span>)
     <span class="k">if</span> n &gt; <span class="n">5</span> { <span class="k">return</span> x * <span class="n">10</span> }
@@ -304,13 +304,13 @@ rolled back</code></pre></div>
 
 <span class="c">// A defer runs on every way out: `return`, `fail`, `?`, `break`,</span>
 <span class="c">// `continue`, and an unravel.</span>
-<span class="k">fn</span> fails(bad: bool) -&gt; i32 ! <span class="t">Oops</span> {
+<span class="k">fun</span> fails(bad: bool) -&gt; i32 ! <span class="t">Oops</span> {
     <span class="k">defer</span> print(<span class="s">"cleanup after fails({</span>bad<span class="s">})"</span>)
     <span class="k">if</span> bad { <span class="k">fail</span> .<span class="t">Bad</span> }
     <span class="n">1</span>
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     plain()
     print(returns(<span class="n">3</span>))
     print(returns(<span class="n">9</span>))
@@ -352,7 +352,7 @@ end of iteration 2</code></pre></div>
     <span class="k">case</span> <span class="t">Node</span>(left: ^<span class="t">Tree</span>, value: i32, right: ^<span class="t">Tree</span>)
 }
 
-<span class="k">fn</span> insert(<span class="k">take</span> t: ^<span class="t">Tree</span>, v: i32) -&gt; ^<span class="t">Tree</span> = <span class="k">match</span> t {
+<span class="k">fun</span> insert(<span class="k">take</span> t: ^<span class="t">Tree</span>, v: i32) -&gt; ^<span class="t">Tree</span> = <span class="k">match</span> t {
     .<span class="t">Leaf</span> =&gt; ^<span class="t">Tree</span>.<span class="t">Node</span>(^<span class="t">Tree</span>.<span class="t">Leaf</span>, v, ^<span class="t">Tree</span>.<span class="t">Leaf</span>)
     .<span class="t">Node</span>(l, x, r) =&gt; <span class="k">if</span> v &lt; x {
         ^<span class="t">Tree</span>.<span class="t">Node</span>(l.insert(v), x, r)
@@ -361,12 +361,12 @@ end of iteration 2</code></pre></div>
     }
 }
 
-<span class="k">fn</span> sum(t: ^<span class="t">Tree</span>) -&gt; i32 = <span class="k">match</span> t {
+<span class="k">fun</span> sum(t: ^<span class="t">Tree</span>) -&gt; i32 = <span class="k">match</span> t {
     .<span class="t">Leaf</span> =&gt; <span class="n">0</span>
     .<span class="t">Node</span>(l, x, r) =&gt; l.sum() + x + r.sum()
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">var</span> t: ^<span class="t">Tree</span> = ^<span class="t">Tree</span>.<span class="t">Leaf</span>
     <span class="k">for</span> v <span class="k">in</span> [<span class="n">5</span>, <span class="n">2</span>, <span class="n">8</span>, <span class="n">1</span>, <span class="n">9</span>, <span class="n">3</span>] {
         t = t.insert(v)
@@ -383,7 +383,7 @@ end of iteration 2</code></pre></div>
 <p>A <code>take</code> pointer that a <code>match</code> takes apart hands its parts to the arms by value, so the arms can move them into a new node.</p>
 <h2 id="spools">Spools</h2>
 <p>A pointer into the heap owns its box and frees it. When many values live and die together (the nodes of a tree, a frame of a game) a <strong>spool</strong> is cheaper: <code>spool frame = Arena(1.kib())</code> makes one, <code>frame.put(v)</code> moves a value into it, and <code>^e</code> allocates in the spool a function is <code>given</code>. A pointer into a spool is <code>Copy</code> and owns nothing; <code>frame.reset()</code> takes every allocation back at once, and the spool ends with its scope.</p>
-<p><code>^T@s</code> is a pointer into the spool <code>s</code>, and <code>fn tree() -&gt; ^Node@sp given sp: Spool</code> is a function that builds in whichever spool the caller gives (<code>tree(4, given: frame)</code>), or the heap if the call gives none. A parameter written <code>^Node</code> takes a tree from any spool. A warp that holds pointers (<code>Node</code>) is <code>Node@s</code> for the spool its nodes are in.</p>
+<p><code>^T@s</code> is a pointer into the spool <code>s</code>, and <code>fun tree() -&gt; ^Node@sp given sp: Spool</code> is a function that builds in whichever spool the caller gives (<code>tree(4, given: frame)</code>), or the heap if the call gives none. A parameter written <code>^Node</code> takes a tree from any spool. A warp that holds pointers (<code>Node</code>) is <code>Node@s</code> for the spool its nodes are in.</p>
 <div class="sample" id="sample-own_spools">
 <div class="sample-head"><span class="file">samples/own_spools.loom</span><span class="tag ok">runs</span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -395,18 +395,18 @@ end of iteration 2</code></pre></div>
 }
 
 <span class="c">// The tree lives in whichever spool the caller gives; with none it is on the heap.</span>
-<span class="k">fn</span> tree(depth: i32) -&gt; ^<span class="t">Node</span>@sp <span class="k">given</span> sp: <span class="t">Spool</span> {
+<span class="k">fun</span> tree(depth: i32) -&gt; ^<span class="t">Node</span>@sp <span class="k">given</span> sp: <span class="t">Spool</span> {
     <span class="k">if</span> depth == <span class="n">0</span> { <span class="k">return</span> ^<span class="t">Node</span>.<span class="t">Leaf</span>(<span class="n">1</span>) }
     ^<span class="t">Node</span>.<span class="t">Pair</span>(tree(depth - <span class="n">1</span>), tree(depth - <span class="n">1</span>))
 }
 
 <span class="c">// A parameter without a region takes a tree from any spool.</span>
-<span class="k">fn</span> count(n: ^<span class="t">Node</span>) -&gt; i32 = <span class="k">match</span> n {
+<span class="k">fun</span> count(n: ^<span class="t">Node</span>) -&gt; i32 = <span class="k">match</span> n {
     .<span class="t">Leaf</span>(k) =&gt; k
     .<span class="t">Pair</span>(a, b) =&gt; count(a) + count(b)
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">spool</span> frame = <span class="t">Arena</span>(<span class="n">1</span>.kib())
     <span class="k">let</span> t = tree(<span class="n">4</span>, <span class="k">given</span>: frame)
     print(<span class="s">"{</span>count(t)<span class="s">}"</span>)
@@ -429,17 +429,17 @@ end of iteration 2</code></pre></div>
     <span class="k">case</span> <span class="t">Pair</span>(^<span class="t">Node</span>, ^<span class="t">Node</span>)
 }
 
-<span class="k">fn</span> tree(depth: i32) -&gt; ^<span class="t">Node</span>@sp <span class="k">given</span> sp: <span class="t">Spool</span> {
+<span class="k">fun</span> tree(depth: i32) -&gt; ^<span class="t">Node</span>@sp <span class="k">given</span> sp: <span class="t">Spool</span> {
     <span class="k">if</span> depth == <span class="n">0</span> { <span class="k">return</span> ^<span class="t">Node</span>.<span class="t">Leaf</span>(<span class="n">1</span>) }
     ^<span class="t">Node</span>.<span class="t">Pair</span>(tree(depth - <span class="n">1</span>), tree(depth - <span class="n">1</span>))
 }
 
-<span class="k">fn</span> count(n: ^<span class="t">Node</span>) -&gt; i32 = <span class="k">match</span> n {
+<span class="k">fun</span> count(n: ^<span class="t">Node</span>) -&gt; i32 = <span class="k">match</span> n {
     .<span class="t">Leaf</span>(k) =&gt; k
     .<span class="t">Pair</span>(a, b) =&gt; count(a) + count(b)
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">spool</span> frame = <span class="t">Arena</span>(<span class="n">1</span>.kib())
     <span class="k">let</span> t = tree(<span class="n">2</span>, <span class="k">given</span>: frame)
     frame.reset()
@@ -461,7 +461,7 @@ end of iteration 2</code></pre></div>
 <p>A pointer into a spool is <code>Copy</code>, so two copies see the same value: a field behind one can be written only when the warp is plain data (no text, lists or cases that own anything); otherwise it is read-only (<a href="diagnostics.html#T0107">T0107</a>).</p>
 <p><code>Pool[T](n)</code> is a spool of <code>n</code> slots of one type: <code>put</code> takes a free slot and <code>free</code> gives it back, a few instructions each. It holds plain data only. <code>SharedArena(cap)</code> is an arena threads may allocate in, and its pointers may cross to them; a pointer into any other spool can't (<a href="diagnostics.html#R0103">R0103</a>).</p>
 <h2 id="given"><code>given</code></h2>
-<p>A function can say what it needs from its caller with a <code>given</code> parameter of a weft: <code>fn welcome(who: str) given g: Greeter</code>. It is passed on by the call, not in the argument list: the innermost <code>given</code> in scope supplies it, <code>given name = value</code> states one from there to the end of the block, and <code>given: x</code> gives one to a single call. A weft marked <code>#given_default(Type)</code> has one when nothing is in scope (a spool's is the heap), so a program that never says <code>given</code> still runs. A function is checked for the type it is given, so an unused <code>given</code> costs nothing. Every function spells its own <code>given</code>s: a private one doesn't infer them from what it calls yet.</p>
+<p>A function can say what it needs from its caller with a <code>given</code> parameter of a weft: <code>fun welcome(who: str) given g: Greeter</code>. It is passed on by the call, not in the argument list: the innermost <code>given</code> in scope supplies it, <code>given name = value</code> states one from there to the end of the block, and <code>given: x</code> gives one to a single call. A weft marked <code>#given_default(Type)</code> has one when nothing is in scope (a spool's is the heap), so a program that never says <code>given</code> still runs. A function is checked for the type it is given, so an unused <code>given</code> costs nothing. Every function spells its own <code>given</code>s: a private one doesn't infer them from what it calls yet.</p>
 <div class="sample" id="sample-own_given">
 <div class="sample-head"><span class="file">samples/own_given.loom</span><span class="tag ok">runs</span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -469,22 +469,22 @@ end of iteration 2</code></pre></div>
 <span class="c">// A weft with a default: a call that is given nothing gets a `Plain`.</span>
 <span class="k">#given_default</span>(<span class="t">Plain</span>)
 <span class="k">weft</span> <span class="t">Greeter</span> {
-    <span class="k">fn</span> greet(<span class="k">self</span>) -&gt; <span class="t">String</span>
+    <span class="k">fun</span> greet(<span class="k">self</span>) -&gt; <span class="t">String</span>
 }
 
 <span class="k">warp</span> <span class="t">Plain</span>: <span class="t">Greeter</span>, <span class="t">Default</span> {
-    <span class="k">pub</span> <span class="k">fn</span> greet(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"hello"</span>
+    <span class="k">pub</span> <span class="k">fun</span> greet(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"hello"</span>
 }
 
 <span class="k">warp</span> <span class="t">Loud</span>: <span class="t">Greeter</span> {
     name: <span class="t">String</span>
 
-    <span class="k">pub</span> <span class="k">fn</span> greet(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"HELLO, {</span>.name<span class="s">}!"</span>
+    <span class="k">pub</span> <span class="k">fun</span> greet(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"HELLO, {</span>.name<span class="s">}!"</span>
 }
 
-<span class="k">fn</span> welcome(who: str) -&gt; <span class="t">String</span> <span class="k">given</span> g: <span class="t">Greeter</span> = <span class="s">"{</span>g.greet()<span class="s">} {</span>who<span class="s">}"</span>
+<span class="k">fun</span> welcome(who: str) -&gt; <span class="t">String</span> <span class="k">given</span> g: <span class="t">Greeter</span> = <span class="s">"{</span>g.greet()<span class="s">} {</span>who<span class="s">}"</span>
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     print(welcome(<span class="s">"ann"</span>))          <span class="c">// nothing given: a Plain</span>
     <span class="k">given</span> g = <span class="t">Loud</span>(<span class="s">"ci"</span>)           <span class="c">// from here to the end of the block</span>
     print(welcome(<span class="s">"dee"</span>))

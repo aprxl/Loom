@@ -8,7 +8,7 @@ const DAYS = 365.24
 
 warp Body { x: f64, y: f64, z: f64, vx: f64, vy: f64, vz: f64, mass: f64 }
 
-fn planets() -> List[Body] = [
+fun planets() -> List[Body] = [
     Body(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, SOLAR_MASS),
     Body(4.84143144246472090e+00, -1.16032004402742839e+00, -1.03622044471123109e-01,
          1.66007664274403694e-03 * DAYS, 7.69901118419740425e-03 * DAYS, -6.90460016972063023e-05 * DAYS,
@@ -24,7 +24,7 @@ fn planets() -> List[Body] = [
          5.15138902046611451e-05 * SOLAR_MASS),
 ]
 
-fn offset_momentum(mut bodies: List[Body]) {
+fun offset_momentum(mut bodies: List[Body]) {
     var px = 0.0
     var py = 0.0
     var pz = 0.0
@@ -38,7 +38,7 @@ fn offset_momentum(mut bodies: List[Body]) {
     bodies[0].vz = -pz / SOLAR_MASS
 }
 
-fn energy(bodies: List[Body]) -> f64 {
+fun energy(bodies: List[Body]) -> f64 {
     var e = 0.0
     let n = bodies.len()
     for i in 0..n {
@@ -55,7 +55,7 @@ fn energy(bodies: List[Body]) -> f64 {
     e
 }
 
-fn advance(mut bodies: List[Body], dt: f64) {
+fun advance(mut bodies: List[Body], dt: f64) {
     let n = bodies.len()
     for i in 0..n {
         for j in i + 1..n {
@@ -81,7 +81,7 @@ fn advance(mut bodies: List[Body], dt: f64) {
     }
 }
 
-fn main() {
+fun main() {
     var bodies = planets()
     offset_momentum(mut bodies)
     print("{energy(bodies):.9}")

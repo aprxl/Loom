@@ -7,33 +7,33 @@ pub warp Duration: Eq, Ord, Show {
     pub(get) nanos: u64
 
     /// A span of `nanos` nanoseconds.
-    pub fn from_nanos(nanos: u64) -> Duration = Duration(nanos: nanos)
+    pub fun from_nanos(nanos: u64) -> Duration = Duration(nanos: nanos)
 
     /// Whole seconds, then the rest as a fraction: `Duration.from_secs_f64(1.5)`.
-    pub fn from_secs_f64(secs: f64) -> Duration {
+    pub fun from_secs_f64(secs: f64) -> Duration {
         assert(secs >= 0.0, "a Duration can't be negative")
         Duration(nanos: (secs * 1_000_000_000.0) as u64)
     }
 
-    pub fn as_secs_f64(self) -> f64 = .nanos as f64 / 1_000_000_000.0
-    pub fn as_millis(self) -> u64 = .nanos / 1_000_000
-    pub fn as_micros(self) -> u64 = .nanos / 1_000
-    pub fn as_nanos(self) -> u64 = .nanos
-    pub fn as_secs(self) -> u64 = .nanos / 1_000_000_000
+    pub fun as_secs_f64(self) -> f64 = .nanos as f64 / 1_000_000_000.0
+    pub fun as_millis(self) -> u64 = .nanos / 1_000_000
+    pub fun as_micros(self) -> u64 = .nanos / 1_000
+    pub fun as_nanos(self) -> u64 = .nanos
+    pub fun as_secs(self) -> u64 = .nanos / 1_000_000_000
 
     /// The sum. Unravels when it doesn't fit.
-    pub fn plus(self, other: Duration) -> Duration = Duration(nanos: .nanos + other.nanos)
+    pub fun plus(self, other: Duration) -> Duration = Duration(nanos: .nanos + other.nanos)
     /// The difference. Unravels when `other` is longer.
-    pub fn minus(self, other: Duration) -> Duration = Duration(nanos: .nanos - other.nanos)
+    pub fun minus(self, other: Duration) -> Duration = Duration(nanos: .nanos - other.nanos)
     /// `n` times as long. Unravels when it doesn't fit.
-    pub fn times(self, n: u64) -> Duration = Duration(nanos: .nanos * n)
+    pub fun times(self, n: u64) -> Duration = Duration(nanos: .nanos * n)
     /// A part of it, rounded down. Unravels if `n` is 0.
-    pub fn divide(self, n: u64) -> Duration = Duration(nanos: .nanos / n)
+    pub fun divide(self, n: u64) -> Duration = Duration(nanos: .nanos / n)
 
-    pub fn show(self, mut f: Fmt) = f.put(.to_string())
+    pub fun show(self, mut f: Fmt) = f.put(.to_string())
 
     /// `1.5s`, `250ms`, `40us`, `7ns`: in the largest unit that fits.
-    pub fn to_string(self) -> String {
+    pub fun to_string(self) -> String {
         if .nanos >= 1_000_000_000 {
             "{.as_secs_f64()}s"
         } else if .nanos >= 1_000_000 {
@@ -46,11 +46,11 @@ pub warp Duration: Eq, Ord, Show {
     }
 }
 
-pub fn ns(n: u64) -> Duration = Duration(nanos: n)
-pub fn micros(n: u64) -> Duration = Duration(nanos: n * 1_000)
-pub fn ms(n: u64) -> Duration = Duration(nanos: n * 1_000_000)
-pub fn secs(n: u64) -> Duration = Duration(nanos: n * 1_000_000_000)
-pub fn mins(n: u64) -> Duration = Duration(nanos: n * 60_000_000_000)
+pub fun ns(n: u64) -> Duration = Duration(nanos: n)
+pub fun micros(n: u64) -> Duration = Duration(nanos: n * 1_000)
+pub fun ms(n: u64) -> Duration = Duration(nanos: n * 1_000_000)
+pub fun secs(n: u64) -> Duration = Duration(nanos: n * 1_000_000_000)
+pub fun mins(n: u64) -> Duration = Duration(nanos: n * 60_000_000_000)
 
 /// A moment on a clock that only goes forward, for measuring how long
 /// things take.
@@ -58,16 +58,16 @@ pub warp Instant: Eq, Ord {
     nanos: u64
 
     /// Now.
-    pub fn now() -> Instant = Instant(nanos: monotonic_nanos())
+    pub fun now() -> Instant = Instant(nanos: monotonic_nanos())
 
     /// How long ago `earlier` was. Unravels if it is later than this.
-    pub fn since(self, earlier: Instant) -> Duration = Duration(nanos: .nanos - earlier.nanos)
+    pub fun since(self, earlier: Instant) -> Duration = Duration(nanos: .nanos - earlier.nanos)
 
     /// How long ago this was.
-    pub fn elapsed(self) -> Duration = Instant.now().since(self)
+    pub fun elapsed(self) -> Duration = Instant.now().since(self)
 
     /// The moment `d` after this one.
-    pub fn plus(self, d: Duration) -> Instant = Instant(nanos: .nanos + d.nanos)
+    pub fun plus(self, d: Duration) -> Instant = Instant(nanos: .nanos + d.nanos)
 }
 
 /// A moment on the system clock, which can be set: for dates and times of day,
@@ -76,17 +76,17 @@ pub warp SystemTime: Eq, Ord {
     nanos: u64
 
     /// Now.
-    pub fn now() -> SystemTime = SystemTime(nanos: unix_nanos())
+    pub fun now() -> SystemTime = SystemTime(nanos: unix_nanos())
 
     /// Whole seconds since 1 January 1970.
-    pub fn unix_secs(self) -> u64 = .nanos / 1_000_000_000
+    pub fun unix_secs(self) -> u64 = .nanos / 1_000_000_000
 
     /// Nanoseconds since 1 January 1970.
-    pub fn unix_nanos(self) -> u64 = .nanos
+    pub fun unix_nanos(self) -> u64 = .nanos
 }
 
 /// Runs `f`, and says how long it took.
-pub fn measure[T](f: () => T) -> (T, Duration) {
+pub fun measure[T](f: () => T) -> (T, Duration) {
     let start = Instant.now()
     let value = f()
     (value, start.elapsed())
@@ -94,10 +94,10 @@ pub fn measure[T](f: () => T) -> (T, Duration) {
 
 extern "host" {
     /// Pauses the current thread for `d`.
-    pub fn sleep(d: Duration)
+    pub fun sleep(d: Duration)
     /// Nanoseconds on a clock that only goes forward, from an arbitrary
     /// start. Differences are what mean something: see `Instant`.
-    pub fn monotonic_nanos() -> u64
+    pub fun monotonic_nanos() -> u64
     /// Nanoseconds since 1 January 1970 on the system clock.
-    pub fn unix_nanos() -> u64
+    pub fun unix_nanos() -> u64
 }

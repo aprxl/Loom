@@ -58,56 +58,56 @@
 <h2>Functions</h2>
 <div class="item" id="join">
 <div class="item-head">
-<span class="sig">fn <strong>join</strong>(a: str, b: str) -&gt; String</span>
+<span class="sig">fun <strong>join</strong>(a: str, b: str) -&gt; String</span>
 
 </div>
 <p class="item-doc"><code>a</code> and <code>b</code> as one path: <code>join("src", "main.loom")</code> is <code>src/main.loom</code>; an absolute <code>b</code> replaces <code>a</code>.</p>
 </div>
 <div class="item" id="is_absolute">
 <div class="item-head">
-<span class="sig">fn <strong>is_absolute</strong>(p: str) -&gt; bool</span>
+<span class="sig">fun <strong>is_absolute</strong>(p: str) -&gt; bool</span>
 
 </div>
 <p class="item-doc">Whether the path starts at the root.</p>
 </div>
 <div class="item" id="file_name">
 <div class="item-head">
-<span class="sig">fn <strong>file_name</strong>(p: str) -&gt; ?str</span>
+<span class="sig">fun <strong>file_name</strong>(p: str) -&gt; ?str</span>
 
 </div>
 <p class="item-doc">The last part: <code>file_name("a/b.txt")</code> is <code>b.txt</code>. None for <code>""</code> and <code>/</code>.</p>
 </div>
 <div class="item" id="parent">
 <div class="item-head">
-<span class="sig">fn <strong>parent</strong>(p: str) -&gt; ?str</span>
+<span class="sig">fun <strong>parent</strong>(p: str) -&gt; ?str</span>
 
 </div>
 <p class="item-doc">Everything before the last part: <code>parent("a/b.txt")</code> is <code>a</code>. None for a path with one part and for the root.</p>
 </div>
 <div class="item" id="stem">
 <div class="item-head">
-<span class="sig">fn <strong>stem</strong>(p: str) -&gt; ?str</span>
+<span class="sig">fun <strong>stem</strong>(p: str) -&gt; ?str</span>
 
 </div>
 <p class="item-doc">The last part without its extension: <code>stem("a/b.tar.gz")</code> is <code>b.tar</code>.</p>
 </div>
 <div class="item" id="extension">
 <div class="item-head">
-<span class="sig">fn <strong>extension</strong>(p: str) -&gt; ?str</span>
+<span class="sig">fun <strong>extension</strong>(p: str) -&gt; ?str</span>
 
 </div>
 <p class="item-doc">The part after the last dot of the last part: <code>extension("a/b.txt")</code> is <code>txt</code>. None when there is no dot, or the dot starts the name.</p>
 </div>
 <div class="item" id="with_extension">
 <div class="item-head">
-<span class="sig">fn <strong>with_extension</strong>(p: str, ext: str) -&gt; String</span>
+<span class="sig">fun <strong>with_extension</strong>(p: str, ext: str) -&gt; String</span>
 
 </div>
 <p class="item-doc">The path with a different extension: <code>with_extension("a/b.txt", "md")</code> is <code>a/b.md</code>.</p>
 </div>
 <div class="item" id="normalize">
 <div class="item-head">
-<span class="sig">fn <strong>normalize</strong>(p: str) -&gt; String</span>
+<span class="sig">fun <strong>normalize</strong>(p: str) -&gt; String</span>
 
 </div>
 <p class="item-doc">The path without <code>.</code> parts, empty parts, and <code>x/..</code> pairs: <code>normalize("a/./b/../c")</code> is <code>a/c</code>.</p>

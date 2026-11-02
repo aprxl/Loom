@@ -2,7 +2,7 @@ use std.io.print
 use std.mem.take
 use std.default.of
 
-fn main() {
+fun main() {
     var a = [1, 2, 3]
     let b = take(mut a)
     print("{b}")

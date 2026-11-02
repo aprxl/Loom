@@ -10,7 +10,7 @@ warp Point {
     y: i32
 }
 
-fn main() {
+fun main() {
     loom {
         for i in 0..2 {
             var n = i

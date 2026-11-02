@@ -1,6 +1,6 @@
 use std.io.print
 
-fn main() {
+fun main() {
     // Division truncates toward zero, and the remainder has the dividend's sign.
     print("{7 / 2} {-7 / 2} {7 / -2} {-7 / -2}")
     print("{7 % 3} {-7 % 3} {7 % -3} {-7 % -3}")

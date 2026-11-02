@@ -1,3 +1,3 @@
 // A slice bound is a shape: a parameter bounded by `[U]` takes a slice of `U`s.
-fn flat[T, U](xs: [T]) -> usize where T: [U] { 0 }
-fn main() { flat([1, 2]) }    //~ T0101
+fun flat[T, U](xs: [T]) -> usize where T: [U] { 0 }
+fun main() { flat([1, 2]) }    //~ T0101

@@ -1,6 +1,6 @@
 use std.io.print
 use std.time.{Duration, Instant, ms, secs, micros, measure, ns}
-fn main() {
+fun main() {
     let d = secs(1).plus(ms(500))
     print(d.to_string())
     print(ms(250).to_string())

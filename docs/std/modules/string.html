@@ -75,84 +75,84 @@
 <div class="members">
 <div class="member" id="String.with_capacity">
 <div class="member-head">
-<span class="sig">fn with_capacity(n: usize) -&gt; String</span>
+<span class="sig">fun with_capacity(n: usize) -&gt; String</span>
 
 </div>
 <p class="member-doc">An empty string with room for <code>n</code> bytes.</p>
 </div>
 <div class="member" id="String.of">
 <div class="member-head">
-<span class="sig">fn of(chars: [char]) -&gt; String</span>
+<span class="sig">fun of(chars: [char]) -&gt; String</span>
 
 </div>
 <p class="member-doc">The text of <code>chars</code>, in order.</p>
 </div>
 <div class="member" id="String.push">
 <div class="member-head">
-<span class="sig">fn push(mut self, c: char)</span>
+<span class="sig">fun push(mut self, c: char)</span>
 
 </div>
 <p class="member-doc">Adds <code>c</code> at the end.</p>
 </div>
 <div class="member" id="String.push_str">
 <div class="member-head">
-<span class="sig">fn push_str(mut self, s: str)</span>
+<span class="sig">fun push_str(mut self, s: str)</span>
 
 </div>
 <p class="member-doc">Adds <code>s</code> at the end.</p>
 </div>
 <div class="member" id="String.pop">
 <div class="member-head">
-<span class="sig">fn pop(mut self) -&gt; ?char</span>
+<span class="sig">fun pop(mut self) -&gt; ?char</span>
 
 </div>
 <p class="member-doc">Takes the last character off, if there is one.</p>
 </div>
 <div class="member" id="String.clear">
 <div class="member-head">
-<span class="sig">fn clear(mut self)</span>
+<span class="sig">fun clear(mut self)</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="String.from_utf8">
 <div class="member-head">
-<span class="sig">fn from_utf8(bytes: [u8]) -&gt; String ! Utf8Error</span>
+<span class="sig">fun from_utf8(bytes: [u8]) -&gt; String ! Utf8Error</span>
 
 </div>
 <p class="member-doc">The text the bytes spell, or where they stop being UTF-8.</p>
 </div>
 <div class="member" id="String.truncate">
 <div class="member-head">
-<span class="sig">fn truncate(mut self, n: usize)</span>
+<span class="sig">fun truncate(mut self, n: usize)</span>
 
 </div>
 <p class="member-doc">Keeps the first <code>n</code> bytes. Unravels if <code>n</code> is past the end or in the middle of a character.</p>
 </div>
 <div class="member" id="String.insert_str">
 <div class="member-head">
-<span class="sig">fn insert_str(mut self, i: usize, s: str)</span>
+<span class="sig">fun insert_str(mut self, i: usize, s: str)</span>
 
 </div>
 <p class="member-doc">Puts <code>s</code> at byte <code>i</code>. Unravels if <code>i</code> is past the end or in the middle of a character.</p>
 </div>
 <div class="member" id="String.insert">
 <div class="member-head">
-<span class="sig">fn insert(mut self, i: usize, c: char)</span>
+<span class="sig">fun insert(mut self, i: usize, c: char)</span>
 
 </div>
 <p class="member-doc">Puts <code>c</code> at byte <code>i</code>.</p>
 </div>
 <div class="member" id="String.remove">
 <div class="member-head">
-<span class="sig">fn remove(mut self, i: usize) -&gt; char</span>
+<span class="sig">fun remove(mut self, i: usize) -&gt; char</span>
 
 </div>
 <p class="member-doc">Takes out the character at byte <code>i</code>. Unravels if there isn't one.</p>
 </div>
 <div class="member" id="String.retain">
 <div class="member-head">
-<span class="sig">fn retain(mut self, keep: char =&gt; bool)</span>
+<span class="sig">fun retain(mut self, keep: char =&gt; bool)</span>
 
 </div>
 <p class="member-doc">Keeps the characters <code>keep</code> says yes to.</p>
@@ -168,322 +168,322 @@
 <div class="members">
 <div class="member" id="Str.len">
 <div class="member-head">
-<span class="sig">fn len(self) -&gt; usize</span>
+<span class="sig">fun len(self) -&gt; usize</span>
 
 </div>
 <p class="member-doc">How many bytes it takes.</p>
 </div>
 <div class="member" id="Str.is_empty">
 <div class="member-head">
-<span class="sig">fn is_empty(self) -&gt; bool</span>
+<span class="sig">fun is_empty(self) -&gt; bool</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Str.char_count">
 <div class="member-head">
-<span class="sig">fn char_count(self) -&gt; usize</span>
+<span class="sig">fun char_count(self) -&gt; usize</span>
 
 </div>
 <p class="member-doc">How many characters it has.</p>
 </div>
 <div class="member" id="Str.contains">
 <div class="member-head">
-<span class="sig">fn contains(self, part: str) -&gt; bool</span>
+<span class="sig">fun contains(self, part: str) -&gt; bool</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Str.starts_with">
 <div class="member-head">
-<span class="sig">fn starts_with(self, prefix: str) -&gt; bool</span>
+<span class="sig">fun starts_with(self, prefix: str) -&gt; bool</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Str.ends_with">
 <div class="member-head">
-<span class="sig">fn ends_with(self, suffix: str) -&gt; bool</span>
+<span class="sig">fun ends_with(self, suffix: str) -&gt; bool</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Str.find">
 <div class="member-head">
-<span class="sig">fn find(self, part: str) -&gt; ?usize</span>
+<span class="sig">fun find(self, part: str) -&gt; ?usize</span>
 
 </div>
 <p class="member-doc">The byte position of the first <code>part</code>, if there is one.</p>
 </div>
 <div class="member" id="Str.trim">
 <div class="member-head">
-<span class="sig">fn trim(self) -&gt; str</span>
+<span class="sig">fun trim(self) -&gt; str</span>
 
 </div>
 <p class="member-doc">Without the white space at both ends (Unicode <code>White_Space</code>).</p>
 </div>
 <div class="member" id="Str.trim_start">
 <div class="member-head">
-<span class="sig">fn trim_start(self) -&gt; str</span>
+<span class="sig">fun trim_start(self) -&gt; str</span>
 
 </div>
 <p class="member-doc">Without the white space at the start.</p>
 </div>
 <div class="member" id="Str.trim_end">
 <div class="member-head">
-<span class="sig">fn trim_end(self) -&gt; str</span>
+<span class="sig">fun trim_end(self) -&gt; str</span>
 
 </div>
 <p class="member-doc">Without the white space at the end.</p>
 </div>
 <div class="member" id="Str.to_upper">
 <div class="member-head">
-<span class="sig">fn to_upper(self) -&gt; String</span>
+<span class="sig">fun to_upper(self) -&gt; String</span>
 
 </div>
 <p class="member-doc">In upper case, letter by letter (<code>ß</code> becomes <code>SS</code>).</p>
 </div>
 <div class="member" id="Str.to_lower">
 <div class="member-head">
-<span class="sig">fn to_lower(self) -&gt; String</span>
+<span class="sig">fun to_lower(self) -&gt; String</span>
 
 </div>
 <p class="member-doc">In lower case, letter by letter.</p>
 </div>
 <div class="member" id="Str.replace">
 <div class="member-head">
-<span class="sig">fn replace(self, from: str, to: str) -&gt; String</span>
+<span class="sig">fun replace(self, from: str, to: str) -&gt; String</span>
 
 </div>
 <p class="member-doc">Every <code>from</code> replaced with <code>to</code>. An empty <code>from</code> is found before every character and at the end: <code>"ab".replace("", "-")</code> is <code>-a-b-</code>.</p>
 </div>
 <div class="member" id="Str.repeat">
 <div class="member-head">
-<span class="sig">fn repeat(self, n: usize) -&gt; String</span>
+<span class="sig">fun repeat(self, n: usize) -&gt; String</span>
 
 </div>
 <p class="member-doc"><code>n</code> copies, one after another.</p>
 </div>
 <div class="member" id="Str.split">
 <div class="member-head">
-<span class="sig">fn split(self, sep: str) -&gt; List[String]</span>
+<span class="sig">fun split(self, sep: str) -&gt; List[String]</span>
 
 </div>
 <p class="member-doc">The parts between each <code>sep</code> (<code>"".split(",")</code> is one empty part). An empty <code>sep</code> splits into each character, with no empty parts at the ends (unlike Rust's).</p>
 </div>
 <div class="member" id="Str.chars">
 <div class="member-head">
-<span class="sig">fn chars(self) -&gt; Stream[char]</span>
+<span class="sig">fun chars(self) -&gt; Stream[char]</span>
 
 </div>
 <p class="member-doc">The characters, one at a time.</p>
 </div>
 <div class="member" id="Str.bytes">
 <div class="member-head">
-<span class="sig">fn bytes(self) -&gt; Stream[u8]</span>
+<span class="sig">fun bytes(self) -&gt; Stream[u8]</span>
 
 </div>
 <p class="member-doc">The bytes of its UTF-8, one at a time.</p>
 </div>
 <div class="member" id="Str.lines">
 <div class="member-head">
-<span class="sig">fn lines(self) -&gt; Stream[str]</span>
+<span class="sig">fun lines(self) -&gt; Stream[str]</span>
 
 </div>
 <p class="member-doc">The lines, without their line breaks (a newline, or a carriage return and a newline).</p>
 </div>
 <div class="member" id="Str.words">
 <div class="member-head">
-<span class="sig">fn words(self) -&gt; Stream[str]</span>
+<span class="sig">fun words(self) -&gt; Stream[str]</span>
 
 </div>
 <p class="member-doc">The words: what's between runs of white space.</p>
 </div>
 <div class="member" id="Str.trim_ascii">
 <div class="member-head">
-<span class="sig">fn trim_ascii(self) -&gt; str</span>
+<span class="sig">fun trim_ascii(self) -&gt; str</span>
 
 </div>
 <p class="member-doc">The text as a <code>String</code> of its own. Without the ASCII white space at both ends.</p>
 </div>
 <div class="member" id="Str.trim_ascii_start">
 <div class="member-head">
-<span class="sig">fn trim_ascii_start(self) -&gt; str</span>
+<span class="sig">fun trim_ascii_start(self) -&gt; str</span>
 
 </div>
 <p class="member-doc">Without the ASCII white space at the start.</p>
 </div>
 <div class="member" id="Str.trim_ascii_end">
 <div class="member-head">
-<span class="sig">fn trim_ascii_end(self) -&gt; str</span>
+<span class="sig">fun trim_ascii_end(self) -&gt; str</span>
 
 </div>
 <p class="member-doc">Without the ASCII white space at the end.</p>
 </div>
 <div class="member" id="Str.to_ascii_upper">
 <div class="member-head">
-<span class="sig">fn to_ascii_upper(self) -&gt; String</span>
+<span class="sig">fun to_ascii_upper(self) -&gt; String</span>
 
 </div>
 <p class="member-doc">With only the ASCII letters in upper case.</p>
 </div>
 <div class="member" id="Str.to_ascii_lower">
 <div class="member-head">
-<span class="sig">fn to_ascii_lower(self) -&gt; String</span>
+<span class="sig">fun to_ascii_lower(self) -&gt; String</span>
 
 </div>
 <p class="member-doc">With only the ASCII letters in lower case.</p>
 </div>
 <div class="member" id="Str.to_string">
 <div class="member-head">
-<span class="sig">fn to_string(self) -&gt; String</span>
+<span class="sig">fun to_string(self) -&gt; String</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Str.copy">
 <div class="member-head">
-<span class="sig">fn copy(self) -&gt; String@sp given sp: Spool</span>
+<span class="sig">fun copy(self) -&gt; String@sp given sp: Spool</span>
 
 </div>
 <p class="member-doc">A <code>String</code> of its own, in the spool the call is given (the heap, when there is none): text in an arena goes when the arena does.</p>
 </div>
 <div class="member" id="Str.parse">
 <div class="member-head">
-<span class="sig">fn parse[T: Parse](self) -&gt; T ! NumError</span>
+<span class="sig">fun parse[T: Parse](self) -&gt; T ! NumError</span>
 
 </div>
 <p class="member-doc">The number the text spells: <code>"42".parse[u8]()</code>. Decimal, with an optional sign; floats also take a fraction, an exponent, <code>inf</code>, <code>NaN</code>.</p>
 </div>
 <div class="member" id="Str.split_once">
 <div class="member-head">
-<span class="sig">fn split_once(self, sep: str) -&gt; ?(str, str)</span>
+<span class="sig">fun split_once(self, sep: str) -&gt; ?(str, str)</span>
 
 </div>
 <p class="member-doc">The text before and after the first <code>sep</code>.</p>
 </div>
 <div class="member" id="Str.splitn">
 <div class="member-head">
-<span class="sig">fn splitn(self, n: usize, sep: str) -&gt; List[String]</span>
+<span class="sig">fun splitn(self, n: usize, sep: str) -&gt; List[String]</span>
 
 </div>
 <p class="member-doc">The pieces between <code>sep</code>s, at most <code>n</code> of them: the last holds the rest. Unravels if <code>sep</code> is empty.</p>
 </div>
 <div class="member" id="Str.rsplit">
 <div class="member-head">
-<span class="sig">fn rsplit(self, sep: str) -&gt; List[String]</span>
+<span class="sig">fun rsplit(self, sep: str) -&gt; List[String]</span>
 
 </div>
 <p class="member-doc">The pieces between <code>sep</code>s, from the last to the first.</p>
 </div>
 <div class="member" id="Str.split_by">
 <div class="member-head">
-<span class="sig">fn split_by(self, f: char =&gt; bool) -&gt; List[String]</span>
+<span class="sig">fun split_by(self, f: char =&gt; bool) -&gt; List[String]</span>
 
 </div>
 <p class="member-doc">The pieces between the characters <code>f</code> says yes to.</p>
 </div>
 <div class="member" id="Str.rsplit_once">
 <div class="member-head">
-<span class="sig">fn rsplit_once(self, sep: str) -&gt; ?(str, str)</span>
+<span class="sig">fun rsplit_once(self, sep: str) -&gt; ?(str, str)</span>
 
 </div>
 <p class="member-doc">The text before and after the last <code>sep</code>.</p>
 </div>
 <div class="member" id="Str.rfind">
 <div class="member-head">
-<span class="sig">fn rfind(self, part: str) -&gt; ?usize</span>
+<span class="sig">fun rfind(self, part: str) -&gt; ?usize</span>
 
 </div>
 <p class="member-doc">The index of the last <code>part</code>.</p>
 </div>
 <div class="member" id="Str.strip_prefix">
 <div class="member-head">
-<span class="sig">fn strip_prefix(self, prefix: str) -&gt; ?str</span>
+<span class="sig">fun strip_prefix(self, prefix: str) -&gt; ?str</span>
 
 </div>
 <p class="member-doc">The text after <code>prefix</code>, if it starts with it.</p>
 </div>
 <div class="member" id="Str.strip_suffix">
 <div class="member-head">
-<span class="sig">fn strip_suffix(self, suffix: str) -&gt; ?str</span>
+<span class="sig">fun strip_suffix(self, suffix: str) -&gt; ?str</span>
 
 </div>
 <p class="member-doc">The text before <code>suffix</code>, if it ends with it.</p>
 </div>
 <div class="member" id="Str.count_of">
 <div class="member-head">
-<span class="sig">fn count_of(self, part: str) -&gt; usize</span>
+<span class="sig">fun count_of(self, part: str) -&gt; usize</span>
 
 </div>
 <p class="member-doc">How many times <code>part</code> comes up, not overlapping. Unravels if <code>part</code> is empty.</p>
 </div>
 <div class="member" id="Str.char_indices">
 <div class="member-head">
-<span class="sig">fn char_indices(self) -&gt; Stream[(usize, char)]</span>
+<span class="sig">fun char_indices(self) -&gt; Stream[(usize, char)]</span>
 
 </div>
 <p class="member-doc">Each character with the byte index it starts at.</p>
 </div>
 <div class="member" id="Str.char_at">
 <div class="member-head">
-<span class="sig">fn char_at(self, i: usize) -&gt; ?char</span>
+<span class="sig">fun char_at(self, i: usize) -&gt; ?char</span>
 
 </div>
 <p class="member-doc">The <code>i</code>th character (counting characters, so it takes <code>O(i)</code>).</p>
 </div>
 <div class="member" id="Str.trim_matches">
 <div class="member-head">
-<span class="sig">fn trim_matches(self, f: char =&gt; bool) -&gt; str</span>
+<span class="sig">fun trim_matches(self, f: char =&gt; bool) -&gt; str</span>
 
 </div>
 <p class="member-doc">Without the characters at both ends that <code>f</code> says yes to.</p>
 </div>
 <div class="member" id="Str.trim_start_matches">
 <div class="member-head">
-<span class="sig">fn trim_start_matches(self, f: char =&gt; bool) -&gt; str</span>
+<span class="sig">fun trim_start_matches(self, f: char =&gt; bool) -&gt; str</span>
 
 </div>
 <p class="member-doc">Without the characters at the start that <code>f</code> says yes to.</p>
 </div>
 <div class="member" id="Str.trim_end_matches">
 <div class="member-head">
-<span class="sig">fn trim_end_matches(self, f: char =&gt; bool) -&gt; str</span>
+<span class="sig">fun trim_end_matches(self, f: char =&gt; bool) -&gt; str</span>
 
 </div>
 <p class="member-doc">Without the characters at the end that <code>f</code> says yes to.</p>
 </div>
 <div class="member" id="Str.eq_ignore_case">
 <div class="member-head">
-<span class="sig">fn eq_ignore_case(self, other: str) -&gt; bool</span>
+<span class="sig">fun eq_ignore_case(self, other: str) -&gt; bool</span>
 
 </div>
 <p class="member-doc">Whether the two are equal when upper and lower case don't count.</p>
 </div>
 <div class="member" id="Str.is_ascii">
 <div class="member-head">
-<span class="sig">fn is_ascii(self) -&gt; bool</span>
+<span class="sig">fun is_ascii(self) -&gt; bool</span>
 
 </div>
 <p class="member-doc">Whether every character is ASCII.</p>
 </div>
 <div class="member" id="Str.capitalize">
 <div class="member-head">
-<span class="sig">fn capitalize(self) -&gt; String</span>
+<span class="sig">fun capitalize(self) -&gt; String</span>
 
 </div>
 <p class="member-doc">With the first letter in upper case.</p>
 </div>
 <div class="member" id="Str.pad_left">
 <div class="member-head">
-<span class="sig">fn pad_left(self, width: usize, fill: char = ' ') -&gt; String</span>
+<span class="sig">fun pad_left(self, width: usize, fill: char = ' ') -&gt; String</span>
 
 </div>
 <p class="member-doc">At least <code>width</code> characters, with <code>fill</code> added at the start.</p>
 </div>
 <div class="member" id="Str.pad_right">
 <div class="member-head">
-<span class="sig">fn pad_right(self, width: usize, fill: char = ' ') -&gt; String</span>
+<span class="sig">fun pad_right(self, width: usize, fill: char = ' ') -&gt; String</span>
 
 </div>
 <p class="member-doc">At least <code>width</code> characters, with <code>fill</code> added at the end.</p>
@@ -499,140 +499,140 @@
 <div class="members">
 <div class="member" id="Char.is_digit">
 <div class="member-head">
-<span class="sig">fn is_digit(self) -&gt; bool</span>
+<span class="sig">fun is_digit(self) -&gt; bool</span>
 
 </div>
 <p class="member-doc"><code>0</code> through <code>9</code>.</p>
 </div>
 <div class="member" id="Char.is_alphabetic">
 <div class="member-head">
-<span class="sig">fn is_alphabetic(self) -&gt; bool</span>
+<span class="sig">fun is_alphabetic(self) -&gt; bool</span>
 
 </div>
 <p class="member-doc">A letter in any alphabet: <code>'é'</code> is.</p>
 </div>
 <div class="member" id="Char.is_numeric">
 <div class="member-head">
-<span class="sig">fn is_numeric(self) -&gt; bool</span>
+<span class="sig">fun is_numeric(self) -&gt; bool</span>
 
 </div>
 <p class="member-doc">A digit in any script, or another number sign (<code>'½'</code>).</p>
 </div>
 <div class="member" id="Char.is_alphanumeric">
 <div class="member-head">
-<span class="sig">fn is_alphanumeric(self) -&gt; bool</span>
+<span class="sig">fun is_alphanumeric(self) -&gt; bool</span>
 
 </div>
 <p class="member-doc">A letter or a number.</p>
 </div>
 <div class="member" id="Char.is_whitespace">
 <div class="member-head">
-<span class="sig">fn is_whitespace(self) -&gt; bool</span>
+<span class="sig">fun is_whitespace(self) -&gt; bool</span>
 
 </div>
 <p class="member-doc">White space: a space, a tab, a line break, a no-break space...</p>
 </div>
 <div class="member" id="Char.is_upper">
 <div class="member-head">
-<span class="sig">fn is_upper(self) -&gt; bool</span>
+<span class="sig">fun is_upper(self) -&gt; bool</span>
 
 </div>
 <p class="member-doc">An upper case letter in any alphabet.</p>
 </div>
 <div class="member" id="Char.is_lower">
 <div class="member-head">
-<span class="sig">fn is_lower(self) -&gt; bool</span>
+<span class="sig">fun is_lower(self) -&gt; bool</span>
 
 </div>
 <p class="member-doc">A lower case letter in any alphabet.</p>
 </div>
 <div class="member" id="Char.is_ascii_alphabetic">
 <div class="member-head">
-<span class="sig">fn is_ascii_alphabetic(self) -&gt; bool</span>
+<span class="sig">fun is_ascii_alphabetic(self) -&gt; bool</span>
 
 </div>
 <p class="member-doc"><code>a</code> through <code>z</code>, or <code>A</code> through <code>Z</code>.</p>
 </div>
 <div class="member" id="Char.is_ascii_alphanumeric">
 <div class="member-head">
-<span class="sig">fn is_ascii_alphanumeric(self) -&gt; bool</span>
+<span class="sig">fun is_ascii_alphanumeric(self) -&gt; bool</span>
 
 </div>
 <p class="member-doc">ASCII letters and <code>0</code> through <code>9</code>.</p>
 </div>
 <div class="member" id="Char.is_ascii_whitespace">
 <div class="member-head">
-<span class="sig">fn is_ascii_whitespace(self) -&gt; bool</span>
+<span class="sig">fun is_ascii_whitespace(self) -&gt; bool</span>
 
 </div>
 <p class="member-doc">A space, tab, newline, carriage return, vertical tab or form feed.</p>
 </div>
 <div class="member" id="Char.is_ascii_upper">
 <div class="member-head">
-<span class="sig">fn is_ascii_upper(self) -&gt; bool</span>
+<span class="sig">fun is_ascii_upper(self) -&gt; bool</span>
 
 </div>
 <p class="member-doc"><code>A</code> through <code>Z</code>.</p>
 </div>
 <div class="member" id="Char.is_ascii_lower">
 <div class="member-head">
-<span class="sig">fn is_ascii_lower(self) -&gt; bool</span>
+<span class="sig">fun is_ascii_lower(self) -&gt; bool</span>
 
 </div>
 <p class="member-doc"><code>a</code> through <code>z</code>.</p>
 </div>
 <div class="member" id="Char.to_upper">
 <div class="member-head">
-<span class="sig">fn to_upper(self) -&gt; char</span>
+<span class="sig">fun to_upper(self) -&gt; char</span>
 
 </div>
 <p class="member-doc">Upper case; a letter with no single upper case character (<code>ß</code>) stays as it is.</p>
 </div>
 <div class="member" id="Char.to_lower">
 <div class="member-head">
-<span class="sig">fn to_lower(self) -&gt; char</span>
+<span class="sig">fun to_lower(self) -&gt; char</span>
 
 </div>
 <p class="member-doc">Lower case; a letter with no single lower case character stays as it is.</p>
 </div>
 <div class="member" id="Char.to_ascii_upper">
 <div class="member-head">
-<span class="sig">fn to_ascii_upper(self) -&gt; char</span>
+<span class="sig">fun to_ascii_upper(self) -&gt; char</span>
 
 </div>
 <p class="member-doc">Upper case for an ASCII letter; any other character stays as it is.</p>
 </div>
 <div class="member" id="Char.to_ascii_lower">
 <div class="member-head">
-<span class="sig">fn to_ascii_lower(self) -&gt; char</span>
+<span class="sig">fun to_ascii_lower(self) -&gt; char</span>
 
 </div>
 <p class="member-doc">Lower case for an ASCII letter; any other character stays as it is.</p>
 </div>
 <div class="member" id="Char.to_digit">
 <div class="member-head">
-<span class="sig">fn to_digit(self, radix: u32 = 10) -&gt; ?u32</span>
+<span class="sig">fun to_digit(self, radix: u32 = 10) -&gt; ?u32</span>
 
 </div>
 <p class="member-doc">Its value as a digit in <code>radix</code>: <code>'f'.to_digit(16)</code> is <code>15</code>.</p>
 </div>
 <div class="member" id="Char.digit">
 <div class="member-head">
-<span class="sig">fn digit(self) -&gt; u8</span>
+<span class="sig">fun digit(self) -&gt; u8</span>
 
 </div>
 <p class="member-doc">The value of a decimal digit: <code>'7'.digit()</code> is <code>7</code>. Unravels for anything but <code>0</code> through <code>9</code>.</p>
 </div>
 <div class="member" id="Char.len_utf8">
 <div class="member-head">
-<span class="sig">fn len_utf8(self) -&gt; usize</span>
+<span class="sig">fun len_utf8(self) -&gt; usize</span>
 
 </div>
 <p class="member-doc">How many bytes it takes in UTF-8.</p>
 </div>
 <div class="member" id="Char.is_ascii">
 <div class="member-head">
-<span class="sig">fn is_ascii(self) -&gt; bool</span>
+<span class="sig">fun is_ascii(self) -&gt; bool</span>
 
 </div>
 <p class="member-doc">Whether it is one of the 128 ASCII characters.</p>

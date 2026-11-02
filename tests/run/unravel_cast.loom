@@ -1,6 +1,6 @@
 use std.io.print
 
-fn main() {
+fun main() {
     let big: i32 = 300
     print("{big as% u8}")
     print("{big as u8}")

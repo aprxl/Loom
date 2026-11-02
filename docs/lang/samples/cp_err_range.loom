@@ -1,8 +1,8 @@
 warp Grid[const W: u8, const H: u8] {
-    fn area(self) -> u16 = W as u16 * H as u16
+    fun area(self) -> u16 = W as u16 * H as u16
 }
 
-fn main() {
+fun main() {
     // 300 doesn't fit a `u8`.
     let b = Grid[300, 1]()
 }

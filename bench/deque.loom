@@ -5,7 +5,7 @@ use std.deque.Deque
 
 const SIZE = 1_000_000
 
-fn main() {
+fun main() {
     var d: Deque[u64] = Deque.new()
     var total = 0u64
     for i in 0..SIZE as u64 {

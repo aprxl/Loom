@@ -8,30 +8,30 @@ use std.iter.FromStream
 #builtin
 pub warp List[T] {
     /// `n` copies of `x`.
-    pub fn filled(x: T, n: usize) -> List[T]
+    pub fun filled(x: T, n: usize) -> List[T]
     /// Adds `x` at the end.
-    pub fn push(mut self, take x: T)
+    pub fun push(mut self, take x: T)
     /// Takes the last element off, if there is one.
-    pub fn pop(mut self) -> ?T
+    pub fun pop(mut self) -> ?T
     /// Puts `x` at index `i`, moving the rest up. Unravels if `i > len`.
-    pub fn insert(mut self, i: usize, take x: T)
+    pub fun insert(mut self, i: usize, take x: T)
     /// Takes out the element at `i`, moving the rest down. Unravels if
     /// `i >= len`.
-    pub fn remove(mut self, i: usize) -> T
+    pub fun remove(mut self, i: usize) -> T
     /// Removes every element.
-    pub fn clear(mut self)
+    pub fun clear(mut self)
     /// Keeps the first `n` elements.
-    pub fn truncate(mut self, n: usize)
+    pub fun truncate(mut self, n: usize)
     /// Adds each of the items at the end.
-    pub fn extend(mut self, take items: Stream[T]) {
+    pub fun extend(mut self, take items: Stream[T]) {
         for x in items {
             self.push(x)
         }
     }
     /// A deep copy.
-    pub fn copy(self) -> List[T]
+    pub fun copy(self) -> List[T]
     /// Keeps the elements `keep` says yes to, in their order.
-    pub fn retain(mut self, keep: T => bool) {
+    pub fun retain(mut self, keep: T => bool) {
         var w = 0
         for i in 0..self.len() {
             if keep(self[i]) {
@@ -42,7 +42,7 @@ pub warp List[T] {
         self.truncate(w)
     }
     /// Removes the elements `same_key` of which equals the one before's.
-    pub fn dedup_by_key[K: Eq](mut self, key: T => K) {
+    pub fun dedup_by_key[K: Eq](mut self, key: T => K) {
         if self.len() < 2 { return }
         var w = 1
         for i in 1..self.len() {
@@ -54,7 +54,7 @@ pub warp List[T] {
         self.truncate(w)
     }
     /// Removes each element that equals the one before it.
-    pub fn dedup(mut self) where T: Eq {
+    pub fun dedup(mut self) where T: Eq {
         if self.len() < 2 { return }
         var w = 1
         for i in 1..self.len() {
@@ -67,7 +67,7 @@ pub warp List[T] {
     }
     /// Takes out the element at `i` by moving the last one into its place:
     /// quick, but it changes the order. Unravels if `i >= len`.
-    pub fn swap_remove(mut self, i: usize) -> T {
+    pub fun swap_remove(mut self, i: usize) -> T {
         assert(i < self.len(), "swap_remove: index out of bounds")
         self.swap(i, self.len() - 1)
         match self.pop() {
@@ -76,7 +76,7 @@ pub warp List[T] {
         }
     }
     /// Grows with copies of `x`, or shrinks, to `n` elements.
-    pub fn resize(mut self, n: usize, x: T) {
+    pub fun resize(mut self, n: usize, x: T) {
         if n < self.len() {
             self.truncate(n)
         } else if n > self.len() {
@@ -86,7 +86,7 @@ pub warp List[T] {
     }
     /// Cuts the list at `at`: this keeps the first `at` elements, and the
     /// rest are returned. Unravels if `at > len`.
-    pub fn split_off(mut self, at: usize) -> List[T] {
+    pub fun split_off(mut self, at: usize) -> List[T] {
         assert(at <= self.len(), "split_off: index out of bounds")
         var tail: List[T] = List()
         while self.len() > at {
@@ -99,7 +99,7 @@ pub warp List[T] {
         tail
     }
     /// Moves every element of `other` to the end of this list.
-    pub fn append(mut self, mut other: List[T]) {
+    pub fun append(mut self, mut other: List[T]) {
         other.reverse()
         while true {
             match other.pop() {
@@ -110,7 +110,7 @@ pub warp List[T] {
     }
     /// Takes out the elements in `from..to` and returns them. Unravels if
     /// the range is outside the list.
-    pub fn drain(mut self, from: usize, to: usize) -> List[T] {
+    pub fun drain(mut self, from: usize, to: usize) -> List[T] {
         assert(from <= to and to <= self.len(), "drain: range out of bounds")
         var tail = self.split_off(to)
         let taken = self.split_off(from)
@@ -121,5 +121,5 @@ pub warp List[T] {
 
 weave[T] FromStream into List[T] {
     type Item = T
-    fn from_stream(take items: Stream[T]) -> List[T] = items.collect()
+    fun from_stream(take items: Stream[T]) -> List[T] = items.collect()
 }

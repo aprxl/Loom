@@ -3,7 +3,7 @@
 
 use std.io.print
 
-fn rows() -> List[(str, u32)] {
+fun rows() -> List[(str, u32)] {
     var out: List[(str, u32)] = List()
     out.push(("pear", 2))
     out.push(("fig", 5))
@@ -20,7 +20,7 @@ fn rows() -> List[(str, u32)] {
     out
 }
 
-fn main() {
+fun main() {
     var desc = rows()
     desc.sort_by((a, b) => a.1 > b.1)
     print("by count, most first:")

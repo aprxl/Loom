@@ -7,4 +7,4 @@ const FOREVER: u32 = {                                   //~ K0102
     n
 }
 
-fn main() {}
+fun main() {}

@@ -9,7 +9,7 @@ use printer.render
 use errors.LispError
 
 /// Runs `src` on a fresh heap and renders its last value in the `write` form.
-fn run(src: str) -> String ! LispError {
+fun run(src: str) -> String ! LispError {
     var h = Heap.new(1)
     let global = boot(mut h)?
     let v = eval_text(mut h, global, src)?

@@ -12,7 +12,7 @@ warp Tree {
     case Node(left: ^Tree, value: i32, right: ^Tree)
 }
 
-fn insert(take t: ^Tree, v: i32) -> ^Tree = match t {
+fun insert(take t: ^Tree, v: i32) -> ^Tree = match t {
     .Leaf => ^Tree.Node(^Tree.Leaf, v, ^Tree.Leaf)
     .Node(l, x, r) => if v < x {
         ^Tree.Node(l.insert(v), x, r)
@@ -21,12 +21,12 @@ fn insert(take t: ^Tree, v: i32) -> ^Tree = match t {
     }
 }
 
-fn sum(t: ^Tree) -> i32 = match t {
+fun sum(t: ^Tree) -> i32 = match t {
     .Leaf => 0
     .Node(l, x, r) => l.sum() + x + r.sum()
 }
 
-fn main() {
+fun main() {
     let n = ^41
     print("{n^ + 1}")
     print("{n}")

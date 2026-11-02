@@ -7,11 +7,11 @@
 // it frees nothing.
 use std.io.print
 
-fn empty() -> usize {
+fun empty() -> usize {
     let xs: List[List[i32]] = List()
     xs.len()
 }
 
-fn main() {
+fun main() {
     print(empty())
 }

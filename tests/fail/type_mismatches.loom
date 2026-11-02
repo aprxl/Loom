@@ -1,6 +1,6 @@
-fn wants_u8(x: u8) {}
+fun wants_u8(x: u8) {}
 
-fn main() {
+fun main() {
     let a: u16 = 300
     wants_u8(a)                         //~ T0101
     let s: String = "ok"
@@ -8,4 +8,4 @@ fn main() {
     let b: bool = if a > 3 { 1 } else { 2 }   //~ T0101 T0101
 }
 
-fn label(n: i32) -> str = "{n} items"   //~ T0101
+fun label(n: i32) -> str = "{n} items"   //~ T0101

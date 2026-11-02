@@ -59,7 +59,7 @@
     <span class="k">case</span> <span class="t">Circle</span>(r: f64)
 }
 
-<span class="k">fn</span> describe[T](v: T) {
+<span class="k">fun</span> describe[T](v: T) {
     print(<span class="s">"{</span>T.name<span class="s">} is a {</span>T.kind<span class="s">}"</span>)
     <span class="k">const</span> <span class="k">if</span> T.kind == .<span class="t">Record</span> {
         <span class="k">const</span> <span class="k">for</span> f <span class="k">in</span> T.fields {
@@ -77,7 +77,7 @@
     }
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     describe(<span class="t">Point</span>(<span class="n">1</span>, <span class="n">2</span>))
     describe(<span class="t">Shape</span>.<span class="t">Circle</span>(r: <span class="n">1.5</span>))
     describe(<span class="t">Shape</span>.<span class="t">Dot</span>)
@@ -100,7 +100,7 @@ Shape is a Sum
 <span class="c">/// Anything that can list its fields. The default body works for any</span>
 <span class="c">/// record: `const for` writes out one line per field.</span>
 <span class="k">weft</span> <span class="t">Fields</span> {
-    <span class="k">fn</span> fields(<span class="k">self</span>) -&gt; <span class="t">String</span> {
+    <span class="k">fun</span> fields(<span class="k">self</span>) -&gt; <span class="t">String</span> {
         <span class="k">var</span> out = <span class="t">String</span>()
         <span class="k">const</span> <span class="k">for</span> (i, f) <span class="k">in</span> <span class="k">Self</span>.fields.indexed() {
             <span class="k">const</span> <span class="k">if</span> i &gt; <span class="n">0</span> { out.push_str(<span class="s">", "</span>) }
@@ -113,7 +113,7 @@ Shape is a Sum
 <span class="k">warp</span> <span class="t">Point</span>: <span class="t">Fields</span> { x: i32, y: i32 }
 <span class="k">warp</span> <span class="t">User</span>: <span class="t">Fields</span> { name: <span class="t">String</span>, age: u8 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     print(<span class="t">Point</span>(<span class="n">3</span>, <span class="n">4</span>).fields())
     print(<span class="t">User</span>(name: <span class="s">"Ada"</span>, age: <span class="n">36</span>).fields())
 }</code></pre>
@@ -137,7 +137,7 @@ name=Ada, age=36</code></pre></div>
 
 <span class="k">type</span> <span class="t">MaybeToken</span> = ?<span class="t">Token</span>
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     print(<span class="s">"Header: {</span><span class="t">Header</span>.size<span class="s">} bytes, aligned to {</span><span class="t">Header</span>.align<span class="s">}"</span>)
     <span class="k">const</span> <span class="k">for</span> f <span class="k">in</span> <span class="t">Header</span>.fields {
         print(<span class="s">"  {</span>f.name<span class="s">} at {</span>f.offset<span class="s">}"</span>)
@@ -159,7 +159,7 @@ Token: 32 bytes, ?Token: 32</code></pre></div>
 
 <span class="k">warp</span> <span class="t">Point</span> { x: i32, y: i32 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     print(<span class="t">Point</span>.fields.len())
     <span class="k">let</span> fields = <span class="t">Point</span>.fields
 }</code></pre>

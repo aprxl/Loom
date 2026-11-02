@@ -12,7 +12,7 @@ pub warp Stats {
 /// The totals for `words`, which came from `lines` lines and `bytes` bytes,
 /// with `unique` different words among them. The longest is the first one
 /// of its length.
-pub fn stats(words: [String], unique: usize, lines: usize, bytes: usize) -> Stats {
+pub fun stats(words: [String], unique: usize, lines: usize, bytes: usize) -> Stats {
     var longest: String = ""
     for w in words {
         if w.len() > longest.len() { longest = w.copy() }
@@ -21,7 +21,7 @@ pub fn stats(words: [String], unique: usize, lines: usize, bytes: usize) -> Stat
 }
 
 /// How many times each word of `words` occurs.
-pub fn count(words: [String]) -> Map[String, u32] {
+pub fun count(words: [String]) -> Map[String, u32] {
     var counts: Map[String, u32] = Map()
     for w in words {
         counts.entry(w.copy(), 0) += 1
@@ -31,7 +31,7 @@ pub fn count(words: [String]) -> Map[String, u32] {
 
 /// How many times each run of `n` words occurs, the words of a run joined
 /// with a space. Empty when `n` is more than there are words.
-pub fn ngrams(words: [String], n: usize) -> Map[String, u32] {
+pub fun ngrams(words: [String], n: usize) -> Map[String, u32] {
     var counts: Map[String, u32] = Map()
     if n > words.len() { return counts }
     for i in 0..=(words.len() - n) {

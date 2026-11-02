@@ -1,12 +1,12 @@
 use std.io.print
 
-fn total(xs: [i32]) -> i32 {                 // `[i32]` is a slice: arrays and lists pass as one
+fun total(xs: [i32]) -> i32 {                 // `[i32]` is a slice: arrays and lists pass as one
     var t = 0
     for x in xs { t += x }
     t
 }
 
-fn main() {
+fun main() {
     let fixed = [1, 2, 3]                    // an array: `[i32; 3]`
     let zeros = [0u8; 4]                     // repeat: four zero bytes
     var xs: List[i32] = [5, 3, 8]            // a literal where a list is expected

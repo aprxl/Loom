@@ -7,7 +7,7 @@
 // `xs[i]` and of the second `xs[j]` go; the first `xs[j]`'s stays.
 use std.io.print
 
-fn reverse(mut xs: [i32; 8], k: usize) {
+fun reverse(mut xs: [i32; 8], k: usize) {
     var i = 0
     var j = k
     while i < j {
@@ -19,7 +19,7 @@ fn reverse(mut xs: [i32; 8], k: usize) {
     }
 }
 
-fn main() {
+fun main() {
     var xs = [1, 2, 3, 4, 5, 6, 7, 8]
     reverse(mut xs, 7)
     print(xs[0])

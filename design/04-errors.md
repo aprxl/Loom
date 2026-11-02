@@ -7,7 +7,7 @@ recovers from either one.
 | | Syntax |
 |---|---|
 | optional | `?T`, whose values are `some(x)` and `none` |
-| result | `T ! E`, whose values are `ok(v)` and `err(e)`. `fn f() ! E` when there's no success value |
+| result | `T ! E`, whose values are `ok(v)` and `err(e)`. `fun f() ! E` when there's no success value |
 | raise | `fail e` |
 | bail out | postfix `?` |
 | recover | `expr mend fallback`, `expr mend e => handler` |
@@ -18,11 +18,11 @@ recovers from either one.
 ## Optionals and results
 
 ```loom
-fn find(users: [User], name: str) -> ?User { ... }
-fn read(path: str) -> Bytes ! IoError { ... }
-fn save(cfg: Config) ! IoError { ... }        // `-> ()` left out
+fun find(users: [User], name: str) -> ?User { ... }
+fun read(path: str) -> Bytes ! IoError { ... }
+fun save(cfg: Config) ! IoError { ... }        // `-> ()` left out
 
-fn check(age: i32) -> u8 ! AgeError {
+fun check(age: i32) -> u8 ! AgeError {
     if age < 0 { fail .Negative }             // leading dot: a case of the declared error type
     age as? u8 mend fail .TooOld(age)
 }
@@ -46,7 +46,7 @@ That one rule covers three things other languages keep separate.
 **Error propagation**, as in Rust:
 
 ```loom
-fn load(path: str) -> Config ! (IoError | ParseError) {
+fun load(path: str) -> Config ! (IoError | ParseError) {
     let text = fs.read_text(path)?          // no mend here, so an error returns from `load`
     parse_config(text)?
 }

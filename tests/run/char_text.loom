@@ -2,7 +2,7 @@
 // they are (and are not letters, upper or lower case, or whitespace).
 
 use std.io.print
-fn main() {
+fun main() {
     let cs = ['a', 'Z', 'é', 'É', 'ß', '5', ' ', '\u{a0}', '\u{3a9}']
     for c in cs {
         print("{c:?} alpha={c.is_alphabetic()} alnum={c.is_alphanumeric()} digit={c.is_digit()} ws={c.is_whitespace()} up={c.is_upper()} low={c.is_lower()} U={c.to_upper()} L={c.to_lower()}")

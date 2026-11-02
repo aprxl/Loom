@@ -1,12 +1,12 @@
 // A generic function's instances are named apart from every other function,
 // even one called `f_0`, which instance 0 of `f` was named once.
 use std.io.print
-fn f(const n: u8) -> i32 = 1
+fun f(const n: u8) -> i32 = 1
 warp Wa { a: i32 }
 warp Wb { a: i32 }
 warp Wc { a: i32 }
-fn f_0() -> i32 = 2
-fn main() {
+fun f_0() -> i32 = 2
+fun main() {
     print(f(1))     // expect 1
     print(f_0())    // expect 2
 }

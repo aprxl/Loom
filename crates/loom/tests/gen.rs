@@ -890,7 +890,7 @@ impl Gen {
         self.yields = None;
         self.defers_ok = true;
         let pulled = pulls.map(|k| format!(" <~ {}", k.name())).unwrap_or_default();
-        let mut s = format!("fn {name}({}) ~> {}{pulled} {{\n", sig.join(", "), self.ty_name(item));
+        let mut s = format!("fun {name}({}) ~> {}{pulled} {{\n", sig.join(", "), self.ty_name(item));
         for b in body {
             s.push_str(&b);
         }
@@ -1038,7 +1038,7 @@ impl Gen {
         let result = self.expr(ret, 3);
         self.fallible = false;
         let mut s = format!(
-            "fn {name}({}) -> {}{} {{\n",
+            "fun {name}({}) -> {}{} {{\n",
             sig.join(", "),
             self.ty_name(ret),
             if fallible { " ! E" } else { "" }
@@ -1056,7 +1056,7 @@ impl Gen {
     fn program(&mut self) -> (String, Vec<String>, String) {
         let (a, b) = (self.a.name(), self.b.name());
         let mut head = format!(
-            "use std.io.print\n\nwarp R {{\n    a: {a}\n    b: {b}\n    f: f64\n}}\n\nwarp S {{\n    case P(x: {a})\n    case Q\n    case W(y: {b}, z: bool)\n}}\n\nwarp E: Error, Show {{\n    case Bad(i64)\n    case Worse\n}}\n\nfn lend_a(mut r: R) ~> mut {a} {{\n    yield mut r.a\n    print(\"lent a: {{r.a}}\")\n}}\n\n"
+            "use std.io.print\n\nwarp R {{\n    a: {a}\n    b: {b}\n    f: f64\n}}\n\nwarp S {{\n    case P(x: {a})\n    case Q\n    case W(y: {b}, z: bool)\n}}\n\nwarp E: Error, Show {{\n    case Bad(i64)\n    case Worse\n}}\n\nfun lend_a(mut r: R) ~> mut {a} {{\n    yield mut r.a\n    print(\"lent a: {{r.a}}\")\n}}\n\n"
         );
         for _ in 0..1 + self.rng.below(4) {
             head.push_str(&self.func());
@@ -1082,14 +1082,14 @@ impl Gen {
                 _ => Ty::StrList,
             };
             let (text, name) = (self.expr(ty, 0), self.ty_name(ty));
-            let _ = write!(head, "const KC_{k}: {name} = {text}\n\nfn mk_{k}() -> {name} {{\n    {text}\n}}\n\n");
+            let _ = write!(head, "const KC_{k}: {name} = {text}\n\nfun mk_{k}() -> {name} {{\n    {text}\n}}\n\n");
             checks.push(format!(
                 "    if \"{{KC_{k}:?}}\" != \"{{mk_{k}():?}}\" {{ print(\"CONST MISMATCH {k}\") }}\n    print(\"{{KC_{k}:?}}\")\n"
             ));
         }
         self.rng = main_rng;
         self.next = next;
-        head.push_str("fn main() {\n");
+        head.push_str("fun main() {\n");
         self.scopes = vec![Vec::new()];
         let n = 10 + self.rng.below(20) as u32;
         let mut main = checks;

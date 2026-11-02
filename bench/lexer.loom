@@ -13,7 +13,7 @@ warp Token {
     case Eof
 }
 
-fn lexer() ~> Token <~ char {
+fun lexer() ~> Token <~ char {
     var next = pull
     loop {
         let c = next mend {
@@ -66,7 +66,7 @@ warp Stats {
     puncts: u64 = 0
     eofs: u64 = 0
 
-    fn count(mut self, take tok: Token) {
+    fun count(mut self, take tok: Token) {
         match tok {
             .Ident(name) => {
                 .idents += 1
@@ -86,7 +86,7 @@ warp Stats {
     }
 }
 
-fn main() {
+fun main() {
     let line = "let greeting = \"hi there\" + 42 * count_7 - (x1 / 1234567);\n"
     var source = String()
     for _ in 0..SIZE {

@@ -15,7 +15,7 @@ warp Ring[T, const N: usize] {
 
     /// Adds to the back. When the ring is full, the oldest item is dropped
     /// and returned.
-    pub fn push(mut self, take x: T) -> ?T {
+    pub fun push(mut self, take x: T) -> ?T {
         let evicted = if .len == N { .pop() } else { none }
         .slots[.tail] = x
         .tail +%= 1
@@ -23,7 +23,7 @@ warp Ring[T, const N: usize] {
         evicted
     }
 
-    pub fn pop(mut self) -> ?T {
+    pub fun pop(mut self) -> ?T {
         if .len == 0 { return none }
         let x = .slots[.head].take()
         .head +%= 1
@@ -32,7 +32,7 @@ warp Ring[T, const N: usize] {
     }
 }
 
-fn main() {
+fun main() {
     var recent = Ring[u32, 4]()
     for n in 1u32..=6 {
         if recent.push(n) is some(old) {

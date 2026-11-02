@@ -3,12 +3,12 @@
 
 use std.io.print
 
-fn both(mut xs: List[i32]) ~> mut i32 {
+fun both(mut xs: List[i32]) ~> mut i32 {
     yield mut xs[0]
     yield mut xs[1]
 }
 
-fn main() {
+fun main() {
     var xs: List[i32] = [1, 2]
     both(mut xs) = 5
     print(xs)

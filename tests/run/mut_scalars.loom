@@ -3,13 +3,13 @@
 
 use std.io.print
 
-fn bump(mut n: i32, by: i32) -> i32 {
+fun bump(mut n: i32, by: i32) -> i32 {
     n += by
     if n > 100 { return -1 }
     n
 }
 
-fn twice(mut a: u8, mut b: u8) {
+fun twice(mut a: u8, mut b: u8) {
     a *= 2
     b *= 2
 }
@@ -17,7 +17,7 @@ fn twice(mut a: u8, mut b: u8) {
 warp Light: Show {
     case Red, Amber, Green
 
-    fn next(mut self) {
+    fun next(mut self) {
         self = match self {
             .Red => .Green
             .Green => .Amber
@@ -28,7 +28,7 @@ warp Light: Show {
 
 warp Counter: Show { hits: u32, light: Light }
 
-fn main() {
+fun main() {
     var x = 5
     let r = bump(mut x, 10)
     print("{x} {r}")
@@ -63,9 +63,9 @@ fn main() {
     print(l)
 }
 
-fn add_hit(mut n: u32) { n += 1 }
+fun add_hit(mut n: u32) { n += 1 }
 
-fn advance_twice(mut l: Light) {
+fun advance_twice(mut l: Light) {
     l.next()
     l.next()
 }

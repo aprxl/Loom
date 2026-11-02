@@ -1,13 +1,13 @@
 // A projection that ends without lending a place unravels where it's
 // called.
 
-fn maybe(mut xs: List[i32], i: usize) ~> mut i32 {
+fun maybe(mut xs: List[i32], i: usize) ~> mut i32 {
     if i < xs.len() {
         yield mut xs[i]
     }
 }
 
-fn main() {
+fun main() {
     var xs: List[i32] = [1, 2]
     maybe(mut xs, 0) = 5
     maybe(mut xs, 7) = 5

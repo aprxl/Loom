@@ -1,10 +1,10 @@
 use std.io.{print, write_out, Buffer, Stdout, Writer}
 
-fn report(n: i32) given out: Writer {
+fun report(n: i32) given out: Writer {
     print("n = {n}")
 }
 
-fn main() {
+fun main() {
     print("before")
     given out = Buffer()
     print("captured {1 + 1}")

@@ -15,11 +15,11 @@ The return arrow tells you what kind of function it is:
 
 | Signature | Kind | Type |
 |-----------|------|------|
-| `fn f() -> T` | ordinary function | |
-| `fn f() ~> T` | **generator**: yields `T`s | `Shuttle[T, ()]` |
-| `fn f() ~> T <~ U` | **duplex**: pulls in `U`s, yields `T`s | `Shuttle[T, U]` |
-| `fn f() <~ U` | **sink**: only pulls | `Shuttle[(), U]` |
-| `fn f(mut self) ~> mut T` | **projection**: lends places (see [03](03-memory.md#projections)) | |
+| `fun f() -> T` | ordinary function | |
+| `fun f() ~> T` | **generator**: yields `T`s | `Shuttle[T, ()]` |
+| `fun f() ~> T <~ U` | **duplex**: pulls in `U`s, yields `T`s | `Shuttle[T, U]` |
+| `fun f() <~ U` | **sink**: only pulls | `Shuttle[(), U]` |
+| `fun f(mut self) ~> mut T` | **projection**: lends places (see [03](03-memory.md#projections)) | |
 
 Two expressions only work inside a shuttle:
 
@@ -31,7 +31,7 @@ Two expressions only work inside a shuttle:
 body. It just builds the suspended shuttle value.
 
 ```loom
-fn fib() ~> u64 {
+fun fib() ~> u64 {
     var (a, b) = (0, 1)
     loop {
         yield a
@@ -39,7 +39,7 @@ fn fib() ~> u64 {
     }
 }
 
-fn running_mean() ~> f64 <~ f64 {
+fun running_mean() ~> f64 <~ f64 {
     var (sum, n) = (0.0, 0)
     while pull is some(x) {
         sum += x
@@ -108,7 +108,7 @@ let (a, b) = loom {
 - **`thread expr`** evaluates `expr` on the loom's worker pool and returns a
   **`Spun[T]`** handle, where `T` is the type of `expr` (`return` leaves the
   thread, and a `?` in it can't reach a `mend` outside it). **`.join()`**
-  (`fn join(take self) -> T`) waits for the thread and gives its value as it
+  (`fun join(take self) -> T`) waits for the thread and gives its value as it
   is: if `expr` is a `U ! E`, `join` gives the `U ! E` for the caller to
   handle, it doesn't propagate it. A handle is joined once (a second `join`
   unravels), and a `Spun[T]` is `once` when `T` is. If a thread unravelled,

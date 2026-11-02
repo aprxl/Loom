@@ -1,7 +1,7 @@
 warp Point {
     x: i32
     y: i32 = 0
-    fn nudge(mut self) { .x += 1 }
+    fun nudge(mut self) { .x += 1 }
 }
 
 warp Shape {
@@ -10,9 +10,9 @@ warp Shape {
     case Dot
 }
 
-fn move(mut p: Point) {}
+fun move(mut p: Point) {}
 
-fn main() {
+fun main() {
     let a = Point()                         //~ T0104
     let b = Point(1, z: 2)                  //~ T0105
     let c = Point(1)

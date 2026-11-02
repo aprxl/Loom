@@ -1,6 +1,6 @@
 use std.io.print
 
-fn main() {
+fun main() {
     print("hello, loom")
 }
 //@ run

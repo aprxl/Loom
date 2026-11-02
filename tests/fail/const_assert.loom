@@ -9,4 +9,4 @@ const assert(LIMIT * 2 > 15 and not (LIMIT < 0))
 const assert(SIZES.len() == 4, "four sizes")      //~ K0101
 const assert(LIMIT / 3 == 4)                      //~ K0101
 
-fn main() {}
+fun main() {}

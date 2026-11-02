@@ -4,37 +4,37 @@
 #builtin
 pub warp Optional[T] {
     /// The value, leaving `none` in its place.
-    pub fn take(mut self) -> ?T
+    pub fun take(mut self) -> ?T
     /// `f` of the value, if there is one.
-    pub fn map[U](take self, f: T => U) -> ?U {
+    pub fun map[U](take self, f: T => U) -> ?U {
         match self {
             some(x) => some(f(x))
             none => none
         }
     }
     /// The value, if `f` says yes to it.
-    pub fn filter(take self, f: T => bool) -> ?T {
+    pub fun filter(take self, f: T => bool) -> ?T {
         match self {
             some(x) => if f(x) { some(x) } else { none }
             none => none
         }
     }
     /// Whether there is a value.
-    pub fn is_some(self) -> bool {
+    pub fun is_some(self) -> bool {
         match self {
             some(_) => true
             none => false
         }
     }
     /// Whether there is no value.
-    pub fn is_none(self) -> bool {
+    pub fun is_none(self) -> bool {
         match self {
             some(_) => false
             none => true
         }
     }
     /// The two values together, if both are there.
-    pub fn zip[U](take self, take other: ?U) -> ?(T, U) {
+    pub fun zip[U](take self, take other: ?U) -> ?(T, U) {
         match self {
             some(a) => match other {
                 some(b) => some((a, b))
@@ -44,13 +44,13 @@ pub warp Optional[T] {
         }
     }
     /// Puts `x` in, returning what was there.
-    pub fn replace(mut self, take x: T) -> ?T {
+    pub fun replace(mut self, take x: T) -> ?T {
         let old = self.take()
         self = some(x)
         old
     }
     /// Takes the value out, if `f` says yes to it.
-    pub fn take_if(mut self, f: T => bool) -> ?T {
+    pub fun take_if(mut self, f: T => bool) -> ?T {
         match self.take() {
             some(x) => if f(x) {
                 some(x)
@@ -62,7 +62,7 @@ pub warp Optional[T] {
         }
     }
     /// The value, or `e` as an error when there is none.
-    pub fn ok_or[E](take self, take e: E) -> T ! E {
+    pub fun ok_or[E](take self, take e: E) -> T ! E {
         match self {
             some(x) => ok(x)
             none => err(e)
@@ -71,7 +71,7 @@ pub warp Optional[T] {
 }
 
 /// `f()` when the condition holds: `(n > 0).then(() => 100 / n)`.
-pub fn then[T](cond: bool, f: () => T) -> ?T = if cond { some(f()) } else { none }
+pub fun then[T](cond: bool, f: () => T) -> ?T = if cond { some(f()) } else { none }
 
 /// `x` when the condition holds.
-pub fn then_some[T](cond: bool, take x: T) -> ?T = if cond { some(x) } else { none }
+pub fun then_some[T](cond: bool, take x: T) -> ?T = if cond { some(x) } else { none }

@@ -334,7 +334,7 @@ impl Checker<'_> {
                 self.diags.push(
                     Diagnostic::error(codes::T0101, "`fail` needs a function that can fail")
                         .primary(e.span, "this function doesn't return `T ! E`")
-                        .help("declare the error type: `fn name(…) -> T ! E`, or `fn name(…) ! E`"),
+                        .help("declare the error type: `fun name(…) -> T ! E`, or `fun name(…) ! E`"),
                 );
             }
             return self.tcx.never;

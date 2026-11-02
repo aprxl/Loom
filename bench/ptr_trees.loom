@@ -8,17 +8,17 @@ warp Tree {
     case Node(left: ^Tree, right: ^Tree)
 }
 
-fn make(depth: u32) -> ^Tree {
+fun make(depth: u32) -> ^Tree {
     if depth == 0 { return ^Tree.Leaf }
     ^Tree.Node(make(depth - 1), make(depth - 1))
 }
 
-fn check(t: ^Tree) -> u32 = match t {
+fun check(t: ^Tree) -> u32 = match t {
     .Leaf => 1
     .Node(l, r) => 1 + check(l) + check(r)
 }
 
-fn main() {
+fun main() {
     let max_depth = SIZE
     let stretch = make(max_depth + 1)
     print("stretch tree of depth {max_depth + 1}\t check: {check(stretch)}")

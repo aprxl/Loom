@@ -10,4 +10,4 @@ warp Shape: Default {                            //~ T0113
     case Square
 }
 
-fn main() {}
+fun main() {}

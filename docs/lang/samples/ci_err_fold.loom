@@ -1,6 +1,6 @@
-fn is_even(n: i32) -> bool = n % 2 == 0
+fun is_even(n: i32) -> bool = n % 2 == 0
 
-fn main() {
+fun main() {
     // The condition has to be something the compiler can fold:
     // literals, constants, arithmetic, comparisons. A function call
     // isn't.

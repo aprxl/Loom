@@ -65,42 +65,42 @@
 <div class="members">
 <div class="member" id="Atomic.load">
 <div class="member-head">
-<span class="sig">fn load(self) -&gt; T</span>
+<span class="sig">fun load(self) -&gt; T</span>
 
 </div>
 <p class="member-doc">The value now.</p>
 </div>
 <div class="member" id="Atomic.store">
 <div class="member-head">
-<span class="sig">fn store(self, value: T)</span>
+<span class="sig">fun store(self, value: T)</span>
 
 </div>
 <p class="member-doc">Sets the value.</p>
 </div>
 <div class="member" id="Atomic.swap">
 <div class="member-head">
-<span class="sig">fn swap(self, value: T) -&gt; T</span>
+<span class="sig">fun swap(self, value: T) -&gt; T</span>
 
 </div>
 <p class="member-doc">Sets the value, and gives the one it replaced.</p>
 </div>
 <div class="member" id="Atomic.compare_exchange">
 <div class="member-head">
-<span class="sig">fn compare_exchange(self, expected: T, desired: T) -&gt; (bool, T)</span>
+<span class="sig">fun compare_exchange(self, expected: T, desired: T) -&gt; (bool, T)</span>
 
 </div>
 <p class="member-doc">Sets the value to <code>desired</code> if it's <code>expected</code>. Gives whether it did, and the value that was there.</p>
 </div>
 <div class="member" id="Atomic.add">
 <div class="member-head">
-<span class="sig">fn add(self, n: T) -&gt; T where T: Integer</span>
+<span class="sig">fun add(self, n: T) -&gt; T where T: Integer</span>
 
 </div>
 <p class="member-doc">Adds <code>n</code>, and gives the value before. Unravels if the sum doesn't fit, leaving the value as it was.</p>
 </div>
 <div class="member" id="Atomic.sub">
 <div class="member-head">
-<span class="sig">fn sub(self, n: T) -&gt; T where T: Integer</span>
+<span class="sig">fun sub(self, n: T) -&gt; T where T: Integer</span>
 
 </div>
 <p class="member-doc">Subtracts <code>n</code>, and gives the value before. Unravels if the result doesn't fit, leaving the value as it was.</p>
@@ -116,7 +116,7 @@
 <div class="members">
 <div class="member" id="Mutex.lock">
 <div class="member-head">
-<span class="sig">fn lock(self) ~&gt; mut T</span>
+<span class="sig">fun lock(self) ~&gt; mut T</span>
 
 </div>
 <p class="member-doc">The value, for the statement it's in: the lock is taken where <code>lock()</code> is evaluated (waiting, in turn, while another thread has it) and given back when the statement ends, however it ends. <code>total.lock() += n</code> changes it. A thread that locks a mutex it has locked already unravels.</p>
@@ -132,7 +132,7 @@
 <div class="members">
 <div class="member" id="Spun.join">
 <div class="member-head">
-<span class="sig">fn join(take self) -&gt; T</span>
+<span class="sig">fun join(take self) -&gt; T</span>
 
 </div>
 <p class="member-doc">Waits for the thread and gives its result. If a thread of the block unravelled, this unravels with its message instead. A thread is joined once: a second <code>join</code> unravels.</p>
@@ -148,21 +148,21 @@
 <div class="members">
 <div class="member" id="Pipe.send">
 <div class="member-head">
-<span class="sig">fn send(self, take item: T)</span>
+<span class="sig">fun send(self, take item: T)</span>
 
 </div>
 <p class="member-doc">Puts <code>item</code> in, waiting while the pipe is full. Unravels if it's closed (before or while it waits).</p>
 </div>
 <div class="member" id="Pipe.recv">
 <div class="member-head">
-<span class="sig">fn recv(self) -&gt; ?T</span>
+<span class="sig">fun recv(self) -&gt; ?T</span>
 
 </div>
 <p class="member-doc">Takes the oldest item, waiting while the pipe is empty. <code>none</code> once it's closed and there's nothing left.</p>
 </div>
 <div class="member" id="Pipe.close">
 <div class="member-head">
-<span class="sig">fn close(self)</span>
+<span class="sig">fun close(self)</span>
 
 </div>
 <p class="member-doc">Closes the pipe: what's in it can still be received, nothing more can be sent, and the threads that wait on it wake. Closing it again does nothing.</p>
@@ -182,7 +182,7 @@
 <h2>Functions</h2>
 <div class="item" id="sched_yield">
 <div class="item-head">
-<span class="sig">fn <strong>sched_yield</strong>()</span>
+<span class="sig">fun <strong>sched_yield</strong>()</span>
 <span class="badge extern">extern</span>
 </div>
 <p class="item-doc">Lets the other threads that can run go first: the running thread goes to the back of the queue.</p>

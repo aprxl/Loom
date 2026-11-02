@@ -29,7 +29,7 @@ const N: u64 = 20_000;
 /// The instructions a program dispatches, and what it prints: `setup` builds
 /// `xs`, then `work` runs.
 fn run(setup: &str, work: &str) -> (u64, String) {
-    let text = format!("use std.io.print\n\nfn main() {{\n{setup}\n{work}\n}}\n");
+    let text = format!("use std.io.print\n\nfun main() {{\n{setup}\n{work}\n}}\n");
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../bench/counts_probe.loom");
     let mut db = SourceDb::new();
     let file = db.add(path.display().to_string(), text.clone());

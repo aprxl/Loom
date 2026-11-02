@@ -5,7 +5,7 @@
 use std.io.print
 use std.sync.sched_yield
 
-fn child(name: str) -> i32 {
+fun child(name: str) -> i32 {
     defer print("{name} cleanup")
     print("{name} start")
     sched_yield()
@@ -13,7 +13,7 @@ fn child(name: str) -> i32 {
     1
 }
 
-fn falls_off() -> i32 {
+fun falls_off() -> i32 {
     loom {
         thread child("fall")
         ()
@@ -22,7 +22,7 @@ fn falls_off() -> i32 {
     5
 }
 
-fn cancelled() -> i32 {
+fun cancelled() -> i32 {
     loom {
         thread child("held")
         sched_yield()
@@ -32,11 +32,11 @@ fn cancelled() -> i32 {
     0
 }
 
-fn boom() {
+fun boom() {
     unravel("boom")
 }
 
-fn main() {
+fun main() {
     loom {
         let a = thread falls_off()
         let b = thread cancelled()

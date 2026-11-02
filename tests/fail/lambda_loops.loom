@@ -1,7 +1,7 @@
 // A lambda is a function of its own: loops outside it can't be left from
 // inside it.
 
-fn main() {
+fun main() {
     for i in 0..3 {
         [i].each(x => {
             if x > 1 { break }               //~ N0108

@@ -1,7 +1,7 @@
 use std.fmt.dbg
 use std.io.print
 
-fn main() {
+fun main() {
     let n = dbg(1 + 2) * 2
     print(n)
     let s = dbg("hi")

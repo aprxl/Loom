@@ -18,18 +18,18 @@ pub warp Utf8Error: Error {
 #builtin
 pub warp String {
     /// An empty string with room for `n` bytes.
-    pub fn with_capacity(n: usize) -> String
+    pub fun with_capacity(n: usize) -> String
     /// The text of `chars`, in order.
-    pub fn of(chars: [char]) -> String
+    pub fun of(chars: [char]) -> String
     /// Adds `c` at the end.
-    pub fn push(mut self, c: char)
+    pub fun push(mut self, c: char)
     /// Adds `s` at the end.
-    pub fn push_str(mut self, s: str)
+    pub fun push_str(mut self, s: str)
     /// Takes the last character off, if there is one.
-    pub fn pop(mut self) -> ?char
-    pub fn clear(mut self)
+    pub fun pop(mut self) -> ?char
+    pub fun clear(mut self)
     /// The text the bytes spell, or where they stop being UTF-8.
-    pub fn from_utf8(bytes: [u8]) -> String ! Utf8Error {
+    pub fun from_utf8(bytes: [u8]) -> String ! Utf8Error {
         var chars: List[char] = []
         var i = 0
         while i < bytes.len() {
@@ -70,26 +70,26 @@ pub warp String {
     }
     /// Keeps the first `n` bytes. Unravels if `n` is past the end or in the
     /// middle of a character.
-    pub fn truncate(mut self, n: usize) {
+    pub fun truncate(mut self, n: usize) {
         let head: String = self[..n].to_string()
         self.clear()
         self.push_str(head)
     }
     /// Puts `s` at byte `i`. Unravels if `i` is past the end or in the middle
     /// of a character.
-    pub fn insert_str(mut self, i: usize, s: str) {
+    pub fun insert_str(mut self, i: usize, s: str) {
         let tail: String = self[i..].to_string()
         self.truncate(i)
         self.push_str(s)
         self.push_str(tail)
     }
     /// Puts `c` at byte `i`.
-    pub fn insert(mut self, i: usize, c: char) {
+    pub fun insert(mut self, i: usize, c: char) {
         let one: String = String.of([c])
         self.insert_str(i, one)
     }
     /// Takes out the character at byte `i`. Unravels if there isn't one.
-    pub fn remove(mut self, i: usize) -> char {
+    pub fun remove(mut self, i: usize) -> char {
         let c = match self[i..].chars().next() {
             some(c) => c
             none => unravel("remove: no character at byte {i}")
@@ -100,7 +100,7 @@ pub warp String {
         c
     }
     /// Keeps the characters `keep` says yes to.
-    pub fn retain(mut self, keep: char => bool) {
+    pub fun retain(mut self, keep: char => bool) {
         var out: String = ""
         for c in self.chars() {
             if keep(c) { out.push(c) }
@@ -115,61 +115,61 @@ pub warp String {
 #builtin
 pub warp Str {
     /// How many bytes it takes.
-    pub fn len(self) -> usize
-    pub fn is_empty(self) -> bool
+    pub fun len(self) -> usize
+    pub fun is_empty(self) -> bool
     /// How many characters it has.
-    pub fn char_count(self) -> usize
-    pub fn contains(self, part: str) -> bool
-    pub fn starts_with(self, prefix: str) -> bool
-    pub fn ends_with(self, suffix: str) -> bool
+    pub fun char_count(self) -> usize
+    pub fun contains(self, part: str) -> bool
+    pub fun starts_with(self, prefix: str) -> bool
+    pub fun ends_with(self, suffix: str) -> bool
     /// The byte position of the first `part`, if there is one.
-    pub fn find(self, part: str) -> ?usize
+    pub fun find(self, part: str) -> ?usize
     /// Without the white space at both ends (Unicode `White_Space`).
-    pub fn trim(self) -> str
+    pub fun trim(self) -> str
     /// Without the white space at the start.
-    pub fn trim_start(self) -> str
+    pub fun trim_start(self) -> str
     /// Without the white space at the end.
-    pub fn trim_end(self) -> str
+    pub fun trim_end(self) -> str
     /// In upper case, letter by letter (`ß` becomes `SS`).
-    pub fn to_upper(self) -> String
+    pub fun to_upper(self) -> String
     /// In lower case, letter by letter.
-    pub fn to_lower(self) -> String
+    pub fun to_lower(self) -> String
     /// Every `from` replaced with `to`. An empty `from` is found before every character and at the end: `"ab".replace("", "-")` is `-a-b-`.
-    pub fn replace(self, from: str, to: str) -> String
+    pub fun replace(self, from: str, to: str) -> String
     /// `n` copies, one after another.
-    pub fn repeat(self, n: usize) -> String
+    pub fun repeat(self, n: usize) -> String
     /// The parts between each `sep` (`"".split(",")` is one empty part). An empty `sep` splits into each character, with no empty parts at the ends (unlike Rust's).
-    pub fn split(self, sep: str) -> List[String]
+    pub fun split(self, sep: str) -> List[String]
     /// The characters, one at a time.
-    pub fn chars(self) -> Stream[char]
+    pub fun chars(self) -> Stream[char]
     /// The bytes of its UTF-8, one at a time.
-    pub fn bytes(self) -> Stream[u8]
+    pub fun bytes(self) -> Stream[u8]
     /// The lines, without their line breaks (a newline, or a carriage
     /// return and a newline).
-    pub fn lines(self) -> Stream[str]
+    pub fun lines(self) -> Stream[str]
     /// The words: what's between runs of white space.
-    pub fn words(self) -> Stream[str]
+    pub fun words(self) -> Stream[str]
     /// The text as a `String` of its own.
     /// Without the ASCII white space at both ends.
-    pub fn trim_ascii(self) -> str
+    pub fun trim_ascii(self) -> str
     /// Without the ASCII white space at the start.
-    pub fn trim_ascii_start(self) -> str
+    pub fun trim_ascii_start(self) -> str
     /// Without the ASCII white space at the end.
-    pub fn trim_ascii_end(self) -> str
+    pub fun trim_ascii_end(self) -> str
     /// With only the ASCII letters in upper case.
-    pub fn to_ascii_upper(self) -> String
+    pub fun to_ascii_upper(self) -> String
     /// With only the ASCII letters in lower case.
-    pub fn to_ascii_lower(self) -> String
-    pub fn to_string(self) -> String
-    fn char_before(self, end: usize) -> (char, usize)
+    pub fun to_ascii_lower(self) -> String
+    pub fun to_string(self) -> String
+    fun char_before(self, end: usize) -> (char, usize)
     /// A `String` of its own, in the spool the call is given (the heap, when
     /// there is none): text in an arena goes when the arena does.
-    pub fn copy(self) -> String@sp given sp: Spool
+    pub fun copy(self) -> String@sp given sp: Spool
     /// The number the text spells: `"42".parse[u8]()`. Decimal, with an
     /// optional sign; floats also take a fraction, an exponent, `inf`, `NaN`.
-    pub fn parse[T: Parse](self) -> T ! NumError
+    pub fun parse[T: Parse](self) -> T ! NumError
     /// The text before and after the first `sep`.
-    pub fn split_once(self, sep: str) -> ?(str, str) {
+    pub fun split_once(self, sep: str) -> ?(str, str) {
         match self.find(sep) {
             some(i) => some((self[..i], self[i + sep.len()..]))
             none => none
@@ -177,7 +177,7 @@ pub warp Str {
     }
     /// The pieces between `sep`s, at most `n` of them: the last holds the rest.
     /// Unravels if `sep` is empty.
-    pub fn splitn(self, n: usize, sep: str) -> List[String] {
+    pub fun splitn(self, n: usize, sep: str) -> List[String] {
         assert(not sep.is_empty(), "splitn: sep is empty")
         var out: List[String] = []
         var rest = self
@@ -194,13 +194,13 @@ pub warp Str {
         out
     }
     /// The pieces between `sep`s, from the last to the first.
-    pub fn rsplit(self, sep: str) -> List[String] {
+    pub fun rsplit(self, sep: str) -> List[String] {
         var out = self.split(sep)
         out.reverse()
         out
     }
     /// The pieces between the characters `f` says yes to.
-    pub fn split_by(self, f: char => bool) -> List[String] {
+    pub fun split_by(self, f: char => bool) -> List[String] {
         var out: List[String] = []
         var from = 0
         var at = 0
@@ -215,14 +215,14 @@ pub warp Str {
         out
     }
     /// The text before and after the last `sep`.
-    pub fn rsplit_once(self, sep: str) -> ?(str, str) {
+    pub fun rsplit_once(self, sep: str) -> ?(str, str) {
         match self.rfind(sep) {
             some(i) => some((self[..i], self[i + sep.len()..]))
             none => none
         }
     }
     /// The index of the last `part`.
-    pub fn rfind(self, part: str) -> ?usize {
+    pub fun rfind(self, part: str) -> ?usize {
         var found: ?usize = none
         var at = 0
         while at <= self.len() {
@@ -241,16 +241,16 @@ pub warp Str {
         found
     }
     /// The text after `prefix`, if it starts with it.
-    pub fn strip_prefix(self, prefix: str) -> ?str {
+    pub fun strip_prefix(self, prefix: str) -> ?str {
         if self.starts_with(prefix) { some(self[prefix.len()..]) } else { none }
     }
     /// The text before `suffix`, if it ends with it.
-    pub fn strip_suffix(self, suffix: str) -> ?str {
+    pub fun strip_suffix(self, suffix: str) -> ?str {
         if self.ends_with(suffix) { some(self[..self.len() - suffix.len()]) } else { none }
     }
     /// How many times `part` comes up, not overlapping. Unravels if `part`
     /// is empty.
-    pub fn count_of(self, part: str) -> usize {
+    pub fun count_of(self, part: str) -> usize {
         assert(not part.is_empty(), "count_of: part is empty")
         var n = 0
         var at = 0
@@ -266,7 +266,7 @@ pub warp Str {
         n
     }
     /// Each character with the byte index it starts at.
-    pub fn char_indices(self) -> Stream[(usize, char)] {
+    pub fun char_indices(self) -> Stream[(usize, char)] {
         var out: List[(usize, char)] = []
         var at = 0
         for c in self.chars() {
@@ -276,11 +276,11 @@ pub warp Str {
         Owned(items: out, at: 0)
     }
     /// The `i`th character (counting characters, so it takes `O(i)`).
-    pub fn char_at(self, i: usize) -> ?char = self.chars().nth(i)
+    pub fun char_at(self, i: usize) -> ?char = self.chars().nth(i)
     /// Without the characters at both ends that `f` says yes to.
-    pub fn trim_matches(self, f: char => bool) -> str = self.trim_start_matches(f).trim_end_matches(f)
+    pub fun trim_matches(self, f: char => bool) -> str = self.trim_start_matches(f).trim_end_matches(f)
     /// Without the characters at the start that `f` says yes to.
-    pub fn trim_start_matches(self, f: char => bool) -> str {
+    pub fun trim_start_matches(self, f: char => bool) -> str {
         var at = 0
         for c in self.chars() {
             if not f(c) { break }
@@ -289,7 +289,7 @@ pub warp Str {
         self[at..]
     }
     /// Without the characters at the end that `f` says yes to.
-    pub fn trim_end_matches(self, f: char => bool) -> str {
+    pub fun trim_end_matches(self, f: char => bool) -> str {
         var end = self.len()
         while end > 0 {
             let (c, start) = self.char_before(end)
@@ -299,11 +299,11 @@ pub warp Str {
         self[..end]
     }
     /// Whether the two are equal when upper and lower case don't count.
-    pub fn eq_ignore_case(self, other: str) -> bool = self.to_lower() == other.to_lower()
+    pub fun eq_ignore_case(self, other: str) -> bool = self.to_lower() == other.to_lower()
     /// Whether every character is ASCII.
-    pub fn is_ascii(self) -> bool = self.chars().all(c => c.is_ascii())
+    pub fun is_ascii(self) -> bool = self.chars().all(c => c.is_ascii())
     /// With the first letter in upper case.
-    pub fn capitalize(self) -> String {
+    pub fun capitalize(self) -> String {
         var out: String = ""
         var first = true
         for c in self.chars() {
@@ -317,7 +317,7 @@ pub warp Str {
         out
     }
     /// At least `width` characters, with `fill` added at the start.
-    pub fn pad_left(self, width: usize, fill: char = ' ') -> String {
+    pub fun pad_left(self, width: usize, fill: char = ' ') -> String {
         var out: String = ""
         var n = self.char_count()
         while n < width {
@@ -328,7 +328,7 @@ pub warp Str {
         out
     }
     /// At least `width` characters, with `fill` added at the end.
-    pub fn pad_right(self, width: usize, fill: char = ' ') -> String {
+    pub fun pad_right(self, width: usize, fill: char = ' ') -> String {
         var out = self.to_string()
         var n = self.char_count()
         while n < width {
@@ -344,54 +344,54 @@ pub warp Str {
 #builtin
 pub warp Char {
     /// `0` through `9`.
-    pub fn is_digit(self) -> bool
+    pub fun is_digit(self) -> bool
     /// A letter in any alphabet: `'é'` is.
-    pub fn is_alphabetic(self) -> bool
+    pub fun is_alphabetic(self) -> bool
     /// A digit in any script, or another number sign (`'½'`).
-    pub fn is_numeric(self) -> bool
+    pub fun is_numeric(self) -> bool
     /// A letter or a number.
-    pub fn is_alphanumeric(self) -> bool
+    pub fun is_alphanumeric(self) -> bool
     /// White space: a space, a tab, a line break, a no-break space...
-    pub fn is_whitespace(self) -> bool
+    pub fun is_whitespace(self) -> bool
     /// An upper case letter in any alphabet.
-    pub fn is_upper(self) -> bool
+    pub fun is_upper(self) -> bool
     /// A lower case letter in any alphabet.
-    pub fn is_lower(self) -> bool
+    pub fun is_lower(self) -> bool
     /// `a` through `z`, or `A` through `Z`.
-    pub fn is_ascii_alphabetic(self) -> bool
+    pub fun is_ascii_alphabetic(self) -> bool
     /// ASCII letters and `0` through `9`.
-    pub fn is_ascii_alphanumeric(self) -> bool
+    pub fun is_ascii_alphanumeric(self) -> bool
     /// A space, tab, newline, carriage return, vertical tab or form feed.
-    pub fn is_ascii_whitespace(self) -> bool
+    pub fun is_ascii_whitespace(self) -> bool
     /// `A` through `Z`.
-    pub fn is_ascii_upper(self) -> bool
+    pub fun is_ascii_upper(self) -> bool
     /// `a` through `z`.
-    pub fn is_ascii_lower(self) -> bool
+    pub fun is_ascii_lower(self) -> bool
     /// Upper case; a letter with no single upper case character (`ß`)
     /// stays as it is.
-    pub fn to_upper(self) -> char
+    pub fun to_upper(self) -> char
     /// Lower case; a letter with no single lower case character stays as it is.
-    pub fn to_lower(self) -> char
+    pub fun to_lower(self) -> char
     /// Upper case for an ASCII letter; any other character stays as it is.
-    pub fn to_ascii_upper(self) -> char
+    pub fun to_ascii_upper(self) -> char
     /// Lower case for an ASCII letter; any other character stays as it is.
-    pub fn to_ascii_lower(self) -> char
+    pub fun to_ascii_lower(self) -> char
     /// Its value as a digit in `radix`: `'f'.to_digit(16)` is `15`.
-    pub fn to_digit(self, radix: u32 = 10) -> ?u32
+    pub fun to_digit(self, radix: u32 = 10) -> ?u32
     /// The value of a decimal digit: `'7'.digit()` is `7`. Unravels for
     /// anything but `0` through `9`.
-    pub fn digit(self) -> u8
+    pub fun digit(self) -> u8
     /// How many bytes it takes in UTF-8.
-    pub fn len_utf8(self) -> usize
+    pub fun len_utf8(self) -> usize
     /// Whether it is one of the 128 ASCII characters.
-    pub fn is_ascii(self) -> bool {
+    pub fun is_ascii(self) -> bool {
         self < '\u{80}'
     }
 }
 
 weave FromStream into String {
     type Item = char
-    fn from_stream(take items: Stream[char]) -> String {
+    fun from_stream(take items: Stream[char]) -> String {
         var out: String = ""
         for c in items {
             out.push(c)

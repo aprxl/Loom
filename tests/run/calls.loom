@@ -4,7 +4,7 @@ const GREETING = "hello"
 const LIMIT = 3
 const TWICE: i64 = LIMIT * 2
 
-fn greet(name: str, loud: bool = false, times: i32 = 1) -> String {
+fun greet(name: str, loud: bool = false, times: i32 = 1) -> String {
     var out: String = ""                // `""` alone would be a `str`, a view
     for _ in 0..times {
         out = if loud { "{out}{GREETING}, {name}! " } else { "{out}{GREETING}, {name}. " }
@@ -12,9 +12,9 @@ fn greet(name: str, loud: bool = false, times: i32 = 1) -> String {
     out
 }
 
-fn swap(p: (i32, str)) -> (str, i32) = (p.1, p.0)
+fun swap(p: (i32, str)) -> (str, i32) = (p.1, p.0)
 
-fn main() {
+fun main() {
     print(greet("loom"))
     print(greet("loom", loud: true))
     print(greet(times: LIMIT, name: "weaver"))

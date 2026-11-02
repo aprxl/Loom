@@ -1,6 +1,6 @@
 use std.io.print
 
-fn main() {
+fun main() {
     let x = 5
     let x = x + 1
     let x = "{x}{x}"

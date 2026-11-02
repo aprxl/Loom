@@ -7,7 +7,7 @@ warp Oops: Error {
     case Bad(n: i32)
 }
 
-fn half(n: i32) -> i32 ! Oops {
+fun half(n: i32) -> i32 ! Oops {
     if n % 2 != 0 { fail .Bad(n) }
     n / 2
 }

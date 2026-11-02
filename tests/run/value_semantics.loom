@@ -12,19 +12,19 @@ warp Line {
     to: P
 }
 
-fn shifted(p: P) -> P = p.{ .x += 100 }     // a read parameter: edits a copy
-fn keep(p: P) -> P = p                      // returns a copy of the caller's value
+fun shifted(p: P) -> P = p.{ .x += 100 }     // a read parameter: edits a copy
+fun keep(p: P) -> P = p                      // returns a copy of the caller's value
 
-fn bump(mut p: P) { p.x += 1 }              // a `mut` parameter: edits the caller's
-fn reset(mut p: P) { p = P(0, 0) }          // whole-value assignment reaches the caller too
+fun bump(mut p: P) { p.x += 1 }              // a `mut` parameter: edits the caller's
+fun reset(mut p: P) { p = P(0, 0) }          // whole-value assignment reaches the caller too
 
 warp Counter {
     n: i32 = 0
-    fn tick(mut self) { .n += 1 }
-    fn restart(mut self) { self = Counter() }
+    fun tick(mut self) { .n += 1 }
+    fun restart(mut self) { self = Counter() }
 }
 
-fn main() {
+fun main() {
     var a = P(1, 2)
     let b = a                    // let: a copy
     var c = a                    // var: a copy

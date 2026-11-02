@@ -10,7 +10,7 @@ const SQUARES: [u32; 8] = {
     table
 }
 
-fn fib(n: u64) -> u64 = if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+fun fib(n: u64) -> u64 = if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
 
 // Any function can run at compile time. There's nothing to mark.
 const FIB_20 = fib(20)
@@ -18,7 +18,7 @@ const FIB_20 = fib(20)
 const assert(SQUARES[7] == 49, "seven squared")
 const assert(FIB_20 == 6765)
 
-fn main() {
+fun main() {
     print(SQUARES)
     print(FIB_20)
 }

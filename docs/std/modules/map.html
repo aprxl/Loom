@@ -65,157 +65,157 @@
 <div class="members">
 <div class="member" id="Map.len">
 <div class="member-head">
-<span class="sig">fn len(self) -&gt; usize</span>
+<span class="sig">fun len(self) -&gt; usize</span>
 
 </div>
 <p class="member-doc">How many keys there are.</p>
 </div>
 <div class="member" id="Map.is_empty">
 <div class="member-head">
-<span class="sig">fn is_empty(self) -&gt; bool</span>
+<span class="sig">fun is_empty(self) -&gt; bool</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Map.get">
 <div class="member-head">
-<span class="sig">fn get(self, key: K) -&gt; ?V where K: Hash</span>
+<span class="sig">fun get(self, key: K) -&gt; ?V where K: Hash</span>
 
 </div>
 <p class="member-doc">A copy of the value for <code>key</code> (<code>m[key]</code> is the value itself).</p>
 </div>
 <div class="member" id="Map.has">
 <div class="member-head">
-<span class="sig">fn has(self, key: K) -&gt; bool where K: Hash</span>
+<span class="sig">fun has(self, key: K) -&gt; bool where K: Hash</span>
 
 </div>
 <p class="member-doc">Whether there's a value for <code>key</code>.</p>
 </div>
 <div class="member" id="Map.insert">
 <div class="member-head">
-<span class="sig">fn insert(mut self, take key: K, take value: V) -&gt; ?V where K: Hash</span>
+<span class="sig">fun insert(mut self, take key: K, take value: V) -&gt; ?V where K: Hash</span>
 
 </div>
 <p class="member-doc">Adds <code>value</code> for <code>key</code>, and gives back the value it replaces.</p>
 </div>
 <div class="member" id="Map.entry">
 <div class="member-head">
-<span class="sig">fn entry(mut self, take key: K, take default: V) ~&gt; mut V where K: Hash</span>
+<span class="sig">fun entry(mut self, take key: K, take default: V) ~&gt; mut V where K: Hash</span>
 
 </div>
 <p class="member-doc">The value for <code>key</code> as a place to change, for the statement it's in: <code>counts.entry(word, default: 0) += 1</code>. When there's none, <code>default</code> is added first (and <code>key</code> kept); when there is, both are dropped.</p>
 </div>
 <div class="member" id="Map.remove">
 <div class="member-head">
-<span class="sig">fn remove(mut self, key: K) -&gt; ?V where K: Hash</span>
+<span class="sig">fun remove(mut self, key: K) -&gt; ?V where K: Hash</span>
 
 </div>
 <p class="member-doc">Takes out the value for <code>key</code>; later keys keep their order.</p>
 </div>
 <div class="member" id="Map.clear">
 <div class="member-head">
-<span class="sig">fn clear(mut self)</span>
+<span class="sig">fun clear(mut self)</span>
 
 </div>
 <p class="member-doc">Removes every key.</p>
 </div>
 <div class="member" id="Map.keys">
 <div class="member-head">
-<span class="sig">fn keys(self) -&gt; Stream[K]</span>
+<span class="sig">fun keys(self) -&gt; Stream[K]</span>
 
 </div>
 <p class="member-doc">The keys, in order.</p>
 </div>
 <div class="member" id="Map.values">
 <div class="member-head">
-<span class="sig">fn values(self) -&gt; Stream[V]</span>
+<span class="sig">fun values(self) -&gt; Stream[V]</span>
 
 </div>
 <p class="member-doc">The values, in the order of their keys.</p>
 </div>
 <div class="member" id="Map.pairs">
 <div class="member-head">
-<span class="sig">fn pairs(self) -&gt; Stream[(K, V)]</span>
+<span class="sig">fun pairs(self) -&gt; Stream[(K, V)]</span>
 
 </div>
 <p class="member-doc">The pairs, in order.</p>
 </div>
 <div class="member" id="Map.sorted">
 <div class="member-head">
-<span class="sig">fn sorted(self) -&gt; List[(K, V)] where K: Ord</span>
+<span class="sig">fun sorted(self) -&gt; List[(K, V)] where K: Ord</span>
 
 </div>
 <p class="member-doc">A list of the pairs, sorted by key.</p>
 </div>
 <div class="member" id="Map.copy">
 <div class="member-head">
-<span class="sig">fn copy(self) -&gt; Map[K, V]</span>
+<span class="sig">fun copy(self) -&gt; Map[K, V]</span>
 
 </div>
 <p class="member-doc">A deep copy.</p>
 </div>
-<div class="member" id="Map.of">
-<div class="member-head">
-<span class="sig">fn of(pairs: [(K, V)]) -&gt; Map[K, V] where K: Hash</span>
-
-</div>
-<p class="member-doc">A map of <code>pairs</code>; a key that comes up again keeps the last value.</p>
-</div>
-<div class="member" id="Map.get_or">
-<div class="member-head">
-<span class="sig">fn get_or(self, key: K, default: V) -&gt; V where K: Hash</span>
-
-</div>
-<p class="member-doc">The value for <code>key</code>, or <code>default</code> when there is none.</p>
-</div>
-<div class="member" id="Map.retain">
-<div class="member-head">
-<span class="sig">fn retain(mut self, keep: (K, V) =&gt; bool) where K: Hash</span>
-
-</div>
-<p class="member-doc">Keeps the entries <code>keep</code> says yes to.</p>
-</div>
-<div class="member" id="Map.extend">
-<div class="member-head">
-<span class="sig">fn extend(mut self, take pairs: Stream[(K, V)]) where K: Hash</span>
-
-</div>
-<p class="member-doc">Adds each pair; a key already there gets the new value.</p>
-</div>
-<div class="member" id="Map.remove_entry">
-<div class="member-head">
-<span class="sig">fn remove_entry(mut self, take key: K) -&gt; ?(K, V) where K: Hash</span>
-
-</div>
-<p class="member-doc">Takes out the entry for <code>key</code> and gives it back with the key you gave.</p>
-</div>
-<div class="member" id="Map.update">
-<div class="member-head">
-<span class="sig">fn update(mut self, take key: K, f: V =&gt; V) where K: Hash</span>
-
-</div>
-<p class="member-doc">Replaces the value for <code>key</code> with <code>f</code> of it, if there is one.</p>
-</div>
-<div class="member" id="Map.merge">
-<div class="member-head">
-<span class="sig">fn merge(mut self, take other: Map[K, V], f: (V, V) =&gt; V) where K: Hash</span>
-
-</div>
-<p class="member-doc">Adds the entries of <code>other</code>; for a key in both, <code>f(mine, theirs)</code>.</p>
-</div>
 <div class="member" id="Map.first">
 <div class="member-head">
-<span class="sig">fn first(self) -&gt; ?(K, V)</span>
+<span class="sig">fun first(self) -&gt; ?(K, V)</span>
 
 </div>
 <p class="member-doc">The oldest entry.</p>
 </div>
 <div class="member" id="Map.last">
 <div class="member-head">
-<span class="sig">fn last(self) -&gt; ?(K, V)</span>
+<span class="sig">fun last(self) -&gt; ?(K, V)</span>
 
 </div>
 <p class="member-doc">The newest entry.</p>
+</div>
+<div class="member" id="Map.of">
+<div class="member-head">
+<span class="sig">fun of(pairs: [(K, V)]) -&gt; Map[K, V] where K: Hash</span>
+
+</div>
+<p class="member-doc">A map of <code>pairs</code>; a key that comes up again keeps the last value.</p>
+</div>
+<div class="member" id="Map.get_or">
+<div class="member-head">
+<span class="sig">fun get_or(self, key: K, default: V) -&gt; V where K: Hash</span>
+
+</div>
+<p class="member-doc">The value for <code>key</code>, or <code>default</code> when there is none.</p>
+</div>
+<div class="member" id="Map.retain">
+<div class="member-head">
+<span class="sig">fun retain(mut self, keep: (K, V) =&gt; bool) where K: Hash</span>
+
+</div>
+<p class="member-doc">Keeps the entries <code>keep</code> says yes to.</p>
+</div>
+<div class="member" id="Map.extend">
+<div class="member-head">
+<span class="sig">fun extend(mut self, take pairs: Stream[(K, V)]) where K: Hash</span>
+
+</div>
+<p class="member-doc">Adds each pair; a key already there gets the new value.</p>
+</div>
+<div class="member" id="Map.remove_entry">
+<div class="member-head">
+<span class="sig">fun remove_entry(mut self, take key: K) -&gt; ?(K, V) where K: Hash</span>
+
+</div>
+<p class="member-doc">Takes out the entry for <code>key</code> and gives it back with the key you gave.</p>
+</div>
+<div class="member" id="Map.update">
+<div class="member-head">
+<span class="sig">fun update(mut self, take key: K, f: V =&gt; V) where K: Hash</span>
+
+</div>
+<p class="member-doc">Replaces the value for <code>key</code> with <code>f</code> of it, if there is one.</p>
+</div>
+<div class="member" id="Map.merge">
+<div class="member-head">
+<span class="sig">fun merge(mut self, take other: Map[K, V], f: (V, V) =&gt; V) where K: Hash</span>
+
+</div>
+<p class="member-doc">Adds the entries of <code>other</code>; for a key in both, <code>f(mine, theirs)</code>.</p>
 </div>
 </div>
 </div>

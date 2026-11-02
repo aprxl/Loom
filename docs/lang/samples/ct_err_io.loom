@@ -1,6 +1,6 @@
 use std.io.print
 
-fn loud(n: i32) -> i32 {
+fun loud(n: i32) -> i32 {
     print("computing")
     n
 }
@@ -8,5 +8,5 @@ fn loud(n: i32) -> i32 {
 // Printing is I/O. The compile-time sandbox has none.
 const NOISY: i32 = loud(3)
 
-fn main() {}
+fun main() {}
 //@ check-fail K0104

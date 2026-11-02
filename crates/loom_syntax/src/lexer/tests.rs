@@ -54,9 +54,9 @@ fn identifier_case_classes() {
 #[test]
 fn keywords_and_contextual_words() {
     assert_eq!(
-        describe_all("fn once take from get defer yield pull unsafe const Self self"),
+        describe_all("fun once take from get defer yield pull unsafe const Self self"),
         [
-            "keyword fn",
+            "keyword fun",
             "ident once",
             "ident take",
             "ident from",
@@ -393,7 +393,7 @@ fn char_errors() {
 fn comments() {
     assert_eq!(describe_all("a // line\nb"), ["ident a", "ident b"]);
     assert_eq!(describe_all("a /* x /* nested */ y */ b"), ["ident a", "ident b"]);
-    assert_eq!(describe_all("/// Adds.\n////not doc\nfn"), [r#"doc "Adds.""#, "keyword fn"]);
+    assert_eq!(describe_all("/// Adds.\n////not doc\nfun"), [r#"doc "Adds.""#, "keyword fun"]);
     assert_eq!(codes_for("/* /* */"), [codes::S0101]);
 }
 

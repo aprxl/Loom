@@ -230,7 +230,7 @@ macro_rules! keywords {
 }
 
 keywords! {
-    Fn = "fn",
+    Fun = "fun",
     Let = "let",
     Var = "var",
     Const = "const",
@@ -481,7 +481,7 @@ mod tests {
 
     #[test]
     fn keywords_round_trip() {
-        for kw in [Keyword::Fn, Keyword::Defer, Keyword::Yield, Keyword::SelfType, Keyword::Unsafe] {
+        for kw in [Keyword::Fun, Keyword::Defer, Keyword::Yield, Keyword::SelfType, Keyword::Unsafe] {
             assert_eq!(Keyword::from_ident(kw.as_str()), Some(kw));
         }
         assert_eq!(Keyword::from_ident("once"), None, "`once` is contextual");

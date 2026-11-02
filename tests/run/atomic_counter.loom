@@ -6,7 +6,7 @@ use std.io.print
 use std.sync.Atomic
 use std.sync.sched_yield
 
-fn main() {
+fun main() {
     let hits = Atomic[u32](0)
     let done = Atomic(false)
     loom {

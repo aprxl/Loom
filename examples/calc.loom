@@ -18,9 +18,9 @@ use std.num.NumError
 warp Op {
     case Add, Sub, Mul, Div
 
-    fn prec(self) -> u8 = match self { .Add | .Sub => 1, .Mul | .Div => 2 }
-    fn sym(self) -> char = match self { .Add => '+', .Sub => '-', .Mul => '*', .Div => '/' }
-    fn apply(self, a: f64, b: f64) -> f64 = match self {
+    fun prec(self) -> u8 = match self { .Add | .Sub => 1, .Mul | .Div => 2 }
+    fun sym(self) -> char = match self { .Add => '+', .Sub => '-', .Mul => '*', .Div => '/' }
+    fun apply(self, a: f64, b: f64) -> f64 = match self {
         .Add => a + b, .Sub => a - b, .Mul => a * b, .Div => a / b
     }
 }
@@ -36,7 +36,7 @@ warp Expr {
 }
 
 weave Show into Expr {
-    fn show(self, mut f: Fmt) = match self {   // patterns see through `^` automatically
+    fun show(self, mut f: Fmt) = match self {   // patterns see through `^` automatically
         .Num(n) => f.put(n)
         .Var(name) => f.put(name)
         .Neg(x) => f.put("-{x}")
@@ -66,14 +66,14 @@ ref warp Parser {
     src: str
     pos: usize = 0
 
-    fn peek(self) -> ?char = .src.char_at(.pos)
+    fun peek(self) -> ?char = .src.char_at(.pos)
 
-    fn skip_space(mut self) {
+    fun skip_space(mut self) {
         while .peek() is some(c) and c.is_whitespace() { .pos += 1 }
     }
 
     /// Pratt parsing: `min` is the weakest operator this call may consume.
-    fn expr(mut self, min: u8) -> ^Expr@sp ! ParseError given sp: Spool {
+    fun expr(mut self, min: u8) -> ^Expr@sp ! ParseError given sp: Spool {
         var lhs = .atom()?
         loop {
             .skip_space()
@@ -90,7 +90,7 @@ ref warp Parser {
         lhs
     }
 
-    fn atom(mut self) -> ^Expr@sp ! ParseError given sp: Spool {
+    fun atom(mut self) -> ^Expr@sp ! ParseError given sp: Spool {
         .skip_space()
         let start = .pos
         match .peek() {
@@ -124,7 +124,7 @@ ref warp Parser {
 
 /// Parse `src` into a tree allocated in whatever spool the caller provides.
 /// `pub` functions spell out their `given`s. Private ones may leave them to inference.
-pub fn parse(src: str) -> ^Expr@sp ! ParseError given sp: Spool {
+pub fun parse(src: str) -> ^Expr@sp ! ParseError given sp: Spool {
     var p = Parser(src)
     let e = p.expr(0)?
     p.skip_space()
@@ -138,7 +138,7 @@ pub fn parse(src: str) -> ^Expr@sp ! ParseError given sp: Spool {
 /// with no `@` is region-polymorphic) and writes a new tree into `out`.
 /// Afterwards the old spool can be reset in one go, which makes this a
 /// tiny semispace collector.
-fn fold(e: ^Expr) -> ^Expr@out given out: Spool = match e {
+fun fold(e: ^Expr) -> ^Expr@out given out: Spool = match e {
     .Num(n) => ^Expr.Num(n)
     .Var(name) => ^Expr.Var(name.copy())         // `.copy()` allocates in the ambient spool: `out`
     .Neg(x) => {
@@ -151,7 +151,7 @@ fn fold(e: ^Expr) -> ^Expr@out given out: Spool = match e {
     }
 }
 
-fn eval(e: ^Expr, vars: Map[str, f64]) -> f64 ! EvalError = match e {
+fun eval(e: ^Expr, vars: Map[str, f64]) -> f64 ! EvalError = match e {
     .Num(n) => n
     .Var(name) => vars.get(name) mend fail .Unbound(name.copy())
     .Neg(x) => -x.eval(vars)?                    // postfix binds tighter: -(x.eval(vars)?)
@@ -160,7 +160,7 @@ fn eval(e: ^Expr, vars: Map[str, f64]) -> f64 ! EvalError = match e {
 
 // ---------------------------------------------------------------- main
 
-fn main() {
+fun main() {
     let src = "2 * (x + 3) - -(4 / 2) * 1.5"
     let vars = ["x": 4.0]
 
@@ -186,7 +186,7 @@ fn main() {
 
 // The region checker at work. Neither of these compiles.
 //
-// fn dangling() -> ^Expr {
+// fun dangling() -> ^Expr {
 //     spool tmp = Arena(1.kib())
 //     parse("1 + 1", given: tmp) mend unravel("")
 // }
@@ -194,7 +194,7 @@ fn main() {
 //     = note: the return type `^Expr` means `^Expr@heap`
 //     = help: take `given out: Spool` and return `^Expr@out`
 //
-// fn too_early() {
+// fun too_early() {
 //     spool raw = Arena(1.kib())
 //     let t = parse("x", given: raw) mend unravel("")
 //     raw.reset()

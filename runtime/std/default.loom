@@ -15,60 +15,60 @@
 /// ```
 pub weft Default {
     /// The default value.
-    fn default() -> Self
+    fun default() -> Self
 }
 
 /// The default value of `T`: `of[u16]()`.
-pub fn of[T: Default]() -> T = T.default()
+pub fun of[T: Default]() -> T = T.default()
 
 weave[T: Integer] Default into T {
-    fn default() -> T = 0
+    fun default() -> T = 0
 }
 weave Default into f32 {
-    fn default() -> f32 = 0.0
+    fun default() -> f32 = 0.0
 }
 weave Default into f64 {
-    fn default() -> f64 = 0.0
+    fun default() -> f64 = 0.0
 }
 weave Default into bool {
-    fn default() -> bool = false
+    fun default() -> bool = false
 }
 weave Default into char {
-    fn default() -> char = '\0'
+    fun default() -> char = '\0'
 }
 weave Default into String {
-    fn default() -> String = String()
+    fun default() -> String = String()
 }
 weave[T] Default into ?T {
-    fn default() -> ?T = none
+    fun default() -> ?T = none
 }
 weave[T] Default into List[T] {
-    fn default() -> List[T] = List()
+    fun default() -> List[T] = List()
 }
 weave[T: Hash] Default into Set[T] {
-    fn default() -> Set[T] = Set()
+    fun default() -> Set[T] = Set()
 }
 weave[K: Hash, V] Default into Map[K, V] {
-    fn default() -> Map[K, V] = Map()
+    fun default() -> Map[K, V] = Map()
 }
 weave Default into str {
-    fn default() -> str = ""
+    fun default() -> str = ""
 }
 weave Default into () {
-    fn default() -> () = ()
+    fun default() -> () = ()
 }
 weave[A: Default, B: Default] Default into (A, B) {
-    fn default() -> (A, B) = (A.default(), B.default())
+    fun default() -> (A, B) = (A.default(), B.default())
 }
 weave[A: Default, B: Default, C: Default] Default into (A, B, C) {
-    fn default() -> (A, B, C) = (A.default(), B.default(), C.default())
+    fun default() -> (A, B, C) = (A.default(), B.default(), C.default())
 }
 weave[A: Default, B: Default, C: Default, D: Default] Default into (A, B, C, D) {
-    fn default() -> (A, B, C, D) = (A.default(), B.default(), C.default(), D.default())
+    fun default() -> (A, B, C, D) = (A.default(), B.default(), C.default(), D.default())
 }
 weave[A: Default, B: Default, C: Default, D: Default, E: Default] Default into (A, B, C, D, E) {
-    fn default() -> (A, B, C, D, E) = (A.default(), B.default(), C.default(), D.default(), E.default())
+    fun default() -> (A, B, C, D, E) = (A.default(), B.default(), C.default(), D.default(), E.default())
 }
 weave[T: Default, const N: usize] Default into [T; N] {
-    fn default() -> [T; N] = [T.default(); N]
+    fun default() -> [T; N] = [T.default(); N]
 }

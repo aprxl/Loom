@@ -14,7 +14,7 @@ A `const` parameter must be known at compile time. Each distinct value makes its
 
 @sample cp_err_known
 
-- A `const` function parameter (`fn zeros(const n: usize)`) is still passed at run time like any other. Inside the instance, and in compile-time code, it's its value.
+- A `const` function parameter (`fun zeros(const n: usize)`) is still passed at run time like any other. Inside the instance, and in compile-time code, it's its value.
 - `zeros(4)` and `zeros(5)` are different instances, and `Ring[u32, 4]` and `Ring[u32, 8]` are different types.
 
 @sample cp_err_range
@@ -60,4 +60,4 @@ A generic warp's field types are worked out again for each list of arguments, si
 
 ## Not supported yet
 
-`std.sys`, and `const fn`s that return types are not built. `const` parameters of other types than integers and `bool` aren't either. See [Not supported yet](page:not-yet).
+`std.sys`, and `const fun`s that return types are not built. `const` parameters of other types than integers and `bool` aren't either. See [Not supported yet](page:not-yet).

@@ -7,5 +7,5 @@ const HUGE: u8 = {
     x
 }
 
-fn main() {}
+fun main() {}
 //@ check-fail K0103

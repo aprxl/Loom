@@ -2,7 +2,7 @@
 
 use std.sync.Atomic
 
-fn main() {
+fun main() {
     let a = Atomic[String]("x".to_string())          //~ U0102
     let b = Atomic[u12](1)                           //~ U0102
     let c = Atomic[u16](1)

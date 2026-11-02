@@ -4,7 +4,7 @@
 
 use std.io.print
 
-fn fib(n: u64) -> u64 {
+fun fib(n: u64) -> u64 {
     if n < 2 { return n }
     loom {
         let a = thread fib(n - 1)
@@ -13,6 +13,6 @@ fn fib(n: u64) -> u64 {
     }
 }
 
-fn main() {
+fun main() {
     print("fib {fib(20)}")
 }

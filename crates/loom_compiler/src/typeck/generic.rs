@@ -4,8 +4,8 @@
 //! is checked once for each `T` it's called with, with `T` standing for that
 //! type, and a generic function nobody calls isn't checked at all. The same
 //! goes for the methods of a generic warp (`Pair[A, B].swap`) and for a
-//! function whose parameter's type is a weft: `fn area(w: Widget)` is
-//! `fn area[W: Widget](w: W)`.
+//! function whose parameter's type is a weft: `fun area(w: Widget)` is
+//! `fun area[W: Widget](w: W)`.
 //!
 //! At a call, each generic argument the call doesn't give is a type
 //! variable, and the arguments are checked against a signature with those
@@ -333,7 +333,7 @@ impl Checker<'_> {
     }
 
     /// The bounds a method's `where` clause puts on its warp's parameters
-    /// (`fn sum(self) -> T where T: Num`), for the warp's arguments `args`.
+    /// (`fun sum(self) -> T where T: Num`), for the warp's arguments `args`.
     pub(super) fn parent_bounds(&self, def: DefId, args: &[Ty]) -> Vec<Bound> {
         let DefKind::Fn(f) = &self.p.def(def).kind else { return Vec::new() };
         let params = self.generic_params(def);

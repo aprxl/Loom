@@ -1,10 +1,10 @@
-fn duplex() ~> i32 <~ i32 {
+fun duplex() ~> i32 <~ i32 {
     while pull is some(x) {
         yield x
     }
 }
 
-fn main() {
+fun main() {
     var d = duplex()
     d.push(1)
 }

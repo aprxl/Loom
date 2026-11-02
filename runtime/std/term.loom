@@ -2,13 +2,13 @@
 
 extern "host" {
     /// Turns raw mode on or off: keys arrive immediately and aren't echoed.
-    pub fn raw_mode(on: bool)
+    pub fun raw_mode(on: bool)
     /// A bit set of the keys in `keymap` that are held down right now.
-    pub fn poll_keys(keymap: str) -> u16
+    pub fun poll_keys(keymap: str) -> u16
     /// How many columns the terminal has (80 when there is none).
-    pub fn columns() -> u16
+    pub fun columns() -> u16
     /// How many rows the terminal has (24 when there is none).
-    pub fn rows() -> u16
+    pub fun rows() -> u16
     /// Whether standard output is a terminal, not a file or a pipe.
-    pub fn is_tty() -> bool
+    pub fun is_tty() -> bool
 }

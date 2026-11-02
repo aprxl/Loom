@@ -2,21 +2,21 @@
 
 use std.io.print
 
-fn gen() ~> i32 {
+fun gen() ~> i32 {
     let x = pull                            //~ T0120
     yield 1
 }
 
-fn sink() <~ i32 {
+fun sink() <~ i32 {
     yield 1                                 //~ T0120
 }
 
-fn deferred() ~> i32 {
+fun deferred() ~> i32 {
     defer yield 2                           //~ T0118
     yield 1
 }
 
-fn nested(n: u32) ~> u32 {
+fun nested(n: u32) ~> u32 {
     yield n
     if n > 0 {
         for x in nested(n - 1) {            //~ T0121
@@ -25,21 +25,21 @@ fn nested(n: u32) ~> u32 {
     }
 }
 
-fn borrows(xs: List[i32]) ~> i32 {         //~ U0102
+fun borrows(xs: List[i32]) ~> i32 {         //~ U0102
     yield 1
 }
 
-fn wrong_type() ~> i32 {
+fun wrong_type() ~> i32 {
     yield "one"                             //~ T0101
 }
 
-fn duplex() ~> i32 <~ i32 {
+fun duplex() ~> i32 <~ i32 {
     while pull is some(x) {
         yield x
     }
 }
 
-fn main() {
+fun main() {
     var d = duplex()
     d.push(1)                               //~ L0301
     let g = gen()

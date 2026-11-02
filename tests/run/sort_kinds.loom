@@ -8,13 +8,13 @@ warp Point: Eq, Ord, Show { x: i32, y: i32 }
 warp Item: Eq, Ord, Show { at: Point, name: String, weight: u64 }
 warp Rank: Show { n: u8 }
 weave Eq into Rank {
-    fn eq(self, other: Rank) -> bool = self.n == other.n
+    fun eq(self, other: Rank) -> bool = self.n == other.n
 }
 weave Ord into Rank {
-    fn lt(self, other: Rank) -> bool = self.n > other.n
+    fun lt(self, other: Rank) -> bool = self.n > other.n
 }
 
-fn main() {
+fun main() {
     var big: List[u64] = [5, 18446744073709551615, 0, 9223372036854775808, 9223372036854775807, 3]
     big.sort()
     print("{big}")

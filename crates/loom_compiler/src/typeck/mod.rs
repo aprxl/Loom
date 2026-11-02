@@ -276,7 +276,7 @@ pub struct Body {
     pub unrolled: HashMap<HirId, Vec<BodyId>>,
     /// Each `f.Frame.size` and `f.Frame.align`: which shuttle's frame.
     pub frames: HashMap<HirId, FrameQuery>,
-    /// Calls of projections (`fn at(mut self, i: usize) ~> mut T`): each is
+    /// Calls of projections (`fun at(mut self, i: usize) ~> mut T`): each is
     /// a place, for the statement it's in, and whether it can be changed.
     pub lends: HashMap<HirId, PlaceMode>,
     /// Patterns matched against a pointer, which match its target.
@@ -1251,7 +1251,7 @@ impl<'p> Checker<'p> {
     /// The parameters and return type of `f`. `mode` says how wefts as
     /// parameter types, and `const` parameters, get their arguments. Each
     /// `const` parameter's value goes into `self.const_locals`, for the
-    /// types after it (`fn zeros(const n: usize) -> [f32; n]`).
+    /// types after it (`fun zeros(const n: usize) -> [f32; n]`).
     fn lower_sig_params(
         &mut self,
         f: &hir::FnDef,
@@ -1391,7 +1391,7 @@ impl<'p> Checker<'p> {
         let signed = match self.p.def_path(def).as_str() {
             "std.prelude.uint" => false,
             "std.prelude.int" => true,
-            _ => return self.unsupported(span, "types computed by `const fn`s"),
+            _ => return self.unsupported(span, "types computed by `const fun`s"),
         };
         let [bits] = args else {
             return self.error_ty(codes::T0104, span, "`uint` and `int` take the number of bits");

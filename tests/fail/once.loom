@@ -2,45 +2,45 @@
 
 pub once warp Tx {
     moves: List[i32] = List()
-    pub fn begin() -> Tx = Tx()
-    pub fn credit(mut self, amount: i32) = .moves.push(amount)
-    pub fn commit(take self, note: str) {
+    pub fun begin() -> Tx = Tx()
+    pub fun credit(mut self, amount: i32) = .moves.push(amount)
+    pub fun commit(take self, note: str) {
         let Tx(moves) = self
     }
-    pub fn rollback(take self) {
+    pub fun rollback(take self) {
         let Tx(_) = self
     }
 }
 
-fn forgetful() {
+fun forgetful() {
     var tx = Tx.begin()                     //~ L0301
     tx.credit(5_00)
 }
 
-fn one_branch(b: bool) {
+fun one_branch(b: bool) {
     let tx = Tx.begin()                     //~ L0301
     if b { tx.rollback() }
 }
 
-fn early(b: bool) -> ?i32 {
+fun early(b: bool) -> ?i32 {
     let tx = Tx.begin()                     //~ L0301
     if b { return none }
     tx.commit("done")
     some(1)
 }
 
-fn thrown_away() {
+fun thrown_away() {
     Tx.begin()                              //~ L0301
     let _ = Tx.begin()                      //~ L0301
 }
 
-fn overwritten() {
+fun overwritten() {
     var tx = Tx.begin()                     //~ L0301
     tx = Tx.begin()
     tx.rollback()
 }
 
-fn in_loop() {
+fun in_loop() {
     for i in 0..3 {
         let tx = Tx.begin()                 //~ L0301
         if i == 1 { continue }
@@ -49,7 +49,7 @@ fn in_loop() {
 }
 
 // These are fine.
-fn tied(b: bool) {
+fun tied(b: bool) {
     let tx = Tx.begin()
     if b { tx.rollback() } else { tx.commit("ok") }
     var again = Tx.begin()
@@ -58,6 +58,6 @@ fn tied(b: bool) {
     again.commit("later")
 }
 
-fn pass_on(take tx: Tx) = tx.rollback()
+fun pass_on(take tx: Tx) = tx.rollback()
 
-fn main() {}
+fun main() {}

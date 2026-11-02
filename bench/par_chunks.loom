@@ -2,7 +2,7 @@
 // the items are counted before the loop, so a task takes a run of them.
 use std.io.print
 
-fn main() {
+fun main() {
     var data = List.filled(0u64, 1000000)
     loom for (i, mut x) in data.chunks_mut(1).indexed() {
         var v = i as u64

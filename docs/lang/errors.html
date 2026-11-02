@@ -40,26 +40,26 @@
 <h1>Optionals and errors</h1>
 <p class="summary"><code>?T</code>, <code>T ! E</code>, and the <code>?</code> and <code>mend</code> pair.</p>
 <p>Loom has two kinds of "didn't work": <strong>absence</strong> (<code>?T</code>) and <strong>failure</strong> (<code>T ! E</code>). One operator leaves either, and one keyword recovers from either.</p>
-<table class="plain"><thead><tr><th></th><th>Syntax</th></tr></thead><tbody><tr><td>optional</td><td><code>?T</code>, with values <code>some(x)</code> and <code>none</code></td></tr><tr><td>result</td><td><code>T ! E</code>, with values <code>ok(v)</code> and <code>err(e)</code>; <code>fn f() ! E</code> when there's no success value</td></tr><tr><td>raise</td><td><code>fail e</code></td></tr><tr><td>bail out</td><td>postfix <code>?</code></td></tr><tr><td>recover</td><td><code>expr mend fallback</code>, <code>expr mend e =&gt; handler</code></td></tr><tr><td>give up</td><td><code>unravel("message")</code></td></tr></tbody></table>
+<table class="plain"><thead><tr><th></th><th>Syntax</th></tr></thead><tbody><tr><td>optional</td><td><code>?T</code>, with values <code>some(x)</code> and <code>none</code></td></tr><tr><td>result</td><td><code>T ! E</code>, with values <code>ok(v)</code> and <code>err(e)</code>; <code>fun f() ! E</code> when there's no success value</td></tr><tr><td>raise</td><td><code>fail e</code></td></tr><tr><td>bail out</td><td>postfix <code>?</code></td></tr><tr><td>recover</td><td><code>expr mend fallback</code>, <code>expr mend e =&gt; handler</code></td></tr><tr><td>give up</td><td><code>unravel("message")</code></td></tr></tbody></table>
 <h2 id="optionals">Optionals</h2>
 <p>A <code>T</code> converts to <code>?T</code> by itself, so a function that returns <code>?i32</code> can end with a plain number. <code>?</code> unwraps an optional. If there's no value, it jumps to the nearest <code>mend</code> around it, or leaves the function with <code>none</code> if there isn't one. That one rule covers early return, optional chaining and try/catch.</p>
 <div class="sample" id="sample-errors_optional">
 <div class="sample-head"><span class="file">samples/errors_optional.loom</span><span class="tag ok">runs</span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fn</span> find(xs: [i32], target: i32) -&gt; ?usize {
+<span class="k">fun</span> find(xs: [i32], target: i32) -&gt; ?usize {
     <span class="k">for</span> (i, x) <span class="k">in</span> xs.indexed() {
         <span class="k">if</span> x == target { <span class="k">return</span> <span class="k">some</span>(i) }
     }
     <span class="k">none</span>
 }
 
-<span class="k">fn</span> first_even_plus_one(xs: [i32]) -&gt; ?i32 {
+<span class="k">fun</span> first_even_plus_one(xs: [i32]) -&gt; ?i32 {
     <span class="k">let</span> e = xs.find(_ % <span class="n">2</span> == <span class="n">0</span>)?             <span class="c">// no value: leave the function with `none`</span>
     e + <span class="n">1</span>                                    <span class="c">// a plain value converts to `?i32`</span>
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">let</span> xs = [<span class="n">3</span>, <span class="n">5</span>, <span class="n">8</span>, <span class="n">9</span>]
     print(<span class="s">"{</span>find(xs, <span class="n">8</span>):?<span class="s">} {</span>find(xs, <span class="n">4</span>):?<span class="s">}"</span>)
     print(<span class="s">"{</span>first_even_plus_one(xs):?<span class="s">} {</span>first_even_plus_one([<span class="n">1</span>, <span class="n">3</span>]):?<span class="s">}"</span>)
@@ -113,21 +113,21 @@ found late at 3</code></pre></div>
     <span class="k">case</span> <span class="t">Range</span>(from <span class="t">RangeError</span>)
 }
 
-<span class="k">fn</span> parse(text: str) -&gt; u32 ! <span class="t">ParseError</span> {
+<span class="k">fun</span> parse(text: str) -&gt; u32 ! <span class="t">ParseError</span> {
     <span class="k">if</span> text.is_empty() { <span class="k">fail</span> .<span class="t">Empty</span> }
     text.parse[u32]() <span class="k">mend</span> <span class="k">fail</span> .<span class="t">NotANumber</span>(text: text.to_string())
 }
 
-<span class="k">fn</span> small(n: u32) -&gt; u8 ! <span class="t">RangeError</span> {
+<span class="k">fun</span> small(n: u32) -&gt; u8 ! <span class="t">RangeError</span> {
     n <span class="k">as</span>? u8 <span class="k">mend</span> <span class="k">fail</span> .<span class="t">TooBig</span>(limit: <span class="n">255</span>)
 }
 
-<span class="k">fn</span> load(text: str) -&gt; u8 ! <span class="t">AppError</span> {
+<span class="k">fun</span> load(text: str) -&gt; u8 ! <span class="t">AppError</span> {
     <span class="k">let</span> n = parse(text)?                     <span class="c">// ParseError becomes AppError.Parse</span>
     small(n)?
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">for</span> text <span class="k">in</span> [<span class="s">"42"</span>, <span class="s">""</span>, <span class="s">"abc"</span>, <span class="s">"1000"</span>] {
         <span class="k">match</span> load(text) {
             <span class="k">ok</span>(v) =&gt; print(<span class="s">"ok {</span>v<span class="s">}"</span>)
@@ -154,30 +154,30 @@ error: Range(TooBig(limit: 255))</code></pre></div>
     <span class="k">case</span> <span class="t">Garbled</span>
 }
 
-<span class="k">fn</span> read(path: str) -&gt; str ! <span class="t">IoProblem</span> {
+<span class="k">fun</span> read(path: str) -&gt; str ! <span class="t">IoProblem</span> {
     <span class="k">if</span> path == <span class="s">"missing"</span> { <span class="k">fail</span> .<span class="t">Unreadable</span>(path: path.to_string()) }
     path
 }
 
-<span class="k">fn</span> decode(text: str) -&gt; i32 ! <span class="t">BadText</span> {
+<span class="k">fun</span> decode(text: str) -&gt; i32 ! <span class="t">BadText</span> {
     <span class="k">if</span> text == <span class="s">"junk"</span> { <span class="k">fail</span> .<span class="t">Garbled</span> }
     <span class="n">42</span>
 }
 
 <span class="c">// A union type: the error is one or the other. Each error widens to it.</span>
-<span class="k">fn</span> load(path: str) -&gt; i32 ! (<span class="t">IoProblem</span> | <span class="t">BadText</span>) {
+<span class="k">fun</span> load(path: str) -&gt; i32 ! (<span class="t">IoProblem</span> | <span class="t">BadText</span>) {
     <span class="k">let</span> text = read(path)?
     decode(text)?
 }
 
 <span class="c">// `any Error` accepts an error of any type.</span>
-<span class="k">fn</span> run(path: str) ! <span class="k">any</span> <span class="t">Error</span> {
+<span class="k">fun</span> run(path: str) ! <span class="k">any</span> <span class="t">Error</span> {
     <span class="k">let</span> text = read(path)?
     <span class="k">let</span> v = decode(text)?
     print(<span class="s">"loaded {</span>v<span class="s">}"</span>)
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">for</span> path <span class="k">in</span> [<span class="s">"config"</span>, <span class="s">"missing"</span>, <span class="s">"junk"</span>] {
         <span class="k">match</span> load(path) {
             <span class="k">ok</span>(v) =&gt; print(<span class="s">"ok {</span>v<span class="s">}"</span>)
@@ -196,7 +196,7 @@ run failed: Garbled</code></pre></div>
 </div>
 <div class="callout">A union of errors doesn't convert to <code>any Error</code> yet: <code>?</code> on a <code>! (A | B)</code> inside a <code>! any Error</code> function is <a href="diagnostics.html#T0108">T0108</a>. Widen the function's errors to the union instead.</div>
 <h2 id="main"><code>main</code></h2>
-<p><code>fn main() ! E</code> lets <code>?</code> leave <code>main</code>. An error that reaches the end is printed as <code>error: ...</code> on stderr, and the program exits with status 1.</p>
+<p><code>fun main() ! E</code> lets <code>?</code> leave <code>main</code>. An error that reaches the end is printed as <code>error: ...</code> on stderr, and the program exits with status 1.</p>
 <div class="sample" id="sample-errors_main">
 <div class="sample-head"><span class="file">samples/errors_main.loom</span><span class="tag warn">exits with an error</span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -205,11 +205,11 @@ run failed: Garbled</code></pre></div>
     <span class="k">case</span> <span class="t">Missing</span>(key: <span class="t">String</span>)
 }
 
-<span class="k">fn</span> setting(key: str) -&gt; u16 ! <span class="t">ConfigError</span> = <span class="k">fail</span> .<span class="t">Missing</span>(key: key.to_string())
+<span class="k">fun</span> setting(key: str) -&gt; u16 ! <span class="t">ConfigError</span> = <span class="k">fail</span> .<span class="t">Missing</span>(key: key.to_string())
 
 <span class="c">// An error that reaches the end of `main` is shown, and the program</span>
 <span class="c">// exits with status 1.</span>
-<span class="k">fn</span> main() ! <span class="t">ConfigError</span> {
+<span class="k">fun</span> main() ! <span class="t">ConfigError</span> {
     print(<span class="s">"starting"</span>)
     <span class="k">let</span> port = setting(<span class="s">"port"</span>)?
     print(<span class="s">"never printed: {</span>port<span class="s">}"</span>)
@@ -223,13 +223,13 @@ run failed: Garbled</code></pre></div>
 <div class="sample-head"><span class="file">samples/errors_unravel.loom</span><span class="tag warn">unravels</span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fn</span> inner() {
+<span class="k">fun</span> inner() {
     <span class="k">defer</span> print(<span class="s">"inner cleanup"</span>)
     unravel(<span class="s">"something that should never happen"</span>)
 }
 
 <span class="c">// `unravel` is for bugs. It unwinds, running each `defer` on the way out.</span>
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">defer</span> print(<span class="s">"outer cleanup"</span>)
     inner()
     print(<span class="s">"never printed"</span>)

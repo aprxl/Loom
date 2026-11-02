@@ -9,7 +9,7 @@ warp Particle {
     y: i32
 }
 
-fn main() {
+fun main() {
     spool frame = Arena(1.kib())
     let p: ^Particle@frame = frame.put(Particle(1, 2))
     let q = p

@@ -1,10 +1,10 @@
 // A type can't depend on the compile-time sandbox yet, only on what the
 // constant folder can work out: literals, constants, arithmetic.
-fn square(n: usize) -> usize = n * n
+fun square(n: usize) -> usize = n * n
 
 const AREA: usize = square(4)
 
-fn main() {
+fun main() {
     let cells = [0u8; AREA]
 }
 //@ check-fail U0102

@@ -21,10 +21,10 @@ overflow-policy operators.
   The parser relies on this rule. In `Foo[x]` the brackets are type arguments,
   and in `foo[x]` or `TABLE[x]` they're an index.
 - Keywords:
-  `fn let var const type warp weft weave into through case pub if else match for in while loop break continue return fail is not and or mend defer ref spool given loom thread yield pull unsafe extern use as any self Self mut`.
+  `fun let var const type warp weft weave into through case pub if else match for in while loop break continue return fail is not and or mend defer ref spool given loom thread yield pull unsafe extern use as any self Self mut`.
   Some keywords are *contextual*: `take` only at the start of a parameter (so
   `iter.take(3)` is an ordinary method call), `from` only inside a case field
-  (so `fn transfer(from: AccountId, ...)` is fine), `get` only inside `pub(get)`,
+  (so `fun transfer(from: AccountId, ...)` is fine), `get` only inside `pub(get)`,
   `where` only after a type in a declaration, `once` only directly before
   `warp` (so `iter.once()` still works), and `test` only at the start of an
   item, before a name and `(` (so `let test = 1` is fine).
@@ -106,19 +106,19 @@ Shadowing is allowed. A type annotation goes after the pattern: `let n: u16 = 7`
 ## Functions
 
 ```loom
-fn add(a: i32, b: i32) -> i32 {
+fun add(a: i32, b: i32) -> i32 {
     a + b                                // the last expression is the result
 }
 
-fn add(a: i32, b: i32) -> i32 = a + b    // expression body
+fun add(a: i32, b: i32) -> i32 = a + b    // expression body
 
-fn connect(host: str, port: u16 = 80, timeout: Duration = time.secs(5)) -> Conn ! NetError
+fun connect(host: str, port: u16 = 80, timeout: Duration = time.secs(5)) -> Conn ! NetError
 
-fn save(data: [u8]) ! IoError            // "returns nothing, might fail": `-> ()` is omitted
+fun save(data: [u8]) ! IoError            // "returns nothing, might fail": `-> ()` is omitted
 ```
 
 The full shape of a signature is
-`fn name[generics](params) -> Ret ! Err given ctx: Type where bounds`.
+`fun name[generics](params) -> Ret ! Err given ctx: Type where bounds`.
 
 - **Named arguments.** Any parameter can be passed by name: `connect("db", timeout: time.secs(1))`.
   Named arguments come after positional ones.
@@ -357,7 +357,7 @@ error and asks you to write `self.name` or `Type.name`. Patterns only use rule 3
 ```loom
 warp Circle {
     radius: f64
-    fn scaled(self, k: f64) -> Shape = .Circle(.radius * k)
+    fun scaled(self, k: f64) -> Shape = .Circle(.radius * k)
     //                                  ^ rule 3    ^ rule 2
 }
 ```
@@ -390,7 +390,7 @@ says so and suggests `.copy()`.
 
 ## Tests
 
-A test is written like a function, with `test` in place of `fn`:
+A test is written like a function, with `test` in place of `fun`:
 
 ```loom
 test adds() = assert(1 + 1 == 2)

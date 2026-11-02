@@ -6,15 +6,15 @@ type Port = u16 where 1..
 type Percent = f32 where 0.0..=1.0
 type Even = i64 where _ % 2 == 0
 
-fn fee(balance: Cents, amount: Cents) -> Cents =
+fun fee(balance: Cents, amount: Cents) -> Cents =
     if balance >= 1000_00 { 0 } else { (amount / 100).max(25) }
 
-fn parse_cents(s: str) -> ?Cents {
+fun parse_cents(s: str) -> ?Cents {
     let n = s.parse[i64]() mend return none
     if n is Cents { n } else { none }        // `is` narrows `n` inside the branch
 }
 
-fn main() {
+fun main() {
     let a: Cents = 250                       // a literal is checked while compiling
     let b: Cents = 100
     let sum = a + b                          // Cents + Cents can't go below zero: still Cents

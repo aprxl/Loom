@@ -5,7 +5,7 @@ use std.rand.Rng
 
 const SIZE = 400_000
 
-fn main() {
+fun main() {
     var r = Rng.seeded(7)
     var xs: List[u64] = []
     for _ in 0..SIZE as u64 {

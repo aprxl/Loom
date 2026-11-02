@@ -13,7 +13,7 @@ pub warp LispError: Error {
     case Read(String)
     case Raised(String)
 
-    fn message(self) -> String = match self {
+    fun message(self) -> String = match self {
         .Unbound(name) => "unbound symbol `{name}`"
         .NotCallable(what) => "{what} is not a procedure"
         .Arity(name, want, got) => "{name} takes {want} argument(s), but got {got}"

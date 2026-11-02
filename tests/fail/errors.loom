@@ -3,26 +3,26 @@ use std.io.print
 warp AgeError: Error { case Negative }
 warp IoError: Error { case Closed }
 
-fn age(n: i32) -> u8 ! AgeError = if n < 0 { fail .Negative } else { 1 }
-fn maybe(n: i32) -> ?u8 = none
+fun age(n: i32) -> u8 ! AgeError = if n < 0 { fail .Negative } else { 1 }
+fun maybe(n: i32) -> ?u8 = none
 
-fn plain(n: i32) -> u8 {
+fun plain(n: i32) -> u8 {
     maybe(n)?                               //~ T0101
 }
 
-fn opt(n: i32) -> ?u8 {
+fun opt(n: i32) -> ?u8 {
     age(n)?                                 //~ T0101
 }
 
-fn io(n: i32) -> u8 ! IoError {
+fun io(n: i32) -> u8 ! IoError {
     age(n)?                                 //~ T0108
 }
 
-fn nothing(n: i32) -> u8 {
+fun nothing(n: i32) -> u8 {
     fail .Negative                          //~ T0101
 }
 
-fn main() {
+fun main() {
     let a = 5?                              //~ T0101
     let b = 5 mend 6                        //~ T0101
     let c = ok(5)                           //~ T0110

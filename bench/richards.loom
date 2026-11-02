@@ -14,13 +14,13 @@ warp Kind: Copy {
 warp Packet: Copy { kind: Kind, hops: u32 }
 
 weft Task {
-    fn run(mut self, p: Packet) -> ?Packet
-    fn done(self) -> u32
+    fun run(mut self, p: Packet) -> ?Packet
+    fun done(self) -> u32
 }
 
 warp Worker { count: u32, seed: u32 }
 weave Task into Worker {
-    fn run(mut self, p: Packet) -> ?Packet {
+    fun run(mut self, p: Packet) -> ?Packet {
         .count += 1
         .seed = .seed *% 1103515245 +% 12345
         match p.kind {
@@ -29,28 +29,28 @@ weave Task into Worker {
             _ => none
         }
     }
-    fn done(self) -> u32 = .count
+    fun done(self) -> u32 = .count
 }
 
 warp Device { id: u32, handled: u32 }
 weave Task into Device {
-    fn run(mut self, p: Packet) -> ?Packet {
+    fun run(mut self, p: Packet) -> ?Packet {
         .handled += 1
         if p.hops % 7 == 0 { some(Packet(kind: .Idle, hops: 0)) } else { some(Packet(kind: .Work(3), hops: p.hops + 1)) }
     }
-    fn done(self) -> u32 = .handled * 10 + .id
+    fun done(self) -> u32 = .handled * 10 + .id
 }
 
 warp Idler { ticks: u32 }
 weave Task into Idler {
-    fn run(mut self, p: Packet) -> ?Packet {
+    fun run(mut self, p: Packet) -> ?Packet {
         .ticks += 1
         some(Packet(kind: .Work(.ticks % 5), hops: p.hops))
     }
-    fn done(self) -> u32 = .ticks
+    fun done(self) -> u32 = .ticks
 }
 
-fn main() {
+fun main() {
     var tasks: List[any Task] = [Worker(count: 0, seed: 7), Idler(ticks: 0)]
     for id in 0..4u32 { tasks.push(Device(id: id, handled: 0)) }
     var queue: List[Packet] = List()

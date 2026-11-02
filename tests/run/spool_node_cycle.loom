@@ -9,12 +9,12 @@ warp Node {
     next: ?^Node
 }
 
-fn total(n: ?^Node) -> i32 = match n {
+fun total(n: ?^Node) -> i32 = match n {
     none => 0
     some(p) => p.v + total(p.next)
 }
 
-fn main() {
+fun main() {
     spool frame = Arena(1.kib())
     let c = frame.put(Node(3, none))
     let b = frame.put(Node(2, some(c)))

@@ -3,7 +3,7 @@
 
 use std.io.print
 
-fn main() {
+fun main() {
     // split
     print("{"".split("")} {"héllo".split("")} {"a,b,,c".split(",")} {",a,".split(",")}")
     print("{"aXXbXXXc".split("XX")} {"abc".split("abc")} {"abc".split("zz")} {"".split(",")}")

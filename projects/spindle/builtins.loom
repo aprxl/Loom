@@ -13,7 +13,7 @@ use printer.{render, kind}
 use std.io.print
 
 /// Every primitive's name, in the order `boot` binds them.
-pub fn names() -> List[str] = [
+pub fun names() -> List[str] = [
     "+", "-", "*", "/", "mod", "<", ">", "<=", ">=", "=", "random",
     "eq?", "equal?", "not", "null?", "pair?", "number?", "string?", "symbol?",
     "cons", "car", "cdr", "list", "list-ref", "length", "append",
@@ -26,7 +26,7 @@ pub fn names() -> List[str] = [
 ]
 
 /// Runs primitive `name` on `args`.
-pub fn call_prim(mut h: Heap, name: str, args: List[Val]) -> Val ! LispError {
+pub fun call_prim(mut h: Heap, name: str, args: List[Val]) -> Val ! LispError {
     match name {
         // ---------------------------------------------------------- numbers
         "+" => {
@@ -296,18 +296,18 @@ pub fn call_prim(mut h: Heap, name: str, args: List[Val]) -> Val ! LispError {
 // ---------------------------------------------------------------- helpers
 
 /// Exactly `want` arguments, or an arity error that names the primitive.
-fn arity(name: str, args: [Val], want: usize) ! LispError {
+fun arity(name: str, args: [Val], want: usize) ! LispError {
     if args.len() != want { fail .Arity(name.to_string(), want, args.len()) }
 }
 
 /// The single argument of a one-argument primitive.
-fn one(name: str, args: [Val]) -> Val ! LispError {
+fun one(name: str, args: [Val]) -> Val ! LispError {
     arity(name, args, 1)?
     args[0]
 }
 
 /// Every argument as an integer.
-fn ints(args: [Val]) -> List[i64] ! LispError {
+fun ints(args: [Val]) -> List[i64] ! LispError {
     var out: List[i64] = List()
     for a in args {
         out.push(int_of(a)?)
@@ -315,59 +315,59 @@ fn ints(args: [Val]) -> List[i64] ! LispError {
     out
 }
 
-fn list_of(args: [Val]) -> List[Val] {
+fun list_of(args: [Val]) -> List[Val] {
     var out: List[Val] = List()
     for a in args { out.push(a) }
     out
 }
 
-fn int_of(v: Val) -> i64 ! LispError = match v {
+fun int_of(v: Val) -> i64 ! LispError = match v {
     .Int(n) => n
     _ => fail .Mismatch("a number".to_string(), kind(v).to_string())
 }
 
 /// A non-negative integer, as an index or a size.
-fn nat(n: i64) -> usize ! LispError {
+fun nat(n: i64) -> usize ! LispError {
     if n < 0 { fail .Mismatch("a non-negative number".to_string(), n.to_string()) }
     n as usize
 }
 
 /// A character from its code, which must be ASCII here.
-fn char_of(code: i64) -> char ! LispError {
+fun char_of(code: i64) -> char ! LispError {
     if code < 0 or code > 127 { fail .Mismatch("an ASCII code".to_string(), code.to_string()) }
     code as u8 as char
 }
 
-fn str_of(v: Val) -> usize ! LispError = match v {
+fun str_of(v: Val) -> usize ! LispError = match v {
     .Str(s) => s
     _ => fail .Mismatch("a string".to_string(), kind(v).to_string())
 }
 
-fn sym_of(v: Val) -> usize ! LispError = match v {
+fun sym_of(v: Val) -> usize ! LispError = match v {
     .Sym(s) => s
     _ => fail .Mismatch("a symbol".to_string(), kind(v).to_string())
 }
 
-fn vec_of(v: Val) -> usize ! LispError = match v {
+fun vec_of(v: Val) -> usize ! LispError = match v {
     .Vec(i) => i
     _ => fail .Mismatch("a vector".to_string(), kind(v).to_string())
 }
 
-fn table_of(v: Val) -> usize ! LispError = match v {
+fun table_of(v: Val) -> usize ! LispError = match v {
     .Table(t) => t
     _ => fail .Mismatch("a table".to_string(), kind(v).to_string())
 }
 
-fn pair_of(v: Val) -> usize ! LispError = match v {
+fun pair_of(v: Val) -> usize ! LispError = match v {
     .Pair(p) => p
     _ => fail .Mismatch("a list".to_string(), kind(v).to_string())
 }
 
 /// An integer result, or `Overflow` when the operation left the i64 range.
-fn fits(x: ?i64) -> i64 ! LispError = x mend fail .Overflow
+fun fits(x: ?i64) -> i64 ! LispError = x mend fail .Overflow
 
 /// Holds for every neighbouring pair of `ns`, as in `(< a b c)`.
-fn chain(ns: [i64], holds: (i64, i64) => bool) -> bool {
+fun chain(ns: [i64], holds: (i64, i64) => bool) -> bool {
     var i = 1
     while i < ns.len() {
         if not holds(ns[i - 1], ns[i]) { return false }
@@ -377,7 +377,7 @@ fn chain(ns: [i64], holds: (i64, i64) => bool) -> bool {
 }
 
 /// `eq?`: the same kind of value with the same payload.
-pub fn eqv(a: Val, b: Val) -> bool = match a {
+pub fun eqv(a: Val, b: Val) -> bool = match a {
     .Nil => b is .Nil
     .Bool(x) => b is .Bool(y) and x == y
     .Int(x) => b is .Int(y) and x == y
@@ -392,7 +392,7 @@ pub fn eqv(a: Val, b: Val) -> bool = match a {
 }
 
 /// `equal?`: like `eq?`, but lists and strings compare by their contents.
-fn equal(h: Heap, a: Val, b: Val) -> bool = match a {
+fun equal(h: Heap, a: Val, b: Val) -> bool = match a {
     .Pair(p) => b is .Pair(q) and equal(h, h.car(p), h.car(q)) and equal(h, h.cdr(p), h.cdr(q))
     .Str(s) => b is .Str(t) and h.text(s) == h.text(t)
     _ => eqv(a, b)

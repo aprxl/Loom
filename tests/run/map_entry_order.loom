@@ -4,7 +4,7 @@
 
 use std.io.print
 
-fn main() {
+fun main() {
     var m = Map[i32, u32]()
     m.entry(1, default: 5) += m.len() as u32 * 100
     for (k, v) in m {

@@ -4,7 +4,7 @@ use std.mem.{Arena, kib}
 
 const SIZE = 10_000_000
 
-fn main() {
+fun main() {
     spool a = Arena(64.kib())
     var total = 0u64
     for i in 0..SIZE as u64 {

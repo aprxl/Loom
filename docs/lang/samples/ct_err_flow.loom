@@ -1,9 +1,9 @@
-fn f() -> i32 {
+fun f() -> i32 {
     let x = const {
         return 0
     }
     x
 }
 
-fn main() {}
+fun main() {}
 //@ check-fail K0106

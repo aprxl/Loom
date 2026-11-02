@@ -6,7 +6,7 @@
 // from a branch gets a block of its own to put that in.
 use std.io.print
 
-fn scale(xs: List[f64], k: f64) -> f64 {
+fun scale(xs: List[f64], k: f64) -> f64 {
     var total = 0.0
     var i = 0usize
     while i < xs.len() {
@@ -16,7 +16,7 @@ fn scale(xs: List[f64], k: f64) -> f64 {
     total
 }
 
-fn walk(n: u32, flag: bool) -> u32 {
+fun walk(n: u32, flag: bool) -> u32 {
     var sum = 0u32
     if flag {
         var i = 0u32
@@ -28,7 +28,7 @@ fn walk(n: u32, flag: bool) -> u32 {
     sum
 }
 
-fn main() {
+fun main() {
     print(scale([1.0, 2.0], 3.0))
     print(walk(10, true))
 }

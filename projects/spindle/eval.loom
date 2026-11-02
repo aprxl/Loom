@@ -19,7 +19,7 @@ use builtins.{names, call_prim, eqv}
 use programs.prelude
 
 /// A fresh global frame: every primitive bound, and the prelude evaluated in it.
-pub fn boot(mut h: Heap) -> usize ! LispError {
+pub fun boot(mut h: Heap) -> usize ! LispError {
     let global = h.new_frame(none)
     for name in names() {
         let s = h.sym(name)
@@ -30,7 +30,7 @@ pub fn boot(mut h: Heap) -> usize ! LispError {
 }
 
 /// Evaluates every form in `src` in frame `env`. The value is the last form's.
-pub fn eval_text(mut h: Heap, env: usize, src: str) -> Val ! LispError {
+pub fun eval_text(mut h: Heap, env: usize, src: str) -> Val ! LispError {
     let forms = read_all(mut h, src)?
     var last = Val.Nil
     for form in forms {
@@ -40,13 +40,13 @@ pub fn eval_text(mut h: Heap, env: usize, src: str) -> Val ! LispError {
 }
 
 /// Evaluates `x` in frame `env`.
-pub fn eval(mut h: Heap, x: Val, env: usize) -> Val ! LispError {
+pub fun eval(mut h: Heap, x: Val, env: usize) -> Val ! LispError {
     let first = step(mut h, x, env)?
     finish(mut h, first)
 }
 
 /// Keeps stepping while a step hands back a form, and returns the final value.
-fn finish(mut h: Heap, first: Step) -> Val ! LispError {
+fun finish(mut h: Heap, first: Step) -> Val ! LispError {
     var at = first
     loop {
         match at {
@@ -57,7 +57,7 @@ fn finish(mut h: Heap, first: Step) -> Val ! LispError {
 }
 
 /// One step of evaluation: a symbol, a list, or a self-evaluating value.
-fn step(mut h: Heap, x: Val, env: usize) -> Step ! LispError {
+fun step(mut h: Heap, x: Val, env: usize) -> Step ! LispError {
     match x {
         .Sym(s) => Step.Done(h.lookup(env, s) mend fail .Unbound(h.name(s)))
         .Pair(p) => form_step(mut h, p, env)
@@ -66,7 +66,7 @@ fn step(mut h: Heap, x: Val, env: usize) -> Step ! LispError {
 }
 
 /// A list: a special form, or a call.
-fn form_step(mut h: Heap, p: usize, env: usize) -> Step ! LispError {
+fun form_step(mut h: Heap, p: usize, env: usize) -> Step ! LispError {
     let head = h.car(p)
     let rest = h.cdr(p)
     if head is .Sym(s) and h.is_special(s) {
@@ -88,7 +88,7 @@ fn form_step(mut h: Heap, p: usize, env: usize) -> Step ! LispError {
 }
 
 /// Evaluates each of `forms` in order.
-fn eval_all(mut h: Heap, forms: [Val], env: usize) -> List[Val] ! LispError {
+fun eval_all(mut h: Heap, forms: [Val], env: usize) -> List[Val] ! LispError {
     var out: List[Val] = List()
     for form in forms {
         out.push(eval(mut h, form, env)?)
@@ -97,7 +97,7 @@ fn eval_all(mut h: Heap, forms: [Val], env: usize) -> List[Val] ! LispError {
 }
 
 /// Calls `f` on the evaluated arguments, and runs it to a value.
-pub fn apply(mut h: Heap, f: Val, args: List[Val]) -> Val ! LispError {
+pub fun apply(mut h: Heap, f: Val, args: List[Val]) -> Val ! LispError {
     match f {
         .Prim(s) => {
             let name = h.name(s)
@@ -112,7 +112,7 @@ pub fn apply(mut h: Heap, f: Val, args: List[Val]) -> Val ! LispError {
 }
 
 /// Binds a closure's parameters in a new frame, and starts its body.
-fn enter(mut h: Heap, c: usize, args: List[Val]) -> Step ! LispError {
+fun enter(mut h: Heap, c: usize, args: List[Val]) -> Step ! LispError {
     let slots = h.params(c)
     if slots.len() != args.len() {
         fail .Arity("a procedure".to_string(), slots.len(), args.len())
@@ -128,7 +128,7 @@ fn enter(mut h: Heap, c: usize, args: List[Val]) -> Step ! LispError {
 
 /// Runs `forms` in frame `env`. All but the last are evaluated now; the last
 /// is handed back as a tail position. An empty body is `()`.
-fn body_step(mut h: Heap, forms: [Val], env: usize) -> Step ! LispError {
+fun body_step(mut h: Heap, forms: [Val], env: usize) -> Step ! LispError {
     if forms.len() == 0 { return Step.Done(Val.Nil) }
     var i = 0
     while i + 1 < forms.len() {
@@ -141,7 +141,7 @@ fn body_step(mut h: Heap, forms: [Val], env: usize) -> Step ! LispError {
 // ---------------------------------------------------------------- special forms
 
 /// The special forms. Each one checks its own shape and names itself when it's wrong.
-fn special(mut h: Heap, name: str, rest: Val, env: usize) -> Step ! LispError {
+fun special(mut h: Heap, name: str, rest: Val, env: usize) -> Step ! LispError {
     match name {
         "quote" => {
             let xs = shape(h, name, rest, 1)?
@@ -336,7 +336,7 @@ fn special(mut h: Heap, name: str, rest: Val, env: usize) -> Step ! LispError {
 
 /// (let name ((var init) ...) body ...): a procedure `name`, bound in a new
 /// frame and called once with the initial values. Its body may call `name` to loop.
-fn named_let(mut h: Heap, loop_name: usize, xs: List[Val], env: usize) -> Step ! LispError {
+fun named_let(mut h: Heap, loop_name: usize, xs: List[Val], env: usize) -> Step ! LispError {
     if xs.len() < 3 { fail .Syntax("a named `let` takes a name, bindings and a body".to_string()) }
     let binds = h.to_list(xs[1])?
     var slots: List[Val] = List()
@@ -358,7 +358,7 @@ fn named_let(mut h: Heap, loop_name: usize, xs: List[Val], env: usize) -> Step !
 }
 
 /// A closure over `env`. `params` is a list of names; `body` is the forms to run.
-fn make_lambda(mut h: Heap, params: Val, take body: List[Val], env: usize) -> Val ! LispError {
+fun make_lambda(mut h: Heap, params: Val, take body: List[Val], env: usize) -> Val ! LispError {
     var slots: List[usize] = List()
     let ps = h.to_list(params)?
     for p in ps {
@@ -368,7 +368,7 @@ fn make_lambda(mut h: Heap, params: Val, take body: List[Val], env: usize) -> Va
 }
 
 /// The parts of a special form, which must be exactly `n` of them.
-fn shape(h: Heap, form: str, rest: Val, n: usize) -> List[Val] ! LispError {
+fun shape(h: Heap, form: str, rest: Val, n: usize) -> List[Val] ! LispError {
     let xs = h.to_list(rest)?
     if xs.len() != n {
         fail .Syntax("`{form}` takes {n} part(s), but got {xs.len()}".to_string())
@@ -376,16 +376,16 @@ fn shape(h: Heap, form: str, rest: Val, n: usize) -> List[Val] ! LispError {
     xs
 }
 
-fn sym_of(v: Val) -> usize ! LispError = match v {
+fun sym_of(v: Val) -> usize ! LispError = match v {
     .Sym(s) => s
     _ => fail .Syntax("expected a name".to_string())
 }
 
-fn is_else(h: Heap, v: Val) -> bool = v is .Sym(s) and h.name(s) == "else"
+fun is_else(h: Heap, v: Val) -> bool = v is .Sym(s) and h.name(s) == "else"
 
 /// Quasi-quote: `x` as data, except that `,e` becomes the value of `e`, and
 /// `,@e` becomes the elements of the list `e`, spliced in.
-fn quasi(mut h: Heap, x: Val, env: usize) -> Val ! LispError {
+fun quasi(mut h: Heap, x: Val, env: usize) -> Val ! LispError {
     if is_tagged(h, x, "unquote") {
         let e = operand(h, x)?
         return eval(mut h, e, env)
@@ -413,20 +413,20 @@ fn quasi(mut h: Heap, x: Val, env: usize) -> Val ! LispError {
 }
 
 /// Whether `x` is a list headed by the symbol `tag`, as `(unquote e)` is.
-fn is_tagged(h: Heap, x: Val, tag: str) -> bool = match x {
+fun is_tagged(h: Heap, x: Val, tag: str) -> bool = match x {
     .Pair(p) => h.car(p) is .Sym(s) and h.name(s) == tag.to_string()
     _ => false
 }
 
 /// The one operand of a tagged form such as `(unquote e)`.
-fn operand(h: Heap, x: Val) -> Val ! LispError {
+fun operand(h: Heap, x: Val) -> Val ! LispError {
     let parts = h.to_list(x)?
     if parts.len() != 2 { fail .Syntax("a `,` takes exactly one form".to_string()) }
     parts[1]
 }
 
 /// Everything from index `from` on.
-fn tail(xs: [Val], from: usize) -> List[Val] {
+fun tail(xs: [Val], from: usize) -> List[Val] {
     var out: List[Val] = List()
     var i = from
     while i < xs.len() {

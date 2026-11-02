@@ -1,14 +1,14 @@
 // The first program anyone wrote in Loom.
 use std.io.print
 
-fn fizzbuzz(n: u32) -> String = match (n % 3, n % 5) {
+fun fizzbuzz(n: u32) -> String = match (n % 3, n % 5) {
     (0, 0) => "fizzbuzz"
     (0, _) => "fizz"
     (_, 0) => "buzz"
     _ => "{n}"
 }
 
-fn main() {
+fun main() {
     for i in 1..=15 {
         print(fizzbuzz(i))              // `i` is a u32: its first use says so
     }

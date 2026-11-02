@@ -7,49 +7,49 @@ use std.iter.Reversed
 #builtin
 pub warp Slice[T] {
     /// How many elements there are.
-    pub fn len(self) -> usize
-    pub fn is_empty(self) -> bool
+    pub fun len(self) -> usize
+    pub fun is_empty(self) -> bool
     /// A copy of the element at `i`, or `none` past the end. (An element
     /// can't be moved out of a slice: it gives a value of its own, a deep
     /// copy for a type that isn't `Copy`.)
-    pub fn get(self, i: usize) -> ?T
+    pub fun get(self, i: usize) -> ?T
     /// A copy of the first element.
-    pub fn first(self) -> ?T
+    pub fun first(self) -> ?T
     /// A copy of the last element.
-    pub fn last(self) -> ?T
+    pub fun last(self) -> ?T
     /// Whether some element equals `x`.
-    pub fn contains(self, x: T) -> bool where T: Eq
+    pub fun contains(self, x: T) -> bool where T: Eq
     /// The index of the first element equal to `x`.
-    pub fn index_of(self, x: T) -> ?usize where T: Eq
+    pub fun index_of(self, x: T) -> ?usize where T: Eq
     /// Copies `src` over the start of this slice. Unravels if `src` is longer.
-    pub fn copy_from(mut self, src: [T])
+    pub fun copy_from(mut self, src: [T])
     /// Sets every element to a copy of `x`.
-    pub fn fill(mut self, x: T)
-    pub fn swap(mut self, i: usize, j: usize)
-    pub fn reverse(mut self)
+    pub fun fill(mut self, x: T)
+    pub fun swap(mut self, i: usize, j: usize)
+    pub fun reverse(mut self)
     /// Sorts in order, keeping equal elements in the order they were in.
-    pub fn sort(mut self) where T: Ord
+    pub fun sort(mut self) where T: Ord
     /// A new list with a copy of every element.
-    pub fn to_list(self) -> List[T]
+    pub fun to_list(self) -> List[T]
     /// A new list of `f` of each element. (`xs.indexed()` and the other
     /// methods of `Stream` work on slices too, lazily.)
-    pub fn map[U](self, f: T => U) -> List[U]
+    pub fun map[U](self, f: T => U) -> List[U]
     /// A new list with a copy of each element `f` says yes to.
-    pub fn filter(self, f: T => bool) -> List[T]
+    pub fun filter(self, f: T => bool) -> List[T]
     /// Views of `n` elements at a time, one after another; the last may be
     /// shorter. Unravels if `n` is 0.
-    pub fn chunks(self, n: usize) -> Stream[[T]]
+    pub fun chunks(self, n: usize) -> Stream[[T]]
     #disjoint
     /// Views of `n` elements at a time, one after another, which can be
     /// changed (`line[i] = x`). They don't overlap, so in a `loom for` each
     /// thread may change its own piece. The last may be shorter. Unravels
     /// if `n` is 0.
-    pub fn chunks_mut(mut self, n: usize) -> Stream[[T]]
+    pub fun chunks_mut(mut self, n: usize) -> Stream[[T]]
     /// Views of every run of `n` elements in a row: `[a, b]`, `[b, c]`, …
     /// Unravels if `n` is 0.
-    pub fn windows(self, n: usize) -> Stream[[T]]
+    pub fun windows(self, n: usize) -> Stream[[T]]
     /// Whether the slice starts with `prefix`.
-    pub fn starts_with(self, prefix: [T]) -> bool where T: Eq {
+    pub fun starts_with(self, prefix: [T]) -> bool where T: Eq {
         if prefix.len() > self.len() { return false }
         for i in 0..prefix.len() {
             if self[i] != prefix[i] { return false }
@@ -57,7 +57,7 @@ pub warp Slice[T] {
         true
     }
     /// The inner slices, one after another.
-    pub fn concat[U](self) -> List[U] where T: [U] {
+    pub fun concat[U](self) -> List[U] where T: [U] {
         let mut out = List()
         for i in 0..self.len() {
             let s = self[i]
@@ -66,7 +66,7 @@ pub warp Slice[T] {
         out
     }
     /// The inner slices with `sep` between them.
-    pub fn join[U](self, sep: [U]) -> List[U] where T: [U] {
+    pub fun join[U](self, sep: [U]) -> List[U] where T: [U] {
         let mut out = List()
         for i in 0..self.len() {
             if i > 0 { for j in 0..sep.len() { out.push(sep[j]) } }
@@ -76,7 +76,7 @@ pub warp Slice[T] {
         out
     }
     /// Whether the slice ends with `suffix`.
-    pub fn ends_with(self, suffix: [T]) -> bool where T: Eq {
+    pub fun ends_with(self, suffix: [T]) -> bool where T: Eq {
         if suffix.len() > self.len() { return false }
         let skip = self.len() - suffix.len()
         for i in 0..suffix.len() {
@@ -85,7 +85,7 @@ pub warp Slice[T] {
         true
     }
     /// How many elements equal `x`.
-    pub fn count_of(self, x: T) -> usize where T: Eq {
+    pub fun count_of(self, x: T) -> usize where T: Eq {
         var n = 0
         for i in 0..self.len() {
             if self[i] == x { n += 1 }
@@ -94,7 +94,7 @@ pub warp Slice[T] {
     }
     /// Moves the elements `n` places towards the start; those pushed out
     /// come back at the end. `n` counts modulo the length.
-    pub fn rotate_left(mut self, n: usize) {
+    pub fun rotate_left(mut self, n: usize) {
         let len = self.len()
         if len < 2 { return }
         let k = n % len
@@ -105,30 +105,30 @@ pub warp Slice[T] {
     }
     /// Moves the elements `n` places towards the end; those pushed out come
     /// back at the start. `n` counts modulo the length.
-    pub fn rotate_right(mut self, n: usize) {
+    pub fun rotate_right(mut self, n: usize) {
         let len = self.len()
         if len < 2 { return }
         self.rotate_left(len - n % len)
     }
     /// The elements from the last to the first.
-    pub fn rev(self) -> Stream[T] {
+    pub fun rev(self) -> Stream[T] {
         Reversed(items: self.to_list())
     }
     /// Sorts so that `less(a, b)` says whether `a` goes before `b`. Stable:
     /// elements neither goes before the other keep their order.
-    pub fn sort_by(mut self, less: (T, T) => bool) {
+    pub fun sort_by(mut self, less: (T, T) => bool) {
         var order = sorted_order(self, less)
         apply_order(mut self, mut order)
     }
     /// Sorts by `key` of each element, which is computed once per element.
     /// Stable.
-    pub fn sort_by_key[K: Ord](mut self, key: T => K) {
+    pub fun sort_by_key[K: Ord](mut self, key: T => K) {
         let keys = self.map(key)
         var order = sorted_order(keys, (a, b) => a < b)
         apply_order(mut self, mut order)
     }
     /// Whether every element is at or after the one before it.
-    pub fn is_sorted(self) -> bool where T: Ord {
+    pub fun is_sorted(self) -> bool where T: Ord {
         for i in 1..self.len() {
             if self[i] < self[i - 1] { return false }
         }
@@ -136,21 +136,21 @@ pub warp Slice[T] {
     }
     /// The index of the first element that is not before `x` in a sorted
     /// slice: where `x` would go.
-    pub fn lower_bound(self, x: T) -> usize where T: Ord {
+    pub fun lower_bound(self, x: T) -> usize where T: Ord {
         self.partition_point(e => e < x)
     }
     /// The index of the first element after `x` in a sorted slice.
-    pub fn upper_bound(self, x: T) -> usize where T: Ord {
+    pub fun upper_bound(self, x: T) -> usize where T: Ord {
         self.partition_point(e => not (x < e))
     }
     /// The index of an element equal to `x` in a sorted slice.
-    pub fn binary_search(self, x: T) -> ?usize where T: Ord {
+    pub fun binary_search(self, x: T) -> ?usize where T: Ord {
         let i = self.lower_bound(x)
         if i < self.len() and not (x < self[i]) { some(i) } else { none }
     }
     /// In a slice where `pred` says yes to a run of elements and then no to
     /// the rest, the index of the first no.
-    pub fn partition_point(self, pred: T => bool) -> usize {
+    pub fun partition_point(self, pred: T => bool) -> usize {
         var lo = 0
         var hi = self.len()
         while lo < hi {
@@ -164,7 +164,7 @@ pub warp Slice[T] {
 const RUN: usize = 8
 
 /// The indices `0..n` in an order that stably sorts them by `before`.
-fn sorted_order[T](xs: [T], before: (T, T) => bool) -> List[usize] {
+fun sorted_order[T](xs: [T], before: (T, T) => bool) -> List[usize] {
     let n = xs.len()
     var a: List[usize] = List.filled(0, n)
     for i in 0..n { a[i] = i }
@@ -229,7 +229,7 @@ fn sorted_order[T](xs: [T], before: (T, T) => bool) -> List[usize] {
 }
 
 /// Puts `xs[order[k]]` at `k` for every `k`, by swaps.
-fn apply_order[T](mut xs: [T], mut order: List[usize]) {
+fun apply_order[T](mut xs: [T], mut order: List[usize]) {
     for i in 0..order.len() {
         var cur = i
         while order[cur] != i {

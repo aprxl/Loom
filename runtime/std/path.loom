@@ -3,17 +3,17 @@
 
 /// `a` and `b` as one path: `join("src", "main.loom")` is `src/main.loom`;
 /// an absolute `b` replaces `a`.
-pub fn join(a: str, b: str) -> String {
+pub fun join(a: str, b: str) -> String {
     if b.starts_with("/") or a.is_empty() { return b.to_string() }
     if a.ends_with("/") { return "{a}{b}" }
     "{a}/{b}"
 }
 
 /// Whether the path starts at the root.
-pub fn is_absolute(p: str) -> bool = p.starts_with("/") or (p.len() > 2 and p.chars().nth(1) == some(':'))
+pub fun is_absolute(p: str) -> bool = p.starts_with("/") or (p.len() > 2 and p.chars().nth(1) == some(':'))
 
 /// The last part: `file_name("a/b.txt")` is `b.txt`. None for `""` and `/`.
-pub fn file_name(p: str) -> ?str {
+pub fun file_name(p: str) -> ?str {
     let t = trim_end_slashes(p)
     if t.is_empty() { return none }
     match t.rfind("/") {
@@ -24,7 +24,7 @@ pub fn file_name(p: str) -> ?str {
 
 /// Everything before the last part: `parent("a/b.txt")` is `a`. None for
 /// a path with one part and for the root.
-pub fn parent(p: str) -> ?str {
+pub fun parent(p: str) -> ?str {
     let t = trim_end_slashes(p)
     if t.is_empty() { return none }
     match t.rfind("/") {
@@ -35,7 +35,7 @@ pub fn parent(p: str) -> ?str {
 }
 
 /// The last part without its extension: `stem("a/b.tar.gz")` is `b.tar`.
-pub fn stem(p: str) -> ?str {
+pub fun stem(p: str) -> ?str {
     match file_name(p) {
         some(name) => match name.rfind(".") {
             some(0) => some(name)
@@ -48,7 +48,7 @@ pub fn stem(p: str) -> ?str {
 
 /// The part after the last dot of the last part: `extension("a/b.txt")` is
 /// `txt`. None when there is no dot, or the dot starts the name.
-pub fn extension(p: str) -> ?str {
+pub fun extension(p: str) -> ?str {
     match file_name(p) {
         some(name) => match name.rfind(".") {
             some(0) => none
@@ -61,7 +61,7 @@ pub fn extension(p: str) -> ?str {
 
 /// The path with a different extension: `with_extension("a/b.txt", "md")`
 /// is `a/b.md`.
-pub fn with_extension(p: str, ext: str) -> String {
+pub fun with_extension(p: str, ext: str) -> String {
     let t = trim_end_slashes(p)
     // Where the last part starts, and where its extension does.
     var start = 0
@@ -79,7 +79,7 @@ pub fn with_extension(p: str, ext: str) -> String {
 
 /// The path without `.` parts, empty parts, and `x/..` pairs:
 /// `normalize("a/./b/../c")` is `a/c`.
-pub fn normalize(p: str) -> String {
+pub fun normalize(p: str) -> String {
     var parts: List[String] = []
     for part in p.split("/") {
         if part.is_empty() or part == "." { continue }
@@ -97,7 +97,7 @@ pub fn normalize(p: str) -> String {
     if p.starts_with("/") { "/{body}" } else if body.is_empty() { ".".to_string() } else { body }
 }
 
-fn trim_end_slashes(p: str) -> str {
+fun trim_end_slashes(p: str) -> str {
     var end = p.len()
     while end > 0 and p[end - 1..end] == "/" {
         end -= 1

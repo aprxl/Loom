@@ -9,20 +9,20 @@ warp Expr {
 }
 
 weave Show into Expr {
-    fn show(self, mut f: Fmt) = match self {
+    fun show(self, mut f: Fmt) = match self {
         .Num(n) => f.put(n)
         .Neg(x) => f.put("-{x}")
         .Add(l, r) => f.put("({l} + {r})")
     }
 }
 
-fn eval(e: ^Expr) -> i32 = match e {
+fun eval(e: ^Expr) -> i32 = match e {
     .Num(n) => n
     .Neg(x) => -x.eval()
     .Add(l, r) => l.eval() + r.eval()
 }
 
-fn main() {
+fun main() {
     let h: ^Expr = ^Expr.Add(^Expr.Num(1), ^Expr.Neg(^Expr.Num(2)))
     print("{h} = {h.eval()}")
 

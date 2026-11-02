@@ -3,7 +3,7 @@
 
 use std.io.print
 
-fn weigh(name: str) -> u32 {
+fun weigh(name: str) -> u32 {
     var w = 0u32
     for c in name.chars() {
         w += c as u32 % 7
@@ -11,7 +11,7 @@ fn weigh(name: str) -> u32 {
     w
 }
 
-fn main() {
+fun main() {
     let names = ["ada", "grace", "edsger", "barbara"]
     let total = loom {
         let jobs = names.map(n => thread weigh(n))

@@ -2,7 +2,7 @@
 // elements that own memory and ones that don't.
 use std.io.print
 warp P: Show, Eq, Ord { name: String, n: i32 }
-fn main() {
+fun main() {
     var xs: List[i32] = [5, 3, 9, 1]
     xs.push(7)
     print("{xs} {xs.len()} {xs.is_empty()}")

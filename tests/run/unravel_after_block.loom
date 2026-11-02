@@ -3,7 +3,7 @@
 // backends reporting it at the block's last line.
 use std.io.print
 
-fn main() {
+fun main() {
     let a: i5 = 15
     let b: i5 = (if a > 3 {
         a - 1

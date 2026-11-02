@@ -1,8 +1,8 @@
 use std.io.print
 
-fn clamp(n: i32, lo: i32, hi: i32) -> i32 = if n < lo { lo } else if n > hi { hi } else { n }
+fun clamp(n: i32, lo: i32, hi: i32) -> i32 = if n < lo { lo } else if n > hi { hi } else { n }
 
-// A test is written like a function, with `test` in place of `fn`.
+// A test is written like a function, with `test` in place of `fun`.
 test clamps_low() = assert(clamp(-5, 0, 10) == 0)
 
 test clamps_high() {

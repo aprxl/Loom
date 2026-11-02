@@ -18,8 +18,8 @@ warp Outer: Default {
     c: Color
 }
 warp Wrap[T]: Default { v: T }
-fn zero[T: Default]() -> T = T.default()
-fn main() {
+fun zero[T: Default]() -> T = T.default()
+fun main() {
     let c = Config.default()
     print("{c.host} {c.port} {c.verbose} {c.tags.len()} {c.ratio} {c.note} {c.limit}")
     print(Color.default() == Color.Red)

@@ -2,77 +2,77 @@
 
 warp Named { name: String, tags: List[str] }
 
-fn keep(take s: String) -> String = s
+fun keep(take s: String) -> String = s
 
-fn give_back(s: String) -> String = s             //~ M0102
+fun give_back(s: String) -> String = s             //~ M0102
 
-fn stash(xs: List[i32]) {
+fun stash(xs: List[i32]) {
     var mine = xs                                  //~ M0102
     mine.push(1)
 }
 
-fn used_after(take s: String) -> String {
+fun used_after(take s: String) -> String {
     let t = keep(s)
     s.len()                                        //~ M0101
     t
 }
 
-fn in_branch(take s: String, b: bool) -> usize {
+fun in_branch(take s: String, b: bool) -> usize {
     if b { keep(s) }
     s.len()                                        //~ M0101
 }
 
-fn in_loop(take s: String) {
+fun in_loop(take s: String) {
     for i in 0..3 {
         keep(s)                                    //~ M0101
     }
 }
 
-fn from_list(xs: List[String]) -> String {
+fun from_list(xs: List[String]) -> String {
     var copy: List[String] = List()
     copy.push(xs[0])                               //~ M0103
     copy.pop() mend ""
 }
 
-fn loop_item(xs: List[String]) {
+fun loop_item(xs: List[String]) {
     var out: List[String] = List()
     for x in xs { out.push(x) }                    //~ M0102
 }
 
-fn pushed(take s: String) -> usize {
+fun pushed(take s: String) -> usize {
     var xs: List[String] = List()
     xs.push(s)
     s.len()                                        //~ M0101
 }
 
-fn same[T](take x: T) -> T = x
+fun same[T](take x: T) -> T = x
 
-fn inferred(take s: String) -> usize {
+fun inferred(take s: String) -> usize {
     let t = same(s)
     s.len()                                        //~ M0101
 }
 
-fn part(take n: Named) -> List[str] {
+fun part(take n: Named) -> List[str] {
     let s = n.name
     let again = n.name                             //~ M0101
     n.tags
 }
 
-fn captured(take s: String) {
+fun captured(take s: String) {
     [1].map(x => keep(s))                          //~ M0102
 }
 
-fn swap(mut a: i32, mut b: i32) {
+fun swap(mut a: i32, mut b: i32) {
     let t = a
     a = b
     b = t
 }
 
-fn add_to(mut xs: List[i32], ys: [i32]) = xs.extend(ys)
+fun add_to(mut xs: List[i32], ys: [i32]) = xs.extend(ys)
 
-fn with_cb(mut xs: List[i32], cb: () => ()) = cb()
+fun with_cb(mut xs: List[i32], cb: () => ()) = cb()
 
-fn guard(take o: ?String) {
+fun guard(take o: ?String) {
     match o {
         some(s) if keep(s).len() > 3 => {}          //~ M0102
         some(s) => { keep(s) }
@@ -80,7 +80,7 @@ fn guard(take o: ?String) {
     }
 }
 
-fn main() {
+fun main() {
     var n = 1
     var m = 2
     swap(mut n, mut m)

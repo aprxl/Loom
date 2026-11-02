@@ -5,7 +5,7 @@ const SIZES = [1, 2, 4]
 
 /// The branch that isn't taken isn't checked, so it can name things that
 /// don't exist here.
-fn page_size() -> usize {
+fun page_size() -> usize {
     const if target.pointer_bits == 63 {
         4096
     } else {
@@ -13,11 +13,11 @@ fn page_size() -> usize {
     }
 }
 
-fn describe[const N: usize](xs: [i32; N]) -> str {
+fun describe[const N: usize](xs: [i32; N]) -> str {
     const if N > 2 { "long" } else { "short" }
 }
 
-fn main() {
+fun main() {
     print(page_size())
     print("{describe([1, 2, 3])} {describe([1])}")
 

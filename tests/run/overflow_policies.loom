@@ -1,7 +1,7 @@
 // The table in design/01-syntax.md, and the same at other widths.
 use std.io.print
 
-fn main() {
+fun main() {
     let x: u8 = 200
     print("{x +% 100} {x +| 100} {x +? 100}")
     print("{x +% 55} {x +| 55} {x +? 55}")

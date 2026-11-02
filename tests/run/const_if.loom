@@ -5,10 +5,10 @@ use std.io.print
 const DEBUG = false
 const SIZES = [1, 2, 4]
 
-fn largest[T: Ord](a: T, b: T) -> T = if a < b { b } else { a }
+fun largest[T: Ord](a: T, b: T) -> T = if a < b { b } else { a }
 
 /// A branch that isn't taken isn't checked: it can name what doesn't exist.
-fn page_size() -> usize {
+fun page_size() -> usize {
     const if target.pointer_bits >= 63 {
         4096
     } else {
@@ -16,15 +16,15 @@ fn page_size() -> usize {
     }
 }
 
-fn bits(const n: u8) -> str {
+fun bits(const n: u8) -> str {
     const if n <= 8 { "small" } else { "big" }
 }
 
-fn describe[const N: usize](xs: [i32; N]) -> str {
+fun describe[const N: usize](xs: [i32; N]) -> str {
     const if N > 2 { "long" } else { "short" }
 }
 
-fn main() {
+fun main() {
     print(page_size())
     print("{bits(4)} {bits(16)} {describe([1, 2, 3])} {describe([1])}")
     const if DEBUG { print("debug on") } else if SIZES.len() == 3 { print("three sizes") } else { print("?") }

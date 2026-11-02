@@ -115,7 +115,7 @@ pub fn expr(e: &Expr) -> String {
                     }
                 })
                 .collect();
-            format!("(fn ({}) {})", params.join(", "), expr(body))
+            format!("(fun ({}) {})", params.join(", "), expr(body))
         }
         ExprKind::Call { callee, args } => {
             let mut s = format!("(call {}", expr(callee));
@@ -567,9 +567,9 @@ fn where_str(preds: &[WherePred]) -> String {
 
 fn fn_decl(f: &FnDecl) -> String {
     let keyword = match f.qualifier {
-        FnQualifier::None => "fn",
-        FnQualifier::Const => "const fn",
-        FnQualifier::Unsafe => "unsafe fn",
+        FnQualifier::None => "fun",
+        FnQualifier::Const => "const fun",
+        FnQualifier::Unsafe => "unsafe fun",
         FnQualifier::Test => "test",
     };
     let params: Vec<String> = f.params.iter().map(param).collect();

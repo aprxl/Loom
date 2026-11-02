@@ -2,7 +2,7 @@
 use std.io.print
 use std.time.{ms, sleep}
 
-fn main() {
+fun main() {
     loom for _ in 0..8 { sleep(ms(100)) }
     print("awake")
 }

@@ -4,7 +4,7 @@
 use std.io.print
 use std.sync.sched_yield
 
-fn main() {
+fun main() {
     loom {
         let t = thread {
             sched_yield()

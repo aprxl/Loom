@@ -1,6 +1,6 @@
 use std.io.print
 
-fn describe(n: i32) -> str = match n {
+fun describe(n: i32) -> str = match n {
     0 => "zero"
     1 | 2 | 3 => "small"
     -9..=-1 => "a little negative"
@@ -8,14 +8,14 @@ fn describe(n: i32) -> str = match n {
     _ => "something else"
 }
 
-fn signs(p: (i32, i32)) -> String = match p {
+fun signs(p: (i32, i32)) -> String = match p {
     (0, 0) => "origin"
     (x, 0) | (0, x) => "on an axis at {x}"
     (a, b) if a == b => "on the diagonal"
     _ => "somewhere"
 }
 
-fn main() {
+fun main() {
     print("{describe(0)}, {describe(2)}, {describe(-4)}, {describe(5000)}, {describe(7)}")
     print(signs((0, 0)))
     print(signs((5, 0)))

@@ -23,7 +23,7 @@ const CRC_TABLE: [u32; 256] = {        // const initializers run at compile time
     table
 }
 
-pub fn crc32(data: [u8]) -> u32 {
+pub fun crc32(data: [u8]) -> u32 {
     var crc = 0xFFFF_FFFFu32
     for b in data {
         crc = CRC_TABLE[(crc ~ b) as% u8] ~ (crc >> 8)   // a u8 index into 256 entries: no bounds check
@@ -51,7 +51,7 @@ pub warp Ring[T, const N: usize] {
     pub(get) len: Len = 0
 
     /// Add to the back. When full, the oldest item is evicted and returned.
-    pub fn push(mut self, take x: T) -> ?T {
+    pub fun push(mut self, take x: T) -> ?T {
         let evicted = if .len == N { .pop() } else { none }
         .slots[.tail] = x
         .tail +%= 1                           // wraps at N by construction
@@ -59,7 +59,7 @@ pub warp Ring[T, const N: usize] {
         evicted
     }
 
-    pub fn pop(mut self) -> ?T {
+    pub fun pop(mut self) -> ?T {
         if .len == 0 { return none }
         let x = .slots[.head].take()          // leaves `none` behind
         .head +%= 1
@@ -73,13 +73,13 @@ pub warp Ring[T, const N: usize] {
 //     note: while instantiating `Ring[u32, 100]`
 
 /// `const` parameters must be known at compile time, and the return type can depend on them.
-fn zeros(const n: usize) -> [f32; n] = [0.0; n]
+fun zeros(const n: usize) -> [f32; n] = [0.0; n]
 
 // ================================================================ 3. compile-time branches
 
 /// `const if` is decided while compiling. The branch that isn't taken is
 /// parsed but *not type-checked*, so it can name APIs this target doesn't have.
-fn page_size() -> usize {
+fun page_size() -> usize {
     const if target.os == .Windows {
         std.sys.win32.system_info().page_size
     } else {
@@ -94,7 +94,7 @@ fn page_size() -> usize {
 /// time. `const if` and `const for` unroll while compiling, so each warp gets
 /// straight-line code with no runtime reflection left in the binary.
 pub weft ToJson {
-    fn to_json(self, mut out: String) {
+    fun to_json(self, mut out: String) {
         const if Self.kind == .Record {
             out.push('{')
             const for (i, f) in Self.fields.indexed() {
@@ -129,16 +129,16 @@ pub weft ToJson {
 
 // Leaves are woven by hand. These are ordinary weaves.
 weave[T: Integer] ToJson into T {
-    fn to_json(self, mut out: String) = out.push_str("{self}")
+    fun to_json(self, mut out: String) = out.push_str("{self}")
 }
 weave ToJson into bool {
-    fn to_json(self, mut out: String) = out.push_str(if self { "true" } else { "false" })
+    fun to_json(self, mut out: String) = out.push_str(if self { "true" } else { "false" })
 }
 weave ToJson into String {
-    fn to_json(self, mut out: String) = out.push_json_str(self)
+    fun to_json(self, mut out: String) = out.push_json_str(self)
 }
 weave[T: ToJson] ToJson into List[T] {
-    fn to_json(self, mut out: String) {
+    fun to_json(self, mut out: String) {
         out.push('[')
         for (i, x) in self.indexed() {
             if i > 0 { out.push(',') }
@@ -148,7 +148,7 @@ weave[T: ToJson] ToJson into List[T] {
     }
 }
 weave[T: ToJson] ToJson into ?T {
-    fn to_json(self, mut out: String) = match self {
+    fun to_json(self, mut out: String) = match self {
         some(x) => x.to_json(mut out)
         none => out.push_str("null")
     }
@@ -156,7 +156,7 @@ weave[T: ToJson] ToJson into ?T {
 
 // Two helpers as free functions. UFCS turns them into String methods
 // without touching String.
-fn push_json_str(mut out: String, s: str) {
+fun push_json_str(mut out: String, s: str) {
     out.push('"')
     for c in s.chars() {
         match c {
@@ -170,7 +170,7 @@ fn push_json_str(mut out: String, s: str) {
     out.push('"')
 }
 
-fn push_json_key(mut out: String, key: str) {
+fun push_json_key(mut out: String, key: str) {
     out.push_json_str(key)
     out.push(':')
 }
@@ -191,7 +191,7 @@ warp User: ToJson {
 
 // ================================================================ main
 
-fn main() {
+fun main() {
     let ada = User(name: "Ada", age: 36, roles: [.Member(since: 1843), .Admin], email: none)
     var json = String()
     ada.to_json(mut json)

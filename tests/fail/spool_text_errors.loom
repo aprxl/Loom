@@ -5,33 +5,33 @@ warp Tag {
     name: String
 }
 
-fn label() -> String {
+fun label() -> String {
     spool a = Arena(1.kib())
     let t = "nails".to_string().copy(given: a)
     t                                        //~ R0101
 }
 
-fn too_early() {
+fun too_early() {
     spool raw = Arena(1.kib())
     let t = "nails".to_string().copy(given: raw)
     raw.reset()
     print("{t}")                             //~ R0102
 }
 
-fn tagged() {
+fun tagged() {
     spool a = Arena(1.kib())
     let t = "nails".to_string().copy(given: a)
     let tag = Tag(t)                         //~ R0101
 }
 
-fn listed() {
+fun listed() {
     spool a = Arena(1.kib())
     let t = "nails".to_string().copy(given: a)
     var xs: List[String] = []
     xs.push(t)                               //~ R0101
 }
 
-fn main() {
+fun main() {
     label()
     too_early()
     tagged()

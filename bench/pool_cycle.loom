@@ -4,7 +4,7 @@ use std.mem.Pool
 
 const SIZE = 1_000_000
 
-fn main() {
+fun main() {
     spool slots = Pool[u64](4)
     var total = 0u64
     for i in 0..SIZE as u64 {

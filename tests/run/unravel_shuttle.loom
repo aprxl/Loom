@@ -3,7 +3,7 @@
 
 use std.io.print
 
-fn boom() ~> i32 {
+fun boom() ~> i32 {
     defer print("boom's defer ran")
     yield 1
     let xs = [1, 2]
@@ -11,7 +11,7 @@ fn boom() ~> i32 {
     yield xs[i]
 }
 
-fn main() {
+fun main() {
     for x in boom() {
         print(x)
     }

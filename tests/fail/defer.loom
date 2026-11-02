@@ -3,9 +3,9 @@
 
 warp Tx { name: String }
 
-fn consume(take s: String) {}
+fun consume(take s: String) {}
 
-fn leaves(o: ?i32) -> ?i32 {
+fun leaves(o: ?i32) -> ?i32 {
     defer return none                       //~ T0118
     defer {
         let v = o?                          //~ T0118
@@ -24,12 +24,12 @@ fn leaves(o: ?i32) -> ?i32 {
     o
 }
 
-fn moves(take s: String, take t: String) {
+fun moves(take s: String, take t: String) {
     defer consume(s)                        //~ M0102
     defer print_len(t)
     consume(t)                              //~ M0102
 }
 
-fn print_len(s: String) {}
+fun print_len(s: String) {}
 
-fn main() {}
+fun main() {}

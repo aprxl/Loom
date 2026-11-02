@@ -2,14 +2,14 @@
 
 use std.io.print
 
-fn shout(s: str) -> String {
+fun shout(s: str) -> String {
     var out = String.with_capacity(s.len() + 1)
     out.push_str(s.to_upper())
     out.push('!')
     out
 }
 
-fn digits(s: str) -> u32 {
+fun digits(s: str) -> u32 {
     var total: u32 = 0
     var i: usize = 0
     while i < s.len() {
@@ -20,7 +20,7 @@ fn digits(s: str) -> u32 {
     total
 }
 
-fn main() {
+fun main() {
     // `String` has every method of `str`.
     let s = "  Hello, Loom  "
     let t = s.trim()

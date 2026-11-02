@@ -5,7 +5,7 @@
 use std.io.print
 
 // One running total per push.
-fn walk(start: u32) ~> u32 <~ bool {
+fun walk(start: u32) ~> u32 <~ bool {
     let grid = [start, start + 1, start + 2, start + 3, start + 4]
     var total = 0u32
     for g in grid {
@@ -20,13 +20,13 @@ warp Holder {
     sh: Shuttle[u32, bool]
 }
 
-fn handed_over(take s: Shuttle[u32, bool]) -> Shuttle[u32, bool] {
+fun handed_over(take s: Shuttle[u32, bool]) -> Shuttle[u32, bool] {
     var t = s
     print("in a function: {t.push(true).collect()}")
     t
 }
 
-fn main() {
+fun main() {
     var a = walk(10)
     var b = walk(100)
     for _ in 0..2 {

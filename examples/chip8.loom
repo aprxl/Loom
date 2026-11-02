@@ -58,7 +58,7 @@ pub warp Chip8 {
     pub keys: u16        = 0            // bit k set = key k held
     rng:    Rng          = Rng.seeded(0x10AD)
 
-    pub fn load(rom: [u8]) -> Chip8 ! LoadError {
+    pub fun load(rom: [u8]) -> Chip8 ! LoadError {
         if rom.len() > 4096 - PROGRAM_AT { fail .TooBig(rom.len()) }
         Chip8().{
             .mem[FONT_AT..][..FONT.len()].copy_from(FONT)
@@ -67,14 +67,14 @@ pub warp Chip8 {
     }
 
     /// Fetch, advance, execute.
-    pub fn step(mut self) ! Fault {
+    pub fun step(mut self) ! Fault {
         let op: u16 = .mem[.pc] << 8 | .mem[.pc +% 1]   // u8 operands widen to u16 *before* the shift
         .pc +%= 2
         .exec(op)
     }
 
     /// Execute one opcode. Each twill pattern captures exactly the bits it names.
-    pub fn exec(mut self, op: u16) ! Fault {
+    pub fun exec(mut self, op: u16) ! Fault {
         let here = .pc -% 2
         match op {
             0x00E0 => .screen = [0; 32]
@@ -156,7 +156,7 @@ pub warp Chip8 {
     }
 
     /// XOR an 8-pixel-wide sprite onto the screen. VF = 1 if any lit pixel was switched off.
-    fn draw(mut self, x: u8, y: u8, rows: u4) {
+    fun draw(mut self, x: u8, y: u8, rows: u4) {
         .v[0xF] = 0
         for r in 0..rows {
             let row = (y +% r) as% u5                      // 32 rows → a u5 index, no bounds check
@@ -167,10 +167,10 @@ pub warp Chip8 {
         }
     }
 
-    fn held(self, key: u8) -> bool = .keys >> (key as% u4) & 1 == 1
+    fun held(self, key: u8) -> bool = .keys >> (key as% u4) & 1 == 1
 
     /// Call at 60 Hz.
-    pub fn tick(mut self) {
+    pub fun tick(mut self) {
         .delay -|= 1                                       // saturating: stops at 0 on its own
         .sound -|= 1
     }
@@ -180,7 +180,7 @@ const assert(FONT.len() == 16 * 5, "one 5-byte sprite per hex digit")
 
 // ---------------------------------------------------------------- frontend
 
-fn render(screen: [u64; 32]) {
+fun render(screen: [u64; 32]) {
     var out = String.with_capacity(32 * 65)
     for row in screen {
         for col in 0..64 {
@@ -191,7 +191,7 @@ fn render(screen: [u64; 32]) {
     print("\x1b[H{out}")                                   // cursor home, then the frame
 }
 
-fn main() ! any Error {
+fun main() ! any Error {
     let path = env.args().get(1) mend unravel("usage: chip8 <rom>")
     var cpu = Chip8.load(fs.read(path)?)?                  // IoError and LoadError both widen to `any Error`
 

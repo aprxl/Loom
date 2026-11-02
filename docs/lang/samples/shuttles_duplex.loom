@@ -2,7 +2,7 @@ use std.io.print
 
 // `~> T <~ U` pulls `U`s in and yields `T`s out. `pull` waits for an input
 // and gives `none` once the shuttle is closed.
-fn pairs() ~> (i32, ?i32) <~ i32 {
+fun pairs() ~> (i32, ?i32) <~ i32 {
     while pull is some(a) {
         match pull {
             some(b) => yield (a, some(b)),
@@ -15,7 +15,7 @@ fn pairs() ~> (i32, ?i32) <~ i32 {
 }
 
 // `<~ U` alone is a sink: it only pulls.
-fn summer() <~ i32 {
+fun summer() <~ i32 {
     var total = 0
     defer print("sum: {total}")
     while pull is some(n) {
@@ -23,7 +23,7 @@ fn summer() <~ i32 {
     }
 }
 
-fn main() {
+fun main() {
     var p = pairs()
     for n in [1, 2, 3, 4, 5] {
         // Each push gives a burst: what the shuttle yields before it

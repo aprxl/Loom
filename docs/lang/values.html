@@ -48,7 +48,7 @@
 <div class="sample-head"><span class="file">samples/values_numbers.loom</span><span class="tag ok">runs</span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="c">// Integers have any width up to 64 bits: `u12` and `i24` are ordinary types.</span>
     <span class="k">let</span> a: u12 = <span class="n">4095</span>
     print(<span class="s">"{</span>a +% <span class="n">1</span><span class="s">} {</span>a +| <span class="n">1</span><span class="s">} {</span>a +? <span class="n">1</span>:?<span class="s">}"</span>)      <span class="c">// wrap, saturate, checked</span>
@@ -81,7 +81,7 @@
 <div class="sample-head"><span class="file">samples/values_text.loom</span><span class="tag ok">runs</span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="c">// `str` is a view of UTF-8 text; `String` owns it. Lengths count bytes.</span>
     <span class="k">let</span> s = <span class="s">"  Hello, Wörld  "</span>
     <span class="k">let</span> t = s.trim()
@@ -119,7 +119,7 @@ ababab</code></pre></div>
 <div class="sample-head"><span class="file">samples/values_control.loom</span><span class="tag ok">runs</span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fn</span> classify(n: i32) -&gt; str = <span class="k">match</span> n {
+<span class="k">fun</span> classify(n: i32) -&gt; str = <span class="k">match</span> n {
     <span class="n">0</span> =&gt; <span class="s">"zero"</span>
     <span class="n">1</span>..=<span class="n">9</span> =&gt; <span class="s">"small"</span>
     <span class="n">10</span> | <span class="n">20</span> | <span class="n">30</span> =&gt; <span class="s">"round"</span>
@@ -127,7 +127,7 @@ ababab</code></pre></div>
     _ =&gt; <span class="s">"big"</span>
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">for</span> n <span class="k">in</span> [<span class="n">0</span>, <span class="n">5</span>, <span class="n">20</span>, -<span class="n">4</span>, <span class="n">99</span>] {
         print(<span class="s">"{</span>n<span class="s">}: {</span>classify(n)<span class="s">}"</span>)
     }
@@ -191,11 +191,11 @@ in range
 <div class="sample-head"><span class="file">samples/values_lambdas.loom</span><span class="tag ok">runs</span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fn</span> apply(x: i32, f: i32 =&gt; i32) -&gt; i32 = f(x)
+<span class="k">fun</span> apply(x: i32, f: i32 =&gt; i32) -&gt; i32 = f(x)
 
-<span class="k">fn</span> is_even(n: i32) -&gt; bool = n % <span class="n">2</span> == <span class="n">0</span>
+<span class="k">fun</span> is_even(n: i32) -&gt; bool = n % <span class="n">2</span> == <span class="n">0</span>
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="c">// A lambda gets its parameter types from where it's passed.</span>
     <span class="c">// Anywhere else, annotate them.</span>
     <span class="k">let</span> double = (x: i32) =&gt; x * <span class="n">2</span>
@@ -230,7 +230,7 @@ in range
 <span class="c">// A twill pattern matches bits. Digits must match, `?` is "don't care",</span>
 <span class="c">// and each lowercase letter is a capture: every bit with the same letter</span>
 <span class="c">// forms one integer exactly that wide.</span>
-<span class="k">fn</span> decode(op: u16) -&gt; <span class="t">String</span> = <span class="k">match</span> op {
+<span class="k">fun</span> decode(op: u16) -&gt; <span class="t">String</span> = <span class="k">match</span> op {
     <span class="n">0x00E0</span> =&gt; <span class="s">"clear"</span>
     <span class="n">0x1nnn</span> =&gt; <span class="s">"jump to {</span>n<span class="s">}"</span>                  <span class="c">// n: u12</span>
     <span class="n">0x6xkk</span> =&gt; <span class="s">"v{</span>x<span class="s">} = {</span>k<span class="s">}"</span>                   <span class="c">// x: u4, k: u8</span>
@@ -239,7 +239,7 @@ in range
     _ =&gt; <span class="s">"unknown"</span>
 }
 
-<span class="k">fn</span> utf8_kind(byte: u8) -&gt; str = <span class="k">match</span> byte {
+<span class="k">fun</span> utf8_kind(byte: u8) -&gt; str = <span class="k">match</span> byte {
     <span class="n">0b0???_????</span> =&gt; <span class="s">"ascii"</span>
     <span class="n">0b110?_????</span> =&gt; <span class="s">"starts a 2-byte character"</span>
     <span class="n">0b1110_????</span> =&gt; <span class="s">"starts a 3-byte character"</span>
@@ -247,7 +247,7 @@ in range
     _ =&gt; <span class="s">"other"</span>
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">for</span> op <span class="k">in</span> [<span class="n">0x00E0</span>, <span class="n">0x1234</span>, <span class="n">0x6A42</span>, <span class="n">0x8AB4</span>, <span class="n">0xF107</span>, <span class="n">0x5000</span>] {
         print(<span class="s">"{</span>op:<span class="n">04</span>X<span class="s">}: {</span>decode(op <span class="k">as</span> u16)<span class="s">}"</span>)
     }

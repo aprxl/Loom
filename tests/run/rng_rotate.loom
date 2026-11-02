@@ -5,7 +5,7 @@
 use std.io.print
 use std.rand.Rng
 
-fn main() {
+fun main() {
     let a: u8 = 0b1000_0001
     print("{a.rotate_left(1)} {a.rotate_right(1)} {a.rotate_left(9)}")
     let one: u64 = 1

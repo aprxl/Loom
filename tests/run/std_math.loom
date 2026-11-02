@@ -2,7 +2,7 @@ use std.hash
 use std.io.print
 use std.math
 
-fn main() {
+fun main() {
     print((-7).rem_euclid(3))
     print((-7).div_euclid(3))
     print(7.div_euclid(-3))

@@ -3,7 +3,7 @@
 
 use std.io.print
 
-fn main() {
+fun main() {
     var counts = Map[String, u32]()
     for w in ["b", "a", "b", "c", "a", "b"] {
         counts.entry(w.to_string(), default: 0) += 1

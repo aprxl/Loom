@@ -1,9 +1,9 @@
-fn keep(take s: String) -> String = s
+fun keep(take s: String) -> String = s
 
-fn used_after(take s: String) -> usize {
+fun used_after(take s: String) -> usize {
     let kept = keep(s)
     s.len()
 }
 
-fn main() {}
+fun main() {}
 //@ check-fail M0101

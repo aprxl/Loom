@@ -4,11 +4,11 @@
 use std.io.print
 use std.sync.Mutex
 
-fn boom() -> i32 {
+fun boom() -> i32 {
     unravel("boom")
 }
 
-fn main() {
+fun main() {
     let m = Mutex[i32](7)
     defer print("m is {m.lock()}")
     loom {

@@ -6,27 +6,27 @@ warp Vec2 {
 
     const ZERO = Vec2(0, 0)
 
-    fn new(x: f64, y: f64) -> Self = Self(x, y)
-    fn dot(self, o: Vec2) -> f64 = .x * o.x + .y * o.y
-    fn scaled(self, k: f64) -> Vec2 = Vec2(.x * k, .y * k)
-    fn flip(mut self) { (.x, .y) = (.y, .x) }
+    fun new(x: f64, y: f64) -> Self = Self(x, y)
+    fun dot(self, o: Vec2) -> f64 = .x * o.x + .y * o.y
+    fun scaled(self, k: f64) -> Vec2 = Vec2(.x * k, .y * k)
+    fun flip(mut self) { (.x, .y) = (.y, .x) }
 }
 
 // UFCS: a free function is a method on its first parameter.
-fn kib(n: usize) -> usize = n * 1024
-fn describe(v: Vec2) -> String = "({v.x}, {v.y})"
+fun kib(n: usize) -> usize = n * 1024
+fun describe(v: Vec2) -> String = "({v.x}, {v.y})"
 
 warp Stack {
     top: i32 = 0
     size: u8 = 0
 
-    fn push(mut self, n: i32) {
+    fun push(mut self, n: i32) {
         .top = n
         .size += 1
     }
 }
 
-fn main() {
+fun main() {
     let v = Vec2.new(3, 4)
     print("{v.dot(v)} {v.scaled(2).describe()} {Vec2.ZERO:?}")
     print("{64.kib()} {u8.MAX} {i8.MIN} {Vec2.dot(v, Vec2(1, 0))}")

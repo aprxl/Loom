@@ -18,7 +18,7 @@ use eval.{boot, eval_text}
 use printer.render
 use programs.demos
 
-fn main() {
+fun main() {
     var h = Heap.new(7)
     let global = boot(mut h) mend e => unravel("the prelude failed: {e.message()}")
 
@@ -32,7 +32,7 @@ fn main() {
 
 /// Runs the file at `path` and shows its value. A failure prints its message
 /// and exits with status 1, so a script can tell it went wrong.
-fn run_file(mut h: Heap, global: usize, path: str) {
+fun run_file(mut h: Heap, global: usize, path: str) {
     let src = read_text(path) mend e => {
         print("cannot read {path}")
         exit(1)
@@ -47,7 +47,7 @@ fn run_file(mut h: Heap, global: usize, path: str) {
 }
 
 /// Runs each demo in its own frame under `global`, and reports its value or error.
-fn run_demos(mut h: Heap, global: usize) {
+fun run_demos(mut h: Heap, global: usize) {
     for demo in demos() {
         print("== {demo.title}")
         let scope = h.new_frame(some(global))

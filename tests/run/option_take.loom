@@ -4,7 +4,7 @@ use std.io.print
 
 warp Slots { items: [?u32; 2] = [some(5), none], name: ?String = some("x") }
 
-fn main() {
+fun main() {
     var a: ?i32 = some(3)
     let b = a.take()
     print("{a:?} {b:?}")

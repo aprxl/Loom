@@ -6,16 +6,16 @@ use std.io.print
 use std.sync.Mutex
 use std.sync.sched_yield
 
-fn nap() -> i32 {
+fun nap() -> i32 {
     sched_yield()
     1
 }
 
-fn boom() -> i32 {
+fun boom() -> i32 {
     unravel("boom")
 }
 
-fn main() {
+fun main() {
     let m = Mutex[i32](0)
     loom {
         thread {

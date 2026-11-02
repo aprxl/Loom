@@ -206,7 +206,7 @@ impl Printer<'_> {
         if let Some(abi) = &f.abi {
             let _ = write!(s, "extern {abi:?} ");
         }
-        let keyword = if f.qualifier == FnQualifier::Test { "test" } else { "fn" };
+        let keyword = if f.qualifier == FnQualifier::Test { "test" } else { "fun" };
         let _ = write!(s, "{keyword} {name}{}(", self.generics(&f.generics));
         let params: Vec<String> = f
             .params
@@ -511,7 +511,7 @@ impl Printer<'_> {
                         }
                     })
                     .collect();
-                format!("(fn ({}) {})", params.join(", "), self.expr(body))
+                format!("(fun ({}) {})", params.join(", "), self.expr(body))
             }
             ExprKind::Call { callee, args } => {
                 let mut s = format!("(call {}", self.expr(callee));

@@ -3,7 +3,7 @@
 
 use std.io.print
 
-fn main() {
+fun main() {
     let x: u64 = 0x8000_0000_0000_0401                // 2^63 + 1025 → 2^63 + 2048
     print(x as f64)
     let w: u64 = 0xFFFF_FFFF_FFFF_FFFF

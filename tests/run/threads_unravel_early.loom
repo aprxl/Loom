@@ -4,17 +4,17 @@
 use std.io.print
 use std.sync.sched_yield
 
-fn slow() {
+fun slow() {
     defer print("slow cleanup")
     sched_yield()
     print("slow finished")
 }
 
-fn boom() -> i32 {
+fun boom() -> i32 {
     unravel("boom")
 }
 
-fn leave() -> i32 {
+fun leave() -> i32 {
     loom {
         thread slow()
         thread boom()
@@ -22,6 +22,6 @@ fn leave() -> i32 {
     }
 }
 
-fn main() {
+fun main() {
     print("{leave()}")
 }

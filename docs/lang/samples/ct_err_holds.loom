@@ -1,4 +1,4 @@
-fn numbers(n: i32) ~> i32 {
+fun numbers(n: i32) ~> i32 {
     for i in 0..n {
         yield i
     }
@@ -7,5 +7,5 @@ fn numbers(n: i32) ~> i32 {
 // A constant is a value that every use copies. A shuttle can't be one.
 const NUMBERS: Shuttle[i32, ()] = numbers(3)
 
-fn main() {}
+fun main() {}
 //@ check-fail K0108

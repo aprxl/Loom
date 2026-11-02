@@ -2,7 +2,7 @@
 
 /// The `n` entries with the highest counts, the highest first. Entries with
 /// the same count go in byte order of their keys.
-pub fn top(counts: Map[String, u32], n: usize) -> List[(String, u32)] {
+pub fun top(counts: Map[String, u32], n: usize) -> List[(String, u32)] {
     var best: List[(String, u32)] = []
     if n == 0 { return best }
     for e in counts.pairs() {
@@ -16,4 +16,4 @@ pub fn top(counts: Map[String, u32], n: usize) -> List[(String, u32)] {
 }
 
 /// Whether the entry `(aw, ac)` ranks above `(bw, bc)`: more often, then alphabetically.
-fn before(aw: str, ac: u32, bw: str, bc: u32) -> bool = ac > bc or (ac == bc and aw < bw)
+fun before(aw: str, ac: u32, bw: str, bc: u32) -> bool = ac > bc or (ac == bc and aw < bw)

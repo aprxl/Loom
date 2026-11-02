@@ -3,7 +3,7 @@ use std.io.print
 /// Anything that can list its fields. The default body works for any
 /// record: `const for` writes out one line per field.
 weft Fields {
-    fn fields(self) -> String {
+    fun fields(self) -> String {
         var out = String()
         const for (i, f) in Self.fields.indexed() {
             const if i > 0 { out.push_str(", ") }
@@ -16,7 +16,7 @@ weft Fields {
 warp Point: Fields { x: i32, y: i32 }
 warp User: Fields { name: String, age: u8 }
 
-fn main() {
+fun main() {
     print(Point(3, 4).fields())
     print(User(name: "Ada", age: 36).fields())
 }

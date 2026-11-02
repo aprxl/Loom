@@ -2,21 +2,21 @@
 // shown, taken out, and tested for their type.
 use std.io.print
 weft Named: Show {
-    fn name(self) -> String
-    fn rename(mut self, to: str)
+    fun name(self) -> String
+    fun rename(mut self, to: str)
 }
 warp Pet: Named, Show {
     nick: String
     tags: List[String]
-    fn name(self) -> String = "pet {.nick}"
-    fn rename(mut self, to: str) { .nick = to.to_string() }
+    fun name(self) -> String = "pet {.nick}"
+    fun rename(mut self, to: str) { .nick = to.to_string() }
 }
 warp Bot: Named, Show {
     id: u32
-    fn name(self) -> String = "bot {.id}"
-    fn rename(mut self, to: str) { .id = to.len() as u32 }
+    fun name(self) -> String = "bot {.id}"
+    fun rename(mut self, to: str) { .id = to.len() as u32 }
 }
-fn main() {
+fun main() {
     var all: List[any Named] = [Pet(nick: "rex", tags: ["good"]), Bot(id: 7)]
     all.push(Pet(nick: "tom", tags: []))
     for mut x in all { x.rename("renamed") }

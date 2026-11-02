@@ -6,14 +6,14 @@ warp User { name: String }
 
 warp Oops: Error { case Bad(n: i32) }
 
-fn twice(n: i32) -> i32 ! Oops {
+fun twice(n: i32) -> i32 ! Oops {
     if n < 0 { fail .Bad(n: n) }
     n * 2
 }
 
-fn doubled(xs: List[i32]) -> List[i32] ! Oops = [for x in xs => twice(x)?]
+fun doubled(xs: List[i32]) -> List[i32] ! Oops = [for x in xs => twice(x)?]
 
-fn main() {
+fun main() {
     let squares = [for n in 1..=10 if n % 2 == 0 => n * n]
     print("{squares}")
 

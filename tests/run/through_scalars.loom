@@ -9,10 +9,10 @@ warp Light {
 }
 
 weft Flip {
-    fn flip(mut self)
+    fun flip(mut self)
 }
 weave Flip into Light {
-    fn flip(mut self) {
+    fun flip(mut self) {
         self = match self {
             .Red => .Green
             .Green => .Red
@@ -27,10 +27,10 @@ warp Lamp: Flip {
 
 warp Tally { n: u32 = 0 }
 weft Count {
-    fn bump(mut self) -> u32
+    fun bump(mut self) -> u32
 }
 weave Count into Tally {
-    fn bump(mut self) -> u32 {
+    fun bump(mut self) -> u32 {
         .n += 1
         .n
     }
@@ -39,11 +39,11 @@ warp Clicker: Count {
     through tally: Tally
 }
 
-fn flip_it(mut f: Flip) { f.flip() }
+fun flip_it(mut f: Flip) { f.flip() }
 warp Level: Eq {
     case Low
     case High
-    fn toggle(mut self) -> bool {
+    fun toggle(mut self) -> bool {
         self = match self {
             .Low => .High
             .High => .Low
@@ -55,7 +55,7 @@ warp Knob { through level: Level }
 warp Panel { through knob: Knob }
 
 
-fn main() {
+fun main() {
     var lamp = Lamp(.Red, 60)
     lamp.flip()
     print("{lamp.light:?}")

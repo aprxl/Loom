@@ -2,7 +2,7 @@
 
 use std.io.print
 
-fn main() {
+fun main() {
     var total = 0
     let a0 = 0
     let a1 = 1

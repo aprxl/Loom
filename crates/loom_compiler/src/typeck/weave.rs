@@ -598,7 +598,7 @@ impl Checker<'_> {
             });
         }
         let ret = self.show(sig.ret);
-        format!("fn({}) -> {ret}", params.join(", "))
+        format!("fun({}) -> {ret}", params.join(", "))
     }
 
     /// A derived method works field by field, so every field must weave

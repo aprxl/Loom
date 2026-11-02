@@ -65,7 +65,7 @@
 <div class="members">
 <div class="member" id="Show.show">
 <div class="member-head">
-<span class="sig">fn show(self, mut f: Fmt)</span>
+<span class="sig">fun show(self, mut f: Fmt)</span>
 <span class="badge builtin">builtin</span>
 </div>
 <p class="member-doc">Writes the value to <code>f</code>. A warp that doesn't write its own gets its debug form, less any fields shared by every case: <code>Point(x: 3, y: 4)</code>, <code>Word("let")</code>, <code>Red</code>.</p>
@@ -81,7 +81,7 @@
 <div class="members">
 <div class="member" id="Fmt.put">
 <div class="member-head">
-<span class="sig">fn put(mut self, x: any Show)</span>
+<span class="sig">fun put(mut self, x: any Show)</span>
 
 </div>
 <p class="member-doc">Writes <code>x</code> the way <code>{x}</code> would.</p>
@@ -91,7 +91,7 @@
 <h2>Functions</h2>
 <div class="item" id="dbg">
 <div class="item-head">
-<span class="sig">fn <strong>dbg</strong>[T: Show](take x: T, at: str = "", expr: str = "") -&gt; T</span>
+<span class="sig">fun <strong>dbg</strong>[T: Show](take x: T, at: str = "", expr: str = "") -&gt; T</span>
 
 </div>
 <p class="item-doc">Writes <code>[file:line:col] expr = value</code> to standard error and gives <code>x</code> back: <code>let n = dbg(a + b) * 2</code>.</p>

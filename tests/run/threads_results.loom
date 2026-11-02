@@ -7,12 +7,12 @@
 use std.io.print
 use std.sync.sched_yield
 
-fn make(n: i32) -> String {
+fun make(n: i32) -> String {
     sched_yield()
     "made {n}"
 }
 
-fn main() {
+fun main() {
     var x = 0
     loom {
         let t = thread { x = 5 }

@@ -6,9 +6,9 @@ use std.io.print
 use std.sync.Atomic
 use std.sync.sched_yield
 
-fn consume(s: String) -> usize = s.len()
+fun consume(s: String) -> usize = s.len()
 
-fn main() {
+fun main() {
     let sum = Atomic[i64](0)
     loom for i in 1..=4 {
         sched_yield()

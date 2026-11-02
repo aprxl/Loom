@@ -3,24 +3,24 @@
 use std.io.print
 warp P: Copy, Show { x: i32 }
 warp Bag: Show { xs: List[i32] }
-fn set_p(mut o: ?P) { o = some(P(1)) }
-fn clear_p(mut o: ?P) { o = none }
-fn bump_p(mut o: ?P) { if o is some(p) { o = some(P(p.x + 1)) } }
-fn set_i(mut o: ?i32) { o = some(5) }
-fn set_ii(mut o: ??i32) { o = some(none) }
-fn set_u(mut u: P | i32) { u = 42 }
-fn set_u2(mut u: P | i32) { u = P(9) }
-fn set_t(mut t: (i32, P)) { t = (7, P(7)) }
-fn set_tt(mut t: (i32, i32)) { t.0 = 100 }
-fn set_b(mut o: ?Bag) { o = some(Bag([1])) }
-fn set_l(mut l: ?List[i32]) { l = some([1, 2]) }
-fn set_a(mut a: [i32; 2]) { a = [9, 9] }
-fn set_s(mut s: str) { s = "changed" }
-fn set_r(mut r: i32 ! Bag) { r = ok(3) }
-fn set_rp(mut r: P ! P) { r = err(P(4)) }
-fn set_u_unit(mut o: ?()) { o = some(()) }
-fn grab(mut o: ?P) -> ?P { o.take() }
-fn main() {
+fun set_p(mut o: ?P) { o = some(P(1)) }
+fun clear_p(mut o: ?P) { o = none }
+fun bump_p(mut o: ?P) { if o is some(p) { o = some(P(p.x + 1)) } }
+fun set_i(mut o: ?i32) { o = some(5) }
+fun set_ii(mut o: ??i32) { o = some(none) }
+fun set_u(mut u: P | i32) { u = 42 }
+fun set_u2(mut u: P | i32) { u = P(9) }
+fun set_t(mut t: (i32, P)) { t = (7, P(7)) }
+fun set_tt(mut t: (i32, i32)) { t.0 = 100 }
+fun set_b(mut o: ?Bag) { o = some(Bag([1])) }
+fun set_l(mut l: ?List[i32]) { l = some([1, 2]) }
+fun set_a(mut a: [i32; 2]) { a = [9, 9] }
+fun set_s(mut s: str) { s = "changed" }
+fun set_r(mut r: i32 ! Bag) { r = ok(3) }
+fun set_rp(mut r: P ! P) { r = err(P(4)) }
+fun set_u_unit(mut o: ?()) { o = some(()) }
+fun grab(mut o: ?P) -> ?P { o.take() }
+fun main() {
     var a: ?P = none
     set_p(mut a)
     print("{a:?}")

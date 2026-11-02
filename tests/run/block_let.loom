@@ -3,11 +3,11 @@
 
 use std.io.print
 
-fn show(xs: [u32]) {
+fun show(xs: [u32]) {
     print("{xs.len()}")
 }
 
-fn early(n: u32) -> usize {
+fun early(n: u32) -> usize {
     let xs = {
         var l: List[u32] = List()
         l.push(n)
@@ -18,7 +18,7 @@ fn early(n: u32) -> usize {
     xs.len()
 }
 
-fn pick(c: bool) -> usize {
+fun pick(c: bool) -> usize {
     let xs = if c {
         var a: List[u32] = List()
         a.push(1)
@@ -32,7 +32,7 @@ fn pick(c: bool) -> usize {
     xs.len()
 }
 
-fn main() {
+fun main() {
     let xs = {
         var l: List[u32] = List()
         l.push(1)

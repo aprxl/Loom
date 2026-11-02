@@ -4,7 +4,7 @@
 use std.io.print
 use std.sync.Atomic
 
-fn row(y: i32, n: i32) -> u64 {
+fun row(y: i32, n: i32) -> u64 {
     var inside: u64 = 0
     for x in 0..n {
         let cr = 2.0 * (x as f64) / (n as f64) - 1.5
@@ -25,7 +25,7 @@ fn row(y: i32, n: i32) -> u64 {
     inside
 }
 
-fn main() {
+fun main() {
     let n = 800
     let total = Atomic[u64](0)
     loom for y in 0..n {

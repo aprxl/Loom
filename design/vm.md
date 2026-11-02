@@ -1326,7 +1326,7 @@ for V6.
 - **`Atomic[T]`** has `T`'s layout, with Rust's atomic operations on its
   address.
 - **`Mutex[T]`** is a lock word and a `T`. Contention parks the task, not the
-  worker. A suggested API is `fn lock(self) ~> mut T`, a projection, so the
+  worker. A suggested API is `fun lock(self) ~> mut T`, a projection, so the
   lock is held for exactly one statement: `total.lock() += n`.
 - **`Pipe[T]`** is a bounded queue. `send` when it's full and `recv` when
   it's empty park the task.
@@ -2047,7 +2047,7 @@ oracle, and stays the way to run Loom inside a Lua host.
 `escape` from `examples/parallel.loom`:
 
 ```loom
-fn escape(cx: f64, cy: f64, limit: u16) -> u16 {
+fun escape(cx: f64, cy: f64, limit: u16) -> u16 {
     var (x, y, i) = (0.0, 0.0, 0u16)
     while x * x + y * y <= 4.0 and i < limit {
         (x, y) = (x * x - y * y + cx, 2.0 * x * y + cy)
@@ -2060,7 +2060,7 @@ fn escape(cx: f64, cy: f64, limit: u16) -> u16 {
 Heddle after `-O2`:
 
 ```
-fn escape(v0: f64, v1: f64, v2: u16) -> u16 {
+fun escape(v0: f64, v1: f64, v2: u16) -> u16 {
 b0:
     jump b1(0.0, 0.0, 0)
 b1(v3: f64, v4: f64, v5: u16):       ; x, y, i

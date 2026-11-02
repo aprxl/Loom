@@ -65,84 +65,84 @@
 <div class="members">
 <div class="member" id="Rng.seeded">
 <div class="member-head">
-<span class="sig">fn seeded(seed: u64) -&gt; Rng</span>
+<span class="sig">fun seeded(seed: u64) -&gt; Rng</span>
 
 </div>
 <p class="member-doc">A generator that always produces the same sequence for <code>seed</code>.</p>
 </div>
 <div class="member" id="Rng.from_entropy">
 <div class="member-head">
-<span class="sig">fn from_entropy() -&gt; Rng</span>
+<span class="sig">fun from_entropy() -&gt; Rng</span>
 
 </div>
 <p class="member-doc">A generator seeded from the clock and the process, so each run gets its own numbers. Not for secrets.</p>
 </div>
 <div class="member" id="Rng.next_u64">
 <div class="member-head">
-<span class="sig">fn next_u64(mut self) -&gt; u64</span>
+<span class="sig">fun next_u64(mut self) -&gt; u64</span>
 
 </div>
 <p class="member-doc">The next 64 random bits.</p>
 </div>
 <div class="member" id="Rng.byte">
 <div class="member-head">
-<span class="sig">fn byte(mut self) -&gt; u8</span>
+<span class="sig">fun byte(mut self) -&gt; u8</span>
 
 </div>
 <p class="member-doc">A random byte: the top 8 bits of <code>next_u64</code>.</p>
 </div>
 <div class="member" id="Rng.below">
 <div class="member-head">
-<span class="sig">fn below(mut self, n: u64) -&gt; u64</span>
+<span class="sig">fun below(mut self, n: u64) -&gt; u64</span>
 
 </div>
 <p class="member-doc">A number from <code>0</code> up to but not including <code>n</code>, every one equally likely. Unravels if <code>n</code> is 0.</p>
 </div>
 <div class="member" id="Rng.between">
 <div class="member-head">
-<span class="sig">fn between(mut self, lo: i64, hi: i64) -&gt; i64</span>
+<span class="sig">fun between(mut self, lo: i64, hi: i64) -&gt; i64</span>
 
 </div>
 <p class="member-doc">A number from <code>lo</code> to <code>hi</code>, both included. Unravels if <code>hi &lt; lo</code>.</p>
 </div>
 <div class="member" id="Rng.float">
 <div class="member-head">
-<span class="sig">fn float(mut self) -&gt; f64</span>
+<span class="sig">fun float(mut self) -&gt; f64</span>
 
 </div>
 <p class="member-doc">A number from 0 up to but not including 1, with 53 random bits.</p>
 </div>
 <div class="member" id="Rng.chance">
 <div class="member-head">
-<span class="sig">fn chance(mut self, p: f64) -&gt; bool</span>
+<span class="sig">fun chance(mut self, p: f64) -&gt; bool</span>
 
 </div>
 <p class="member-doc"><code>true</code> with probability <code>p</code>.</p>
 </div>
 <div class="member" id="Rng.shuffle">
 <div class="member-head">
-<span class="sig">fn shuffle[T](mut self, mut xs: [T])</span>
+<span class="sig">fun shuffle[T](mut self, mut xs: [T])</span>
 
 </div>
 <p class="member-doc">Puts the items in a random order.</p>
 </div>
 <div class="member" id="Rng.choose">
 <div class="member-head">
-<span class="sig">fn choose[T](mut self, xs: [T]) -&gt; ?T</span>
+<span class="sig">fun choose[T](mut self, xs: [T]) -&gt; ?T</span>
 
 </div>
 <p class="member-doc">A copy of a random item, if there are any.</p>
 </div>
 <div class="member" id="Rng.fill">
 <div class="member-head">
-<span class="sig">fn fill(mut self, mut buf: [u8])</span>
+<span class="sig">fun fill(mut self, mut buf: [u8])</span>
 
 </div>
 <p class="member-doc">Fills <code>buf</code> with random bytes.</p>
 </div>
 <div class="member" id="Rng.jump">
 <div class="member-head">
-<span class="sig">fn jump(mut self) -&gt; Rng</span>
+<span class="sig">fun jump(mut self) -&gt; Rng</span>
 
 </div>
 <p class="member-doc">A generator at the current state, which this one then leaves 2^128 steps behind: each call gives a stream that overlaps no other, so every thread can have its own.</p>

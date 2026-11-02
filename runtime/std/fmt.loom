@@ -8,19 +8,19 @@ pub weft Show {
     /// debug form, less any fields shared by every case: `Point(x: 3, y: 4)`,
     /// `Word("let")`, `Red`.
     #builtin
-    fn show(self, mut f: Fmt)
+    fun show(self, mut f: Fmt)
 }
 
 /// Where `show` writes to.
 #builtin
 pub warp Fmt {
     /// Writes `x` the way `{x}` would.
-    pub fn put(mut self, x: any Show)
+    pub fun put(mut self, x: any Show)
 }
 
 /// Writes `[file:line:col] expr = value` to standard error and gives `x`
 /// back: `let n = dbg(a + b) * 2`.
-pub fn dbg[T: Show](take x: T, at: str = "", expr: str = "") -> T {
+pub fun dbg[T: Show](take x: T, at: str = "", expr: str = "") -> T {
     write_err("[{at}] {expr} = {x}\n")
     x
 }

@@ -4,6 +4,6 @@ error[K0107]: `ALPHA` needs its own value
 1 | const ALPHA: i32 = BETA + 1
   |       ^^^^^ computing this reads it again
   |
-  = note: read again at docs/lang/samples/ct_err_cycle.loom:4:4
+  = note: read again at docs/lang/samples/ct_err_cycle.loom:4:5
 
 error: docs/lang/samples/ct_err_cycle.loom failed to compile (1 error)

@@ -4,22 +4,22 @@
 
 use std.io.print
 
-fn eat(take s: String) {
+fun eat(take s: String) {
     print("ate {s}")
 }
 
-fn names() ~> String {
+fun names() ~> String {
     yield "ada"
     yield "bob"
 }
 
-fn echo() ~> String <~ String {
+fun echo() ~> String <~ String {
     while pull is some(s) {
         yield s
     }
 }
 
-fn main() {
+fun main() {
     for s in ["x", "y"].map(c => c.to_string()) {
         eat(s)
     }

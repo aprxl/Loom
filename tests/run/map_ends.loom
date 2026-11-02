@@ -3,15 +3,15 @@
 
 use std.io.print
 
-fn word(i: u32) -> String {
+fun word(i: u32) -> String {
     "w{i}"
 }
 
-fn ends(m: Map[u32, String]) {
+fun ends(m: Map[u32, String]) {
     print("{m.len()} {m.first()} {m.last()}")
 }
 
-fn full() -> Map[u32, String] {
+fun full() -> Map[u32, String] {
     var m: Map[u32, String] = Map()
     for i in 0..6u32 {
         m.insert(i, word(i))
@@ -19,7 +19,7 @@ fn full() -> Map[u32, String] {
     m
 }
 
-fn queue(n: u64) -> u64 {
+fun queue(n: u64) -> u64 {
     var m: Map[u64, u64] = Map()
     for i in 0..n {
         m.insert(i, i * 2)
@@ -37,7 +37,7 @@ fn queue(n: u64) -> u64 {
     total
 }
 
-fn stack(n: u64) -> u64 {
+fun stack(n: u64) -> u64 {
     var m: Map[u64, u64] = Map()
     for i in 0..n {
         m.insert(i, i * 3)
@@ -55,7 +55,7 @@ fn stack(n: u64) -> u64 {
     total
 }
 
-fn churn(n: u64) -> u64 {
+fun churn(n: u64) -> u64 {
     // A deep stack with pushes and pops in turn, then a queue over what's
     // left, with new entries behind it.
     var m: Map[u64, u64] = Map()
@@ -89,7 +89,7 @@ fn churn(n: u64) -> u64 {
     total + m.len() as u64
 }
 
-fn mixed(steps: u64) -> u64 {
+fun mixed(steps: u64) -> u64 {
     // Inserts and removals at both ends and in the middle, in a fixed
     // pseudo-random order; the ends are summed after every step.
     var m: Map[u64, u64] = Map()
@@ -140,7 +140,7 @@ fn mixed(steps: u64) -> u64 {
     total + m.len() as u64
 }
 
-fn main() {
+fun main() {
     var m: Map[u32, String] = Map()
     ends(m)
 

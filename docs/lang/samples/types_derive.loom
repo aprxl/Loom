@@ -13,7 +13,7 @@ warp Level: Show, Eq, Ord {
     case High
 }
 
-fn main() {
+fun main() {
     let a = Version(1, 4)
     let b = Version(1, 10)
     print("{a} {a == b} {a < b}")

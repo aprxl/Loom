@@ -8,7 +8,7 @@ warp Card {
     n: i32
 }
 
-fn main() {
+fun main() {
     var a = 1
     var b = 2
     swap(mut a, mut b)

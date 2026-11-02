@@ -91,210 +91,210 @@
 <div class="members">
 <div class="member" id="Int.abs">
 <div class="member-head">
-<span class="sig">fn abs(self) -&gt; T</span>
+<span class="sig">fun abs(self) -&gt; T</span>
 
 </div>
 <p class="member-doc">The value without its sign. Unravels for the smallest signed value.</p>
 </div>
 <div class="member" id="Int.min">
 <div class="member-head">
-<span class="sig">fn min(self, other: T) -&gt; T</span>
+<span class="sig">fun min(self, other: T) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Int.max">
 <div class="member-head">
-<span class="sig">fn max(self, other: T) -&gt; T</span>
+<span class="sig">fun max(self, other: T) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Int.pow">
 <div class="member-head">
-<span class="sig">fn pow(self, exp: u32) -&gt; T</span>
+<span class="sig">fun pow(self, exp: u32) -&gt; T</span>
 
 </div>
 <p class="member-doc"><code>self</code> to the power <code>exp</code>. Unravels when it doesn't fit.</p>
 </div>
 <div class="member" id="Int.trailing_zeros">
 <div class="member-head">
-<span class="sig">fn trailing_zeros(self) -&gt; u32</span>
+<span class="sig">fun trailing_zeros(self) -&gt; u32</span>
 
 </div>
 <p class="member-doc">How many zero bits come after the lowest one bit (all of them for 0).</p>
 </div>
 <div class="member" id="Int.leading_zeros">
 <div class="member-head">
-<span class="sig">fn leading_zeros(self) -&gt; u32</span>
+<span class="sig">fun leading_zeros(self) -&gt; u32</span>
 
 </div>
 <p class="member-doc">How many zero bits come before the highest one bit.</p>
 </div>
 <div class="member" id="Int.count_ones">
 <div class="member-head">
-<span class="sig">fn count_ones(self) -&gt; u32</span>
+<span class="sig">fun count_ones(self) -&gt; u32</span>
 
 </div>
 <p class="member-doc">How many bits are one.</p>
 </div>
 <div class="member" id="Int.is_power_of_two">
 <div class="member-head">
-<span class="sig">fn is_power_of_two(self) -&gt; bool</span>
+<span class="sig">fun is_power_of_two(self) -&gt; bool</span>
 
 </div>
 <p class="member-doc">Whether it's 2 to the power of something: one bit is one, and it's above zero.</p>
 </div>
 <div class="member" id="Int.log2">
 <div class="member-head">
-<span class="sig">fn log2(self) -&gt; u32</span>
+<span class="sig">fun log2(self) -&gt; u32</span>
 
 </div>
 <p class="member-doc">The base-2 logarithm, rounded down: the position of the highest one bit. Unravels for zero and below.</p>
 </div>
 <div class="member" id="Int.rotate_left">
 <div class="member-head">
-<span class="sig">fn rotate_left(self, n: u32) -&gt; T</span>
+<span class="sig">fun rotate_left(self, n: u32) -&gt; T</span>
 
 </div>
 <p class="member-doc">The bits moved <code>n</code> places towards the top; those pushed out come back in at the bottom. <code>n</code> counts modulo the type's width.</p>
 </div>
 <div class="member" id="Int.rotate_right">
 <div class="member-head">
-<span class="sig">fn rotate_right(self, n: u32) -&gt; T</span>
+<span class="sig">fun rotate_right(self, n: u32) -&gt; T</span>
 
 </div>
 <p class="member-doc">The bits moved <code>n</code> places towards the bottom; those pushed out come back in at the top. <code>n</code> counts modulo the type's width.</p>
 </div>
 <div class="member" id="Int.to_string">
 <div class="member-head">
-<span class="sig">fn to_string(self) -&gt; String</span>
+<span class="sig">fun to_string(self) -&gt; String</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Int.to_string_radix">
 <div class="member-head">
-<span class="sig">fn to_string_radix(self, radix: u32) -&gt; String</span>
+<span class="sig">fun to_string_radix(self, radix: u32) -&gt; String</span>
 
 </div>
 <p class="member-doc">The digits of <code>self</code> in base <code>radix</code>, lowercase, with a leading <code>-</code> when negative. Unravels unless <code>radix</code> is 2 to 36.</p>
 </div>
 <div class="member" id="Int.signum">
 <div class="member-head">
-<span class="sig">fn signum(self) -&gt; T</span>
+<span class="sig">fun signum(self) -&gt; T</span>
 
 </div>
 <p class="member-doc"><code>-1</code>, <code>0</code> or <code>1</code>.</p>
 </div>
 <div class="member" id="Int.rem_euclid">
 <div class="member-head">
-<span class="sig">fn rem_euclid(self, m: T) -&gt; T</span>
+<span class="sig">fun rem_euclid(self, m: T) -&gt; T</span>
 
 </div>
 <p class="member-doc">The remainder that is never below zero: <code>(-7).rem_euclid(3)</code> is <code>2</code>. Unravels if <code>m</code> is 0.</p>
 </div>
 <div class="member" id="Int.div_euclid">
 <div class="member-head">
-<span class="sig">fn div_euclid(self, m: T) -&gt; T</span>
+<span class="sig">fun div_euclid(self, m: T) -&gt; T</span>
 
 </div>
 <p class="member-doc">The quotient that goes with <code>rem_euclid</code>. Unravels if <code>m</code> is 0.</p>
 </div>
 <div class="member" id="Int.div_floor">
 <div class="member-head">
-<span class="sig">fn div_floor(self, m: T) -&gt; T</span>
+<span class="sig">fun div_floor(self, m: T) -&gt; T</span>
 
 </div>
 <p class="member-doc">The quotient rounded down. Unravels if <code>m</code> is 0.</p>
 </div>
 <div class="member" id="Int.div_ceil">
 <div class="member-head">
-<span class="sig">fn div_ceil(self, m: T) -&gt; T</span>
+<span class="sig">fun div_ceil(self, m: T) -&gt; T</span>
 
 </div>
 <p class="member-doc">The quotient rounded up. Unravels if <code>m</code> is 0.</p>
 </div>
 <div class="member" id="Int.gcd">
 <div class="member-head">
-<span class="sig">fn gcd(self, other: T) -&gt; T</span>
+<span class="sig">fun gcd(self, other: T) -&gt; T</span>
 
 </div>
 <p class="member-doc">The greatest number that divides both.</p>
 </div>
 <div class="member" id="Int.lcm">
 <div class="member-head">
-<span class="sig">fn lcm(self, other: T) -&gt; T</span>
+<span class="sig">fun lcm(self, other: T) -&gt; T</span>
 
 </div>
 <p class="member-doc">The smallest number both divide. Unravels when it doesn't fit.</p>
 </div>
 <div class="member" id="Int.abs_diff">
 <div class="member-head">
-<span class="sig">fn abs_diff(self, other: T) -&gt; T</span>
+<span class="sig">fun abs_diff(self, other: T) -&gt; T</span>
 
 </div>
 <p class="member-doc">The distance between <code>self</code> and <code>other</code>. Unravels when it doesn't fit.</p>
 </div>
 <div class="member" id="Int.isqrt">
 <div class="member-head">
-<span class="sig">fn isqrt(self) -&gt; T</span>
+<span class="sig">fun isqrt(self) -&gt; T</span>
 
 </div>
 <p class="member-doc">The square root, rounded down. Unravels below zero.</p>
 </div>
 <div class="member" id="Int.ilog10">
 <div class="member-head">
-<span class="sig">fn ilog10(self) -&gt; u32</span>
+<span class="sig">fun ilog10(self) -&gt; u32</span>
 
 </div>
 <p class="member-doc">The base-10 logarithm, rounded down. Unravels for zero and below.</p>
 </div>
 <div class="member" id="Int.next_power_of_two">
 <div class="member-head">
-<span class="sig">fn next_power_of_two(self) -&gt; T</span>
+<span class="sig">fun next_power_of_two(self) -&gt; T</span>
 
 </div>
 <p class="member-doc">The smallest power of two that is not below it. Unravels when it doesn't fit.</p>
 </div>
 <div class="member" id="Int.count_zeros">
 <div class="member-head">
-<span class="sig">fn count_zeros(self) -&gt; u32</span>
+<span class="sig">fun count_zeros(self) -&gt; u32</span>
 
 </div>
 <p class="member-doc">How many bits are zero.</p>
 </div>
 <div class="member" id="Int.pow_wrap">
 <div class="member-head">
-<span class="sig">fn pow_wrap(self, exp: u32) -&gt; T</span>
+<span class="sig">fun pow_wrap(self, exp: u32) -&gt; T</span>
 
 </div>
 <p class="member-doc"><code>self</code> to the power <code>exp</code>, with the bits that don't fit dropped.</p>
 </div>
 <div class="member" id="Int.pow_sat">
 <div class="member-head">
-<span class="sig">fn pow_sat(self, exp: u32) -&gt; T</span>
+<span class="sig">fun pow_sat(self, exp: u32) -&gt; T</span>
 
 </div>
 <p class="member-doc"><code>self</code> to the power <code>exp</code>, or the nearest number that fits.</p>
 </div>
 <div class="member" id="Int.pow_checked">
 <div class="member-head">
-<span class="sig">fn pow_checked(self, exp: u32) -&gt; ?T</span>
+<span class="sig">fun pow_checked(self, exp: u32) -&gt; ?T</span>
 
 </div>
 <p class="member-doc"><code>self</code> to the power <code>exp</code>, or <code>none</code> when it doesn't fit.</p>
 </div>
 <div class="member" id="Int.to_be_bytes">
 <div class="member-head">
-<span class="sig">fn to_be_bytes(self) -&gt; [u8; T.size]</span>
+<span class="sig">fun to_be_bytes(self) -&gt; [u8; T.size]</span>
 
 </div>
 <p class="member-doc">The bytes of <code>self</code>, most significant first.</p>
 </div>
 <div class="member" id="Int.from_be_bytes">
 <div class="member-head">
-<span class="sig">fn from_be_bytes(bytes: [u8; T.size]) -&gt; T</span>
+<span class="sig">fun from_be_bytes(bytes: [u8; T.size]) -&gt; T</span>
 
 </div>
 <p class="member-doc">The integer whose bytes, most significant first, are <code>bytes</code>.</p>
@@ -310,273 +310,273 @@
 <div class="members">
 <div class="member" id="Float.abs">
 <div class="member-head">
-<span class="sig">fn abs(self) -&gt; T</span>
+<span class="sig">fun abs(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.min">
 <div class="member-head">
-<span class="sig">fn min(self, other: T) -&gt; T</span>
+<span class="sig">fun min(self, other: T) -&gt; T</span>
 
 </div>
 <p class="member-doc">The smaller one; a NaN loses to a number.</p>
 </div>
 <div class="member" id="Float.max">
 <div class="member-head">
-<span class="sig">fn max(self, other: T) -&gt; T</span>
+<span class="sig">fun max(self, other: T) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.sqrt">
 <div class="member-head">
-<span class="sig">fn sqrt(self) -&gt; T</span>
+<span class="sig">fun sqrt(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.floor">
 <div class="member-head">
-<span class="sig">fn floor(self) -&gt; T</span>
+<span class="sig">fun floor(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.ceil">
 <div class="member-head">
-<span class="sig">fn ceil(self) -&gt; T</span>
+<span class="sig">fun ceil(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.round">
 <div class="member-head">
-<span class="sig">fn round(self) -&gt; T</span>
+<span class="sig">fun round(self) -&gt; T</span>
 
 </div>
 <p class="member-doc">Halfway rounds away from zero.</p>
 </div>
 <div class="member" id="Float.trunc">
 <div class="member-head">
-<span class="sig">fn trunc(self) -&gt; T</span>
+<span class="sig">fun trunc(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.pow">
 <div class="member-head">
-<span class="sig">fn pow(self, exp: T) -&gt; T</span>
+<span class="sig">fun pow(self, exp: T) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.is_nan">
 <div class="member-head">
-<span class="sig">fn is_nan(self) -&gt; bool</span>
+<span class="sig">fun is_nan(self) -&gt; bool</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.to_string">
 <div class="member-head">
-<span class="sig">fn to_string(self) -&gt; String</span>
+<span class="sig">fun to_string(self) -&gt; String</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.sin">
 <div class="member-head">
-<span class="sig">fn sin(self) -&gt; T</span>
+<span class="sig">fun sin(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.cos">
 <div class="member-head">
-<span class="sig">fn cos(self) -&gt; T</span>
+<span class="sig">fun cos(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.tan">
 <div class="member-head">
-<span class="sig">fn tan(self) -&gt; T</span>
+<span class="sig">fun tan(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.asin">
 <div class="member-head">
-<span class="sig">fn asin(self) -&gt; T</span>
+<span class="sig">fun asin(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.acos">
 <div class="member-head">
-<span class="sig">fn acos(self) -&gt; T</span>
+<span class="sig">fun acos(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.atan">
 <div class="member-head">
-<span class="sig">fn atan(self) -&gt; T</span>
+<span class="sig">fun atan(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.atan2">
 <div class="member-head">
-<span class="sig">fn atan2(self, other: T) -&gt; T</span>
+<span class="sig">fun atan2(self, other: T) -&gt; T</span>
 
 </div>
 <p class="member-doc">The angle of the point (<code>other</code>, <code>self</code>), from the x axis.</p>
 </div>
 <div class="member" id="Float.sinh">
 <div class="member-head">
-<span class="sig">fn sinh(self) -&gt; T</span>
+<span class="sig">fun sinh(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.cosh">
 <div class="member-head">
-<span class="sig">fn cosh(self) -&gt; T</span>
+<span class="sig">fun cosh(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.tanh">
 <div class="member-head">
-<span class="sig">fn tanh(self) -&gt; T</span>
+<span class="sig">fun tanh(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.exp">
 <div class="member-head">
-<span class="sig">fn exp(self) -&gt; T</span>
+<span class="sig">fun exp(self) -&gt; T</span>
 
 </div>
 <p class="member-doc"><code>e</code> to the power <code>self</code>.</p>
 </div>
 <div class="member" id="Float.exp2">
 <div class="member-head">
-<span class="sig">fn exp2(self) -&gt; T</span>
+<span class="sig">fun exp2(self) -&gt; T</span>
 
 </div>
 <p class="member-doc">2 to the power <code>self</code>.</p>
 </div>
 <div class="member" id="Float.ln">
 <div class="member-head">
-<span class="sig">fn ln(self) -&gt; T</span>
+<span class="sig">fun ln(self) -&gt; T</span>
 
 </div>
 <p class="member-doc">The natural logarithm.</p>
 </div>
 <div class="member" id="Float.log2">
 <div class="member-head">
-<span class="sig">fn log2(self) -&gt; T</span>
+<span class="sig">fun log2(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.log10">
 <div class="member-head">
-<span class="sig">fn log10(self) -&gt; T</span>
+<span class="sig">fun log10(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.log">
 <div class="member-head">
-<span class="sig">fn log(self, base: T) -&gt; T</span>
+<span class="sig">fun log(self, base: T) -&gt; T</span>
 
 </div>
 <p class="member-doc">The logarithm in <code>base</code>.</p>
 </div>
 <div class="member" id="Float.hypot">
 <div class="member-head">
-<span class="sig">fn hypot(self, other: T) -&gt; T</span>
+<span class="sig">fun hypot(self, other: T) -&gt; T</span>
 
 </div>
 <p class="member-doc">The length of the hypotenuse of a triangle with sides <code>self</code> and <code>other</code>.</p>
 </div>
 <div class="member" id="Float.fract">
 <div class="member-head">
-<span class="sig">fn fract(self) -&gt; T</span>
+<span class="sig">fun fract(self) -&gt; T</span>
 
 </div>
 <p class="member-doc">What is left after <code>trunc</code>.</p>
 </div>
 <div class="member" id="Float.signum">
 <div class="member-head">
-<span class="sig">fn signum(self) -&gt; T</span>
+<span class="sig">fun signum(self) -&gt; T</span>
 
 </div>
 <p class="member-doc"><code>-1</code>, or <code>1</code>; NaN stays NaN.</p>
 </div>
 <div class="member" id="Float.copysign">
 <div class="member-head">
-<span class="sig">fn copysign(self, sign: T) -&gt; T</span>
+<span class="sig">fun copysign(self, sign: T) -&gt; T</span>
 
 </div>
 <p class="member-doc"><code>self</code> with the sign of <code>sign</code>.</p>
 </div>
 <div class="member" id="Float.to_degrees">
 <div class="member-head">
-<span class="sig">fn to_degrees(self) -&gt; T</span>
+<span class="sig">fun to_degrees(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.to_radians">
 <div class="member-head">
-<span class="sig">fn to_radians(self) -&gt; T</span>
+<span class="sig">fun to_radians(self) -&gt; T</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.is_finite">
 <div class="member-head">
-<span class="sig">fn is_finite(self) -&gt; bool</span>
+<span class="sig">fun is_finite(self) -&gt; bool</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.is_infinite">
 <div class="member-head">
-<span class="sig">fn is_infinite(self) -&gt; bool</span>
+<span class="sig">fun is_infinite(self) -&gt; bool</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.is_sign_negative">
 <div class="member-head">
-<span class="sig">fn is_sign_negative(self) -&gt; bool</span>
+<span class="sig">fun is_sign_negative(self) -&gt; bool</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Float.to_bits">
 <div class="member-head">
-<span class="sig">fn to_bits(self) -&gt; uint(T.size * 8)</span>
+<span class="sig">fun to_bits(self) -&gt; uint(T.size * 8)</span>
 
 </div>
 <p class="member-doc">The IEEE 754 bit pattern.</p>
 </div>
 <div class="member" id="Float.from_bits">
 <div class="member-head">
-<span class="sig">fn from_bits(bits: uint(T.size * 8)) -&gt; T</span>
+<span class="sig">fun from_bits(bits: uint(T.size * 8)) -&gt; T</span>
 
 </div>
 <p class="member-doc">The float with IEEE 754 bit pattern <code>bits</code>.</p>
 </div>
 <div class="member" id="Float.total_cmp">
 <div class="member-head">
-<span class="sig">fn total_cmp(self, other: T) -&gt; Ordering</span>
+<span class="sig">fun total_cmp(self, other: T) -&gt; Ordering</span>
 
 </div>
 <p class="member-doc">Orders every value, NaNs included: -NaN &lt; -inf &lt; … &lt; -0 &lt; +0 &lt; … &lt; inf &lt; NaN.</p>

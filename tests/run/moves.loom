@@ -4,11 +4,11 @@ use std.io.print
 
 warp Pair { first: String, second: List[i32] }
 
-fn keep(take s: String) -> String = s
-fn length(s: String) -> usize = s.len()
+fun keep(take s: String) -> String = s
+fun length(s: String) -> usize = s.len()
 
 // A variable given a new value can be used again.
-fn refill(take s: String) -> String {
+fun refill(take s: String) -> String {
     var s = s
     var out: List[String] = List()
     for i in 0..3 {
@@ -19,7 +19,7 @@ fn refill(take s: String) -> String {
 }
 
 // Moved on one branch, given a new value on it too.
-fn maybe(take s: String, b: bool) -> String {
+fun maybe(take s: String, b: bool) -> String {
     var s = s
     if b {
         keep(s)
@@ -29,20 +29,20 @@ fn maybe(take s: String, b: bool) -> String {
 }
 
 // Moved only on the way out.
-fn early(take s: String, b: bool) -> String {
+fun early(take s: String, b: bool) -> String {
     if b { return keep(s) }
     "{length(s)}"
 }
 
 // Different fields move separately.
-fn split(take p: Pair) -> String {
+fun split(take p: Pair) -> String {
     let a = p.first
     let b = p.second
     "{a} {b}"
 }
 
 // A temporary, and a value made from a copy.
-fn fresh(xs: List[String]) -> List[String] {
+fun fresh(xs: List[String]) -> List[String] {
     var out: List[String] = List()
     out.push(xs[0].copy())
     out.push("made".to_string())
@@ -51,7 +51,7 @@ fn fresh(xs: List[String]) -> List[String] {
 }
 
 // Moved once, then the loop ends.
-fn once(take s: String) -> String {
+fun once(take s: String) -> String {
     var out: String = ""
     loop {
         out = keep(s)
@@ -60,7 +60,7 @@ fn once(take s: String) -> String {
     out
 }
 
-fn main() {
+fun main() {
     print(refill("start"))
     print("{maybe("old", true)} {maybe("old", false)}")
     print("{early("abc", true)} {early("abc", false)}")

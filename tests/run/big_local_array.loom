@@ -3,33 +3,33 @@
 
 use std.io.print
 
-fn sum(xs: [i64]) -> i64 {
+fun sum(xs: [i64]) -> i64 {
     var total = 0i64
     for x in xs { total += x }
     total
 }
 
-fn fill(n: i64) -> i64 {
+fun fill(n: i64) -> i64 {
     var a = [1i64; 100_000]
     a[99_999] = n
     sum(a)
 }
 
-fn deeper(n: u32) -> u64 {
+fun deeper(n: u32) -> u64 {
     var pad = [0u8; 70_000]
     pad[(n as usize) % 70_000] = n as u8
     if n == 0 { return pad.len() as u64 }
     deeper(n - 1) + pad[(n as usize) % 70_000] as u64
 }
 
-fn boom() -> u8 {
+fun boom() -> u8 {
     var a = [7u8; 600_000]
     let i = 599_999
     a[i] = 9
     a[i + 1]
 }
 
-fn main() {
+fun main() {
     var a = [0u8; 600_000]
     a[5] = 3
     a[599_999] = 4

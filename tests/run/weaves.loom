@@ -5,28 +5,28 @@ use std.io.print
 use std.fmt.{Show, Fmt}
 
 weft Shape: Show {
-    fn area(self) -> f64
-    fn name(self) -> str = "shape"
-    fn describe(self) -> String = "{.name()} of area {.area()}"
+    fun area(self) -> f64
+    fun name(self) -> str = "shape"
+    fun describe(self) -> String = "{.name()} of area {.area()}"
 }
 
 // Inline: the weft's methods live in the warp's body. Show is derived.
 warp Circle: Shape, Show {
     r: f64
 
-    fn area(self) -> f64 = 3.0 * .r * .r
-    fn name(self) -> str = "circle"
+    fun area(self) -> f64 = 3.0 * .r * .r
+    fun name(self) -> str = "circle"
 }
 
 // Separate: the weaves are written apart from the warp.
 warp Rect { w: f64, h: f64 }
 
 weave Shape into Rect {
-    fn area(self) -> f64 = .w * .h
+    fun area(self) -> f64 = .w * .h
 }
 
 weave Show into Rect {
-    fn show(self, mut f: Fmt) {
+    fun show(self, mut f: Fmt) {
         f.put(.w)
         f.put("x")
         f.put(.h)
@@ -35,7 +35,7 @@ weave Show into Rect {
 }
 
 // Every weft method is also reachable as `Weft.method(x)`.
-fn total(c: Circle, r: Rect) -> f64 = Shape.area(c) + Shape.area(r)
+fun total(c: Circle, r: Rect) -> f64 = Shape.area(c) + Shape.area(r)
 
 // Derived Eq and Ord compare field by field, in order.
 warp Version: Eq, Ord, Show { major: u8, minor: u8 }
@@ -44,7 +44,7 @@ warp Version: Eq, Ord, Show { major: u8, minor: u8 }
 warp Approx { v: i32 }
 
 weave Eq into Approx {
-    fn eq(self, other: Self) -> bool = .v / 10 == other.v / 10
+    fun eq(self, other: Self) -> bool = .v / 10 == other.v / 10
 }
 
 warp Light: Eq, Show {
@@ -58,7 +58,7 @@ warp Token: Show, Eq {
     case End
 }
 
-fn main() {
+fun main() {
     let c = Circle(r: 2.0)
     let r = Rect(w: 3.0, h: 4.5)
     print(c.area())

@@ -5,7 +5,7 @@
 use std.io.print
 use std.sync.sched_yield
 
-fn main() {
+fun main() {
     var grid = List.filled(0, 12)
     let width = 4
     loom for (row, mut line) in grid.chunks_mut(width).indexed() {

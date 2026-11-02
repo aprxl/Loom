@@ -1,19 +1,19 @@
 use std.io.print
 
 weft Shape {
-    fn area(self) -> f64
-    fn same(self, other: Self) -> bool
+    fun area(self) -> f64
+    fun same(self, other: Self) -> bool
 }
 
 warp Circle: Shape {
     r: f64
-    fn area(self) -> f64 = .r
-    fn same(self, other: Self) -> bool = .r == other.r
+    fun area(self) -> f64 = .r
+    fun same(self, other: Self) -> bool = .r == other.r
 }
 
 warp Rock { weight: u8 }
 
-fn main() {
+fun main() {
     let s: any Shape = Circle(1.0)
     let t: any Shape = Rock(3)              //~ T0108
     let a = s.volume()                      //~ T0111

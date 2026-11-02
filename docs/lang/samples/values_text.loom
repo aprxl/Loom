@@ -1,6 +1,6 @@
 use std.io.print
 
-fn main() {
+fun main() {
     // `str` is a view of UTF-8 text; `String` owns it. Lengths count bytes.
     let s = "  Hello, Wörld  "
     let t = s.trim()

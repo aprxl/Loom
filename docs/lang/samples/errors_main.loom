@@ -4,11 +4,11 @@ warp ConfigError: Error {
     case Missing(key: String)
 }
 
-fn setting(key: str) -> u16 ! ConfigError = fail .Missing(key: key.to_string())
+fun setting(key: str) -> u16 ! ConfigError = fail .Missing(key: key.to_string())
 
 // An error that reaches the end of `main` is shown, and the program
 // exits with status 1.
-fn main() ! ConfigError {
+fun main() ! ConfigError {
     print("starting")
     let port = setting("port")?
     print("never printed: {port}")

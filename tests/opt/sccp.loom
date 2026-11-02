@@ -6,7 +6,7 @@
 // would overflow stays, to unravel when it runs.
 use std.io.print
 
-fn main() {
+fun main() {
     let limit = 10
     var n = limit * 2
     if n > 15 {

@@ -17,8 +17,8 @@ pub use std.cmp.{Ordering, cmp, min, max, clamp}
 
 /// The unsigned integer type with `bits` bits: `uint(12)` is `u12`.
 #builtin
-pub const fn uint(bits: u8) -> type
+pub const fun uint(bits: u8) -> type
 
 /// The signed integer type with `bits` bits: `int(24)` is `i24`.
 #builtin
-pub const fn int(bits: u8) -> type
+pub const fun int(bits: u8) -> type

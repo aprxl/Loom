@@ -1,6 +1,6 @@
 use std.io.print
 use std.deque.Deque
-fn main() {
+fun main() {
     var d: Deque[i32] = Deque.new()
     for i in 0..5 { d.push_back(i) }
     for i in 10..13 { d.push_front(i) }

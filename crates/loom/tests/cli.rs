@@ -55,11 +55,12 @@ fn check_rejects_examples_only_for_unimplemented_features() {
 
 #[test]
 fn emit_tokens_dumps_the_token_stream() {
-    let path = temp_source("dump", "fn main() {\n    print(\"hi {name}\")\n}\n");
+    let path = temp_source("dump", "fun main() {\n    print(\"hi {name}\")\n}\n");
     let out = loom(&["build", path.to_str().expect("utf-8 path"), "--emit", "tokens"]);
     assert!(out.status.success(), "{}", text(&out.stderr));
     let dump = text(&out.stdout);
-    for expected in ["keyword fn", "ident main", "template-start", "text \"hi \"", "interp-open", "ident name", "eof"] {
+    for expected in ["keyword fun", "ident main", "template-start", "text \"hi \"", "interp-open", "ident name", "eof"]
+    {
         assert!(dump.contains(expected), "missing `{expected}` in:\n{dump}");
     }
     // `print` starts a new line indented by four columns.
@@ -70,21 +71,21 @@ fn emit_tokens_dumps_the_token_stream() {
 fn emit_ast_prints_s_expressions() {
     let path = temp_source(
         "ast",
-        "fn main() {
+        "fun main() {
     let x = 1 + 2 * 3
 }
 ",
     );
     let out = loom(&["build", path.to_str().expect("utf-8 path"), "--emit", "ast"]);
     assert!(out.status.success(), "{}", text(&out.stderr));
-    assert_eq!(text(&out.stdout).trim_end(), "(fn main() (block (let x (+ 1 (* 2 3)))))");
+    assert_eq!(text(&out.stdout).trim_end(), "(fun main() (block (let x (+ 1 (* 2 3)))))");
 }
 
 #[test]
 fn parse_errors_exit_with_code_2() {
     let path = temp_source(
         "parse-error",
-        "fn main() {
+        "fun main() {
     let x = )
 }
 ",
@@ -129,7 +130,7 @@ fn docs_unpacks_the_site() {
 
 #[test]
 fn run_passes_arguments_to_the_program() {
-    let source = "use std.env\nuse std.io.print\n\nfn main() {\n    let args = env.args()\n    print(args.len())\n    for a in args.skip(1) {\n        print(a)\n    }\n}\n";
+    let source = "use std.env\nuse std.io.print\n\nfun main() {\n    let args = env.args()\n    print(args.len())\n    for a in args.skip(1) {\n        print(a)\n    }\n}\n";
     let path = temp_source("args", source);
     let path = path.to_str().expect("utf-8 path");
     let out = loom(&["run", path, "--", "one", "two"]);
@@ -163,7 +164,7 @@ fn run_prints_and_exits_0() {
         "run-ok",
         "use std.io.print
 
-fn main() {
+fun main() {
     print(\"hello, loom\")
 }
 ",
@@ -183,7 +184,7 @@ fn unravels_exit_101_with_a_loom_location() {
         "run-unravel",
         "use std.io.print
 
-fn main() {
+fun main() {
     let x: u8 = 250
     print(x + 10)
 }
@@ -203,7 +204,7 @@ fn build_writes_a_bundle_and_a_source_map() {
         "build",
         "use std.io.print
 
-fn main() {
+fun main() {
     print(\"built\")
 }
 ",
@@ -228,7 +229,7 @@ fn main() {
 fn a_program_needs_main() {
     let path = temp_source(
         "no-main",
-        "fn helper() {}
+        "fun helper() {}
 ",
     );
     let out = loom(&["run", path.to_str().expect("utf-8 path")]);
@@ -239,18 +240,18 @@ fn a_program_needs_main() {
 #[test]
 fn emit_hir_prints_resolved_names() {
     let path =
-        temp_source("hir", "use std.io.print\nfn main() {\n    let x = 1\n    let x = x + 1\n    print(\"{x}\")\n}\n");
+        temp_source("hir", "use std.io.print\nfun main() {\n    let x = 1\n    let x = x + 1\n    print(\"{x}\")\n}\n");
     let out = loom(&["build", path.to_str().expect("utf-8 path"), "--emit", "hir"]);
     assert!(out.status.success(), "{}", text(&out.stderr));
     assert_eq!(
         text(&out.stdout),
-        "(fn main() (block (let x#1 1) (let x#2 (+ x#1 1)) (call std.io.print (template {x#2}))))\n"
+        "(fun main() (block (let x#1 1) (let x#2 (+ x#1 1)) (call std.io.print (template {x#2}))))\n"
     );
 }
 
 #[test]
 fn resolution_errors_exit_with_code_2_and_suggest_imports() {
-    let path = temp_source("unresolved", "fn main() {\n    print(\"hi\")\n}\n");
+    let path = temp_source("unresolved", "fun main() {\n    print(\"hi\")\n}\n");
     let out = loom(&["check", path.to_str().expect("utf-8 path")]);
     assert_eq!(out.status.code(), Some(2));
     let stderr = text(&out.stderr);
@@ -265,7 +266,7 @@ fn treadle_unravels_like_lua() {
     // The same report, word for word, and the same exit code.
     let path = temp_source(
         "vm_unravel",
-        "use std.io.print\n\nfn bump(x: u8) -> u8 {\n    let y = x + 10\n    y\n}\n\nfn main() {\n    print(bump(200))\n    print(bump(250))\n}\n",
+        "use std.io.print\n\nfun bump(x: u8) -> u8 {\n    let y = x + 10\n    y\n}\n\nfun main() {\n    print(bump(200))\n    print(bump(250))\n}\n",
     );
     let file = path.to_str().expect("utf-8 path");
     let lua = loom(&["run", file]);
@@ -282,13 +283,13 @@ fn treadle_unravels_like_lua() {
 fn treadle_recurses_a_million_deep_and_overflows_cleanly() {
     let deep = temp_source(
         "vm_deep",
-        "use std.io.print\n\nfn down(n: u64) -> u64 = if n == 0 { 0 } else { down(n - 1) + 1 }\n\nfn main() {\n    print(down(1000000))\n}\n",
+        "use std.io.print\n\nfun down(n: u64) -> u64 = if n == 0 { 0 } else { down(n - 1) + 1 }\n\nfun main() {\n    print(down(1000000))\n}\n",
     );
     let out = loom(&["run", "--backend", "vm", deep.to_str().expect("utf-8 path")]);
     assert_eq!((out.status.code(), text(&out.stdout)), (Some(0), "1000000\n".into()), "{}", text(&out.stderr));
     let endless = temp_source(
         "vm_endless",
-        "use std.io.print\n\nfn forever(n: u64) -> u64 = forever(n + 1) + 1\n\nfn main() {\n    print(forever(0))\n}\n",
+        "use std.io.print\n\nfun forever(n: u64) -> u64 = forever(n + 1) + 1\n\nfun main() {\n    print(forever(0))\n}\n",
     );
     let out = loom(&["run", "--backend", "vm", endless.to_str().expect("utf-8 path")]);
     assert_eq!(out.status.code(), Some(101));
@@ -301,7 +302,7 @@ fn treadle_recurses_a_million_deep_and_overflows_cleanly() {
 
 #[test]
 fn emit_heddle_and_bytecode_show_treadle_s_code() {
-    let path = temp_source("vm_emit", "fn main() {\n    var x: i32 = 1\n    x += 2\n}\n");
+    let path = temp_source("vm_emit", "fun main() {\n    var x: i32 = 1\n    x += 2\n}\n");
     let file = path.to_str().expect("utf-8 path");
     let heddle = loom(&["build", file, "--emit", "heddle"]);
     assert!(heddle.status.success(), "{}", text(&heddle.stderr));
@@ -320,9 +321,9 @@ fn backtraces_list_every_frame_on_treadle() {
     let path = temp_source(
         "backtrace",
         "use std.io.print\n\
-         fn inner(xs: [i32], i: usize) -> i32 = xs[i]\n\
-         fn middle(xs: List[i32]) -> i32 = inner(xs, 5) + 1\n\
-         fn main() {\n\
+         fun inner(xs: [i32], i: usize) -> i32 = xs[i]\n\
+         fun middle(xs: List[i32]) -> i32 = inner(xs, 5) + 1\n\
+         fun main() {\n\
          \x20   let xs: List[i32] = [1, 2, 3]\n\
          \x20   xs.each(x => print(middle(xs)))\n\
          }\n",
@@ -343,8 +344,8 @@ fn backtraces_list_every_frame_on_treadle() {
         let frames: Vec<&str> = err.lines().skip_while(|l| *l != "backtrace:").skip(1).collect();
         let names: Vec<&str> = frames.iter().filter_map(|l| l.split_whitespace().nth(1)).collect();
         assert_eq!(names, ["inner", "middle", "main.{lambda}", "main"], "{level}: {err}");
-        assert!(frames[0].ends_with(":2:4"), "{level}: {err}");
-        assert!(frames[1].ends_with(":3:4"), "{level}: {err}");
+        assert!(frames[0].ends_with(":2:5"), "{level}: {err}");
+        assert!(frames[1].ends_with(":3:5"), "{level}: {err}");
         reports.push(err);
     }
     let _ = std::fs::remove_file(&path);
@@ -358,13 +359,13 @@ fn process_exit_unwinds_then_exits_with_its_code_on_both_backends() {
         "use std.io.print
 use std.process
 
-fn work(n: u32) -> u32 {
+fun work(n: u32) -> u32 {
     defer print(\"leaving work\")
     if n > 2 { process.exit(3) }
     n + 1
 }
 
-fn main() {
+fun main() {
     defer print(\"main's defer\")
     let names: List[String] = [\"a\", \"b\"]
     print(work(1))
@@ -401,7 +402,7 @@ fn ctrl_c_unwinds_then_exits_130_on_both_backends() {
             &format!(
                 "use std.io.print
 
-fn main() {{
+fun main() {{
     defer print(\"cleaned up\")
     var n = 0u64
     print(\"spinning\")
@@ -442,7 +443,7 @@ fn an_interrupt_before_the_run_starts_is_not_lost() {
         "interrupt_early",
         "use std.io.print
 
-fn main() {
+fun main() {
     defer print(\"cleaned up\")
     var n = 0u64
     while true { n +%= 1 }
@@ -474,7 +475,7 @@ fn ctrl_c_at_a_back_edge_after_an_if_runs_the_defers() {
         "interrupt_branch",
         "use std.io.print
 
-fn main() {
+fun main() {
     defer print(\"cleaned up\")
     var i = 0u64
     loop {
@@ -501,7 +502,7 @@ fn main() {
 fn a_runaway_recursion_unravels_quickly_with_a_short_backtrace() {
     let path = temp_source(
         "runaway",
-        "use std.io.print\nfn down(n: u64) -> u64 { 1 + down(n + 1) }\nfn main() { print(down(0)) }\n",
+        "use std.io.print\nfun down(n: u64) -> u64 { 1 + down(n + 1) }\nfun main() { print(down(0)) }\n",
     );
     let started = std::time::Instant::now();
     let out = Command::new(env!("CARGO_BIN_EXE_loom"))
@@ -532,7 +533,7 @@ fn ctrl_c_reaches_a_shuttle_that_never_yields() {
             &format!(
                 "use std.io.print
 
-fn rare() ~> u64 {{
+fun rare() ~> u64 {{
     defer print(\"generator closed\")
     var i = 0u64
     loop {{
@@ -541,7 +542,7 @@ fn rare() ~> u64 {{
     }}
 }}
 
-fn main() {{
+fun main() {{
     defer print(\"main cleaned up\")
     {call} {{ print(x) }}
 }}
@@ -577,7 +578,7 @@ fn written_lines_are_in_the_file_when_it_is_read_back_on_both_backends() {
             "use std.io.print
 use std.fs.{{File, IoError, read_text}}
 
-fn run() -> () ! IoError {{
+fun run() -> () ! IoError {{
     var f = File.append(\"{shown}\")?
     f.write_line(\"one\")?
     f.write_line(\"two\")?
@@ -587,7 +588,7 @@ fn run() -> () ! IoError {{
     print(text.lines().count())
 }}
 
-fn main() {{
+fun main() {{
     run() mend e => print(\"failed\")
 }}
 "
@@ -615,7 +616,7 @@ fn ctrl_c_ends_a_long_sleep_on_both_backends() {
         "use std.io.print
 use std.time.{secs, sleep}
 
-fn main() {
+fun main() {
     defer print(\"cleaned up\")
     print(\"sleeping\")
     sleep(secs(120))
@@ -646,18 +647,18 @@ fn process_exit_in_a_thread_cancels_the_rest_and_exits_on_both_backends() {
 use std.process
 use std.sync.sched_yield
 
-fn parked() {
+fun parked() {
     defer print(\"parked cleanup\")
     sched_yield()
     print(\"parked finished\")
 }
 
-fn quitter() {
+fun quitter() {
     defer print(\"quitter cleanup\")
     process.exit(3)
 }
 
-fn main() {
+fun main() {
     defer print(\"main's defer\")
     loom {
         thread parked()
@@ -711,19 +712,19 @@ fn ctrl_c_in_a_thread_unwinds_every_task_and_exits_130_on_both_backends() {
         "use std.io.print
 use std.sync.sched_yield
 
-fn parked() {
+fun parked() {
     defer print(\"parked cleanup\")
     sched_yield()
     print(\"parked finished\")
 }
 
-fn spin() {
+fun spin() {
     defer print(\"spin cleanup\")
     var n = 0u64
     while true { n +%= 1 }
 }
 
-fn main() {
+fun main() {
     defer print(\"main's defer\")
     print(\"spinning\")
     loom {
@@ -809,7 +810,7 @@ fn parallel_example_runs_the_same_on_both_backends() {
 
 #[test]
 fn stdin_and_stderr_work_on_both_backends() {
-    let source = "use std.io.{print, write, eprint, read_line, lines}\n\nfn main() {\n    write(\"a\")\n    eprint(\"err\")\n    print(read_line())\n    var n = 0\n    for line in lines() {\n        n += line.len()\n    }\n    print(n)\n    print(read_line())\n}\n";
+    let source = "use std.io.{print, write, eprint, read_line, lines}\n\nfun main() {\n    write(\"a\")\n    eprint(\"err\")\n    print(read_line())\n    var n = 0\n    for line in lines() {\n        n += line.len()\n    }\n    print(n)\n    print(read_line())\n}\n";
     let path = temp_source("stdin", source);
     let path = path.to_str().expect("utf-8 path");
     for backend in ["lua", "vm"] {
@@ -836,7 +837,7 @@ fn a_sleeping_thread_is_cancelled() {
         let label = format!("{backend} {}", threads.unwrap_or("default workers"));
         let path = temp_source(
             "sleep-cancel",
-            "use std.time.{sleep, ms}\nfn main() {\n    loom {\n        let a = thread { sleep(ms(20000)); 1 }\n        let b = thread { sleep(ms(50)); unravel(\"stop\") }\n        a.join()\n    }\n}\n",
+            "use std.time.{sleep, ms}\nfun main() {\n    loom {\n        let a = thread { sleep(ms(20000)); 1 }\n        let b = thread { sleep(ms(50)); unravel(\"stop\") }\n        a.join()\n    }\n}\n",
         );
         let mut command = Command::new(env!("CARGO_BIN_EXE_loom"));
         command.args(["--color", "never", "run", "--backend", backend, path.to_str().expect("utf-8 path")]);
@@ -859,7 +860,7 @@ fn a_sleeping_thread_is_cancelled() {
 fn sleepers_park_instead_of_holding_workers() {
     let path = temp_source(
         "sleep-park",
-        "use std.time.{sleep, ms}\nfn main() {\n    loom {\n        let a = thread { sleep(ms(300)); 1 }\n        let b = thread { sleep(ms(300)); 1 }\n        let c = thread { sleep(ms(300)); 1 }\n        a.join()\n        b.join()\n        c.join()\n    }\n}\n",
+        "use std.time.{sleep, ms}\nfun main() {\n    loom {\n        let a = thread { sleep(ms(300)); 1 }\n        let b = thread { sleep(ms(300)); 1 }\n        let c = thread { sleep(ms(300)); 1 }\n        a.join()\n        b.join()\n        c.join()\n    }\n}\n",
     );
     for backend in ["vm", "lua"] {
         let started = std::time::Instant::now();
@@ -882,7 +883,7 @@ fn sleepers_park_instead_of_holding_workers() {
 fn ctrl_c_ends_a_sleep() {
     let path = temp_source(
         "interrupt_sleeper",
-        "use std.time.{sleep, ms}\nfn main() {\n    loom {\n        let a = thread { sleep(ms(20000)); 1 }\n        sleep(ms(20000))\n    }\n}\n",
+        "use std.time.{sleep, ms}\nfun main() {\n    loom {\n        let a = thread { sleep(ms(20000)); 1 }\n        sleep(ms(20000))\n    }\n}\n",
     );
     for (backend, threads) in [("vm", None), ("vm", Some("1")), ("lua", None)] {
         let label = format!("{backend} {}", threads.unwrap_or("default workers"));
@@ -909,7 +910,7 @@ fn ctrl_c_ends_a_sleep() {
 fn a_blocking_read_frees_its_worker() {
     let path = temp_source(
         "read-frees-worker",
-        "use std.io.{print, read_line}\nuse std.time.{sleep, ms}\nfn main() {\n    loom {\n        let a = thread { print(read_line()) }\n        let b = thread { sleep(ms(50)); print(\"tick\") }\n        a.join()\n        b.join()\n    }\n}\n",
+        "use std.io.{print, read_line}\nuse std.time.{sleep, ms}\nfun main() {\n    loom {\n        let a = thread { print(read_line()) }\n        let b = thread { sleep(ms(50)); print(\"tick\") }\n        a.join()\n        b.join()\n    }\n}\n",
     );
     let mut child = Command::new(env!("CARGO_BIN_EXE_loom"))
         .args(["--color", "never", "run", "--backend", "vm", path.to_str().expect("utf-8 path")])
@@ -939,7 +940,7 @@ fn a_prompt_is_not_left_in_a_worker_queue() {
         r#"use std.io.{print, read_line}
 use std.sync.Atomic
 
-fn main() {
+fun main() {
     let done = Atomic[u64](0)
     loom {
         let a = thread {
@@ -1038,7 +1039,7 @@ fn main() {
 fn a_read_is_a_cancellation_point() {
     let path = temp_source(
         "read-cancel",
-        "use std.io.{print, read_line}\nfn main() {\n    loom {\n        let a = thread { let l = read_line(); print(\"read\") }\n        let b = thread { unravel(\"stop\") }\n    }\n}\n",
+        "use std.io.{print, read_line}\nfun main() {\n    loom {\n        let a = thread { let l = read_line(); print(\"read\") }\n        let b = thread { unravel(\"stop\") }\n    }\n}\n",
     );
     let mut child = Command::new(env!("CARGO_BIN_EXE_loom"))
         .args(["--color", "never", "run", "--backend", "vm", path.to_str().expect("utf-8 path")])

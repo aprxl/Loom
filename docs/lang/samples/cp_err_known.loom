@@ -1,8 +1,8 @@
 use std.io.print
 
-fn pick(const first: bool) -> str = if first { "first" } else { "second" }
+fun pick(const first: bool) -> str = if first { "first" } else { "second" }
 
-fn main() {
+fun main() {
     var k = 3
     print(pick(k > 2))
 }

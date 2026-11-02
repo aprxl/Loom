@@ -3,7 +3,7 @@
 use std.io.print
 use std.sync.Mutex
 
-fn main() {
+fun main() {
     let m = Mutex[i32](1)
     print("{m.lock()} {m.lock()}")
 }

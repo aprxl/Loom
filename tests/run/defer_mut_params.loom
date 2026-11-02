@@ -7,35 +7,35 @@ warp W: Show { n: i32 }
 
 warp Lv: Show {
     case A, B
-    fn go(mut self) {
+    fun go(mut self) {
         defer self = .B
         self = .A
     }
 }
 
-fn f_scalar(mut n: i32) -> i32 {
+fun f_scalar(mut n: i32) -> i32 {
     defer n += 1000
     n += 1
     n
 }
 
-fn f_scalar_unit(mut n: i32) {
+fun f_scalar_unit(mut n: i32) {
     defer n += 1000
     n += 1
 }
 
-fn f_str(mut s: String) {
+fun f_str(mut s: String) {
     defer s.push_str("!")
     s.push_str("?")
 }
 
-fn f_table(mut w: W) -> i32 {
+fun f_table(mut w: W) -> i32 {
     defer w.n += 1000
     w.n += 1
     w.n
 }
 
-fn main() {
+fun main() {
     var a = 0
     print("{f_scalar(mut a)} {a}")
     var b = 0

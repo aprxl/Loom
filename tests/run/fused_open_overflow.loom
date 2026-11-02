@@ -2,6 +2,6 @@
 // maximum, as the stream does: after the ones before it went through.
 use std.io.print
 
-fn main() {
+fun main() {
     (254u8..).take(3).each(x => print(x))
 }

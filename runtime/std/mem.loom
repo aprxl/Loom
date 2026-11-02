@@ -14,13 +14,13 @@ pub warp Arena: Spool {
 
     #spool_reset
     /// Frees everything allocated so far.
-    pub fn reset(mut self)
+    pub fun reset(mut self)
 
     #spool_put
     /// Moves `value` into the arena and gives a pointer to it. The pointer
     /// is `Copy` and owns nothing: it lasts until the arena is reset or
     /// ends.
-    pub fn put[T](self, take value: T) -> ^T@self
+    pub fun put[T](self, take value: T) -> ^T@self
 }
 
 /// An `Arena` that threads may allocate in: its pointers can cross threads,
@@ -29,11 +29,11 @@ pub warp Arena: Spool {
 pub warp SharedArena: Spool {
     #spool_reset
     /// Frees everything allocated so far.
-    pub fn reset(mut self)
+    pub fun reset(mut self)
 
     #spool_put
     /// Moves `value` into the arena and gives a pointer to it.
-    pub fn put[T](self, take value: T) -> ^T@self
+    pub fun put[T](self, take value: T) -> ^T@self
 }
 
 /// A spool of `n` slots, each one `T`: allocating and freeing a slot is a
@@ -45,27 +45,27 @@ pub warp Pool[T]: Spool {
     #spool_put
     /// Moves `value` into a free slot and gives a pointer to it. The pool
     /// being full unravels.
-    pub fn put(self, take value: T) -> ^T@self
+    pub fun put(self, take value: T) -> ^T@self
 
     /// Gives the slot back. The pointer, and any copy of it, must not be used
     /// again.
-    pub fn free(self, p: ^T@self)
+    pub fun free(self, p: ^T@self)
 
     #spool_reset
     /// Frees every slot.
-    pub fn reset(mut self)
+    pub fun reset(mut self)
 }
 
-pub fn kib(n: usize) -> usize = n * 1024
-pub fn mib(n: usize) -> usize = n * 1024 * 1024
+pub fun kib(n: usize) -> usize = n * 1024
+pub fun mib(n: usize) -> usize = n * 1024 * 1024
 
 /// Exchanges the values of `a` and `b`.
 #builtin
-pub fn swap[T](mut a: T, mut b: T)
+pub fun swap[T](mut a: T, mut b: T)
 
 /// Puts `value` in `dest` and gives the value that was there.
 #builtin
-pub fn replace[T](mut dest: T, take value: T) -> T
+pub fun replace[T](mut dest: T, take value: T) -> T
 
 /// Gives the value in `dest`, leaving its default behind.
-pub fn take[T: Default](mut dest: T) -> T = replace(mut dest, T.default())
+pub fun take[T: Default](mut dest: T) -> T = replace(mut dest, T.default())

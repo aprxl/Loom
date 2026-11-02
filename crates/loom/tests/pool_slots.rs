@@ -9,7 +9,7 @@ use loom_syntax::SourceDb;
 
 #[test]
 fn lua_pool_slots_are_treadles() {
-    let source = "use std.io.print\nuse std.mem.Pool\n\nwarp Trio {\n    a: u64\n    b: u64\n    c: u64\n}\n\nfn main() {\n    spool a = Pool[u8](1)\n    spool b = Pool[u64](1)\n    spool c = Pool[Trio](1)\n    print(\"x\")\n}\n";
+    let source = "use std.io.print\nuse std.mem.Pool\n\nwarp Trio {\n    a: u64\n    b: u64\n    c: u64\n}\n\nfun main() {\n    spool a = Pool[u8](1)\n    spool b = Pool[u64](1)\n    spool c = Pool[Trio](1)\n    print(\"x\")\n}\n";
     let path = std::env::temp_dir().join(format!("loom-pool-slots-{}.loom", std::process::id()));
     std::fs::write(&path, source).expect("a temporary file");
     let mut db = SourceDb::new();

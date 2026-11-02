@@ -2,7 +2,7 @@
 // either: the loop unravels rather than going on over a list that shrank.
 use std.io.print
 
-fn main() {
+fun main() {
     var zs: List[String] = ["a", "b", "c"]
     let clear = () => zs.clear()
     for x in zs {

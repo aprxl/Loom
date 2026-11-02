@@ -1,8 +1,8 @@
 error[M0106]: a lambda that uses `k` can't be returned
   --> docs/lang/samples/own_err_escape.loom:2:5
   |
-1 | fn adder(k: i32) -> i32 => i32 {
-  |          - `k` is here
+1 | fun adder(k: i32) -> i32 => i32 {
+  |           - `k` is here
 2 |     x => x + k
   |     ^^^^^^^^^^ returned here, it would outlive `k`
   |

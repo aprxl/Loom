@@ -8,11 +8,11 @@
 // writes.
 use std.io.print
 
-fn bump(mut counts: Map[String, u32], word: String) {
+fun bump(mut counts: Map[String, u32], word: String) {
     if counts.has(word) { counts[word] += 1 } else { counts[word] = 1 }
 }
 
-fn main() {
+fun main() {
     var m: Map[String, u32] = Map()
     bump(mut m, "a")
     bump(mut m, "a")

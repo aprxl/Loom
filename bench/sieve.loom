@@ -3,7 +3,7 @@ use std.io.print
 
 const SIZE = 10_000_000
 
-fn main() {
+fun main() {
     var composite = List.filled(false, SIZE + 1)
     var count = 0
     for i in 2..=SIZE {

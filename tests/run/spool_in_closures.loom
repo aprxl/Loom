@@ -9,18 +9,18 @@ warp P {
 }
 
 weft Tagged {
-    fn tag(self) -> u64
+    fun tag(self) -> u64
 }
 
 warp Tag: Tagged {
     id: u64
 
-    pub fn tag(self) -> u64 = self.id
+    pub fun tag(self) -> u64 = self.id
 }
 
-fn tag_of() -> u64 given t: Tagged = t.tag()
+fun tag_of() -> u64 given t: Tagged = t.tag()
 
-fn main() {
+fun main() {
     let f = (n: u64) => {
         spool a = Arena(1.kib())
         let p = a.put(P(n * 2))

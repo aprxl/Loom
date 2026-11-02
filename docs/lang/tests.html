@@ -39,14 +39,14 @@
 <div class="crumb"><a href="index.html">Language</a> / Tests</div>
 <h1>Tests</h1>
 <p class="summary"><code>test name() { ... }</code> and <code>loom test</code>.</p>
-<p>A test is written like a function, with <code>test</code> in place of <code>fn</code>. It takes no parameters and returns nothing, or <code>! E</code> so it can use <code>?</code>. <code>loom test FILE</code> runs the file's tests one after another and prints a report like cargo's.</p>
+<p>A test is written like a function, with <code>test</code> in place of <code>fun</code>. It takes no parameters and returns nothing, or <code>! E</code> so it can use <code>?</code>. <code>loom test FILE</code> runs the file's tests one after another and prints a report like cargo's.</p>
 <div class="sample" id="sample-tests_pass">
 <div class="sample-head"><span class="file">samples/tests_pass.loom</span><span class="tag ok">tests pass</span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fn</span> clamp(n: i32, lo: i32, hi: i32) -&gt; i32 = <span class="k">if</span> n &lt; lo { lo } <span class="k">else</span> <span class="k">if</span> n &gt; hi { hi } <span class="k">else</span> { n }
+<span class="k">fun</span> clamp(n: i32, lo: i32, hi: i32) -&gt; i32 = <span class="k">if</span> n &lt; lo { lo } <span class="k">else</span> <span class="k">if</span> n &gt; hi { hi } <span class="k">else</span> { n }
 
-<span class="c">// A test is written like a function, with `test` in place of `fn`.</span>
+<span class="c">// A test is written like a function, with `test` in place of `fun`.</span>
 <span class="k">test</span> clamps_low() = assert(clamp(-<span class="n">5</span>, <span class="n">0</span>, <span class="n">10</span>) == <span class="n">0</span>)
 
 <span class="k">test</span> clamps_high() {
@@ -82,7 +82,7 @@ test result: ok. 4 passed; 0 failed</code></pre></div>
     <span class="k">case</span> <span class="t">Bad</span>(n: i32)
 }
 
-<span class="k">fn</span> half(n: i32) -&gt; i32 ! <span class="t">Oops</span> {
+<span class="k">fun</span> half(n: i32) -&gt; i32 ! <span class="t">Oops</span> {
     <span class="k">if</span> n % <span class="n">2</span> != <span class="n">0</span> { <span class="k">fail</span> .<span class="t">Bad</span>(n) }
     n / <span class="n">2</span>
 }

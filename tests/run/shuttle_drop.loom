@@ -6,7 +6,7 @@
 
 use std.io.print
 
-fn gen(name: str) ~> i32 {
+fun gen(name: str) ~> i32 {
     defer print("{name}: outer")
     {
         defer print("{name}: left behind")
@@ -20,7 +20,7 @@ fn gen(name: str) ~> i32 {
     yield 99
 }
 
-fn main() {
+fun main() {
     // Never started.
     {
         let g = gen("unstarted")

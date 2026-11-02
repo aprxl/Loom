@@ -5,7 +5,7 @@
 use std.io.print
 use std.sync.Atomic
 
-fn main() {
+fun main() {
     // Each thread changes its own piece; the last is shorter.
     var data = List.filled(0u64, 1003)
     loom for (i, mut line) in data.chunks_mut(10).indexed() {

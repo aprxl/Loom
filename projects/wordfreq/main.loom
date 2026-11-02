@@ -15,7 +15,7 @@ use tokens.tokens
 use count.{count, ngrams, stats}
 use report.top
 
-fn main() {
+fun main() {
     let args = env.args()
     var top_n: usize = 10
     var gram: usize = 2
@@ -67,7 +67,7 @@ fn main() {
 
 /// Prints `heading`, then each entry's count right-aligned to the widest
 /// count, and its key.
-fn section(heading: str, entries: List[(String, u32)]) {
+fun section(heading: str, entries: List[(String, u32)]) {
     print(heading)
     if entries.len() == 0 { return }
     let width = "{entries[0].1}".len()
@@ -78,7 +78,7 @@ fn section(heading: str, entries: List[(String, u32)]) {
 }
 
 /// The number after the flag at `args[i]`, which must be at least 1.
-fn flag_number(args: List[String], i: usize) -> usize {
+fun flag_number(args: List[String], i: usize) -> usize {
     let flag = args[i].copy()
     if i + 1 == args.len() { die("{flag} needs a number of at least 1") }
     match args[i + 1].parse[usize]() {
@@ -88,7 +88,7 @@ fn flag_number(args: List[String], i: usize) -> usize {
 }
 
 /// Prints `msg` to standard error as one line, and exits with status 1.
-fn die(msg: str) -> never {
+fun die(msg: str) -> never {
     io.eprint("wordfreq: {msg}")
     exit(1)
 }

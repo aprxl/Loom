@@ -246,7 +246,7 @@ fn startup() -> Duration {
     let dir = std::env::temp_dir().join("loom_perf_gates");
     std::fs::create_dir_all(&dir).expect("a temp dir");
     let path = dir.join("hello.loom");
-    std::fs::write(&path, "use std.io.print\nfn main() { print(\"hi\") }\n").expect("writable");
+    std::fs::write(&path, "use std.io.print\nfun main() { print(\"hi\") }\n").expect("writable");
     (0..RUNS)
         .map(|_| {
             let start = Instant::now();

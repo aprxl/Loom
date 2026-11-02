@@ -1,6 +1,6 @@
 use std.io.print
 
-fn main() {
+fun main() {
     let a: u8 = 0b1010_0110
     print("{a & 0x0F} {a | 1} {a ~ 0xFF} {~a}")
     print("{a << 1} {a >> 3} {1u16 << 15}")

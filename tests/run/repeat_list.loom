@@ -1,9 +1,9 @@
 // `[x; n]` makes an array, or a list or a slice where one is expected.
 use std.io.print
-fn total(xs: [i32]) -> i32 = xs.fold(0, (a, b) => a + b)
-fn mk() -> List[i32] = [7; 3]
-fn take_list(take xs: List[i32]) -> usize = xs.len()
-fn main() {
+fun total(xs: [i32]) -> i32 = xs.fold(0, (a, b) => a + b)
+fun mk() -> List[i32] = [7; 3]
+fun take_list(take xs: List[i32]) -> usize = xs.len()
+fun main() {
     let a = [5; 3]
     var l: List[i32] = [5; 3]
     print("{a} {l} {mk()} {total([1; 4])} {take_list([2; 6])}")

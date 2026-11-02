@@ -4,7 +4,7 @@
 warp Bomb { n: i32 }
 
 weave Show into Bomb {
-    fn show(self, mut f: Fmt) {
+    fun show(self, mut f: Fmt) {
         f.put("bomb ")
         unravel("inner {self.n}")
     }

@@ -65,77 +65,77 @@
 <div class="members">
 <div class="member" id="BitSet.new">
 <div class="member-head">
-<span class="sig">fn new(len: usize) -&gt; BitSet</span>
+<span class="sig">fun new(len: usize) -&gt; BitSet</span>
 
 </div>
 <p class="member-doc">A set of <code>len</code> numbers, none in it.</p>
 </div>
 <div class="member" id="BitSet.len">
 <div class="member-head">
-<span class="sig">fn len(self) -&gt; usize</span>
+<span class="sig">fun len(self) -&gt; usize</span>
 
 </div>
 <p class="member-doc">How many numbers it can hold: they are <code>0</code> up to this.</p>
 </div>
 <div class="member" id="BitSet.set">
 <div class="member-head">
-<span class="sig">fn set(mut self, i: usize)</span>
+<span class="sig">fun set(mut self, i: usize)</span>
 
 </div>
 <p class="member-doc">Puts <code>i</code> in. Unravels if <code>i &gt;= len</code>.</p>
 </div>
 <div class="member" id="BitSet.clear">
 <div class="member-head">
-<span class="sig">fn clear(mut self, i: usize)</span>
+<span class="sig">fun clear(mut self, i: usize)</span>
 
 </div>
 <p class="member-doc">Takes <code>i</code> out. Unravels if <code>i &gt;= len</code>.</p>
 </div>
 <div class="member" id="BitSet.toggle">
 <div class="member-head">
-<span class="sig">fn toggle(mut self, i: usize)</span>
+<span class="sig">fun toggle(mut self, i: usize)</span>
 
 </div>
 <p class="member-doc">Puts <code>i</code> in if it is out, and out if it is in.</p>
 </div>
 <div class="member" id="BitSet.test">
 <div class="member-head">
-<span class="sig">fn test(self, i: usize) -&gt; bool</span>
+<span class="sig">fun test(self, i: usize) -&gt; bool</span>
 
 </div>
 <p class="member-doc">Whether <code>i</code> is in. Unravels if <code>i &gt;= len</code>.</p>
 </div>
 <div class="member" id="BitSet.count">
 <div class="member-head">
-<span class="sig">fn count(self) -&gt; usize</span>
+<span class="sig">fun count(self) -&gt; usize</span>
 
 </div>
 <p class="member-doc">How many numbers are in.</p>
 </div>
 <div class="member" id="BitSet.items">
 <div class="member-head">
-<span class="sig">fn items(self) -&gt; List[usize]</span>
+<span class="sig">fun items(self) -&gt; List[usize]</span>
 
 </div>
 <p class="member-doc">The numbers that are in, from the smallest.</p>
 </div>
 <div class="member" id="BitSet.intersect_with">
 <div class="member-head">
-<span class="sig">fn intersect_with(mut self, other: BitSet)</span>
+<span class="sig">fun intersect_with(mut self, other: BitSet)</span>
 
 </div>
 <p class="member-doc">Keeps the numbers that are also in <code>other</code>. The sets must be the same size.</p>
 </div>
 <div class="member" id="BitSet.union_with">
 <div class="member-head">
-<span class="sig">fn union_with(mut self, other: BitSet)</span>
+<span class="sig">fun union_with(mut self, other: BitSet)</span>
 
 </div>
 <p class="member-doc">Adds the numbers in <code>other</code>. The sets must be the same size.</p>
 </div>
 <div class="member" id="BitSet.subtract">
 <div class="member-head">
-<span class="sig">fn subtract(mut self, other: BitSet)</span>
+<span class="sig">fun subtract(mut self, other: BitSet)</span>
 
 </div>
 <p class="member-doc">Takes out the numbers that are in <code>other</code>. The sets must be the same size.</p>

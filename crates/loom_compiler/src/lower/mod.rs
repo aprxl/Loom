@@ -380,7 +380,7 @@ impl<'a> Lowerer<'a> {
         let Some(def) = main.filter(|&d| matches!(p.def(d).kind, DefKind::Fn(_))) else {
             let span = p.module(root).file.map(|f| Span::new(f, 0, 0));
             let mut diag = Diagnostic::error(codes::N0116, "there's no `main` function to run")
-                .help("add `fn main() { … }`, where the program starts");
+                .help("add `fun main() { … }`, where the program starts");
             if !p.module(root).tests.is_empty() {
                 diag = diag.help("`loom test` runs this file's tests");
             }
@@ -421,7 +421,7 @@ impl<'a> Lowerer<'a> {
     /// is named after its definition; one checked for particular types (a
     /// `Self`, generic arguments) also gets its instance number, after an
     /// `i`: `f_5_i3`. A definition's name always ends in `_` and digits, so
-    /// it can't be an instance's (`fn f_5` is `f_5_3`).
+    /// it can't be an instance's (`fun f_5` is `f_5_3`).
     fn fn_name(&self, id: BodyId) -> String {
         let inst = self.typed.results.instance(id);
         if inst.self_ty.is_none() && inst.args.is_empty() && !inst.forward {

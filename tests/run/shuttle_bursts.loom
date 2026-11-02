@@ -3,7 +3,7 @@
 
 use std.io.print
 
-fn echo(tag: str) ~> String <~ i32 {
+fun echo(tag: str) ~> String <~ i32 {
     defer print("{tag} ended")
     while pull is some(x) {
         print("{tag} got {x}")
@@ -13,7 +13,7 @@ fn echo(tag: str) ~> String <~ i32 {
     yield "{tag} closed"
 }
 
-fn main() {
+fun main() {
     var e = echo("a")
     // Half gone through: the rest runs at the next push.
     for s in e.push(1) {

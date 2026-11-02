@@ -1,5 +1,5 @@
-fn make() -> List[i32] = [1, 2]
+fun make() -> List[i32] = [1, 2]
 
-fn main() {
+fun main() {
     let v = make()[#-1]               //~ S0200
 }

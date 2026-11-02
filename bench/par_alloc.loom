@@ -7,18 +7,18 @@ use std.sync.Atomic
 
 warp Tree { kids: List[Tree] }
 
-fn make(depth: u32) -> Tree {
+fun make(depth: u32) -> Tree {
     if depth == 0 { return Tree(kids: List()) }
     Tree(kids: [make(depth - 1), make(depth - 1)])
 }
 
-fn count(t: Tree) -> u64 {
+fun count(t: Tree) -> u64 {
     var n = 1u64
     for k in t.kids { n += count(k) }
     n
 }
 
-fn row(y: i32) -> u64 {
+fun row(y: i32) -> u64 {
     var total: u64 = 0
     for k in 0..40 {
         total += count(make(8))
@@ -28,7 +28,7 @@ fn row(y: i32) -> u64 {
     total
 }
 
-fn main() {
+fun main() {
     let total = Atomic[u64](0)
     loom for y in 0..256 {
         total.add(row(y))

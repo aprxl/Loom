@@ -2,7 +2,7 @@
 
 use std.io.print
 
-fn main() {
+fun main() {
     loom {
         let t = thread 5
         print("{t.join()}")

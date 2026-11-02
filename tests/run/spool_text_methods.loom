@@ -4,15 +4,15 @@
 use std.io.print
 use std.mem.{Arena, kib}
 
-fn head(s: str) -> str = s[0..2]
+fun head(s: str) -> str = s[0..2]
 
-fn out() -> String {
+fun out() -> String {
     spool a = Arena(1.kib())
     let t = "nails".to_string().copy(given: a)
     t.copy()
 }
 
-fn main() {
+fun main() {
     spool a = Arena(1.kib())
     let t = "nails".to_string().copy(given: a)
     let h = "nails".to_string()

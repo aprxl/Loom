@@ -119,7 +119,7 @@ both for free.
 
 A throwaway branch measuring three things, before any phase starts:
 
-1. Does an [L] higher-order function, `fn retain[T](mut xs: List[T], keep: T => bool)`
+1. Does an [L] higher-order function, `fun retain[T](mut xs: List[T], keep: T => bool)`
    written in `std`, called with a lambda, compile at `-O2` to the same loop as a
    hand-written one? vm.md defers the *specialize lambdas* pass and says GVN plus
    inlining covers it "for now". `sorted_by` is the only HOF in `std` written
@@ -176,22 +176,22 @@ independent enough to ship alone.
 // std.cmp
 pub warp Ordering: Eq, Ord, Show {
     case Less, Equal, Greater
-    pub fn reverse(self) -> Ordering
+    pub fun reverse(self) -> Ordering
     /// Breaks a tie: `a.age.cmp(b.age).then(a.name.cmp(b.name))`.
-    pub fn then(self, other: Ordering) -> Ordering
+    pub fun then(self, other: Ordering) -> Ordering
 }
 // `cmp` is a free function in the prelude, so `a.cmp(b)` works on every `Ord`
 // type through UFCS. (A default method `Ord.cmp` recursed: the derived `<`
 // runs through the runtime's comparison, which finds the new method.)
-pub fn cmp[T: Ord](a: T, b: T) -> Ordering
-pub fn min[T: Ord](a: T, b: T) -> T
-pub fn max[T: Ord](a: T, b: T) -> T
-pub fn clamp[T: Ord](x: T, lo: T, hi: T) -> T
+pub fun cmp[T: Ord](a: T, b: T) -> Ordering
+pub fun min[T: Ord](a: T, b: T) -> T
+pub fun max[T: Ord](a: T, b: T) -> T
+pub fun clamp[T: Ord](x: T, lo: T, hi: T) -> T
 /// Flips the order: `xs.sort_by_key(Reverse(_.score))` is highest first.
 pub warp Reverse[T: Ord]: Ord { pub value: T }
 
 // std.default
-pub weft Default { fn default() -> Self }   // derived: field defaults, else the field type's
+pub weft Default { fun default() -> Self }   // derived: field defaults, else the field type's
 
 // std.option / std.result (methods of `?T` and `T ! E`)
 //   ?T:      map, filter, zip, flatten, replace, insert, get_or_insert, take_if,
@@ -209,16 +209,16 @@ common case.
 **Sorting** [L, with a native fast path for primitive keys]:
 
 ```text
-pub fn sort(mut self) where T: Ord                          // exists; same algorithm underneath
-pub fn sort_by(mut self, less: (T, T) => bool)
-pub fn sort_by_key[K: Ord](mut self, key: T => K)
-pub fn sort_unstable(mut self) where T: Ord                 // also _by, _by_key
-pub fn is_sorted(self) -> bool where T: Ord
+pub fun sort(mut self) where T: Ord                          // exists; same algorithm underneath
+pub fun sort_by(mut self, less: (T, T) => bool)
+pub fun sort_by_key[K: Ord](mut self, key: T => K)
+pub fun sort_unstable(mut self) where T: Ord                 // also _by, _by_key
+pub fun is_sorted(self) -> bool where T: Ord
 // Streams: sorted(), sorted_by(less), sorted_by_key(key) -> List[T]
-pub fn binary_search(self, x: T) -> ?usize where T: Ord     // also _by_key
-pub fn lower_bound(self, x: T) -> usize where T: Ord        // the insertion point; C++ name
-pub fn upper_bound(self, x: T) -> usize where T: Ord
-pub fn partition_point(self, pred: T => bool) -> usize
+pub fun binary_search(self, x: T) -> ?usize where T: Ord     // also _by_key
+pub fun lower_bound(self, x: T) -> usize where T: Ord        // the insertion point; C++ name
+pub fun upper_bound(self, x: T) -> usize where T: Ord
+pub fun partition_point(self, pred: T => bool) -> usize
 ```
 
 Stable sort: merge sort with insertion runs under ~16 and a pre-check for
@@ -235,37 +235,37 @@ stability test with equal keys.
 **Stream** (all [L] or the existing fused [B] path, per step 0):
 
 ```text
-pub fn rev(take self) -> Stream[T]            // only on sources that know their end:
+pub fun rev(take self) -> Stream[T]            // only on sources that know their end:
                                               // slices, lists, ranges, chars(), indexed() of those
-pub fn step_by(take self, n: usize) -> Stream[T]
-pub fn filter_map[U](take self, f: T => ?U) -> Stream[U]
-pub fn flat_map[U](take self, f: T => Stream[U]) -> Stream[U]
-pub fn flatten(take self) -> Stream[U] where T: Stream[U]
-pub fn scan[S, U](take self, take init: S, f: (S, T) => ?U) -> Stream[U]
-pub fn inspect(take self, f: T => ()) -> Stream[T]
-pub fn peekable(take self) -> Peekable[T]     // warp: peek(mut self) -> ?T, next_if(mut self, f) -> ?T
-pub fn cycle(take self) -> Stream[T]          // needs T: Copy
-pub fn nth(take self, n: usize) -> ?T
-pub fn min_by_key / max_by_key[K: Ord](take self, key: T => K) -> ?T
-pub fn min_by / max_by(take self, less: (T, T) => bool) -> ?T
-pub fn partition(take self, f: T => bool) -> (List[T], List[T])
-pub fn unzip[A, B](take self) -> (List[A], List[B]) where T: (A, B)
-pub fn dedup(take self) -> Stream[T] where T: Eq          // consecutive repeats
-pub fn counts(take self) -> Map[T, usize] where T: Hash   // Python's Counter
-pub fn group_by[K: Hash](take self, key: T => K) -> Map[K, List[T]]
-pub fn chunks(take self, n: usize) -> Stream[List[T]]     // on any stream (slices keep their zero-copy one)
-pub fn windows ... (slices only; keeps today's)
-pub fn collect[C]() -> C where C: FromStream[T]  // List, Set, Map, String, Deque, ...
-pub fn eq(take self, other: Stream[T]) -> bool where T: Eq
-pub fn is_empty(take self) -> bool
+pub fun step_by(take self, n: usize) -> Stream[T]
+pub fun filter_map[U](take self, f: T => ?U) -> Stream[U]
+pub fun flat_map[U](take self, f: T => Stream[U]) -> Stream[U]
+pub fun flatten(take self) -> Stream[U] where T: Stream[U]
+pub fun scan[S, U](take self, take init: S, f: (S, T) => ?U) -> Stream[U]
+pub fun inspect(take self, f: T => ()) -> Stream[T]
+pub fun peekable(take self) -> Peekable[T]     // warp: peek(mut self) -> ?T, next_if(mut self, f) -> ?T
+pub fun cycle(take self) -> Stream[T]          // needs T: Copy
+pub fun nth(take self, n: usize) -> ?T
+pub fun min_by_key / max_by_key[K: Ord](take self, key: T => K) -> ?T
+pub fun min_by / max_by(take self, less: (T, T) => bool) -> ?T
+pub fun partition(take self, f: T => bool) -> (List[T], List[T])
+pub fun unzip[A, B](take self) -> (List[A], List[B]) where T: (A, B)
+pub fun dedup(take self) -> Stream[T] where T: Eq          // consecutive repeats
+pub fun counts(take self) -> Map[T, usize] where T: Hash   // Python's Counter
+pub fun group_by[K: Hash](take self, key: T => K) -> Map[K, List[T]]
+pub fun chunks(take self, n: usize) -> Stream[List[T]]     // on any stream (slices keep their zero-copy one)
+pub fun windows ... (slices only; keeps today's)
+pub fun collect[C]() -> C where C: FromStream[T]  // List, Set, Map, String, Deque, ...
+pub fun eq(take self, other: Stream[T]) -> bool where T: Eq
+pub fun is_empty(take self) -> bool
 // sources (std.iter free functions)
-pub fn repeat[T: Copy](x: T) -> Stream[T]
-pub fn from_fn[T](f: () => ?T) -> Stream[T]
-pub fn successors[T](take first: ?T, f: T => ?T) -> Stream[T]
+pub fun repeat[T: Copy](x: T) -> Stream[T]
+pub fun from_fn[T](f: () => ?T) -> Stream[T]
+pub fun successors[T](take first: ?T, f: T => ?T) -> Stream[T]
 ```
 
 `collect[C]` replaces "`collect` makes a list": `FromStream[T]` is a small weft
-(`fn from_stream(take s: Stream[T]) -> Self`) woven by `List`, `Set`, `Map` (for
+(`fun from_stream(take s: Stream[T]) -> Self`) woven by `List`, `Set`, `Map` (for
 `(K, V)` items), `String` (for `char` and `str`), and the new collections, so
 `words.collect[Set[String]]()` and `chars.collect[String]()` work and a user type can
 join in. Bare `collect()` stays a list when the target type is known from context.
@@ -280,24 +280,24 @@ length; `counts` on 4M items is within 10% of the hand-written `Map` loop in
 
 ```text
 // List
-pub fn with_capacity(n: usize) -> List[T]
-pub fn reserve(mut self, extra: usize)
-pub fn capacity(self) -> usize
-pub fn shrink_to_fit(mut self)
-pub fn resize(mut self, n: usize, x: T)
-pub fn swap_remove(mut self, i: usize) -> T        // O(1)
-pub fn retain(mut self, keep: T => bool)
-pub fn dedup(mut self) where T: Eq                  // also dedup_by_key
-pub fn drain(mut self, r: Range[usize]) -> List[T]  // removes and returns the range
-pub fn split_off(mut self, at: usize) -> List[T]
-pub fn append(mut self, take other: List[T])        // moves, leaves `other` empty
-pub fn extend(mut self, items: Stream[T])           // was: slices only
+pub fun with_capacity(n: usize) -> List[T]
+pub fun reserve(mut self, extra: usize)
+pub fun capacity(self) -> usize
+pub fun shrink_to_fit(mut self)
+pub fun resize(mut self, n: usize, x: T)
+pub fun swap_remove(mut self, i: usize) -> T        // O(1)
+pub fun retain(mut self, keep: T => bool)
+pub fun dedup(mut self) where T: Eq                  // also dedup_by_key
+pub fun drain(mut self, r: Range[usize]) -> List[T]  // removes and returns the range
+pub fun split_off(mut self, at: usize) -> List[T]
+pub fun append(mut self, take other: List[T])        // moves, leaves `other` empty
+pub fun extend(mut self, items: Stream[T])           // was: slices only
 // Slice
-pub fn starts_with(self, p: [T]) -> bool where T: Eq   // ends_with
-pub fn rotate_left(mut self, n: usize)                 // rotate_right
-pub fn concat(self) -> List[U] where T: [U]            // also join(sep)
-pub fn count_of(self, x: T) -> usize where T: Eq
-pub fn iter_rev ... no: `xs.rev()` through Stream
+pub fun starts_with(self, p: [T]) -> bool where T: Eq   // ends_with
+pub fun rotate_left(mut self, n: usize)                 // rotate_right
+pub fun concat(self) -> List[U] where T: [U]            // also join(sep)
+pub fun count_of(self, x: T) -> usize where T: Eq
+pub fun iter_rev ... no: `xs.rev()` through Stream
 ```
 
 (`split_at`, `first_mut` and friends are not added: slicing syntax `xs[..i]`,
@@ -312,21 +312,21 @@ reallocation.
 
 ```text
 // Map
-pub fn of(pairs: [(K, V)]) -> Map[K, V]
-pub fn with_capacity(n: usize) -> Map[K, V]
-pub fn get_or(self, key: K, default: V) -> V           // like `m.get(k) mend d`, no ?V built
-pub fn retain(mut self, keep: (K, V) => bool)
-pub fn extend(mut self, pairs: Stream[(K, V)])
-pub fn remove_entry(mut self, key: K) -> ?(K, V)
-pub fn update(mut self, key: K, f: V => V)             // only if present
-pub fn merge(mut self, take other: Map[K, V], f: (V, V) => V)
-pub fn first / last (self) -> ?(K, V)                  // insertion order is part of the contract
+pub fun of(pairs: [(K, V)]) -> Map[K, V]
+pub fun with_capacity(n: usize) -> Map[K, V]
+pub fun get_or(self, key: K, default: V) -> V           // like `m.get(k) mend d`, no ?V built
+pub fun retain(mut self, keep: (K, V) => bool)
+pub fun extend(mut self, pairs: Stream[(K, V)])
+pub fun remove_entry(mut self, key: K) -> ?(K, V)
+pub fun update(mut self, key: K, f: V => V)             // only if present
+pub fun merge(mut self, take other: Map[K, V], f: (V, V) => V)
+pub fun first / last (self) -> ?(K, V)                  // insertion order is part of the contract
 // Set
-pub fn union / intersection / difference / symmetric_difference(self, other: Set[T]) -> Set[T]
-pub fn is_subset / is_superset / is_disjoint(self, other: Set[T]) -> bool
-pub fn retain(mut self, keep: T => bool)
-pub fn extend(mut self, items: Stream[T])
-pub fn pop(mut self) -> ?T                              // removes the oldest
+pub fun union / intersection / difference / symmetric_difference(self, other: Set[T]) -> Set[T]
+pub fun is_subset / is_superset / is_disjoint(self, other: Set[T]) -> bool
+pub fun retain(mut self, keep: T => bool)
+pub fun extend(mut self, items: Stream[T])
+pub fun pop(mut self) -> ?T                              // removes the oldest
 ```
 
 **New containers** (each `[L]` unless noted, each gets a section in the docs):
@@ -360,24 +360,24 @@ hello-world binary and image sizes grow by < 2% (tables are lazy).
 **Str** [B for view-returning, N for search, L for the rest]:
 
 ```text
-pub fn split_once(self, sep: str) -> ?(str, str)             // rsplit_once
-pub fn splitn(self, n: usize, sep: str) -> Stream[str]       // rsplit, split_terminator
-pub fn split_by(self, f: char => bool) -> Stream[str]
-pub fn strip_prefix(self, p: str) -> ?str                    // strip_suffix
-pub fn trim_matches(self, f: char => bool) -> str            // trim_start_matches, trim_end_matches
-pub fn char_indices(self) -> Stream[(usize, char)]
-pub fn rfind(self, part: str) -> ?usize                      // find_by(f), matches, match_indices
-pub fn count_of(self, part: str) -> usize
-pub fn char_at(self, i: usize) -> ?char                      // i counts characters; O(i), say so in the doc
-pub fn is_char_boundary(self, i: usize) -> bool
-pub fn is_ascii(self) -> bool
-pub fn eq_ignore_case(self, other: str) -> bool
-pub fn capitalize(self) -> String
-pub fn pad_left(self, width: usize, fill: char = ' ') -> String   // pad_right, center
-pub fn escape(self) -> String                                // debug-form escapes
-pub fn from_utf8(bytes: [u8]) -> String ! Utf8Error          // String.from_utf8_lossy
-pub fn to_bytes(self) -> List[u8]
-pub fn parse_radix[T: Parse](self, radix: u32) -> T ! NumError
+pub fun split_once(self, sep: str) -> ?(str, str)             // rsplit_once
+pub fun splitn(self, n: usize, sep: str) -> Stream[str]       // rsplit, split_terminator
+pub fun split_by(self, f: char => bool) -> Stream[str]
+pub fun strip_prefix(self, p: str) -> ?str                    // strip_suffix
+pub fun trim_matches(self, f: char => bool) -> str            // trim_start_matches, trim_end_matches
+pub fun char_indices(self) -> Stream[(usize, char)]
+pub fun rfind(self, part: str) -> ?usize                      // find_by(f), matches, match_indices
+pub fun count_of(self, part: str) -> usize
+pub fun char_at(self, i: usize) -> ?char                      // i counts characters; O(i), say so in the doc
+pub fun is_char_boundary(self, i: usize) -> bool
+pub fun is_ascii(self) -> bool
+pub fun eq_ignore_case(self, other: str) -> bool
+pub fun capitalize(self) -> String
+pub fun pad_left(self, width: usize, fill: char = ' ') -> String   // pad_right, center
+pub fun escape(self) -> String                                // debug-form escapes
+pub fun from_utf8(bytes: [u8]) -> String ! Utf8Error          // String.from_utf8_lossy
+pub fun to_bytes(self) -> List[u8]
+pub fun parse_radix[T: Parse](self, radix: u32) -> T ! NumError
 ```
 
 **String** (the builder): `insert(i, c)`, `insert_str(i, s)`, `remove(i) -> char`,
@@ -388,13 +388,13 @@ pub fn parse_radix[T: Parse](self, radix: u32) -> T ! NumError
 **Fmt** (so user `Show` weaves behave like built-ins):
 
 ```text
-pub fn spec(self) -> Spec          // width, fill, align, precision, radix, debug flag
-pub fn put_str(mut self, s: str)
-pub fn pad(mut self, s: str)       // writes `s` honouring the spec: `{name:>12}` works for user types
-pub fn debug_struct(mut self, name: str) -> StructFmt   // StructFmt.field(name, any Show), .finish()
+pub fun spec(self) -> Spec          // width, fill, align, precision, radix, debug flag
+pub fun put_str(mut self, s: str)
+pub fun pad(mut self, s: str)       // writes `s` honouring the spec: `{name:>12}` works for user types
+pub fun debug_struct(mut self, name: str) -> StructFmt   // StructFmt.field(name, any Show), .finish()
 // std.fmt free functions
-pub fn dbg[T: Show](take x: T) -> T      // prints `file:line  expr = value`, returns x
-pub fn format(...)                       // not needed: templates are already the format string
+pub fun dbg[T: Show](take x: T) -> T      // prints `file:line  expr = value`, returns x
+pub fun format(...)                       // not needed: templates are already the format string
 ```
 
 `dbg` needs the compiler to hand it the expression's source text, so it is the
@@ -410,26 +410,26 @@ Gates for the rest: `split_once`, `strip_prefix`, `lines` stay allocation-free
 
 ```text
 // Int[T]
-pub fn signum / is_negative (self)
-pub fn clamp(self, lo: T, hi: T) -> T
-pub fn abs_diff(self, other: T) -> unsigned T            // never overflows
-pub fn rem_euclid / div_euclid / div_floor / div_ceil
-pub fn gcd(self, other: T) -> T                          // lcm
-pub fn isqrt(self) -> T
-pub fn ilog10 / ilog(base) (self) -> u32                 // next to `log2`
-pub fn next_power_of_two(self) -> T                      // Unravels on overflow, like `pow`
-pub fn count_zeros / reverse_bits / swap_bytes
-pub fn pow_wrap / pow_sat / pow_checked
-pub fn to_be_bytes / to_le_bytes(self) -> [u8; T.size]   // from_be_bytes / from_le_bytes
-pub fn to_string_radix(self, radix: u32) -> String
+pub fun signum / is_negative (self)
+pub fun clamp(self, lo: T, hi: T) -> T
+pub fun abs_diff(self, other: T) -> unsigned T            // never overflows
+pub fun rem_euclid / div_euclid / div_floor / div_ceil
+pub fun gcd(self, other: T) -> T                          // lcm
+pub fun isqrt(self) -> T
+pub fun ilog10 / ilog(base) (self) -> u32                 // next to `log2`
+pub fun next_power_of_two(self) -> T                      // Unravels on overflow, like `pow`
+pub fun count_zeros / reverse_bits / swap_bytes
+pub fun pow_wrap / pow_sat / pow_checked
+pub fun to_be_bytes / to_le_bytes(self) -> [u8; T.size]   // from_be_bytes / from_le_bytes
+pub fun to_string_radix(self, radix: u32) -> String
 // associated constants, if `Int[T]` can carry them: u8.MAX, i32.MIN, T.BITS
 // Float[T]
-pub fn sin cos tan asin acos atan atan2 sinh cosh tanh exp exp2 ln log2 log10 log(base) cbrt hypot
-pub fn fract signum clamp copysign mul_add lerp(self, to: T, t: T)
-pub fn to_degrees / to_radians
-pub fn is_finite / is_infinite / is_sign_negative
-pub fn total_cmp(self, other: T) -> Ordering
-pub fn to_bits / from_bits
+pub fun sin cos tan asin acos atan atan2 sinh cosh tanh exp exp2 ln log2 log10 log(base) cbrt hypot
+pub fun fract signum clamp copysign mul_add lerp(self, to: T, t: T)
+pub fun to_degrees / to_radians
+pub fun is_finite / is_infinite / is_sign_negative
+pub fun total_cmp(self, other: T) -> Ordering
+pub fun to_bits / from_bits
 // std.math constants: TAU, SQRT_2, LN_2, LN_10, INV_PI, PHI, plus per-type EPSILON, MAX, MIN_POSITIVE, INF, NAN
 ```
 
@@ -457,14 +457,14 @@ All host services (`io`, `fs`, `env`, `process`, `term`, `time`) go through
 makes everything else composable:
 
 ```text
-pub fn print(x: any Show)                   // exists
-pub fn eprint(x: any Show)                  // stderr, newline
-pub fn write(x: any Show)                   // stdout, no newline  (ewrite for stderr)
-pub fn read_line() -> ?String ! IoError     // stdin; none at end of input
-pub fn read_all() -> String ! IoError       // slurp stdin
-pub fn lines() -> Stream[String ! IoError]  // stdin as a stream: `for line in io.lines()`
-pub weft Reader { fn read(mut self, mut buf: [u8]) -> usize ! IoError }
-pub weft Writer { fn write_bytes(mut self, bytes: [u8]) ! IoError }  // + default write_str, flush
+pub fun print(x: any Show)                   // exists
+pub fun eprint(x: any Show)                  // stderr, newline
+pub fun write(x: any Show)                   // stdout, no newline  (ewrite for stderr)
+pub fun read_line() -> ?String ! IoError     // stdin; none at end of input
+pub fun read_all() -> String ! IoError       // slurp stdin
+pub fun lines() -> Stream[String ! IoError]  // stdin as a stream: `for line in io.lines()`
+pub weft Reader { fun read(mut self, mut buf: [u8]) -> usize ! IoError }
+pub weft Writer { fun write_bytes(mut self, bytes: [u8]) ! IoError }  // + default write_str, flush
 pub warp BufReader[R: Reader]   // read_line, lines, read_to_string, bytes
 pub warp BufWriter[W: Writer]   // batches small writes; flush on drop
 pub warp Cursor                 // a Reader/Writer over a List[u8], for tests
@@ -478,15 +478,15 @@ allocates one `String` per line at most; `BufWriter` ≥ 5x faster than unbuffer
 **fs and path.**
 
 ```text
-pub fn write_text(path: str, text: str) ! IoError      // write(bytes), append_text
-pub fn exists(path: str) -> bool
-pub fn read_dir(path: str) -> List[DirEntry] ! IoError
-pub fn create_dir_all / remove_file / remove_dir_all / copy / rename (...) ! IoError
-pub fn metadata(path: str) -> Meta ! IoError           // size, kind, modified: SystemTime
+pub fun write_text(path: str, text: str) ! IoError      // write(bytes), append_text
+pub fun exists(path: str) -> bool
+pub fun read_dir(path: str) -> List[DirEntry] ! IoError
+pub fun create_dir_all / remove_file / remove_dir_all / copy / rename (...) ! IoError
+pub fun metadata(path: str) -> Meta ! IoError           // size, kind, modified: SystemTime
 pub once warp File {
-    pub fn open(path: str) -> File ! IoError           // File.create, File.append (exists)
-    pub fn read_line(mut self) -> ?String ! IoError    // weaves Reader and Writer
-    pub fn close(take self) ! IoError
+    pub fun open(path: str) -> File ! IoError           // File.create, File.append (exists)
+    pub fun read_line(mut self) -> ?String ! IoError    // weaves Reader and Writer
+    pub fun close(take self) ! IoError
 }
 // std.path
 pub warp Path(String)   // join, parent, file_name, stem, extension, with_extension,
@@ -504,7 +504,7 @@ pub warp Duration { ... }   // + - * / by integer, Ord, Eq, Show ("1.5s", "250ms
                             // as_secs_f64, as_millis, checked arithmetic via the operators
 pub warp Instant: Ord       // monotonic clock: `Instant.now()`, `elapsed()`, `since(other)`, `+ Duration`
 pub warp SystemTime         // `unix_now()`, `unix_secs()`; calendar dates are a later proposal
-pub fn measure[T](f: () => T) -> (T, Duration)
+pub fun measure[T](f: () => T) -> (T, Duration)
 ```
 
 Needs the operator wefts (D4) for `+`/`-` on durations. Gates: `Instant.now()`
@@ -515,15 +515,15 @@ Needs the operator wefts (D4) for `+`/`-` on durations. Gates: `Instant.now()`
 **rand.**
 
 ```text
-pub fn from_entropy() -> Rng                      // OS seed; every other constructor stays deterministic
-pub fn range[T: Integer](mut self, r: Range[T]) -> T   // unbiased (Lemire), accepts a..b and a..=b
-pub fn float(mut self) -> f64                     // [0, 1), 53 bits
-pub fn bool(mut self) -> bool                     // chance(p)
-pub fn shuffle[T](mut self, mut xs: [T])          // Fisher-Yates
-pub fn choose[T](mut self, xs: [T]) -> ?T         // sample(xs, n)
-pub fn fill(mut self, mut buf: [u8])
-pub fn gaussian(mut self) -> f64
-pub fn jump(mut self) -> Rng                      // xoshiro's jump: an independent stream per thread
+pub fun from_entropy() -> Rng                      // OS seed; every other constructor stays deterministic
+pub fun range[T: Integer](mut self, r: Range[T]) -> T   // unbiased (Lemire), accepts a..b and a..=b
+pub fun float(mut self) -> f64                     // [0, 1), 53 bits
+pub fun bool(mut self) -> bool                     // chance(p)
+pub fun shuffle[T](mut self, mut xs: [T])          // Fisher-Yates
+pub fun choose[T](mut self, xs: [T]) -> ?T         // sample(xs, n)
+pub fun fill(mut self, mut buf: [u8])
+pub fun gaussian(mut self) -> f64
+pub fun jump(mut self) -> Rng                      // xoshiro's jump: an independent stream per thread
 ```
 
 `jump` is there for V5: each `thread` gets `rng.jump()`, deterministic and race-free.
@@ -549,28 +549,28 @@ build machine: a program that spawns can't forget the child.
 
 ```text
 // Atomic[T]
-pub fn fetch_and / fetch_or / fetch_xor / fetch_max / fetch_min (self, v: T) -> T
-pub fn update(self, f: T => T) -> T         // compare-exchange loop; f must be pure
+pub fun fetch_and / fetch_or / fetch_xor / fetch_max / fetch_min (self, v: T) -> T
+pub fun update(self, f: T => T) -> T         // compare-exchange loop; f must be pure
 // Mutex[T]
-pub fn try_lock(self) ~> mut T ... ?        // shape depends on projection rules: open question D6
+pub fun try_lock(self) ~> mut T ... ?        // shape depends on projection rules: open question D6
 // Pipe[T]
-pub fn try_send(self, take item: T) -> bool
-pub fn try_recv(self) -> ?T
-pub fn len(self) -> usize
-pub fn is_closed(self) -> bool
+pub fun try_send(self, take item: T) -> bool
+pub fun try_recv(self) -> ?T
+pub fun len(self) -> usize
+pub fun is_closed(self) -> bool
 //   weaves Iter: `for job in pipe { ... }` ends when the pipe is closed and drained.
 //   `Pipe.unbounded()` would defeat back-pressure; not proposed.
 // new
 pub warp RwLock[T]                          // read() ~> ref T (many), write() ~> mut T (one)
 pub warp Once[T] / Lazy[T]                  // computed once, safely, on first use; `lazy.get()`
 pub warp Barrier                            // loom threads wait for each other: wait(self)
-pub fn workers() -> usize                   // the pool's size, so grain sizes can be chosen
+pub fun workers() -> usize                   // the pool's size, so grain sizes can be chosen
 // Spun[T]
-pub fn is_done(self) -> bool
+pub fun is_done(self) -> bool
 // parallel helpers on slices and ranges, built on `loom for` and `chunks_mut`:
-pub fn par_map[U](self, f: T => U) -> List[U]
-pub fn par_for_each(mut self, f: mut T => ())      // chunks_mut underneath
-pub fn par_sum / par_min / par_max / par_fold ... (self)
+pub fun par_map[U](self, f: T => U) -> List[U]
+pub fun par_for_each(mut self, f: mut T => ())      // chunks_mut underneath
+pub fun par_sum / par_min / par_max / par_fold ... (self)
 ```
 
 `par_*` is Rayon / C++17 `std::execution::par` in miniature: `xs.par_map(f)` is
@@ -597,12 +597,12 @@ has to change.
 
 ```text
 // std.mem
-pub weft Spool { fn alloc(...); fn free(...); fn reset(mut self) }   // 03-memory: "alloc, free, reset"
+pub weft Spool { fun alloc(...); fun free(...); fun reset(mut self) }   // 03-memory: "alloc, free, reset"
 pub warp Arena: Spool            // exists as a stub
 pub warp SharedArena: Spool      // thread-safe, so its pointers may cross threads
 pub warp Pool[T]: Spool          // fixed slots, O(1) alloc and free
-pub fn size_of[T]() -> usize     // align_of; also `T.size` already exists in compile-time code
-pub fn swap / replace / take / drop
+pub fun size_of[T]() -> usize     // align_of; also `T.size` already exists in compile-time code
+pub fun swap / replace / take / drop
 ```
 
 Ambient services through `given`, the Loom-specific part. Each is a weft with a
@@ -641,7 +641,7 @@ warp Config: Default, ToJson, FromJson, Args {
     verbose: bool = false
 }
 
-fn main() ! any Error {
+fun main() ! any Error {
     let cfg = Config.from_args()?        // --host x --port 80 --verbose; also --help from the doc comments
     let saved = cfg.to_json()            // {"host":"localhost","port":8080,"verbose":false}
     let back = Config.from_json(saved)?

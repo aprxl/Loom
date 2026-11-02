@@ -5,7 +5,7 @@
 // so their definitions don't leak into each other.
 
 /// Definitions every program can use. They're evaluated once, at boot.
-pub fn prelude() -> str = """
+pub fun prelude() -> str = """
 (define (map f xs) (if (null? xs) '() (cons (f (car xs)) (map f (cdr xs)))))
 (define (filter keep? xs)
   (cond ((null? xs) '())
@@ -62,7 +62,7 @@ pub warp Demo {
     pub source: str
 }
 
-pub fn demos() -> List[Demo] = [
+pub fun demos() -> List[Demo] = [
     Demo(title: "arithmetic and definitions", source: """
 (define x 6)
 (define y (* x 7))

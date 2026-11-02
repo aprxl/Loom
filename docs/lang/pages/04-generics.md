@@ -11,7 +11,7 @@ Generics are checked **per instance**, in the style of Zig. A generic function i
 
 - **Generic warps** (`Pair[A, B]`) and their methods are compiled per list of arguments too.
 - **Generic weaves** (`weave[T: Show] Twice into List[T]`) work the same way.
-- **Wefts as parameter types are implicit generics.** `fn show_all(xs: [Show])` means `fn show_all[T: Show](xs: [T])`, and each use has static dispatch.
+- **Wefts as parameter types are implicit generics.** `fun show_all(xs: [Show])` means `fun show_all[T: Show](xs: [T])`, and each use has static dispatch.
 - Value parameters (`const N: usize`) work too: see [Const parameters](page:const-params).
 - Generic wefts (`weft From[T]`) are not supported yet ([U0102](diag:U0102)).
 

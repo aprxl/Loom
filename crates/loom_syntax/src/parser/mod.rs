@@ -304,6 +304,9 @@ impl<'a> Parser<'a> {
         let span = self.peek().span;
         let label = if matches!(self.kind(), TokenKind::Eof) { "the file ends here" } else { "unexpected here" };
         let mut diag = Diagnostic::error(codes::S0200, format!("expected {what}, found {found}")).primary(span, label);
+        if self.at_contextual("fn") {
+            diag = diag.help("functions are declared with `fun`, not `fn`");
+        }
         if self.peek().nl_before && is_continuation(self.kind()) {
             diag = diag.help(format!(
                 "a line starting with {found} continues the statement above only when it's indented deeper than \

@@ -88,14 +88,14 @@
 <div class="members">
 <div class="member" id="File.append">
 <div class="member-head">
-<span class="sig">fn append(path: str) -&gt; File ! IoError</span>
+<span class="sig">fun append(path: str) -&gt; File ! IoError</span>
 
 </div>
 <p class="member-doc">Opens <code>path</code> for appending, creating it if needed.</p>
 </div>
 <div class="member" id="File.write_line">
 <div class="member-head">
-<span class="sig">fn write_line(mut self, line: str) ! IoError</span>
+<span class="sig">fun write_line(mut self, line: str) ! IoError</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
@@ -105,98 +105,98 @@
 <h2>Functions</h2>
 <div class="item" id="metadata">
 <div class="item-head">
-<span class="sig">fn <strong>metadata</strong>(path: str) -&gt; Meta ! IoError</span>
+<span class="sig">fun <strong>metadata</strong>(path: str) -&gt; Meta ! IoError</span>
 
 </div>
 <p class="item-doc">The size of the file at <code>path</code>, and whether it is a directory.</p>
 </div>
 <div class="item" id="is_dir">
 <div class="item-head">
-<span class="sig">fn <strong>is_dir</strong>(path: str) -&gt; bool</span>
+<span class="sig">fun <strong>is_dir</strong>(path: str) -&gt; bool</span>
 
 </div>
 <p class="item-doc">Whether <code>path</code> is a directory.</p>
 </div>
 <div class="item" id="is_file">
 <div class="item-head">
-<span class="sig">fn <strong>is_file</strong>(path: str) -&gt; bool</span>
+<span class="sig">fun <strong>is_file</strong>(path: str) -&gt; bool</span>
 
 </div>
 <p class="item-doc">Whether <code>path</code> is a file.</p>
 </div>
 <div class="item" id="read">
 <div class="item-head">
-<span class="sig">fn <strong>read</strong>(path: str) -&gt; List[u8] ! IoError</span>
+<span class="sig">fun <strong>read</strong>(path: str) -&gt; List[u8] ! IoError</span>
 <span class="badge extern">extern</span><span class="badge todo">TODO</span>
 </div>
 <p class="item-doc empty">undocumented in source</p>
 </div>
 <div class="item" id="read_text">
 <div class="item-head">
-<span class="sig">fn <strong>read_text</strong>(path: str) -&gt; String ! IoError</span>
+<span class="sig">fun <strong>read_text</strong>(path: str) -&gt; String ! IoError</span>
 <span class="badge extern">extern</span><span class="badge todo">TODO</span>
 </div>
 <p class="item-doc empty">undocumented in source</p>
 </div>
 <div class="item" id="write_text">
 <div class="item-head">
-<span class="sig">fn <strong>write_text</strong>(path: str, text: str) ! IoError</span>
+<span class="sig">fun <strong>write_text</strong>(path: str, text: str) ! IoError</span>
 <span class="badge extern">extern</span>
 </div>
 <p class="item-doc">Makes the file <code>path</code> hold <code>text</code>, replacing what was there.</p>
 </div>
 <div class="item" id="exists">
 <div class="item-head">
-<span class="sig">fn <strong>exists</strong>(path: str) -&gt; bool</span>
+<span class="sig">fun <strong>exists</strong>(path: str) -&gt; bool</span>
 <span class="badge extern">extern</span>
 </div>
 <p class="item-doc">Whether there is a file or a directory at <code>path</code>.</p>
 </div>
 <div class="item" id="remove_file">
 <div class="item-head">
-<span class="sig">fn <strong>remove_file</strong>(path: str) ! IoError</span>
+<span class="sig">fun <strong>remove_file</strong>(path: str) ! IoError</span>
 <span class="badge extern">extern</span>
 </div>
 <p class="item-doc">Deletes the file at <code>path</code>.</p>
 </div>
 <div class="item" id="file_kind">
 <div class="item-head">
-<span class="sig">fn <strong>file_kind</strong>(path: str) -&gt; u8</span>
+<span class="sig">fun <strong>file_kind</strong>(path: str) -&gt; u8</span>
 <span class="badge extern">extern</span>
 </div>
 <p class="item-doc">What kind of thing is at <code>path</code>: 0 nothing, 1 a file, 2 a directory.</p>
 </div>
 <div class="item" id="file_size">
 <div class="item-head">
-<span class="sig">fn <strong>file_size</strong>(path: str) -&gt; u64</span>
+<span class="sig">fun <strong>file_size</strong>(path: str) -&gt; u64</span>
 <span class="badge extern">extern</span>
 </div>
 <p class="item-doc">The length of the file at <code>path</code> in bytes, 0 when it can't be read.</p>
 </div>
 <div class="item" id="create_dir_all">
 <div class="item-head">
-<span class="sig">fn <strong>create_dir_all</strong>(path: str) ! IoError</span>
+<span class="sig">fun <strong>create_dir_all</strong>(path: str) ! IoError</span>
 <span class="badge extern">extern</span>
 </div>
 <p class="item-doc">Makes the directory <code>path</code> and the ones above it that are missing.</p>
 </div>
 <div class="item" id="rename">
 <div class="item-head">
-<span class="sig">fn <strong>rename</strong>(from: str, to: str) ! IoError</span>
+<span class="sig">fun <strong>rename</strong>(from: str, to: str) ! IoError</span>
 <span class="badge extern">extern</span>
 </div>
 <p class="item-doc">Moves the file <code>from</code> to <code>to</code>, replacing what is there.</p>
 </div>
 <div class="item" id="copy">
 <div class="item-head">
-<span class="sig">fn <strong>copy</strong>(from: str, to: str) ! IoError</span>
+<span class="sig">fun <strong>copy</strong>(from: str, to: str) ! IoError</span>
 <span class="badge extern">extern</span>
 </div>
 <p class="item-doc">Copies the file <code>from</code> to <code>to</code>, replacing what is there.</p>
 </div>
 <div class="item" id="read_dir">
 <div class="item-head">
-<span class="sig">fn <strong>read_dir</strong>(path: str) -&gt; List[String] ! IoError</span>
+<span class="sig">fun <strong>read_dir</strong>(path: str) -&gt; List[String] ! IoError</span>
 <span class="badge extern">extern</span>
 </div>
 <p class="item-doc">The names in the directory <code>path</code>, in order.</p>

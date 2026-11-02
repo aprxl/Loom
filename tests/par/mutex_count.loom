@@ -3,7 +3,7 @@
 use std.io.print
 use std.sync.Mutex
 
-fn main() {
+fun main() {
     let m = Mutex[i64](0)
     loom for i in 1..=50 {
         for k in 0..20 {

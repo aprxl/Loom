@@ -14,38 +14,38 @@ use std.iter.FromStream
 #builtin
 pub warp Map[K, V] {
     /// How many keys there are.
-    pub fn len(self) -> usize
-    pub fn is_empty(self) -> bool
+    pub fun len(self) -> usize
+    pub fun is_empty(self) -> bool
     /// A copy of the value for `key` (`m[key]` is the value itself).
-    pub fn get(self, key: K) -> ?V where K: Hash
+    pub fun get(self, key: K) -> ?V where K: Hash
     /// Whether there's a value for `key`.
-    pub fn has(self, key: K) -> bool where K: Hash
+    pub fun has(self, key: K) -> bool where K: Hash
     /// Adds `value` for `key`, and gives back the value it replaces.
-    pub fn insert(mut self, take key: K, take value: V) -> ?V where K: Hash
+    pub fun insert(mut self, take key: K, take value: V) -> ?V where K: Hash
     /// The value for `key` as a place to change, for the statement it's in:
     /// `counts.entry(word, default: 0) += 1`. When there's none, `default`
     /// is added first (and `key` kept); when there is, both are dropped.
-    pub fn entry(mut self, take key: K, take default: V) ~> mut V where K: Hash
+    pub fun entry(mut self, take key: K, take default: V) ~> mut V where K: Hash
     /// Takes out the value for `key`; later keys keep their order.
-    pub fn remove(mut self, key: K) -> ?V where K: Hash
+    pub fun remove(mut self, key: K) -> ?V where K: Hash
     /// Removes every key.
-    pub fn clear(mut self)
+    pub fun clear(mut self)
     /// The keys, in order.
-    pub fn keys(self) -> Stream[K]
+    pub fun keys(self) -> Stream[K]
     /// The values, in the order of their keys.
-    pub fn values(self) -> Stream[V]
+    pub fun values(self) -> Stream[V]
     /// The pairs, in order.
-    pub fn pairs(self) -> Stream[(K, V)]
+    pub fun pairs(self) -> Stream[(K, V)]
     /// A list of the pairs, sorted by key.
-    pub fn sorted(self) -> List[(K, V)] where K: Ord
+    pub fun sorted(self) -> List[(K, V)] where K: Ord
     /// A deep copy.
-    pub fn copy(self) -> Map[K, V]
+    pub fun copy(self) -> Map[K, V]
     /// The oldest entry.
-    pub fn first(self) -> ?(K, V)
+    pub fun first(self) -> ?(K, V)
     /// The newest entry.
-    pub fn last(self) -> ?(K, V)
+    pub fun last(self) -> ?(K, V)
     /// A map of `pairs`; a key that comes up again keeps the last value.
-    pub fn of(pairs: [(K, V)]) -> Map[K, V] where K: Hash {
+    pub fun of(pairs: [(K, V)]) -> Map[K, V] where K: Hash {
         var m: Map[K, V] = Map()
         for (k, v) in pairs {
             m.insert(k, v)
@@ -53,14 +53,14 @@ pub warp Map[K, V] {
         m
     }
     /// The value for `key`, or `default` when there is none.
-    pub fn get_or(self, key: K, default: V) -> V where K: Hash {
+    pub fun get_or(self, key: K, default: V) -> V where K: Hash {
         match self.get(key) {
             some(v) => v
             none => default
         }
     }
     /// Keeps the entries `keep` says yes to.
-    pub fn retain(mut self, keep: (K, V) => bool) where K: Hash {
+    pub fun retain(mut self, keep: (K, V) => bool) where K: Hash {
         var dead: List[K] = []
         for (k, v) in self.pairs() {
             if not keep(k, v) { dead.push(k) }
@@ -70,27 +70,27 @@ pub warp Map[K, V] {
         }
     }
     /// Adds each pair; a key already there gets the new value.
-    pub fn extend(mut self, take pairs: Stream[(K, V)]) where K: Hash {
+    pub fun extend(mut self, take pairs: Stream[(K, V)]) where K: Hash {
         for (k, v) in pairs {
             self.insert(k, v)
         }
     }
     /// Takes out the entry for `key` and gives it back with the key you gave.
-    pub fn remove_entry(mut self, take key: K) -> ?(K, V) where K: Hash {
+    pub fun remove_entry(mut self, take key: K) -> ?(K, V) where K: Hash {
         match self.remove(key) {
             some(v) => some((key, v))
             none => none
         }
     }
     /// Replaces the value for `key` with `f` of it, if there is one.
-    pub fn update(mut self, take key: K, f: V => V) where K: Hash {
+    pub fun update(mut self, take key: K, f: V => V) where K: Hash {
         match self.get(key) {
             some(v) => self.insert(key, f(v))
             none => none
         }
     }
     /// Adds the entries of `other`; for a key in both, `f(mine, theirs)`.
-    pub fn merge(mut self, take other: Map[K, V], f: (V, V) => V) where K: Hash {
+    pub fun merge(mut self, take other: Map[K, V], f: (V, V) => V) where K: Hash {
         for (k, v) in other.pairs() {
             match self.get(k) {
                 some(mine) => self.insert(k, f(mine, v))
@@ -102,7 +102,7 @@ pub warp Map[K, V] {
 
 weave[K: Hash, V] FromStream into Map[K, V] {
     type Item = (K, V)
-    fn from_stream(take items: Stream[(K, V)]) -> Map[K, V] {
+    fun from_stream(take items: Stream[(K, V)]) -> Map[K, V] {
         var out: Map[K, V] = Map()
         out.extend(items)
         out

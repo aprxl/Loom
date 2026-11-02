@@ -10,19 +10,19 @@ const MAX_RETRIES = 3
 
 /// Doc comments use three slashes. Parameters can have defaults, and the
 /// `= expr` form is for one-expression functions.
-fn greet(name: str, excited: bool = false) -> String =
+fun greet(name: str, excited: bool = false) -> String =
     if excited { "hello, {name}!" } else { "hello, {name}." }
 
 /// Any free function can be called as a method on its first argument (UFCS),
 /// so this is also `"text".shout()`.
-fn shout(s: str) -> String = s.to_upper()
+fun shout(s: str) -> String = s.to_upper()
 
 warp Point {
     x: f64 = 0
     y: f64 = 0
 
-    fn len(self) -> f64 = (.x * .x + .y * .y).sqrt()     // `.x` means `self.x`
-    fn plus(self, o: Point) -> Point = Point(.x + o.x, .y + o.y)
+    fun len(self) -> f64 = (.x * .x + .y * .y).sqrt()     // `.x` means `self.x`
+    fun plus(self, o: Point) -> Point = Point(.x + o.x, .y + o.y)
 }
 
 warp Weather {
@@ -34,7 +34,7 @@ warp Weather {
 /// A gauge: an f32 that's always between 0 and 1.
 type Percent = f32 where 0.0..=1.0
 
-fn main() {
+fun main() {
     // --- bindings -----------------------------------------------------------
     let answer = 42                      // immutable
     var count = 0                        // mutable
@@ -131,4 +131,4 @@ fn main() {
 
 warp Flake: Error { case NotYet(u32) }
 
-fn flaky(n: u32) -> u32 ! Flake = if n < 3 { fail .NotYet(n) } else { n * 100 }
+fun flaky(n: u32) -> u32 ! Flake = if n < 3 { fail .NotYet(n) } else { n * 100 }

@@ -4,7 +4,7 @@
 // the apostrophes at its ends taken off. Every other character separates words.
 
 /// Appends the words of `text` to `out`, in order.
-pub fn tokens(text: str, mut out: List[String]) {
+pub fun tokens(text: str, mut out: List[String]) {
     var word: String = ""
     for c in text.chars() {
         if c.is_ascii_alphanumeric() or c == '\'' {
@@ -18,6 +18,6 @@ pub fn tokens(text: str, mut out: List[String]) {
 }
 
 /// Pushes `word` onto `out`, unless nothing is left of it.
-fn keep(word: str, mut out: List[String]) {
+fun keep(word: str, mut out: List[String]) {
     if word.len() > 0 { out.push(word.to_string()) }
 }

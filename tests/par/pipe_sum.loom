@@ -4,7 +4,7 @@ use std.io.print
 use std.sync.Pipe
 use std.sync.Atomic
 
-fn main() {
+fun main() {
     let p = Pipe[i64](3)
     let done = Atomic[u64](0)
     var sum: i64 = 0

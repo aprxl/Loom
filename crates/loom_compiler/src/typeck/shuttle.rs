@@ -1,4 +1,4 @@
-//! Shuttles: functions that yield and pull (`fn f() ~> T <~ U`).
+//! Shuttles: functions that yield and pull (`fun f() ~> T <~ U`).
 //!
 //! Calling one makes a `Shuttle[T, U]` without running its body, which is
 //! checked as if it returned `()`: `yield v` takes a `T`, `pull` gives a

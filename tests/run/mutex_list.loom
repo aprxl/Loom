@@ -5,7 +5,7 @@ use std.io.print
 use std.sync.Mutex
 use std.sync.sched_yield
 
-fn main() {
+fun main() {
     let log = Mutex[List[i32]]([])
     let name = Mutex[String]("log".to_string())
     loom {

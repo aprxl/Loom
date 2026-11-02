@@ -11,7 +11,7 @@ use value.Val
 use errors.LispError
 
 /// Every datum in `src`, in order.
-pub fn read_all(mut h: Heap, src: str) -> List[Val] ! LispError {
+pub fun read_all(mut h: Heap, src: str) -> List[Val] ! LispError {
     var r = Reader(chars: src.chars().collect())
     var forms: List[Val] = List()
     loop {
@@ -27,10 +27,10 @@ warp Reader {
     chars: List[char]
     pos: usize = 0
 
-    fn peek(self) -> ?char = .chars.get(.pos)
+    fun peek(self) -> ?char = .chars.get(.pos)
 
     /// The line the cursor is on, counting from 1.
-    fn line(self) -> usize {
+    fun line(self) -> usize {
         var n = 1
         var i = 0
         while i < .pos and i < .chars.len() {
@@ -41,10 +41,10 @@ warp Reader {
     }
 
     /// A read error at the cursor, with `what` describing it.
-    fn error(self, what: str) -> LispError = .Read("line {.line()}: {what}".to_string())
+    fun error(self, what: str) -> LispError = .Read("line {.line()}: {what}".to_string())
 
     /// Skips whitespace and `;` comments.
-    fn skip_space(mut self) {
+    fun skip_space(mut self) {
         while .peek() is some(c) {
             if c == ';' {
                 while .peek() is some(d) and d != '\n' { .pos += 1 }
@@ -57,7 +57,7 @@ warp Reader {
     }
 
     /// One datum: a list, a prefixed form, a string, or an atom.
-    fn datum(mut self, mut h: Heap) -> Val ! LispError {
+    fun datum(mut self, mut h: Heap) -> Val ! LispError {
         .skip_space()
         match .peek() {
             none => fail .error("unexpected end of input")
@@ -92,7 +92,7 @@ warp Reader {
     }
 
     /// The elements of a list, up to its closing `)`.
-    fn items(mut self, mut h: Heap) -> Val ! LispError {
+    fun items(mut self, mut h: Heap) -> Val ! LispError {
         var xs: List[Val] = List()
         loop {
             .skip_space()
@@ -109,7 +109,7 @@ warp Reader {
     }
 
     /// A string literal. The opening quote has already been read.
-    fn string(mut self, mut h: Heap) -> Val ! LispError {
+    fun string(mut self, mut h: Heap) -> Val ! LispError {
         var text = String()
         loop {
             match .peek() {
@@ -133,7 +133,7 @@ warp Reader {
     }
 
     /// A number, `#t`, `#f`, or a symbol: everything up to a delimiter.
-    fn atom(mut self, mut h: Heap) -> Val ! LispError {
+    fun atom(mut self, mut h: Heap) -> Val ! LispError {
         var text = String()
         while .peek() is some(c) and not is_delimiter(c) {
             text.push(c)
@@ -148,15 +148,15 @@ warp Reader {
 }
 
 /// `(tag inner)`: the list that a prefix such as `'x` reads as.
-fn wrap(mut h: Heap, tag: str, inner: Val) -> Val {
+fun wrap(mut h: Heap, tag: str, inner: Val) -> Val {
     let q = h.sym(tag)
     h.list([Val.Sym(q), inner])
 }
 
-fn is_delimiter(c: char) -> bool =
+fun is_delimiter(c: char) -> bool =
     c.is_whitespace() or c == '(' or c == ')' or c == ';' or c == '"' or c == '\'' or c == '`' or c == ','
 
-fn escape(c: char) -> char = match c {
+fun escape(c: char) -> char = match c {
     'n' => '\n'
     't' => '\t'
     _ => c

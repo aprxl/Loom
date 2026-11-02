@@ -1,10 +1,10 @@
 use std.io.print
 
-fn apply(x: i32, f: i32 => i32) -> i32 = f(x)
+fun apply(x: i32, f: i32 => i32) -> i32 = f(x)
 
-fn is_even(n: i32) -> bool = n % 2 == 0
+fun is_even(n: i32) -> bool = n % 2 == 0
 
-fn main() {
+fun main() {
     // A lambda gets its parameter types from where it's passed.
     // Anywhere else, annotate them.
     let double = (x: i32) => x * 2

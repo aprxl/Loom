@@ -1,6 +1,6 @@
 use std.io.print
 
-fn main() {
+fun main() {
     print("héllo wörld".to_upper())
     print("ÀÉÎ Straße".to_lower())
     print("Straße".to_upper())

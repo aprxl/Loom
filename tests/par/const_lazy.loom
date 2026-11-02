@@ -6,7 +6,7 @@ use std.sync.Atomic
 
 const TABLE: Map[i64, i64] = [1: 10, 2: 20, 3: 30, 4: 40]
 
-fn main() {
+fun main() {
     let total = Atomic[i64](0)
     loom for i in 0..64 {
         let mut s = 0i64

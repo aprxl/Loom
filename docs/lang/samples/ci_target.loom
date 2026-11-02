@@ -1,7 +1,7 @@
 use std.io.print
 
 // A `const if` on `target` picks a branch while compiling.
-fn separator() -> str {
+fun separator() -> str {
     const if target.os == .Windows {
         "\\"
     } else {
@@ -9,7 +9,7 @@ fn separator() -> str {
     }
 }
 
-fn main() {
+fun main() {
     // `target` describes the machine the program is built for.
     print(target.pointer_bits)
     print(target.endian == .Little)

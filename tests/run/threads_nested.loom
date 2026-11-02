@@ -4,12 +4,12 @@
 use std.io.print
 use std.sync.sched_yield
 
-fn leaf(n: i32) -> i32 {
+fun leaf(n: i32) -> i32 {
     sched_yield()
     n * 10
 }
 
-fn pair(n: i32) -> i32 {
+fun pair(n: i32) -> i32 {
     // A loom inside a thread: its own group, waited for before `pair` returns.
     loom {
         let a = thread leaf(n)
@@ -18,7 +18,7 @@ fn pair(n: i32) -> i32 {
     }
 }
 
-fn main() {
+fun main() {
     let total = loom {
         let outer = [1, 3].map(n => thread pair(n))
         // A thread spawned by a thread joins the outer loom, since it has none.

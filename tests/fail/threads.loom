@@ -4,7 +4,7 @@
 use std.io.print
 use std.sync.Spun
 
-fn two_writers() {
+fun two_writers() {
     var hits = 0
     loom {
         thread { hits += 1 }
@@ -14,7 +14,7 @@ fn two_writers() {
     print(hits)
 }
 
-fn parent_reads_what_a_thread_writes() {
+fun parent_reads_what_a_thread_writes() {
     var total = 0
     loom {
         let t = thread { total += 1 }
@@ -23,7 +23,7 @@ fn parent_reads_what_a_thread_writes() {
     }
 }
 
-fn parent_writes_what_a_thread_reads() {
+fun parent_writes_what_a_thread_reads() {
     var n = 5
     loom {
         let t = thread { n + 1 }
@@ -32,7 +32,7 @@ fn parent_writes_what_a_thread_reads() {
     }
 }
 
-fn a_reader_beside_a_writer() {
+fun a_reader_beside_a_writer() {
     var n = 5
     loom {
         thread { n += 1 }
@@ -41,7 +41,7 @@ fn a_reader_beside_a_writer() {
     }
 }
 
-fn joined_first_is_fine() {
+fun joined_first_is_fine() {
     var total = 0
     loom {
         let t = thread { total += 1 }
@@ -50,7 +50,7 @@ fn joined_first_is_fine() {
     }
 }
 
-fn readers_share() {
+fun readers_share() {
     let n = 5
     loom {
         let a = thread { n + 1 }
@@ -60,7 +60,7 @@ fn readers_share() {
     }
 }
 
-fn a_loop_variable_is_copied() {
+fun a_loop_variable_is_copied() {
     loom {
         for i in 0..3 {
             thread { print(i) }
@@ -68,24 +68,24 @@ fn a_loop_variable_is_copied() {
     }
 }
 
-fn outside_a_loom() {
+fun outside_a_loom() {
     let t = thread 1                        //~ C0403
 }
 
-fn handle_as_the_value() {
+fun handle_as_the_value() {
     let h = loom {
         thread 1                            //~ C0404
     }
 }
 
-fn handle_kept_outside() {
+fun handle_kept_outside() {
     var kept: ?Spun[i32] = none
     loom {
         kept = some(thread 1)               //~ C0404
     }
 }
 
-fn a_thread_changes_its_copy() {
+fun a_thread_changes_its_copy() {
     loom {
         for i in 0..2 {
             var n = i
@@ -95,7 +95,7 @@ fn a_thread_changes_its_copy() {
     }
 }
 
-fn a_thread_cant_keep_an_owned_local() {
+fun a_thread_cant_keep_an_owned_local() {
     loom {
         for i in 0..2 {
             let xs: List[i32] = [i, i]
@@ -105,7 +105,7 @@ fn a_thread_cant_keep_an_owned_local() {
     }
 }
 
-fn a_loom_level_owned_local() {
+fun a_loom_level_owned_local() {
     loom {
         let xs: List[i32] = [1, 2]
         let t = thread { xs.len() }         // moved in: it's the thread's
@@ -113,7 +113,7 @@ fn a_loom_level_owned_local() {
     }
 }
 
-fn a_loom_level_copy_is_fine() {
+fun a_loom_level_copy_is_fine() {
     loom {
         let k = 3
         let t = thread { k + 1 }
@@ -121,7 +121,7 @@ fn a_loom_level_copy_is_fine() {
     }
 }
 
-fn a_borrow_of_a_loom_local() {
+fun a_borrow_of_a_loom_local() {
     loom {
         let names: List[str] = ["a", "b"]
         for n in names {
@@ -131,7 +131,7 @@ fn a_borrow_of_a_loom_local() {
     }
 }
 
-fn a_borrow_of_what_outlives_the_loom_is_fine(names: List[str]) {
+fun a_borrow_of_what_outlives_the_loom_is_fine(names: List[str]) {
     loom {
         for n in names {
             let t = thread { n.len() }
@@ -140,7 +140,7 @@ fn a_borrow_of_what_outlives_the_loom_is_fine(names: List[str]) {
     }
 }
 
-fn a_lambda_parameter_borrows_a_loom_local() {
+fun a_lambda_parameter_borrows_a_loom_local() {
     loom {
         let names: List[String] = ["a".to_string(), "bb".to_string()]
         let jobs = names.map(n => thread n.len())       //~ C0405
@@ -150,7 +150,7 @@ fn a_lambda_parameter_borrows_a_loom_local() {
     }
 }
 
-fn through_a_stream_over_a_loom_local() {
+fun through_a_stream_over_a_loom_local() {
     loom {
         let text = "a bb ccc".to_string()
         let jobs = text.words().map(w => thread w.len()).collect()      //~ C0405
@@ -160,7 +160,7 @@ fn through_a_stream_over_a_loom_local() {
     }
 }
 
-fn a_lambda_over_a_slice_of_a_loom_local() {
+fun a_lambda_over_a_slice_of_a_loom_local() {
     loom {
         let names: List[str] = ["a", "bb", "ccc"]
         let rest = names[1..]
@@ -171,7 +171,7 @@ fn a_lambda_over_a_slice_of_a_loom_local() {
     }
 }
 
-fn a_lambda_over_what_outlives_the_loom_is_fine(names: List[String]) {
+fun a_lambda_over_what_outlives_the_loom_is_fine(names: List[String]) {
     loom {
         let jobs = names.map(n => thread n.len())
         for job in jobs {
@@ -180,7 +180,7 @@ fn a_lambda_over_what_outlives_the_loom_is_fine(names: List[String]) {
     }
 }
 
-fn numbers_are_copies_of_their_items() {
+fun numbers_are_copies_of_their_items() {
     loom {
         let xs: List[i32] = [1, 2]
         let jobs = xs.map(x => thread x + 1)

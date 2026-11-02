@@ -431,7 +431,7 @@ mod tests {
     #[test]
     fn integers_take_the_smallest_power_of_two() {
         let [a, b, c, d, e]: [Layout; 5] = layouts(
-            "fn main() { let a: u1 = 1\n let b: u12 = 1\n let c: i24 = 1\n let d: u64 = 1\n let e: usize = 1 }",
+            "fun main() { let a: u1 = 1\n let b: u12 = 1\n let c: i24 = 1\n let d: u64 = 1\n let e: usize = 1 }",
             &["a", "b", "c", "d", "e"],
         )
         .try_into()
@@ -448,7 +448,7 @@ mod tests {
 
     #[test]
     fn fields_go_largest_alignment_first() {
-        let [t]: [Layout; 1] = layouts("fn main() { let t = (1u8, 2u64, 3u16) }", &["t"]).try_into().expect("one");
+        let [t]: [Layout; 1] = layouts("fun main() { let t = (1u8, 2u64, 3u16) }", &["t"]).try_into().expect("one");
         assert_eq!(size_align(&t), (16, 8));
         assert_eq!(t.shape, Shape::Fields(vec![10, 0, 8]));
     }
@@ -459,7 +459,7 @@ mod tests {
                    warp Span(u32, u32)\n\
                    warp Token { span: Span\n case Ident(String)\n case Int(u64)\n case Eof }\n\
                    warp Color { case Red, Green, Blue }\n\
-                   fn main() {\n\
+                   fun main() {\n\
                        let p = Point(1, 2)\n\
                        let t = Token.Eof(span: Span(0, 0))\n\
                        let ot: ?Token = none\n\
@@ -490,7 +490,7 @@ mod tests {
 
     #[test]
     fn results_unions_and_arrays() {
-        let src = "fn main() {\n\
+        let src = "fun main() {\n\
                        let r: u32 ! u8 = 1\n\
                        let u: u8 | f64 = 1.5\n\
                        let a = [1u16, 2, 3]\n\

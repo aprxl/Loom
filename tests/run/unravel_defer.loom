@@ -1,11 +1,11 @@
 use std.io.print
 
-fn inner() {
+fun inner() {
     defer print("inner cleanup")
     unravel("boom")
 }
 
-fn main() {
+fun main() {
     defer print("outer cleanup")
     inner()
     print("never")

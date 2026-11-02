@@ -9,10 +9,10 @@ pub warp PriorityQueue[T: Ord] {
     items: List[T]
 
     /// An empty queue.
-    pub fn new() -> PriorityQueue[T] = PriorityQueue(items: [])
+    pub fun new() -> PriorityQueue[T] = PriorityQueue(items: [])
 
     /// A queue of `items`, made in `O(n)`.
-    pub fn from_list(take items: List[T]) -> PriorityQueue[T] {
+    pub fun from_list(take items: List[T]) -> PriorityQueue[T] {
         var q = PriorityQueue(items: items)
         var i = q.items.len() / 2
         while i > 0 {
@@ -23,15 +23,15 @@ pub warp PriorityQueue[T: Ord] {
     }
 
     /// How many items there are.
-    pub fn len(self) -> usize = .items.len()
+    pub fun len(self) -> usize = .items.len()
 
-    pub fn is_empty(self) -> bool = .items.is_empty()
+    pub fun is_empty(self) -> bool = .items.is_empty()
 
     /// A copy of the largest item.
-    pub fn peek(self) -> ?T = .items.get(0)
+    pub fun peek(self) -> ?T = .items.get(0)
 
     /// Adds `x`.
-    pub fn push(mut self, take x: T) {
+    pub fun push(mut self, take x: T) {
         .items.push(x)
         var i = .items.len() - 1
         while i > 0 {
@@ -43,7 +43,7 @@ pub warp PriorityQueue[T: Ord] {
     }
 
     /// Takes off the largest item.
-    pub fn pop(mut self) -> ?T {
+    pub fun pop(mut self) -> ?T {
         if .items.is_empty() { return none }
         .items.swap(0, .items.len() - 1)
         let top = .items.pop()
@@ -52,13 +52,13 @@ pub warp PriorityQueue[T: Ord] {
     }
 
     /// Removes every item.
-    pub fn clear(mut self) {
+    pub fun clear(mut self) {
         .items.clear()
     }
 
     /// The items from the largest to the smallest, in a new list; this
     /// queue is used up.
-    pub fn into_sorted(take self) -> List[T] {
+    pub fun into_sorted(take self) -> List[T] {
         var q = self
         var out: List[T] = []
         while true {
@@ -70,7 +70,7 @@ pub warp PriorityQueue[T: Ord] {
         out
     }
 
-    fn sift_down(mut self, from: usize) {
+    fun sift_down(mut self, from: usize) {
         let n = .items.len()
         var i = from
         while true {
@@ -87,5 +87,5 @@ pub warp PriorityQueue[T: Ord] {
 
 weave[T: Ord] FromStream into PriorityQueue[T] {
     type Item = T
-    fn from_stream(take items: Stream[T]) -> PriorityQueue[T] = PriorityQueue.from_list(items.collect())
+    fun from_stream(take items: Stream[T]) -> PriorityQueue[T] = PriorityQueue.from_list(items.collect())
 }

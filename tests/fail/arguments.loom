@@ -1,6 +1,6 @@
-fn greet(name: str, loud: bool = false) {}
+fun greet(name: str, loud: bool = false) {}
 
-fn main() {
+fun main() {
     greet()                             //~ T0104
     greet("a", true, 3)                 //~ T0104
     greet("a", quiet: true)             //~ T0105

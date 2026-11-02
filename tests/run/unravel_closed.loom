@@ -1,12 +1,12 @@
 // Pushing into a shuttle after closing it unravels.
 
-fn echo() ~> i32 <~ i32 {
+fun echo() ~> i32 <~ i32 {
     while pull is some(x) {
         yield x
     }
 }
 
-fn main() {
+fun main() {
     var e = echo()
     e.push(1).drain()
     e.close().drain()

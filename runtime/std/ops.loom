@@ -11,7 +11,7 @@ pub weft Eq {
     /// Whether the values are equal. Derived: every field is equal, and for
     /// a warp with cases, it's the same case.
     #builtin
-    fn eq(self, other: Self) -> bool
+    fun eq(self, other: Self) -> bool
 }
 
 /// `<`, `<=`, `>`, `>=`.
@@ -19,12 +19,12 @@ pub weft Ord: Eq {
     /// Whether `self` comes first. Derived: fields compare in order, the
     /// first that differs decides, and earlier cases come first.
     #builtin
-    fn lt(self, other: Self) -> bool
+    fun lt(self, other: Self) -> bool
 }
 
 pub weft Hash {
     #builtin
-    fn hash(self) -> u64
+    fun hash(self) -> u64
 }
 
 /// Every integer type, `u1` through `i128`.

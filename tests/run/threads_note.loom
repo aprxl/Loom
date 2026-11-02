@@ -4,11 +4,11 @@
 
 use std.io.print
 
-fn boom() -> i32 {
+fun boom() -> i32 {
     unravel("boom")
 }
 
-fn main() {
+fun main() {
     loom {
         let fine = thread 1
         let t = thread boom()

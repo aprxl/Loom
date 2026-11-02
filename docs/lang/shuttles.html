@@ -40,7 +40,7 @@
 <h1>Shuttles</h1>
 <p class="summary">Functions that pause, yielding values out and pulling values in.</p>
 <p>A <strong>shuttle</strong> is a function that can pause and resume. The return arrow says what kind it is:</p>
-<table class="plain"><thead><tr><th>Signature</th><th>Kind</th><th>Type</th></tr></thead><tbody><tr><td><code>fn f() -&gt; T</code></td><td>an ordinary function</td><td></td></tr><tr><td><code>fn f() ~&gt; T</code></td><td>a <strong>generator</strong>: yields <code>T</code>s</td><td><code>Shuttle[T, ()]</code></td></tr><tr><td><code>fn f() ~&gt; T &lt;~ U</code></td><td>a <strong>duplex</strong> shuttle: pulls in <code>U</code>s, yields <code>T</code>s</td><td><code>Shuttle[T, U]</code></td></tr><tr><td><code>fn f() &lt;~ U</code></td><td>a <strong>sink</strong>: only pulls</td><td><code>Shuttle[(), U]</code></td></tr></tbody></table>
+<table class="plain"><thead><tr><th>Signature</th><th>Kind</th><th>Type</th></tr></thead><tbody><tr><td><code>fun f() -&gt; T</code></td><td>an ordinary function</td><td></td></tr><tr><td><code>fun f() ~&gt; T</code></td><td>a <strong>generator</strong>: yields <code>T</code>s</td><td><code>Shuttle[T, ()]</code></td></tr><tr><td><code>fun f() ~&gt; T &lt;~ U</code></td><td>a <strong>duplex</strong> shuttle: pulls in <code>U</code>s, yields <code>T</code>s</td><td><code>Shuttle[T, U]</code></td></tr><tr><td><code>fun f() &lt;~ U</code></td><td>a <strong>sink</strong>: only pulls</td><td><code>Shuttle[(), U]</code></td></tr></tbody></table>
 <p>Two expressions work only inside a shuttle. <code>yield v</code> sends <code>v</code> out and pauses. <code>pull</code> pauses until the driver pushes an input, and evaluates to <code>?U</code>: <code>none</code> once the shuttle is closed. <code>return</code> ends it.</p>
 <p><strong>Calling a shuttle function runs none of its body.</strong> It builds a suspended shuttle value. On the Lua backend that's a coroutine; on Treadle, a frame holding what the shuttle keeps between pauses, and the function that runs it from one pause to the next.</p>
 <h2 id="generators">Generators</h2>
@@ -50,7 +50,7 @@
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="c">// `~&gt; T` marks a generator: it yields `T`s. Calling it runs none of its body.</span>
-<span class="k">fn</span> fib() ~&gt; u64 {
+<span class="k">fun</span> fib() ~&gt; u64 {
     <span class="k">var</span> (a, b): (u64, u64) = (<span class="n">0</span>, <span class="n">1</span>)
     <span class="k">loop</span> {
         <span class="k">yield</span> a
@@ -58,7 +58,7 @@
     }
 }
 
-<span class="k">fn</span> countdown(name: str, from: i32) ~&gt; i32 {
+<span class="k">fun</span> countdown(name: str, from: i32) ~&gt; i32 {
     <span class="k">defer</span> print(<span class="s">"{</span>name<span class="s">} closed"</span>)
     <span class="k">var</span> i = from
     <span class="k">while</span> i &gt; <span class="n">0</span> {
@@ -67,7 +67,7 @@
     }
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="c">// A generator is a stream of what it yields.</span>
     print(fib().take(<span class="n">10</span>).collect())
     print(fib().skip_while(_ &lt; <span class="n">50</span>).take(<span class="n">3</span>).collect())
@@ -98,7 +98,7 @@ whole closed</code></pre></div>
 
 <span class="c">// `~&gt; T &lt;~ U` pulls `U`s in and yields `T`s out. `pull` waits for an input</span>
 <span class="c">// and gives `none` once the shuttle is closed.</span>
-<span class="k">fn</span> pairs() ~&gt; (i32, ?i32) &lt;~ i32 {
+<span class="k">fun</span> pairs() ~&gt; (i32, ?i32) &lt;~ i32 {
     <span class="k">while</span> <span class="k">pull</span> <span class="k">is</span> <span class="k">some</span>(a) {
         <span class="k">match</span> <span class="k">pull</span> {
             <span class="k">some</span>(b) =&gt; <span class="k">yield</span> (a, <span class="k">some</span>(b)),
@@ -111,7 +111,7 @@ whole closed</code></pre></div>
 }
 
 <span class="c">// `&lt;~ U` alone is a sink: it only pulls.</span>
-<span class="k">fn</span> summer() &lt;~ i32 {
+<span class="k">fun</span> summer() &lt;~ i32 {
     <span class="k">var</span> total = <span class="n">0</span>
     <span class="k">defer</span> print(<span class="s">"sum: {</span>total<span class="s">}"</span>)
     <span class="k">while</span> <span class="k">pull</span> <span class="k">is</span> <span class="k">some</span>(n) {
@@ -119,7 +119,7 @@ whole closed</code></pre></div>
     }
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">var</span> p = pairs()
     <span class="k">for</span> n <span class="k">in</span> [<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>, <span class="n">4</span>, <span class="n">5</span>] {
         <span class="c">// Each push gives a burst: what the shuttle yields before it</span>
@@ -148,13 +148,13 @@ sum: 10</code></pre></div>
 <p>A <code>Burst</code> is a <code>once</code> warp, so the outputs of a push can't be dropped by accident. Go through it with <code>for</code> or a stream method, or call <code>.drain()</code> to throw them away on purpose:</p>
 <div class="sample" id="sample-shuttles_err">
 <div class="sample-head"><span class="file">samples/shuttles_err.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#L0301">L0301</a></span></div>
-<pre class="code"><code><span class="k">fn</span> duplex() ~&gt; i32 &lt;~ i32 {
+<pre class="code"><code><span class="k">fun</span> duplex() ~&gt; i32 &lt;~ i32 {
     <span class="k">while</span> <span class="k">pull</span> <span class="k">is</span> <span class="k">some</span>(x) {
         <span class="k">yield</span> x
     }
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">var</span> d = duplex()
     d.push(<span class="n">1</span>)
 }</code></pre>
@@ -184,14 +184,14 @@ sum: 10</code></pre></div>
     width: usize
 
     <span class="c">// `~&gt; mut T` lends a place to change.</span>
-    <span class="k">fn</span> at(<span class="k">mut</span> <span class="k">self</span>, x: usize, y: usize) ~&gt; <span class="k">mut</span> i32 {
+    <span class="k">fun</span> at(<span class="k">mut</span> <span class="k">self</span>, x: usize, y: usize) ~&gt; <span class="k">mut</span> i32 {
         <span class="k">yield</span> <span class="k">mut</span> .cells[y * .width + x]
         <span class="c">// Runs once the statement that used the place is done.</span>
         print(<span class="s">"  ({</span>x<span class="s">}, {</span>y<span class="s">}) is {</span>.cells[y * .width + x]<span class="s">}"</span>)
     }
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">var</span> g = <span class="t">Grid</span>(cells: [<span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>], width: <span class="n">2</span>)
     g.at(<span class="n">1</span>, <span class="n">0</span>) = <span class="n">5</span>
     g.at(<span class="n">1</span>, <span class="n">0</span>) += <span class="n">1</span>

@@ -2,7 +2,7 @@ use std.io.print
 use std.priority.PriorityQueue
 use std.bitset.BitSet
 use std.cmp.Reverse
-fn main() {
+fun main() {
     var q: PriorityQueue[i32] = PriorityQueue.new()
     for x in [5, 1, 8, 3, 9, 2, 7] { q.push(x) }
     print(q.peek())

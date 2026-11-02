@@ -8,10 +8,10 @@ warp Tally { n: usize }
 
 weave FromStream into Tally {
     type Item = i32
-    fn from_stream(take items: Stream[i32]) -> Tally = Tally(n: items.count())
+    fun from_stream(take items: Stream[i32]) -> Tally = Tally(n: items.count())
 }
 
-fn main() {
+fun main() {
     let words: List[String] = ["b", "a", "b", "c"]
     print(words.collect_as[Set[String]]().len())
     let t: Set[i32] = (0..10).map(_ % 3).collect_as()

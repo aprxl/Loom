@@ -4,7 +4,7 @@ use std.io.print
 
 const SIZE = 200_000
 
-fn main() {
+fun main() {
     var m: Map[usize, usize] = Map()
     for i in 0..SIZE { m[i << 12] = i }
     var total = 0

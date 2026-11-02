@@ -19,7 +19,7 @@ warp Pair[A, B] {
     second: B
 }
 
-fn describe[T](v: T) {
+fun describe[T](v: T) {
     print("{T.name} is a {T.kind}")
     const if T.kind == .Record {
         const for (i, f) in T.fields.indexed() {
@@ -38,7 +38,7 @@ fn describe[T](v: T) {
 }
 
 /// Sets every `i32` field named `x` or `y` to `n`.
-fn fill(mut p: Point, n: i32) {
+fun fill(mut p: Point, n: i32) {
     const for f in Point.fields {
         const if f.name == "x" or f.name == "y" {
             p.(f) = n
@@ -46,7 +46,7 @@ fn fill(mut p: Point, n: i32) {
     }
 }
 
-fn main() {
+fun main() {
     describe(Point(1, 2))
     describe(Shape.Dot)
     describe(Shape.Circle(r: 1.5))

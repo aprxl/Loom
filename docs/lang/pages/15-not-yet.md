@@ -29,7 +29,7 @@ Array lengths and gauge bounds must be something the compiler's own evaluator ca
 
 Also missing:
 
-- `const fn`s that return types (`const fn fixed(...) -> type`), and anonymous `warp { ... }` types ([U0101](diag:U0101)).
+- `const fun`s that return types (`const fun fixed(...) -> type`), and anonymous `warp { ... }` types ([U0101](diag:U0101)).
 - `break` and `continue` out of a `const for`.
 - `const` parameters that aren't integers or `bool`.
 - `embed` and `embed_text`, and the `bolt.loom` manifest.

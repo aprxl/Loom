@@ -4,7 +4,7 @@
 use std.io.print
 use std.sync.{Atomic, Crew}
 
-fn main() {
+fun main() {
     let running = Atomic[usize](0)
     let peak = Atomic[usize](0)
     loom(given: Crew(workers: 2)) {

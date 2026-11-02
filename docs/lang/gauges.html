@@ -53,15 +53,15 @@
 <span class="k">type</span> <span class="t">Percent</span> = f32 <span class="k">where</span> <span class="n">0.0</span>..=<span class="n">1.0</span>
 <span class="k">type</span> <span class="t">Even</span> = i64 <span class="k">where</span> _ % <span class="n">2</span> == <span class="n">0</span>
 
-<span class="k">fn</span> fee(balance: <span class="t">Cents</span>, amount: <span class="t">Cents</span>) -&gt; <span class="t">Cents</span> =
+<span class="k">fun</span> fee(balance: <span class="t">Cents</span>, amount: <span class="t">Cents</span>) -&gt; <span class="t">Cents</span> =
     <span class="k">if</span> balance &gt;= <span class="n">1000_00</span> { <span class="n">0</span> } <span class="k">else</span> { (amount / <span class="n">100</span>).max(<span class="n">25</span>) }
 
-<span class="k">fn</span> parse_cents(s: str) -&gt; ?<span class="t">Cents</span> {
+<span class="k">fun</span> parse_cents(s: str) -&gt; ?<span class="t">Cents</span> {
     <span class="k">let</span> n = s.parse[i64]() <span class="k">mend</span> <span class="k">return</span> <span class="k">none</span>
     <span class="k">if</span> n <span class="k">is</span> <span class="t">Cents</span> { n } <span class="k">else</span> { <span class="k">none</span> }        <span class="c">// `is` narrows `n` inside the branch</span>
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">let</span> a: <span class="t">Cents</span> = <span class="n">250</span>                       <span class="c">// a literal is checked while compiling</span>
     <span class="k">let</span> b: <span class="t">Cents</span> = <span class="n">100</span>
     <span class="k">let</span> sum = a + b                          <span class="c">// Cents + Cents can't go below zero: still Cents</span>
@@ -88,7 +88,7 @@ none some(7)
 
 <span class="k">const</span> REFUND: <span class="t">Cents</span> = -<span class="n">1</span>
 
-<span class="k">fn</span> main() {}</code></pre>
+<span class="k">fun</span> main() {}</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[G0201]: `-1` is outside the gauge `Cents`</span>
 <span class="loc">  --&gt; gauges_err.loom:3:24</span>
   |

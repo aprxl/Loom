@@ -8,14 +8,14 @@ use heap.Heap
 use value.Val
 
 /// The text of `v`. `quoted` puts strings in double quotes.
-pub fn render(h: Heap, v: Val, quoted: bool) -> String {
+pub fun render(h: Heap, v: Val, quoted: bool) -> String {
     var out = String()
     write_val(h, v, quoted, mut out)
     out
 }
 
 /// What kind of value `v` is, for error messages.
-pub fn kind(v: Val) -> str = match v {
+pub fun kind(v: Val) -> str = match v {
     .Nil => "the empty list"
     .Bool(_) => "a boolean"
     .Int(_) => "a number"
@@ -29,7 +29,7 @@ pub fn kind(v: Val) -> str = match v {
     .Macro(_) => "a macro"
 }
 
-fn write_val(h: Heap, v: Val, quoted: bool, mut out: String) {
+fun write_val(h: Heap, v: Val, quoted: bool, mut out: String) {
     match v {
         .Nil => out.push_str("()")
         .Bool(b) => out.push_str(if b { "#t" } else { "#f" })
@@ -50,7 +50,7 @@ fn write_val(h: Heap, v: Val, quoted: bool, mut out: String) {
 }
 
 /// `(a b c)`: the elements of the list that starts at cell `head`.
-fn write_list(h: Heap, head: usize, quoted: bool, mut out: String) {
+fun write_list(h: Heap, head: usize, quoted: bool, mut out: String) {
     out.push('(')
     var at: Val = .Pair(head)
     var first = true
@@ -64,7 +64,7 @@ fn write_list(h: Heap, head: usize, quoted: bool, mut out: String) {
 }
 
 /// `#(a b c)`: a vector's elements, in order.
-fn write_vector(h: Heap, v: usize, quoted: bool, mut out: String) {
+fun write_vector(h: Heap, v: usize, quoted: bool, mut out: String) {
     out.push_str("#(")
     for i in 0..h.vec_len(v) {
         if i > 0 { out.push(' ') }

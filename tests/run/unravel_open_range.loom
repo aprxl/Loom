@@ -1,6 +1,6 @@
 use std.io.print
 
-fn main() {
+fun main() {
     print((254u8..).take(2).collect())
     print((254u8..).take(3).collect())
 }

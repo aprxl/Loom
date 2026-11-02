@@ -1,9 +1,9 @@
 // Compile-time code runs before the program does: it can't read the
 // program's locals, and control flow can't leave it.
 
-fn twice(n: i32) -> i32 = n * 2
+fun twice(n: i32) -> i32 = n * 2
 
-fn f(n: i32) -> i32 {
+fun f(n: i32) -> i32 {
     let a = const twice(4)
     let b = const twice(n)                               //~ K0105
     for i in 0..3 {
@@ -21,17 +21,17 @@ fn f(n: i32) -> i32 {
     a + e
 }
 
-fn g() -> ?i32 {
+fun g() -> ?i32 {
     let x = const { let o: ?i32 = none; o? }             //~ K0106
     x
 }
 
-fn numbers(n: i32) ~> i32 {
+fun numbers(n: i32) ~> i32 {
     for i in 0..n { yield i }
 }
 
 const NUMBERS: Shuttle[i32, ()] = numbers(3)             //~ K0108
 
-fn main() {
+fun main() {
     let s = const numbers(2)                             //~ K0108
 }

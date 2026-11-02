@@ -85,8 +85,8 @@ warp Point {
     x: f64 = 0          // defaults
     y: f64 = 0
 
-    fn len(self) -> f64 = (.x * .x + .y * .y).sqrt()
-    fn origin() -> Point = Point()      // no `self`: an associated function, called as `Point.origin()`
+    fun len(self) -> f64 = (.x * .x + .y * .y).sqrt()
+    fun origin() -> Point = Point()      // no `self`: an associated function, called as `Point.origin()`
     const UNIT = Point(1, 0)
 }
 
@@ -176,18 +176,18 @@ associated types, and super-wefts.
 
 ```loom
 weft Widget: Show {                 // anything that's a Widget must also be Show
-    fn size(self) -> (u16, u16)
-    fn draw(self, at: Pos, mut c: Canvas)
-    fn name(self) -> str = "widget" // default
+    fun size(self) -> (u16, u16)
+    fun draw(self, at: Pos, mut c: Canvas)
+    fun name(self) -> str = "widget" // default
 }
 
 weft Iter {
     type Item
-    fn next(mut self) -> ?Item
+    fun next(mut self) -> ?Item
 }
 
 weft From[T] {
-    fn from(take x: T) -> Self
+    fun from(take x: T) -> Self
 }
 ```
 
@@ -196,7 +196,7 @@ Operators are wefts: `Add`, `Sub`, `Eq`, `Ord`, `Index` (see projections in
 
 **Associated types.** A weft's `type Item` is a type each weave names
 (`type Item = u8`). Inside the weft and its weaves it's just `Item`; from
-outside, a generic parameter's is `I.Item`: `fn first[I: Iter](it: I) -> ?I.Item`.
+outside, a generic parameter's is `I.Item`: `fun first[I: Iter](it: I) -> ?I.Item`.
 
 **Streams.** `for` loops over anything that weaves `Iter`. std's
 `Stream[T]` is a lazy stream of `T`s with the usual adaptors and consumers
@@ -205,8 +205,8 @@ and everything with items has its methods too: `xs.indexed()`,
 `(1..=20).filter(_ % 2 == 0)`, `countdown.sum()`. On arrays, lists and
 slices, `map` and `filter` are eager and make lists; the rest are lazy.
 
-**Wefts used as parameter types are implicit generics.** `fn show_all(xs: [Show])`
-means `fn show_all[T: Show](xs: [T])`, which is monomorphized with static
+**Wefts used as parameter types are implicit generics.** `fun show_all(xs: [Show])`
+means `fun show_all[T: Show](xs: [T])`, which is monomorphized with static
 dispatch. For dynamic dispatch, write `any Show`.
 
 ---
@@ -221,7 +221,7 @@ methods in the body.
 ```loom
 warp Circle: Shape {
     radius: f64
-    fn area(self) -> f64 = PI * .radius * .radius
+    fun area(self) -> f64 = PI * .radius * .radius
 }
 ```
 
@@ -229,16 +229,16 @@ warp Circle: Shape {
 
 ```loom
 weave Shape into Rect {
-    fn area(self) -> f64 = .w * .h
+    fun area(self) -> f64 = .w * .h
 }
 
 weave[T: Show] Show into List[T] {       // generic weave
-    fn show(self, mut f: Fmt) { ... }
+    fun show(self, mut f: Fmt) { ... }
 }
 
 weave Iter into Bytes {
     type Item = u8                       // binds the weft's associated type
-    fn next(mut self) -> ?u8 { ... }
+    fun next(mut self) -> ?u8 { ... }
 }
 ```
 
@@ -282,7 +282,7 @@ warp Button: Widget {
     through frame: Frame
     label: String
 
-    fn draw(self, at: Pos, mut c: Canvas) {       // override
+    fun draw(self, at: Pos, mut c: Canvas) {       // override
         .frame.draw(at, mut c)                     // "super" is just the field
         c.text(at.{ .x += 2; .y += 1 }, .label)
     }
@@ -326,7 +326,7 @@ access, and methods are never called implicitly.
 Rule 5 is how Loom gets extension methods without special syntax:
 
 ```loom
-fn kib(n: usize) -> usize = n * 1024
+fun kib(n: usize) -> usize = n * 1024
 let size = 64.kib()                    // same as kib(64)
 ```
 
@@ -335,7 +335,7 @@ let size = 64.kib()                    // same as kib(64)
 ## Generics
 
 ```loom
-fn largest[T: Ord + Copy](xs: [T]) -> ?T {
+fun largest[T: Ord + Copy](xs: [T]) -> ?T {
     var best: ?T = none
     for x in xs { if best is some(b) and b >= x { continue }; best = x }
     best
@@ -345,12 +345,12 @@ warp Pair[A, B] { first: A, second: B }
 
 warp Matrix[const R: usize, const C: usize] { cells: [f32; R * C] }
 
-fn describe[T](x: T) -> String where T: Show + Hash = "{x} #{x.hash():x}"
+fun describe[T](x: T) -> String where T: Show + Hash = "{x} #{x.hash():x}"
 ```
 
 - Generics are monomorphized.
 - Type parameters are really **`const` parameters** of type `type`.
-  `fn max[T: Ord](xs: [T])` is sugar for `fn max[const T: type](xs: [T]) where T: Ord`,
+  `fun max[T: Ord](xs: [T])` is sugar for `fun max[const T: type](xs: [T]) where T: Ord`,
   with `T` inferred from the arguments.
   Value parameters such as `const N: usize` work the same way.
 - To give explicit type arguments, use brackets: `s.parse[u16]()`, `List[i32]()`.

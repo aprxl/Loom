@@ -2,7 +2,7 @@
 // formatting where the spec is silent, and both backends agree.
 use std.io.print
 
-fn main() {
+fun main() {
     let fs = [0.0, -0.0, 1.0, 0.1, 1.5e300, 1e-7, 123456789.125, -2.5, 1.0 / 3.0]
     for f in fs { print("{f} {f:?} {f:.2} {f:>12.3}") }
     let tiny: f32 = 0.1

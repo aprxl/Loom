@@ -1,7 +1,7 @@
 // Compile-time code can't start threads: they'd be tasks of the machine
 // that's compiling.
 
-fn threaded() -> i32 {
+fun threaded() -> i32 {
     loom {
         let t = thread 1
         t.join()
@@ -10,6 +10,6 @@ fn threaded() -> i32 {
 
 const THREADED: i32 = threaded()          //~ K0104
 
-fn main() {
+fun main() {
     let x = THREADED
 }

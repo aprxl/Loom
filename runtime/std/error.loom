@@ -5,42 +5,42 @@
 pub weft Error: Show {
     /// What went wrong, in words. Derived: the value's `Show` form.
     #builtin
-    fn message(self) -> String
+    fun message(self) -> String
 }
 
 /// The methods of every result type, `T ! E`.
 #builtin
 pub warp Fallible[T, E] {
     /// `f` of the value, or the error as it was.
-    pub fn map[U](take self, f: T => U) -> U ! E {
+    pub fun map[U](take self, f: T => U) -> U ! E {
         match self {
             ok(x) => ok(f(x))
             err(e) => err(e)
         }
     }
     /// The value as it was, or `f` of the error.
-    pub fn map_err[F](take self, f: E => F) -> T ! F {
+    pub fun map_err[F](take self, f: E => F) -> T ! F {
         match self {
             ok(x) => ok(x)
             err(e) => err(f(e))
         }
     }
     /// The value, if it worked.
-    pub fn value(take self) -> ?T {
+    pub fun value(take self) -> ?T {
         match self {
             ok(x) => some(x)
             err(_) => none
         }
     }
     /// The error, if it failed.
-    pub fn error(take self) -> ?E {
+    pub fun error(take self) -> ?E {
         match self {
             ok(_) => none
             err(e) => some(e)
         }
     }
     /// Whether it worked.
-    pub fn is_ok(self) -> bool {
+    pub fun is_ok(self) -> bool {
         match self {
             ok(_) => true
             err(_) => false
@@ -53,8 +53,8 @@ pub warp Missing: Error
 
 extern "host" {
     /// Gives up: unwinds the current thread, running `defer`s on the way out.
-    pub fn unravel(message: str) -> never
+    pub fun unravel(message: str) -> never
     /// Unravels with `message` unless `condition` holds. In a `const`
     /// context, a failed assertion is a compile error.
-    pub fn assert(condition: bool, message: str = "assertion failed")
+    pub fun assert(condition: bool, message: str = "assertion failed")
 }

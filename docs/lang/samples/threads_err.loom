@@ -1,6 +1,6 @@
 use std.io.print
 
-fn main() {
+fun main() {
     var hits = 0
     loom {
         thread { hits += 1 }

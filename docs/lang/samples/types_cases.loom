@@ -5,7 +5,7 @@ warp Shape: Show {
     case Rect(w: f64, h: f64)
     case Dot                                 // no payload
 
-    fn area(self) -> f64 = match self {
+    fun area(self) -> f64 = match self {
         .Circle(r) => 3.14159 * r * r
         .Rect(w, h) => w * h
         .Dot => 0
@@ -21,7 +21,7 @@ warp Token: Show {
     case End
 }
 
-fn main() {
+fun main() {
     let shapes = [Shape.Circle(2.0), .Rect(w: 3, h: 4), .Dot]
     for s in shapes {
         print("{s}: {s.area()}")

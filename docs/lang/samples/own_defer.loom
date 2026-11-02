@@ -1,13 +1,13 @@
 use std.io.print
 
-fn plain() {
+fun plain() {
     defer print("declared first, runs last")
     defer print("declared second, runs first")
     print("body")
 }
 
 // The result is worked out before the defers run.
-fn returns(n: i32) -> i32 {
+fun returns(n: i32) -> i32 {
     var x = n
     defer print("defer sees x = {x}")
     if n > 5 { return x * 10 }
@@ -21,13 +21,13 @@ warp Oops: Error {
 
 // A defer runs on every way out: `return`, `fail`, `?`, `break`,
 // `continue`, and an unravel.
-fn fails(bad: bool) -> i32 ! Oops {
+fun fails(bad: bool) -> i32 ! Oops {
     defer print("cleanup after fails({bad})")
     if bad { fail .Bad }
     1
 }
 
-fn main() {
+fun main() {
     plain()
     print(returns(3))
     print(returns(9))

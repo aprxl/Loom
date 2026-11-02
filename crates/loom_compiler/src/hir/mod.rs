@@ -402,7 +402,7 @@ pub enum TyKind {
     },
     /// `type`, the type of types.
     TypeType,
-    /// `uint(12)`: a `const fn` that returns a type.
+    /// `uint(12)`: a `const fun` that returns a type.
     ConstCall {
         def: DefId,
         args: Vec<Expr>,

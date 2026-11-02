@@ -4,7 +4,7 @@ use std.io.print
 
 const SIZE = 400
 
-fn escape(cx: f64, cy: f64, limit: u16) -> u16 {
+fun escape(cx: f64, cy: f64, limit: u16) -> u16 {
     var (x, y, i) = (0.0, 0.0, 0u16)
     while x * x + y * y <= 4.0 and i < limit {
         (x, y) = (x * x - y * y + cx, 2.0 * x * y + cy)
@@ -13,7 +13,7 @@ fn escape(cx: f64, cy: f64, limit: u16) -> u16 {
     i
 }
 
-fn main() {
+fun main() {
     var total: u64 = 0
     for row in 0..SIZE {
         let cy = row as f64 / SIZE as f64 * 2.4 - 1.2

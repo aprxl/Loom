@@ -5,7 +5,7 @@
 
 use std.io.print
 
-fn main() {
+fun main() {
     let a: f64 = 93731167244648.125
     print("{a} {a:?} {-a} {a:.2}")
     let b: f64 = 0.333 * 281474976710655.0

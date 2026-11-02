@@ -1,3 +1,3 @@
 // A bound must be a weft: a slice or a type named in a `where` clause is refused.
-fn f[T: [i32]](x: T) {}          //~ T0111
-fn g[T](x: T) where T: i32 {}    //~ T0111
+fun f[T: [i32]](x: T) {}          //~ T0111
+fun g[T](x: T) where T: i32 {}    //~ T0111

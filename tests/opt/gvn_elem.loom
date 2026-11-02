@@ -7,13 +7,13 @@
 // analysis drops the check.
 use std.io.print
 
-fn sum_to(n: usize) -> u64 {
+fun sum_to(n: usize) -> u64 {
     let xs: List[u64] = List.filled(1, n)
     var s = 0u64
     for i in 0..n { s = s +% xs[i] }
     s
 }
 
-fn main() {
+fun main() {
     print(sum_to(5))
 }

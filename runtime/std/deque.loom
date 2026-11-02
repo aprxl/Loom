@@ -11,25 +11,25 @@ pub warp Deque[T] {
     back: List[T]
 
     /// An empty queue.
-    pub fn new() -> Deque[T] = Deque(front: [], back: [])
+    pub fun new() -> Deque[T] = Deque(front: [], back: [])
 
     /// How many items there are.
-    pub fn len(self) -> usize = .front.len() + .back.len()
+    pub fun len(self) -> usize = .front.len() + .back.len()
 
-    pub fn is_empty(self) -> bool = .front.is_empty() and .back.is_empty()
+    pub fun is_empty(self) -> bool = .front.is_empty() and .back.is_empty()
 
     /// Adds `x` at the end.
-    pub fn push_back(mut self, take x: T) {
+    pub fun push_back(mut self, take x: T) {
         .back.push(x)
     }
 
     /// Adds `x` at the start.
-    pub fn push_front(mut self, take x: T) {
+    pub fun push_front(mut self, take x: T) {
         .front.push(x)
     }
 
     /// Takes off the last item.
-    pub fn pop_back(mut self) -> ?T {
+    pub fun pop_back(mut self) -> ?T {
         if .back.is_empty() {
             let moved = .front.len() - .front.len() / 2
             var low = .front.drain(0, moved)
@@ -40,7 +40,7 @@ pub warp Deque[T] {
     }
 
     /// Takes off the first item.
-    pub fn pop_front(mut self) -> ?T {
+    pub fun pop_front(mut self) -> ?T {
         if .front.is_empty() {
             let moved = .back.len() - .back.len() / 2
             var low = .back.drain(0, moved)
@@ -51,34 +51,34 @@ pub warp Deque[T] {
     }
 
     /// A copy of the item at `i`, counting from the start.
-    pub fn get(self, i: usize) -> ?T {
+    pub fun get(self, i: usize) -> ?T {
         let nf = .front.len()
         if i < nf { .front.get(nf - 1 - i) } else { .back.get(i - nf) }
     }
 
     /// A copy of the first item.
-    pub fn first(self) -> ?T = .get(0)
+    pub fun first(self) -> ?T = .get(0)
 
     /// A copy of the last item.
-    pub fn last(self) -> ?T {
+    pub fun last(self) -> ?T {
         if .back.is_empty() { .front.get(0) } else { .back.last() }
     }
 
     /// Replaces the item at `i`. Unravels if there isn't one.
-    pub fn set(mut self, i: usize, take x: T) {
+    pub fun set(mut self, i: usize, take x: T) {
         let nf = .front.len()
         assert(i < nf + .back.len(), "Deque.set: index out of bounds")
         if i < nf { .front[nf - 1 - i] = x } else { .back[i - nf] = x }
     }
 
     /// Removes every item.
-    pub fn clear(mut self) {
+    pub fun clear(mut self) {
         .front.clear()
         .back.clear()
     }
 
     /// The items in order, in a new list.
-    pub fn to_list(self) -> List[T] {
+    pub fun to_list(self) -> List[T] {
         var out: List[T] = .front.copy()
         out.reverse()
         out.extend(.back.copy())
@@ -88,7 +88,7 @@ pub warp Deque[T] {
 
 weave[T] FromStream into Deque[T] {
     type Item = T
-    fn from_stream(take items: Stream[T]) -> Deque[T] {
+    fun from_stream(take items: Stream[T]) -> Deque[T] {
         var out: Deque[T] = Deque.new()
         for x in items {
             out.push_back(x)

@@ -65,7 +65,7 @@
 <div class="members">
 <div class="member" id="Error.message">
 <div class="member-head">
-<span class="sig">fn message(self) -&gt; String</span>
+<span class="sig">fun message(self) -&gt; String</span>
 <span class="badge builtin">builtin</span>
 </div>
 <p class="member-doc">What went wrong, in words. Derived: the value's <code>Show</code> form.</p>
@@ -81,35 +81,35 @@
 <div class="members">
 <div class="member" id="Fallible.map">
 <div class="member-head">
-<span class="sig">fn map[U](take self, f: T =&gt; U) -&gt; U ! E</span>
+<span class="sig">fun map[U](take self, f: T =&gt; U) -&gt; U ! E</span>
 
 </div>
 <p class="member-doc"><code>f</code> of the value, or the error as it was.</p>
 </div>
 <div class="member" id="Fallible.map_err">
 <div class="member-head">
-<span class="sig">fn map_err[F](take self, f: E =&gt; F) -&gt; T ! F</span>
+<span class="sig">fun map_err[F](take self, f: E =&gt; F) -&gt; T ! F</span>
 
 </div>
 <p class="member-doc">The value as it was, or <code>f</code> of the error.</p>
 </div>
 <div class="member" id="Fallible.value">
 <div class="member-head">
-<span class="sig">fn value(take self) -&gt; ?T</span>
+<span class="sig">fun value(take self) -&gt; ?T</span>
 
 </div>
 <p class="member-doc">The value, if it worked.</p>
 </div>
 <div class="member" id="Fallible.error">
 <div class="member-head">
-<span class="sig">fn error(take self) -&gt; ?E</span>
+<span class="sig">fun error(take self) -&gt; ?E</span>
 
 </div>
 <p class="member-doc">The error, if it failed.</p>
 </div>
 <div class="member" id="Fallible.is_ok">
 <div class="member-head">
-<span class="sig">fn is_ok(self) -&gt; bool</span>
+<span class="sig">fun is_ok(self) -&gt; bool</span>
 
 </div>
 <p class="member-doc">Whether it worked.</p>
@@ -126,14 +126,14 @@
 <h2>Functions</h2>
 <div class="item" id="unravel">
 <div class="item-head">
-<span class="sig">fn <strong>unravel</strong>(message: str) -&gt; never</span>
+<span class="sig">fun <strong>unravel</strong>(message: str) -&gt; never</span>
 <span class="badge extern">extern</span>
 </div>
 <p class="item-doc">Gives up: unwinds the current thread, running <code>defer</code>s on the way out.</p>
 </div>
 <div class="item" id="assert">
 <div class="item-head">
-<span class="sig">fn <strong>assert</strong>(condition: bool, message: str = "assertion failed")</span>
+<span class="sig">fun <strong>assert</strong>(condition: bool, message: str = "assertion failed")</span>
 <span class="badge extern">extern</span>
 </div>
 <p class="item-doc">Unravels with <code>message</code> unless <code>condition</code> holds. In a <code>const</code> context, a failed assertion is a compile error.</p>

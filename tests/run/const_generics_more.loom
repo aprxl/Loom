@@ -6,39 +6,39 @@ use std.io.print
 
 warp Matrix[const R: usize, const C: usize] {
     cells: [f32; R * C] = [0.0; R * C]
-    fn transpose(self) -> Matrix[C, R] = Matrix[C, R]()
-    fn dims(self) -> (usize, usize) = (R, C)
+    fun transpose(self) -> Matrix[C, R] = Matrix[C, R]()
+    fun dims(self) -> (usize, usize) = (R, C)
 }
 
 warp Buf[const N: usize] {
     data: [u8; N] = [0; N]
-    fn n(self) -> usize = N
-    fn capacity() -> usize = N
+    fun n(self) -> usize = N
+    fun capacity() -> usize = N
 }
 
 warp Cell[T] {
     value: T
-    fn describe() -> str = "a cell"
+    fun describe() -> str = "a cell"
 }
 
 warp Two[const CAP: usize] {
     a: Buf[{CAP}] = Buf[CAP]()
     b: Buf[{CAP * 2}] = Buf[CAP * 2]()
-    fn total(self) -> usize = .a.n() + .b.n()
+    fun total(self) -> usize = .a.n() + .b.n()
 }
 
 warp Ring[T, const CAP: usize] {
     slots: [?T; CAP] = [none; CAP]
 }
 
-fn capacity[const N: usize](r: Ring[u32, {N}]) -> usize = N
+fun capacity[const N: usize](r: Ring[u32, {N}]) -> usize = N
 
 const IS_WIN = target.os == .Windows
 const SIZES: [u8; 3] = [1, 2, 3]
 const LIMIT = SIZES.len()
 warp Cfg { const CAP = 4 }
 
-fn main() {
+fun main() {
     let m = Matrix[2, 3]()
     print(m.dims())
     print(m.transpose().dims())

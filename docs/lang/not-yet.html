@@ -51,7 +51,7 @@
 <p>The standard library's <code>std.sys</code> is not built, and neither are <code>T.bits</code> (which needs <code>#layout(bits)</code>), <code>f.ty</code> or <code>T.weaves(W)</code>:</p>
 <div class="sample" id="sample-nyet_sys">
 <div class="sample-head"><span class="file">samples/nyet_sys.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span></div>
-<pre class="code"><code><span class="k">fn</span> main() {
+<pre class="code"><code><span class="k">fun</span> main() {
     <span class="k">let</span> size = std.sys.page_size()
 }</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[U0102]: not implemented yet: `std.sys`, the platform's own APIs</span>
@@ -67,11 +67,11 @@
 <div class="sample-head"><span class="file">samples/nyet_types.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span></div>
 <pre class="code"><code><span class="c">// A type can't depend on the compile-time sandbox yet, only on what the</span>
 <span class="c">// constant folder can work out: literals, constants, arithmetic.</span>
-<span class="k">fn</span> square(n: usize) -&gt; usize = n * n
+<span class="k">fun</span> square(n: usize) -&gt; usize = n * n
 
 <span class="k">const</span> AREA: usize = square(<span class="n">4</span>)
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">let</span> cells = [<span class="n">0u8</span>; AREA]
 }</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[U0102]: not implemented yet: array lengths that aren't known at compile time</span>
@@ -85,7 +85,7 @@
 <span class="err">error: nyet_types.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
 <p>Also missing:</p>
-<ul><li><code>const fn</code>s that return types (<code>const fn fixed(...) -&gt; type</code>), and anonymous <code>warp { ... }</code> types (<a href="diagnostics.html#U0101">U0101</a>).</li><li><code>break</code> and <code>continue</code> out of a <code>const for</code>.</li><li><code>const</code> parameters that aren't integers or <code>bool</code>.</li><li><code>embed</code> and <code>embed_text</code>, and the <code>bolt.loom</code> manifest.</li></ul>
+<ul><li><code>const fun</code>s that return types (<code>const fun fixed(...) -&gt; type</code>), and anonymous <code>warp { ... }</code> types (<a href="diagnostics.html#U0101">U0101</a>).</li><li><code>break</code> and <code>continue</code> out of a <code>const for</code>.</li><li><code>const</code> parameters that aren't integers or <code>bool</code>.</li><li><code>embed</code> and <code>embed_text</code>, and the <code>bolt.loom</code> manifest.</li></ul>
 <h2 id="memory-and-safety">Memory and safety</h2>
 <ul><li>A <code>for</code> loop over a projection that lends many places, and <code>xs[i]</code> through an <code>Index</code> weave.</li><li><code>unsafe</code> blocks, raw pointers (<code>*T</code>), <code>extern "C"</code>, <code>Volatile</code>. <code>#layout(...)</code> is parsed but nothing acts on it.</li><li>User-written <code>Spool</code> weaves.</li><li>Lists, maps and sets in a spool (<code>List[i32]@frame</code>): a <code>String</code> made with <code>.copy()</code> goes in the spool, and a warp in a spool can't hold the others (<a href="diagnostics.html#U0102">U0102</a>).</li></ul>
 <h2 id="types-and-library">Types and library</h2>

@@ -11,7 +11,7 @@
 //!   spool ends with: returned, failed with, or stored in an outer variable.
 //! - R0102: a value is used after the spool it is rooted in was reset.
 //! - R0104: an argument is rooted in another spool than the parameter says
-//!   (`fn f(e: ^Expr@sp) given sp: Spool` called with `given: other`).
+//!   (`fun f(e: ^Expr@sp) given sp: Spool` called with `given: other`).
 //!
 //! It runs only for functions that use spools at all.
 

@@ -3,7 +3,7 @@ use std.io.print
 
 const SIZE = 10
 
-fn main() {
+fun main() {
     let n = SIZE
     var perm1: List[i32] = List()
     for i in 0..n { perm1.push(i as i32) }

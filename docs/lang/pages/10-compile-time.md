@@ -3,7 +3,7 @@ summary: Constants computed by ordinary code, `const` expressions, `const assert
 ---
 Loom has no macro language. Code that runs while the program compiles is ordinary Loom. The keyword `const` marks where: a constant's initializer, an expression, an assertion, a parameter, a condition, a loop. This page covers the first three and the limits. [Const parameters and control flow](page:const-params) covers the rest.
 
-> `const fn` means "compile-time only" in Loom, as in Zig's `comptime`. It is not Rust's `const fn`, which means "may also run at compile time". You don't mark functions: the compiler checks each function when a compile-time expression calls it.
+> `const fun` means "compile-time only" in Loom, as in Zig's `comptime`. It is not Rust's `const fun`, which means "may also run at compile time". You don't mark functions: the compiler checks each function when a compile-time expression calls it.
 
 ## Constants
 
@@ -96,4 +96,4 @@ The compiler builds the "jobs": the constants, `const` expressions and `const as
 
 ## Not supported yet
 
-Types computed by `const fn`s are not built ([reflection](page:reflection) is). `embed` and `embed_text` don't exist, and neither does `bolt.loom`. See [Not supported yet](page:not-yet).
+Types computed by `const fun`s are not built ([reflection](page:reflection) is). `embed` and `embed_text` don't exist, and neither does `bolt.loom`. See [Not supported yet](page:not-yet).

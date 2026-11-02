@@ -85,7 +85,7 @@ ref warp Parser {
     pos: usize = 0
 }
 
-fn parse(src: str) -> Ast {
+fun parse(src: str) -> Ast {
     var p = Parser(src)  // lives only inside this call
     p.program()
 }
@@ -100,7 +100,7 @@ A function can't return a borrow. It *can* `yield` one and then wait. A
 
 ```loom
 weave[T] Index[usize] into List[T] {
-    fn at(mut self, i: usize) ~> mut T {
+    fun at(mut self, i: usize) ~> mut T {
         if i >= .len { unravel("index {i} out of bounds (len {.len})") }
         yield mut .items[i]       // lend the slot; the caller uses it; we resume afterwards
     }
@@ -108,7 +108,7 @@ weave[T] Index[usize] into List[T] {
 
 xs[3] += 1                         // xs.at(3) projected, edited, released
 
-fn entry(mut self, take key: K, take default: V) ~> mut V { ... }
+fun entry(mut self, take key: K, take default: V) ~> mut V { ... }
 counts.entry(word, default: 0) += 1
 ```
 
@@ -171,8 +171,8 @@ A `spool` binding can't be moved or reassigned, and it ends with its scope.
 | read / `mut` parameter | **any** spool (the function is region-polymorphic) |
 | return type, field, `take` parameter | `@heap` for owning types, `@static` for slices |
 
-So `fn sum(xs: List[i32])` accepts a list from any spool, and
-`fn make() -> List[i32]` returns one on the heap.
+So `fun sum(xs: List[i32])` accepts a list from any spool, and
+`fun make() -> List[i32]` returns one on the heap.
 
 ### What the region checker enforces
 
@@ -207,7 +207,7 @@ and then resets the old arena.
 `str` and `[T]` don't own anything. Declared as a parameter, they're borrows.
 In any other position they're `@static` unless they carry a region
 annotation, and string literals are `str@static`. Because of that,
-`fn name(self) -> str = "button"` is fine, and a field `label: str` holds a
+`fun name(self) -> str = "button"` is fine, and a field `label: str` holds a
 static string. For text that belongs to the value, use `String`.
 
 **Literals convert to `String`.** A string literal is a template with no
@@ -217,12 +217,12 @@ on its own, because that would hide an allocation: write `s.to_string()`.
 
 The other direction is a borrow: a `String` **argument** can be passed to a
 `str` parameter, because a borrow lasts exactly as long as the call. Anywhere
-else, a `str` can't hold a `String`: `fn label(n: i32) -> str = "{n} items"`
+else, a `str` can't hold a `String`: `fun label(n: i32) -> str = "{n} items"`
 is an error, since the view would outlive the text it points at.
 
 ```loom
-fn label(n: u32) -> String = if n == 0 { "none" } else { "{n} items" }   // both convert
-fn shout(s: str) -> String = s.to_upper()                             // str → String is explicit
+fun label(n: u32) -> String = if n == 0 { "none" } else { "{n} items" }   // both convert
+fun shout(s: str) -> String = s.to_upper()                             // str → String is explicit
 ```
 
 ---
@@ -235,13 +235,13 @@ hand is tedious, and hiding them in globals makes them invisible. `given` sits
 between the two.
 
 ```loom
-fn render(scene: Scene) given log: Logger, sp: Spool {
+fun render(scene: Scene) given log: Logger, sp: Spool {
     log.debug("render {scene.name}")
     let batch = ^Batch(...)            // allocates in `sp`
     draw_batch(batch)                  // passes `log` and `sp` on implicitly
 }
 
-fn main() {
+fun main() {
     given log = Logger.stderr()        // in scope for the rest of the block
     spool frame = Arena(4.mib())
     loop {
@@ -274,11 +274,11 @@ keyword: it's only special directly before `warp`.
 pub once warp Tx {
     moves: List[Move]
 
-    pub fn commit(take self, mut ledger: Ledger) ! LedgerError {
+    pub fun commit(take self, mut ledger: Ledger) ! LedgerError {
         let Tx(moves) = self              // destructuring *ties off* the value
         ...
     }
-    pub fn rollback(take self) { let Tx(_) = self }
+    pub fun rollback(take self) { let Tx(_) = self }
 }
 ```
 
@@ -341,7 +341,7 @@ or use `?`. They're allowed to `unravel`.
 `unsafe` blocks are where you can:
 
 - dereference raw pointers `*T` and do pointer arithmetic
-- call `extern` functions and `unsafe fn`s
+- call `extern` functions and `unsafe fun`s
 - reinterpret bits: `bits_as[T](x)`
 - read and write `Volatile[T]` registers
 - break exclusivity through `Shared` cells
@@ -351,17 +351,17 @@ can just grep for `unsafe`:
 
 ```loom
 extern "C" {
-    fn write(fd: i32, buf: *u8, len: usize) -> isize
+    fun write(fd: i32, buf: *u8, len: usize) -> isize
 }
 
-pub fn raw_print(s: str) {
+pub fun raw_print(s: str) {
     unsafe "fd 1 is open for the whole process; s outlives the call" {
         write(1, s.ptr(), s.len())
     }
 }
 ```
 
-`unsafe fn` marks a whole function as unsafe to call, and its doc comment
+`unsafe fun` marks a whole function as unsafe to call, and its doc comment
 has to include a `# Safety` section describing what callers must guarantee.
 
 ### Layout control

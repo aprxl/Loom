@@ -5,22 +5,22 @@ use std.io.print
 
 warp Tx {
     name: String
-    pub fn commit(take self) { print("commit {.name}") }
-    pub fn rollback(take self) { print("rollback {.name}") }
+    pub fun commit(take self) { print("commit {.name}") }
+    pub fun rollback(take self) { print("rollback {.name}") }
 }
 
 warp Oops: Error {
     case Bad
 }
 
-fn plain() {
+fun plain() {
     defer print("first declared, last run")
     defer print("second declared, first run")
     print("body")
 }
 
 // The value is worked out before the defers run.
-fn returns(n: i32) -> i32 {
+fun returns(n: i32) -> i32 {
     var x = n
     defer print("defer sees x = {x}")
     if n > 5 { return x * 10 }
@@ -28,19 +28,19 @@ fn returns(n: i32) -> i32 {
     x
 }
 
-fn fails(bad: bool) -> i32 ! Oops {
+fun fails(bad: bool) -> i32 ! Oops {
     defer print("cleanup after fails({bad})")
     if bad { fail .Bad }
     1
 }
 
-fn tries(o: ?i32) -> ?i32 {
+fun tries(o: ?i32) -> ?i32 {
     defer print("cleanup after tries")
     let v = o?
     v + 1
 }
 
-fn loops() {
+fun loops() {
     for i in 0..4 {
         defer print("end of iteration {i}")
         if i == 1 { continue }
@@ -56,7 +56,7 @@ fn loops() {
     print("found {found}, n {n}")
 }
 
-fn blocks() {
+fun blocks() {
     defer print("outer")
     {
         defer print("inner")
@@ -65,7 +65,7 @@ fn blocks() {
     print("after the block")
 }
 
-fn transfer(good: bool, early: bool) -> i32 ! Oops {
+fun transfer(good: bool, early: bool) -> i32 ! Oops {
     let tx = Tx("t{good}{early}")
     defer tx => tx.rollback()
     if early { fail .Bad }
@@ -76,21 +76,21 @@ fn transfer(good: bool, early: bool) -> i32 ! Oops {
     0
 }
 
-fn reuse() {
+fun reuse() {
     var tx = Tx("first")
     defer tx => tx.rollback()
     tx.commit()
     tx = Tx("second")                      // a new value to clean up
 }
 
-fn in_lambda() {
+fun in_lambda() {
     [1, 2].each(x => {
         defer print("after {x}")
         print("with {x}")
     })
 }
 
-fn mended() -> i32 {
+fun mended() -> i32 {
     let v = {
         defer print("left the block")
         let a = tries(none)?
@@ -99,7 +99,7 @@ fn mended() -> i32 {
     v
 }
 
-fn main() {
+fun main() {
     plain()
     print(returns(3))
     print(returns(9))

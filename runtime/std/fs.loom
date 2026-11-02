@@ -13,44 +13,44 @@ pub warp Meta {
 }
 
 /// The size of the file at `path`, and whether it is a directory.
-pub fn metadata(path: str) -> Meta ! IoError {
+pub fun metadata(path: str) -> Meta ! IoError {
     if file_kind(path) == 0 { fail IoError.NotFound(path.to_string()) }
     Meta(size: file_size(path), is_dir: file_kind(path) == 2)
 }
 
 /// Whether `path` is a directory.
-pub fn is_dir(path: str) -> bool = file_kind(path) == 2
+pub fun is_dir(path: str) -> bool = file_kind(path) == 2
 
 /// Whether `path` is a file.
-pub fn is_file(path: str) -> bool = file_kind(path) == 1
+pub fun is_file(path: str) -> bool = file_kind(path) == 1
 
 /// An open file.
 #builtin
 pub warp File {
     /// Opens `path` for appending, creating it if needed.
-    pub fn append(path: str) -> File ! IoError
-    pub fn write_line(mut self, line: str) ! IoError
+    pub fun append(path: str) -> File ! IoError
+    pub fun write_line(mut self, line: str) ! IoError
 }
 
 extern "host" {
-    pub fn read(path: str) -> List[u8] ! IoError
-    pub fn read_text(path: str) -> String ! IoError
+    pub fun read(path: str) -> List[u8] ! IoError
+    pub fun read_text(path: str) -> String ! IoError
     /// Makes the file `path` hold `text`, replacing what was there.
-    pub fn write_text(path: str, text: str) ! IoError
+    pub fun write_text(path: str, text: str) ! IoError
     /// Whether there is a file or a directory at `path`.
-    pub fn exists(path: str) -> bool
+    pub fun exists(path: str) -> bool
     /// Deletes the file at `path`.
-    pub fn remove_file(path: str) ! IoError
+    pub fun remove_file(path: str) ! IoError
     /// What kind of thing is at `path`: 0 nothing, 1 a file, 2 a directory.
-    pub fn file_kind(path: str) -> u8
+    pub fun file_kind(path: str) -> u8
     /// The length of the file at `path` in bytes, 0 when it can't be read.
-    pub fn file_size(path: str) -> u64
+    pub fun file_size(path: str) -> u64
     /// Makes the directory `path` and the ones above it that are missing.
-    pub fn create_dir_all(path: str) ! IoError
+    pub fun create_dir_all(path: str) ! IoError
     /// Moves the file `from` to `to`, replacing what is there.
-    pub fn rename(from: str, to: str) ! IoError
+    pub fun rename(from: str, to: str) ! IoError
     /// Copies the file `from` to `to`, replacing what is there.
-    pub fn copy(from: str, to: str) ! IoError
+    pub fun copy(from: str, to: str) ! IoError
     /// The names in the directory `path`, in order.
-    pub fn read_dir(path: str) -> List[String] ! IoError
+    pub fun read_dir(path: str) -> List[String] ! IoError
 }

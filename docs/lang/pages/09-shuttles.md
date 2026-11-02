@@ -5,10 +5,10 @@ A **shuttle** is a function that can pause and resume. The return arrow says wha
 
 | Signature | Kind | Type |
 |-----------|------|------|
-| `fn f() -> T` | an ordinary function | |
-| `fn f() ~> T` | a **generator**: yields `T`s | `Shuttle[T, ()]` |
-| `fn f() ~> T <~ U` | a **duplex** shuttle: pulls in `U`s, yields `T`s | `Shuttle[T, U]` |
-| `fn f() <~ U` | a **sink**: only pulls | `Shuttle[(), U]` |
+| `fun f() -> T` | an ordinary function | |
+| `fun f() ~> T` | a **generator**: yields `T`s | `Shuttle[T, ()]` |
+| `fun f() ~> T <~ U` | a **duplex** shuttle: pulls in `U`s, yields `T`s | `Shuttle[T, U]` |
+| `fun f() <~ U` | a **sink**: only pulls | `Shuttle[(), U]` |
 
 Two expressions work only inside a shuttle. `yield v` sends `v` out and pauses. `pull` pauses until the driver pushes an input, and evaluates to `?U`: `none` once the shuttle is closed. `return` ends it.
 

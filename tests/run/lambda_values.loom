@@ -1,11 +1,11 @@
 // Lambdas that capture (and change) locals, through nested lambdas and
 // loops; named functions as values; generic ones; `map` and `filter`.
 use std.io.print
-fn apply(f: i32 => i32, x: i32) -> i32 = f(x)
-fn twice[T](f: T => T, x: T) -> T = f(f(x))
-fn is_even(n: i32) -> bool = n % 2 == 0
-fn each(xs: [i32], f: i32 => ()) { for x in xs { f(x) } }
-fn find(xs: [i32]) -> i32 {
+fun apply(f: i32 => i32, x: i32) -> i32 = f(x)
+fun twice[T](f: T => T, x: T) -> T = f(f(x))
+fun is_even(n: i32) -> bool = n % 2 == 0
+fun each(xs: [i32], f: i32 => ()) { for x in xs { f(x) } }
+fun find(xs: [i32]) -> i32 {
     var found = 0
     each(xs, x => {
         if x >= 0 { return }
@@ -13,7 +13,7 @@ fn find(xs: [i32]) -> i32 {
     })
     found
 }
-fn captures() {
+fun captures() {
     let offset = 10
     print(apply(x => x * 2, 21))
     print(apply(_ + offset, 5))
@@ -37,7 +37,7 @@ fn captures() {
     print(n)
 }
 warp Point { x: i32, y: i32 }
-fn values() {
+fun values() {
     print([1, 2, 3, 4].filter(is_even))
     let pts = [Point(3, -4), Point(-1, 1)]
     print(pts.map(_.x))
@@ -47,7 +47,7 @@ fn values() {
     let k = 3
     print([1, 2, 3].map(_ * k))
 }
-fn main() {
+fun main() {
     captures()
     values()
 }

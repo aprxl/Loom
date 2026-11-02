@@ -37,7 +37,7 @@ warp Token: Show {
 /// like a pull lexer. The lexer's whole state (pos, the pending char, partial
 /// tokens) lives in its frame, which is sized at compile time and stored
 /// inline in the shuttle value.
-fn lexer() ~> Token <~ char {
+fun lexer() ~> Token <~ char {
     var pos: u32 = 0
     var next = pull                               // ?char: `none` once the input is closed
 
@@ -96,7 +96,7 @@ fn lexer() ~> Token <~ char {
 // ---------------------------------------------------------------- generators
 
 /// A generator is a shuttle that only yields. It's an iterator too.
-fn primes() ~> u64 {
+fun primes() ~> u64 {
     var found = List[u64]()
     for n in 2.. {
         if found.all(n % _ != 0) {                // hole lambda: p => n % p != 0
@@ -107,7 +107,7 @@ fn primes() ~> u64 {
 }
 
 /// A duplex shuttle can keep state between inputs, like a tiny actor.
-fn running_mean() ~> f64 <~ f64 {
+fun running_mean() ~> f64 <~ f64 {
     var (sum, count) = (0.0, 0)
     while pull is some(x) {
         sum += x
@@ -118,7 +118,7 @@ fn running_mean() ~> f64 <~ f64 {
 
 // ---------------------------------------------------------------- main
 
-fn main() {
+fun main() {
     let source = "let greeting = \"hi\" + 42"
 
     // We decide when input arrives. Each push resumes the lexer until it

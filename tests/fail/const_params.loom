@@ -2,18 +2,18 @@
 
 use std.io.print
 
-fn sum[const N: usize](xs: [i32; N]) -> i32 = 0
-fn both[const N: usize](a: [i32; N], b: [i32; N]) -> i32 = 0
-fn pick(const first: bool) -> i32 = 0
-fn small[const N: u8](xs: [i32; N]) -> u8 = N
-fn label(const s: str) -> str = s                        //~ T0101
-fn sized(k: usize) -> [u8; k] = [0; k]                   //~ K0105
+fun sum[const N: usize](xs: [i32; N]) -> i32 = 0
+fun both[const N: usize](a: [i32; N], b: [i32; N]) -> i32 = 0
+fun pick(const first: bool) -> i32 = 0
+fun small[const N: u8](xs: [i32; N]) -> u8 = N
+fun label(const s: str) -> str = s                        //~ T0101
+fun sized(k: usize) -> [u8; k] = [0; k]                   //~ K0105
 
 warp Grid[const W: u8, const H: u8] {
     const assert(W > 0 and H > 0, "an empty grid")      //~ K0101
 }
 
-fn main() {
+fun main() {
     var k = 3
     print(sum[k]([1, 2, 3]))                             //~ K0109
     print(pick(k > 2))                                   //~ K0109

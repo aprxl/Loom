@@ -49,4 +49,4 @@ pub warp Frame {
 }
 
 /// Everything but `#f` is true, as in Scheme. `()` is true too.
-pub fn truthy(v: Val) -> bool = not (v is .Bool(false))
+pub fun truthy(v: Val) -> bool = not (v is .Bool(false))

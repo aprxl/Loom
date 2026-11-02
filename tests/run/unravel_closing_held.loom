@@ -4,13 +4,13 @@
 
 use std.io.print
 
-fn gen() ~> i32 {
+fun gen() ~> i32 {
     defer unravel("gen's defer")
     yield 1
     yield 2
 }
 
-fn main() {
+fun main() {
     defer print("main's defer ran")
     let g = gen()
     for x in g {

@@ -3,7 +3,7 @@ use std.io.print
 // A twill pattern matches bits. Digits must match, `?` is "don't care",
 // and each lowercase letter is a capture: every bit with the same letter
 // forms one integer exactly that wide.
-fn decode(op: u16) -> String = match op {
+fun decode(op: u16) -> String = match op {
     0x00E0 => "clear"
     0x1nnn => "jump to {n}"                  // n: u12
     0x6xkk => "v{x} = {k}"                   // x: u4, k: u8
@@ -12,7 +12,7 @@ fn decode(op: u16) -> String = match op {
     _ => "unknown"
 }
 
-fn utf8_kind(byte: u8) -> str = match byte {
+fun utf8_kind(byte: u8) -> str = match byte {
     0b0???_???? => "ascii"
     0b110?_???? => "starts a 2-byte character"
     0b1110_???? => "starts a 3-byte character"
@@ -20,7 +20,7 @@ fn utf8_kind(byte: u8) -> str = match byte {
     _ => "other"
 }
 
-fn main() {
+fun main() {
     for op in [0x00E0, 0x1234, 0x6A42, 0x8AB4, 0xF107, 0x5000] {
         print("{op:04X}: {decode(op as u16)}")
     }

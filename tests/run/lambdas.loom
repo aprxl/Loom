@@ -4,15 +4,15 @@ use std.io.print
 
 warp Point { x: i32, y: i32 }
 
-fn apply(f: i32 => i32, x: i32) -> i32 = f(x)
-fn twice[T](f: T => T, x: T) -> T = f(f(x))
-fn compose(f: i32 => i32, g: i32 => i32, x: i32) -> i32 = g(f(x))
-fn is_even(n: i32) -> bool = n % 2 == 0
-fn clamp(x: i32, lo: i32, hi: i32) -> i32 = x.max(lo).min(hi)
-fn norm1(p: Point) -> i32 = p.x.abs() + p.y.abs()
+fun apply(f: i32 => i32, x: i32) -> i32 = f(x)
+fun twice[T](f: T => T, x: T) -> T = f(f(x))
+fun compose(f: i32 => i32, g: i32 => i32, x: i32) -> i32 = g(f(x))
+fun is_even(n: i32) -> bool = n % 2 == 0
+fun clamp(x: i32, lo: i32, hi: i32) -> i32 = x.max(lo).min(hi)
+fun norm1(p: Point) -> i32 = p.x.abs() + p.y.abs()
 
 // A lambda's `return` leaves the lambda, not the function around it.
-fn first_negative(xs: [i32]) -> i32 {
+fun first_negative(xs: [i32]) -> i32 {
     var found = 0
     xs.each(x => {
         if x >= 0 { return }
@@ -21,7 +21,7 @@ fn first_negative(xs: [i32]) -> i32 {
     found
 }
 
-fn main() {
+fun main() {
     let offset = 10
     print(apply(x => x * 2, 21))
     print(apply(_ + offset, 5))                   // a hole lambda sees `offset`

@@ -9,7 +9,7 @@ warp P {
     x: u64
 }
 
-fn main() {
+fun main() {
     let total = Atomic[u64](0)
     loom for i in 0..8u64 {
         spool a = Arena(4.kib())

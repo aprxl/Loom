@@ -4,10 +4,10 @@ warp Thing {
     x: i32
 
     #spool_putt                          //~ N0101
-    fn get(self) -> i32 = self.x
+    fun get(self) -> i32 = self.x
 }
 
-fn main() {
+fun main() {
     let t = Thing(1)
     print("{t.get()}")
 }

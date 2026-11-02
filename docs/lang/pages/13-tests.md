@@ -1,7 +1,7 @@
 title: Tests
 summary: `test name() { ... }` and `loom test`.
 ---
-A test is written like a function, with `test` in place of `fn`. It takes no parameters and returns nothing, or `! E` so it can use `?`. `loom test FILE` runs the file's tests one after another and prints a report like cargo's.
+A test is written like a function, with `test` in place of `fun`. It takes no parameters and returns nothing, or `! E` so it can use `?`. `loom test FILE` runs the file's tests one after another and prints a report like cargo's.
 
 @sample tests_pass
 

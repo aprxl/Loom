@@ -10,7 +10,7 @@ warp Token {
 
 type MaybeToken = ?Token
 
-fn main() {
+fun main() {
     print("Header: {Header.size} bytes, aligned to {Header.align}")
     const for f in Header.fields {
         print("  {f.name} at {f.offset}")

@@ -1,12 +1,12 @@
 use std.io.print
 
-fn add(a: i32, b: i32) -> i32 {
+fun add(a: i32, b: i32) -> i32 {
     a + b                                    // the last expression is the result
 }
 
-fn area(w: f64, h: f64 = 1.0) -> f64 = w * h  // expression body, default argument
+fun area(w: f64, h: f64 = 1.0) -> f64 = w * h  // expression body, default argument
 
-fn main() {
+fun main() {
     let x = 5                                // immutable
     var count = 0                            // mutable
     count += add(x, 2)

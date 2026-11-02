@@ -5,9 +5,9 @@ use std.io.print
 
 warp P: Copy, Show { x: i32, y: i32 }
 
-fn swap(mut a: P, mut b: P) { (a, b) = (b, a) }
-fn set_both(mut a: P, mut b: P) { (a, b) = (P(0, 0), P(9, 9)) }
-fn mixed(mut a: P) -> P {
+fun swap(mut a: P, mut b: P) { (a, b) = (b, a) }
+fun set_both(mut a: P, mut b: P) { (a, b) = (P(0, 0), P(9, 9)) }
+fun mixed(mut a: P) -> P {
     var x = P(7, 7)
     (x, a) = (a, x)
     x
@@ -15,18 +15,18 @@ fn mixed(mut a: P) -> P {
 
 warp W: Show {
     p: P
-    fn swap_in(mut self, mut o: P) { (self, o) = (W(o), self.p) }
+    fun swap_in(mut self, mut o: P) { (self, o) = (W(o), self.p) }
 }
 
-fn keep(take s: String) -> usize = s.len()
+fun keep(take s: String) -> usize = s.len()
 
 once warp Tx {
     name: String
-    pub fn commit(take self) { let Tx(n) = self; print("commit {n}") }
-    pub fn rollback(take self) { let Tx(n) = self; print("rollback {n}") }
+    pub fun commit(take self) { let Tx(n) = self; print("commit {n}") }
+    pub fun rollback(take self) { let Tx(n) = self; print("rollback {n}") }
 }
 
-fn tx() {
+fun tx() {
     var t = Tx("first".to_string())
     var n = 0
     defer t => t.rollback()
@@ -34,7 +34,7 @@ fn tx() {
     (t, n) = (Tx("second".to_string()), 1)
 }
 
-fn main() {
+fun main() {
     var a = P(1, 1)
     var b = P(2, 2)
     swap(mut a, mut b)

@@ -48,10 +48,10 @@
 
 <span class="c">// `n` must be known while compiling. Each length gets its own copy of the</span>
 <span class="c">// function, and the length is part of the return type.</span>
-<span class="k">fn</span> zeros(<span class="k">const</span> n: usize) -&gt; [f32; n] = [<span class="n">0.0</span>; n]
+<span class="k">fun</span> zeros(<span class="k">const</span> n: usize) -&gt; [f32; n] = [<span class="n">0.0</span>; n]
 
 <span class="c">// `N` is a generic parameter, worked out from the array's length.</span>
-<span class="k">fn</span> sum[<span class="k">const</span> N: usize](xs: [i32; N]) -&gt; i32 {
+<span class="k">fun</span> sum[<span class="k">const</span> N: usize](xs: [i32; N]) -&gt; i32 {
     <span class="k">const</span> assert(N &gt; <span class="n">0</span>, <span class="s">"summing nothing"</span>)
     <span class="k">var</span> total = <span class="n">0</span>
     <span class="k">for</span> x <span class="k">in</span> xs {
@@ -60,7 +60,7 @@
     total
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     print(zeros(<span class="n">3</span>))
     print(zeros(<span class="n">4</span>).len())
     print(sum([<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]))
@@ -76,9 +76,9 @@
 <div class="sample-head"><span class="file">samples/cp_err_known.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0109">K0109</a></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fn</span> pick(<span class="k">const</span> first: bool) -&gt; str = <span class="k">if</span> first { <span class="s">"first"</span> } <span class="k">else</span> { <span class="s">"second"</span> }
+<span class="k">fun</span> pick(<span class="k">const</span> first: bool) -&gt; str = <span class="k">if</span> first { <span class="s">"first"</span> } <span class="k">else</span> { <span class="s">"second"</span> }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">var</span> k = <span class="n">3</span>
     print(pick(k &gt; <span class="n">2</span>))
 }</code></pre>
@@ -92,14 +92,14 @@
 
 <span class="err">error: cp_err_known.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
-<ul><li>A <code>const</code> function parameter (<code>fn zeros(const n: usize)</code>) is still passed at run time like any other. Inside the instance, and in compile-time code, it's its value.</li><li><code>zeros(4)</code> and <code>zeros(5)</code> are different instances, and <code>Ring[u32, 4]</code> and <code>Ring[u32, 8]</code> are different types.</li></ul>
+<ul><li>A <code>const</code> function parameter (<code>fun zeros(const n: usize)</code>) is still passed at run time like any other. Inside the instance, and in compile-time code, it's its value.</li><li><code>zeros(4)</code> and <code>zeros(5)</code> are different instances, and <code>Ring[u32, 4]</code> and <code>Ring[u32, 8]</code> are different types.</li></ul>
 <div class="sample" id="sample-cp_err_range">
 <div class="sample-head"><span class="file">samples/cp_err_range.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#T0102">T0102</a></span></div>
 <pre class="code"><code><span class="k">warp</span> <span class="t">Grid</span>[<span class="k">const</span> W: u8, <span class="k">const</span> H: u8] {
-    <span class="k">fn</span> area(<span class="k">self</span>) -&gt; u16 = W <span class="k">as</span> u16 * H <span class="k">as</span> u16
+    <span class="k">fun</span> area(<span class="k">self</span>) -&gt; u16 = W <span class="k">as</span> u16 * H <span class="k">as</span> u16
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="c">// 300 doesn't fit a `u8`.</span>
     <span class="k">let</span> b = <span class="t">Grid</span>[<span class="n">300</span>, <span class="n">1</span>]()
 }</code></pre>
@@ -118,10 +118,10 @@
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="k">warp</span> <span class="t">Grid</span>[<span class="k">const</span> W: u8, <span class="k">const</span> H: u8] {
-    <span class="k">fn</span> area(<span class="k">self</span>) -&gt; u16 = W <span class="k">as</span> u16 * H <span class="k">as</span> u16
+    <span class="k">fun</span> area(<span class="k">self</span>) -&gt; u16 = W <span class="k">as</span> u16 * H <span class="k">as</span> u16
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="c">// `uint(n)` and `int(n)` are the integer types with `n` bits.</span>
     <span class="k">let</span> small: uint(<span class="n">3</span>) = <span class="n">7</span>
     <span class="k">let</span> wide: int(<span class="n">12</span>) = -<span class="n">2048</span>
@@ -157,7 +157,7 @@
 
     <span class="c">/// Adds to the back. When the ring is full, the oldest item is dropped</span>
     <span class="c">/// and returned.</span>
-    <span class="k">pub</span> <span class="k">fn</span> push(<span class="k">mut</span> <span class="k">self</span>, <span class="k">take</span> x: T) -&gt; ?T {
+    <span class="k">pub</span> <span class="k">fun</span> push(<span class="k">mut</span> <span class="k">self</span>, <span class="k">take</span> x: T) -&gt; ?T {
         <span class="k">let</span> evicted = <span class="k">if</span> .len == N { .pop() } <span class="k">else</span> { <span class="k">none</span> }
         .slots[.tail] = x
         .tail +%= <span class="n">1</span>
@@ -165,7 +165,7 @@
         evicted
     }
 
-    <span class="k">pub</span> <span class="k">fn</span> pop(<span class="k">mut</span> <span class="k">self</span>) -&gt; ?T {
+    <span class="k">pub</span> <span class="k">fun</span> pop(<span class="k">mut</span> <span class="k">self</span>) -&gt; ?T {
         <span class="k">if</span> .len == <span class="n">0</span> { <span class="k">return</span> <span class="k">none</span> }
         <span class="k">let</span> x = .slots[.head].take()
         .head +%= <span class="n">1</span>
@@ -174,7 +174,7 @@
     }
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">var</span> recent = <span class="t">Ring</span>[u32, <span class="n">4</span>]()
     <span class="k">for</span> n <span class="k">in</span> <span class="n">1u32</span>..=<span class="n">6</span> {
         <span class="k">if</span> recent.push(n) <span class="k">is</span> <span class="k">some</span>(old) {
@@ -199,7 +199,7 @@ kept 6</code></pre></div>
     slots: [?T; N] = [<span class="k">none</span>; N]
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">let</span> fine = <span class="t">Ring</span>[u32, <span class="n">4</span>]()
     <span class="k">let</span> odd = <span class="t">Ring</span>[u32, <span class="n">100</span>]()
 }</code></pre>
@@ -224,7 +224,7 @@ kept 6</code></pre></div>
 
 <span class="c">/// The branch that isn't taken isn't checked, so it can name things that</span>
 <span class="c">/// don't exist here.</span>
-<span class="k">fn</span> page_size() -&gt; usize {
+<span class="k">fun</span> page_size() -&gt; usize {
     <span class="k">const</span> <span class="k">if</span> target.pointer_bits == <span class="n">63</span> {
         <span class="n">4096</span>
     } <span class="k">else</span> {
@@ -232,11 +232,11 @@ kept 6</code></pre></div>
     }
 }
 
-<span class="k">fn</span> describe[<span class="k">const</span> N: usize](xs: [i32; N]) -&gt; str {
+<span class="k">fun</span> describe[<span class="k">const</span> N: usize](xs: [i32; N]) -&gt; str {
     <span class="k">const</span> <span class="k">if</span> N &gt; <span class="n">2</span> { <span class="s">"long"</span> } <span class="k">else</span> { <span class="s">"short"</span> }
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     print(page_size())
     print(<span class="s">"{</span>describe([<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>])<span class="s">} {</span>describe([<span class="n">1</span>])<span class="s">}"</span>)
 
@@ -258,7 +258,7 @@ three sizes
 <ul><li>The condition must be something the constant folder can work out, like a <code>const</code> argument: literals, constants, <code>const</code> parameters, <code>target</code>, arithmetic and comparisons. Otherwise it's <a href="diagnostics.html#K0110">K0110</a>, or <a href="diagnostics.html#K0105">K0105</a> if it reads a local variable.</li><li>It can be an expression. Its branches then have to give a value.</li></ul>
 <div class="sample" id="sample-ci_err_known">
 <div class="sample-head"><span class="file">samples/ci_err_known.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0105">K0105</a></span></div>
-<pre class="code"><code><span class="k">fn</span> main() {
+<pre class="code"><code><span class="k">fun</span> main() {
     <span class="k">var</span> n = <span class="n">3</span>
     <span class="k">const</span> <span class="k">if</span> n &gt; <span class="n">2</span> {
     }
@@ -277,9 +277,9 @@ three sizes
 </div>
 <div class="sample" id="sample-ci_err_fold">
 <div class="sample-head"><span class="file">samples/ci_err_fold.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0110">K0110</a></span></div>
-<pre class="code"><code><span class="k">fn</span> is_even(n: i32) -&gt; bool = n % <span class="n">2</span> == <span class="n">0</span>
+<pre class="code"><code><span class="k">fun</span> is_even(n: i32) -&gt; bool = n % <span class="n">2</span> == <span class="n">0</span>
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="c">// The condition has to be something the compiler can fold:</span>
     <span class="c">// literals, constants, arithmetic, comparisons. A function call</span>
     <span class="c">// isn't.</span>
@@ -304,7 +304,7 @@ three sizes
 
 <span class="k">const</span> SIZES = [<span class="n">1</span>, <span class="n">2</span>, <span class="n">4</span>]
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="c">// `const for` is unrolled while compiling: the body is written out</span>
     <span class="c">// once per item, and each copy is checked on its own. `i` is a</span>
     <span class="c">// constant in each copy, so it can size an array.</span>
@@ -334,7 +334,7 @@ three sizes
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="c">// A `const if` on `target` picks a branch while compiling.</span>
-<span class="k">fn</span> separator() -&gt; str {
+<span class="k">fun</span> separator() -&gt; str {
     <span class="k">const</span> <span class="k">if</span> target.os == .<span class="t">Windows</span> {
         <span class="s">"\\"</span>
     } <span class="k">else</span> {
@@ -342,7 +342,7 @@ three sizes
     }
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="c">// `target` describes the machine the program is built for.</span>
     print(target.pointer_bits)
     print(target.endian == .<span class="t">Little</span>)
@@ -353,7 +353,7 @@ true
 1</code></pre></div>
 </div>
 <h2 id="not-supported-yet">Not supported yet</h2>
-<p><code>std.sys</code>, and <code>const fn</code>s that return types are not built. <code>const</code> parameters of other types than integers and <code>bool</code> aren't either. See <a href="not-yet.html">Not supported yet</a>.</p>
+<p><code>std.sys</code>, and <code>const fun</code>s that return types are not built. <code>const</code> parameters of other types than integers and <code>bool</code> aren't either. See <a href="not-yet.html">Not supported yet</a>.</p>
 <div class="pager">
 <a href="compile-time.html">&larr; Compile-time code</a>
 <a href="reflection.html">Reflection &rarr;</a>

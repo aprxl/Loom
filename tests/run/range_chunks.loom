@@ -3,7 +3,7 @@
 
 use std.io.print
 
-fn main() {
+fun main() {
     for c in (2..12u64).chunks(4) {
         print("{c.count()}")
     }

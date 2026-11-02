@@ -6,7 +6,7 @@ use std.rand.Rng
 
 const SIZE = 200_000
 
-fn main() {
+fun main() {
     var r = Rng.seeded(3)
     var q: PriorityQueue[u64] = PriorityQueue.new()
     var seen = BitSet.new(1_000_000)

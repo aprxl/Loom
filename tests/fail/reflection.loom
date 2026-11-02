@@ -10,7 +10,7 @@ warp Shape {
     case Circle(r: f64)
 }
 
-fn main() {
+fun main() {
     let p = Point(1, 2)
     let s = Shape.Circle(r: 1.0)
     const for f in Size.fields {

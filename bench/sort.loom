@@ -5,7 +5,7 @@ const SIZE = 300_000
 
 warp Person: Eq, Ord, Show { age: u32, id: u64 }
 
-fn main() {
+fun main() {
     var people: List[Person] = List()
     var seed = 12345u64
     for i in 0..SIZE {

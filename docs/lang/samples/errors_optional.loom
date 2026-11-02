@@ -1,18 +1,18 @@
 use std.io.print
 
-fn find(xs: [i32], target: i32) -> ?usize {
+fun find(xs: [i32], target: i32) -> ?usize {
     for (i, x) in xs.indexed() {
         if x == target { return some(i) }
     }
     none
 }
 
-fn first_even_plus_one(xs: [i32]) -> ?i32 {
+fun first_even_plus_one(xs: [i32]) -> ?i32 {
     let e = xs.find(_ % 2 == 0)?             // no value: leave the function with `none`
     e + 1                                    // a plain value converts to `?i32`
 }
 
-fn main() {
+fun main() {
     let xs = [3, 5, 8, 9]
     print("{find(xs, 8):?} {find(xs, 4):?}")
     print("{first_even_plus_one(xs):?} {first_even_plus_one([1, 3]):?}")

@@ -19,32 +19,32 @@ pub weft Num: Ord, Copy, Show {}
 #builtin
 pub warp Int[T] {
     /// The value without its sign. Unravels for the smallest signed value.
-    pub fn abs(self) -> T
-    pub fn min(self, other: T) -> T
-    pub fn max(self, other: T) -> T
+    pub fun abs(self) -> T
+    pub fun min(self, other: T) -> T
+    pub fun max(self, other: T) -> T
     /// `self` to the power `exp`. Unravels when it doesn't fit.
-    pub fn pow(self, exp: u32) -> T
+    pub fun pow(self, exp: u32) -> T
     /// How many zero bits come after the lowest one bit (all of them for 0).
-    pub fn trailing_zeros(self) -> u32
+    pub fun trailing_zeros(self) -> u32
     /// How many zero bits come before the highest one bit.
-    pub fn leading_zeros(self) -> u32
+    pub fun leading_zeros(self) -> u32
     /// How many bits are one.
-    pub fn count_ones(self) -> u32
+    pub fun count_ones(self) -> u32
     /// Whether it's 2 to the power of something: one bit is one, and it's
     /// above zero.
-    pub fn is_power_of_two(self) -> bool
+    pub fun is_power_of_two(self) -> bool
     /// The base-2 logarithm, rounded down: the position of the highest one
     /// bit. Unravels for zero and below.
-    pub fn log2(self) -> u32
+    pub fun log2(self) -> u32
     /// The bits moved `n` places towards the top; those pushed out come back
     /// in at the bottom. `n` counts modulo the type's width.
-    pub fn rotate_left(self, n: u32) -> T
+    pub fun rotate_left(self, n: u32) -> T
     /// The bits moved `n` places towards the bottom; those pushed out come
     /// back in at the top. `n` counts modulo the type's width.
-    pub fn rotate_right(self, n: u32) -> T
-    pub fn to_string(self) -> String
+    pub fun rotate_right(self, n: u32) -> T
+    pub fun to_string(self) -> String
     /// The digits of `self` in base `radix`, lowercase, with a leading `-` when negative. Unravels unless `radix` is 2 to 36.
-    pub fn to_string_radix(self, radix: u32) -> String {
+    pub fun to_string_radix(self, radix: u32) -> String {
         assert(radix >= 2 and radix <= 36, "to_string_radix: the radix is 2 to 36")
         let r = radix as T
         var v = self
@@ -69,37 +69,37 @@ pub warp Int[T] {
         out
     }
     /// `-1`, `0` or `1`.
-    pub fn signum(self) -> T
+    pub fun signum(self) -> T
     /// The remainder that is never below zero: `(-7).rem_euclid(3)` is `2`.
     /// Unravels if `m` is 0.
-    pub fn rem_euclid(self, m: T) -> T
+    pub fun rem_euclid(self, m: T) -> T
     /// The quotient that goes with `rem_euclid`. Unravels if `m` is 0.
-    pub fn div_euclid(self, m: T) -> T
+    pub fun div_euclid(self, m: T) -> T
     /// The quotient rounded down. Unravels if `m` is 0.
-    pub fn div_floor(self, m: T) -> T
+    pub fun div_floor(self, m: T) -> T
     /// The quotient rounded up. Unravels if `m` is 0.
-    pub fn div_ceil(self, m: T) -> T
+    pub fun div_ceil(self, m: T) -> T
     /// The greatest number that divides both.
-    pub fn gcd(self, other: T) -> T
+    pub fun gcd(self, other: T) -> T
     /// The smallest number both divide. Unravels when it doesn't fit.
-    pub fn lcm(self, other: T) -> T
+    pub fun lcm(self, other: T) -> T
     /// The distance between `self` and `other`. Unravels when it doesn't fit.
-    pub fn abs_diff(self, other: T) -> T = if self > other { self - other } else { other - self }
+    pub fun abs_diff(self, other: T) -> T = if self > other { self - other } else { other - self }
     /// The square root, rounded down. Unravels below zero.
-    pub fn isqrt(self) -> T
+    pub fun isqrt(self) -> T
     /// The base-10 logarithm, rounded down. Unravels for zero and below.
-    pub fn ilog10(self) -> u32
+    pub fun ilog10(self) -> u32
     /// The smallest power of two that is not below it. Unravels when it
     /// doesn't fit.
-    pub fn next_power_of_two(self) -> T
+    pub fun next_power_of_two(self) -> T
     /// How many bits are zero.
-    pub fn count_zeros(self) -> u32
+    pub fun count_zeros(self) -> u32
     /// `self` to the power `exp`, with the bits that don't fit dropped.
-    pub fn pow_wrap(self, exp: u32) -> T
+    pub fun pow_wrap(self, exp: u32) -> T
     /// `self` to the power `exp`, or the nearest number that fits.
-    pub fn pow_sat(self, exp: u32) -> T
+    pub fun pow_sat(self, exp: u32) -> T
     /// `self` to the power `exp`, or `none` when it doesn't fit.
-    pub fn pow_checked(self, exp: u32) -> ?T {
+    pub fun pow_checked(self, exp: u32) -> ?T {
         var acc: T = 1
         var base = self
         var e = exp
@@ -111,7 +111,7 @@ pub warp Int[T] {
         some(acc)
     }
     /// The bytes of `self`, most significant first.
-    pub fn to_be_bytes(self) -> [u8; T.size] {
+    pub fun to_be_bytes(self) -> [u8; T.size] {
         var out: [u8; T.size] = [0; T.size]
         for i in 0..T.size {
             out[i] = ((self >> ((T.size - 1 - i) * 8)) & 0xFF) as u8
@@ -119,7 +119,7 @@ pub warp Int[T] {
         out
     }
     /// The integer whose bytes, most significant first, are `bytes`.
-    pub fn from_be_bytes(bytes: [u8; T.size]) -> T {
+    pub fun from_be_bytes(bytes: [u8; T.size]) -> T {
         var v: T = 0
         for i in 0..T.size {
             v = v | ((bytes[i] as T) << ((T.size - 1 - i) * 8))
@@ -131,59 +131,59 @@ pub warp Int[T] {
 /// The methods of every float type, `T`.
 #builtin
 pub warp Float[T] {
-    pub fn abs(self) -> T
+    pub fun abs(self) -> T
     /// The smaller one; a NaN loses to a number.
-    pub fn min(self, other: T) -> T
-    pub fn max(self, other: T) -> T
-    pub fn sqrt(self) -> T
-    pub fn floor(self) -> T
-    pub fn ceil(self) -> T
+    pub fun min(self, other: T) -> T
+    pub fun max(self, other: T) -> T
+    pub fun sqrt(self) -> T
+    pub fun floor(self) -> T
+    pub fun ceil(self) -> T
     /// Halfway rounds away from zero.
-    pub fn round(self) -> T
-    pub fn trunc(self) -> T
-    pub fn pow(self, exp: T) -> T
-    pub fn is_nan(self) -> bool
-    pub fn to_string(self) -> String
-    pub fn sin(self) -> T
-    pub fn cos(self) -> T
-    pub fn tan(self) -> T
-    pub fn asin(self) -> T
-    pub fn acos(self) -> T
-    pub fn atan(self) -> T
+    pub fun round(self) -> T
+    pub fun trunc(self) -> T
+    pub fun pow(self, exp: T) -> T
+    pub fun is_nan(self) -> bool
+    pub fun to_string(self) -> String
+    pub fun sin(self) -> T
+    pub fun cos(self) -> T
+    pub fun tan(self) -> T
+    pub fun asin(self) -> T
+    pub fun acos(self) -> T
+    pub fun atan(self) -> T
     /// The angle of the point (`other`, `self`), from the x axis.
-    pub fn atan2(self, other: T) -> T
-    pub fn sinh(self) -> T
-    pub fn cosh(self) -> T
-    pub fn tanh(self) -> T
+    pub fun atan2(self, other: T) -> T
+    pub fun sinh(self) -> T
+    pub fun cosh(self) -> T
+    pub fun tanh(self) -> T
     /// `e` to the power `self`.
-    pub fn exp(self) -> T
+    pub fun exp(self) -> T
     /// 2 to the power `self`.
-    pub fn exp2(self) -> T
+    pub fun exp2(self) -> T
     /// The natural logarithm.
-    pub fn ln(self) -> T
-    pub fn log2(self) -> T
-    pub fn log10(self) -> T
+    pub fun ln(self) -> T
+    pub fun log2(self) -> T
+    pub fun log10(self) -> T
     /// The logarithm in `base`.
-    pub fn log(self, base: T) -> T
+    pub fun log(self, base: T) -> T
     /// The length of the hypotenuse of a triangle with sides `self` and `other`.
-    pub fn hypot(self, other: T) -> T
+    pub fun hypot(self, other: T) -> T
     /// What is left after `trunc`.
-    pub fn fract(self) -> T
+    pub fun fract(self) -> T
     /// `-1`, or `1`; NaN stays NaN.
-    pub fn signum(self) -> T
+    pub fun signum(self) -> T
     /// `self` with the sign of `sign`.
-    pub fn copysign(self, sign: T) -> T
-    pub fn to_degrees(self) -> T
-    pub fn to_radians(self) -> T
-    pub fn is_finite(self) -> bool
-    pub fn is_infinite(self) -> bool
-    pub fn is_sign_negative(self) -> bool
+    pub fun copysign(self, sign: T) -> T
+    pub fun to_degrees(self) -> T
+    pub fun to_radians(self) -> T
+    pub fun is_finite(self) -> bool
+    pub fun is_infinite(self) -> bool
+    pub fun is_sign_negative(self) -> bool
     /// The IEEE 754 bit pattern.
-    pub fn to_bits(self) -> uint(T.size * 8)
+    pub fun to_bits(self) -> uint(T.size * 8)
     /// The float with IEEE 754 bit pattern `bits`.
-    pub fn from_bits(bits: uint(T.size * 8)) -> T
+    pub fun from_bits(bits: uint(T.size * 8)) -> T
     /// Orders every value, NaNs included: -NaN < -inf < … < -0 < +0 < … < inf < NaN.
-    pub fn total_cmp(self, other: T) -> Ordering {
+    pub fun total_cmp(self, other: T) -> Ordering {
         let top: uint(T.size * 8) = 1 << (T.size * 8 - 1)
         let a = self.to_bits()
         let b = other.to_bits()

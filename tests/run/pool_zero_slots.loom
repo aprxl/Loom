@@ -7,7 +7,7 @@ warp Particle {
     x: i32
 }
 
-fn main() {
+fun main() {
     spool slots = Pool[Particle](0)
     print("made")
     let p = slots.put(Particle(1))

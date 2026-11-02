@@ -1,4 +1,4 @@
-fn main() {
+fun main() {
     var n = 3
     const if n > 2 {
     }

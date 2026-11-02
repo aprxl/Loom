@@ -5,19 +5,19 @@ use std.io.print
 pub once warp Tx {
     moves: List[i32] = List()
 
-    pub fn begin() -> Tx = Tx()
-    pub fn credit(mut self, amount: i32) { .moves.push(amount) }
-    pub fn commit(take self) {
+    pub fun begin() -> Tx = Tx()
+    pub fun credit(mut self, amount: i32) { .moves.push(amount) }
+    pub fun commit(take self) {
         let Tx(moves) = self                 // destructuring ties the value off
         print("committed {moves}")
     }
-    pub fn rollback(take self) {
+    pub fun rollback(take self) {
         let Tx(_) = self
         print("rolled back")
     }
 }
 
-fn transfer(good: bool) {
+fun transfer(good: bool) {
     var tx = Tx.begin()
     defer tx => tx.rollback()                // runs only if `tx` is still loose
     tx.credit(5)
@@ -25,7 +25,7 @@ fn transfer(good: bool) {
     tx.commit()                              // used up: the defer does nothing
 }
 
-fn main() {
+fun main() {
     transfer(true)
     transfer(false)
 }

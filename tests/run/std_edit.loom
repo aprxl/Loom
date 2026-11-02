@@ -1,5 +1,5 @@
 use std.io.print
-fn main() {
+fun main() {
     var s: String = "héllo"
     s.insert(0, '>')
     s.insert_str(4, "--")

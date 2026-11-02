@@ -1,7 +1,7 @@
 // Maps and sets at scale: keys and values that own memory, replacing,
 // removing, clearing, copies, growing the index, and keys of every kind.
 use std.io.print
-fn main() {
+fun main() {
     var m: Map[String, List[String]] = Map()
     for i in 0..20 {
         let k = "k{i % 7}"

@@ -65,231 +65,231 @@
 <div class="members">
 <div class="member" id="Slice.len">
 <div class="member-head">
-<span class="sig">fn len(self) -&gt; usize</span>
+<span class="sig">fun len(self) -&gt; usize</span>
 
 </div>
 <p class="member-doc">How many elements there are.</p>
 </div>
 <div class="member" id="Slice.is_empty">
 <div class="member-head">
-<span class="sig">fn is_empty(self) -&gt; bool</span>
+<span class="sig">fun is_empty(self) -&gt; bool</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Slice.get">
 <div class="member-head">
-<span class="sig">fn get(self, i: usize) -&gt; ?T</span>
+<span class="sig">fun get(self, i: usize) -&gt; ?T</span>
 
 </div>
 <p class="member-doc">A copy of the element at <code>i</code>, or <code>none</code> past the end. (An element can't be moved out of a slice: it gives a value of its own, a deep copy for a type that isn't <code>Copy</code>.)</p>
 </div>
 <div class="member" id="Slice.first">
 <div class="member-head">
-<span class="sig">fn first(self) -&gt; ?T</span>
+<span class="sig">fun first(self) -&gt; ?T</span>
 
 </div>
 <p class="member-doc">A copy of the first element.</p>
 </div>
 <div class="member" id="Slice.last">
 <div class="member-head">
-<span class="sig">fn last(self) -&gt; ?T</span>
+<span class="sig">fun last(self) -&gt; ?T</span>
 
 </div>
 <p class="member-doc">A copy of the last element.</p>
 </div>
 <div class="member" id="Slice.contains">
 <div class="member-head">
-<span class="sig">fn contains(self, x: T) -&gt; bool where T: Eq</span>
+<span class="sig">fun contains(self, x: T) -&gt; bool where T: Eq</span>
 
 </div>
 <p class="member-doc">Whether some element equals <code>x</code>.</p>
 </div>
 <div class="member" id="Slice.index_of">
 <div class="member-head">
-<span class="sig">fn index_of(self, x: T) -&gt; ?usize where T: Eq</span>
+<span class="sig">fun index_of(self, x: T) -&gt; ?usize where T: Eq</span>
 
 </div>
 <p class="member-doc">The index of the first element equal to <code>x</code>.</p>
 </div>
 <div class="member" id="Slice.copy_from">
 <div class="member-head">
-<span class="sig">fn copy_from(mut self, src: [T])</span>
+<span class="sig">fun copy_from(mut self, src: [T])</span>
 
 </div>
 <p class="member-doc">Copies <code>src</code> over the start of this slice. Unravels if <code>src</code> is longer.</p>
 </div>
 <div class="member" id="Slice.fill">
 <div class="member-head">
-<span class="sig">fn fill(mut self, x: T)</span>
+<span class="sig">fun fill(mut self, x: T)</span>
 
 </div>
 <p class="member-doc">Sets every element to a copy of <code>x</code>.</p>
 </div>
 <div class="member" id="Slice.swap">
 <div class="member-head">
-<span class="sig">fn swap(mut self, i: usize, j: usize)</span>
+<span class="sig">fun swap(mut self, i: usize, j: usize)</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Slice.reverse">
 <div class="member-head">
-<span class="sig">fn reverse(mut self)</span>
+<span class="sig">fun reverse(mut self)</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Slice.sort">
 <div class="member-head">
-<span class="sig">fn sort(mut self) where T: Ord</span>
+<span class="sig">fun sort(mut self) where T: Ord</span>
 
 </div>
 <p class="member-doc">Sorts in order, keeping equal elements in the order they were in.</p>
 </div>
 <div class="member" id="Slice.to_list">
 <div class="member-head">
-<span class="sig">fn to_list(self) -&gt; List[T]</span>
+<span class="sig">fun to_list(self) -&gt; List[T]</span>
 
 </div>
 <p class="member-doc">A new list with a copy of every element.</p>
 </div>
 <div class="member" id="Slice.map">
 <div class="member-head">
-<span class="sig">fn map[U](self, f: T =&gt; U) -&gt; List[U]</span>
+<span class="sig">fun map[U](self, f: T =&gt; U) -&gt; List[U]</span>
 
 </div>
 <p class="member-doc">A new list of <code>f</code> of each element. (<code>xs.indexed()</code> and the other methods of <code>Stream</code> work on slices too, lazily.)</p>
 </div>
 <div class="member" id="Slice.filter">
 <div class="member-head">
-<span class="sig">fn filter(self, f: T =&gt; bool) -&gt; List[T]</span>
+<span class="sig">fun filter(self, f: T =&gt; bool) -&gt; List[T]</span>
 
 </div>
 <p class="member-doc">A new list with a copy of each element <code>f</code> says yes to.</p>
 </div>
 <div class="member" id="Slice.chunks">
 <div class="member-head">
-<span class="sig">fn chunks(self, n: usize) -&gt; Stream[[T]]</span>
+<span class="sig">fun chunks(self, n: usize) -&gt; Stream[[T]]</span>
 
 </div>
 <p class="member-doc">Views of <code>n</code> elements at a time, one after another; the last may be shorter. Unravels if <code>n</code> is 0.</p>
 </div>
 <div class="member" id="Slice.chunks_mut">
 <div class="member-head">
-<span class="sig">fn chunks_mut(mut self, n: usize) -&gt; Stream[[T]]</span>
+<span class="sig">fun chunks_mut(mut self, n: usize) -&gt; Stream[[T]]</span>
 
 </div>
 <p class="member-doc">Views of <code>n</code> elements at a time, one after another, which can be changed (<code>line[i] = x</code>). They don't overlap, so in a <code>loom for</code> each thread may change its own piece. The last may be shorter. Unravels if <code>n</code> is 0.</p>
 </div>
 <div class="member" id="Slice.windows">
 <div class="member-head">
-<span class="sig">fn windows(self, n: usize) -&gt; Stream[[T]]</span>
+<span class="sig">fun windows(self, n: usize) -&gt; Stream[[T]]</span>
 
 </div>
 <p class="member-doc">Views of every run of <code>n</code> elements in a row: <code>[a, b]</code>, <code>[b, c]</code>, … Unravels if <code>n</code> is 0.</p>
 </div>
 <div class="member" id="Slice.starts_with">
 <div class="member-head">
-<span class="sig">fn starts_with(self, prefix: [T]) -&gt; bool where T: Eq</span>
+<span class="sig">fun starts_with(self, prefix: [T]) -&gt; bool where T: Eq</span>
 
 </div>
 <p class="member-doc">Whether the slice starts with <code>prefix</code>.</p>
 </div>
 <div class="member" id="Slice.concat">
 <div class="member-head">
-<span class="sig">fn concat[U](self) -&gt; List[U] where T: [U]</span>
+<span class="sig">fun concat[U](self) -&gt; List[U] where T: [U]</span>
 
 </div>
 <p class="member-doc">The inner slices, one after another.</p>
 </div>
 <div class="member" id="Slice.join">
 <div class="member-head">
-<span class="sig">fn join[U](self, sep: [U]) -&gt; List[U] where T: [U]</span>
+<span class="sig">fun join[U](self, sep: [U]) -&gt; List[U] where T: [U]</span>
 
 </div>
 <p class="member-doc">The inner slices with <code>sep</code> between them.</p>
 </div>
 <div class="member" id="Slice.ends_with">
 <div class="member-head">
-<span class="sig">fn ends_with(self, suffix: [T]) -&gt; bool where T: Eq</span>
+<span class="sig">fun ends_with(self, suffix: [T]) -&gt; bool where T: Eq</span>
 
 </div>
 <p class="member-doc">Whether the slice ends with <code>suffix</code>.</p>
 </div>
 <div class="member" id="Slice.count_of">
 <div class="member-head">
-<span class="sig">fn count_of(self, x: T) -&gt; usize where T: Eq</span>
+<span class="sig">fun count_of(self, x: T) -&gt; usize where T: Eq</span>
 
 </div>
 <p class="member-doc">How many elements equal <code>x</code>.</p>
 </div>
 <div class="member" id="Slice.rotate_left">
 <div class="member-head">
-<span class="sig">fn rotate_left(mut self, n: usize)</span>
+<span class="sig">fun rotate_left(mut self, n: usize)</span>
 
 </div>
 <p class="member-doc">Moves the elements <code>n</code> places towards the start; those pushed out come back at the end. <code>n</code> counts modulo the length.</p>
 </div>
 <div class="member" id="Slice.rotate_right">
 <div class="member-head">
-<span class="sig">fn rotate_right(mut self, n: usize)</span>
+<span class="sig">fun rotate_right(mut self, n: usize)</span>
 
 </div>
 <p class="member-doc">Moves the elements <code>n</code> places towards the end; those pushed out come back at the start. <code>n</code> counts modulo the length.</p>
 </div>
 <div class="member" id="Slice.rev">
 <div class="member-head">
-<span class="sig">fn rev(self) -&gt; Stream[T]</span>
+<span class="sig">fun rev(self) -&gt; Stream[T]</span>
 
 </div>
 <p class="member-doc">The elements from the last to the first.</p>
 </div>
 <div class="member" id="Slice.sort_by">
 <div class="member-head">
-<span class="sig">fn sort_by(mut self, less: (T, T) =&gt; bool)</span>
+<span class="sig">fun sort_by(mut self, less: (T, T) =&gt; bool)</span>
 
 </div>
 <p class="member-doc">Sorts so that <code>less(a, b)</code> says whether <code>a</code> goes before <code>b</code>. Stable: elements neither goes before the other keep their order.</p>
 </div>
 <div class="member" id="Slice.sort_by_key">
 <div class="member-head">
-<span class="sig">fn sort_by_key[K: Ord](mut self, key: T =&gt; K)</span>
+<span class="sig">fun sort_by_key[K: Ord](mut self, key: T =&gt; K)</span>
 
 </div>
 <p class="member-doc">Sorts by <code>key</code> of each element, which is computed once per element. Stable.</p>
 </div>
 <div class="member" id="Slice.is_sorted">
 <div class="member-head">
-<span class="sig">fn is_sorted(self) -&gt; bool where T: Ord</span>
+<span class="sig">fun is_sorted(self) -&gt; bool where T: Ord</span>
 
 </div>
 <p class="member-doc">Whether every element is at or after the one before it.</p>
 </div>
 <div class="member" id="Slice.lower_bound">
 <div class="member-head">
-<span class="sig">fn lower_bound(self, x: T) -&gt; usize where T: Ord</span>
+<span class="sig">fun lower_bound(self, x: T) -&gt; usize where T: Ord</span>
 
 </div>
 <p class="member-doc">The index of the first element that is not before <code>x</code> in a sorted slice: where <code>x</code> would go.</p>
 </div>
 <div class="member" id="Slice.upper_bound">
 <div class="member-head">
-<span class="sig">fn upper_bound(self, x: T) -&gt; usize where T: Ord</span>
+<span class="sig">fun upper_bound(self, x: T) -&gt; usize where T: Ord</span>
 
 </div>
 <p class="member-doc">The index of the first element after <code>x</code> in a sorted slice.</p>
 </div>
 <div class="member" id="Slice.binary_search">
 <div class="member-head">
-<span class="sig">fn binary_search(self, x: T) -&gt; ?usize where T: Ord</span>
+<span class="sig">fun binary_search(self, x: T) -&gt; ?usize where T: Ord</span>
 
 </div>
 <p class="member-doc">The index of an element equal to <code>x</code> in a sorted slice.</p>
 </div>
 <div class="member" id="Slice.partition_point">
 <div class="member-head">
-<span class="sig">fn partition_point(self, pred: T =&gt; bool) -&gt; usize</span>
+<span class="sig">fun partition_point(self, pred: T =&gt; bool) -&gt; usize</span>
 
 </div>
 <p class="member-doc">In a slice where <code>pred</code> says yes to a run of elements and then no to the rest, the index of the first no.</p>

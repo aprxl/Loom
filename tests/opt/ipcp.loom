@@ -5,9 +5,9 @@
 // `x * k` folds its constant in.
 use std.io.print
 
-fn scale(x: i64, k: i64) -> i64 = x * k
+fun scale(x: i64, k: i64) -> i64 = x * k
 
-fn main() {
+fun main() {
     print(scale(5, 3))
     print(scale(7, 3))
 }

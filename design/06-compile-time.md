@@ -7,8 +7,8 @@ compiles is ordinary Loom code marked with `const`, with a few restrictions.
 the same keyword marks everything else that happens at compile time: blocks,
 conditions, loops, assertions, and parameters.
 
-> Loom's `const fn` means **compile-time only**, as in Zig's `comptime`. It is
-> *not* Rust's `const fn`, which means "may also be evaluated at compile time".
+> Loom's `const fun` means **compile-time only**, as in Zig's `comptime`. It is
+> *not* Rust's `const fun`, which means "may also be evaluated at compile time".
 
 ---
 
@@ -35,24 +35,24 @@ called at compile time.
 ## `const` parameters and types as values
 
 ```loom
-fn zeros(const n: usize) -> [f32; n] = [0.0; n]
+fun zeros(const n: usize) -> [f32; n] = [0.0; n]
 
 warp Matrix[const R: usize, const C: usize] {
     cells: [f32; R * C]
-    fn transpose(self) -> Matrix[C, R] { ... }
+    fun transpose(self) -> Matrix[C, R] { ... }
 }
 ```
 
 - A `const` parameter must be known at compile time. The function is
   specialized for each distinct value.
 - `type` is a compile-time-only type. **Generics are `const` parameters:**
-  `fn max[T: Ord](xs: [T])` is sugar for `fn max[const T: type](xs: [T]) where T: Ord`,
+  `fun max[T: Ord](xs: [T])` is sugar for `fun max[const T: type](xs: [T]) where T: Ord`,
   with `T` inferred.
-- `const fn`s can return types, so you can compute them:
+- `const fun`s can return types, so you can compute them:
 
 ```loom
-const fn uint(bits: u8) -> type          // a builtin: uint(12) is u12
-const fn fixed(int_bits: u8, frac_bits: u8) -> type = warp {
+const fun uint(bits: u8) -> type          // a builtin: uint(12) is u12
+const fun fixed(int_bits: u8, frac_bits: u8) -> type = warp {
     raw: int(int_bits + frac_bits)
     ...
 }
@@ -109,7 +109,7 @@ specialized to its own shape:
 
 ```loom
 pub weft Show {
-    fn show(self, mut f: Fmt) {
+    fun show(self, mut f: Fmt) {
         const if Self.kind == .Record {
             f.put("{Self.name}(")
             const for (i, fld) in Self.fields.indexed() {
@@ -156,7 +156,7 @@ relative to the bolt root and become build dependencies.
 ```loom
 use std.build.{Bolt, Dep}
 
-pub const fn bolt() -> Bolt = Bolt(
+pub const fun bolt() -> Bolt = Bolt(
     name: "chip8",
     version: "0.1.0",
     deps: [Dep.git("https://example.com/loom-term", tag: "v2")],

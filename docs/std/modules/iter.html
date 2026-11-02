@@ -64,7 +64,7 @@
 <p class="item-doc">Something <code>for</code> can loop over, one item at a time.</p>
 <pre><code>warp Countdown(u32): Iter {
     type Item = u32
-    fn next(mut self) -&gt; ?u32 {
+    fun next(mut self) -&gt; ?u32 {
         if .0 == 0 { return none }
         .0 -= 1
         .0 + 1
@@ -80,7 +80,7 @@
 </div>
 <div class="member" id="Iter.next">
 <div class="member-head">
-<span class="sig">fn next(mut self) -&gt; ?Item</span>
+<span class="sig">fun next(mut self) -&gt; ?Item</span>
 
 </div>
 <p class="member-doc">The next item, or <code>none</code> once there are no more.</p>
@@ -105,7 +105,7 @@ let text: String = letters.collect_as()</code></pre>
 </div>
 <div class="member" id="FromStream.from_stream">
 <div class="member-head">
-<span class="sig">fn from_stream(take items: Stream[Item]) -&gt; Self</span>
+<span class="sig">fun from_stream(take items: Stream[Item]) -&gt; Self</span>
 
 </div>
 <p class="member-doc">A collection of the items.</p>
@@ -121,14 +121,14 @@ let text: String = letters.collect_as()</code></pre>
 <div class="members">
 <div class="member" id="Range.chunks">
 <div class="member-head">
-<span class="sig">fn chunks(self, n: usize) -&gt; Stream[Range[T]]</span>
+<span class="sig">fun chunks(self, n: usize) -&gt; Stream[Range[T]]</span>
 
 </div>
 <p class="member-doc">Ranges of <code>n</code> values at a time, one after another: <code>(0..10).chunks(4)</code> is <code>0..4</code>, <code>4..8</code> and <code>8..10</code>. Each one is a range too, with all the methods of one, so it can be given to a thread. Unravels if <code>n</code> is 0 or the range has no end.</p>
 </div>
 <div class="member" id="Range.rev">
 <div class="member-head">
-<span class="sig">fn rev(self) -&gt; Stream[T]</span>
+<span class="sig">fun rev(self) -&gt; Stream[T]</span>
 
 </div>
 <p class="member-doc">The values from the last to the first. Needs room for all of them, and unravels for a range with no end.</p>
@@ -144,329 +144,329 @@ let text: String = letters.collect_as()</code></pre>
 <div class="members">
 <div class="member" id="Stream.next">
 <div class="member-head">
-<span class="sig">fn next(mut self) -&gt; ?T</span>
+<span class="sig">fun next(mut self) -&gt; ?T</span>
 
 </div>
 <p class="member-doc">The next item, or <code>none</code> once there are no more.</p>
 </div>
 <div class="member" id="Stream.map">
 <div class="member-head">
-<span class="sig">fn map[U](take self, f: T =&gt; U) -&gt; Stream[U]</span>
+<span class="sig">fun map[U](take self, f: T =&gt; U) -&gt; Stream[U]</span>
 
 </div>
 <p class="member-doc"><code>f</code> of each item.</p>
 </div>
 <div class="member" id="Stream.filter">
 <div class="member-head">
-<span class="sig">fn filter(take self, f: T =&gt; bool) -&gt; Stream[T]</span>
+<span class="sig">fun filter(take self, f: T =&gt; bool) -&gt; Stream[T]</span>
 
 </div>
 <p class="member-doc">The items <code>f</code> says yes to.</p>
 </div>
 <div class="member" id="Stream.take">
 <div class="member-head">
-<span class="sig">fn take(take self, n: usize) -&gt; Stream[T]</span>
+<span class="sig">fun take(take self, n: usize) -&gt; Stream[T]</span>
 
 </div>
 <p class="member-doc">The first <code>n</code> items.</p>
 </div>
 <div class="member" id="Stream.skip">
 <div class="member-head">
-<span class="sig">fn skip(take self, n: usize) -&gt; Stream[T]</span>
+<span class="sig">fun skip(take self, n: usize) -&gt; Stream[T]</span>
 
 </div>
 <p class="member-doc">The items after the first <code>n</code>.</p>
 </div>
 <div class="member" id="Stream.take_while">
 <div class="member-head">
-<span class="sig">fn take_while(take self, f: T =&gt; bool) -&gt; Stream[T]</span>
+<span class="sig">fun take_while(take self, f: T =&gt; bool) -&gt; Stream[T]</span>
 
 </div>
 <p class="member-doc">The items before the first one <code>f</code> says no to.</p>
 </div>
 <div class="member" id="Stream.skip_while">
 <div class="member-head">
-<span class="sig">fn skip_while(take self, f: T =&gt; bool) -&gt; Stream[T]</span>
+<span class="sig">fun skip_while(take self, f: T =&gt; bool) -&gt; Stream[T]</span>
 
 </div>
 <p class="member-doc">The items from the first one <code>f</code> says no to.</p>
 </div>
 <div class="member" id="Stream.indexed">
 <div class="member-head">
-<span class="sig">fn indexed(take self) -&gt; Stream[(usize, T)]</span>
+<span class="sig">fun indexed(take self) -&gt; Stream[(usize, T)]</span>
 
 </div>
 <p class="member-doc">Each item with its index: <code>(0, a), (1, b), …</code>.</p>
 </div>
 <div class="member" id="Stream.zip">
 <div class="member-head">
-<span class="sig">fn zip[U](take self, other: Stream[U]) -&gt; Stream[(T, U)]</span>
+<span class="sig">fun zip[U](take self, other: Stream[U]) -&gt; Stream[(T, U)]</span>
 
 </div>
 <p class="member-doc">Pairs of items, one from each, until either runs out.</p>
 </div>
 <div class="member" id="Stream.chain">
 <div class="member-head">
-<span class="sig">fn chain(take self, other: Stream[T]) -&gt; Stream[T]</span>
+<span class="sig">fun chain(take self, other: Stream[T]) -&gt; Stream[T]</span>
 
 </div>
 <p class="member-doc">These items, then <code>other</code>'s.</p>
 </div>
 <div class="member" id="Stream.step_by">
 <div class="member-head">
-<span class="sig">fn step_by(take self, n: usize) -&gt; Stream[T]</span>
+<span class="sig">fun step_by(take self, n: usize) -&gt; Stream[T]</span>
 
 </div>
 <p class="member-doc">Every <code>n</code>th item, starting with the first. Unravels if <code>n</code> is 0.</p>
 </div>
 <div class="member" id="Stream.filter_map">
 <div class="member-head">
-<span class="sig">fn filter_map[U](take self, f: T =&gt; ?U) -&gt; Stream[U]</span>
+<span class="sig">fun filter_map[U](take self, f: T =&gt; ?U) -&gt; Stream[U]</span>
 
 </div>
 <p class="member-doc"><code>f</code> of each item, leaving out the ones it gives <code>none</code> for.</p>
 </div>
 <div class="member" id="Stream.inspect">
 <div class="member-head">
-<span class="sig">fn inspect(take self, f: T =&gt; ()) -&gt; Stream[T]</span>
+<span class="sig">fun inspect(take self, f: T =&gt; ()) -&gt; Stream[T]</span>
 
 </div>
 <p class="member-doc">The items, calling <code>f</code> with each as it goes by.</p>
 </div>
 <div class="member" id="Stream.flat_map">
 <div class="member-head">
-<span class="sig">fn flat_map[U](take self, f: T =&gt; Stream[U]) -&gt; Stream[U]</span>
+<span class="sig">fun flat_map[U](take self, f: T =&gt; Stream[U]) -&gt; Stream[U]</span>
 
 </div>
 <p class="member-doc">The items of the streams <code>f</code> makes from each item, one after another.</p>
 </div>
 <div class="member" id="Stream.peekable">
 <div class="member-head">
-<span class="sig">fn peekable(take self) -&gt; Peekable[T]</span>
+<span class="sig">fun peekable(take self) -&gt; Peekable[T]</span>
 
 </div>
 <p class="member-doc">A stream that lets you look at the next item before taking it.</p>
 </div>
 <div class="member" id="Stream.scan">
 <div class="member-head">
-<span class="sig">fn scan[S, U](take self, take init: S, take f: (S, T) =&gt; ?(S, U)) -&gt; Stream[U]</span>
+<span class="sig">fun scan[S, U](take self, take init: S, take f: (S, T) =&gt; ?(S, U)) -&gt; Stream[U]</span>
 
 </div>
 <p class="member-doc">Items made from a running state: <code>f(state, item)</code> gives the new state and the next item, or <code>none</code> to stop. <code>f</code> can't capture anything; what it needs travels in the state.</p>
 </div>
 <div class="member" id="Stream.cycle">
 <div class="member-head">
-<span class="sig">fn cycle(take self) -&gt; Stream[T]</span>
+<span class="sig">fun cycle(take self) -&gt; Stream[T]</span>
 
 </div>
 <p class="member-doc">The items again and again, for ever. Nothing if there are none.</p>
 </div>
 <div class="member" id="Stream.chunks">
 <div class="member-head">
-<span class="sig">fn chunks(take self, n: usize) -&gt; Stream[List[T]]</span>
+<span class="sig">fun chunks(take self, n: usize) -&gt; Stream[List[T]]</span>
 
 </div>
 <p class="member-doc">Lists of <code>n</code> items at a time; the last may be shorter. Unravels if <code>n</code> is 0.</p>
 </div>
 <div class="member" id="Stream.nth">
 <div class="member-head">
-<span class="sig">fn nth(take self, n: usize) -&gt; ?T</span>
+<span class="sig">fun nth(take self, n: usize) -&gt; ?T</span>
 
 </div>
 <p class="member-doc">The item after skipping <code>n</code>.</p>
 </div>
 <div class="member" id="Stream.is_empty">
 <div class="member-head">
-<span class="sig">fn is_empty(take self) -&gt; bool</span>
+<span class="sig">fun is_empty(take self) -&gt; bool</span>
 
 </div>
 <p class="member-doc">Whether there are no items.</p>
 </div>
 <div class="member" id="Stream.eq">
 <div class="member-head">
-<span class="sig">fn eq(take self, take other: Stream[T]) -&gt; bool where T: Eq</span>
+<span class="sig">fun eq(take self, take other: Stream[T]) -&gt; bool where T: Eq</span>
 
 </div>
 <p class="member-doc">Whether both streams have equal items in the same order.</p>
 </div>
 <div class="member" id="Stream.min_by_key">
 <div class="member-head">
-<span class="sig">fn min_by_key[K: Ord](take self, key: T =&gt; K) -&gt; ?T</span>
+<span class="sig">fun min_by_key[K: Ord](take self, key: T =&gt; K) -&gt; ?T</span>
 
 </div>
 <p class="member-doc">The item with the smallest <code>key</code> (the first, among equals).</p>
 </div>
 <div class="member" id="Stream.max_by_key">
 <div class="member-head">
-<span class="sig">fn max_by_key[K: Ord](take self, key: T =&gt; K) -&gt; ?T</span>
+<span class="sig">fun max_by_key[K: Ord](take self, key: T =&gt; K) -&gt; ?T</span>
 
 </div>
 <p class="member-doc">The item with the largest <code>key</code> (the last, among equals).</p>
 </div>
 <div class="member" id="Stream.min_by">
 <div class="member-head">
-<span class="sig">fn min_by(take self, before: (T, T) =&gt; bool) -&gt; ?T</span>
+<span class="sig">fun min_by(take self, before: (T, T) =&gt; bool) -&gt; ?T</span>
 
 </div>
 <p class="member-doc">The item no other goes before, by <code>before</code> (the first, among equals).</p>
 </div>
 <div class="member" id="Stream.max_by">
 <div class="member-head">
-<span class="sig">fn max_by(take self, before: (T, T) =&gt; bool) -&gt; ?T</span>
+<span class="sig">fun max_by(take self, before: (T, T) =&gt; bool) -&gt; ?T</span>
 
 </div>
 <p class="member-doc">The item that goes before no other, by <code>before</code> (the last, among equals).</p>
 </div>
 <div class="member" id="Stream.partition">
 <div class="member-head">
-<span class="sig">fn partition(take self, f: T =&gt; bool) -&gt; (List[T], List[T])</span>
+<span class="sig">fun partition(take self, f: T =&gt; bool) -&gt; (List[T], List[T])</span>
 
 </div>
 <p class="member-doc">The items <code>f</code> says yes to, and the ones it says no to.</p>
 </div>
 <div class="member" id="Stream.counts">
 <div class="member-head">
-<span class="sig">fn counts(take self) -&gt; Map[T, usize] where T: Hash</span>
+<span class="sig">fun counts(take self) -&gt; Map[T, usize] where T: Hash</span>
 
 </div>
 <p class="member-doc">How many times each item comes up.</p>
 </div>
 <div class="member" id="Stream.group_by">
 <div class="member-head">
-<span class="sig">fn group_by[K: Hash](take self, key: T =&gt; K) -&gt; Map[K, List[T]]</span>
+<span class="sig">fun group_by[K: Hash](take self, key: T =&gt; K) -&gt; Map[K, List[T]]</span>
 
 </div>
 <p class="member-doc">The items in lists by <code>key</code>, in the order the keys first came up.</p>
 </div>
 <div class="member" id="Stream.collect_as">
 <div class="member-head">
-<span class="sig">fn collect_as[C: FromStream](take self) -&gt; C where T: C.Item</span>
+<span class="sig">fun collect_as[C: FromStream](take self) -&gt; C where T: C.Item</span>
 
 </div>
 <p class="member-doc">The items gathered into a <code>C</code>: <code>words.collect_as[Set[String]]()</code>, or <code>let text: String = chars.collect_as()</code> when the type is known from where the result goes. The collections that can be made are the ones that weave <code>FromStream</code>: <code>List</code>, <code>Set</code>, <code>Map</code> (of pairs), <code>String</code> (of characters), <code>Deque</code> and <code>PriorityQueue</code>.</p>
 </div>
 <div class="member" id="Stream.collect">
 <div class="member-head">
-<span class="sig">fn collect(take self) -&gt; List[T]</span>
+<span class="sig">fun collect(take self) -&gt; List[T]</span>
 
 </div>
 <p class="member-doc">A list of the items.</p>
 </div>
 <div class="member" id="Stream.count">
 <div class="member-head">
-<span class="sig">fn count(take self) -&gt; usize</span>
+<span class="sig">fun count(take self) -&gt; usize</span>
 
 </div>
 <p class="member-doc">How many items there are.</p>
 </div>
 <div class="member" id="Stream.last">
 <div class="member-head">
-<span class="sig">fn last(take self) -&gt; ?T</span>
+<span class="sig">fun last(take self) -&gt; ?T</span>
 
 </div>
 <p class="member-doc">The last item.</p>
 </div>
 <div class="member" id="Stream.each">
 <div class="member-head">
-<span class="sig">fn each(take self, f: T =&gt; ())</span>
+<span class="sig">fun each(take self, f: T =&gt; ())</span>
 
 </div>
 <p class="member-doc">Calls <code>f</code> with each item.</p>
 </div>
 <div class="member" id="Stream.fold">
 <div class="member-head">
-<span class="sig">fn fold[A](take self, take init: A, f: (A, T) =&gt; A) -&gt; A</span>
+<span class="sig">fun fold[A](take self, take init: A, f: (A, T) =&gt; A) -&gt; A</span>
 
 </div>
 <p class="member-doc">Combines the items, starting with <code>init</code>: <code>f(f(init, a), b)</code>…</p>
 </div>
 <div class="member" id="Stream.reduce">
 <div class="member-head">
-<span class="sig">fn reduce(take self, f: (T, T) =&gt; T) -&gt; ?T</span>
+<span class="sig">fun reduce(take self, f: (T, T) =&gt; T) -&gt; ?T</span>
 
 </div>
 <p class="member-doc">Combines the items, starting with the first; <code>none</code> if there are none.</p>
 </div>
 <div class="member" id="Stream.all">
 <div class="member-head">
-<span class="sig">fn all(take self, f: T =&gt; bool) -&gt; bool</span>
+<span class="sig">fun all(take self, f: T =&gt; bool) -&gt; bool</span>
 
 </div>
 <p class="member-doc">Whether <code>f</code> says yes to every item (<code>true</code> when there are none).</p>
 </div>
 <div class="member" id="Stream.exists">
 <div class="member-head">
-<span class="sig">fn exists(take self, f: T =&gt; bool) -&gt; bool</span>
+<span class="sig">fun exists(take self, f: T =&gt; bool) -&gt; bool</span>
 
 </div>
 <p class="member-doc">Whether <code>f</code> says yes to some item. (<code>any</code> is a keyword.)</p>
 </div>
 <div class="member" id="Stream.find">
 <div class="member-head">
-<span class="sig">fn find(take self, f: T =&gt; bool) -&gt; ?T</span>
+<span class="sig">fun find(take self, f: T =&gt; bool) -&gt; ?T</span>
 
 </div>
 <p class="member-doc">The first item <code>f</code> says yes to.</p>
 </div>
 <div class="member" id="Stream.position">
 <div class="member-head">
-<span class="sig">fn position(take self, f: T =&gt; bool) -&gt; ?usize</span>
+<span class="sig">fun position(take self, f: T =&gt; bool) -&gt; ?usize</span>
 
 </div>
 <p class="member-doc">The index of the first item <code>f</code> says yes to.</p>
 </div>
 <div class="member" id="Stream.sum">
 <div class="member-head">
-<span class="sig">fn sum(take self) -&gt; T where T: Num</span>
+<span class="sig">fun sum(take self) -&gt; T where T: Num</span>
 
 </div>
 <p class="member-doc">The sum of the items (0 when there are none). Unravels when it doesn't fit.</p>
 </div>
 <div class="member" id="Stream.product">
 <div class="member-head">
-<span class="sig">fn product(take self) -&gt; T where T: Num</span>
+<span class="sig">fun product(take self) -&gt; T where T: Num</span>
 
 </div>
 <p class="member-doc">The product of the items (1 when there are none). Unravels when it doesn't fit.</p>
 </div>
 <div class="member" id="Stream.min">
 <div class="member-head">
-<span class="sig">fn min(take self) -&gt; ?T where T: Ord</span>
+<span class="sig">fun min(take self) -&gt; ?T where T: Ord</span>
 
 </div>
 <p class="member-doc">The smallest item (the first, among equals).</p>
 </div>
 <div class="member" id="Stream.max">
 <div class="member-head">
-<span class="sig">fn max(take self) -&gt; ?T where T: Ord</span>
+<span class="sig">fun max(take self) -&gt; ?T where T: Ord</span>
 
 </div>
 <p class="member-doc">The largest item (the last, among equals).</p>
 </div>
 <div class="member" id="Stream.join">
 <div class="member-head">
-<span class="sig">fn join(take self, sep: str) -&gt; String where T: Show</span>
+<span class="sig">fun join(take self, sep: str) -&gt; String where T: Show</span>
 
 </div>
 <p class="member-doc">The items as text, with <code>sep</code> between them.</p>
 </div>
 <div class="member" id="Stream.sorted_by">
 <div class="member-head">
-<span class="sig">fn sorted_by(take self, before: (T, T) =&gt; bool) -&gt; List[T]</span>
+<span class="sig">fun sorted_by(take self, before: (T, T) =&gt; bool) -&gt; List[T]</span>
 
 </div>
 <p class="member-doc">The items in a new list, sorted by <code>before</code>: <code>before(a, b)</code> says whether <code>a</code> goes before <code>b</code>. A stable sort: items that neither goes before the other keep the order they came in. <code>words.pairs().sorted_by(_.1 &gt; _.1)</code> is the most frequent first.</p>
 </div>
 <div class="member" id="Stream.sorted_by_key">
 <div class="member-head">
-<span class="sig">fn sorted_by_key[K: Ord](take self, key: T =&gt; K) -&gt; List[T]</span>
+<span class="sig">fun sorted_by_key[K: Ord](take self, key: T =&gt; K) -&gt; List[T]</span>
 
 </div>
 <p class="member-doc">The items in a new list, sorted by <code>key</code> of each. Stable.</p>
 </div>
 <div class="member" id="Stream.sorted">
 <div class="member-head">
-<span class="sig">fn sorted(take self) -&gt; List[T] where T: Ord</span>
+<span class="sig">fun sorted(take self) -&gt; List[T] where T: Ord</span>
 
 </div>
 <p class="member-doc">The items in a new list, in order. Stable.</p>
@@ -478,18 +478,18 @@ let text: String = letters.collect_as()</code></pre>
 <span class="sig">warp <strong>Shuttle</strong>[T, U]</span>
 <span class="badge builtin">builtin</span>
 </div>
-<p class="item-doc">A shuttle: a function paused between the <code>T</code>s it yields and the <code>U</code>s it pulls. Calling <code>fn f() ~&gt; T &lt;~ U</code> makes one without running any of it. A generator (<code>~&gt; T</code>, which pulls nothing) is a stream of what it yields: <code>for x in fib()</code>, <code>fib().take(10)</code>.</p>
+<p class="item-doc">A shuttle: a function paused between the <code>T</code>s it yields and the <code>U</code>s it pulls. Calling <code>fun f() ~&gt; T &lt;~ U</code> makes one without running any of it. A generator (<code>~&gt; T</code>, which pulls nothing) is a stream of what it yields: <code>for x in fib()</code>, <code>fib().take(10)</code>.</p>
 <div class="members">
 <div class="member" id="Shuttle.push">
 <div class="member-head">
-<span class="sig">fn push(mut self, take input: U) -&gt; Burst[T]</span>
+<span class="sig">fun push(mut self, take input: U) -&gt; Burst[T]</span>
 
 </div>
 <p class="member-doc">Resumes it with <code>input</code> as the value of its pending <code>pull</code> (the first push starts it), once what's left of the last burst has run. The burst is what it yields before its next <code>pull</code>.</p>
 </div>
 <div class="member" id="Shuttle.close">
 <div class="member-head">
-<span class="sig">fn close(mut self) -&gt; Burst[T]</span>
+<span class="sig">fun close(mut self) -&gt; Burst[T]</span>
 
 </div>
 <p class="member-doc">Makes its pending and later <code>pull</code>s give <code>none</code>, once what's left of the last burst has run. The burst is what it yields from here on.</p>
@@ -505,7 +505,7 @@ let text: String = letters.collect_as()</code></pre>
 <div class="members">
 <div class="member" id="Burst.drain">
 <div class="member-head">
-<span class="sig">fn drain(take self)</span>
+<span class="sig">fun drain(take self)</span>
 
 </div>
 <p class="member-doc">Runs the shuttle to its next <code>pull</code>, throwing away what it yields.</p>
@@ -528,14 +528,14 @@ let text: String = letters.collect_as()</code></pre>
 </div>
 <div class="member" id="Peekable.peek">
 <div class="member-head">
-<span class="sig">fn peek(mut self) -&gt; ?T</span>
+<span class="sig">fun peek(mut self) -&gt; ?T</span>
 
 </div>
 <p class="member-doc">A copy of the next item, without taking it.</p>
 </div>
 <div class="member" id="Peekable.next_if">
 <div class="member-head">
-<span class="sig">fn next_if(mut self, f: T =&gt; bool) -&gt; ?T</span>
+<span class="sig">fun next_if(mut self, f: T =&gt; bool) -&gt; ?T</span>
 
 </div>
 <p class="member-doc">The next item, if <code>f</code> says yes to it.</p>
@@ -584,14 +584,14 @@ let text: String = letters.collect_as()</code></pre>
 <h2>Functions</h2>
 <div class="item" id="from_fn">
 <div class="item-head">
-<span class="sig">fn <strong>from_fn</strong>[S, T](take init: S, take f: S =&gt; ?(S, T)) -&gt; Stream[T]</span>
+<span class="sig">fun <strong>from_fn</strong>[S, T](take init: S, take f: S =&gt; ?(S, T)) -&gt; Stream[T]</span>
 
 </div>
 <p class="item-doc">Items made from a state: <code>f(state)</code> gives the new state and the next item, or <code>none</code> to stop. <code>f</code> can't capture anything; what it needs travels in the state.</p>
 </div>
 <div class="item" id="successors">
 <div class="item-head">
-<span class="sig">fn <strong>successors</strong>[T: Copy](take first: ?T, take f: T =&gt; ?T) -&gt; Stream[T]</span>
+<span class="sig">fun <strong>successors</strong>[T: Copy](take first: ?T, take f: T =&gt; ?T) -&gt; Stream[T]</span>
 
 </div>
 <p class="item-doc"><code>first</code>, then <code>f</code> of it, and so on until <code>f</code> gives <code>none</code>.</p>

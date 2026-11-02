@@ -4,13 +4,13 @@ use std.io.print
 warp Counter { n: i32 }
 weave Iter into Counter {
     type Item = i32
-    fn next(mut self) -> ?i32 {
+    fun next(mut self) -> ?i32 {
         if .n >= 3 { return none }
         .n += 1
         some(.n)
     }
 }
-fn main() {
+fun main() {
     let xs = [1, 2, 3, 4, 5]
     print(xs.map(_ * 2).collect())
     print(xs.filter(_ % 2 == 1).count())

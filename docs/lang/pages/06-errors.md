@@ -6,7 +6,7 @@ Loom has two kinds of "didn't work": **absence** (`?T`) and **failure** (`T ! E`
 | | Syntax |
 |---|--------|
 | optional | `?T`, with values `some(x)` and `none` |
-| result | `T ! E`, with values `ok(v)` and `err(e)`; `fn f() ! E` when there's no success value |
+| result | `T ! E`, with values `ok(v)` and `err(e)`; `fun f() ! E` when there's no success value |
 | raise | `fail e` |
 | bail out | postfix `?` |
 | recover | `expr mend fallback`, `expr mend e => handler` |
@@ -41,7 +41,7 @@ A `?` that leaves a function converts the error. A `from` case absorbs another e
 
 ## `main`
 
-`fn main() ! E` lets `?` leave `main`. An error that reaches the end is printed as `error: ...` on stderr, and the program exits with status 1.
+`fun main() ! E` lets `?` leave `main`. An error that reaches the end is printed as `error: ...` on stderr, and the program exits with status 1.
 
 @sample errors_main
 

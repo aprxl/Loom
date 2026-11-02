@@ -3,7 +3,7 @@ use std.io.print
 
 const SIZE = 100_000
 
-fn main() {
+fun main() {
     var s: Set[u64] = Set()
     var m: Map[u64, u64] = Map()
     for i in 0..SIZE as u64 {

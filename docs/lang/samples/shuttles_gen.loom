@@ -1,7 +1,7 @@
 use std.io.print
 
 // `~> T` marks a generator: it yields `T`s. Calling it runs none of its body.
-fn fib() ~> u64 {
+fun fib() ~> u64 {
     var (a, b): (u64, u64) = (0, 1)
     loop {
         yield a
@@ -9,7 +9,7 @@ fn fib() ~> u64 {
     }
 }
 
-fn countdown(name: str, from: i32) ~> i32 {
+fun countdown(name: str, from: i32) ~> i32 {
     defer print("{name} closed")
     var i = from
     while i > 0 {
@@ -18,7 +18,7 @@ fn countdown(name: str, from: i32) ~> i32 {
     }
 }
 
-fn main() {
+fun main() {
     // A generator is a stream of what it yields.
     print(fib().take(10).collect())
     print(fib().skip_while(_ < 50).take(3).collect())

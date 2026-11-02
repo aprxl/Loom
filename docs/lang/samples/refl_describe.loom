@@ -10,7 +10,7 @@ warp Shape: Show {
     case Circle(r: f64)
 }
 
-fn describe[T](v: T) {
+fun describe[T](v: T) {
     print("{T.name} is a {T.kind}")
     const if T.kind == .Record {
         const for f in T.fields {
@@ -28,7 +28,7 @@ fn describe[T](v: T) {
     }
 }
 
-fn main() {
+fun main() {
     describe(Point(1, 2))
     describe(Shape.Circle(r: 1.5))
     describe(Shape.Dot)

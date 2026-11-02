@@ -3,7 +3,7 @@ use std.io.print
 
 const SIZE = 3_000_000
 
-fn main() {
+fun main() {
     var total = 0u64
     for round in 0..5u64 {
         total += (0..SIZE as u64)

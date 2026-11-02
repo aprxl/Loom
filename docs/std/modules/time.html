@@ -68,91 +68,91 @@
 <div class="members">
 <div class="member" id="Duration.from_nanos">
 <div class="member-head">
-<span class="sig">fn from_nanos(nanos: u64) -&gt; Duration</span>
+<span class="sig">fun from_nanos(nanos: u64) -&gt; Duration</span>
 
 </div>
 <p class="member-doc">A span of <code>nanos</code> nanoseconds.</p>
 </div>
 <div class="member" id="Duration.from_secs_f64">
 <div class="member-head">
-<span class="sig">fn from_secs_f64(secs: f64) -&gt; Duration</span>
+<span class="sig">fun from_secs_f64(secs: f64) -&gt; Duration</span>
 
 </div>
 <p class="member-doc">Whole seconds, then the rest as a fraction: <code>Duration.from_secs_f64(1.5)</code>.</p>
 </div>
 <div class="member" id="Duration.as_secs_f64">
 <div class="member-head">
-<span class="sig">fn as_secs_f64(self) -&gt; f64</span>
+<span class="sig">fun as_secs_f64(self) -&gt; f64</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Duration.as_millis">
 <div class="member-head">
-<span class="sig">fn as_millis(self) -&gt; u64</span>
+<span class="sig">fun as_millis(self) -&gt; u64</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Duration.as_micros">
 <div class="member-head">
-<span class="sig">fn as_micros(self) -&gt; u64</span>
+<span class="sig">fun as_micros(self) -&gt; u64</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Duration.as_nanos">
 <div class="member-head">
-<span class="sig">fn as_nanos(self) -&gt; u64</span>
+<span class="sig">fun as_nanos(self) -&gt; u64</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Duration.as_secs">
 <div class="member-head">
-<span class="sig">fn as_secs(self) -&gt; u64</span>
+<span class="sig">fun as_secs(self) -&gt; u64</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Duration.plus">
 <div class="member-head">
-<span class="sig">fn plus(self, other: Duration) -&gt; Duration</span>
+<span class="sig">fun plus(self, other: Duration) -&gt; Duration</span>
 
 </div>
 <p class="member-doc">The sum. Unravels when it doesn't fit.</p>
 </div>
 <div class="member" id="Duration.minus">
 <div class="member-head">
-<span class="sig">fn minus(self, other: Duration) -&gt; Duration</span>
+<span class="sig">fun minus(self, other: Duration) -&gt; Duration</span>
 
 </div>
 <p class="member-doc">The difference. Unravels when <code>other</code> is longer.</p>
 </div>
 <div class="member" id="Duration.times">
 <div class="member-head">
-<span class="sig">fn times(self, n: u64) -&gt; Duration</span>
+<span class="sig">fun times(self, n: u64) -&gt; Duration</span>
 
 </div>
 <p class="member-doc"><code>n</code> times as long. Unravels when it doesn't fit.</p>
 </div>
 <div class="member" id="Duration.divide">
 <div class="member-head">
-<span class="sig">fn divide(self, n: u64) -&gt; Duration</span>
+<span class="sig">fun divide(self, n: u64) -&gt; Duration</span>
 
 </div>
 <p class="member-doc">A part of it, rounded down. Unravels if <code>n</code> is 0.</p>
 </div>
 <div class="member" id="Duration.show">
 <div class="member-head">
-<span class="sig">fn show(self, mut f: Fmt)</span>
+<span class="sig">fun show(self, mut f: Fmt)</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
 </div>
 <div class="member" id="Duration.to_string">
 <div class="member-head">
-<span class="sig">fn to_string(self) -&gt; String</span>
+<span class="sig">fun to_string(self) -&gt; String</span>
 
 </div>
 <p class="member-doc"><code>1.5s</code>, <code>250ms</code>, <code>40us</code>, <code>7ns</code>: in the largest unit that fits.</p>
@@ -168,28 +168,28 @@
 <div class="members">
 <div class="member" id="Instant.now">
 <div class="member-head">
-<span class="sig">fn now() -&gt; Instant</span>
+<span class="sig">fun now() -&gt; Instant</span>
 
 </div>
 <p class="member-doc">Now.</p>
 </div>
 <div class="member" id="Instant.since">
 <div class="member-head">
-<span class="sig">fn since(self, earlier: Instant) -&gt; Duration</span>
+<span class="sig">fun since(self, earlier: Instant) -&gt; Duration</span>
 
 </div>
 <p class="member-doc">How long ago <code>earlier</code> was. Unravels if it is later than this.</p>
 </div>
 <div class="member" id="Instant.elapsed">
 <div class="member-head">
-<span class="sig">fn elapsed(self) -&gt; Duration</span>
+<span class="sig">fun elapsed(self) -&gt; Duration</span>
 
 </div>
 <p class="member-doc">How long ago this was.</p>
 </div>
 <div class="member" id="Instant.plus">
 <div class="member-head">
-<span class="sig">fn plus(self, d: Duration) -&gt; Instant</span>
+<span class="sig">fun plus(self, d: Duration) -&gt; Instant</span>
 
 </div>
 <p class="member-doc">The moment <code>d</code> after this one.</p>
@@ -205,21 +205,21 @@
 <div class="members">
 <div class="member" id="SystemTime.now">
 <div class="member-head">
-<span class="sig">fn now() -&gt; SystemTime</span>
+<span class="sig">fun now() -&gt; SystemTime</span>
 
 </div>
 <p class="member-doc">Now.</p>
 </div>
 <div class="member" id="SystemTime.unix_secs">
 <div class="member-head">
-<span class="sig">fn unix_secs(self) -&gt; u64</span>
+<span class="sig">fun unix_secs(self) -&gt; u64</span>
 
 </div>
 <p class="member-doc">Whole seconds since 1 January 1970.</p>
 </div>
 <div class="member" id="SystemTime.unix_nanos">
 <div class="member-head">
-<span class="sig">fn unix_nanos(self) -&gt; u64</span>
+<span class="sig">fun unix_nanos(self) -&gt; u64</span>
 
 </div>
 <p class="member-doc">Nanoseconds since 1 January 1970.</p>
@@ -229,63 +229,63 @@
 <h2>Functions</h2>
 <div class="item" id="ns">
 <div class="item-head">
-<span class="sig">fn <strong>ns</strong>(n: u64) -&gt; Duration</span>
+<span class="sig">fun <strong>ns</strong>(n: u64) -&gt; Duration</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="item-doc empty">undocumented in source</p>
 </div>
 <div class="item" id="micros">
 <div class="item-head">
-<span class="sig">fn <strong>micros</strong>(n: u64) -&gt; Duration</span>
+<span class="sig">fun <strong>micros</strong>(n: u64) -&gt; Duration</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="item-doc empty">undocumented in source</p>
 </div>
 <div class="item" id="ms">
 <div class="item-head">
-<span class="sig">fn <strong>ms</strong>(n: u64) -&gt; Duration</span>
+<span class="sig">fun <strong>ms</strong>(n: u64) -&gt; Duration</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="item-doc empty">undocumented in source</p>
 </div>
 <div class="item" id="secs">
 <div class="item-head">
-<span class="sig">fn <strong>secs</strong>(n: u64) -&gt; Duration</span>
+<span class="sig">fun <strong>secs</strong>(n: u64) -&gt; Duration</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="item-doc empty">undocumented in source</p>
 </div>
 <div class="item" id="mins">
 <div class="item-head">
-<span class="sig">fn <strong>mins</strong>(n: u64) -&gt; Duration</span>
+<span class="sig">fun <strong>mins</strong>(n: u64) -&gt; Duration</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="item-doc empty">undocumented in source</p>
 </div>
 <div class="item" id="measure">
 <div class="item-head">
-<span class="sig">fn <strong>measure</strong>[T](f: () =&gt; T) -&gt; (T, Duration)</span>
+<span class="sig">fun <strong>measure</strong>[T](f: () =&gt; T) -&gt; (T, Duration)</span>
 
 </div>
 <p class="item-doc">Runs <code>f</code>, and says how long it took.</p>
 </div>
 <div class="item" id="sleep">
 <div class="item-head">
-<span class="sig">fn <strong>sleep</strong>(d: Duration)</span>
+<span class="sig">fun <strong>sleep</strong>(d: Duration)</span>
 <span class="badge extern">extern</span>
 </div>
 <p class="item-doc">Pauses the current thread for <code>d</code>.</p>
 </div>
 <div class="item" id="monotonic_nanos">
 <div class="item-head">
-<span class="sig">fn <strong>monotonic_nanos</strong>() -&gt; u64</span>
+<span class="sig">fun <strong>monotonic_nanos</strong>() -&gt; u64</span>
 <span class="badge extern">extern</span>
 </div>
 <p class="item-doc">Nanoseconds on a clock that only goes forward, from an arbitrary start. Differences are what mean something: see <code>Instant</code>.</p>
 </div>
 <div class="item" id="unix_nanos">
 <div class="item-head">
-<span class="sig">fn <strong>unix_nanos</strong>() -&gt; u64</span>
+<span class="sig">fun <strong>unix_nanos</strong>() -&gt; u64</span>
 <span class="badge extern">extern</span>
 </div>
 <p class="item-doc">Nanoseconds since 1 January 1970 on the system clock.</p>

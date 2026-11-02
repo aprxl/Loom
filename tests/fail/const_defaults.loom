@@ -11,9 +11,9 @@ warp Cfg {
     }
 }
 
-fn g(x: i32 = { const assert(1 + 1 == 3, "in a parameter default"); 1 }) -> i32 = x   //~ K0101
+fun g(x: i32 = { const assert(1 + 1 == 3, "in a parameter default"); 1 }) -> i32 = x   //~ K0101
 
-fn main() {
+fun main() {
     print(Cfg().limit)
     print(g())
 }

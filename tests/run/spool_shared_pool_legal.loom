@@ -7,7 +7,7 @@ warp Particle {
     x: i32
 }
 
-fn main() {
+fun main() {
     spool shared = SharedArena(1.kib())
     let a = shared.put(Particle(1))
     let b = shared.put(Particle(2))

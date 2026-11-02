@@ -5,7 +5,7 @@ use std.io.print
 
 warp P: Eq, Hash, Show { x: i32, name: String }
 
-fn main() {
+fun main() {
     let a = P(x: 1, name: "a")
     let b = P(x: 1, name: "a")
     print("{a.hash() == b.hash()} {a.hash() == P(x: 2, name: "a").hash()}")

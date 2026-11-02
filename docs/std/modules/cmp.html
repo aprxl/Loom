@@ -70,14 +70,14 @@
 <div class="members">
 <div class="member" id="Ordering.reverse">
 <div class="member-head">
-<span class="sig">fn reverse(self) -&gt; Ordering</span>
+<span class="sig">fun reverse(self) -&gt; Ordering</span>
 
 </div>
 <p class="member-doc"><code>Less</code> becomes <code>Greater</code> and the other way round.</p>
 </div>
 <div class="member" id="Ordering.then">
 <div class="member-head">
-<span class="sig">fn then(self, other: Ordering) -&gt; Ordering</span>
+<span class="sig">fun then(self, other: Ordering) -&gt; Ordering</span>
 
 </div>
 <p class="member-doc">Breaks a tie: <code>a.age.cmp(b.age).then(a.name.cmp(b.name))</code>.</p>
@@ -96,7 +96,7 @@
 <div class="members">
 <div class="member" id="Reverse.lt">
 <div class="member-head">
-<span class="sig">fn lt(self, other: Reverse[T]) -&gt; bool</span>
+<span class="sig">fun lt(self, other: Reverse[T]) -&gt; bool</span>
 <span class="badge todo">TODO</span>
 </div>
 <p class="member-doc empty">undocumented</p>
@@ -106,28 +106,28 @@
 <h2>Functions</h2>
 <div class="item" id="cmp">
 <div class="item-head">
-<span class="sig">fn <strong>cmp</strong>[T: Ord](a: T, b: T) -&gt; Ordering</span>
+<span class="sig">fun <strong>cmp</strong>[T: Ord](a: T, b: T) -&gt; Ordering</span>
 
 </div>
 <p class="item-doc">How <code>a</code> compares to <code>b</code>: <code>x.cmp(y)</code> also works on numbers and text.</p>
 </div>
 <div class="item" id="min">
 <div class="item-head">
-<span class="sig">fn <strong>min</strong>[T: Ord](a: T, b: T) -&gt; T</span>
+<span class="sig">fun <strong>min</strong>[T: Ord](a: T, b: T) -&gt; T</span>
 
 </div>
 <p class="item-doc">The smaller of two values (the first, if they are equal).</p>
 </div>
 <div class="item" id="max">
 <div class="item-head">
-<span class="sig">fn <strong>max</strong>[T: Ord](a: T, b: T) -&gt; T</span>
+<span class="sig">fun <strong>max</strong>[T: Ord](a: T, b: T) -&gt; T</span>
 
 </div>
 <p class="item-doc">The larger of two values (the first, if they are equal).</p>
 </div>
 <div class="item" id="clamp">
 <div class="item-head">
-<span class="sig">fn <strong>clamp</strong>[T: Ord](x: T, lo: T, hi: T) -&gt; T</span>
+<span class="sig">fun <strong>clamp</strong>[T: Ord](x: T, lo: T, hi: T) -&gt; T</span>
 
 </div>
 <p class="item-doc"><code>x</code>, or the nearest of <code>lo</code> and <code>hi</code> when it is outside them.</p>

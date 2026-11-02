@@ -1,6 +1,6 @@
 use std.mem.Pool
 
-fn main() {
+fun main() {
     spool slots = Pool[i32](2)
     slots.put(1)
     slots.put(2)

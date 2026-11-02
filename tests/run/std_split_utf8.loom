@@ -1,5 +1,5 @@
 use std.io.print
-fn main() {
+fun main() {
     print("a,b,c,d".splitn(3, ",").join("|"))
     print("a,b".splitn(5, ",").join("|"))
     print("a,b,c".rsplit(",").join("|"))

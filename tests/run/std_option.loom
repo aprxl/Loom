@@ -1,6 +1,6 @@
 use std.io.print
 use std.error.Missing
-fn main() {
+fun main() {
     let a: ?i32 = some(4)
     let b: ?i32 = none
     print(a.map(_ * 2))

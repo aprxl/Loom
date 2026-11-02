@@ -3,13 +3,13 @@
 use std.io.print
 use std.iter.{from_fn, successors}
 
-fn count_up(n: u32) -> ?(u32, u32) = if n < 5 { some((n + 1, n * n)) } else { none }
+fun count_up(n: u32) -> ?(u32, u32) = if n < 5 { some((n + 1, n * n)) } else { none }
 
-fn halve(n: u32) -> ?u32 = if n > 1 { some(n / 2) } else { none }
+fun halve(n: u32) -> ?u32 = if n > 1 { some(n / 2) } else { none }
 
-fn running(total: i32, x: i32) -> ?(i32, i32) = some((total + x, total + x))
+fun running(total: i32, x: i32) -> ?(i32, i32) = some((total + x, total + x))
 
-fn main() {
+fun main() {
     print("{from_fn(0, count_up).collect()}")
     print("{successors(some(64u32), halve).collect()}")
     print("{[1, 2, 3, 4].scan(0, running).collect()}")

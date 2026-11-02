@@ -1,7 +1,7 @@
 // Pipelines whose source is a range written out: the loop counts.
 use std.io.print
 
-fn main() {
+fun main() {
     print((0..10).filter(_ % 3 == 0).sum())
     print((1..=5).map(x => x * x).sum())
     print((5..3).map(_ + 1).count())

@@ -1,4 +1,4 @@
-fn main() {
+fun main() {
     let s = "hello"
     let c = s[0]                            //~ T0103
     let b = s.parse[bool]()                 //~ T0108

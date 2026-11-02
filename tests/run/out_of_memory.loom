@@ -2,7 +2,7 @@
 // taking the process down.
 use std.io.print
 
-fn main() {
+fun main() {
     print("before")
     let s = "ab".repeat(1 << 40)
     print(s.len())

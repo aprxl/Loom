@@ -4,7 +4,7 @@
 
 use std.io.print
 
-fn main() {
+fun main() {
     let a: i32 | str = 1
     let b: i32 | str = 1
     let c: i32 | str = "1"

@@ -79,7 +79,7 @@ const FLAGS: [bool; 3] = [true, false, true]
 const LATER: Colour = Colour.Green
 const DISC: Shape = .Disc(radius: 3)
 
-fn main() {}
+fun main() {}
 "#;
 
 #[test]
@@ -149,7 +149,7 @@ const CRC_TABLE: [u32; 256] = {
 const WORDS: List[String] = ["alpha", "beta", "gamma"]
 const LIMIT: u32 = 12 * 1000
 
-fn main() {
+fun main() {
     print("{CRC_TABLE[255]} {WORDS} {LIMIT}")
 }
 "#;
@@ -244,7 +244,7 @@ fn building_in_two_processes_gives_the_same_bytes() {
 #[test]
 fn usize_is_the_targets() {
     // `target` is the target being built: what the constants see.
-    let source = "const BIG: usize = usize.MAX\nconst SBIG: isize = isize.MIN\nconst BITS: u64 = target.pointer_bits as u64\nfn main() {}\n";
+    let source = "const BIG: usize = usize.MAX\nconst SBIG: isize = isize.MIN\nconst BITS: u64 = target.pointer_bits as u64\nfun main() {}\n";
     let vm = read_back(source, Target::VM);
     assert_eq!(vm["BIG"], BakedVal::Int(u64::MAX.into()));
     assert_eq!(vm["SBIG"], BakedVal::Int(i64::MIN.into()));

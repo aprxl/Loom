@@ -4,7 +4,7 @@ use std.io.print
 use std.sync.Atomic
 use std.sync.Mutex
 
-fn main() {
+fun main() {
     let total = Atomic[u64](0)
     loom for i in 0..8 {
         let m = Mutex[u64](0)

@@ -1,8 +1,8 @@
 // Maps used wrongly.
 
-fn bump(mut n: i32) { n += 1 }
+fun bump(mut n: i32) { n += 1 }
 
-fn main() {
+fun main() {
     let unknown = [:]                        //~ T0110
     var floats: Map[f64, i32] = Map()
     floats[1.5] = 2                          //~ T0108

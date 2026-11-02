@@ -3,7 +3,7 @@
 
 use std.io.print
 
-fn fib(n: u32) -> u64 = if n < 2 { n as u64 } else { fib(n - 1) + fib(n - 2) }
+fun fib(n: u32) -> u64 = if n < 2 { n as u64 } else { fib(n - 1) + fib(n - 2) }
 
 test fib_starts_right() {
     assert(fib(0) == 0 and fib(1) == 1 and fib(10) == 55)
@@ -17,6 +17,6 @@ test prints_quietly() {
     print("only failing tests show what they printed")
 }
 
-fn main() {
+fun main() {
     print("not a test")
 }

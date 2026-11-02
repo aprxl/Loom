@@ -1,28 +1,28 @@
 // A branch that gives an outer local by name moves it into the join; its scope
 // must not drop it first.
 use std.io.print
-fn a(p: str) -> String {
+fun a(p: str) -> String {
     var parts: List[String] = ["x", "y"]
     let body = parts.join("/")
     if p.starts_with("/") { "/{body}" } else { body }
 }
-fn b(p: str) -> String {
+fun b(p: str) -> String {
     var parts: List[String] = ["x", "y"]
     let body = parts.join("/")
     if p.starts_with("/") { return "/{body}" }
     body
 }
-fn c(p: str) -> String {
+fun c(p: str) -> String {
     let body = "x/y".to_string()
     if p.starts_with("/") { "/{body}" } else { body }
 }
-fn d(p: str) -> String {
+fun d(p: str) -> String {
     var parts: List[String] = ["x", "y"]
     let body = parts.join("/")
     print(body)
     if p.starts_with("/") { "/{body}" } else if body.is_empty() { ".".to_string() } else { body }
 }
-fn main() {
+fun main() {
     print(a("q"))
     print(b("q"))
     print(c("q"))

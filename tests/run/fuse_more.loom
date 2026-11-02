@@ -3,7 +3,7 @@
 
 use std.io.print
 
-fn main() {
+fun main() {
     var xs: List[u64] = []
     for i in 0..20u64 { xs.push(i * 7 % 11) }
 

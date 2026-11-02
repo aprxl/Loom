@@ -2,7 +2,7 @@
 
 use std.sync.Pipe
 
-fn main() {
+fun main() {
     let a = Pipe[i32](2)
     let b = Pipe[i32]()                      //~ T0104
     let c = Pipe[i32]("two")                 //~ T0101

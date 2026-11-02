@@ -46,13 +46,13 @@
 <div class="sample-head"><span class="file">samples/coll_lists.loom</span><span class="tag ok">runs</span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fn</span> total(xs: [i32]) -&gt; i32 {                 <span class="c">// `[i32]` is a slice: arrays and lists pass as one</span>
+<span class="k">fun</span> total(xs: [i32]) -&gt; i32 {                 <span class="c">// `[i32]` is a slice: arrays and lists pass as one</span>
     <span class="k">var</span> t = <span class="n">0</span>
     <span class="k">for</span> x <span class="k">in</span> xs { t += x }
     t
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="k">let</span> fixed = [<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]                    <span class="c">// an array: `[i32; 3]`</span>
     <span class="k">let</span> zeros = [<span class="n">0u8</span>; <span class="n">4</span>]                     <span class="c">// repeat: four zero bytes</span>
     <span class="k">var</span> xs: <span class="t">List</span>[i32] = [<span class="n">5</span>, <span class="n">3</span>, <span class="n">8</span>]            <span class="c">// a literal where a list is expected</span>
@@ -94,7 +94,7 @@
 <div class="sample-head"><span class="file">samples/coll_maps.loom</span><span class="tag ok">runs</span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="c">// Maps and sets remember insertion order.</span>
     <span class="k">var</span> ages: <span class="t">Map</span>[str, u8] = [<span class="s">"ada"</span>: <span class="n">36</span>, <span class="s">"alan"</span>: <span class="n">41</span>]
     ages[<span class="s">"grace"</span>] = <span class="n">85</span>                       <span class="c">// adds a key</span>
@@ -149,14 +149,14 @@ new: 2
 <span class="k">warp</span> <span class="t">Countdown</span>: <span class="t">Iter</span> {
     n: u32
     <span class="k">type</span> <span class="t">Item</span> = u32
-    <span class="k">fn</span> next(<span class="k">mut</span> <span class="k">self</span>) -&gt; ?u32 {
+    <span class="k">fun</span> next(<span class="k">mut</span> <span class="k">self</span>) -&gt; ?u32 {
         <span class="k">if</span> .n == <span class="n">0</span> { <span class="k">return</span> <span class="k">none</span> }
         .n -= <span class="n">1</span>
         .n + <span class="n">1</span>
     }
 }
 
-<span class="k">fn</span> main() {
+<span class="k">fun</span> main() {
     <span class="c">// Streams are lazy: nothing runs until something asks for an item.</span>
     <span class="k">let</span> evens = (<span class="n">1</span>..=<span class="n">20</span>).filter(_ % <span class="n">2</span> == <span class="n">0</span>).map(n =&gt; n * n)
     print(evens.take(<span class="n">4</span>).collect())

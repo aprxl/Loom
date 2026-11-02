@@ -4,20 +4,20 @@
 
 use std.io.print
 
-fn gcd(a: u64, b: u64) -> u64 = if b == 0 { a } else { gcd(b, a % b) }
+fun gcd(a: u64, b: u64) -> u64 = if b == 0 { a } else { gcd(b, a % b) }
 
-fn clamp(x: i32, lo: i32 = 0, hi: i32 = 100) -> i32 = if x < lo { lo } else if x > hi { hi } else { x }
+fun clamp(x: i32, lo: i32 = 0, hi: i32 = 100) -> i32 = if x < lo { lo } else if x > hi { hi } else { x }
 
-fn swap(mut a: i16, mut b: i16) {
+fun swap(mut a: i16, mut b: i16) {
     (a, b) = (b, a)
 }
 
-fn bump(mut n: u8, by: u8) -> bool {
+fun bump(mut n: u8, by: u8) -> bool {
     n +%= by
     n < by
 }
 
-fn classify(n: i32) -> str = match n {
+fun classify(n: i32) -> str = match n {
     0 => "zero"
     1 | 2 | 3 => "small"
     x if x < 0 => "negative"
@@ -25,14 +25,14 @@ fn classify(n: i32) -> str = match n {
     _ => "big"
 }
 
-fn decode(op: u16) -> (u8, u8, u8) = match op {
+fun decode(op: u16) -> (u8, u8, u8) = match op {
     0x00E0 => (0, 0, 0)
     0x8xy4 => (8, x, y)
     0x1nnn => (1, (n >> 8) as% u8, n as% u8)
     _ => (15, 15, 15)
 }
 
-fn first_square_over(limit: u32) -> u32 {
+fun first_square_over(limit: u32) -> u32 {
     var i: u32 = 0
     loop {
         i += 1
@@ -40,7 +40,7 @@ fn first_square_over(limit: u32) -> u32 {
     }
 }
 
-fn pairs(n: i32) -> i32 {
+fun pairs(n: i32) -> i32 {
     var count = 0
     outer: for a in 0..n {
         for b in 0..n {
@@ -52,7 +52,7 @@ fn pairs(n: i32) -> i32 {
     count
 }
 
-fn main() {
+fun main() {
     print(gcd(1071, 462))
     print("{clamp(-5)} {clamp(50)} {clamp(500, hi: 200)}")
     var (a, b) = (3i16, -4i16)

@@ -5,7 +5,7 @@ warp Cell {
     n: i32
 }
 
-fn main() {
+fun main() {
     spool a = Arena(1.kib())
     let p = a.put(Cell(1))
     loom {

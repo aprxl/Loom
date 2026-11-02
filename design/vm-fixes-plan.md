@@ -131,8 +131,8 @@ All in one commit; none changes output.
 
   ```loom
   use std.io.print
-  fn down(n: u64) -> u64 { 1 + down(n + 1) }
-  fn main() { print("{down(0)}") }
+  fun down(n: u64) -> u64 { 1 + down(n + 1) }
+  fun main() { print("{down(0)}") }
   ```
 
   `tests/run/unravel_stack` must still pass.
@@ -336,12 +336,12 @@ Each fix fails compilation with a clear message instead of wrapping.
   ```loom
   use std.io.print
   use std.fs.{File, IoError}
-  fn run() -> () ! IoError {
+  fun run() -> () ! IoError {
       var f = File.append("out.txt")?
       var i = 0u32
       while i < 20000 { f.write_line("line {i}")?; i += 1 }
   }
-  fn main() { run() mend e => print("failed"); print("done") }
+  fun main() { run() mend e => print("failed"); print("done") }
   ```
 
 ## Card 12 (M2): empty patterns behave as in Rust

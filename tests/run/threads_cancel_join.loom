@@ -4,17 +4,17 @@
 use std.io.print
 use std.sync.sched_yield
 
-fn child() -> i32 {
+fun child() -> i32 {
     sched_yield()
     sched_yield()
     7
 }
 
-fn boom() -> i32 {
+fun boom() -> i32 {
     unravel("boom")
 }
 
-fn main() {
+fun main() {
     loom {
         let t = thread {
             defer print("t cleanup")

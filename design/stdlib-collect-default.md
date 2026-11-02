@@ -18,11 +18,11 @@ by hand (`Set.extend`, `Map.extend`, a `String` loop).
 
 ```text
 pub weft FromStream[T] {
-    fn from_stream(take items: Stream[T]) -> Self
+    fun from_stream(take items: Stream[T]) -> Self
 }
 // woven by: List[T], Set[T] (T: Hash), Map[K, V] for items (K, V),
 // String for char and for str items, Deque[T], PriorityQueue[T], BitSet for usize.
-// On Stream[T]:  pub fn collect[C: FromStream[T]](take self) -> C
+// On Stream[T]:  pub fun collect[C: FromStream[T]](take self) -> C
 ```
 
 Two spellings must work: `words.collect[Set[String]]()` (explicit), and
@@ -78,7 +78,7 @@ construction, but there is no way to ask a type for its default value.
 ### The proposal
 
 ```text
-pub weft Default { fn default() -> Self }
+pub weft Default { fun default() -> Self }
 ```
 
 Woven by hand for: every integer (0), floats (0.0), `bool` (false), `char`
@@ -124,7 +124,7 @@ here, so this is the second real compiler change).
 | `default_scalars` | every integer width, floats, `bool`, `char`, `str`, `String` |
 | `default_containers` | `?T`, `List`, `Set`, `Map`, tuples, arrays, `()` |
 | `default_derive` | the `Config` above; field default beats type default; nested derived warps |
-| `default_generic` | `fn zero[T: Default]() -> T = T.default()` at three types |
+| `default_generic` | `fun zero[T: Default]() -> T = T.default()` at three types |
 | `default_missing` (fail) | a field whose type has no `Default` and no declared default is a type error with a code naming the field |
 | `default_cases` | a warp with cases: first payload-free case; a payload-only warp errors |
 | `default_collect` | with `collect`: `Map[K, V]` entry defaults through `get_or(k, V.default())` |

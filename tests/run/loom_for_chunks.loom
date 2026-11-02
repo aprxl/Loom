@@ -6,7 +6,7 @@
 use std.io.print
 use std.sync.Atomic
 
-fn main() {
+fun main() {
     let lens = Atomic[usize](0)
     let odd = Atomic[u32](0)
     loom for i in 0..1000 {

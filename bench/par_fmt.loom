@@ -3,7 +3,7 @@
 use std.io.print
 use std.sync.Atomic
 
-fn main() {
+fun main() {
     let total = Atomic[u64](0)
     loom for i in 0..8 {
         var n = 0u64

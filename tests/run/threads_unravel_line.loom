@@ -3,14 +3,14 @@
 
 use std.io.print
 
-fn boom(n: i32) -> i32 {
+fun boom(n: i32) -> i32 {
     if n > 0 {
         unravel("boom {n}")
     }
     n
 }
 
-fn main() {
+fun main() {
     loom {
         let b = thread boom(1)
         print("joining")

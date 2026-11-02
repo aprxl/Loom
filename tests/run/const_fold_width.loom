@@ -7,10 +7,10 @@ const MASK: u8 = ~0x0F
 const AA: u8 = 200
 const BIG: f32 = 16777216.0
 
-fn shl(a: u8, n: u8) -> u8 = a << n
-fn id(const n: u8) -> u8 = n
+fun shl(a: u8, n: u8) -> u8 = a << n
+fun id(const n: u8) -> u8 = n
 
-fn main() {
+fun main() {
     let m: u8 = MASK
     print(m)
     const if MASK == 240 { print("folded: 240") } else { print("folded: wrong") }

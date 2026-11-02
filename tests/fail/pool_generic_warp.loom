@@ -4,6 +4,6 @@ warp Wrap[T] {
     inner: T
 }
 
-fn main() {
+fun main() {
     spool slots = Pool[Wrap[List[i32]]](4)         //~ U0102
 }
