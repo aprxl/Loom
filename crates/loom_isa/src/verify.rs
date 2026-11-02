@@ -18,6 +18,7 @@
 //! What a register *means* isn't checked: that's the compiler's job, and the
 //! checked build's.
 
+use std::collections::HashSet;
 use std::fmt;
 
 use crate::natives::{NativeImm, NativeSig, native};
@@ -74,6 +75,12 @@ pub fn verify(image: &Image) -> Result<(), VerifyError> {
         match native(name) {
             Some(sig) => sigs.push(sig),
             None => return Err(whole(format!("unknown native `{name}`"))),
+        }
+    }
+    let mut imports = HashSet::new();
+    for import in &image.host_imports {
+        if import.name.is_empty() || !imports.insert(import.name.as_str()) {
+            return Err(whole(format!("empty or duplicate host import `{}`", import.name)));
         }
     }
     for i in 0..image.funcs.len() {
@@ -208,7 +215,13 @@ fn verify_func(image: &Image, index: usize, sigs: &[&NativeSig]) -> Result<(), V
             Form::Native => {
                 let name = image.natives.get(b(w)).ok_or_else(|| err(pc, "no such native".into()))?;
                 let sig = sigs[b(w)];
-                if a(w) + usize::from(sig.args.max(sig.results)) > frame {
+                let window = if sig.imm == NativeImm::HostImport {
+                    let import = image.host_imports.get(c(w)).ok_or_else(|| err(pc, "no such host import".into()))?;
+                    import.args.max(import.results)
+                } else {
+                    sig.args.max(sig.results)
+                };
+                if a(w) + usize::from(window) > frame {
                     return Err(err(pc, format!("`{name}`'s arguments don't fit the frame")));
                 }
                 if sig.imm == NativeImm::Fmt {
@@ -353,6 +366,7 @@ mod tests {
             strings: vec![b"hi".to_vec()],
             fmts: vec![FmtItem { kind: ValueKind::Bool, debug: false, spec: None }],
             natives: vec!["out.fmt".into()],
+            host_imports: vec![],
             files: vec![],
             data: vec![0; 2],
             relocs: vec![],

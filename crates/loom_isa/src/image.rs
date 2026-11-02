@@ -82,6 +82,15 @@ pub const CRASHES: &[&str] = &[
 /// A place in Loom source: a file's name, a line and a column.
 pub type Place<'a> = (&'a str, u32, u32);
 
+/// A host function the program calls: the name the host registers it
+/// under, and how many registers it reads and writes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HostImport {
+    pub name: String,
+    pub args: u16,
+    pub results: u16,
+}
+
 /// A compiled program.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Image {
@@ -92,6 +101,8 @@ pub struct Image {
     pub fmts: Vec<FmtItem>,
     /// The natives it calls, by name (see [`crate::natives`]).
     pub natives: Vec<String>,
+    /// The host functions it calls, by index (the immediate of `host.call`).
+    pub host_imports: Vec<HostImport>,
     /// Source file names, for [`Line::file`].
     pub files: Vec<String>,
     /// What the program's data starts as, in 8-byte words: vtables,
