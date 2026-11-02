@@ -16,6 +16,8 @@ pub struct RuntimeStats {
     pub unfinished_probes: u64,
     pub cancellation_probes: u64,
     pub task_stacks: u64,
+    /// Times a task found a constant being computed by another and waited.
+    pub const_waits: u64,
 }
 
 impl RuntimeStats {
@@ -29,6 +31,7 @@ impl RuntimeStats {
         self.unfinished_probes += other.unfinished_probes;
         self.cancellation_probes += other.cancellation_probes;
         self.task_stacks += other.task_stacks;
+        self.const_waits += other.const_waits;
     }
 }
 

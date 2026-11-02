@@ -184,6 +184,8 @@ struct Env<'e, 'i> {
     out: Option<Arc<Mutex<OutBuf>>>,
     /// With several workers, whether they queue whole lines (not a terminal).
     batched: bool,
+    /// How many tasks wait for a constant.
+    const_waiting: Arc<std::sync::atomic::AtomicUsize>,
     /// With several workers, this worker's own heap, which needs no lock.
     heap: Option<Box<Heap>>,
     /// With `stats`: what this worker dispatched, added to the context's
@@ -210,6 +212,7 @@ struct Init<'a, 'i> {
     /// With several workers, where the whole lines of output go.
     out: Option<Arc<Mutex<OutBuf>>>,
     batched: bool,
+    const_waiting: Arc<std::sync::atomic::AtomicUsize>,
     ctx: *mut Ctx<'i>,
     sched: *mut Sched,
     rodata: *const u8,
@@ -262,7 +265,8 @@ impl Drop for Env<'_, '_> {
 #[derive(Debug)]
 pub(crate) struct Machine<'i> {
     image: &'i Image,
-    code: &'i [u64],
+    /// The image's code, with each jump back made a `Loop` (see `with_loops`).
+    code: Box<[u64]>,
     funcs: Vec<Callee>,
     /// The program's data: the image's, which the program may change
     /// (constants computed on first read).
@@ -284,6 +288,28 @@ pub(crate) struct Machine<'i> {
     has_threads: bool,
 }
 
+/// A copy of `image`'s code in which every `Jmp` that goes back (or to
+/// itself) is a `Loop`, which counts a tick: an image can't make a loop the
+/// budgets and Ctrl-C never see. The compiler already writes `Loop` for those,
+/// so this changes nothing in what it makes, and the forward `Jmp` stays as
+/// it is (a test of the offset on each would cost where it's rarely needed).
+fn with_loops(image: &Image) -> Box<[u64]> {
+    let mut code = image.code.clone().into_boxed_slice();
+    for f in &image.funcs {
+        let (mut pc, end) = (f.entry as usize, (f.entry + f.len) as usize);
+        while pc < end {
+            let w = code[pc];
+            // Verified: every opcode exists and its words are inside the function.
+            let op = Op::from_u16(loom_isa::word::opcode(w)).expect("a verified opcode");
+            if op == Op::Jmp && bc_i32(w) <= 0 {
+                code[pc] = loom_isa::word::word_i32(Op::Loop, 0, bc_i32(w));
+            }
+            pc += op.form().words();
+        }
+    }
+    code
+}
+
 impl<'i> Machine<'i> {
     pub fn scheduler_stats(&self) -> crate::RuntimeStats {
         self.sched.stats.clone()
@@ -295,11 +321,12 @@ impl<'i> Machine<'i> {
             .iter()
             .map(|name| resolve(name).ok_or_else(|| format!("Treadle has no native `{name}`")))
             .collect::<Result<Vec<_>, _>>()?;
+        let code = with_loops(image);
         let funcs = image
             .funcs
             .iter()
             .map(|f| Callee {
-                entry: image.code[f.entry as usize..].as_ptr(),
+                entry: code[f.entry as usize..].as_ptr(),
                 frame: usize::from(f.frame),
                 params: usize::from(f.params),
                 results: usize::from(f.results),
@@ -312,12 +339,12 @@ impl<'i> Machine<'i> {
             // Verified: inside the data, and an offset within it.
             data[r as usize] += base;
         }
+        let sched = Sched::new();
         Ok(Machine {
-            sched: Sched::new(),
             workers: config.workers.max(1),
             has_threads: image.natives.iter().any(|n| n == "task.spawn"),
             image,
-            code: &image.code,
+            code,
             funcs,
             data,
             local_natives: image.natives.iter().map(|name| resolve_local(name)).collect(),
@@ -326,10 +353,12 @@ impl<'i> Machine<'i> {
             natives,
             ctx: {
                 let mut ctx = Ctx::new(image, host);
+                ctx.const_waiting = Arc::clone(&sched.const_waiting);
                 ctx.interrupt = config.interrupt.clone();
                 ctx.set_limits(&config.limits, config.refuse_host);
                 ctx
             },
+            sched,
             stack_limit: config.stack_limit,
             stack: None,
             ticks: TICKS,
@@ -414,6 +443,7 @@ impl<'i> Machine<'i> {
             shared: pool.is_some().then(|| Arc::clone(self.ctx.heap.shared())),
             out: pool.is_some().then(|| self.ctx.out_shared()),
             batched: self.ctx.batches_output(),
+            const_waiting: Arc::clone(&self.sched.const_waiting),
             ctx: &raw mut self.ctx,
             sched: &raw mut self.sched,
             rodata: self.ctx.rodata_ptr(),
@@ -532,6 +562,7 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
             local: Default::default(),
             out: init.out.clone(),
             batched: init.batched,
+            const_waiting: Arc::clone(&init.const_waiting),
             heap: init.shared.as_ref().map(|shared| Box::new(Heap::sharing(shared))),
             st_dispatched: 0,
             st_runtime: crate::RuntimeStats::default(),
@@ -638,7 +669,8 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
                         macro_rules! cjump {
                             ($off:expr) => {{
                                 let off: isize = $off as isize;
-                                if off < 0 {
+                                // A jump back, or to itself, is a loop.
+                                if off <= 0 {
                                     tick!();
                                 }
                                 jump!(off);
@@ -846,7 +878,7 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
                                 // (or a slice's) header: its buffer, then its length.
                                 let (buf, len) = unsafe {
                                     let h = header as *const u64;
-                                    (h.read(), h.add(1).read())
+                                    (h.read_unaligned(), h.add(1).read_unaligned())
                                 };
                                 if index >= len {
                                     throw!(Trap::Index { index, len });
@@ -936,7 +968,7 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
                                 // header: its buffer, length and capacity.
                                 let (buf, cap) = unsafe {
                                     let h = header as *const u64;
-                                    (h.read(), h.add(2).read())
+                                    (h.read_unaligned(), h.add(2).read_unaligned())
                                 };
                                 if cap != 0 {
                                     if let Err(trap) = heap!(env).free(buf, cap.wrapping_mul($size), $align) {
@@ -1431,6 +1463,7 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
                                             batched: env.batched,
                                             fmts: &env.image.fmts,
                                             data_range: env.data_range,
+                                            const_waiting: &env.const_waiting,
                                         };
                                         let done = own(&mut worker, args, c(w) as u16);
                                         worker.publish(from);
@@ -1618,12 +1651,12 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
                                 // two where the next object goes and where the chunk ends.
                                 let (cur, end) = unsafe {
                                     let h = header as *const u64;
-                                    (h.read(), h.add(1).read())
+                                    (h.read_unaligned(), h.add(1).read_unaligned())
                                 };
                                 let size = c(w) as u64;
                                 if end - cur >= size {
                                     // SAFETY: as above.
-                                    unsafe { (header as *mut u64).write(cur + size) };
+                                    unsafe { (header as *mut u64).write_unaligned(cur + size) };
                                     set!(a(w), cur)
                                 } else {
                                     match crate::arena::alloc(heap!(env), header, size) {
@@ -2188,11 +2221,16 @@ fn task_op<'p>(
         TaskOp::ConstBegin => {
             // With one worker, the init function does it all (and finds a
             // cycle). With several, the first task to ask computes it, and
-            // another waits (2: look at the flag again) unless it's the one
+            // another waits for it to finish (or fail) unless it's the one
             // computing it, which is the cycle the init reports.
             let addr = args[0];
-            let flag = crate::natives::data_word(ctx!(env), addr)?;
             let me = sched!(env).current;
+            // A task that waits is counted before it looks at the flag again,
+            // so the one that finishes the constant meanwhile sees it.
+            if pool.is_some() {
+                sched!(env).const_wait_begin();
+            }
+            let flag = crate::natives::data_word(ctx!(env), addr)?;
             let claim = if flag == 1 {
                 0
             } else if pool.is_none() || flag == 3 {
@@ -2207,20 +2245,29 @@ fn task_op<'p>(
                     }
                 }
             };
-            args[0] = claim;
+            if pool.is_some() && claim != 2 {
+                sched!(env).const_wait_undo();
+            }
             if claim == 2 {
+                if cfg!(feature = "stats") {
+                    env.st_runtime.const_waits += 1;
+                }
                 // Waiting for it is a place to be cancelled at (the one
                 // computing it may have unravelled).
                 if sched!(env).is_cancelled() {
+                    sched!(env).const_wait_undo();
                     return Err(Trap::Cancel);
                 }
-                // The one computing it may be waiting for the lock.
-                *guard = None;
-                std::thread::yield_now();
-                *guard = pool.map(Pool::lock);
-                // Others ran meanwhile: the scheduler is this task's again.
-                sched!(env).current = me;
+                // The call runs again when the constant changes: its first
+                // register is still the address.
+                sched!(env).park_const(addr)
+            } else {
+                args[0] = claim;
+                Step::Next
             }
+        }
+        TaskOp::ConstWake => {
+            sched!(env).wake_const(args[0]);
             Step::Next
         }
         TaskOp::MutexUnlock => {

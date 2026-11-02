@@ -78,9 +78,9 @@ fn env_args(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
     // SAFETY: `dst` is the header the compiler gave: three words.
     unsafe {
         let d = args[0] as *mut u64;
-        d.write(buf);
-        d.add(1).write(n);
-        d.add(2).write(n);
+        d.write_unaligned(buf);
+        d.add(1).write_unaligned(n);
+        d.add(2).write_unaligned(n);
     }
     Ok(())
 }
@@ -329,9 +329,9 @@ fn fs_list(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
             // SAFETY: `dst` is the header of a `List[String]` the compiler gave.
             unsafe {
                 let d = args[2] as *mut u64;
-                d.write(buf);
-                d.add(1).write(n);
-                d.add(2).write(n);
+                d.write_unaligned(buf);
+                d.add(1).write_unaligned(n);
+                d.add(2).write_unaligned(n);
             }
             args[0] = FINE;
         }

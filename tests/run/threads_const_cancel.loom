@@ -1,0 +1,35 @@
+// A task unravels while others wait for a constant that is still being
+// computed: the waiters are cancelled where they wait, and the unravel is the
+// program's.
+
+use std.io.print
+use std.sync.Atomic
+
+warp Shape {
+    case Round(u64)
+    case Square(u64)
+}
+
+const SLOW: Shape = slow_shape()
+
+fun slow_shape() -> Shape {
+    var n = 0u64
+    for i in 0..400000u64 {
+        n += i % 7
+    }
+    Shape.Round(n)
+}
+
+fun size(s: Shape) -> u64 = match s {
+    .Round(r) => r
+    .Square(r) => r * r
+}
+
+fun main() {
+    let total = Atomic[u64](0)
+    loom for i in 0..8u64 {
+        if i == 7 { unravel("stop") }
+        total.add(size(SLOW) + i)
+    }
+    print("total {total.load()}")
+}

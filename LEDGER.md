@@ -93,7 +93,9 @@ Deferred: see "Later (deferred from V8)" below.
 - Compile-time passes: the gvn root index, `tidy` and `range` repeats, codegen liveness and `Emitter::line`, pipeline consolidation (`compile_at` alone is 1.95-2.11x `-O0` against the design's 1.5x); also the deferred optimizer passes, specializing lambdas and self tail calls (unmeasured).
 - `Instant.now()` at 8 workers is unmeasured.
 
-**V9 (Treadle by default)**: verifier hardening before images are loaded from disk: a backward `Jmp` neither ticks nor is rejected, loads/stores through registers are unchecked outside the checked build (reword "verified" in the docs), header reads assume 8-aligned offsets, a waiter on a constant busy-spins.
+**V9 (Treadle by default)**: verifier hardening before images are loaded from disk.
+- Done (V9-1): a backward `Jmp` (and a jump to itself) ticks, by rewriting each one to `Loop` when the image is loaded (the forward `Jmp` stays branch-free: testing each cost 4% on `binary_trees`); the list-header forms must sit on a word; every aligned read of a header, handle or entry that comes from a register is `read_unaligned` (same instruction on x86-64); a task waiting for a constant another is computing parks in `Wait::Const` and is woken by `const.store` or by the end of the task computing it, instead of yielding in a loop.
+- Open: loads and stores through registers are unchecked outside the checked build, so any image can read or write any address (Caio decides the direction; reword "verified" in the docs). Also: a lazily computed constant that holds heap memory is not dropped when the program unravels (the checked build reports a leak).
 
 **Std backlog (no compiler blocker; a stdlib session, any time)**
 - Natives and plain Loom: `reverse_bits`, `swap_bytes`, `ilog(base)`, `cbrt`, `mul_add`, `lerp`, Float constants (`EPSILON`, `INF`, `NAN`), `parse_radix`, `escape`, `matches`, `String` `drain`/`split_off`/`to_bytes`, `env.vars`, `BufReader`/`BufWriter`, `process.run`/`Child` (own designs), `Deque` `for` loop (works over any `Iter`, so it is a weave away); `remove_entry` returning the map's stored key; the `Range.rev` message on an open range.

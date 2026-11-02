@@ -447,6 +447,7 @@ fn run_vm(path: &Path, args: &[String], color: ColorMode, level: Level) -> ExitC
                         stats.leftover_probes, stats.unfinished_probes, stats.cancellation_probes
                     );
                     eprintln!("task stacks allocated: {}", stats.task_stacks);
+                    eprintln!("constant waits: {}", stats.const_waits);
                 }
                 if let (Some(counts), Some(total)) = (vm.op_counts(), vm.dispatched())
                     && std::env::var_os("LOOM_STATS").is_some_and(|v| v == "1")

@@ -43,11 +43,11 @@ pub(crate) fn new(heap: &mut Heap, size: u64, slots: u64) -> Result<u64, Trap> {
     // SAFETY: `header` is a new object of `HEADER` bytes.
     unsafe {
         let w = words(header);
-        w.add(FREE).write(0);
-        w.add(NEXT).write(block);
-        w.add(END).write(block + bytes);
-        w.add(BLOCK).write(block);
-        w.add(SLOT).write(slot);
+        w.add(FREE).write_unaligned(0);
+        w.add(NEXT).write_unaligned(block);
+        w.add(END).write_unaligned(block + bytes);
+        w.add(BLOCK).write_unaligned(block);
+        w.add(SLOT).write_unaligned(slot);
     }
     Ok(header)
 }
@@ -57,16 +57,17 @@ pub(crate) fn alloc(header: u64) -> Result<u64, Trap> {
     // SAFETY: `header` is a pool `new` made and `free_all` hasn't freed.
     unsafe {
         let w = words(header);
-        let head = w.add(FREE).read();
+        let head = w.add(FREE).read_unaligned();
         if head != 0 {
-            w.add(FREE).write((head as *const u64).read());
+            w.add(FREE).write_unaligned((head as *const u64).read_unaligned());
             return Ok(head);
         }
-        let (next, end, slot) = (w.add(NEXT).read(), w.add(END).read(), w.add(SLOT).read());
+        let (next, end, slot) =
+            (w.add(NEXT).read_unaligned(), w.add(END).read_unaligned(), w.add(SLOT).read_unaligned());
         if end - next < slot {
             return Err(Trap::Unravel("the pool is full".into()));
         }
-        w.add(NEXT).write(next + slot);
+        w.add(NEXT).write_unaligned(next + slot);
         Ok(next)
     }
 }
@@ -77,8 +78,8 @@ pub(crate) fn free(header: u64, slot: u64) {
     // program is finished with (its value dropped).
     unsafe {
         let w = words(header);
-        (slot as *mut u64).write(w.add(FREE).read());
-        w.add(FREE).write(slot);
+        (slot as *mut u64).write_unaligned(w.add(FREE).read_unaligned());
+        w.add(FREE).write_unaligned(slot);
     }
 }
 
@@ -87,8 +88,8 @@ pub(crate) fn reset(header: u64) {
     // SAFETY: as for [`alloc`].
     unsafe {
         let w = words(header);
-        w.add(FREE).write(0);
-        w.add(NEXT).write(w.add(BLOCK).read());
+        w.add(FREE).write_unaligned(0);
+        w.add(NEXT).write_unaligned(w.add(BLOCK).read_unaligned());
     }
 }
 
@@ -97,7 +98,7 @@ pub(crate) fn drop_pool(heap: &mut Heap, header: u64) -> Result<(), Trap> {
     // SAFETY: as for [`alloc`].
     let (block, bytes) = unsafe {
         let w = words(header);
-        (w.add(BLOCK).read(), w.add(END).read() - w.add(BLOCK).read())
+        (w.add(BLOCK).read_unaligned(), w.add(END).read_unaligned() - w.add(BLOCK).read_unaligned())
     };
     heap.free(block, bytes, 16)?;
     heap.free(header, HEADER, 16)

@@ -30,6 +30,8 @@ pub(crate) struct Ctx<'i> {
     line_buffered: bool,
     /// There is a pool: output reaches `shared_out` a whole line at a time.
     pub(crate) pooled: bool,
+    /// How many tasks wait for a constant (the scheduler's count).
+    pub(crate) const_waiting: Arc<std::sync::atomic::AtomicUsize>,
     /// What the natives work on: the output (with one worker, all of it; else
     /// the line being written), the message of an unravel being built
     /// (`msg.*`, sink 1) and the sinks `sink.push` made (2 and up).
@@ -161,6 +163,7 @@ impl<'i> Ctx<'i> {
             shared_out: Arc::new(Mutex::new(OutBuf { buf: Vec::new(), sink, line_buffered })),
             line_buffered,
             pooled: false,
+            const_waiting: Arc::default(),
             cur: Local::default(),
             split: false,
             split_start: 0,
@@ -389,7 +392,7 @@ impl<'i> Ctx<'i> {
         // SAFETY: the header is live, eight words.
         let (ebuf, ibuf, slots, used) = unsafe {
             let p = header as *const u64;
-            (p.read(), p.add(3).read(), p.add(4).read(), p.add(5).read())
+            (p.read_unaligned(), p.add(3).read_unaligned(), p.add(4).read_unaligned(), p.add(5).read_unaligned())
         };
         let entries = used.checked_mul(esize).ok_or_else(bad)?;
         let index = slots.checked_mul(8).ok_or_else(bad)?;
@@ -465,6 +468,8 @@ pub(crate) trait Sinks: Strings {
     fn written(&mut self, from: usize);
     /// Where the program's data is, which constants' flags are in.
     fn data_range(&self) -> (u64, u64);
+    /// Whether any task waits for a constant.
+    fn const_waiting(&self) -> bool;
 }
 
 impl Sinks for Ctx<'_> {
@@ -488,6 +493,10 @@ impl Sinks for Ctx<'_> {
 
     fn data_range(&self) -> (u64, u64) {
         self.data_range
+    }
+
+    fn const_waiting(&self) -> bool {
+        self.const_waiting.load(std::sync::atomic::Ordering::SeqCst) > 0
     }
 }
 
@@ -653,6 +662,7 @@ pub(crate) struct Worker<'w> {
     pub batched: bool,
     pub fmts: &'w [FmtItem],
     pub data_range: (u64, u64),
+    pub const_waiting: &'w std::sync::atomic::AtomicUsize,
 }
 
 impl Worker<'_> {
@@ -712,6 +722,10 @@ impl Sinks for Worker<'_> {
 
     fn data_range(&self) -> (u64, u64) {
         self.data_range
+    }
+
+    fn const_waiting(&self) -> bool {
+        self.const_waiting.load(std::sync::atomic::Ordering::SeqCst) > 0
     }
 }
 
@@ -835,6 +849,13 @@ fn const_load<S: Sinks>(s: &mut S, args: &mut [u64], _: u16) -> Result<(), Trap>
 
 fn const_store<S: Sinks>(s: &mut S, args: &mut [u64], _: u16) -> Result<(), Trap> {
     data_atomic(s.data_range(), args[0])?.store(args[1], std::sync::atomic::Ordering::SeqCst);
+    // A task waiting for the constant is woken when it is done or failed (the
+    // flag's value 2 is "computing", from `heddle/build/consts.rs`). The
+    // waiter counted itself before it looked at the flag, so one of us sees
+    // the other.
+    if args[1] != 2 && s.const_waiting() {
+        return Err(Trap::Task(crate::sched::TaskOp::ConstWake));
+    }
     Ok(())
 }
 
@@ -1031,9 +1052,9 @@ fn str_new_in<S: Strings>(ctx: &mut S, args: &mut [u64], _: u16) -> Result<(), T
             std::ptr::copy_nonoverlapping(text.as_ptr(), ptr as *mut u8, text.len());
         }
         let d = args[3] as *mut u64;
-        d.write(ptr);
-        d.add(1).write(len);
-        d.add(2).write(0);
+        d.write_unaligned(ptr);
+        d.add(1).write_unaligned(len);
+        d.add(2).write_unaligned(0);
     }
     Ok(())
 }
@@ -1147,7 +1168,7 @@ fn heap_grow(heap: &mut Heap, args: &mut [u64]) -> Result<(), Trap> {
     // words it owns (the checked build checks the buffer below).
     let (ptr, len, cap) = unsafe {
         let h = header as *const u64;
-        (h.read(), h.add(1).read(), h.add(2).read())
+        (h.read_unaligned(), h.add(1).read_unaligned(), h.add(2).read_unaligned())
     };
     if want <= cap {
         return Ok(());
@@ -1169,8 +1190,8 @@ fn heap_grow(heap: &mut Heap, args: &mut [u64]) -> Result<(), Trap> {
     // SAFETY: as above.
     unsafe {
         let h = header as *mut u64;
-        h.write(moved);
-        h.add(2).write(if size == 0 { u64::MAX } else { new_cap });
+        h.write_unaligned(moved);
+        h.add(2).write_unaligned(if size == 0 { u64::MAX } else { new_cap });
     }
     Ok(())
 }
@@ -1223,7 +1244,7 @@ fn seq_join_text<S: Strings>(ctx: &mut S, args: &mut [u64], _: u16) -> Result<()
         // with a text's address and length.
         unsafe {
             let e = (buf + i as u64 * size) as *const u64;
-            (e.read(), e.add(1).read())
+            (e.read_unaligned(), e.add(1).read_unaligned())
         }
     };
     let mut total = len.saturating_sub(1) * sep.len();

@@ -377,9 +377,9 @@ fn write_header(dst: u64, buf: u64, len: u64, cap: u64) {
     // SAFETY: `dst` is three words the compiler gave for the header.
     unsafe {
         let d = dst as *mut u64;
-        d.write(buf);
-        d.add(1).write(len);
-        d.add(2).write(cap);
+        d.write_unaligned(buf);
+        d.add(1).write_unaligned(len);
+        d.add(2).write_unaligned(cap);
     }
 }
 
@@ -388,7 +388,7 @@ fn read_header(dst: u64) -> (u64, u64, u64) {
     // SAFETY: `dst` is the header of a list or a string the program owns.
     unsafe {
         let d = dst as *const u64;
-        (d.read(), d.add(1).read(), d.add(2).read())
+        (d.read_unaligned(), d.add(1).read_unaligned(), d.add(2).read_unaligned())
     }
 }
 
@@ -501,7 +501,7 @@ fn string_of<S: Strings>(ctx: &mut S, args: &mut [u64], _: u16) -> Result<(), Tr
     let mut out = String::new();
     for i in 0..n {
         // SAFETY: the compiler passes the elements of a `[char]`, 4 bytes each.
-        let c = unsafe { (args[0] as *const u32).add(i).read() };
+        let c = unsafe { (args[0] as *const u32).add(i).read_unaligned() };
         debug_assert!(char::from_u32(c).is_some(), "a `char` is a valid code point");
         out.push(char::from_u32(c).unwrap_or('\u{FFFD}'));
     }
@@ -689,7 +689,7 @@ fn probe(header: u64, h: u64, esize: u64, same: impl Fn(u64) -> bool) -> u64 {
     // SAFETY: the compiler passes a map's header: five words.
     let (ebuf, ibuf, slots) = unsafe {
         let p = header as *const u64;
-        (p.read(), p.add(3).read(), p.add(4).read())
+        (p.read_unaligned(), p.add(3).read_unaligned(), p.add(4).read_unaligned())
     };
     if slots == 0 {
         return u64::MAX;
@@ -701,13 +701,13 @@ fn probe(header: u64, h: u64, esize: u64, same: impl Fn(u64) -> bool) -> u64 {
     for _ in 0..slots {
         // SAFETY: the index has `slots` words, each 0 or an entry's number
         // plus one, and the entries `esize` bytes each.
-        let s = unsafe { (ibuf as *const u64).add(i as usize).read() };
+        let s = unsafe { (ibuf as *const u64).add(i as usize).read_unaligned() };
         if s == 0 {
             return u64::MAX;
         }
         let entry = ebuf + (s - 1) * esize;
         // SAFETY: an entry starts with its hash word.
-        if unsafe { (entry as *const u64).read() } == h && same(entry) {
+        if unsafe { (entry as *const u64).read_unaligned() } == h && same(entry) {
             return s - 1;
         }
         i = (i + 1) & mask;
@@ -732,7 +732,7 @@ fn map_find_str_in<T: Texts>(ctx: &T, args: &mut [u64], _: u16) -> Result<(), Tr
         // SAFETY: an entry's key is text: its address and length first.
         let (p, n) = unsafe {
             let k = (entry + koff) as *const u64;
-            (k.read(), k.add(1).read())
+            (k.read_unaligned(), k.add(1).read_unaligned())
         };
         // SAFETY: the key's text: `n` bytes at `p`.
         n as usize == key.len() && unsafe { same_text(p as *const u8, key) }
@@ -794,8 +794,14 @@ fn reindex(heap: &mut Heap, header: u64, slots: u64, esize: u64) -> Result<(), T
     let bytes = slots.checked_mul(8).ok_or_else(|| broken("a map index too big"))?;
     let words = header as *mut u64;
     // SAFETY: the compiler passes a map's header: eight words.
-    let (ebuf, old, old_slots, used) =
-        unsafe { (words.read(), words.add(3).read(), words.add(4).read(), words.add(5).read()) };
+    let (ebuf, old, old_slots, used) = unsafe {
+        (
+            words.read_unaligned(),
+            words.add(3).read_unaligned(),
+            words.add(4).read_unaligned(),
+            words.add(5).read_unaligned(),
+        )
+    };
     if old_slots != 0 {
         heap.free(old, old_slots * 8, 8)?;
     }
@@ -803,13 +809,13 @@ fn reindex(heap: &mut Heap, header: u64, slots: u64, esize: u64) -> Result<(), T
     // SAFETY: `ibuf` is a new object of `bytes` bytes.
     unsafe {
         std::ptr::write_bytes(ibuf as *mut u8, 0, bytes as usize);
-        words.add(3).write(ibuf);
-        words.add(4).write(slots);
+        words.add(3).write_unaligned(ibuf);
+        words.add(4).write_unaligned(slots);
     }
     let (index, mask) = (ibuf as *mut u64, slots.wrapping_sub(1));
     for e in 0..used {
         // SAFETY: entry `e` is one of the `used`, and starts with its hash.
-        let hash = unsafe { ((ebuf + e * esize) as *const u64).read() };
+        let hash = unsafe { ((ebuf + e * esize) as *const u64).read_unaligned() };
         if hash == 0 {
             continue;
         }
@@ -838,14 +844,20 @@ fn map_compact(heap: &mut Heap, args: &[u64]) -> Result<(), Trap> {
     let (header, esize) = (args[0], args[1]);
     let words = header as *mut u64;
     // SAFETY: the compiler passes a map's header: eight words.
-    let (ebuf, len, used, slots) =
-        unsafe { (words.read(), words.add(1).read(), words.add(5).read(), words.add(4).read()) };
+    let (ebuf, len, used, slots) = unsafe {
+        (
+            words.read_unaligned(),
+            words.add(1).read_unaligned(),
+            words.add(5).read_unaligned(),
+            words.add(4).read_unaligned(),
+        )
+    };
     if len == used {
         return Ok(());
     }
     let live = |e: u64| {
         // SAFETY: `e` is one of the `used` entries, which start with a hash.
-        unsafe { ((ebuf + e * esize) as *const u64).read() != 0 }
+        unsafe { ((ebuf + e * esize) as *const u64).read_unaligned() != 0 }
     };
     let (mut kept, mut e) = (0, 0);
     while e < used {
@@ -874,9 +886,9 @@ fn map_compact(heap: &mut Heap, args: &[u64]) -> Result<(), Trap> {
     }
     // SAFETY: as above, the header's `used`, `head` and `tail`.
     unsafe {
-        words.add(5).write(len);
-        words.add(6).write(0);
-        words.add(7).write(len);
+        words.add(5).write_unaligned(len);
+        words.add(6).write_unaligned(0);
+        words.add(7).write_unaligned(len);
     }
     reindex(heap, header, slots, esize)
 }

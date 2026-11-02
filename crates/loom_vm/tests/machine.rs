@@ -729,3 +729,32 @@ fn a_failure_cancels_the_threads_that_are_parked() {
     let Outcome::Unravel { message, .. } = outcome else { panic!("{outcome:?}") };
     assert_eq!((message.as_str(), out.as_str()), ("arithmetic overflow", ""), "9 is never printed");
 }
+
+#[test]
+fn a_backward_jmp_ticks_like_a_loop() {
+    // An unconditional jump back (`Jmp`, not `Loop`) is a loop too: the step
+    // budget stops it.
+    let config = limited(Limits { steps: Some(1 << 20), ..Limits::default() });
+    let back = vec![word_i32(Op::Ldi, 0, 1), word_i32(Op::Jmp, 0, -1)];
+    let (outcome, _) = exec(&image(vec![("main", 1, 0, 0, back)]), &config);
+    assert!(matches!(outcome, Outcome::OverBudget { budget: Budget::Steps, .. }), "{outcome:?}");
+    // And so does one to itself.
+    let itself = vec![word_i32(Op::Jmp, 0, 0)];
+    let (outcome, _) = exec(&image(vec![("main", 1, 0, 0, itself)]), &config);
+    assert!(matches!(outcome, Outcome::OverBudget { budget: Budget::Steps, .. }), "{outcome:?}");
+}
+
+#[test]
+fn a_backward_jmp_loop_ends_at_ctrl_c() {
+    let interrupt = Arc::new(AtomicBool::new(false));
+    let config = Config { interrupt: Some(interrupt.clone()), ..Config::default() };
+    let flag = interrupt.clone();
+    let stopper = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        flag.store(true, std::sync::atomic::Ordering::SeqCst);
+    });
+    let back = vec![word_i32(Op::Ldi, 0, 1), word_i32(Op::Jmp, 0, -1)];
+    let (outcome, _) = exec(&image(vec![("main", 1, 0, 0, back)]), &config);
+    stopper.join().expect("the stopper ends");
+    assert!(matches!(outcome, Outcome::Interrupted), "{outcome:?}");
+}

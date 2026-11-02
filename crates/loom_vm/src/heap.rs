@@ -153,9 +153,9 @@ impl Heap {
                 fill(std::slice::from_raw_parts_mut(ptr as *mut u8, len));
             }
             let d = dst as *mut u64;
-            d.write(ptr);
-            d.add(1).write(len as u64);
-            d.add(2).write(len as u64);
+            d.write_unaligned(ptr);
+            d.add(1).write_unaligned(len as u64);
+            d.add(2).write_unaligned(len as u64);
         }
         Ok(())
     }
@@ -172,9 +172,9 @@ impl Heap {
                 std::ptr::copy_nonoverlapping(text.as_ptr(), ptr as *mut u8, text.len());
             }
             let d = dst as *mut u64;
-            d.write(ptr);
-            d.add(1).write(len);
-            d.add(2).write(len);
+            d.write_unaligned(ptr);
+            d.add(1).write_unaligned(len);
+            d.add(2).write_unaligned(len);
         }
         Ok(())
     }

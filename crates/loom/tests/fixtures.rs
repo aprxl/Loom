@@ -452,6 +452,80 @@ fn par_output_stays_whole() {
     }
 }
 
+/// Eight tasks wait for one slow constant (`tests/par/const_slow.loom`): they
+/// park until it is done, they don't spin. `const_waits` counts the times a
+/// task found the constant being computed by another; a task that waits by
+/// yielding in a loop would count thousands.
+#[cfg(feature = "vm-stats")]
+#[test]
+fn tasks_wait_for_a_slow_constant_without_spinning() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/par/const_slow.loom");
+    for level in [Level::O2, Level::O0] {
+        let (db, diags, image) = compile_vm(&path, level);
+        let image = image.unwrap_or_else(|| {
+            panic!(
+                "didn't compile:
+{}",
+                rendered(&db, &diags)
+            )
+        });
+        let entry = image.entry.expect("a main");
+        let (mut most, mut waited) = (0, 0);
+        for _ in 0..10 {
+            let buffer = Rc::new(RefCell::new(Vec::new()));
+            let config = loom_vm::Config { stack_limit: 64 << 20, workers: 8, ..loom_vm::Config::default() };
+            let mut vm = loom_vm::Vm::new(&image, Host::captured(buffer.clone()), &config).expect("verifies");
+            vm.call(entry, &[]).expect("runs");
+            assert_eq!(
+                String::from_utf8_lossy(&buffer.borrow()),
+                "total 9600004
+"
+            );
+            let waits = vm.runtime_stats().expect("a stats build").const_waits;
+            most = most.max(waits);
+            waited += waits;
+        }
+        println!("{level:?}: at most {most} waits in a run, {waited} in 10");
+        assert!(most <= 24, "{level:?}: a run waited {most} times for the constant");
+        assert!(waited > 0, "{level:?}: no task ever waited, so the test proves nothing");
+    }
+}
+
+/// A task that unravels cancels the ones parked waiting for a slow constant
+/// (`tests/run/threads_const_cancel.loom`): the program ends with the unravel,
+/// not a hang, whichever way the tasks interleave.
+#[test]
+fn a_waiter_for_a_constant_is_cancelled() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/run/threads_const_cancel.loom");
+    let (db, diags, image) = compile_vm(&path, Level::O2);
+    let image = image.unwrap_or_else(|| {
+        panic!(
+            "didn't compile:
+{}",
+            rendered(&db, &diags)
+        )
+    });
+    let (done, ended) = std::sync::mpsc::channel();
+    // Detached, so a hung run fails the test instead of hanging it.
+    std::thread::spawn(move || {
+        for round in 0..40 {
+            let buffer = Rc::new(RefCell::new(Vec::new()));
+            let config = loom_vm::Config { stack_limit: 64 << 20, workers: 8, ..loom_vm::Config::default() };
+            let outcome = loom_vm::run(&image, Host::captured(buffer), &config);
+            let ok = matches!(&outcome, Outcome::Unravel { message, .. } if message == "stop");
+            if done.send((round, ok, format!("{outcome:?}"))).is_err() || !ok {
+                return;
+            }
+        }
+    });
+    for _ in 0..40 {
+        let (round, ok, outcome) = ended
+            .recv_timeout(std::time::Duration::from_secs(20))
+            .expect("a run hung: a waiter for the constant was never woken");
+        assert!(ok, "round {round}: {outcome}");
+    }
+}
+
 /// The `loom for` fixtures over ranges, on 8 workers, where a task takes a
 /// run of items (design/vm.md §11.4): the same output, and the failing one
 /// ends the same way and frees what its items own (a checked build, as in

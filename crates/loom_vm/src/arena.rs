@@ -49,8 +49,8 @@ fn new_chunk(heap: &mut Heap, data: u64) -> Result<u64, Trap> {
     // SAFETY: `chunk` is a new object of `CHUNK_HEADER + data` bytes.
     unsafe {
         let w = words(chunk);
-        w.write(0);
-        w.add(1).write(data);
+        w.write_unaligned(0);
+        w.add(1).write_unaligned(data);
     }
     Ok(chunk)
 }
@@ -71,11 +71,11 @@ pub(crate) fn new(heap: &mut Heap, capacity: u64) -> Result<u64, Trap> {
     // with its data after `CHUNK_HEADER`.
     unsafe {
         let w = words(header);
-        w.add(CUR).write(chunk + CHUNK_HEADER);
-        w.add(END).write(chunk + CHUNK_HEADER + data);
-        w.add(CHUNK).write(chunk);
-        w.add(FIRST).write(chunk);
-        w.add(SIZE).write(data);
+        w.add(CUR).write_unaligned(chunk + CHUNK_HEADER);
+        w.add(END).write_unaligned(chunk + CHUNK_HEADER + data);
+        w.add(CHUNK).write_unaligned(chunk);
+        w.add(FIRST).write_unaligned(chunk);
+        w.add(SIZE).write_unaligned(data);
     }
     Ok(header)
 }
@@ -88,10 +88,10 @@ pub(crate) fn alloc(heap: &mut Heap, header: u64, size: u64) -> Result<u64, Trap
     // the state described above.
     unsafe {
         let w = words(header);
-        let cur = w.add(CUR).read();
-        let end = w.add(END).read();
+        let cur = w.add(CUR).read_unaligned();
+        let end = w.add(END).read_unaligned();
         if end - cur >= size {
-            w.add(CUR).write(cur + size);
+            w.add(CUR).write_unaligned(cur + size);
             return Ok(cur);
         }
         grow(heap, w, size)
@@ -108,15 +108,15 @@ pub(crate) fn alloc(heap: &mut Heap, header: u64, size: u64) -> Result<u64, Trap
 unsafe fn grow(heap: &mut Heap, w: *mut u64, size: u64) -> Result<u64, Trap> {
     // SAFETY: as the caller says; the chunks are the ones this arena made.
     unsafe {
-        let last = w.add(CHUNK).read();
-        let last_size = (last as *const u64).add(1).read();
+        let last = w.add(CHUNK).read_unaligned();
+        let last_size = (last as *const u64).add(1).read_unaligned();
         let doubled = last_size.checked_mul(2).ok_or(Trap::OutOfMemory)?;
         let data = round(doubled.max(size))?;
         let chunk = new_chunk(heap, data)?;
-        (last as *mut u64).write(chunk);
-        w.add(CHUNK).write(chunk);
-        w.add(END).write(chunk + CHUNK_HEADER + data);
-        w.add(CUR).write(chunk + CHUNK_HEADER + size);
+        (last as *mut u64).write_unaligned(chunk);
+        w.add(CHUNK).write_unaligned(chunk);
+        w.add(END).write_unaligned(chunk + CHUNK_HEADER + data);
+        w.add(CUR).write_unaligned(chunk + CHUNK_HEADER + size);
         Ok(chunk + CHUNK_HEADER)
     }
 }
@@ -127,22 +127,22 @@ pub(crate) fn reset(heap: &mut Heap, header: u64) -> Result<(), Trap> {
     // SAFETY: as for [`alloc`].
     unsafe {
         let w = words(header);
-        let first = w.add(FIRST).read();
-        let mut chunk = (first as *const u64).read();
+        let first = w.add(FIRST).read_unaligned();
+        let mut chunk = (first as *const u64).read_unaligned();
         while chunk != 0 {
-            let next = (chunk as *const u64).read();
-            let data = (chunk as *const u64).add(1).read();
+            let next = (chunk as *const u64).read_unaligned();
+            let data = (chunk as *const u64).add(1).read_unaligned();
             heap.free(chunk, CHUNK_HEADER + data, 16)?;
             chunk = next;
         }
-        let data = w.add(SIZE).read();
-        (first as *mut u64).write(0);
+        let data = w.add(SIZE).read_unaligned();
+        (first as *mut u64).write_unaligned(0);
         if cfg!(feature = "checked") {
             std::ptr::write_bytes((first + CHUNK_HEADER) as *mut u8, 0xDD, data as usize);
         }
-        w.add(CUR).write(first + CHUNK_HEADER);
-        w.add(END).write(first + CHUNK_HEADER + data);
-        w.add(CHUNK).write(first);
+        w.add(CUR).write_unaligned(first + CHUNK_HEADER);
+        w.add(END).write_unaligned(first + CHUNK_HEADER + data);
+        w.add(CHUNK).write_unaligned(first);
     }
     Ok(())
 }
@@ -152,10 +152,10 @@ pub(crate) fn free(heap: &mut Heap, header: u64) -> Result<(), Trap> {
     // SAFETY: as for [`alloc`].
     unsafe {
         let w = words(header);
-        let mut chunk = w.add(FIRST).read();
+        let mut chunk = w.add(FIRST).read_unaligned();
         while chunk != 0 {
-            let next = (chunk as *const u64).read();
-            let data = (chunk as *const u64).add(1).read();
+            let next = (chunk as *const u64).read_unaligned();
+            let data = (chunk as *const u64).add(1).read_unaligned();
             heap.free(chunk, CHUNK_HEADER + data, 16)?;
             chunk = next;
         }

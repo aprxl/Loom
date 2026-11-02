@@ -251,9 +251,12 @@ fn verify_func(image: &Image, index: usize, sigs: &[&NativeSig]) -> Result<(), V
                 reg((ext >> 48) as usize)?;
             }
             Form::FB => {
-                // The list's header: three words, inside the frame.
+                // The list's header: three words, inside the frame, on a word.
                 if (ext >> 32) + 24 > frame as u64 * 8 {
                     return Err(err(pc, format!("fp+{} is outside the frame", ext >> 32)));
+                }
+                if (ext >> 32) % 8 != 0 {
+                    return Err(err(pc, format!("the list header at fp+{} isn't on a word", ext >> 32)));
                 }
                 if a(w) > 12 {
                     return Err(err(pc, "an alignment past 4096".into()));
@@ -268,9 +271,12 @@ fn verify_func(image: &Image, index: usize, sigs: &[&NativeSig]) -> Result<(), V
             Form::FE | Form::ABFZ => {
                 reg(a(w))?;
                 reg(b(w))?;
-                // The list's header: two words, inside the frame.
+                // The list's header: two words, inside the frame, on a word.
                 if (ext >> 32) + 16 > frame as u64 * 8 {
                     return Err(err(pc, format!("fp+{} is outside the frame", ext >> 32)));
+                }
+                if (ext >> 32) % 8 != 0 {
+                    return Err(err(pc, format!("the list header at fp+{} isn't on a word", ext >> 32)));
                 }
             }
             Form::AF => {
@@ -428,6 +434,21 @@ mod tests {
         rejects(vec![word(Op::CallR, 2, 0, 0x0101), ret()], "no room for its linkage");
         rejects(vec![word(Op::CallR, 3, 0, 0x0200), ret()], "window");
         rejects(vec![word(Op::Resume, 0, 0, 0), word(Op::Idx, 0, 1, 7), 8, ret()], "register r7");
+    }
+
+    #[test]
+    fn list_headers_in_the_frame_are_on_a_word() {
+        // A header of three words at fp+8 fills a 4-register frame; at fp+4 it
+        // is inside the frame but not on a word.
+        let mut ok = vec![word(Op::FreeBufF, 3, 0, 0), 8 << 32 | 8, ret()];
+        verify(&image(ok.clone())).expect("aligned");
+        ok[1] = 4 << 32 | 8;
+        rejects(ok, "isn't on a word");
+        // The two-word form: fp+16 and fp+12 in a 4-register frame (32 bytes).
+        let mut elem = vec![word(Op::LdElF64, 0, 1, 0), 16 << 32, ret()];
+        verify(&image(elem.clone())).expect("aligned");
+        elem[1] = 12 << 32;
+        rejects(elem, "isn't on a word");
     }
 
     #[test]

@@ -217,6 +217,9 @@ pub(crate) enum TaskOp {
     MutexUnlock,
     /// `const.begin`: who computes a constant that isn't done.
     ConstBegin,
+    /// Made by `const.store` when a task waits for a constant: the flag at
+    /// the address in the first register changed, so they look again.
+    ConstWake,
     /// A worker with no task: waits for one (never made by bytecode).
     Idle,
     PipeNew,
@@ -239,6 +242,9 @@ pub(crate) enum Wait {
     Recv(usize),
     /// A sleeper, until its timer is due.
     Sleep,
+    /// The tasks waiting for the constant whose flag is at an address, until
+    /// the task computing it stores in it or ends.
+    Const(u64),
 }
 
 /// A pipe: a ring of `cap` items of `elem` bytes in the VM's heap, and who
@@ -439,6 +445,12 @@ pub(crate) struct Sched {
     /// Which task computes each constant (by its flag's address), with
     /// several workers.
     pub consts: std::collections::BTreeMap<u64, usize>,
+    /// The tasks waiting for each constant being computed, by its flag's
+    /// address.
+    const_waiters: std::collections::BTreeMap<u64, Vec<usize>>,
+    /// How many tasks wait in `const_waiters`: what `const.store` looks at,
+    /// without the pool's lock, to know whether anyone must be woken.
+    pub const_waiting: Arc<AtomicUsize>,
     /// A new thread runs at once (the reference schedule, one worker), and
     /// not when a worker is free.
     pub eager: bool,
@@ -485,6 +497,8 @@ impl Sched {
             ready: vec![VecDeque::new()],
             lockers: std::collections::BTreeMap::new(),
             consts: std::collections::BTreeMap::new(),
+            const_waiters: std::collections::BTreeMap::new(),
+            const_waiting: Arc::new(AtomicUsize::new(0)),
             eager: true,
             pipes: Vec::new(),
             free_pipes: Vec::new(),
@@ -510,6 +524,8 @@ impl Sched {
         self.queued.store(0, Ordering::Relaxed);
         self.lockers.clear();
         self.consts.clear();
+        self.const_waiters.clear();
+        self.const_waiting.store(0, Ordering::SeqCst);
         self.pipes.clear();
         self.free_pipes.clear();
         self.pending = None;
@@ -723,6 +739,7 @@ impl Sched {
             Wait::Recv(p) => self.pipes[p].receivers.pop_front(),
             Wait::Task(_) => unreachable!("task completion wakes all its waiters"),
             Wait::Sleep => unreachable!("a sleep is not a resource"),
+            Wait::Const(_) => unreachable!("a constant wakes all its waiters"),
         };
         if let Some(t) = next {
             self.tasks[t].wake_from = Some(source);
@@ -749,6 +766,7 @@ impl Sched {
             Wait::Mutex(addr) => self.lockers.entry(addr).or_default().push_back(cur),
             Wait::Send(p) => self.pipes[p].senders.push_back(cur),
             Wait::Recv(p) => self.pipes[p].receivers.push_back(cur),
+            Wait::Const(addr) => self.const_waiters.entry(addr).or_default().push(cur),
             Wait::Sleep => unreachable!("sleepers park through `sleep`"),
         }
         Step::Park { again: true }
@@ -768,7 +786,45 @@ impl Sched {
             }
             Wait::Send(p) => self.pipes[p].senders.retain(|&w| w != t),
             Wait::Recv(p) => self.pipes[p].receivers.retain(|&w| w != t),
+            Wait::Const(addr) => {
+                if let Some(q) = self.const_waiters.get_mut(&addr) {
+                    let before = q.len();
+                    q.retain(|&w| w != t);
+                    self.const_waiting.fetch_sub(before - q.len(), SeqCst);
+                    if q.is_empty() {
+                        self.const_waiters.remove(&addr);
+                    }
+                }
+            }
             Wait::Sleep => self.timers.retain(|&(_, w)| w != t),
+        }
+    }
+
+    /// The running task finds the constant at `addr` being computed by
+    /// another: it is counted as a waiter (before it looks at the flag
+    /// again, so a task that finishes the constant meanwhile sees it).
+    pub fn const_wait_begin(&self) {
+        self.const_waiting.fetch_add(1, SeqCst);
+    }
+
+    /// The flag turned out to be done after all: not a waiter.
+    pub fn const_wait_undo(&self) {
+        self.const_waiting.fetch_sub(1, SeqCst);
+    }
+
+    /// The running task waits for the constant at `addr`.
+    pub fn park_const(&mut self, addr: u64) -> Step {
+        self.park_in(Wait::Const(addr), true)
+    }
+
+    /// The constant at `addr` changed (it is done, or its task failed): the
+    /// tasks waiting for it look again.
+    pub fn wake_const(&mut self, addr: u64) {
+        if let Some(q) = self.const_waiters.remove(&addr) {
+            self.const_waiting.fetch_sub(q.len(), SeqCst);
+            for t in q {
+                self.wake(t);
+            }
         }
     }
 
@@ -1335,6 +1391,13 @@ impl Sched {
         let g = self.tasks[cur].group;
         if let Some(source) = self.tasks[cur].wake_from.take() {
             self.wake_resource(source);
+        }
+        // What it was computing is nobody's now: the waiters look again.
+        let computing: Vec<u64> =
+            self.consts.iter().filter(|&(_, &owner)| owner == cur).map(|(&addr, _)| addr).collect();
+        for addr in computing {
+            self.consts.remove(&addr);
+            self.wake_const(addr);
         }
         self.tasks[cur].done = true;
         match trap {
