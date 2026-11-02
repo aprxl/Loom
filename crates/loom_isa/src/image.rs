@@ -118,6 +118,11 @@ pub struct Image {
 }
 
 impl Image {
+    /// The registers a `host.call` needs: the largest import's window.
+    pub fn host_window(&self) -> usize {
+        self.host_imports.iter().map(|h| usize::from(h.args.max(h.results))).max().unwrap_or(0)
+    }
+
     /// The function whose code holds word `pc`.
     pub fn func_at(&self, pc: u32) -> Option<usize> {
         let i = self.funcs.partition_point(|f| f.entry <= pc);

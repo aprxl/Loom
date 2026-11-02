@@ -52,6 +52,18 @@ fn an_import_must_fit_the_frame() {
 }
 
 #[test]
+fn the_largest_import_must_fit_the_frame() {
+    // Windows of 1 and 3 registers: a call at r2 in a 4-register frame fits
+    // the first but not the second, and every call site is checked against
+    // the largest.
+    let mut img = image(0, vec![import("app.small", 1, 1), import("app.big", 3, 1)]);
+    img.code[0] = word(Op::CallN, 2, 0, 0);
+    rejects(&img, "don't fit the frame");
+    img.code[0] = word(Op::CallN, 1, 0, 0);
+    verify(&img).expect("valid");
+}
+
+#[test]
 fn import_names_are_unique() {
     rejects(&image(0, vec![import("app.f", 1, 1), import("app.f", 0, 0)]), "duplicate");
 }

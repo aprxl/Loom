@@ -319,7 +319,10 @@ impl<'i> Machine<'i> {
         let natives = image
             .natives
             .iter()
-            .map(|name| resolve(name).ok_or_else(|| format!("Treadle has no native `{name}`")))
+            .map(|name| {
+                let (native, regs) = resolve(name).ok_or_else(|| format!("Treadle has no native `{name}`"))?;
+                Ok::<_, String>((native, if name == "host.call" { image.host_window() } else { regs }))
+            })
             .collect::<Result<Vec<_>, _>>()?;
         let code = with_loops(image);
         let funcs = image

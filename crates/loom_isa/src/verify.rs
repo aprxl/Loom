@@ -215,13 +215,14 @@ fn verify_func(image: &Image, index: usize, sigs: &[&NativeSig]) -> Result<(), V
             Form::Native => {
                 let name = image.natives.get(b(w)).ok_or_else(|| err(pc, "no such native".into()))?;
                 let sig = sigs[b(w)];
-                let window = if sig.imm == NativeImm::HostImport {
-                    let import = image.host_imports.get(c(w)).ok_or_else(|| err(pc, "no such host import".into()))?;
-                    import.args.max(import.results)
-                } else {
-                    sig.args.max(sig.results)
-                };
-                if a(w) + usize::from(window) > frame {
+                if sig.imm == NativeImm::HostImport {
+                    if c(w) >= image.host_imports.len() {
+                        return Err(err(pc, "no such host import".into()));
+                    }
+                    if a(w) + image.host_window() > frame {
+                        return Err(err(pc, "`host.call`'s registers don't fit the frame".into()));
+                    }
+                } else if a(w) + usize::from(sig.args.max(sig.results)) > frame {
                     return Err(err(pc, format!("`{name}`'s arguments don't fit the frame")));
                 }
                 if sig.imm == NativeImm::Fmt {
