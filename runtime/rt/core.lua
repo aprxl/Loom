@@ -1878,6 +1878,13 @@ local current = MAIN
 local ready, rhead, rtail = {}, 1, 0
 local sleepers = {} -- tasks parked in `time.sleep`, each with its `sleep_at`
 
+-- The host sleeps in slices and answers `true` when Ctrl-C cut it short; the
+-- interrupt unwinds from here, because a host callback that raises would
+-- longjmp across Rust frames.
+local function host_sleep(nanos)
+  if host.sleep(nanos) then error(MARK .. "\31interrupt", 0) end
+end
+
 local function enqueue(t)
   rtail = rtail + 1
   ready[rtail] = t
@@ -1923,7 +1930,7 @@ local function suspend()
           if sleepers[i].sleep_at < first.sleep_at then first = sleepers[i] end
         end
         local left = first.sleep_at - host.now()
-        if left > 0 then host.sleep(left) end
+        if left > 0 then host_sleep(left) end
         unsleep(first)
         wake(first)
       end
@@ -1963,7 +1970,7 @@ rt.ext["std.time.sleep"] = function(d)
   if not host then needs_host("time.sleep") end
   local cur = current
   if cur.main and cur.sdepth == 0 and rhead > rtail and #sleepers == 0 then
-    host.sleep(d.nanos) -- nothing else can run
+    host_sleep(d.nanos) -- nothing else can run
     return
   end
   cur.sleep_at = host.now() + d.nanos

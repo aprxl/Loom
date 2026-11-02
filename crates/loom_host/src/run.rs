@@ -165,6 +165,16 @@ fn watch_interrupt(lua: &Lua) -> Option<loom_sys::interrupt::Watch> {
     }))
 }
 
+#[allow(unsafe_code)]
+unsafe extern "C" {
+    /// Lua's `lua_error`, declared `extern "C"` on purpose: mlua's declaration
+    /// is `C-unwind`, and under `panic = "abort"` the compiler puts a
+    /// terminate pad on a call to one. Lua's `longjmp` (on Windows, an unwind
+    /// frame by frame) reaches that pad and aborts the process.
+    #[link_name = "lua_error"]
+    fn lua_error_nounwind(state: *mut mlua::ffi::lua_State) -> std::ffi::c_int;
+}
+
 /// The hook `watch_interrupt` installs: raises the interrupt.
 ///
 /// # Safety
@@ -175,14 +185,15 @@ unsafe extern "C-unwind" fn stop(state: *mut mlua::ffi::lua_State, _: *mut mlua:
     let message = format!("{UNRAVEL_MARK}{INTERRUPT_MARK}");
     RAISED.store(true, Ordering::Relaxed);
     // SAFETY: as above; Lua calls the hook with its state; the message is
-    // copied in before it's freed, and `lua_error` doesn't return (nothing
-    // of this frame is left to drop).
+    // copied in before it's freed, and `lua_error` doesn't return: its
+    // `longjmp` skips this frame, which has nothing left to drop, and the
+    // frames of Lua's own C between the hook and the `pcall` that catches it.
     unsafe {
         clear_hooks();
         mlua::ffi::lua_sethook(state, None, 0, 0);
         mlua::ffi::lua_pushlstring(state, message.as_ptr().cast(), message.len());
         drop(message);
-        mlua::ffi::lua_error(state);
+        lua_error_nounwind(state);
     }
 }
 
@@ -286,9 +297,11 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
     // A sandboxed run's files live in memory (see runtime/rt/core.lua).
     table.set("memory_fs", sandbox)?;
     table.set("args", lua.create_sequence_from(host.args)?)?;
+    // `true` when Ctrl-C ended it: the runtime raises the interrupt (a
+    // callback that returned an error would longjmp across Rust frames).
     let sleep = lua.create_function(move |_, nanos: i64| {
         if sandbox {
-            return Ok(());
+            return Ok(false);
         }
         flush_stdout();
         // In slices, so Ctrl-C ends a long sleep, which then unwinds.
@@ -303,11 +316,11 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
                 unsafe {
                     clear_hooks()
                 };
-                return Err(mlua::Error::runtime(format!("{UNRAVEL_MARK}{INTERRUPT_MARK}")));
+                return Ok(true);
             }
             let left = end.map_or(slice, |end| end.saturating_duration_since(std::time::Instant::now()));
             if left.is_zero() {
-                return Ok(());
+                return Ok(false);
             }
             std::thread::sleep(left.min(slice));
         }
