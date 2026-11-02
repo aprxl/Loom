@@ -1,0 +1,11 @@
+// Eight tasks read a constant that owns memory and one of them unravels: the
+// constant is dropped once, when the program ends.
+
+const TABLE: Map[u64, u64] = [1: 10, 2: 20]
+
+fun main() {
+    loom for i in 0..8u64 {
+        let x = TABLE[1] + i
+        if i == 7 { unravel("stop") }
+    }
+}

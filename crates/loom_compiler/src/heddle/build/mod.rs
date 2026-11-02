@@ -586,11 +586,14 @@ impl<'a> Builder<'a> {
         let span = self.here();
         let ret = self.typed.results.sigs.get(&main)?.ret;
         let func = self.func_id(FnKey::Body(main));
-        let exit = self.const_exit_id();
+        // The constants' drops run however `main` ends: a return, or a landing
+        // pad when it unravels, exits or is interrupted.
+        let depth = self.open_scope();
+        let exit = self.add_cleanup(cleanup::CleanupKind::ConstExit);
         let TyKind::Result(_, err) = *self.tcx().kind(ret) else {
             // `main` with no result: then the constants' drops.
             self.emit(InstKind::Call { func, args: Vec::new() }, &[]);
-            self.emit(InstKind::Call { func: exit, args: Vec::new() }, &[]);
+            self.close_scope(depth);
             self.terminate(Term::Ret(Vec::new()));
             return Some(Vec::new());
         };
@@ -607,12 +610,15 @@ impl<'a> Builder<'a> {
         let msg = self.msg_sink();
         self.write_value(msg, e, err, None, false, span)?;
         self.drop_at(r, ret);
-        self.emit(InstKind::Call { func: exit, args: Vec::new() }, &[]);
+        // `exit.fail` ends the run by unwinding: the drops are done by then.
+        self.run_cleanups(self.scope_start(depth));
+        self.kill_cleanup(exit);
         self.emit(InstKind::Native { name: "exit.fail", imm: 0, args: Vec::new() }, &[]);
         self.terminate(Term::Crash(1));
         self.enter(yes);
+        self.revive_cleanup(exit);
         self.drop_at(r, ret);
-        self.emit(InstKind::Call { func: exit, args: Vec::new() }, &[]);
+        self.close_scope(depth);
         self.terminate(Term::Ret(Vec::new()));
         Some(Vec::new())
     }

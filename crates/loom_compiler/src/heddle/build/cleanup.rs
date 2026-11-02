@@ -63,6 +63,10 @@ pub(super) enum CleanupKind<'a> {
     /// Gives back the lock of the mutex whose address is in this slot (see
     /// `sync.rs`).
     Unlock { slot: u32 },
+    /// Drops what the computed constants own: in the entry function, around
+    /// `main`, so every way out of the program (a return, an unravel, an
+    /// exit, Ctrl-C) does it, once (see `consts.rs`).
+    ConstExit,
 }
 
 #[derive(Clone, Debug)]
@@ -146,6 +150,14 @@ impl<'a> Builder<'a> {
     pub(super) fn kill_cleanup(&mut self, id: u32) {
         if let Some(c) = self.f.cleanups.iter_mut().find(|c| c.id == id) {
             c.live = false;
+        }
+    }
+
+    /// Puts cleanup `id` back after [`kill_cleanup`](Self::kill_cleanup), for
+    /// a path of the code that hasn't run it.
+    pub(super) fn revive_cleanup(&mut self, id: u32) {
+        if let Some(c) = self.f.cleanups.iter_mut().find(|c| c.id == id) {
+            c.live = true;
         }
     }
 
@@ -306,6 +318,10 @@ impl<'a> Builder<'a> {
             CleanupKind::Lend { slot, ty } => self.finish_lend(*slot, *ty),
             CleanupKind::Loom { slot } => self.emit_loom_end(*slot),
             CleanupKind::Unlock { slot } => self.emit_unlock(*slot),
+            CleanupKind::ConstExit => {
+                let func = self.const_exit_id();
+                self.emit(InstKind::Call { func, args: Vec::new() }, &[]);
+            }
             CleanupKind::Free { at, size } => {
                 let (n, a) = (self.iconst(*size), self.iconst(8));
                 self.emit(InstKind::Native { name: "mem.free", imm: 0, args: vec![*at, n, a] }, &[]);

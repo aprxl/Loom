@@ -526,6 +526,47 @@ fn a_waiter_for_a_constant_is_cancelled() {
     }
 }
 
+/// A constant that owns memory is dropped on every way out of the program
+/// (`tests/const_drop`): the checked build reports what is left allocated as a
+/// crash.
+#[cfg(feature = "vm-checked")]
+#[test]
+fn constants_that_own_memory_are_dropped_on_every_exit() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/const_drop");
+    let run = |name: &str, workers: usize| {
+        let (db, diags, image) = compile_vm(&dir.join(name), Level::O2);
+        let image = image.unwrap_or_else(|| {
+            panic!(
+                "{name} didn't compile:
+{}",
+                rendered(&db, &diags)
+            )
+        });
+        let buffer = Rc::new(RefCell::new(Vec::new()));
+        let config = loom_vm::Config { stack_limit: 64 << 20, workers, ..loom_vm::Config::default() };
+        let outcome = loom_vm::run(&image, Host::captured(buffer.clone()), &config);
+        (outcome, String::from_utf8_lossy(&buffer.borrow()).into_owned())
+    };
+    let stop = |o: &Outcome| matches!(o, Outcome::Unravel { message, .. } if message == "stop");
+    for workers in [1, 8] {
+        let (outcome, _) = run("unravel.loom", workers);
+        assert!(stop(&outcome), "unravel at {workers} workers: {outcome:?}");
+        let (outcome, _) = run("exit.loom", workers);
+        assert_eq!(outcome, Outcome::Exit(3), "exit at {workers} workers");
+        let (outcome, out) = run("failed.loom", workers);
+        assert!(matches!(&outcome, Outcome::Failed { message } if message == "bad"), "{outcome:?}");
+        assert_eq!(
+            out,
+            "10
+"
+        );
+    }
+    for round in 0..30 {
+        let (outcome, _) = run("threads.loom", 8);
+        assert!(stop(&outcome), "round {round}: {outcome:?}");
+    }
+}
+
 /// The `loom for` fixtures over ranges, on 8 workers, where a task takes a
 /// run of items (design/vm.md §11.4): the same output, and the failing one
 /// ends the same way and frees what its items own (a checked build, as in

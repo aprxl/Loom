@@ -1,0 +1,10 @@
+// And when `main` returns an error.
+
+use std.io.print
+
+const TABLE: Map[u64, u64] = [1: 10, 2: 20]
+
+fun main() ! str {
+    print("{TABLE[1]}")
+    fail "bad"
+}

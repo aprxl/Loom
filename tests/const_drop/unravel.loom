@@ -1,0 +1,9 @@
+// A constant that owns memory (a map) is dropped when the program unravels,
+// as when it ends: the checked build finds nothing left allocated.
+
+const TABLE: Map[u64, u64] = [1: 10, 2: 20]
+
+fun main() {
+    let x = TABLE[1]
+    if x == 10 { unravel("stop") }
+}
