@@ -225,6 +225,26 @@ fun main() {
     );
 }
 
+/// A host callback never raises, whatever it is given: a bad argument comes
+/// back as the `fault` value (an error returned from a callback is raised with
+/// a `longjmp` over mlua's Rust frames, which a release build aborts on).
+#[test]
+fn a_host_callback_with_a_bad_argument_returns_a_fault() {
+    let path = temp_source(
+        "host_fault",
+        "local host = __LOOM_HOST
+local tag, memory, message = host.make_dir({})
+assert(tag == host.fault and memory == false and type(message) == 'string', 'no fault')
+assert(host.cwd() ~= host.fault, 'a good call still answers')
+assert(host.write({}) == host.fault, 'write answers a fault for what is not text')
+return function() end
+",
+    );
+    let out = loom(&["lua-host", path.to_str().expect("utf-8 path")]);
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
+    let _ = std::fs::remove_file(&path);
+}
+
 #[test]
 fn a_program_needs_main() {
     let path = temp_source(

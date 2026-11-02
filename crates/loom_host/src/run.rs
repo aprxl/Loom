@@ -279,27 +279,62 @@ fn traceback_location(text: &str, map: Option<&SourceMap>) -> Option<Location> {
     })
 }
 
+/// Registers a host function that never raises: its arguments arrive raw and
+/// are converted here, and a failure of any kind (a bad argument, an I/O
+/// error, no memory) leaves as the values `fault, is_memory, message`, which
+/// the runtime raises (`core.lua`, where `host` is wrapped). An error returned
+/// from a callback is raised by mlua with `lua_error`, a `longjmp` across its
+/// Rust frames, which a `panic = "abort"` build turns into an abort.
+fn host_fn<A, R>(lua: &Lua, fault: &Table, f: impl Fn(&Lua, A) -> mlua::Result<R> + 'static) -> mlua::Result<Function>
+where
+    A: mlua::FromLuaMulti,
+    R: mlua::IntoLuaMulti,
+{
+    let fault = fault.clone();
+    lua.create_function(move |lua, args: mlua::MultiValue| {
+        let result = A::from_lua_multi(args, lua).and_then(|args| f(lua, args)).and_then(|r| r.into_lua_multi(lua));
+        Ok(match result {
+            Ok(values) => values,
+            Err(e) => {
+                let text = lua.create_string(error_text(&e)).map_or(mlua::Value::Nil, mlua::Value::String);
+                mlua::MultiValue::from_vec(vec![
+                    mlua::Value::Table(fault.clone()),
+                    mlua::Value::Boolean(is_memory_error(&e)),
+                    text,
+                ])
+            }
+        })
+    })
+}
+
 pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> mlua::Result<()> {
     let table = lua.create_table()?;
+    let fault = lua.create_table()?;
+    table.set("fault", fault.clone())?;
     let sandbox = host.sandbox;
     let output = host.output;
-    let write = lua.create_function(move |_, s: mlua::String| {
+    // The hot one: it takes its one argument as a `Value` (no `MultiValue`
+    // allocated per call, as `host_fn` does) and answers `fault` for anything
+    // but text, which its callers in core.lua look at.
+    let write_fault = fault.clone();
+    let write = lua.create_function(move |_, s: mlua::Value| {
+        let mlua::Value::String(s) = s else { return Ok(Some(write_fault.clone())) };
         match &output {
             Output::Stdout => stdout_write(&s.as_bytes()),
             Output::Capture(buffer) => buffer.borrow_mut().extend_from_slice(&s.as_bytes()),
         }
-        Ok(())
+        Ok(None)
     })?;
     table.set("write", write)?;
     let getenv =
-        lua.create_function(move |_, name: String| Ok(if sandbox { None } else { std::env::var(name).ok() }))?;
+        host_fn(lua, &fault, move |_, name: String| Ok(if sandbox { None } else { std::env::var(name).ok() }))?;
     table.set("getenv", getenv)?;
     // A sandboxed run's files live in memory (see runtime/rt/core.lua).
     table.set("memory_fs", sandbox)?;
     table.set("args", lua.create_sequence_from(host.args)?)?;
     // `true` when Ctrl-C ended it: the runtime raises the interrupt (a
     // callback that returned an error would longjmp across Rust frames).
-    let sleep = lua.create_function(move |_, nanos: i64| {
+    let sleep = host_fn(lua, &fault, move |_, nanos: i64| {
         if sandbox {
             return Ok(false);
         }
@@ -326,7 +361,7 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
         }
     })?;
     table.set("sleep", sleep)?;
-    let write_err = lua.create_function(move |_, s: mlua::String| {
+    let write_err = host_fn(lua, &fault, move |_, s: mlua::String| {
         if !sandbox {
             flush_stdout();
             let mut err = std::io::stderr().lock();
@@ -337,7 +372,7 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
     })?;
     table.set("write_err", write_err)?;
     // The next line of standard input without its line ending, `nil` at the end.
-    let read_line = lua.create_function(move |lua, ()| {
+    let read_line = host_fn(lua, &fault, move |lua, ()| {
         flush_stdout();
         let mut raw = Vec::new();
         let got = if sandbox {
@@ -355,7 +390,7 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
         Ok(Some(lua.create_string(line)?))
     })?;
     table.set("read_line", read_line)?;
-    let read_all = lua.create_function(move |lua, ()| {
+    let read_all = host_fn(lua, &fault, move |lua, ()| {
         flush_stdout();
         let mut all = Vec::new();
         if !sandbox {
@@ -377,7 +412,7 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
     };
     table.set(
         "make_dir",
-        lua.create_function(move |_, path: String| {
+        host_fn(lua, &fault, move |_, path: String| {
             Ok(match std::fs::create_dir_all(&path) {
                 Ok(()) => (mlua::Value::Boolean(true), String::new(), 0),
                 Err(e) => failed(e),
@@ -386,7 +421,7 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
     )?;
     table.set(
         "move_file",
-        lua.create_function(move |_, (from, to, keep): (String, String, bool)| {
+        host_fn(lua, &fault, move |_, (from, to, keep): (String, String, bool)| {
             let done = if keep { std::fs::copy(&from, &to).map(|_| ()) } else { std::fs::rename(&from, &to) };
             Ok(match done {
                 Ok(()) => (mlua::Value::Boolean(true), String::new(), 0),
@@ -396,7 +431,7 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
     )?;
     table.set(
         "list_dir",
-        lua.create_function(move |lua, path: String| {
+        host_fn(lua, &fault, move |lua, path: String| {
             let names: std::io::Result<Vec<String>> = std::fs::read_dir(&path).and_then(|entries| {
                 let mut names = Vec::new();
                 for entry in entries {
@@ -413,7 +448,7 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
     )?;
     table.set(
         "file_info",
-        lua.create_function(move |_, path: String| {
+        host_fn(lua, &fault, move |_, path: String| {
             Ok(match std::fs::metadata(&path) {
                 Ok(m) => (if m.is_dir() { 2 } else { 1 }, m.len() as i64),
                 Err(_) => (0, 0),
@@ -422,15 +457,16 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
     )?;
     table.set(
         "unix_nanos",
-        lua.create_function(move |_, ()| {
+        host_fn(lua, &fault, move |_, ()| {
             let since = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
             Ok(since.map_or(0, |d| d.as_nanos() as i64))
         })?,
     )?;
-    table.set("pid", lua.create_function(move |_, ()| Ok(if sandbox { 1 } else { i64::from(std::process::id()) }))?)?;
+    table
+        .set("pid", host_fn(lua, &fault, move |_, ()| Ok(if sandbox { 1 } else { i64::from(std::process::id()) }))?)?;
     table.set(
         "cwd",
-        lua.create_function(move |_, ()| {
+        host_fn(lua, &fault, move |_, ()| {
             Ok(if sandbox {
                 Some("/".to_string())
             } else {
@@ -440,7 +476,7 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
     )?;
     table.set(
         "term_info",
-        lua.create_function(move |_, which: i64| {
+        host_fn(lua, &fault, move |_, which: i64| {
             Ok(if sandbox {
                 [80, 24, 0][which.clamp(0, 2) as usize]
             } else if which < 2 {
@@ -452,18 +488,18 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
         })?,
     )?;
     let clock_start = std::time::Instant::now();
-    table.set("now", lua.create_function(move |_, ()| Ok(clock_start.elapsed().as_nanos() as i64))?)?;
+    table.set("now", host_fn(lua, &fault, move |_, ()| Ok(clock_start.elapsed().as_nanos() as i64))?)?;
     // The terminal: each returns an error message when it fails, which the
     // runtime unravels with. A sandboxed run has no terminal and no keys held.
     let raw_term = term.clone();
-    let raw_mode = lua.create_function(move |_, on: bool| {
+    let raw_mode = host_fn(lua, &fault, move |_, on: bool| {
         if !sandbox {
             flush_stdout();
         }
         Ok(if sandbox { None } else { raw_term.borrow_mut().raw_mode(on).err() })
     })?;
     table.set("raw_mode", raw_mode)?;
-    let poll_keys = lua.create_function(move |_, keymap: String| {
+    let poll_keys = host_fn(lua, &fault, move |_, keymap: String| {
         if sandbox {
             return Ok((Some(0), None));
         }
@@ -476,7 +512,7 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
     table.set("poll_keys", poll_keys)?;
     // The runtime tells which coroutines are alive, for Ctrl-C (see
     // `watch_interrupt`); it holds each one until it says it's done.
-    let watch_thread = lua.create_function(|_, co: mlua::Thread| {
+    let watch_thread = host_fn(lua, &fault, |_, co: mlua::Thread| {
         if loom_sys::interrupt::installed().is_some()
             && let Ok(mut coroutines) = COROUTINES.lock()
         {
@@ -485,7 +521,7 @@ pub(crate) fn install_host(lua: &Lua, host: Host, term: Rc<RefCell<Term>>) -> ml
         Ok(())
     })?;
     table.set("watch_thread", watch_thread)?;
-    let unwatch_thread = lua.create_function(|_, co: mlua::Thread| {
+    let unwatch_thread = host_fn(lua, &fault, |_, co: mlua::Thread| {
         if let Ok(mut coroutines) = COROUTINES.lock() {
             let at = co.to_pointer() as usize;
             coroutines.retain(|&c| c != at);

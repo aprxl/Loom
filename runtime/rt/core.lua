@@ -33,6 +33,26 @@ rt.ult = ult
 -- Output goes through the host when there is one (`loom run`), so text
 -- reaches the Windows console as UTF-8; plain `io.write` otherwise.
 local host = rawget(_G, "__LOOM_HOST")
+local fault = host and host.fault
+-- A host function never raises (a callback that raised would longjmp across
+-- Rust frames): a failure comes back as `fault, is_memory, message`, raised
+-- here.
+local function host_raise(memory, message)
+  error(memory and MARK .. "out of memory" or message or "host call failed", 0)
+end
+if host then
+  local function check(tag, ...)
+    if tag == fault then host_raise(...) end
+    return tag, ...
+  end
+  -- Every one but `write`, the hot one, whose two callers look at its answer
+  -- (it answers `fault` for what is not text).
+  for name, f in pairs(host) do
+    if type(f) == "function" and name ~= "write" then
+      host[name] = function(...) return check(f(...)) end
+    end
+  end
+end
 local write = host and host.write or function(s) io.write(s) end
 
 -- ================================================================ integers
@@ -1508,7 +1528,7 @@ end
 rt.ext = {}
 
 rt.ext["std.io.print"] = function(x)
-  write(show(x[2].d, x[1], false) .. "\n")
+  if write(show(x[2].d, x[1], false) .. "\n") == fault then host_raise() end
 end
 
 rt.ext["std.fmt.Fmt.put"] = function(f, x)
@@ -1543,7 +1563,7 @@ rt.ext["std.process.exit"] = function(code)
 end
 
 rt.ext["std.io.write_out"] = function(s)
-  write(s)
+  if write(s) == fault then host_raise() end
 end
 
 rt.ext["std.io.write_err"] = function(s)
