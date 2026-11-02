@@ -94,6 +94,7 @@ fn compile(funcs: Vec<Func>) -> loom_isa::Image {
         roots: Vec::new(),
         relocs: Vec::new(),
         plain: Vec::new(),
+        host_imports: Vec::new(),
     };
     loom_compiler::heddle::verify(&module).expect("valid Heddle");
     codegen::generate(&SourceDb::new(), &module).expect("compiles")

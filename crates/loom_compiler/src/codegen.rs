@@ -109,16 +109,18 @@ pub fn generate(db: &SourceDb, module: &Module) -> Result<Image, CodegenError> {
         data: module.data.clone(),
         relocs: module.relocs.clone(),
         entry: Some(module.entry.0),
+        host_imports: module.host_imports.clone(),
         ..Image::default()
     };
+    let host_window = image.host_window();
     for f in &module.funcs {
         let hoisted = hoist_constants(f);
         let f = hoisted.as_ref().unwrap_or(f);
         // A function whose conditional branches reach too far for a fused
         // compare-and-branch is emitted again without fusing.
-        let out = match emit_func(db, f, true, &mut natives, &mut files) {
+        let out = match emit_func(db, f, true, &mut natives, &mut files, host_window) {
             Ok(out) => out,
-            Err(Retry) => emit_func(db, f, false, &mut natives, &mut files)
+            Err(Retry) => emit_func(db, f, false, &mut natives, &mut files, host_window)
                 .map_err(|_| CodegenError::Bug(format!("`{}` has a branch that reaches too far", f.name)))?,
         };
         let out = out?;
@@ -246,6 +248,7 @@ fn emit_func(
     fuse: bool,
     natives: &mut IndexMap<&'static str, u16>,
     files: &mut IndexMap<String, u32>,
+    host_window: usize,
 ) -> Result<Result<Emitted, CodegenError>, Retry> {
     let order = layout(f);
     let mut rank = vec![usize::MAX; f.blocks.len()];
@@ -305,6 +308,7 @@ fn emit_func(
                 InstKind::Call { args, .. } | InstKind::CallInd { args, .. } => {
                     max(u32::from(window) + args.len().max(inst.results.len()) as u32);
                 }
+                InstKind::Native { name: "host.call", .. } => max(u32::from(scratch) + host_window as u32),
                 InstKind::Native { args, .. } => {
                     max(u32::from(scratch) + args.len().max(inst.results.len()) as u32);
                 }

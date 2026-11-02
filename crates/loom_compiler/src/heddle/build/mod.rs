@@ -311,6 +311,8 @@ pub(super) struct Builder<'a> {
     relocs: Vec<u32>,
     /// Word ranges of `data` that are baked values.
     plain: Vec<(u32, u32)>,
+    /// The host functions called, in the order of their first call.
+    host_imports: Vec<loom_isa::HostImport>,
     /// Each weft method called through `any`: its slot in every vtable.
     dyn_slots: IndexMap<crate::hir::DefId, u32>,
     /// The number of each type made into an `any`.
@@ -431,6 +433,7 @@ pub fn build_tests_with(
                 data: Vec::new(),
                 relocs: Vec::new(),
                 plain: Vec::new(),
+                host_imports: Vec::new(),
                 entry: FuncId(0),
                 roots: Vec::new(),
                 changed: Vec::new(),
@@ -471,6 +474,7 @@ impl<'a> Builder<'a> {
             baked_keys: HashSet::new(),
             relocs: Vec::new(),
             plain: Vec::new(),
+            host_imports: Vec::new(),
             dyn_slots: IndexMap::new(),
             type_ids: IndexMap::new(),
             vtable_at: HashMap::new(),
@@ -506,6 +510,7 @@ impl<'a> Builder<'a> {
             data: self.data,
             relocs: self.relocs,
             plain: self.plain,
+            host_imports: self.host_imports,
             entry,
             roots: Vec::new(),
         };

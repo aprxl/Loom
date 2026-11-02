@@ -508,6 +508,8 @@ pub struct Module {
     /// Ranges of words of `data` that are plain values (constants baked in),
     /// not function numbers as a vtable's are: `[start, end)`.
     pub plain: Vec<(u32, u32)>,
+    /// The host functions the program calls, by index (the immediate of `host.call`).
+    pub host_imports: Vec<loom_isa::HostImport>,
     /// The function to run.
     pub entry: FuncId,
     /// Functions something outside the module calls, besides the entry (a
