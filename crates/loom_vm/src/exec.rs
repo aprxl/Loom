@@ -182,6 +182,8 @@ struct Env<'e, 'i> {
     local: crate::natives::Local,
     /// With several workers, where the whole lines of output go.
     out: Option<Arc<Mutex<OutBuf>>>,
+    /// With several workers, whether they queue whole lines (not a terminal).
+    batched: bool,
     /// With several workers, this worker's own heap, which needs no lock.
     heap: Option<Box<Heap>>,
     /// With `stats`: what this worker dispatched, added to the context's
@@ -207,6 +209,7 @@ struct Init<'a, 'i> {
     shared: Option<Arc<Shared>>,
     /// With several workers, where the whole lines of output go.
     out: Option<Arc<Mutex<OutBuf>>>,
+    batched: bool,
     ctx: *mut Ctx<'i>,
     sched: *mut Sched,
     rodata: *const u8,
@@ -239,6 +242,7 @@ impl Drop for Env<'_, '_> {
         *self.ticks_out = self.ticks;
         let _held = self.pool.map(Pool::lock);
         if self.pool.is_some() {
+            ctx!(self).append_queue(&mut self.local.queue);
             ctx!(self).append_out(&mut self.local.out);
         }
         if cfg!(feature = "stats") {
@@ -409,6 +413,7 @@ impl<'i> Machine<'i> {
             task_natives: &self.task_natives,
             shared: pool.is_some().then(|| Arc::clone(self.ctx.heap.shared())),
             out: pool.is_some().then(|| self.ctx.out_shared()),
+            batched: self.ctx.batches_output(),
             ctx: &raw mut self.ctx,
             sched: &raw mut self.sched,
             rodata: self.ctx.rodata_ptr(),
@@ -526,6 +531,7 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
             interrupt: init.interrupt.clone(),
             local: Default::default(),
             out: init.out.clone(),
+            batched: init.batched,
             heap: init.shared.as_ref().map(|shared| Box::new(Heap::sharing(shared))),
             st_dispatched: 0,
             st_runtime: crate::RuntimeStats::default(),
@@ -1422,6 +1428,7 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
                                             heap,
                                             local: &mut env.local,
                                             out,
+                                            batched: env.batched,
                                             fmts: &env.image.fmts,
                                             data_range: env.data_range,
                                         };
@@ -1987,9 +1994,7 @@ fn read_task(env: &mut Env, op: TaskOp, dst: u64) -> Result<Moved, Trap> {
     let sandbox = {
         let _held = env.pool.map(Pool::lock);
         ctx!(env).host_check(if line { "io.read_line" } else { "io.read_all" })?;
-        ctx!(env).enter(&mut env.local);
-        ctx!(env).flush();
-        ctx!(env).exit(&mut env.local);
+        ctx!(env).flush_for_read(&mut env.local);
         ctx!(env).sandbox
     };
     let mut raw = Vec::new();
@@ -2032,6 +2037,9 @@ fn run_task_op(env: &mut Env, op: TaskOp, args: &mut [u64], pc: *const u64, fp: 
         return Ok(Moved::No);
     }
     let mut guard = pool.map(Pool::lock);
+    // A task that parks, joins or ends has its worker's lines queued before
+    // anything else it writes, wherever it runs next.
+    ctx!(env).append_queue(&mut env.local.queue);
     if cfg!(feature = "stats") && pool.is_some() {
         env.st_runtime.task_locks += 1;
     }
@@ -2262,6 +2270,7 @@ fn thread_ended(env: &mut Env, trap: Option<Trap>) -> Moved {
     }
     // What it had written of a line it won't finish goes out as it is.
     let mut left = sched!(env).take_line(cur);
+    ctx!(env).append_queue(&mut env.local.queue);
     ctx!(env).append_out(&mut left);
     sched!(env).drop_stack(cur);
     sched!(env).current = IDLE;

@@ -97,6 +97,10 @@ struct Meter {
 /// How much output is kept before it's written.
 const OUT_BUFFER: usize = 32 * 1024;
 
+/// How many bytes of whole lines a worker of a pool queues before it hands
+/// them to the shared output (when that isn't a terminal).
+const QUEUE_BATCH: usize = 16 * 1024;
+
 /// Output that is whole lines, waiting to be handed to the host.
 #[derive(Debug)]
 pub(crate) struct OutBuf {
@@ -113,8 +117,8 @@ unsafe impl Send for OutBuf {}
 impl OutBuf {
     /// Adds whole lines, and hands the output to the host if it's a
     /// terminal or there is a lot.
-    fn add(&mut self, lines: impl Iterator<Item = u8>) {
-        self.buf.extend(lines);
+    fn add(&mut self, lines: &[u8]) {
+        self.buf.extend_from_slice(lines);
         if self.line_buffered || self.buf.len() >= OUT_BUFFER {
             self.flush();
         }
@@ -300,7 +304,12 @@ impl<'i> Ctx<'i> {
         self.split = false;
         if let Some(i) = l.out[self.split_start..].iter().rposition(|&b| b == b'\n') {
             let i = self.split_start + i;
-            lock_out(&self.shared_out).add(l.out.drain(..=i));
+            // What the worker queued comes first.
+            let mut out = lock_out(&self.shared_out);
+            out.buf.append(&mut l.queue);
+            out.add(&l.out[..=i]);
+            drop(out);
+            l.out.drain(..=i);
         }
     }
 
@@ -310,6 +319,34 @@ impl<'i> Ctx<'i> {
             lock_out(&self.shared_out).buf.append(bytes);
         } else {
             self.cur.out.append(bytes);
+        }
+    }
+
+    /// Hands the whole lines a worker of a pool queued to the output.
+    pub(crate) fn append_queue(&mut self, queue: &mut Vec<u8>) {
+        if !queue.is_empty() {
+            lock_out(&self.shared_out).add(queue);
+            queue.clear();
+        }
+    }
+
+    /// Whether the workers of a pool queue their whole lines (and hand them
+    /// over in batches): not when the output is a terminal.
+    pub(crate) fn batches_output(&self) -> bool {
+        !self.line_buffered
+    }
+
+    /// Everything a worker has written reaches the host: its queued lines and
+    /// the line it is in the middle of (a prompt), before standard input is
+    /// read.
+    pub(crate) fn flush_for_read(&mut self, l: &mut Local) {
+        if self.pooled {
+            let mut out = lock_out(&self.shared_out);
+            out.buf.append(&mut l.queue);
+            out.buf.append(&mut l.out);
+            out.flush();
+        } else {
+            self.flush();
         }
     }
 
@@ -563,6 +600,9 @@ pub(crate) struct Local {
     pub out: Vec<u8>,
     /// Buffers of sinks gone, emptied, for the next ones.
     pub spare: Vec<Vec<u8>>,
+    /// Whole lines written, waiting to be handed to the shared output, which
+    /// they are in batches (the worker's own, not its task's).
+    pub queue: Vec<u8>,
 }
 
 impl Local {
@@ -608,17 +648,30 @@ pub(crate) struct Worker<'w> {
     pub heap: &'w mut Heap,
     pub local: &'w mut Local,
     pub out: &'w Mutex<OutBuf>,
+    /// Whole lines are queued and handed over in batches (the output isn't a
+    /// terminal), not one by one.
+    pub batched: bool,
     pub fmts: &'w [FmtItem],
     pub data_range: (u64, u64),
 }
 
 impl Worker<'_> {
-    /// The native ran: the whole lines it wrote, from `from` on, go on the
-    /// shared output.
+    /// The native ran: the whole lines it wrote, from `from` on, are queued,
+    /// and go on the shared output when there are enough (or at once, for a
+    /// terminal).
     pub(crate) fn publish(&mut self, from: usize) {
-        if let Some(i) = self.local.out[from..].iter().rposition(|&b| b == b'\n') {
-            lock_out(self.out).add(self.local.out.drain(..=from + i));
+        let Some(i) = self.local.out[from..].iter().rposition(|&b| b == b'\n') else { return };
+        let end = from + i + 1;
+        if !self.batched {
+            lock_out(self.out).add(&self.local.out[..end]);
+        } else {
+            self.local.queue.extend_from_slice(&self.local.out[..end]);
+            if self.local.queue.len() >= QUEUE_BATCH {
+                lock_out(self.out).add(&self.local.queue);
+                self.local.queue.clear();
+            }
         }
+        self.local.out.drain(..end);
     }
 }
 

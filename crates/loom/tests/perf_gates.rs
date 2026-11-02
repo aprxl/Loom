@@ -139,6 +139,55 @@ fn templates_scale_to_8_workers() {
     );
 }
 
+/// The gate: printing lines from many tasks (to a file) scales this much on 8
+/// workers, because each worker queues its whole lines and hands them over in
+/// batches.
+const MIN_PRINT_SPEEDUP: f64 = 3.0;
+
+/// The best of `RUNS` times of `bench/par_print.loom` with `workers` workers,
+/// its output going to a file.
+fn best_printing(workers: usize) -> Duration {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let out = std::env::temp_dir().join(format!("loom-par-print-{}.txt", std::process::id()));
+    let time = (0..RUNS)
+        .map(|_| {
+            let file = std::fs::File::create(&out).expect("a temp file");
+            let start = Instant::now();
+            let status = Command::new(env!("CARGO_BIN_EXE_loom"))
+                .args(["run", "--backend", "vm"])
+                .arg(root.join("bench").join("par_print.loom"))
+                .env("LOOM_THREADS", workers.to_string())
+                .stdout(file)
+                .status()
+                .expect("the loom binary runs");
+            assert!(status.success(), "par_print at {workers} workers: {status}");
+            start.elapsed()
+        })
+        .min()
+        .expect("a run");
+    let _ = std::fs::remove_file(&out);
+    time
+}
+
+#[test]
+#[ignore = "perf gate: run with --release -- --ignored --nocapture"]
+fn print_scales_to_8_workers() {
+    let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
+    if cores < WORKERS {
+        println!("skipped: {cores} cores, the gate needs {WORKERS}");
+        return;
+    }
+    let (one, many) = (best_printing(1), best_printing(WORKERS));
+    let speedup = one.as_secs_f64() / many.as_secs_f64();
+    println!(
+        "par_print: {one:.3?} on one worker, {many:.3?} on {WORKERS}: {speedup:.2}x (at least {MIN_PRINT_SPEEDUP:.1}x)"
+    );
+    assert!(
+        speedup >= MIN_PRINT_SPEEDUP,
+        "par_print is {speedup:.2}x faster on {WORKERS} workers (at least {MIN_PRINT_SPEEDUP:.1}x)"
+    );
+}
+
 /// The gate: locking and unlocking a mutex of one's own scales this much on
 /// 8 workers, because an uncontended mutex needs no lock on the pool.
 const MIN_MUTEX_SPEEDUP: f64 = 4.0;

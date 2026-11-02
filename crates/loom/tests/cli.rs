@@ -929,6 +929,108 @@ fn a_blocking_read_frees_its_worker() {
     let _ = std::fs::remove_file(&path);
 }
 
+/// A prompt printed before a read reaches the host before the read blocks,
+/// though other tasks are printing on other workers (which queue their lines
+/// and hand them over in batches): the lines stay whole and in order.
+#[test]
+fn a_prompt_is_not_left_in_a_worker_queue() {
+    let path = temp_source(
+        "prompt-queue",
+        r#"use std.io.{print, read_line}
+use std.sync.Atomic
+
+fn main() {
+    let done = Atomic[u64](0)
+    loom {
+        let a = thread {
+            var j = 0u64
+            while done.load() == 0 and j < 300000 {
+                print("a {j}")
+                j += 1
+            }
+        }
+        let b = thread {
+            var j = 0u64
+            while done.load() == 0 and j < 300000 {
+                print("b {j}")
+                j += 1
+            }
+        }
+        print("prompt")
+        let name = match read_line() {
+            some(l) => l
+            none => ""
+        }
+        done.store(1)
+        print("hello {name}")
+        a.join()
+        b.join()
+    }
+}
+"#,
+    );
+    let mut child = Command::new(env!("CARGO_BIN_EXE_loom"))
+        .args(["--color", "never", "run", "--backend", "vm", path.to_str().expect("utf-8 path")])
+        .env("LOOM_THREADS", "4")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("the loom binary runs");
+    let stdout = child.stdout.take().expect("stdout");
+    let (lines, seen) = std::sync::mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        for line in std::io::BufRead::lines(std::io::BufReader::new(stdout)) {
+            let Ok(line) = line else { break };
+            if lines.send(line).is_err() {
+                break;
+            }
+        }
+    });
+    // The prompt arrives while the read is still waiting for its input.
+    let mut out = Vec::new();
+    let started = std::time::Instant::now();
+    loop {
+        match seen.recv_timeout(std::time::Duration::from_millis(100)) {
+            Ok(line) => {
+                let prompt = line == "prompt";
+                out.push(line);
+                if prompt {
+                    break;
+                }
+            }
+            Err(_) => assert!(
+                started.elapsed() < std::time::Duration::from_secs(10),
+                "the prompt did not arrive before the read ({} lines came, the last {:?})",
+                out.len(),
+                out.iter().rev().take(3).collect::<Vec<_>>()
+            ),
+        }
+    }
+    let mut stdin = child.stdin.take().expect("stdin");
+    std::io::Write::write_all(
+        &mut stdin, b"ann
+",
+    )
+    .expect("input");
+    drop(stdin);
+    let status = child.wait().expect("finishes");
+    reader.join().expect("the reader ends");
+    out.extend(seen.try_iter());
+    assert!(status.success(), "{status}");
+    assert!(out.iter().any(|l| l == "hello ann"), "no greeting after {} lines", out.len());
+    // Every other line is whole, and each task's lines are in order.
+    let mut next = [0u64; 2];
+    for line in out.iter().filter(|l| *l != "prompt" && *l != "hello ann") {
+        let (who, n) = line.split_once(' ').expect("a task's line");
+        let k = usize::from(who == "b");
+        assert!(who == "a" || who == "b", "a torn line: {line:?}");
+        assert_eq!(n.parse::<u64>().expect("a number"), next[k], "{line:?} out of order");
+        next[k] += 1;
+    }
+    let _ = std::fs::remove_file(&path);
+}
+
 /// A read is a cancellation point: a thread that unravels while another reads
 /// cancels it, and the read's text is never printed. On Lua a read blocks the
 /// whole program, so no other thread runs during it: only Treadle is tested here.

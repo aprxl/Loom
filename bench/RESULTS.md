@@ -4,6 +4,24 @@ Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
 
+## V8: per-worker queues for printed lines (2026-11-02)
+
+A worker queues the whole lines its natives write and hands them to the one
+output in batches of 16 KiB (a terminal still gets each line at once), and also
+whenever a task parks, joins, ends, or reads standard input, and when the worker
+stops. Lines stay whole and a task's own lines stay in order; lines of different
+tasks may interleave differently. `bench/par_print` (8 tasks, 800 000 lines each,
+stdout to a file), best of 5, wall ms:
+
+| | before | after |
+|---|---|---|
+| 1 worker | 412 | 420 |
+| 8 workers | 958 (0.43x) | 140 (3.0x in a shell run; 3.5-3.8x in the gate) |
+
+At 100 000 lines a task the process's 25-35 ms of start-up caps the ratio at about
+2.4x, which is why the bench is bigger. The 100 000-line scratch version: 8 workers
+1 015 ms before the lock-free natives, 155 after them, 53 now.
+
 ## V8: a `spool` made in a `loom for` body is the task's own (2026-10-29)
 
 The captures scan (`heddle/build/scan.rs`) never `declare`d the local of a
