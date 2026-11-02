@@ -116,6 +116,29 @@ fn string_building_scales_to_8_workers() {
     );
 }
 
+/// The gate: formatting text with templates scales this much on 8 workers,
+/// because a worker builds them in its own buffers.
+const MIN_TEMPLATE_SPEEDUP: f64 = 4.0;
+
+#[test]
+#[ignore = "perf gate: run with --release -- --ignored --nocapture"]
+fn templates_scale_to_8_workers() {
+    let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
+    if cores < WORKERS {
+        println!("skipped: {cores} cores, the gate needs {WORKERS}");
+        return;
+    }
+    let (one, many) = (best("par_fmt", 1), best("par_fmt", WORKERS));
+    let speedup = one.as_secs_f64() / many.as_secs_f64();
+    println!(
+        "par_fmt: {one:.3?} on one worker, {many:.3?} on {WORKERS}: {speedup:.2}x (at least {MIN_TEMPLATE_SPEEDUP:.1}x)"
+    );
+    assert!(
+        speedup >= MIN_TEMPLATE_SPEEDUP,
+        "par_fmt is {speedup:.2}x faster on {WORKERS} workers (at least {MIN_TEMPLATE_SPEEDUP:.1}x)"
+    );
+}
+
 /// The gate: locking and unlocking a mutex of one's own scales this much on
 /// 8 workers, because an uncontended mutex needs no lock on the pool.
 const MIN_MUTEX_SPEEDUP: f64 = 4.0;

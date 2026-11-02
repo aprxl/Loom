@@ -4,6 +4,25 @@ Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
 
+## V8: templates, messages, `str.new_in` and constants off the pool lock (2026-10-29)
+
+The message, the sinks `sink.push` makes and the line being written are the
+worker's own (`Local`, which `Ctx` now holds as `cur`), and the natives that
+write output, build text and read constants run on a `Worker` (its heap, its
+`Local`, the output, the format items) without the pool's lock, in a build that
+doesn't check. Whole lines reach the one output through its own mutex, when a
+native is done. Wall ms, 8 tasks in `loom for`, best of 3, 1 worker / 8 workers:
+
+| Benchmark | before | after |
+|---|---|---|
+| `par_fmt` (400k templates a task) | 250 / 3 897 | 240 / 93 |
+| `par_fmt` (3.2M a task, the gate's) | 1 534 / about 31 000 | 1 534 / 357 (4.3x; gate 4.0x, 3.8-5.2x over 12 runs) |
+| `par_print` (100 000 lines a task) | 93 / 1 015 | 90 / 155 |
+| `par_newin` (`str.new_in`) | 186 / 2 623 | 182 / 313 (see the next section) |
+
+Every call of these natives took the lock before (25.6M of 25.6M in `par_fmt`),
+and none does now.
+
 ## V8: native map reindex and compact (2026-10-29)
 
 `map.reindex(header, slots, esize)` frees the old index, makes an empty one of

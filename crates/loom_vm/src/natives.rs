@@ -5,6 +5,7 @@
 #![allow(unsafe_code)]
 
 use std::io::{IsTerminal as _, Write as _};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use loom_isa::natives::native;
 use loom_isa::{FmtItem, Image, Op};
@@ -22,24 +23,25 @@ pub(crate) struct Ctx<'i> {
     rodata: Box<[u8]>,
     /// Where each literal starts in `rodata`, and its length.
     strings: Vec<(usize, usize)>,
-    out: Vec<u8>,
-    sink: Output,
+    /// Where output goes once it is whole lines, with its own lock: the
+    /// workers of a pool put theirs there without the pool's.
+    shared_out: Arc<Mutex<OutBuf>>,
     /// Flush at each newline: the output is a terminal.
     line_buffered: bool,
-    /// A worker of a pool is running a native, so `out` is its partial line
-    /// (see [`Local`]) and flushing is for it to do on the way out.
+    /// There is a pool: output reaches `shared_out` a whole line at a time.
+    pub(crate) pooled: bool,
+    /// What the natives work on: the output (with one worker, all of it; else
+    /// the line being written), the message of an unravel being built
+    /// (`msg.*`, sink 1) and the sinks `sink.push` made (2 and up).
+    cur: Local,
+    /// A worker of a pool is running a native, so `cur` is its own (see
+    /// [`Local`]) and its output goes on the way out.
     split: bool,
     /// The partial line was already scanned on the preceding native.
     split_start: usize,
     /// What a task switch swaps for a task's partial output line, with one
-    /// worker (where lines are written to `out` as they come).
+    /// worker (where lines are written to `cur.out` as they come).
     task_line: Vec<u8>,
-    /// The message of an unravel being built (`msg.*`, sink 1).
-    msg: Vec<u8>,
-    /// Sinks 2 and up: text being built (`sink.push`).
-    bufs: Vec<Vec<u8>>,
-    /// Buffers of sinks gone, emptied, for the next ones.
-    spare: Vec<Vec<u8>>,
     pub heap: Heap,
     /// A run that doesn't see the machine (see `host`).
     pub sandbox: bool,
@@ -95,6 +97,49 @@ struct Meter {
 /// How much output is kept before it's written.
 const OUT_BUFFER: usize = 32 * 1024;
 
+/// Output that is whole lines, waiting to be handed to the host.
+#[derive(Debug)]
+pub(crate) struct OutBuf {
+    buf: Vec<u8>,
+    sink: Output,
+    line_buffered: bool,
+}
+
+// SAFETY: `sink` may hold an `Rc` (a captured output), which the host reads
+// after the run and nothing else touches during it; the buffer is reached only
+// through the `Mutex` it is in.
+unsafe impl Send for OutBuf {}
+
+impl OutBuf {
+    /// Adds whole lines, and hands the output to the host if it's a
+    /// terminal or there is a lot.
+    fn add(&mut self, lines: impl Iterator<Item = u8>) {
+        self.buf.extend(lines);
+        if self.line_buffered || self.buf.len() >= OUT_BUFFER {
+            self.flush();
+        }
+    }
+
+    fn flush(&mut self) {
+        if self.buf.is_empty() {
+            return;
+        }
+        match &self.sink {
+            Output::Stdout => {
+                let mut stdout = std::io::stdout().lock();
+                let _ = stdout.write_all(&self.buf);
+                let _ = stdout.flush();
+            }
+            Output::Capture(buffer) => buffer.borrow_mut().extend_from_slice(&self.buf),
+        }
+        self.buf.clear();
+    }
+}
+
+fn lock_out(out: &Mutex<OutBuf>) -> MutexGuard<'_, OutBuf> {
+    out.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 impl<'i> Ctx<'i> {
     pub fn new(image: &'i Image, host: loom_sys::Host) -> Ctx<'i> {
         let sink = host.output;
@@ -109,15 +154,13 @@ impl<'i> Ctx<'i> {
             fmts: &image.fmts,
             rodata: rodata.into_boxed_slice(),
             strings,
-            out: Vec::new(),
-            sink,
+            shared_out: Arc::new(Mutex::new(OutBuf { buf: Vec::new(), sink, line_buffered })),
             line_buffered,
-            msg: Vec::new(),
-            bufs: Vec::new(),
+            pooled: false,
+            cur: Local::default(),
             split: false,
             split_start: 0,
             task_line: Vec::new(),
-            spare: Vec::new(),
             heap: Heap::default(),
             sandbox: host.sandbox,
             args: host.args,
@@ -218,16 +261,21 @@ impl<'i> Ctx<'i> {
     /// the message and the buffers being built, for the next call to start
     /// clean.
     pub fn reset_sinks(&mut self) {
-        self.msg.clear();
-        while let Some(buf) = self.bufs.pop() {
-            self.recycle(buf);
+        self.cur.msg.clear();
+        while let Some(buf) = self.cur.bufs.pop() {
+            self.cur.recycle(buf);
         }
     }
 
     /// The message an unravel (or a `const assert`) built, as of the last
     /// call.
     pub fn message(&self) -> &[u8] {
-        &self.msg
+        &self.cur.msg
+    }
+
+    /// The output the workers of a pool put their lines in.
+    pub(crate) fn out_shared(&self) -> Arc<Mutex<OutBuf>> {
+        Arc::clone(&self.shared_out)
     }
 
     /// Where the image's text is.
@@ -240,38 +288,35 @@ impl<'i> Ctx<'i> {
     /// own, and its output goes to its line, so lines of different
     /// workers stay whole.
     pub(crate) fn enter(&mut self, l: &mut Local) {
-        std::mem::swap(&mut self.msg, &mut l.msg);
-        std::mem::swap(&mut self.bufs, &mut l.bufs);
-        std::mem::swap(&mut self.out, &mut l.out);
+        std::mem::swap(&mut self.cur, l);
         self.split = true;
-        self.split_start = self.out.len();
+        self.split_start = self.cur.out.len();
     }
 
     /// The native ran: what is whole lines of the worker's output goes on
     /// the shared output.
     pub(crate) fn exit(&mut self, l: &mut Local) {
-        std::mem::swap(&mut self.msg, &mut l.msg);
-        std::mem::swap(&mut self.bufs, &mut l.bufs);
-        std::mem::swap(&mut self.out, &mut l.out);
+        std::mem::swap(&mut self.cur, l);
         self.split = false;
         if let Some(i) = l.out[self.split_start..].iter().rposition(|&b| b == b'\n') {
             let i = self.split_start + i;
-            self.out.extend(l.out.drain(..=i));
-            if self.line_buffered || self.out.len() >= OUT_BUFFER {
-                self.flush();
-            }
+            lock_out(&self.shared_out).add(l.out.drain(..=i));
         }
     }
 
     /// Puts `bytes` (a worker's last, unfinished line) on the output.
     pub(crate) fn append_out(&mut self, bytes: &mut Vec<u8>) {
-        self.out.append(bytes);
+        if self.pooled {
+            lock_out(&self.shared_out).buf.append(bytes);
+        } else {
+            self.cur.out.append(bytes);
+        }
     }
 
     /// What the running task's natives are building (its unravel message,
     /// and the templates it has under way), which a task switch swaps.
     pub(crate) fn task_state(&mut self) -> (&mut Vec<u8>, &mut Vec<Vec<u8>>, &mut Vec<u8>) {
-        (&mut self.msg, &mut self.bufs, &mut self.task_line)
+        (&mut self.cur.msg, &mut self.cur.bufs, &mut self.task_line)
     }
 
     /// Where the text literals are, and where each starts with its length:
@@ -352,101 +397,97 @@ impl<'i> Ctx<'i> {
         Ok(unsafe { std::slice::from_raw_parts(ptr as *const u8, len as usize) })
     }
 
-    fn write(&mut self, bytes: &[u8]) {
-        self.out.extend_from_slice(bytes);
-        if (self.line_buffered && bytes.contains(&b'\n')) || self.out.len() >= OUT_BUFFER {
-            self.flush();
-        }
-    }
-
     /// Hands buffered output to the host.
     pub fn flush(&mut self) {
-        if self.split || self.out.is_empty() {
+        if self.split {
             return;
         }
-        match &self.sink {
-            Output::Stdout => {
-                let mut stdout = std::io::stdout().lock();
-                let _ = stdout.write_all(&self.out);
-                let _ = stdout.flush();
-            }
-            Output::Capture(buffer) => buffer.borrow_mut().extend_from_slice(&self.out),
+        let mut out = lock_out(&self.shared_out);
+        if !self.cur.out.is_empty() {
+            out.buf.append(&mut self.cur.out);
         }
-        self.out.clear();
-    }
-
-    /// Appends `bytes` to sink `h`.
-    fn put(&mut self, h: u64, bytes: &[u8]) -> Result<(), Trap> {
-        match h {
-            0 => {
-                self.host_check("out")?;
-                self.write(bytes)
-            }
-            1 => self.msg.extend_from_slice(bytes),
-            _ => match self.bufs.get_mut(h as usize - 2) {
-                Some(buf) => buf.extend_from_slice(bytes),
-                None => return Err(Trap::Crash(format!("loom internal: no sink {h}"))),
-            },
-        }
-        Ok(())
-    }
-
-    /// Takes the buffer made last, which must be sink `h`.
-    fn pop(&mut self, h: u64) -> Result<Vec<u8>, Trap> {
-        if h < 2 || h as usize - 2 != self.bufs.len().wrapping_sub(1) {
-            return Err(Trap::Crash(format!("loom internal: sink {h} isn't the last one made")));
-        }
-        Ok(self.bufs.pop().unwrap_or_default())
-    }
-
-    /// Keeps a sink's buffer for the next sink.
-    fn recycle(&mut self, mut buf: Vec<u8>) {
-        if self.spare.len() < 8 && buf.capacity() <= 64 * 1024 {
-            buf.clear();
-            self.spare.push(buf);
-        }
+        out.flush();
     }
 
     /// Writes a `String` holding `text` at `dst` (see [`Heap::new_string`]).
     pub(crate) fn new_string(&mut self, text: &[u8], dst: u64) -> Result<(), Trap> {
         self.heap.new_string(text, dst)
     }
+}
 
-    /// Formats `args` as format item `item` says, onto the end of sink
-    /// `h`: written where it goes, with no buffer of its own.
-    fn format_into(&mut self, h: u64, item: u16, args: &[u64]) -> Result<(), Trap> {
-        let fmts = self.fmts;
-        let item = &fmts[usize::from(item)];
-        let value = match args {
-            // SAFETY: a two-register value to format is text (the verifier
-            // matched the native to the item's kind): a literal or a heap
-            // object, never a buffer of the context's.
-            [ptr, len] => Value::Text(unsafe { &*(self.text(*ptr, *len)? as *const [u8]) }),
-            [r] => Value::Reg(*r),
-            _ => Value::Reg(0),
-        };
-        match h {
-            0 => {
-                self.host_check("out")?;
-                let from = self.out.len();
-                fmt::write(&mut self.out, item, value);
-                self.written(from);
-            }
-            1 => fmt::write(&mut self.msg, item, value),
-            _ => match self.bufs.get_mut(h as usize - 2) {
-                Some(buf) => fmt::write(buf, item, value),
-                None => return Err(Trap::Crash(format!("loom internal: no sink {h}"))),
-            },
-        }
-        Ok(())
+/// What the natives that write output, build text and read constants work
+/// on: the context, or (without the pool's lock, in a build that doesn't
+/// check) a [`Worker`].
+pub(crate) trait Sinks: Strings {
+    /// The output line, message and sinks the native works on.
+    fn local(&mut self) -> &mut Local;
+    fn fmt_item(&self, item: u16) -> FmtItem;
+    fn host_check(&self, native: &'static str) -> Result<(), Trap>;
+    /// Output was appended to the line from `from`: written where it goes if
+    /// that is time.
+    fn written(&mut self, from: usize);
+    /// Where the program's data is, which constants' flags are in.
+    fn data_range(&self) -> (u64, u64);
+}
+
+impl Sinks for Ctx<'_> {
+    fn local(&mut self) -> &mut Local {
+        &mut self.cur
     }
 
-    /// Output was appended to `out` from `from`: flushes where `write` does.
+    fn fmt_item(&self, item: u16) -> FmtItem {
+        self.fmts[usize::from(item)]
+    }
+
+    fn host_check(&self, native: &'static str) -> Result<(), Trap> {
+        Ctx::host_check(self, native)
+    }
+
     fn written(&mut self, from: usize) {
-        if (self.line_buffered && self.out[from..].contains(&b'\n')) || self.out.len() >= OUT_BUFFER {
+        if (self.line_buffered && self.cur.out[from..].contains(&b'\n')) || self.cur.out.len() >= OUT_BUFFER {
             self.flush();
         }
     }
+
+    fn data_range(&self) -> (u64, u64) {
+        self.data_range
+    }
+}
+
+/// Appends `bytes` to sink `h`.
+fn put<S: Sinks>(s: &mut S, h: u64, bytes: &[u8]) -> Result<(), Trap> {
+    if h == 0 {
+        s.host_check("out")?;
+        let from = s.local().out.len();
+        s.local().out.extend_from_slice(bytes);
+        s.written(from);
+        return Ok(());
+    }
+    s.local().sink_mut(h)?.extend_from_slice(bytes);
+    Ok(())
+}
+
+/// Formats `args` as format item `item` says, onto the end of sink `h`:
+/// written where it goes, with no buffer of its own.
+fn format_into<S: Sinks>(s: &mut S, h: u64, item: u16, args: &[u64]) -> Result<(), Trap> {
+    let item = s.fmt_item(item);
+    let value = match args {
+        // SAFETY: a two-register value to format is text (the verifier
+        // matched the native to the item's kind): a literal or a heap
+        // object, never a buffer of the context's.
+        [ptr, len] => Value::Text(unsafe { &*(s.text(*ptr, *len)? as *const [u8]) }),
+        [r] => Value::Reg(*r),
+        _ => Value::Reg(0),
+    };
+    if h == 0 {
+        s.host_check("out")?;
+        let from = s.local().out.len();
+        fmt::write(&mut s.local().out, &item, value);
+        s.written(from);
+    } else {
+        fmt::write(s.local().sink_mut(h)?, &item, value);
+    }
+    Ok(())
 }
 
 /// Where a native gets the text a value names: the context, which checks the
@@ -513,13 +554,142 @@ impl Strings for Own<'_> {
 }
 
 /// What a worker of a pool has of its own, which a native it runs works on
-/// in the context's place: the message and sinks of the task it runs, and
-/// its output line (not yet whole).
+/// in the context's place: the message and sinks of the task it runs, its
+/// output line (not yet whole), and the buffers of sinks gone.
 #[derive(Debug, Default)]
 pub(crate) struct Local {
     pub msg: Vec<u8>,
     pub bufs: Vec<Vec<u8>>,
     pub out: Vec<u8>,
+    /// Buffers of sinks gone, emptied, for the next ones.
+    pub spare: Vec<Vec<u8>>,
+}
+
+impl Local {
+    /// The buffer of sink `h`: 0 is the output line, 1 the message, and 2 and
+    /// up the ones `sink.push` made.
+    fn sink_mut(&mut self, h: u64) -> Result<&mut Vec<u8>, Trap> {
+        match h {
+            0 => Ok(&mut self.out),
+            1 => Ok(&mut self.msg),
+            _ => self.bufs.get_mut(h as usize - 2).ok_or_else(|| Trap::Crash(format!("loom internal: no sink {h}"))),
+        }
+    }
+
+    /// A new sink, which is the last one: its handle.
+    fn push(&mut self) -> u64 {
+        let buf = self.spare.pop().unwrap_or_default();
+        self.bufs.push(buf);
+        self.bufs.len() as u64 + 1
+    }
+
+    /// Takes the buffer made last, which must be sink `h`.
+    fn pop(&mut self, h: u64) -> Result<Vec<u8>, Trap> {
+        if h < 2 || h as usize - 2 != self.bufs.len().wrapping_sub(1) {
+            return Err(Trap::Crash(format!("loom internal: sink {h} isn't the last one made")));
+        }
+        Ok(self.bufs.pop().unwrap_or_default())
+    }
+
+    /// Keeps a sink's buffer for the next sink.
+    fn recycle(&mut self, mut buf: Vec<u8>) {
+        if self.spare.len() < 8 && buf.capacity() <= 64 * 1024 {
+            buf.clear();
+            self.spare.push(buf);
+        }
+    }
+}
+
+/// What a worker of a pool runs a native on without the pool's lock: its own
+/// heap and [`Local`], the shared output (which has a lock of its own), and
+/// what is read-only. Output is put on the shared output a whole line at a
+/// time, when the native is done.
+pub(crate) struct Worker<'w> {
+    pub heap: &'w mut Heap,
+    pub local: &'w mut Local,
+    pub out: &'w Mutex<OutBuf>,
+    pub fmts: &'w [FmtItem],
+    pub data_range: (u64, u64),
+}
+
+impl Worker<'_> {
+    /// The native ran: the whole lines it wrote, from `from` on, go on the
+    /// shared output.
+    pub(crate) fn publish(&mut self, from: usize) {
+        if let Some(i) = self.local.out[from..].iter().rposition(|&b| b == b'\n') {
+            lock_out(self.out).add(self.local.out.drain(..=from + i));
+        }
+    }
+}
+
+impl Texts for Worker<'_> {
+    fn text(&self, ptr: u64, len: u64) -> Result<&[u8], Trap> {
+        if len == 0 {
+            return Ok(&[]);
+        }
+        // SAFETY: callers pass a text value the compiler built: `len` bytes at
+        // `ptr`, alive until the native returns (workers run only in a build
+        // that doesn't check it).
+        Ok(unsafe { std::slice::from_raw_parts(ptr as *const u8, len as usize) })
+    }
+}
+
+impl Strings for Worker<'_> {
+    fn heap(&mut self) -> &mut Heap {
+        self.heap
+    }
+}
+
+impl Sinks for Worker<'_> {
+    fn local(&mut self) -> &mut Local {
+        self.local
+    }
+
+    fn fmt_item(&self, item: u16) -> FmtItem {
+        self.fmts[usize::from(item)]
+    }
+
+    /// A pool never runs a program that may not touch the machine.
+    fn host_check(&self, _: &'static str) -> Result<(), Trap> {
+        Ok(())
+    }
+
+    /// The line is put on the shared output when the native is done.
+    fn written(&mut self, _: usize) {}
+
+    fn data_range(&self) -> (u64, u64) {
+        self.data_range
+    }
+}
+
+/// A native that a worker runs without the pool's lock, on its own state.
+pub(crate) type WorkerFn = fn(&mut Worker, &mut [u64], u16) -> Result<(), Trap>;
+
+/// The natives that write output, build text and read constants, for a
+/// worker to run without the pool's lock. (The checked build runs them on
+/// the context, with the worker's state swapped in.)
+pub(crate) fn resolve_worker(name: &str) -> Option<WorkerFn> {
+    if cfg!(feature = "checked") {
+        return None;
+    }
+    Some(match name {
+        "out.str" => |w, a, i| out_str(w, a, i),
+        "out.fmt" | "out.fmt2" => |w, a, i| out_fmt(w, a, i),
+        "msg.begin" => |w, a, i| msg_begin(w, a, i),
+        "msg.str" => |w, a, i| msg_str(w, a, i),
+        "msg.fmt" | "msg.fmt2" => |w, a, i| msg_fmt(w, a, i),
+        "msg.unravel" => |w, a, i| msg_unravel(w, a, i),
+        "sink.str" => |w, a, i| sink_str(w, a, i),
+        "sink.fmt" | "sink.fmt2" => |w, a, i| sink_fmt(w, a, i),
+        "sink.push" => |w, a, i| sink_push(w, a, i),
+        "sink.string" => |w, a, i| sink_string(w, a, i),
+        "seq.join_text" => |w, a, i| seq_join_text(w, a, i),
+        "sink.pad" => |w, a, i| sink_pad(w, a, i),
+        "str.new_in" => |w, a, i| str_new_in(w, a, i),
+        "const.load" => |w, a, i| const_load(w, a, i),
+        "const.store" => |w, a, i| const_store(w, a, i),
+        _ => return None,
+    })
 }
 
 /// A native: its context, its argument registers, and its immediate.
@@ -591,12 +761,11 @@ pub(crate) fn try_unlock(addr: u64, me: u64) -> bool {
 }
 
 /// The word at `addr`, which is in the program's data (a constant's flag).
-pub(crate) fn data_word(ctx: &Ctx, addr: u64) -> Result<u64, Trap> {
-    Ok(data_atomic(ctx, addr)?.load(std::sync::atomic::Ordering::Acquire))
+pub(crate) fn data_word<S: Sinks>(s: &S, addr: u64) -> Result<u64, Trap> {
+    Ok(data_atomic(s.data_range(), addr)?.load(std::sync::atomic::Ordering::SeqCst))
 }
 
-fn data_atomic<'a>(ctx: &'a Ctx, addr: u64) -> Result<&'a std::sync::atomic::AtomicU64, Trap> {
-    let (lo, hi) = ctx.data_range;
+fn data_atomic<'a>((lo, hi): (u64, u64), addr: u64) -> Result<&'a std::sync::atomic::AtomicU64, Trap> {
     if addr < lo || addr.checked_add(8).is_none_or(|end| end > hi) || !addr.is_multiple_of(8) {
         return Err(Trap::Crash(format!("loom internal: {addr:#x} isn't a word of the program's data")));
     }
@@ -606,13 +775,13 @@ fn data_atomic<'a>(ctx: &'a Ctx, addr: u64) -> Result<&'a std::sync::atomic::Ato
     Ok(unsafe { std::sync::atomic::AtomicU64::from_ptr(addr as *mut u64) })
 }
 
-fn const_load(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    args[0] = data_word(ctx, args[0])?;
+fn const_load<S: Sinks>(s: &mut S, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    args[0] = data_word(s, args[0])?;
     Ok(())
 }
 
-fn const_store(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    data_atomic(ctx, args[0])?.store(args[1], std::sync::atomic::Ordering::Release);
+fn const_store<S: Sinks>(s: &mut S, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    data_atomic(s.data_range(), args[0])?.store(args[1], std::sync::atomic::Ordering::SeqCst);
     Ok(())
 }
 
@@ -652,20 +821,20 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
         |_, _, _| Err(Trap::Crash("loom internal: a task native bypassed dispatch".into()))
     } else {
         match name {
-            "const.load" => const_load,
-            "const.store" => const_store,
-            "out.str" => out_str,
-            "out.fmt" | "out.fmt2" => out_fmt,
-            "msg.begin" => msg_begin,
-            "msg.str" => msg_str,
-            "msg.fmt" | "msg.fmt2" => msg_fmt,
-            "msg.unravel" => msg_unravel,
-            "sink.str" => sink_str,
-            "sink.fmt" | "sink.fmt2" => sink_fmt,
-            "sink.push" => sink_push,
-            "sink.string" => sink_string,
-            "seq.join_text" => seq_join_text,
-            "sink.pad" => sink_pad,
+            "const.load" => |c, a, i| const_load(c, a, i),
+            "const.store" => |c, a, i| const_store(c, a, i),
+            "out.str" => |c, a, i| out_str(c, a, i),
+            "out.fmt" | "out.fmt2" => |c, a, i| out_fmt(c, a, i),
+            "msg.begin" => |c, a, i| msg_begin(c, a, i),
+            "msg.str" => |c, a, i| msg_str(c, a, i),
+            "msg.fmt" | "msg.fmt2" => |c, a, i| msg_fmt(c, a, i),
+            "msg.unravel" => |c, a, i| msg_unravel(c, a, i),
+            "sink.str" => |c, a, i| sink_str(c, a, i),
+            "sink.fmt" | "sink.fmt2" => |c, a, i| sink_fmt(c, a, i),
+            "sink.push" => |c, a, i| sink_push(c, a, i),
+            "sink.string" => |c, a, i| sink_string(c, a, i),
+            "seq.join_text" => |c, a, i| seq_join_text(c, a, i),
+            "sink.pad" => |c, a, i| sink_pad(c, a, i),
             "str.new" => |c, a, i| str_new(c, a, i),
             "str.eq" => str_eq,
             "str.cmp" => |c, a, i| str_cmp(c, a, i),
@@ -681,7 +850,7 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
             "mem.grow" => mem_grow,
             "mem.move" => mem_move,
             "mem.calloc" => mem_calloc,
-            "str.new_in" => str_new_in,
+            "str.new_in" => |c, a, i| str_new_in(c, a, i),
             "sarena.new" => |c, a, _| arena_new(&mut c.heap, a),
             "sarena.alloc" => |c, a, _| arena_alloc(&mut c.heap, a),
             "sarena.reset" => |c, a, _| crate::arena::reset(&mut c.heap, a[0]),
@@ -714,40 +883,38 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
     Some((f, usize::from(sig.args.max(sig.results))))
 }
 
-fn out_str(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn out_str<S: Sinks>(s: &mut S, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let text: *const [u8] = s.text(args[0], args[1])?;
     // SAFETY: `out.str` is passed a text value, which writing doesn't
     // touch: it's a literal or a heap object, not the output buffer.
-    let text: *const [u8] = unsafe { ctx.text(args[0], args[1])? };
-    ctx.host_check("out")?;
-    ctx.write(unsafe { &*text });
-    Ok(())
+    put(s, 0, unsafe { &*text })
 }
 
-fn out_fmt(ctx: &mut Ctx, args: &mut [u64], item: u16) -> Result<(), Trap> {
-    ctx.format_into(0, item, args)
+fn out_fmt<S: Sinks>(s: &mut S, args: &mut [u64], item: u16) -> Result<(), Trap> {
+    format_into(s, 0, item, args)
 }
 
 /// `msg.begin()`: a new message. Building one can run the program's code (a
 /// hand-written `show`), which may unravel with a message of its own; that
 /// one must not find the half-built text of this one.
-fn msg_begin(ctx: &mut Ctx, _: &mut [u64], _: u16) -> Result<(), Trap> {
-    ctx.msg.clear();
+fn msg_begin<S: Sinks>(s: &mut S, _: &mut [u64], _: u16) -> Result<(), Trap> {
+    s.local().msg.clear();
     Ok(())
 }
 
-fn msg_str(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn msg_str<S: Sinks>(s: &mut S, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let text: *const [u8] = s.text(args[0], args[1])?;
     // SAFETY: as for `out.str`.
-    let text: *const [u8] = unsafe { ctx.text(args[0], args[1])? };
-    ctx.msg.extend_from_slice(unsafe { &*text });
+    s.local().msg.extend_from_slice(unsafe { &*text });
     Ok(())
 }
 
-fn msg_fmt(ctx: &mut Ctx, args: &mut [u64], item: u16) -> Result<(), Trap> {
-    ctx.format_into(1, item, args)
+fn msg_fmt<S: Sinks>(s: &mut S, args: &mut [u64], item: u16) -> Result<(), Trap> {
+    format_into(s, 1, item, args)
 }
 
-fn msg_unravel(ctx: &mut Ctx, _: &mut [u64], _: u16) -> Result<(), Trap> {
-    let msg = std::mem::take(&mut ctx.msg);
+fn msg_unravel<S: Sinks>(s: &mut S, _: &mut [u64], _: u16) -> Result<(), Trap> {
+    let msg = std::mem::take(&mut s.local().msg);
     Err(Trap::Unravel(String::from_utf8_lossy(&msg).into_owned()))
 }
 
@@ -796,14 +963,13 @@ pub(crate) fn resolve_local(name: &str) -> Option<LocalFn> {
 }
 
 /// `str.new_in(arena, text, length, destination)`.
-fn str_new_in(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    // SAFETY: as for `str.new`.
-    let text: *const [u8] = unsafe { ctx.text(args[1], args[2])? };
+fn str_new_in<S: Strings>(ctx: &mut S, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let text: *const [u8] = ctx.text(args[1], args[2])?;
     // SAFETY: `text` is the pointer `ctx.text` checked above, and the arena
     // allocation below only adds memory, so the bytes stay where they are.
     let text = unsafe { &*text };
     let len = text.len() as u64;
-    let ptr = crate::arena::alloc(&mut ctx.heap, args[0], len)?;
+    let ptr = crate::arena::alloc(ctx.heap(), args[0], len)?;
     // SAFETY: `ptr` is `len` bytes of the arena, which nothing else refers
     // to; `args[3]` is where the compiler wants the string: three words of
     // memory it owns. A capacity of 0 says the buffer isn't the string's to free.
@@ -965,39 +1131,37 @@ fn mem_grow(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
 }
 
 /// `sink.str(sink, text address, length)`.
-fn sink_str(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn sink_str<S: Sinks>(s: &mut S, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let text: *const [u8] = s.text(args[1], args[2])?;
     // SAFETY: as for `out.str`: a sink's buffer is never a text value's.
-    let text: *const [u8] = unsafe { ctx.text(args[1], args[2])? };
-    ctx.put(args[0], unsafe { &*text })
+    put(s, args[0], unsafe { &*text })
 }
 
 /// `sink.fmt(sink, value)` and `sink.fmt2(sink, text address, length)`.
-fn sink_fmt(ctx: &mut Ctx, args: &mut [u64], item: u16) -> Result<(), Trap> {
-    ctx.format_into(args[0], item, &args[1..])
+fn sink_fmt<S: Sinks>(s: &mut S, args: &mut [u64], item: u16) -> Result<(), Trap> {
+    format_into(s, args[0], item, &args[1..])
 }
 
 /// `sink.push() -> sink`: a new buffer.
-fn sink_push(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    let buf = ctx.spare.pop().unwrap_or_default();
-    ctx.bufs.push(buf);
-    args[0] = ctx.bufs.len() as u64 + 1;
+fn sink_push<S: Sinks>(s: &mut S, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    args[0] = s.local().push();
     Ok(())
 }
 
 /// `sink.string(sink, destination)`: the buffer's text as a `String`.
-fn sink_string(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
-    let text = ctx.pop(args[0])?;
-    ctx.new_string(&text, args[1])?;
-    ctx.recycle(text);
+fn sink_string<S: Sinks>(s: &mut S, args: &mut [u64], _: u16) -> Result<(), Trap> {
+    let text = s.local().pop(args[0])?;
+    s.heap().new_string(&text, args[1])?;
+    s.local().recycle(text);
     Ok(())
 }
 
 /// `seq.join_text(buf, len, elem size, sep, sep len, destination)`: the texts
 /// of a list, slice or array of `String` or `str`, with `sep` between them.
-fn seq_join_text(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
+fn seq_join_text<S: Strings>(ctx: &mut S, args: &mut [u64], _: u16) -> Result<(), Trap> {
     let (buf, len, size) = (args[0], args[1] as usize, args[2]);
-    // SAFETY: the compiler passes a `str` for the separator.
-    let sep: *const [u8] = unsafe { ctx.text(args[3], args[4])? };
+    // The compiler passes a `str` for the separator.
+    let sep: *const [u8] = ctx.text(args[3], args[4])?;
     // SAFETY: `sep` is the text `ctx.text` just checked, which nothing frees
     // during this native.
     let sep: &[u8] = unsafe { &*sep };
@@ -1019,24 +1183,24 @@ fn seq_join_text(ctx: &mut Ctx, args: &mut [u64], _: u16) -> Result<(), Trap> {
             out.extend_from_slice(sep);
         }
         let (p, n) = item(i);
-        // SAFETY: every element is a text value the program owns.
-        out.extend_from_slice(unsafe { ctx.text(p, n)? });
+        // Every element is a text value the program owns.
+        out.extend_from_slice(ctx.text(p, n)?);
     }
-    ctx.new_string(&out, args[5])
+    ctx.heap().new_string(&out, args[5])
 }
 
 /// `sink.pad(sink, into)`: the buffer's text, padded as the format item's
 /// spec says, into another sink.
-fn sink_pad(ctx: &mut Ctx, args: &mut [u64], item: u16) -> Result<(), Trap> {
-    let text = ctx.pop(args[0])?;
-    let spec = ctx.fmts[usize::from(item)].spec;
+fn sink_pad<S: Sinks>(s: &mut S, args: &mut [u64], item: u16) -> Result<(), Trap> {
+    let text = s.local().pop(args[0])?;
+    let spec = s.fmt_item(item).spec;
     let mut out = Vec::new();
     match spec {
         Some(spec) => fmt::pad(&mut out, &text, &spec),
         None => out.extend_from_slice(&text),
     }
-    ctx.recycle(text);
-    ctx.put(args[1], &out)
+    s.local().recycle(text);
+    put(s, args[1], &out)
 }
 
 /// `str.new(text address, length, destination)`: a `String` of the text.
@@ -1113,6 +1277,6 @@ fn int_to_char_chk(_: &mut Heap, args: &mut [u64], _: u16) -> Result<(), Trap> {
 
 /// `exit.fail()`: `main` returned an error, whose text is in sink 1.
 fn exit_fail(ctx: &mut Ctx, _: &mut [u64], _: u16) -> Result<(), Trap> {
-    let msg = std::mem::take(&mut ctx.msg);
+    let msg = std::mem::take(&mut ctx.cur.msg);
     Err(Trap::Failed(String::from_utf8_lossy(&msg).into_owned()))
 }

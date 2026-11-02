@@ -37,7 +37,7 @@
 
 use loom_isa::word::{a, b, bc_i32, bc_u32, c, c_i16, unpack_cast};
 use std::io::{BufRead as _, Read as _};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use loom_isa::{Image, LINK_SLOTS, Op};
 
@@ -48,7 +48,9 @@ use crate::heap::{Heap, Shared};
 use loom_sys::Host;
 
 use crate::ints::{self, IntErr};
-use crate::natives::{Ctx, LocalFn, NativeFn, resolve, resolve_local, resolve_task};
+use crate::natives::{
+    Ctx, LocalFn, NativeFn, OutBuf, Worker, WorkerFn, resolve, resolve_local, resolve_task, resolve_worker,
+};
 use crate::stack::Stack;
 use crate::{Config, Fault, Trap, crash_message};
 
@@ -140,6 +142,8 @@ struct Env<'e, 'i> {
     natives: &'e [(NativeFn, usize)],
     /// Leaves that use only arguments, memory and the worker heap.
     local_natives: &'e [Option<LocalFn>],
+    /// Natives that use the worker's own output line, message and sinks too.
+    worker_natives: &'e [Option<WorkerFn>],
     task_natives: &'e [Option<TaskOp>],
     /// The program's context and threads, by pointer: with several workers
     /// they're shared, each use under the pool's lock (see `pool.rs`), so no
@@ -176,6 +180,8 @@ struct Env<'e, 'i> {
     interrupt: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     /// What this worker's natives work on, with several workers.
     local: crate::natives::Local,
+    /// With several workers, where the whole lines of output go.
+    out: Option<Arc<Mutex<OutBuf>>>,
     /// With several workers, this worker's own heap, which needs no lock.
     heap: Option<Box<Heap>>,
     /// With `stats`: what this worker dispatched, added to the context's
@@ -195,9 +201,12 @@ struct Init<'a, 'i> {
     nfuncs: usize,
     natives: &'a [(NativeFn, usize)],
     local_natives: &'a [Option<LocalFn>],
+    worker_natives: &'a [Option<WorkerFn>],
     task_natives: &'a [Option<TaskOp>],
     /// With several workers, what their heaps share.
     shared: Option<Arc<Shared>>,
+    /// With several workers, where the whole lines of output go.
+    out: Option<Arc<Mutex<OutBuf>>>,
     ctx: *mut Ctx<'i>,
     sched: *mut Sched,
     rodata: *const u8,
@@ -256,6 +265,7 @@ pub(crate) struct Machine<'i> {
     data: Box<[u64]>,
     natives: Vec<(NativeFn, usize)>,
     local_natives: Vec<Option<LocalFn>>,
+    worker_natives: Vec<Option<WorkerFn>>,
     task_natives: Vec<Option<TaskOp>>,
     pub ctx: Ctx<'i>,
     stack_limit: usize,
@@ -307,6 +317,7 @@ impl<'i> Machine<'i> {
             funcs,
             data,
             local_natives: image.natives.iter().map(|name| resolve_local(name)).collect(),
+            worker_natives: image.natives.iter().map(|name| resolve_worker(name)).collect(),
             task_natives: image.natives.iter().map(|name| resolve_task(name)).collect(),
             natives,
             ctx: {
@@ -386,6 +397,7 @@ impl<'i> Machine<'i> {
             .then(|| Pool::new(workers, Arc::clone(&self.sched.cancel_seen), Arc::clone(&self.sched.queued)));
         self.sched.eager = pool.is_none();
         self.sched.set_workers(workers);
+        self.ctx.pooled = pool.is_some();
         let init = Init {
             image: self.image,
             code_base: self.code.as_ptr(),
@@ -393,8 +405,10 @@ impl<'i> Machine<'i> {
             nfuncs: self.funcs.len(),
             natives: &self.natives,
             local_natives: &self.local_natives,
+            worker_natives: &self.worker_natives,
             task_natives: &self.task_natives,
             shared: pool.is_some().then(|| Arc::clone(self.ctx.heap.shared())),
+            out: pool.is_some().then(|| self.ctx.out_shared()),
             ctx: &raw mut self.ctx,
             sched: &raw mut self.sched,
             rodata: self.ctx.rodata_ptr(),
@@ -437,6 +451,7 @@ impl<'i> Machine<'i> {
             }
         };
         self.ticks = ticks;
+        self.ctx.pooled = false;
         result
     }
 }
@@ -491,6 +506,7 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
             nfuncs: init.nfuncs,
             natives: init.natives,
             local_natives: init.local_natives,
+            worker_natives: init.worker_natives,
             task_natives: init.task_natives,
             ctx: init.ctx,
             stack,
@@ -509,6 +525,7 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
             pool: init.pool,
             interrupt: init.interrupt.clone(),
             local: Default::default(),
+            out: init.out.clone(),
             heap: init.shared.as_ref().map(|shared| Box::new(Heap::sharing(shared))),
             st_dispatched: 0,
             st_runtime: crate::RuntimeStats::default(),
@@ -1395,6 +1412,22 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
                                     // worker's own heap, without the pool lock.
                                     if let (Some(heap), Some(own)) = (env.heap.as_mut(), env.local_natives[b(w)]) {
                                         own(heap, args, c(w) as u16)
+                                    } else if let (Some(heap), Some(own), Some(out)) =
+                                        (env.heap.as_mut(), env.worker_natives[b(w)], env.out.as_deref())
+                                    {
+                                        // Output, text and constants: the worker's own line,
+                                        // message and sinks, and the output's own lock.
+                                        let from = env.local.out.len();
+                                        let mut worker = Worker {
+                                            heap,
+                                            local: &mut env.local,
+                                            out,
+                                            fmts: &env.image.fmts,
+                                            data_range: env.data_range,
+                                        };
+                                        let done = own(&mut worker, args, c(w) as u16);
+                                        worker.publish(from);
+                                        done
                                     } else {
                                         if cfg!(feature = "stats") {
                                             let cat = crate::stats::category(&env.image.natives[b(w)]);

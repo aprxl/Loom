@@ -403,6 +403,55 @@ fn par_corpus() {
     assert!(failures.is_empty(), "{} par runs failed:\n{}", failures.len(), failures.join("\n"));
 }
 
+/// `tests/par_lines/print_lines.loom` on many workers: eight tasks print 10,000
+/// built lines each. The lines come in any order across tasks, but every line
+/// is whole, none is missing or repeated, and a task's own lines are in order.
+#[test]
+fn par_output_stays_whole() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/par_lines/print_lines.loom");
+    for level in [Level::O2, Level::O0] {
+        let (db, diags, image) = compile_vm(&path, level);
+        let image = image.unwrap_or_else(|| {
+            panic!(
+                "didn't compile:
+{}",
+                rendered(&db, &diags)
+            )
+        });
+        for workers in [2, 4, 8] {
+            for _ in 0..3 {
+                let buffer = Rc::new(RefCell::new(Vec::new()));
+                let config = loom_vm::Config { stack_limit: 64 << 20, workers, ..loom_vm::Config::default() };
+                let outcome = loom_vm::run(&image, Host::captured(buffer.clone()), &config);
+                assert!(matches!(outcome, Outcome::Finished), "{level:?}, {workers} workers: {outcome:?}");
+                let out = String::from_utf8_lossy(&buffer.borrow()).into_owned();
+                let mut next = [0u64; 8];
+                let mut lines = 0;
+                for line in out.lines() {
+                    let parts: Vec<&str> = line.split(' ').collect();
+                    let whole = parts.len() == 7
+                        && parts[0] == "task"
+                        && parts[2] == "line"
+                        && parts[4] == "sum"
+                        && parts[6] == "end";
+                    assert!(whole, "{level:?}, {workers} workers: a torn line: {line:?}");
+                    let (task, n, sum): (usize, u64, u64) = (
+                        parts[1].parse().expect("a task"),
+                        parts[3].parse().expect("a line number"),
+                        parts[5].parse().expect("a sum"),
+                    );
+                    assert_eq!(parts[3].len(), 6, "{level:?}, {workers} workers: {line:?}");
+                    assert_eq!(sum, task as u64 * 100_000 + n, "{level:?}, {workers} workers: {line:?}");
+                    assert_eq!(n, next[task], "{level:?}, {workers} workers: task {task} out of order: {line:?}");
+                    next[task] += 1;
+                    lines += 1;
+                }
+                assert_eq!(lines, 80_000, "{level:?}, {workers} workers");
+            }
+        }
+    }
+}
+
 /// The `loom for` fixtures over ranges, on 8 workers, where a task takes a
 /// run of items (design/vm.md §11.4): the same output, and the failing one
 /// ends the same way and frees what its items own (a checked build, as in

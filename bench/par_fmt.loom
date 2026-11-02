@@ -1,0 +1,17 @@
+// Templates in tasks: `"task {i} item {j}"` builds its text in the worker's
+// own buffers, without the pool's lock.
+use std.io.print
+use std.sync.Atomic
+
+fn main() {
+    let total = Atomic[u64](0)
+    loom for i in 0..8 {
+        var n = 0u64
+        for j in 0..3200000u64 {
+            let s = "task {i} item {j} of {j * 3}"
+            n += s.len() as u64
+        }
+        total.add(n)
+    }
+    print("total {total.load()}")
+}
