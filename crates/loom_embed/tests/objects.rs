@@ -214,3 +214,75 @@ fn a_warp_shows_through_a_host_method() {
     assert_eq!(call(&program, "shown_len", &[2.0_f64.to_reg()]), [10]);
     assert_eq!(call(&program, "any_len", &[2.0_f64.to_reg()]), [10]);
 }
+
+#[test]
+fn a_payload_enum_crosses_with_its_tag_and_payload() {
+    let mut embed = Embed::new("m");
+    let shape = embed.enum_warp("Shape", &[("Dot", &[]), ("Circle", &[("r", "f64")])]).expect("declares");
+    embed
+        .warp_method(&shape, "area", &[], "f64", move |cx, r, l| {
+            let bytes = l.bytes(cx, r[0])?;
+            let area = if l.case(bytes) == 1 {
+                let radius: f64 = l.read_case(bytes, 1, 0);
+                3.0 * radius * radius
+            } else {
+                0.0
+            };
+            r[0] = area.to_reg();
+            Ok(())
+        })
+        .expect("registers");
+    embed
+        .warp_method(&shape, "grown", &["f64"], "Shape", move |cx, r, l| {
+            let by = f64::from_reg(r[2]);
+            let radius: f64 = l.read_case(l.bytes(cx, r[1])?, 1, 0);
+            let out = l.bytes_mut(cx, r[0])?;
+            l.set_case(out, 1);
+            l.write_case(out, 1, 0, radius + by);
+            Ok(())
+        })
+        .expect("registers");
+    let program = compile(
+        embed,
+        "use m.{Shape}\npub fun area_of(r: f64) -> f64 { Shape.Circle(r: r).area() }\npub fun dot_area() -> f64 { Shape.Dot.area() }\npub fun grown_area(r: f64, by: f64) -> f64 { Shape.Circle(r: r).grown(by).area() }\n",
+    );
+    assert_eq!(f64::from_reg(call(&program, "area_of", &[2.0_f64.to_reg()])[0]), 12.0);
+    assert_eq!(f64::from_reg(call(&program, "dot_area", &[])[0]), 0.0);
+    assert_eq!(f64::from_reg(call(&program, "grown_area", &[1.0_f64.to_reg(), 2.0_f64.to_reg()])[0]), 27.0);
+}
+
+#[test]
+fn a_host_declared_weave_maps_weft_methods_to_host_methods() {
+    let mut embed = Embed::new("m");
+    let circle = embed.warp("Circle", &[("r", "f64")]).expect("declares");
+    embed.weft("Labeled", &[("label", &[], "String"), ("twice", &["f64"], "f64")]).expect("declares");
+    embed
+        .warp_method(&circle, "text", &[], "String", move |cx, r, l| {
+            let radius: f64 = l.read(l.bytes(cx, r[1])?, 0);
+            cx.new_string(format!("circle r={radius}").as_bytes(), r[0])
+        })
+        .expect("registers");
+    embed
+        .warp_method(&circle, "double", &["f64"], "f64", move |cx, r, l| {
+            let radius: f64 = l.read(l.bytes(cx, r[0])?, 0);
+            r[0] = (radius * f64::from_reg(r[1])).to_reg();
+            Ok(())
+        })
+        .expect("registers");
+    embed.weave(&circle, "Labeled", &[("label", "text"), ("twice", "double")]).expect("weaves");
+    let program = compile(
+        embed,
+        "use m.{Circle, Labeled}\npub fun label_len(r: f64) -> usize {\n    let d: any Labeled = Circle(r: r)\n    d.label().len()\n}\npub fun twice(r: f64) -> f64 {\n    let d: any Labeled = Circle(r: r)\n    d.twice(4.0)\n}\n",
+    );
+    assert_eq!(call(&program, "label_len", &[2.0_f64.to_reg()]), [10]);
+    assert_eq!(f64::from_reg(call(&program, "twice", &[2.0_f64.to_reg()])[0]), 8.0);
+}
+
+#[test]
+fn a_weave_needs_a_host_method_for_each_weft_method() {
+    let mut embed = Embed::new("m");
+    let circle = embed.warp("Circle", &[("r", "f64")]).expect("declares");
+    embed.weft("Labeled", &[("label", &[], "String"), ("twice", &["f64"], "f64")]).expect("declares");
+    assert!(embed.weave(&circle, "Labeled", &[("label", "text")]).is_err(), "twice has no host method");
+    assert!(embed.weave(&circle, "Nope", &[]).is_err(), "no such weft");
+}

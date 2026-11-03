@@ -27,7 +27,7 @@ enum Crossing {
     Scalar,
     /// `str`: its address and length, in two registers.
     Text,
-    /// A value warp (a struct of scalars): the address of a copy.
+    /// A value warp (a struct of scalars) or a payload enum: the address of a copy.
     Warp,
     /// A unit enum: its tag, in one register.
     Tag,
@@ -123,7 +123,7 @@ impl<'a> Builder<'a> {
     }
 
     /// How a value of `ty` crosses an `extern "host"` boundary, or `None` for a
-    /// type the host can't read (a payload enum, a generic warp, a tuple).
+    /// type the host can't read (an enum with shared fields, a generic warp, a tuple).
     fn crossing(&mut self, ty: Ty) -> Option<Crossing> {
         let tcx = self.tcx();
         let p = self.p;
@@ -133,10 +133,8 @@ impl<'a> Builder<'a> {
             TyKind::Adt(def, args) if args.is_empty() && !p.def_path(*def).starts_with("std.") => {
                 match self.layout(ty)?.shape {
                     Shape::Fields(_) => Some(Crossing::Warp),
-                    Shape::Sum { ref shared, ref cases, .. }
-                        if shared.is_empty() && cases.iter().all(Vec::is_empty) =>
-                    {
-                        Some(Crossing::Tag)
+                    Shape::Sum { ref shared, ref cases, .. } if shared.is_empty() => {
+                        Some(if cases.iter().all(Vec::is_empty) { Crossing::Tag } else { Crossing::Warp })
                     }
                     _ => None,
                 }

@@ -100,15 +100,21 @@ fn a_unit_enum_crosses_as_its_tag() {
 }
 
 #[test]
-fn a_payload_enum_is_refused_both_ways() {
-    let warp = "warp Shape {\n    case Dot\n    case Circle(r: f64)\n}\n\n";
+fn a_payload_enum_crosses_as_its_address() {
+    let image = compile(
+        "warp Shape {\n    case Dot\n    case Circle(r: f64)\n}\n\nextern \"host\" {\n    pub fun f(s: Shape)\n    pub fun g() -> Shape\n}\n\nfun main() {\n    f(.Dot)\n    g()\n}\n",
+    )
+    .expect("compiles");
+    let shape: Vec<_> = image.host_imports.iter().map(|h| (h.name.as_str(), h.args, h.results)).collect();
+    assert_eq!(shape, [("host_extern.f", 1, 0), ("host_extern.g", 1, 0)]);
+    loom_isa::verify(&image).expect("valid");
+}
+
+#[test]
+fn an_enum_with_shared_fields_is_refused() {
     rejected(
-        &format!("{warp}extern \"host\" {{\n    pub fun f(s: Shape)\n}}\n\nfun main() {{\n    f(.Dot)\n}}\n"),
-        "a parameter of type Shape",
-    );
-    rejected(
-        &format!("{warp}extern \"host\" {{\n    pub fun g() -> Shape\n}}\n\nfun main() {{\n    g()\n}}\n"),
-        "a result of type Shape",
+        "warp Event {\n    at: i32\n    case Key(code: i32)\n    case Tick\n}\n\nextern \"host\" {\n    pub fun f(e: Event)\n}\n\nfun main() {\n    f(.Tick(at: 1))\n}\n",
+        "a parameter of type Event",
     );
 }
 

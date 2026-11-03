@@ -138,6 +138,23 @@ struct ValueWarp {
     sizes: Vec<u64>,
     methods: Vec<String>,
     wefts: Vec<String>,
+    cases: Vec<CaseDecl>,
+    woven: Vec<String>,
+}
+
+/// A case of a payload enum: its name, its fields (name and Loom type) and their sizes.
+struct CaseDecl {
+    name: String,
+    fields: Vec<(String, String)>,
+    sizes: Vec<u64>,
+}
+
+/// A weft declared with [`Embed::weft`]: its methods (name, parameter types and
+/// result) and its Loom text.
+struct WeftDecl {
+    name: String,
+    methods: Vec<(String, Vec<String>, String)>,
+    text: String,
 }
 
 /// A value warp declared with [`Embed::warp`]; its methods are registered with
@@ -148,13 +165,19 @@ pub struct WarpRef {
     name: String,
 }
 
-/// Where a value warp's fields are: each field's byte offset and size, and the
-/// bytes the whole value spans. A host closure gets its warp's layout, which the
-/// compiler sets, and reads and writes fields with plain values.
+/// A field's byte offset and size.
+type Field = (usize, usize);
+
+/// Where a value's bytes are: a struct's fields (each field's byte offset and size),
+/// or a payload enum's tag and each case's fields, and the bytes the whole value
+/// spans. A host closure gets its warp's layout, which the compiler sets, and reads
+/// and writes with plain values.
 #[derive(Clone, Debug)]
 pub struct Layout {
     span: usize,
-    fields: Box<[(usize, usize)]>,
+    fields: Box<[Field]>,
+    tag: Field,
+    cases: Box<[Box<[Field]>]>,
 }
 
 impl Layout {
@@ -162,7 +185,20 @@ impl Layout {
         let fields: Box<[(usize, usize)]> =
             offsets.iter().zip(sizes).map(|(at, size)| (*at as usize, *size as usize)).collect();
         let span = fields.iter().map(|(at, size)| at + size).max().unwrap_or(0);
-        Layout { span, fields }
+        Layout { span, fields, tag: (0, 0), cases: Box::default() }
+    }
+
+    fn cases(tag: (u64, u8), offsets: &[Vec<u64>], sizes: &[Vec<u64>]) -> Layout {
+        let cases: Box<[Box<[Field]>]> = offsets
+            .iter()
+            .zip(sizes)
+            .map(|(at, size)| {
+                at.iter().zip(size).map(|(at, size)| (*at as usize, *size as usize)).collect::<Box<[_]>>()
+            })
+            .collect();
+        let tag = (tag.0 as usize, tag.1 as usize);
+        let span = cases.iter().flat_map(|c| c.iter()).map(|(at, size)| at + size).chain([tag.0 + tag.1]).max();
+        Layout { span: span.unwrap_or(0), fields: Box::default(), tag, cases }
     }
 
     /// The bytes of the whole value at `addr`, read in place: one checked call.
@@ -185,6 +221,31 @@ impl Layout {
     /// Writes field `field` into the bytes of [`bytes_mut`](Self::bytes_mut).
     pub fn write<T: Scalar>(&self, bytes: &mut [u8], field: usize, value: T) {
         let (at, size) = self.fields[field];
+        write_le(&mut bytes[at..at + size], size, value.to_reg());
+    }
+
+    /// The case of a payload enum's value, from the bytes of [`bytes`](Self::bytes).
+    pub fn case(&self, bytes: &[u8]) -> usize {
+        let (at, size) = self.tag;
+        read_le(&bytes[at..at + size], size) as usize
+    }
+
+    /// Makes a payload enum's value the case `case`, by its tag.
+    pub fn set_case(&self, bytes: &mut [u8], case: usize) {
+        let (at, size) = self.tag;
+        write_le(&mut bytes[at..at + size], size, case as u64);
+    }
+
+    /// Field `field` of case `case` of a payload enum's value, read as `T`. Panics
+    /// if there is no such case or field.
+    pub fn read_case<T: Scalar>(&self, bytes: &[u8], case: usize, field: usize) -> T {
+        let (at, size) = self.cases[case][field];
+        T::from_reg(read_le(&bytes[at..at + size], size))
+    }
+
+    /// Writes field `field` of case `case` of a payload enum's value.
+    pub fn write_case<T: Scalar>(&self, bytes: &mut [u8], case: usize, field: usize, value: T) {
+        let (at, size) = self.cases[case][field];
         write_le(&mut bytes[at..at + size], size, value.to_reg());
     }
 }
@@ -244,7 +305,8 @@ pub struct Embed {
     warps: Vec<Warp>,
     value_warps: Vec<ValueWarp>,
     enums: Vec<(String, Vec<String>)>,
-    wefts: Vec<(String, String)>,
+    wefts: Vec<WeftDecl>,
+    weaves: Vec<String>,
     functions: Vec<String>,
     source: String,
     names: HashSet<String>,
@@ -322,6 +384,7 @@ impl Embed {
             value_warps: Vec::new(),
             enums: Vec::new(),
             wefts: Vec::new(),
+            weaves: Vec::new(),
         }
     }
 
@@ -451,6 +514,45 @@ impl Embed {
             sizes,
             methods: Vec::new(),
             wefts: Vec::new(),
+            cases: Vec::new(),
+            woven: Vec::new(),
+        });
+        Ok(WarpRef { index: self.value_warps.len() - 1, name: name.to_string() })
+    }
+
+    /// Declares a payload enum `name` (`pub warp name { case … }`), whose values the
+    /// host reads and writes by address, like a value warp. Each case is a name and
+    /// its fields (name and scalar type). Its methods come from
+    /// [`Embed::warp_method`], and the closures read it with [`Layout::case`] and
+    /// [`Layout::read_case`].
+    pub fn enum_warp(&mut self, name: &str, cases: &[(&str, &[(&str, &str)])]) -> Result<WarpRef, EmbedError> {
+        if cases.is_empty() {
+            return Err(EmbedError(format!("`{name}` has no cases")));
+        }
+        let mut decls = Vec::with_capacity(cases.len());
+        for (case, fields) in cases {
+            if !lexes_as(case, &TokenKind::TypeIdent) {
+                return Err(EmbedError(format!("`{case}` is not a case name")));
+            }
+            let mut sizes = Vec::with_capacity(fields.len());
+            for (field, ty) in *fields {
+                if !lexes_as(field, &TokenKind::Ident) {
+                    return Err(EmbedError(format!("`{field}` is not a field name")));
+                }
+                sizes.push(scalar_size(ty).ok_or_else(|| EmbedError(format!("`{ty}` is not a scalar field type")))?);
+            }
+            let fields = fields.iter().map(|(f, t)| (f.to_string(), t.to_string())).collect();
+            decls.push(CaseDecl { name: case.to_string(), fields, sizes });
+        }
+        self.claim(name, &TokenKind::TypeIdent)?;
+        self.value_warps.push(ValueWarp {
+            name: name.to_string(),
+            fields: Vec::new(),
+            sizes: Vec::new(),
+            methods: Vec::new(),
+            wefts: Vec::new(),
+            cases: decls,
+            woven: Vec::new(),
         });
         Ok(WarpRef { index: self.value_warps.len() - 1, name: name.to_string() })
     }
@@ -554,14 +656,18 @@ impl Embed {
             text.push_str(&format!("    fun {method}(self{sep}{}){ret}\n", params_text(params)));
         }
         text.push_str("}\n\n");
-        self.wefts.push((name.to_string(), text));
+        let methods = methods
+            .iter()
+            .map(|(m, params, ret)| (m.to_string(), params.iter().map(|t| t.to_string()).collect(), ret.to_string()))
+            .collect();
+        self.wefts.push(WeftDecl { name: name.to_string(), methods, text });
         Ok(())
     }
 
     /// Makes the value warp `w` implement the weft `weft`: its methods are the ones
     /// [`Embed::warp_method`] gave it, and an `any` of the weft takes it.
     pub fn implement(&mut self, w: &WarpRef, weft: &str) -> Result<(), EmbedError> {
-        if !self.wefts.iter().any(|(name, _)| name == weft) {
+        if !self.wefts.iter().any(|d| d.name == weft) {
             return Err(EmbedError(format!("`{weft}` is not a weft of this module")));
         }
         let warp = &mut self.value_warps[w.index];
@@ -569,6 +675,38 @@ impl Embed {
             return Err(EmbedError(format!("`{}` already implements `{weft}`", warp.name)));
         }
         warp.wefts.push(weft.to_string());
+        Ok(())
+    }
+
+    /// Makes the value warp `w` a weave of the weft `weft` through host methods:
+    /// `methods` maps each of the weft's methods to the warp method that gives it
+    /// (see [`Embed::warp_method`]). The weave is `weave weft into w`, and each of
+    /// its methods calls its target.
+    pub fn weave(&mut self, w: &WarpRef, weft: &str, methods: &[(&str, &str)]) -> Result<(), EmbedError> {
+        let Some(decl) = self.wefts.iter().find(|d| d.name == weft) else {
+            return Err(EmbedError(format!("`{weft}` is not a weft of this module")));
+        };
+        let warp = &self.value_warps[w.index];
+        if warp.wefts.iter().chain(&warp.woven).any(|n| n == weft) {
+            return Err(EmbedError(format!("`{}` already implements `{weft}`", warp.name)));
+        }
+        let mut text = format!("weave {weft} into {} {{\n", warp.name);
+        for (method, params, ret) in &decl.methods {
+            let Some((_, target)) = methods.iter().find(|(m, _)| *m == method.as_str()) else {
+                return Err(EmbedError(format!("`{weft}.{method}` has no host method to give it")));
+            };
+            let types: Vec<&str> = params.iter().map(String::as_str).collect();
+            let sep = if types.is_empty() { "" } else { ", " };
+            let ret = if ret.is_empty() { String::new() } else { format!(" -> {ret}") };
+            text.push_str(&format!(
+                "    fun {method}(self{sep}{}){ret} {{\n        self.{target}({})\n    }}\n",
+                params_text(&types),
+                args_text(types.len()),
+            ));
+        }
+        text.push_str("}\n\n");
+        self.value_warps[w.index].woven.push(weft.to_string());
+        self.weaves.push(text);
         Ok(())
     }
 
@@ -620,19 +758,42 @@ impl Embed {
         for (name, ty, value) in &self.consts {
             text.push_str(&format!("pub const {name}: {ty} = {value}\n"));
         }
-        for (_, weft) in &self.wefts {
-            text.push_str(weft);
+        for weft in &self.wefts {
+            text.push_str(&weft.text);
         }
         for (name, cases) in &self.enums {
             let cases: String = cases.iter().map(|c| format!("    case {c}\n")).collect();
             text.push_str(&format!("pub warp {name} {{\n{cases}}}\n\n"));
         }
         for warp in &self.value_warps {
-            let fields: Vec<String> = warp.fields.iter().map(|(f, t)| format!("    pub {f}: {t}")).collect();
-            let methods: String = warp.methods.concat();
-            let sep = if methods.is_empty() { "\n" } else { ",\n" };
             let header = if warp.wefts.is_empty() { String::new() } else { format!(": {}", warp.wefts.join(", ")) };
-            text.push_str(&format!("pub warp {}{header} {{\n{}{sep}{methods}}}\n\n", warp.name, fields.join(",\n")));
+            let methods: String = warp.methods.concat();
+            if warp.cases.is_empty() {
+                let fields: Vec<String> = warp.fields.iter().map(|(f, t)| format!("    pub {f}: {t}")).collect();
+                let sep = if methods.is_empty() { "\n" } else { ",\n" };
+                text.push_str(&format!(
+                    "pub warp {}{header} {{\n{}{sep}{methods}}}\n\n",
+                    warp.name,
+                    fields.join(",\n")
+                ));
+            } else {
+                let cases: String = warp
+                    .cases
+                    .iter()
+                    .map(|c| {
+                        let fields: Vec<String> = c.fields.iter().map(|(f, t)| format!("{f}: {t}")).collect();
+                        if fields.is_empty() {
+                            format!("    case {}\n", c.name)
+                        } else {
+                            format!("    case {}({})\n", c.name, fields.join(", "))
+                        }
+                    })
+                    .collect();
+                text.push_str(&format!("pub warp {}{header} {{\n{cases}{methods}}}\n\n", warp.name));
+            }
+        }
+        for woven in &self.weaves {
+            text.push_str(woven);
         }
         for warp in &self.warps {
             text.push_str(&format!("pub warp {} {{\n    id: u64\n", warp.name));
@@ -667,11 +828,17 @@ impl Embed {
         }
         let mut layouts = Vec::with_capacity(self.value_warps.len());
         for w in &self.value_warps {
-            let offsets =
-                treadle::warp_field_offsets(&resolved.program, &typed, &self.module, &w.name).ok_or_else(|| {
-                    vec![Diagnostic::error(codes::U0102, format!("`{}` has no layout to read its fields by", w.name))]
-                })?;
-            layouts.push(Layout::new(&offsets, &w.sizes));
+            let no_layout = || vec![Diagnostic::error(codes::U0102, format!("`{}` has no layout to read by", w.name))];
+            if w.cases.is_empty() {
+                let offsets = treadle::warp_field_offsets(&resolved.program, &typed, &self.module, &w.name)
+                    .ok_or_else(no_layout)?;
+                layouts.push(Layout::new(&offsets, &w.sizes));
+            } else {
+                let case_offsets = treadle::warp_case_offsets(&resolved.program, &typed, &self.module, &w.name)
+                    .ok_or_else(no_layout)?;
+                let sizes: Vec<Vec<u64>> = w.cases.iter().map(|c| c.sizes.clone()).collect();
+                layouts.push(Layout::cases(case_offsets.tag, &case_offsets.cases, &sizes));
+            }
         }
         let image = treadle::compile_exports(&db, &resolved.program, &typed, Level::O2)?.image;
         let hosts = self.funs.into_iter().map(|f| (format!("{}.{}", self.module, f.name), f.factory)).collect();
