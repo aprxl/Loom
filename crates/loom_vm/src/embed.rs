@@ -1,5 +1,5 @@
 //! Host functions: Rust code an embedding application registers by name and
-//! a program calls through `host.call`.
+//! a program calls through `hostcall`.
 
 use std::collections::BTreeMap;
 use std::fmt;

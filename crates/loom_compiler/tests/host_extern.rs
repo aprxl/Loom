@@ -1,4 +1,4 @@
-//! A user `extern "host"` function compiles to `host.call` on Treadle when
+//! A user `extern "host"` function compiles to `hostcall` on Treadle when
 //! it takes and gives integers, `bool` or `char`; anything else is U0102.
 
 use loom_compiler::hir::resolve;
@@ -26,7 +26,8 @@ fn a_scalar_host_function_is_a_host_call() {
     assert_eq!(image.host_imports.len(), 1);
     let import = &image.host_imports[0];
     assert_eq!((import.name.as_str(), import.args, import.results), ("host_extern.step", 1, 1));
-    assert!(image.natives.iter().any(|n| n == "host.call"));
+    assert!(!image.natives.iter().any(|n| n == "host.call"));
+    assert!(image.code.iter().any(|&w| loom_isa::word::opcode(w) == loom_isa::Op::HostCall as u16));
     loom_isa::verify(&image).expect("valid");
 }
 

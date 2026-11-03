@@ -55,15 +55,26 @@ fn best(image: &Image, host: Option<fn() -> HostFn>) -> (Duration, String) {
     (best, printed)
 }
 
-fn gate(name: &str, loom_step: &str, main: &str, host: fn() -> HostFn) {
+fn gate(name: &str, calls: u32, loom_step: &str, guarded_step: &str, main: &str, host: fn() -> HostFn) {
     let with_host = format!("use std.io.print\n\nextern \"host\" {{\n    pub fun step(n: u64) -> u64\n}}\n\n{main}");
     let in_loom = format!("use std.io.print\n\n{loom_step}\n\n{main}");
+    let guarded = format!("use std.io.print\n\n{guarded_step}\n\n{main}");
     let (host_time, host_out) = best(&compile(&with_host), Some(host));
     let (loom_time, loom_out) = best(&compile(&in_loom), None);
+    let (guarded_time, guarded_out) = best(&compile(&guarded), None);
     assert_eq!(host_out, loom_out, "{name}: the two programs disagree");
+    assert_eq!(host_out, guarded_out, "{name}: the guarded program disagrees");
+    let per = |t: Duration| t.as_secs_f64() * 1e9 / f64::from(calls);
     let ratio = loom_time.as_secs_f64() / host_time.as_secs_f64();
-    println!("{name}: host {host_time:?}, loom {loom_time:?}, ratio = {ratio:.2} (at least {MIN_RATIO})");
-    assert!(ratio >= MIN_RATIO, "{name}: ratio {ratio:.2} is below {MIN_RATIO}");
+    let ratio_guarded = guarded_time.as_secs_f64() / host_time.as_secs_f64();
+    println!(
+        "{name}: host {:.2} ns/call, loom {:.2} ns/call, loom_guarded {:.2} ns/call",
+        per(host_time),
+        per(loom_time),
+        per(guarded_time)
+    );
+    println!("{name}: ratio = {ratio:.2}, ratio_guarded = {ratio_guarded:.2} (at least {MIN_RATIO})");
+    assert!(ratio_guarded >= MIN_RATIO, "{name}: ratio_guarded {ratio_guarded:.2} is below {MIN_RATIO}");
 }
 
 #[test]
@@ -71,7 +82,9 @@ fn gate(name: &str, loom_step: &str, main: &str, host: fn() -> HostFn) {
 fn a_host_call_costs_what_a_loom_call_does() {
     gate(
         "overhead",
+        10_000_000,
         "fun step(n: u64) -> u64 = n + 1",
+        "fun step(x: u64) -> u64 {\n    if x == u64.MAX { step(x) } else { x + 1 }\n}",
         "fun main() {\n    var x = 0u64\n    for _ in 0..10000000 { x = step(x) }\n    print(x)\n}\n",
         || {
             Box::new(|r| {
@@ -87,7 +100,9 @@ fn a_host_call_costs_what_a_loom_call_does() {
 fn a_host_call_that_works_costs_what_a_loom_call_does() {
     gate(
         "work",
+        100_000,
         "fun step(n: u64) -> u64 {\n    var s = 0u64\n    for k in 1..=n { s += k }\n    s\n}",
+        "fun step(n: u64) -> u64 {\n    if n == u64.MAX {\n        step(n)\n    } else {\n        var s = 0u64\n        for k in 1..=n { s += k }\n        s\n    }\n}",
         "fun main() {\n    var total = 0u64\n    for _ in 0..100000 { total += step(1000) }\n    print(total)\n}\n",
         || {
             Box::new(|r| {

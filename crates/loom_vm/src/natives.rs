@@ -922,7 +922,6 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
             "int.cast_chk" => |c, a, i| int_cast_chk(&mut c.heap, a, i),
             "float.to_int_chk" => |c, a, i| float_to_int_chk(&mut c.heap, a, i),
             "int.to_char_chk" => |c, a, i| int_to_char_chk(&mut c.heap, a, i),
-            "host.call" => host_call,
             "exit.fail" => exit_fail,
             "mem.alloc" => mem_alloc,
             "mem.free" => mem_free,
@@ -960,14 +959,6 @@ pub(crate) fn resolve(name: &str) -> Option<(NativeFn, usize)> {
     };
     let sig = native(name)?;
     Some((f, usize::from(sig.args.max(sig.results))))
-}
-
-/// `host.call`: the host function bound to import `index`, over the registers at `args`.
-fn host_call(ctx: &mut Ctx, args: &mut [u64], index: u16) -> Result<(), Trap> {
-    ctx.host_check("host.call")?;
-    let (window, f) =
-        ctx.hosts.0.get_mut(usize::from(index)).ok_or_else(|| Trap::Crash("loom internal: no host function".into()))?;
-    f(&mut args[..*window]).map_err(Trap::Unravel)
 }
 
 fn out_str<S: Sinks>(s: &mut S, args: &mut [u64], _: u16) -> Result<(), Trap> {

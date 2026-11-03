@@ -5,10 +5,10 @@ fn import(name: &str, args: u16, results: u16) -> HostImport {
     HostImport { name: name.into(), args, results }
 }
 
-/// An image of one function that does `calln host.call` with immediate `c`,
+/// An image of one function that does `hostcall` of import `c`,
 /// in a frame of 4 registers.
 fn image(c: u16, imports: Vec<HostImport>) -> Image {
-    let code = vec![word(Op::CallN, 0, 0, c), word(Op::Ret, 0, 1, 0)];
+    let code = vec![word(Op::HostCall, 0, c, 0), word(Op::Ret, 0, 1, 0)];
     let func = Func {
         name: "f".into(),
         entry: 0,
@@ -20,14 +20,7 @@ fn image(c: u16, imports: Vec<HostImport>) -> Image {
         pads: vec![],
         sites: vec![],
     };
-    Image {
-        funcs: vec![func],
-        code,
-        natives: vec!["host.call".into()],
-        host_imports: imports,
-        entry: Some(0),
-        ..Image::default()
-    }
+    Image { funcs: vec![func], code, host_imports: imports, entry: Some(0), ..Image::default() }
 }
 
 fn rejects(img: &Image, what: &str) {
@@ -57,10 +50,17 @@ fn the_largest_import_must_fit_the_frame() {
     // the first but not the second, and every call site is checked against
     // the largest.
     let mut img = image(0, vec![import("app.small", 1, 1), import("app.big", 3, 1)]);
-    img.code[0] = word(Op::CallN, 2, 0, 0);
+    img.code[0] = word(Op::HostCall, 2, 0, 0);
     rejects(&img, "don't fit the frame");
-    img.code[0] = word(Op::CallN, 1, 0, 0);
+    img.code[0] = word(Op::HostCall, 1, 0, 0);
     verify(&img).expect("valid");
+}
+
+#[test]
+fn hostcall_leaves_c_zero() {
+    let mut img = image(0, vec![import("app.increment", 1, 1)]);
+    img.code[0] = word(Op::HostCall, 0, 0, 1);
+    rejects(&img, "nonzero `c`");
 }
 
 #[test]

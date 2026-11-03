@@ -12,11 +12,11 @@ fn import(name: &str, args: u16, results: u16) -> HostImport {
     HostImport { name: name.into(), args, results }
 }
 
-/// An image of one function, `f(x)`, that does `host.call` of import `c`
+/// An image of one function, `f(x)`, that does `hostcall` of import `c`
 /// over its registers and returns `r0`, and the image's imports. The frame
 /// holds 4 registers.
 fn image(calls: &[u16], imports: Vec<HostImport>) -> Image {
-    let mut code: Vec<u64> = calls.iter().map(|&c| word(Op::CallN, 0, 0, c)).collect();
+    let mut code: Vec<u64> = calls.iter().map(|&c| word(Op::HostCall, 0, c, 0)).collect();
     code.push(word(Op::Ret, 0, 1, 0));
     let func = Func {
         name: "f".into(),
@@ -29,14 +29,7 @@ fn image(calls: &[u16], imports: Vec<HostImport>) -> Image {
         pads: vec![],
         sites: vec![],
     };
-    Image {
-        funcs: vec![func],
-        code,
-        natives: vec!["host.call".into()],
-        host_imports: imports,
-        entry: Some(0),
-        ..Image::default()
-    }
+    Image { funcs: vec![func], code, host_imports: imports, entry: Some(0), ..Image::default() }
 }
 
 fn host() -> Host {
@@ -140,6 +133,6 @@ fn compile_time_code_cannot_call_the_host() {
     let config = Config { refuse_host: true, ..Config::default() };
     let mut vm = vm(&img, table, &config).expect("loads");
     let Err(Outcome::Refused { native, .. }) = vm.call(0, &[5]) else { panic!("expected a refusal") };
-    assert_eq!(native, "host.call");
+    assert_eq!(native, "hostcall");
     assert!(!called.load(Ordering::Relaxed));
 }

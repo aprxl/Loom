@@ -11,8 +11,6 @@ pub enum NativeImm {
     None,
     /// An index into the image's format items.
     Fmt,
-    /// An index into the image's host imports.
-    HostImport,
 }
 
 /// A native's signature.
@@ -47,9 +45,6 @@ const fn sink_fmt(name: &'static str, args: u16) -> NativeSig {
 /// into another sink (both take the buffer made last). `str.new` makes a
 /// `String` of text.
 pub const NATIVES: &[NativeSig] = &[
-    // A call of a host function: its immediate indexes `Image::host_imports`,
-    // and its window is that import's (the verifier reads it there).
-    sig("host.call", 0, 0, NativeImm::HostImport),
     // Lazy constants publish their payload through an acquire/release flag.
     sig("const.load", 1, 1, NativeImm::None),
     sig("const.store", 2, 0, NativeImm::None),

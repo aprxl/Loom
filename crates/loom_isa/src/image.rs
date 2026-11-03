@@ -101,7 +101,7 @@ pub struct Image {
     pub fmts: Vec<FmtItem>,
     /// The natives it calls, by name (see [`crate::natives`]).
     pub natives: Vec<String>,
-    /// The host functions it calls, by index (the immediate of `host.call`).
+    /// The host functions it calls, by index (the operand of `hostcall`).
     pub host_imports: Vec<HostImport>,
     /// Source file names, for [`Line::file`].
     pub files: Vec<String>,
@@ -118,7 +118,7 @@ pub struct Image {
 }
 
 impl Image {
-    /// The registers a `host.call` needs: the largest import's window.
+    /// The registers a `hostcall` needs: the largest import's window.
     pub fn host_window(&self) -> usize {
         self.host_imports.iter().map(|h| usize::from(h.args.max(h.results))).max().unwrap_or(0)
     }

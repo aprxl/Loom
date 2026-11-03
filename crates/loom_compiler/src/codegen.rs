@@ -2118,6 +2118,17 @@ impl Emitter<'_> {
             K::Native { name: "arena.alloc.k", imm, args } => {
                 self.put(span, word(Op::ArenaAllocK, dst, self.r(args[0]), *imm));
             }
+            // A host function is called by an op of its own, not a native.
+            K::Native { name: "host.call", imm, args } => {
+                let moves = args.iter().enumerate().map(|(i, &a)| (self.scratch + i as u16, self.r(a))).collect();
+                self.parallel(span, moves);
+                self.put(span, word(Op::HostCall, self.scratch, *imm, 0));
+                for (i, &r) in inst.results.iter().enumerate() {
+                    if !self.unused.contains(&r) {
+                        self.mov(span, self.r(r), self.scratch + i as u16);
+                    }
+                }
+            }
             K::Native { name, imm, args } => {
                 // At once: an argument may sit where another goes.
                 let moves = args.iter().enumerate().map(|(i, &a)| (self.scratch + i as u16, self.r(a))).collect();

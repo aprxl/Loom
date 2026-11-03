@@ -20,7 +20,7 @@ const FINE: u64 = 3;
 
 impl<'a> Builder<'a> {
     /// A call of an `extern "host"` function the program declares: a
-    /// `host.call` of the import named by its path. Only integers, `bool`
+    /// `hostcall` of the import named by its path. Only integers, `bool`
     /// and `char` cross, one register each.
     fn user_host_call(
         &mut self,
