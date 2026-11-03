@@ -21,8 +21,16 @@
 //!
 //! What a registration declares becomes a Loom module of the given name
 //! that the program `use`s: an `extern "host"` block for the functions, a
-//! `pub const` for each constant, the handles' warps, then the source added
-//! with [`Embed::source`].
+//! `pub const` for each constant, the unit enums, value warps and handles'
+//! warps, the wefts, then the source added with [`Embed::source`].
+//!
+//! A value warp ([`Embed::warp`]) is a struct of scalars: a host function takes
+//! and gives it as the address of a copy, and its methods read and write its
+//! fields through a [`Layout`]. A unit enum ([`Embed::unit_enum`]) crosses as the
+//! index of its case. [`Embed::constant_warp`] declares a constant of a value
+//! warp, [`Embed::weft`] declares a weft, and [`Embed::implement`] makes a value
+//! warp satisfy it with its host methods. [`Embed::show_via`] makes a value warp
+//! show through one of them.
 //!
 //! A typed closure takes scalars (integers, `bool`, `char`, `f32`, `f64`) and
 //! `&str`, and returns a scalar or a `String`; its annotated parameter types

@@ -81,6 +81,14 @@ fn a_value_warp_crosses_as_its_address() {
 }
 
 #[test]
+fn a_mutable_parameter_is_refused() {
+    rejected(
+        "extern \"host\" {\n    pub fun f(mut x: i64)\n}\n\nfun main() {\n    var n = 1\n    f(mut n)\n}\n",
+        "a parameter of type i64",
+    );
+}
+
+#[test]
 fn a_unit_enum_crosses_as_its_tag() {
     let image = compile(
         "warp Light {\n    case Red\n    case Green\n    case Off\n}\n\nextern \"host\" {\n    pub fun next(l: Light) -> Light\n}\n\nfun main() {\n    next(.Red)\n}\n",
