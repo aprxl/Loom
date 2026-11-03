@@ -28,5 +28,8 @@ loom_isa.workspace = true
 loom_vm.workspace = true
 loom_sys.workspace = true
 
+[dev-dependencies]
+loom_embed.workspace = true
+
 [lints]
 workspace = true

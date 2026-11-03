@@ -19,7 +19,7 @@ fn call(program: &Program, name: &str, args: &[u64]) -> Vec<u64> {
 #[test]
 fn add_goes_through_calc() {
     let mut embed = Embed::new("editor");
-    embed.fun2("add", |a: i64, b: i64| a + b).expect("registers");
+    embed.fun("add", |a: i64, b: i64| a + b).expect("registers");
     let program = compile(embed, "use editor.add\npub fun calc(a: i64, b: i64) -> i64 { add(a, b) }");
     assert_eq!(call(&program, "calc", &[2, 3]), [5]);
 }
@@ -36,8 +36,8 @@ fn a_constant_and_hardcoded_source_go_through_width() {
 #[test]
 fn narrow_signed_integers_round_trip() {
     let mut embed = Embed::new("m");
-    embed.fun1("same32", |x: i32| x).expect("registers");
-    embed.fun1("same8", |x: i8| x).expect("registers");
+    embed.fun("same32", |x: i32| x).expect("registers");
+    embed.fun("same8", |x: i8| x).expect("registers");
     let program = compile(
         embed,
         "use m.{same32, same8}\npub fun neg(x: i32) -> i32 { same32(x) }\npub fun small(x: i8) -> i8 { same8(x) }",
@@ -51,8 +51,8 @@ fn narrow_signed_integers_round_trip() {
 #[test]
 fn bool_and_char_round_trip() {
     let mut embed = Embed::new("m");
-    embed.fun1("flip", |b: bool| !b).expect("registers");
-    embed.fun1("next", |c: char| char::from_u32(u32::from(c) + 1).unwrap_or('?')).expect("registers");
+    embed.fun("flip", |b: bool| !b).expect("registers");
+    embed.fun("next", |c: char| char::from_u32(u32::from(c) + 1).unwrap_or('?')).expect("registers");
     let program = compile(
         embed,
         "use m.{flip, next}\npub fun f(b: bool) -> bool { flip(b) }\npub fun n(c: char) -> char { next(c) }",
@@ -65,7 +65,7 @@ fn bool_and_char_round_trip() {
 fn a_raw_function_over_registers() {
     let mut embed = Embed::new("m");
     embed
-        .fun("twice", &["u32"], Some("u32"), |_cx, r: &mut [u64]| {
+        .raw_fun("twice", &["u32"], Some("u32"), |_cx, r: &mut [u64]| {
             r[0] *= 2;
             Ok(())
         })
@@ -77,7 +77,7 @@ fn a_raw_function_over_registers() {
 #[test]
 fn an_error_from_a_raw_function_is_an_unravel() {
     let mut embed = Embed::new("m");
-    embed.fun("explode", &[], None, |_cx, _r: &mut [u64]| Err("boom".to_string())).expect("registers");
+    embed.raw_fun("explode", &[], None, |_cx, _r: &mut [u64]| Err("boom".to_string())).expect("registers");
     let program = compile(embed, "use m.explode\npub fun go() { explode() }");
     let Err(Outcome::Unravel { message, .. }) = program.start(host()).expect("starts").call("go", &[]) else {
         panic!("expected an unravel")
@@ -88,15 +88,15 @@ fn an_error_from_a_raw_function_is_an_unravel() {
 #[test]
 fn bad_registrations_are_errors() {
     let mut embed = Embed::new("m");
-    embed.fun0("one", || 1_i64).expect("registers");
-    assert!(embed.fun0("one", || 2_i64).is_err(), "twice");
+    embed.fun("one", || 1_i64).expect("registers");
+    assert!(embed.fun("one", || 2_i64).is_err(), "twice");
     assert!(embed.constant("one", 3_i64).is_err(), "a constant with a function's name");
-    assert!(embed.fun0("fail", || 1_i64).is_err(), "a keyword");
-    assert!(embed.fun0("LOUD", || 1_i64).is_err(), "a function in the case of a constant");
+    assert!(embed.fun("fail", || 1_i64).is_err(), "a keyword");
+    assert!(embed.fun("LOUD", || 1_i64).is_err(), "a function in the case of a constant");
     assert!(embed.constant("quiet", 1_i64).is_err(), "a constant in the case of a function");
-    assert!(embed.fun0("two words", || 1_i64).is_err(), "not one name");
-    assert!(embed.fun0("x // y", || 1_i64).is_err(), "a comment");
-    assert!(embed.fun("t", &["String"], None, |_cx, _r: &mut [u64]| Ok(())).is_err(), "a type that doesn't cross");
+    assert!(embed.fun("two words", || 1_i64).is_err(), "not one name");
+    assert!(embed.fun("x // y", || 1_i64).is_err(), "a comment");
+    assert!(embed.raw_fun("t", &["String"], None, |_cx, _r: &mut [u64]| Ok(())).is_err(), "a type that doesn't cross");
 }
 
 #[test]
@@ -111,7 +111,7 @@ fn a_program_starts_twice_and_each_run_has_its_own_state() {
     let mut embed = Embed::new("m");
     let mut count = 0_i64;
     embed
-        .fun0("next", move || {
+        .fun("next", move || {
             count += 1;
             count
         })
@@ -136,19 +136,19 @@ fn calling_what_is_not_there_is_an_error() {
 fn text_goes_in_and_a_string_comes_out() {
     let mut embed = Embed::new("m");
     embed
-        .fun("len_of", &["str"], Some("u64"), |cx, r| {
+        .raw_fun("len_of", &["str"], Some("u64"), |cx, r| {
             let n = cx.text(r[0], r[1])?.len() as u64;
             r[0] = n;
             Ok(())
         })
         .expect("registers");
     embed
-        .fun("to_text", &["u64"], Some("String"), |cx, r| {
+        .raw_fun("to_text", &["u64"], Some("String"), |cx, r| {
             let text = r[1].to_string();
             cx.new_string(text.as_bytes(), r[0])
         })
         .expect("registers");
-    embed.fun("empty", &[], Some("String"), |cx, r| cx.new_string(b"", r[0])).expect("registers");
+    embed.raw_fun("empty", &[], Some("String"), |cx, r| cx.new_string(b"", r[0])).expect("registers");
     let program = compile(
         embed,
         "use m.{len_of, to_text, empty}\npub fun bytes() -> u64 { len_of(\"h\u{e9}llo\") }\npub fun digits(n: u64) -> usize { to_text(n).len() }\npub fun nothing() -> usize { empty().len() }",

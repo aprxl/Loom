@@ -6,8 +6,9 @@
 //! use loom_embed::Embed;
 //!
 //! let mut embed = Embed::new("editor");
-//! embed.fun2("add", |a: i64, b: i64| a + b)?;
-//! embed.fun("tick", &[], None, |_cx, _r: &mut [u64]| -> Result<(), String> { Ok(()) })?;
+//! embed.fun("add", |a: i64, b: i64| a + b)?;
+//! embed.fun("cat", |s: &str, n: i64| s.repeat(n as usize))?;
+//! embed.raw_fun("tick", &[], None, |_cx, _r: &mut [u64]| -> Result<(), String> { Ok(()) })?;
 //! embed.constant("TAB_WIDTH", 4_i64)?;
 //! embed.source("pub fun width() -> i64 { TAB_WIDTH * 2 }")?;
 //! let program = embed
@@ -23,19 +24,21 @@
 //! `pub const` for each constant, the handles' warps, then the source added
 //! with [`Embed::source`].
 //!
-//! Scalars (integers, `bool`, `char`, `f32`, `f64`) cross in one register
-//! each; a `String` result is written by the host into a slot, and a raw
-//! [`Embed::fun`] takes `str` arguments as two registers (see [`HostCx`]).
-//! The typed helpers take scalar arguments, so a `str` argument needs the raw
-//! form. Handles give a Loom warp an id that the host keeps a value under.
+//! A typed closure takes scalars (integers, `bool`, `char`, `f32`, `f64`) and
+//! `&str`, and returns a scalar or a `String`; its annotated parameter types
+//! pick the registration, so no turbofish is needed. A scalar is one register,
+//! a `&str` is an address and a length, and a `String` result is written by
+//! the host into a slot that comes first. [`Embed::raw_fun`] gives the
+//! registers themselves, with a [`HostCx`].
 //!
-//! A [`Program`] can be started any number of times. Each registration
-//! keeps a factory that clones the closure, so each run owns its closures
-//! and a call is one indirect call. A closure's captured state must be
-//! `Clone`. A handle's values are shared by every run of its program and
-//! live until the program is dropped: v1 has no way to release one.
+//! A [`Program`] can be started any number of times. Each registration keeps
+//! a factory that clones the closure, so each run owns its closures and a
+//! call is one indirect call. A closure's captured state must be `Clone`. A
+//! handle's values are shared by every run of its program and live until the
+//! program is dropped: v1 has no way to release one.
 
 mod scalar;
+mod typed;
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -52,6 +55,7 @@ use loom_sys::{Host, Outcome};
 use loom_vm::{Config, HostCx, HostFn, HostTable, Vm};
 
 pub use scalar::{Out, Scalar};
+pub use typed::{IntoHost, IntoMethod, Num, Text};
 
 /// A registration that can't be made.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -66,7 +70,8 @@ impl fmt::Display for EmbedError {
 impl std::error::Error for EmbedError {}
 
 /// Makes a run's own copy of a host function.
-type Factory = Box<dyn Fn() -> HostFn + Send>;
+#[doc(hidden)]
+pub type Factory = Box<dyn Fn() -> HostFn + Send>;
 
 struct Registration {
     name: String,
@@ -82,12 +87,19 @@ struct Warp {
 }
 
 /// What a handle's warp keeps: the values the host made, by id.
-struct Table<T> {
+#[doc(hidden)]
+pub struct HandleTable<T> {
     next: u64,
-    items: HashMap<u64, T>,
+    pub(crate) items: HashMap<u64, T>,
 }
 
-impl<T> Table<T> {
+impl<T> fmt::Debug for HandleTable<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("HandleTable").field("next", &self.next).finish_non_exhaustive()
+    }
+}
+
+impl<T> HandleTable<T> {
     fn insert(&mut self, value: T) -> u64 {
         let id = self.next;
         self.next += 1;
@@ -101,7 +113,7 @@ impl<T> Table<T> {
 pub struct Handle<T> {
     index: usize,
     warp: String,
-    table: Arc<Mutex<Table<T>>>,
+    table: Arc<Mutex<HandleTable<T>>>,
 }
 
 impl<T> fmt::Debug for Handle<T> {
@@ -127,7 +139,7 @@ impl fmt::Debug for Embed {
     }
 }
 
-/// The kind of the one token `name` lexes as, if it is one token.
+/// Whether `name` lexes as one token of `kind`.
 fn lexes_as(name: &str, kind: &TokenKind) -> bool {
     if name.is_empty() || !name.chars().all(|c| c.is_alphanumeric() || c == '_') {
         return false;
@@ -149,24 +161,6 @@ fn args_text(count: usize) -> String {
     (0..count).map(|i| format!("a{i}")).collect::<Vec<_>>().join(", ")
 }
 
-macro_rules! typed_funs {
-    ($($method:ident($($ty:ident => $i:tt),*);)*) => {$(
-        /// Registers a function of scalars, returning a scalar or a `String`; its closure may keep state, which each run gets a copy of.
-        pub fn $method<$($ty: Scalar,)* R: Out, F>(&mut self, name: &str, f: F) -> Result<(), EmbedError>
-        where
-            F: FnMut($($ty),*) -> R + Clone + Send + 'static,
-        {
-            self.add(name, vec![$(<$ty as Scalar>::LOOM),*], Some(R::LOOM), move || {
-                let mut f = f.clone();
-                Box::new(move |cx: &mut HostCx<'_>, r: &mut [u64]| {
-                    let out = f($(<$ty as Scalar>::from_reg(r[R::LEAD + $i])),*);
-                    out.put(cx, r)
-                })
-            })
-        }
-    )*};
-}
-
 macro_rules! constructors {
     ($($method:ident($($ty:ident => $i:tt),*);)*) => {$(
         /// Registers a constructor of `h`'s warp: `f` makes the value, which the table keeps under the id the Loom function `name` returns.
@@ -178,7 +172,7 @@ macro_rules! constructors {
             self.claim(name, &TokenKind::Ident)?;
             let table = Arc::clone(&h.table);
             let types: Vec<&str> = vec![$(<$ty as Scalar>::LOOM),*];
-            self.add(&ext, types.clone(), Some("u64"), move || {
+            self.add_factory(&ext, types.clone(), Some("u64"), Box::new(move || {
                 let mut f = f.clone();
                 let table = Arc::clone(&table);
                 Box::new(move |_cx: &mut HostCx<'_>, r: &mut [u64]| {
@@ -186,50 +180,12 @@ macro_rules! constructors {
                     r[0] = table.lock().map_err(|_| "a handle's table is poisoned".to_string())?.insert(value);
                     Ok(())
                 })
-            })?;
+            }))?;
             let (params, args) = (params_text(&types), args_text(types.len()));
             self.functions.push(format!(
-                "pub fun {name}({params}) -> {warp} {{
-    {warp}(id: {ext}({args}))
-}}
-",
+                "pub fun {name}({params}) -> {warp} {{\n    {warp}(id: {ext}({args}))\n}}\n",
                 warp = h.warp,
             ));
-            Ok(())
-        }
-    )*};
-}
-
-macro_rules! methods {
-    ($($method:ident($($ty:ident => $i:tt),*);)*) => {$(
-        /// Registers a method of `h`'s warp: `f` gets the value the id names, and a stale id is an error.
-        pub fn $method<T: Send + 'static, $($ty: Scalar,)* R: Out, F>(&mut self, h: &Handle<T>, name: &str, f: F) -> Result<(), EmbedError>
-        where
-            F: FnMut(&mut T, $($ty),*) -> R + Clone + Send + 'static,
-        {
-            let ext = format!("{}_{name}", h.warp.to_lowercase());
-            let table = Arc::clone(&h.table);
-            let types: Vec<&str> = ["u64"].into_iter().chain(vec![$(<$ty as Scalar>::LOOM),*]).collect();
-            self.add(&ext, types.clone(), Some(R::LOOM), move || {
-                let mut f = f.clone();
-                let table = Arc::clone(&table);
-                Box::new(move |cx: &mut HostCx<'_>, r: &mut [u64]| {
-                    let id = r[R::LEAD];
-                    let out = {
-                        let mut t = table.lock().map_err(|_| "a handle's table is poisoned".to_string())?;
-                        let item = t.items.get_mut(&id).ok_or_else(|| format!("stale handle {id}"))?;
-                        f(item, $(<$ty as Scalar>::from_reg(r[R::LEAD + 1 + $i])),*)
-                    };
-                    out.put(cx, r)
-                })
-            })?;
-            let (params, args) = (params_text(&types[1..]), args_text(types.len() - 1));
-            let sep = if params.is_empty() { "" } else { ", " };
-            let text = format!(
-                "    pub fun {name}(self{sep}{params}) -> {} {{\n        {ext}(self.id{sep}{args})\n    }}\n",
-                R::LOOM,
-            );
-            self.warps[h.index].methods.push(text);
             Ok(())
         }
     )*};
@@ -262,10 +218,13 @@ impl Embed {
         Ok(())
     }
 
-    fn add<I>(&mut self, name: &str, params: Vec<&str>, ret: Option<&str>, make: I) -> Result<(), EmbedError>
-    where
-        I: Fn() -> HostFn + Send + 'static,
-    {
+    fn add_factory(
+        &mut self,
+        name: &str,
+        params: Vec<&str>,
+        ret: Option<&str>,
+        factory: Factory,
+    ) -> Result<(), EmbedError> {
         if let Some(bad) = params.iter().find(|t| !scalar::TYPES.contains(t) && **t != "str") {
             return Err(EmbedError(format!("`{bad}` is not a type that crosses into Loom")));
         }
@@ -273,33 +232,46 @@ impl Embed {
             return Err(EmbedError(format!("`{bad}` is not a type that crosses into Loom")));
         }
         self.claim(name, &TokenKind::Ident)?;
-        let params = params.into_iter().map(str::to_string).collect();
         self.funs.push(Registration {
             name: name.to_string(),
-            params,
+            params: params.into_iter().map(str::to_string).collect(),
             ret: ret.map(str::to_string),
-            factory: Box::new(make),
+            factory,
         });
         Ok(())
     }
 
-    typed_funs! {
-        fun0();
-        fun1(A => 0);
-        fun2(A => 0, B => 1);
-        fun3(A => 0, B => 1, C => 2);
+    /// Registers a function from a closure: its annotated parameters are its
+    /// Loom parameters (`i64`, `f32`, `&str` and the like), its return value
+    /// its result (a scalar, or a `String`).
+    ///
+    /// An unannotated `&str` parameter is not inferred, so the closure needs
+    /// its type:
+    ///
+    /// ```compile_fail
+    /// let mut embed = loom_embed::Embed::new("m");
+    /// embed.fun("len", |s| s.len() as u64).ok();
+    /// ```
+    pub fn fun<M, F: IntoHost<M>>(&mut self, name: &str, f: F) -> Result<(), EmbedError> {
+        self.add_factory(name, F::params(), Some(F::ret()), f.factory())
+    }
+
+    /// Registers a function over registers: it gets one for each of `params`
+    /// (Loom type names), reads a `str` as two registers (see [`HostCx::text`]),
+    /// and writes its result, if `ret` names one, to the first register; a
+    /// `String` result is written into a slot that is the first register and
+    /// the parameters follow it.
+    pub fn raw_fun<F>(&mut self, name: &str, params: &[&str], ret: Option<&str>, f: F) -> Result<(), EmbedError>
+    where
+        F: FnMut(&mut HostCx<'_>, &mut [u64]) -> Result<(), String> + Clone + Send + 'static,
+    {
+        self.add_factory(name, params.to_vec(), ret, Box::new(move || Box::new(f.clone())))
     }
 
     constructors! {
         constructor0();
         constructor1(A => 0);
         constructor2(A => 0, B => 1);
-    }
-
-    methods! {
-        method0();
-        method1(A => 0);
-        method2(A => 0, B => 1);
     }
 
     /// Declares a handle type `name` (a `PascalCase` Loom warp): its values
@@ -310,20 +282,27 @@ impl Embed {
         Ok(Handle {
             index: self.warps.len() - 1,
             warp: name.to_string(),
-            table: Arc::new(Mutex::new(Table { next: 1, items: HashMap::new() })),
+            table: Arc::new(Mutex::new(HandleTable { next: 1, items: HashMap::new() })),
         })
     }
 
-    /// Registers a function over registers: it gets one for each of `params`
-    /// (Loom type names), reads a `str` as two registers (see [`HostCx::text`]),
-    /// and writes its result, if `ret` names one, to the first register; a
-    /// `String` result is written into a slot that is the first register and
-    /// the parameters follow it.
-    pub fn fun<F>(&mut self, name: &str, params: &[&str], ret: Option<&str>, f: F) -> Result<(), EmbedError>
-    where
-        F: FnMut(&mut HostCx<'_>, &mut [u64]) -> Result<(), String> + Clone + Send + 'static,
-    {
-        self.add(name, params.to_vec(), ret, move || Box::new(f.clone()))
+    /// Registers a method of `h`'s warp from a closure whose first parameter
+    /// is the value the id names; a stale id is an error.
+    pub fn method<T, M, F: IntoMethod<T, M>>(&mut self, h: &Handle<T>, name: &str, f: F) -> Result<(), EmbedError> {
+        let ext = format!("{}_{name}", h.warp.to_lowercase());
+        let params = F::params();
+        let mut types: Vec<&str> = vec!["u64"];
+        types.extend(params.iter().copied());
+        self.add_factory(&ext, types, Some(F::ret()), f.factory(Arc::clone(&h.table)))?;
+        let sep = if params.is_empty() { "" } else { ", " };
+        let text = format!(
+            "    pub fun {name}(self{sep}{}) -> {} {{\n        {ext}(self.id{sep}{})\n    }}\n",
+            params_text(&params),
+            F::ret(),
+            args_text(params.len()),
+        );
+        self.warps[h.index].methods.push(text);
+        Ok(())
     }
 
     /// Declares `pub const name: T = value` in the module.

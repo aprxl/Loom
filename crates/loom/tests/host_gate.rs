@@ -269,3 +269,89 @@ fn a_host_call_that_evaluates_a_polynomial_costs_what_a_loom_call_does() {
         },
     );
 }
+
+/// The best time of `RUNS` calls of an exported `run`, and what it printed.
+fn best_export(program: &loom_embed::Program) -> (Duration, String) {
+    let mut best = Duration::MAX;
+    let mut printed = String::new();
+    for _ in 0..RUNS {
+        let output = Rc::new(RefCell::new(Vec::new()));
+        let mut run = program.start(Host::captured(Rc::clone(&output))).expect("starts");
+        let start = Instant::now();
+        run.call("run", &[]).expect("runs");
+        best = best.min(start.elapsed());
+        printed = String::from_utf8_lossy(&output.borrow()).into_owned();
+    }
+    (best, printed)
+}
+
+#[test]
+#[ignore = "perf gate: run with --release -- --ignored --nocapture"]
+fn a_buffer_append_costs_what_a_loom_list_push_costs() {
+    const CALLS: u32 = 200_000;
+    let host = {
+        let mut embed = loom_embed::Embed::new("m");
+        let buffer = embed.handle::<Vec<String>>("Buffer").expect("declares");
+        embed.constructor0(&buffer, "open", Vec::new).expect("registers");
+        embed
+            .method(&buffer, "append", |items: &mut Vec<String>, text: &str| {
+                items.push(text.to_string());
+                items.len() as u64
+            })
+            .expect("registers");
+        embed
+            .compile(&format!(
+                "use std.io.print
+use m.{{open}}
+
+pub fun run() {{
+    var total = 0u64
+    let b = open()
+    var k = 0u64
+    for _ in 0..{CALLS} {{
+        let s = if k % 2 == 0 {{ \"héllo\" }} else {{ \"héllo!\" }}
+        total += b.append(s)
+        k += 1
+    }}
+    print(total)
+}}
+"
+            ))
+            .unwrap_or_else(|d| panic!("{d:?}"))
+    };
+    let loom = loom_embed::Embed::new("m")
+        .compile(&format!(
+            "use std.io.print
+
+fun append_ref(mut xs: List[String], text: str) -> u64 {{
+    xs.push(\"{{text}}\")
+    let n = xs.len() as u64
+    if n == u64.MAX {{ append_ref(mut xs, text) }} else {{ n }}
+}}
+
+pub fun run() {{
+    var xs: List[String] = []
+    var total = 0u64
+    var k = 0u64
+    for _ in 0..{CALLS} {{
+        let s = if k % 2 == 0 {{ \"héllo\" }} else {{ \"héllo!\" }}
+        total += append_ref(mut xs, s)
+        k += 1
+    }}
+    print(total)
+}}
+"
+        ))
+        .unwrap_or_else(|d| panic!("{d:?}"));
+    let (host_time, host_out) = best_export(&host);
+    let (loom_time, loom_out) = best_export(&loom);
+    assert_eq!(host_out, loom_out, "append: the two programs disagree");
+    let per = |t: Duration| t.as_secs_f64() * 1e9 / f64::from(CALLS);
+    let ratio = loom_time.as_secs_f64() / host_time.as_secs_f64();
+    println!(
+        "append (gated): host {:.2} ns/call, loom_list {:.2} ns/call, ratio_guarded = {ratio:.2} (at least {MIN_RATIO})",
+        per(host_time),
+        per(loom_time)
+    );
+    assert!(ratio >= MIN_RATIO, "append: ratio_guarded {ratio:.2} is below {MIN_RATIO}");
+}

@@ -19,11 +19,11 @@ fn call(program: &Program, name: &str, args: &[u64]) -> Vec<u64> {
 #[test]
 fn every_arity_takes_mixed_scalars_and_returns_a_string() {
     let mut embed = Embed::new("m");
-    embed.fun0("zero", || 7_i64).expect("registers");
-    embed.fun1("neg", |x: i64| -x).expect("registers");
-    embed.fun2("mix", |x: f64, y: f32| x * f64::from(y)).expect("registers");
-    embed.fun3("pick", |a: bool, c: char, n: u8| if a { u64::from(n) + u64::from(c) } else { 0 }).expect("registers");
-    embed.fun2("text", |n: i64, c: char| c.to_string().repeat(n as usize)).expect("registers");
+    embed.fun("zero", || 7_i64).expect("registers");
+    embed.fun("neg", |x: i64| -x).expect("registers");
+    embed.fun("mix", |x: f64, y: f32| x * f64::from(y)).expect("registers");
+    embed.fun("pick", |a: bool, c: char, n: u8| if a { u64::from(n) + u64::from(c) } else { 0 }).expect("registers");
+    embed.fun("text", |n: i64, c: char| c.to_string().repeat(n as usize)).expect("registers");
     let program = compile(
         embed,
         "use m.{zero, neg, mix, pick, text}\n\
@@ -43,7 +43,7 @@ fn every_arity_takes_mixed_scalars_and_returns_a_string() {
 #[test]
 fn f32_nan_and_negative_zero_round_trip_bit_exact() {
     let mut embed = Embed::new("m");
-    embed.fun1("same32", |x: f32| x).expect("registers");
+    embed.fun("same32", |x: f32| x).expect("registers");
     let program = compile(embed, "use m.same32\npub fun id(x: f32) -> f32 { same32(x) }\n");
     for bits in [0x7fc0_0001_u32, 0x8000_0000, 0x7f80_0000, 1] {
         let out = call(&program, "id", &[u64::from(bits)]);
@@ -55,7 +55,7 @@ fn f32_nan_and_negative_zero_round_trip_bit_exact() {
 fn a_raw_function_takes_text_and_returns_a_string() {
     let mut embed = Embed::new("m");
     embed
-        .fun("pad_text", &["str", "i64"], Some("String"), |cx, r| {
+        .raw_fun("pad_text", &["str", "i64"], Some("String"), |cx, r| {
             let text = std::str::from_utf8(cx.text(r[1], r[2])?).map_err(|e| e.to_string())?.to_string();
             let n = r[3] as i64;
             cx.new_string(text.repeat(n as usize).as_bytes(), r[0])
@@ -71,12 +71,12 @@ fn a_handle_is_copy_and_its_methods_see_one_value() {
     let buffer = embed.handle::<i64>("Buffer").expect("declares");
     embed.constructor1(&buffer, "open", |x: i64| x).expect("registers");
     embed
-        .method1(&buffer, "add", |v: &mut i64, d: i64| {
+        .method(&buffer, "add", |v: &mut i64, d: i64| {
             *v += d;
             *v
         })
         .expect("registers");
-    embed.method0(&buffer, "get", |v: &mut i64| *v).expect("registers");
+    embed.method(&buffer, "get", |v: &mut i64| *v).expect("registers");
     let program = compile(
         embed,
         "use m.{open}\npub fun twice(a: i64) -> i64 {\n    let b = open(a)\n    let b2 = b\n    b.add(1) + b2.get()\n}\n",
@@ -99,7 +99,7 @@ fn outside_code_cannot_build_a_handle_from_its_id() {
 fn a_stale_id_is_an_unravel() {
     let mut embed = Embed::new("m");
     let buffer = embed.handle::<i64>("Buffer").expect("declares");
-    embed.method0(&buffer, "get", |v: &mut i64| *v).expect("registers");
+    embed.method(&buffer, "get", |v: &mut i64| *v).expect("registers");
     embed.source("pub fun forged() -> i64 { Buffer(id: 99).get() }").expect("adds");
     let program = compile(embed, "use m.forged\npub fun go() -> i64 { forged() }\n");
     let Err(Outcome::Unravel { message, .. }) = program.start(host()).expect("starts").call("go", &[]) else {
@@ -112,6 +112,37 @@ fn a_stale_id_is_an_unravel() {
 fn a_non_snake_case_function_or_non_pascal_handle_is_rejected() {
     let mut embed = Embed::new("m");
     assert!(embed.handle::<i64>("buffer").is_err(), "a handle is PascalCase");
-    assert!(embed.fun0("Zero", || 1_i64).is_err(), "a function is snake_case");
-    assert!(embed.fun0("f64", || 1_i64).is_err(), "a keyword type name");
+    assert!(embed.fun("Zero", || 1_i64).is_err(), "a function is snake_case");
+    assert!(embed.fun("f64", || 1_i64).is_err(), "a keyword type name");
+}
+
+#[test]
+fn text_arguments_infer_without_a_turbofish() {
+    let mut embed = Embed::new("m");
+    embed.fun("cat", |s: &str, n: i64| s.repeat(n as usize)).expect("registers");
+    embed.fun("len", |s: &str| s.len() as u64).expect("registers");
+    let program = compile(
+        embed,
+        "use m.{cat, len}\npub fun bytes() -> u64 { len(\"h\u{e9}llo\") }\npub fun rep() -> usize { cat(\"ab\", 2).len() }\n",
+    );
+    assert_eq!(call(&program, "bytes", &[]), [6]);
+    assert_eq!(call(&program, "rep", &[]), [4]);
+}
+
+#[test]
+fn a_handle_method_takes_text() {
+    let mut embed = Embed::new("m");
+    let buffer = embed.handle::<Vec<String>>("Buffer").expect("declares");
+    embed.constructor0(&buffer, "open", Vec::new).expect("registers");
+    embed
+        .method(&buffer, "append", |items: &mut Vec<String>, text: &str| {
+            items.push(text.to_string());
+            items.len() as u64
+        })
+        .expect("registers");
+    let program = compile(
+        embed,
+        "use m.{open}\npub fun go() -> u64 {\n    let b = open()\n    b.append(\"h\u{e9}llo\")\n    b.append(\"x\")\n}\n",
+    );
+    assert_eq!(call(&program, "go", &[]), [2]);
 }
