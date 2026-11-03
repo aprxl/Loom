@@ -50,6 +50,7 @@ use loom_compiler::modules::{MemoryLoader, Source};
 use loom_compiler::target::Target;
 use loom_compiler::{treadle, typeck};
 use loom_isa::Image;
+use loom_syntax::diag::codes;
 use loom_syntax::{Diagnostic, SourceDb, TokenKind};
 use loom_sys::{Host, Outcome};
 use loom_vm::{Config, HostCx, HostFn, HostTable, Vm};
@@ -71,7 +72,7 @@ impl std::error::Error for EmbedError {}
 
 /// Makes a run's own copy of a host function.
 #[doc(hidden)]
-pub type Factory = Box<dyn Fn() -> HostFn + Send>;
+pub type Factory = Box<dyn Fn(&[Layout]) -> HostFn + Send>;
 
 struct Registration {
     name: String,
@@ -122,12 +123,101 @@ impl<T> fmt::Debug for Handle<T> {
     }
 }
 
+/// A warp of scalar fields, whose values the host reads and writes by address.
+struct ValueWarp {
+    name: String,
+    fields: Vec<(String, String)>,
+    sizes: Vec<u64>,
+    methods: Vec<String>,
+}
+
+/// A value warp declared with [`Embed::warp`]; its methods are registered with
+/// [`Embed::warp_method`].
+#[derive(Clone, Debug)]
+pub struct WarpRef {
+    index: usize,
+    name: String,
+}
+
+/// Where a value warp's fields are: each field's byte offset and size, and the
+/// bytes the whole value spans. A host closure gets its warp's layout, which the
+/// compiler sets, and reads and writes fields with plain values.
+#[derive(Clone, Debug)]
+pub struct Layout {
+    span: usize,
+    fields: Box<[(usize, usize)]>,
+}
+
+impl Layout {
+    fn new(offsets: &[u64], sizes: &[u64]) -> Layout {
+        let fields: Box<[(usize, usize)]> =
+            offsets.iter().zip(sizes).map(|(at, size)| (*at as usize, *size as usize)).collect();
+        let span = fields.iter().map(|(at, size)| at + size).max().unwrap_or(0);
+        Layout { span, fields }
+    }
+
+    /// The bytes of the whole value at `addr`, read in place: one checked call.
+    pub fn bytes<'c>(&self, cx: &'c HostCx<'_>, addr: u64) -> Result<&'c [u8], String> {
+        cx.bytes(addr, self.span as u64)
+    }
+
+    /// The bytes of the whole value at `addr`, to write in place.
+    pub fn bytes_mut<'c>(&self, cx: &'c mut HostCx<'_>, addr: u64) -> Result<&'c mut [u8], String> {
+        cx.bytes_mut(addr, self.span as u64)
+    }
+
+    /// Field `field`, decoded from the bytes of [`bytes`](Self::bytes). Panics if
+    /// `field` is not one of the warp's fields.
+    pub fn read<T: Scalar>(&self, bytes: &[u8], field: usize) -> T {
+        let (at, size) = self.fields[field];
+        T::from_reg(read_le(&bytes[at..at + size], size))
+    }
+
+    /// Writes field `field` into the bytes of [`bytes_mut`](Self::bytes_mut).
+    pub fn write<T: Scalar>(&self, bytes: &mut [u8], field: usize, value: T) {
+        let (at, size) = self.fields[field];
+        write_le(&mut bytes[at..at + size], size, value.to_reg());
+    }
+}
+
+/// The `size` bytes of `raw` as a little-endian register, zero-extended.
+fn read_le(raw: &[u8], size: usize) -> u64 {
+    match size {
+        1 => u64::from(raw[0]),
+        2 => u64::from(u16::from_le_bytes(raw.try_into().unwrap_or_default())),
+        4 => u64::from(u32::from_le_bytes(raw.try_into().unwrap_or_default())),
+        _ => u64::from_le_bytes(raw.try_into().unwrap_or_default()),
+    }
+}
+
+/// The low `size` bytes of `value`, little-endian, into `raw`.
+fn write_le(raw: &mut [u8], size: usize, value: u64) {
+    match size {
+        1 => raw[0] = value as u8,
+        2 => raw.copy_from_slice(&(value as u16).to_le_bytes()),
+        4 => raw.copy_from_slice(&(value as u32).to_le_bytes()),
+        _ => raw.copy_from_slice(&value.to_le_bytes()),
+    }
+}
+
+/// The size in bytes of a scalar type, if it is one.
+fn scalar_size(ty: &str) -> Option<u64> {
+    Some(match ty {
+        "i8" | "u8" | "bool" => 1,
+        "i16" | "u16" => 2,
+        "i32" | "u32" | "f32" | "char" => 4,
+        "i64" | "u64" | "f64" => 8,
+        _ => return None,
+    })
+}
+
 /// What a program can call, collected before it is compiled.
 pub struct Embed {
     module: String,
     funs: Vec<Registration>,
     consts: Vec<(String, String, String)>,
     warps: Vec<Warp>,
+    value_warps: Vec<ValueWarp>,
     functions: Vec<String>,
     source: String,
     names: HashSet<String>,
@@ -172,7 +262,7 @@ macro_rules! constructors {
             self.claim(name, &TokenKind::Ident)?;
             let table = Arc::clone(&h.table);
             let types: Vec<&str> = vec![$(<$ty as Scalar>::LOOM),*];
-            self.add_factory(&ext, types.clone(), Some("u64"), Box::new(move || {
+            self.add_factory(&ext, types.clone(), Some("u64"), Box::new(move |_: &[Layout]| {
                 let mut f = f.clone();
                 let table = Arc::clone(&table);
                 Box::new(move |_cx: &mut HostCx<'_>, r: &mut [u64]| {
@@ -202,6 +292,7 @@ impl Embed {
             functions: Vec::new(),
             source: String::new(),
             names: HashSet::new(),
+            value_warps: Vec::new(),
         }
     }
 
@@ -218,6 +309,13 @@ impl Embed {
         Ok(())
     }
 
+    /// Whether a type may cross: a scalar, `str` (or `String` as a result), or a value warp.
+    fn crosses(&self, t: &str, result: bool) -> bool {
+        scalar::TYPES.contains(&t)
+            || if result { t == "String" } else { t == "str" }
+            || self.value_warps.iter().any(|w| w.name == t)
+    }
+
     fn add_factory(
         &mut self,
         name: &str,
@@ -225,10 +323,10 @@ impl Embed {
         ret: Option<&str>,
         factory: Factory,
     ) -> Result<(), EmbedError> {
-        if let Some(bad) = params.iter().find(|t| !scalar::TYPES.contains(t) && **t != "str") {
+        if let Some(bad) = params.iter().find(|t| !self.crosses(t, false)) {
             return Err(EmbedError(format!("`{bad}` is not a type that crosses into Loom")));
         }
-        if let Some(bad) = ret.filter(|t| !scalar::TYPES.contains(t) && *t != "String") {
+        if let Some(bad) = ret.filter(|t| !self.crosses(t, true)) {
             return Err(EmbedError(format!("`{bad}` is not a type that crosses into Loom")));
         }
         self.claim(name, &TokenKind::Ident)?;
@@ -265,7 +363,7 @@ impl Embed {
     where
         F: FnMut(&mut HostCx<'_>, &mut [u64]) -> Result<(), String> + Clone + Send + 'static,
     {
-        self.add_factory(name, params.to_vec(), ret, Box::new(move || Box::new(f.clone())))
+        self.add_factory(name, params.to_vec(), ret, Box::new(move |_: &[Layout]| Box::new(f.clone())))
     }
 
     constructors! {
@@ -305,6 +403,58 @@ impl Embed {
         Ok(())
     }
 
+    /// Declares a value warp `name` with scalar `fields` (name and Loom type),
+    /// whose values the host reads and writes by address (see [`Layout`]).
+    pub fn warp(&mut self, name: &str, fields: &[(&str, &str)]) -> Result<WarpRef, EmbedError> {
+        let mut sizes = Vec::with_capacity(fields.len());
+        for (field, ty) in fields {
+            if !lexes_as(field, &TokenKind::Ident) {
+                return Err(EmbedError(format!("`{field}` is not a field name")));
+            }
+            sizes.push(scalar_size(ty).ok_or_else(|| EmbedError(format!("`{ty}` is not a scalar field type")))?);
+        }
+        self.claim(name, &TokenKind::TypeIdent)?;
+        let fields = fields.iter().map(|(f, t)| (f.to_string(), t.to_string())).collect();
+        self.value_warps.push(ValueWarp { name: name.to_string(), fields, sizes, methods: Vec::new() });
+        Ok(WarpRef { index: self.value_warps.len() - 1, name: name.to_string() })
+    }
+
+    /// Registers a method of the value warp `w`: the Loom method `name` on `self`,
+    /// passing `self` and `params` (their addresses for a warp) to the host. A warp
+    /// result is written to a slot the host gets as `r[0]`, and `self` is `r[1]`,
+    /// the parameters after it (raw registers, as in [`Embed::raw_fun`]). The
+    /// closure gets the warp's [`Layout`].
+    pub fn warp_method<F>(
+        &mut self,
+        w: &WarpRef,
+        name: &str,
+        params: &[&str],
+        ret: &str,
+        f: F,
+    ) -> Result<(), EmbedError>
+    where
+        F: FnMut(&mut HostCx<'_>, &mut [u64], &Layout) -> Result<(), String> + Clone + Send + 'static,
+    {
+        let ext = format!("{}_{name}", w.name.to_lowercase());
+        let mut types: Vec<&str> = vec![w.name.as_str()];
+        types.extend(params.iter().copied());
+        let index = w.index;
+        let make = move |layouts: &[Layout]| -> HostFn {
+            let layout = layouts[index].clone();
+            let mut f = f.clone();
+            Box::new(move |cx: &mut HostCx<'_>, r: &mut [u64]| f(cx, r, &layout))
+        };
+        self.add_factory(&ext, types, Some(ret), Box::new(make))?;
+        let sep = if params.is_empty() { "" } else { ", " };
+        let text = format!(
+            "    pub fun {name}(self{sep}{}) -> {ret} {{\n        {ext}(self{sep}{})\n    }}\n",
+            params_text(params),
+            args_text(params.len()),
+        );
+        self.value_warps[w.index].methods.push(text);
+        Ok(())
+    }
+
     /// Declares `pub const name: T = value` in the module.
     pub fn constant<T: Scalar>(&mut self, name: &str, value: T) -> Result<(), EmbedError> {
         let literal = value.literal().ok_or_else(|| EmbedError(format!("`{name}` has no Loom literal")))?;
@@ -333,6 +483,12 @@ impl Embed {
         }
         for (name, ty, value) in &self.consts {
             text.push_str(&format!("pub const {name}: {ty} = {value}\n"));
+        }
+        for warp in &self.value_warps {
+            let fields: Vec<String> = warp.fields.iter().map(|(f, t)| format!("    pub {f}: {t}")).collect();
+            let methods: String = warp.methods.concat();
+            let sep = if methods.is_empty() { "\n" } else { ",\n" };
+            text.push_str(&format!("pub warp {} {{\n{}{sep}{methods}}}\n\n", warp.name, fields.join(",\n")));
         }
         for warp in &self.warps {
             text.push_str(&format!("pub warp {} {{\n    id: u64\n", warp.name));
@@ -365,9 +521,17 @@ impl Embed {
         if typed.has_errors() {
             return Err(typed.diagnostics);
         }
+        let mut layouts = Vec::with_capacity(self.value_warps.len());
+        for w in &self.value_warps {
+            let offsets =
+                treadle::warp_field_offsets(&resolved.program, &typed, &self.module, &w.name).ok_or_else(|| {
+                    vec![Diagnostic::error(codes::U0102, format!("`{}` has no layout to read its fields by", w.name))]
+                })?;
+            layouts.push(Layout::new(&offsets, &w.sizes));
+        }
         let image = treadle::compile_exports(&db, &resolved.program, &typed, Level::O2)?.image;
         let hosts = self.funs.into_iter().map(|f| (format!("{}.{}", self.module, f.name), f.factory)).collect();
-        Ok(Program { image, hosts })
+        Ok(Program { image, hosts, layouts })
     }
 }
 
@@ -375,6 +539,7 @@ impl Embed {
 pub struct Program {
     image: Image,
     hosts: Vec<(String, Factory)>,
+    layouts: Vec<Layout>,
 }
 
 impl fmt::Debug for Program {
@@ -389,11 +554,11 @@ impl Program {
         &self.image
     }
 
-    /// A new run, with a copy of every registered closure.
+    /// A new run, with a fresh copy of every registered closure.
     pub fn start(&self, host: Host) -> Result<Running<'_>, Outcome> {
         let mut table = HostTable::default();
         for (key, make) in &self.hosts {
-            table.register(key, make()).map_err(|message| Outcome::Crash { message, location: None })?;
+            table.register(key, make(&self.layouts)).map_err(|message| Outcome::Crash { message, location: None })?;
         }
         let vm = Vm::new_hosted(&self.image, host, &Config::default(), table)?;
         Ok(Running { vm, image: &self.image })

@@ -27,6 +27,16 @@ impl<'a> HostCx<'a> {
     pub fn new_string(&mut self, text: &[u8], dst: u64) -> Result<(), String> {
         self.ops.new_string(text, dst)
     }
+
+    /// The `len` bytes at `addr`: a value laid out by the compiler, read in place.
+    pub fn bytes(&self, addr: u64, len: u64) -> Result<&[u8], String> {
+        self.ops.bytes(addr, len)
+    }
+
+    /// The `len` bytes at `addr`, to write in place.
+    pub fn bytes_mut(&mut self, addr: u64, len: u64) -> Result<&mut [u8], String> {
+        self.ops.bytes_mut(addr, len)
+    }
 }
 
 impl fmt::Debug for HostCx<'_> {

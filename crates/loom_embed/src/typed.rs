@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use loom_vm::HostCx;
 
 use crate::scalar::{Out, Scalar};
-use crate::{Factory, HandleTable};
+use crate::{Factory, HandleTable, Layout};
 
 /// A `Scalar` argument: one register.
 #[doc(hidden)]
@@ -121,7 +121,7 @@ macro_rules! free_impl {
             }
 
             fn factory(self) -> Factory {
-                Box::new(move || {
+                Box::new(move |_: &[Layout]| {
                     let mut f = self.clone();
                     Box::new(move |cx: &mut HostCx<'_>, r: &mut [u64]| {
                         let mut regs = r[R::LEAD..].iter().copied();
@@ -154,7 +154,7 @@ macro_rules! method_impl {
             }
 
             fn factory(self, table: Arc<Mutex<HandleTable<T>>>) -> Factory {
-                Box::new(move || {
+                Box::new(move |_: &[Layout]| {
                     let mut f = self.clone();
                     let table = Arc::clone(&table);
                     Box::new(move |cx: &mut HostCx<'_>, r: &mut [u64]| {
@@ -187,7 +187,7 @@ where
     }
 
     fn factory(self) -> Factory {
-        Box::new(move || {
+        Box::new(move |_: &[Layout]| {
             let mut f = self.clone();
             Box::new(move |cx: &mut HostCx<'_>, r: &mut [u64]| {
                 let out = f();
@@ -212,7 +212,7 @@ where
     }
 
     fn factory(self, table: Arc<Mutex<HandleTable<T>>>) -> Factory {
-        Box::new(move || {
+        Box::new(move |_: &[Layout]| {
             let mut f = self.clone();
             let table = Arc::clone(&table);
             Box::new(move |cx: &mut HostCx<'_>, r: &mut [u64]| {

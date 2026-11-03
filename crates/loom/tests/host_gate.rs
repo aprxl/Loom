@@ -355,3 +355,94 @@ pub fun run() {{
     );
     assert!(ratio >= MIN_RATIO, "append: ratio_guarded {ratio:.2} is below {MIN_RATIO}");
 }
+
+#[test]
+#[ignore = "perf gate: run with --release -- --ignored --nocapture"]
+fn a_mat3_product_costs_what_a_loom_method_costs() {
+    const CALLS: u32 = 200_000;
+    let names: Vec<String> = (0..9).map(|k| format!("m{}{}", k / 3, k % 3)).collect();
+    let user = format!(
+        "use std.io.print
+use m.{{Mat3}}
+
+pub fun run() {{
+    var total = 0.0f64
+    let b = Mat3(m00: 1.0, m01: 0.5, m02: 0.25, m10: 0.0, m11: 1.0, m12: 0.5, m20: 0.5, m21: 0.0, m22: 1.0)
+    for k in 0..{CALLS} {{
+        let kf = (k % 7) as f64
+        let x = Mat3(m00: kf, m01: 1.0, m02: 2.0, m10: 0.5, m11: kf, m12: 1.0, m20: 2.0, m21: 0.5, m22: kf)
+        let r = x.mul(b)
+        total += r.m00 + r.m22
+    }}
+    print(total)
+}}
+"
+    );
+    // The product's entry (i, j): a row of `self` times a column of `other`, summed in order.
+    let entry =
+        |i: usize, j: usize| format!("self.m{i}0 * other.m0{j} + self.m{i}1 * other.m1{j} + self.m{i}2 * other.m2{j}");
+    let fields: Vec<String> = names.iter().map(|n| format!("pub {n}: f64")).collect();
+    let body: Vec<String> = (0..9).map(|k| format!("m{}{}: {}", k / 3, k % 3, entry(k / 3, k % 3))).collect();
+    let reference = format!(
+        "pub warp Mat3 {{
+    {},
+    pub fun mul(self, other: Mat3) -> Mat3 {{
+        let r = Mat3({})
+        if r.m00 != r.m00 {{ self.mul(other) }} else {{ r }}
+    }}
+}}
+",
+        fields.join(
+            ",
+    "
+        ),
+        body.join(", ")
+    );
+    let loom = {
+        let mut embed = loom_embed::Embed::new("m");
+        embed.source(&reference).unwrap_or_else(|e| panic!("{e}"));
+        embed.compile(&user).unwrap_or_else(|d| panic!("{d:?}"))
+    };
+    let host = {
+        let mut embed = loom_embed::Embed::new("m");
+        let pairs: Vec<(&str, &str)> = names.iter().map(|n| (n.as_str(), "f64")).collect();
+        let mat = embed.warp("Mat3", &pairs).expect("declares");
+        embed
+            .warp_method(&mat, "mul", &["Mat3"], "Mat3", move |cx, r, l| {
+                let (out, a, b) = (r[0], r[1], r[2]);
+                let (mut x, mut y) = ([0.0_f64; 9], [0.0_f64; 9]);
+                {
+                    let xs = l.bytes(cx, a)?;
+                    let ys = l.bytes(cx, b)?;
+                    for k in 0..9 {
+                        x[k] = l.read(xs, k);
+                        y[k] = l.read(ys, k);
+                    }
+                }
+                let mut c = [0.0_f64; 9];
+                for i in 0..3 {
+                    for j in 0..3 {
+                        c[i * 3 + j] = x[i * 3] * y[j] + x[i * 3 + 1] * y[3 + j] + x[i * 3 + 2] * y[6 + j];
+                    }
+                }
+                let zs = l.bytes_mut(cx, out)?;
+                for (k, value) in c.into_iter().enumerate() {
+                    l.write(zs, k, value);
+                }
+                Ok(())
+            })
+            .expect("registers");
+        embed.compile(&user).unwrap_or_else(|d| panic!("{d:?}"))
+    };
+    let (host_time, host_out) = best_export(&host);
+    let (loom_time, loom_out) = best_export(&loom);
+    assert_eq!(host_out, loom_out, "mat3: the two programs disagree");
+    let per = |t: Duration| t.as_secs_f64() * 1e9 / f64::from(CALLS);
+    let ratio = loom_time.as_secs_f64() / host_time.as_secs_f64();
+    println!(
+        "mat3 (gated): host {:.2} ns/call, loom_guarded {:.2} ns/call, ratio_guarded = {ratio:.2} (at least {MIN_RATIO})",
+        per(host_time),
+        per(loom_time)
+    );
+    assert!(ratio >= MIN_RATIO, "mat3: ratio_guarded {ratio:.2} is below {MIN_RATIO}");
+}

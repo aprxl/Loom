@@ -71,12 +71,21 @@ fun main() {
 }
 
 #[test]
+fn a_value_warp_crosses_as_its_address() {
+    let image =
+        compile("warp P { x: u32 }\n\nextern \"host\" {\n    pub fun f(p: P)\n}\n\nfun main() {\n    f(P(x: 1))\n}\n")
+            .expect("compiles");
+    let shape: Vec<_> = image.host_imports.iter().map(|h| (h.name.as_str(), h.args, h.results)).collect();
+    assert_eq!(shape, [("host_extern.f", 1, 0)]);
+    loom_isa::verify(&image).expect("valid");
+}
+
+#[test]
 fn other_types_are_not_implemented_yet() {
     let cases = [
         ("pub fun f(v: List[u8])", "f([1u8])", "a parameter of type"),
         ("pub fun f(p: (i64, i64))", "f((1, 2))", "a parameter of type"),
         ("pub fun f[T](x: T)", "f(1)", "generic parameters"),
-        ("pub fun f(p: P)", "f(P(x: 1))", "a parameter of type P"),
     ];
     for (decl, call, what) in cases {
         rejected(

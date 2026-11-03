@@ -60,6 +60,18 @@ pub fn compile_tests(
     Ok((Compiled { heddle, image }, tests))
 }
 
+/// The byte offset of each field of the warp `warp` in `module`, in
+/// declaration order, as the layout gives them (`None` if it has no such
+/// warp, or it has cases).
+pub fn warp_field_offsets(p: &Program, typed: &Typed, module: &str, warp: &str) -> Option<Vec<u64>> {
+    let def = *p.modules.iter().find(|m| m.path == module)?.items.get(warp)?;
+    let ty = typed.tcx.find(&crate::ty::TyKind::Adt(def, Vec::new()))?;
+    match &crate::ty::layout::Layouts::new(&typed.tcx, p, &typed.results).of(ty)?.shape {
+        crate::ty::layout::Shape::Fields(offsets) => Some(offsets.clone()),
+        _ => None,
+    }
+}
+
 /// Compiles a program with no `main` whose `pub` functions are called from
 /// outside (`loom_embed`): each one is an entry of the image, found by name.
 pub fn compile_exports(db: &SourceDb, p: &Program, typed: &Typed, level: Level) -> Result<Compiled, Vec<Diagnostic>> {

@@ -44,9 +44,11 @@ impl<'a> Builder<'a> {
             _ => VTy::Int,
         };
         let is_text = |ty: Ty| matches!(tcx.kind(ty), TyKind::Str);
+        let p = self.p;
+        let is_warp = |ty: Ty| matches!(tcx.kind(ty), TyKind::Adt(def, args) if args.is_empty() && !p.def_path(*def).starts_with("std."));
         for param in &sig.params {
             let ty = self.plain_ty(param.ty);
-            if !(is_scalar(ty) || is_text(ty)) || param.mode != ParamMode::Read || param.has_default {
+            if !(is_scalar(ty) || is_text(ty) || is_warp(ty)) || param.mode != ParamMode::Read || param.has_default {
                 let shown = self.tcx().display(self.p, ty);
                 return self.unsupported(span, &format!("`host function with a parameter of type {shown}` on Treadle"));
             }
@@ -54,11 +56,12 @@ impl<'a> Builder<'a> {
         let ret = self.plain_ty(sig.ret);
         let unit = matches!(self.tcx().kind(ret), TyKind::Unit);
         let string = self.is_string(ret);
-        if !unit && !string && !is_scalar(ret) {
+        let warp = is_warp(ret);
+        if !unit && !string && !warp && !is_scalar(ret) {
             let shown = self.tcx().display(self.p, ret);
             return self.unsupported(span, &format!("`host function with a result of type {shown}` on Treadle"));
         }
-        let slot = if string { Some(self.temp(ret, span)?) } else { None };
+        let slot = if string || warp { Some(self.temp(ret, span)?) } else { None };
         let mut regs: Vec<Value> = slot.into_iter().collect();
         for k in 0..sig.params.len() {
             let Some(ArgSource::Arg(i)) = info.args.get(k) else { return self.unsupported(span, "this call") };
@@ -68,11 +71,15 @@ impl<'a> Builder<'a> {
             if matches!(self.tcx().kind(ty), TyKind::Str) {
                 let (p, n) = self.text_of(v, ty, span)?;
                 regs.extend([p, n]);
+            } else if is_warp(ty) {
+                let at = self.temp(ty, span)?;
+                self.store_val(at, 0, ty, &v, span)?;
+                regs.push(at);
             } else {
                 regs.push(self.regs(v, ty, span)?[0]);
             }
         }
-        let results = usize::from(!unit && !string);
+        let results = usize::from(!unit && !string && !warp);
         let result_ty = vty(ret);
         let index = match self.host_imports.iter().position(|h| h.name == path) {
             Some(index) => index,
