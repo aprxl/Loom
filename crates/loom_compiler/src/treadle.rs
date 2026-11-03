@@ -60,6 +60,18 @@ pub fn compile_tests(
     Ok((Compiled { heddle, image }, tests))
 }
 
+/// Compiles a program with no `main` whose `pub` functions are called from
+/// outside (`loom_embed`): each one is an entry of the image, found by name.
+pub fn compile_exports(db: &SourceDb, p: &Program, typed: &Typed, level: Level) -> Result<Compiled, Vec<Diagnostic>> {
+    let baked = crate::consteval::evaluate(db, p, typed, false)?;
+    let heddle = optimized(heddle::build_exports_with(p, typed, &baked)?, level)?;
+    if heddle.funcs.is_empty() {
+        return Ok(Compiled { heddle, image: Image::default() });
+    }
+    let image = codegen::generate(db, &heddle).map_err(codegen_diagnostics)?;
+    Ok(Compiled { heddle, image })
+}
+
 /// Compiles a program type-checked for [`Target::VM`](crate::target::Target::VM)
 /// with no errors, after running its compile-time code, at `-O2`.
 pub fn compile(db: &SourceDb, p: &Program, typed: &Typed) -> Result<Compiled, Vec<Diagnostic>> {

@@ -42,6 +42,12 @@ impl Host {
     pub fn captured(buffer: Rc<RefCell<Vec<u8>>>) -> Host {
         Host { output: Output::Capture(buffer), sandbox: true, args: vec!["main".into()] }
     }
+
+    /// A run that prints to standard output and sees the machine; `args` is
+    /// what `env.args()` gives.
+    pub fn stdout(args: Vec<String>) -> Host {
+        Host { output: Output::Stdout, sandbox: false, args }
+    }
 }
 
 /// A Loom source location.

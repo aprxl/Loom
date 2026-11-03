@@ -446,6 +446,40 @@ pub fn build_tests_with(
     Ok((module, entries))
 }
 
+/// Builds the Heddle of a program with no `main`: each `pub`, non-generic
+/// function of the root file is an entry, and the first is the module's.
+/// `loom_embed` runs them by name.
+pub fn build_exports_with(p: &Program, typed: &Typed, baked: &crate::baked::Baked) -> Result<Module, Vec<Diagnostic>> {
+    let mut b = Builder::new(p, typed);
+    b.baked = Some(baked);
+    let mut roots = Vec::new();
+    let items = p.root.map(|root| p.module(root).items.values().copied().collect::<Vec<_>>()).unwrap_or_default();
+    for def in items {
+        let DefKind::Fn(f) = &p.def(def).kind else { continue };
+        let exported = p.def(def).vis == loom_syntax::ast::Vis::Pub
+            && f.generics.is_empty()
+            && f.body.is_some()
+            && f.abi.is_none()
+            && f.qualifier != loom_syntax::ast::FnQualifier::Test;
+        let Some(id) = typed.results.find(&Instance::of(def)).filter(|_| exported) else { continue };
+        let span = p.def(def).span;
+        if typed.results.sigs.get(&id).is_some_and(|s| matches!(typed.tcx.kind(s.ret), TyKind::Result(..))) {
+            b.unsupported::<()>(span, &format!("the export `{}` returns `! E`", p.def(def).name));
+            continue;
+        }
+        b.main_span.get_or_insert(span);
+        roots.push(b.func_id(FnKey::Body(id)));
+    }
+    b.drain();
+    if !b.diags.is_empty() {
+        return Err(b.diags);
+    }
+    let Some(&entry) = roots.first() else { return Ok(Module { entry: FuncId(0), ..Module::default() }) };
+    let mut module = b.finish(entry)?;
+    module.roots = roots;
+    Ok(module)
+}
+
 impl<'a> Builder<'a> {
     fn new(p: &'a Program, typed: &'a Typed) -> Self {
         Builder {
