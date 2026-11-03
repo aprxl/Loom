@@ -74,7 +74,7 @@ fun main() {
 fn other_types_are_not_implemented_yet() {
     let cases = [
         ("pub fun f(v: List[u8])", "f([1u8])", "a parameter of type"),
-        ("pub fun f(x: f64)", "f(1.0)", "a parameter of type f64"),
+        ("pub fun f(p: (i64, i64))", "f((1, 2))", "a parameter of type"),
         ("pub fun f[T](x: T)", "f(1)", "generic parameters"),
         ("pub fun f(p: P)", "f(P(x: 1))", "a parameter of type P"),
     ];

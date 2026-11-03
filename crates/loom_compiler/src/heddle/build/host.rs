@@ -11,7 +11,7 @@ use super::value::Val;
 use super::{Builder, ParamAbi};
 use crate::heddle::{Cmp, InstKind, Mem, VTy, Value};
 use crate::hir::{self, DefId, DefKind};
-use crate::ty::{Ty, TyKind};
+use crate::ty::{FloatTy, Ty, TyKind};
 use crate::typeck::{ArgSource, BodyId, Call};
 use loom_syntax::ast::ParamMode;
 
@@ -36,7 +36,13 @@ impl<'a> Builder<'a> {
             return self.unsupported(span, &format!("`host function {path}` with generic parameters on Treadle"));
         }
         let tcx = self.tcx();
-        let is_scalar = |ty: Ty| matches!(tcx.kind(ty), TyKind::Int(_) | TyKind::Bool | TyKind::Char);
+        let is_scalar =
+            |ty: Ty| matches!(tcx.kind(ty), TyKind::Int(_) | TyKind::Bool | TyKind::Char | TyKind::Float(_));
+        let vty = |ty: Ty| match tcx.kind(ty) {
+            TyKind::Float(FloatTy::F32) => VTy::F32,
+            TyKind::Float(FloatTy::F64) => VTy::F64,
+            _ => VTy::Int,
+        };
         let is_text = |ty: Ty| matches!(tcx.kind(ty), TyKind::Str);
         for param in &sig.params {
             let ty = self.plain_ty(param.ty);
@@ -67,6 +73,7 @@ impl<'a> Builder<'a> {
             }
         }
         let results = usize::from(!unit && !string);
+        let result_ty = vty(ret);
         let index = match self.host_imports.iter().position(|h| h.name == path) {
             Some(index) => index,
             None => {
@@ -77,7 +84,7 @@ impl<'a> Builder<'a> {
             }
         };
         let out =
-            self.emit(InstKind::Native { name: "host.call", imm: index as u16, args: regs }, &vec![VTy::Int; results]);
+            self.emit(InstKind::Native { name: "host.call", imm: index as u16, args: regs }, &vec![result_ty; results]);
         match slot {
             Some(dst) => {
                 self.own_temp(dst, ret);

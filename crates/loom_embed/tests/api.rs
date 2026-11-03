@@ -96,7 +96,7 @@ fn bad_registrations_are_errors() {
     assert!(embed.constant("quiet", 1_i64).is_err(), "a constant in the case of a function");
     assert!(embed.fun0("two words", || 1_i64).is_err(), "not one name");
     assert!(embed.fun0("x // y", || 1_i64).is_err(), "a comment");
-    assert!(embed.fun("t", &["f64"], None, |_cx, _r: &mut [u64]| Ok(())).is_err(), "a type that doesn't cross");
+    assert!(embed.fun("t", &["String"], None, |_cx, _r: &mut [u64]| Ok(())).is_err(), "a type that doesn't cross");
 }
 
 #[test]

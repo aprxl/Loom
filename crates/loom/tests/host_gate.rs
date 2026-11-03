@@ -206,3 +206,66 @@ fn a_host_call_that_builds_a_string_costs_what_a_loom_call_does() {
         },
     );
 }
+
+#[test]
+#[ignore = "perf gate: run with --release -- --ignored --nocapture"]
+fn a_host_call_that_counts_words_costs_what_a_loom_call_does() {
+    // The texts of the space count, with 20 and 32 words.
+    let (a, b) = ("ab cd ".repeat(10) + "efgh", "a b c d e f g h ".repeat(4));
+    let main = format!(
+        "fun main() {{\n    var total = 0u64\n    var k = 0u64\n    for _ in 0..1000000 {{\n        let s = if k % 2 == 0 {{ \"{a}\" }} else {{ \"{b}\" }}\n        total += count_words(s)\n        k += 1\n    }}\n    print(total)\n}}\n"
+    );
+    gate(
+        "count_words",
+        true,
+        1_000_000,
+        "pub fun count_words(s: str) -> u64",
+        "fun count_words(s: str) -> u64 {\n    var n = 0u64\n    var inword = false\n    for c in s.bytes() {\n        if c == 32u8 {\n            inword = false\n        } else if not inword {\n            inword = true\n            n += 1\n        }\n    }\n    n\n}",
+        "fun count_words(s: str) -> u64 {\n    var n = 0u64\n    var inword = false\n    for c in s.bytes() {\n        if c == 32u8 {\n            inword = false\n        } else if not inword {\n            inword = true\n            n += 1\n        }\n    }\n    if n == u64.MAX { count_words(s) } else { n }\n}",
+        &main,
+        || {
+            Box::new(|cx, r| {
+                let text = cx.text(r[0], r[1])?;
+                let (mut n, mut inword) = (0u64, false);
+                for &c in text {
+                    if c == b' ' {
+                        inword = false;
+                    } else if !inword {
+                        inword = true;
+                        n += 1;
+                    }
+                }
+                r[0] = n;
+                Ok(())
+            })
+        },
+    );
+}
+
+#[test]
+#[ignore = "perf gate: run with --release -- --ignored --nocapture"]
+fn a_host_call_that_evaluates_a_polynomial_costs_what_a_loom_call_does() {
+    let horner =
+        "((((((((-0.5 * x + 0.75) * x - 0.25) * x + 0.5) * x + 0.0625) * x - 0.125) * x + 0.25) * x + 0.5) * x + 1.0)";
+    let main = "fun main() {\n    var total = 0.0f64\n    for k in 0..1000000 {\n        total += poly((k % 7) as f64)\n    }\n    print(total)\n}\n";
+    gate(
+        "poly",
+        true,
+        1_000_000,
+        "pub fun poly(x: f64) -> f64",
+        &format!("fun poly(x: f64) -> f64 = {horner}"),
+        &format!("fun poly(x: f64) -> f64 {{\n    let y = {horner}\n    if y != y {{ poly(x) }} else {{ y }}\n}}"),
+        main,
+        || {
+            Box::new(|_, r| {
+                let x = f64::from_bits(r[0]);
+                let y = (((((((-0.5 * x + 0.75) * x - 0.25) * x + 0.5) * x + 0.0625) * x - 0.125) * x + 0.25) * x
+                    + 0.5)
+                    * x
+                    + 1.0;
+                r[0] = y.to_bits();
+                Ok(())
+            })
+        },
+    );
+}
