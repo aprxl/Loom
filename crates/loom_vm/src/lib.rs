@@ -236,10 +236,32 @@ impl<'i> Vm<'i> {
 
     /// Verifies and loads `image`, binding each of its host imports to the
     /// function `hosts` registers under its name.
-    pub fn new_hosted(image: &'i Image, host: Host, config: &Config, mut hosts: HostTable) -> Result<Vm<'i>, Outcome> {
+    pub fn new_hosted(image: &'i Image, host: Host, config: &Config, hosts: HostTable) -> Result<Vm<'i>, Outcome> {
         if let Err(e) = loom_isa::verify(image) {
             return Err(Outcome::Crash { message: format!("invalid bytecode: {e}"), location: None });
         }
+        Self::load(image, host, config, hosts)
+    }
+
+    /// Loads `image` without verifying it.
+    ///
+    /// # Safety
+    ///
+    /// `image` must be one this toolchain built, whose hash
+    /// [`loom_isa::decode`] has checked: Treadle reads registers and code
+    /// without bounds checks, so an image the verifier would refuse is
+    /// undefined behaviour.
+    #[allow(unsafe_code)]
+    pub unsafe fn new_trusted(
+        image: &'i Image,
+        host: Host,
+        config: &Config,
+        hosts: HostTable,
+    ) -> Result<Vm<'i>, Outcome> {
+        Self::load(image, host, config, hosts)
+    }
+
+    fn load(image: &'i Image, host: Host, config: &Config, mut hosts: HostTable) -> Result<Vm<'i>, Outcome> {
         let mut machine =
             exec::Machine::load(image, host, config).map_err(|message| Outcome::Crash { message, location: None })?;
         let mut bound = Vec::with_capacity(image.host_imports.len());

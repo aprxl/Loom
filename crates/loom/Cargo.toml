@@ -15,9 +15,9 @@ default = ["lua54"]
 lua54 = ["loom_host/lua54"]
 lua55 = ["loom_host/lua55"]
 # Treadle with its run-time checks on (design/vm.md §5.6).
-vm-checked = ["loom_vm/checked"]
+vm-checked = ["loom_vm/checked", "loom_runner/vm-checked"]
 # Treadle counting what it dispatches, for bench/counts.txt.
-vm-stats = ["loom_vm/stats"]
+vm-stats = ["loom_vm/stats", "loom_runner/vm-stats"]
 
 [dependencies]
 clap.workspace = true
@@ -26,6 +26,7 @@ loom_compiler.workspace = true
 loom_host.workspace = true
 loom_isa.workspace = true
 loom_vm.workspace = true
+loom_runner.workspace = true
 loom_sys.workspace = true
 
 [dev-dependencies]

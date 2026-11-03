@@ -1,0 +1,29 @@
+[package]
+name = "loom_runner"
+description = "Runs a compiled Loom image on Treadle: the library `loom run` uses, and the stub `loom build --exe` appends an image to."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+name = "loom_runner"
+path = "src/lib.rs"
+
+[[bin]]
+name = "loom_runner"
+path = "src/main.rs"
+
+[features]
+# Treadle with its run-time checks on (design/vm.md §5.6).
+vm-checked = ["loom_vm/checked"]
+# Treadle counting what it dispatches, for bench/counts.txt.
+vm-stats = ["loom_vm/stats"]
+
+[dependencies]
+loom_isa.workspace = true
+loom_sys.workspace = true
+loom_vm.workspace = true
+
+[lints]
+workspace = true

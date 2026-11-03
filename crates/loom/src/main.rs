@@ -28,16 +28,13 @@ use loom_compiler::target::Target;
 use loom_compiler::treadle;
 use loom_compiler::typeck::{self, Typed};
 use loom_host::{Host, Outcome, Output};
+use loom_runner::{EXIT_FAILED, EXIT_INTERNAL, describe, exit_code, worker_count};
 use loom_syntax::diag::{ColorMode, emit_to_stderr};
 use loom_syntax::token::dump_tokens;
 use loom_syntax::{Diagnostic, FileId, SourceDb, lex, parse, pretty};
 
 /// Exit codes (see design/lua-backend.md).
-const EXIT_FAILED: u8 = 1;
 const EXIT_COMPILE_ERROR: u8 = 2;
-const EXIT_INTERNAL: u8 = 70;
-const EXIT_UNRAVEL: u8 = 101;
-const EXIT_INTERRUPTED: u8 = 130;
 
 /// How many diagnostics one report shows; the rest are counted. Past the
 /// first few, they're mostly the same mistake again.
@@ -68,8 +65,14 @@ enum Command {
         #[arg(short, long)]
         out: Option<PathBuf>,
         /// Stop after a stage and print it instead of writing Lua.
-        #[arg(long, value_enum)]
+        #[arg(long, value_enum, conflicts_with_all = ["image", "exe"])]
         emit: Option<Emit>,
+        /// Write Treadle's compiled image (`<file>.lmi`, which `loom run` runs) instead of Lua.
+        #[arg(long, conflicts_with = "exe")]
+        image: bool,
+        /// Write a standalone executable: Treadle and the compiled image, without the compiler.
+        #[arg(long)]
+        exe: bool,
     },
     /// Compile a Loom file and run it (on Treadle, or with `--backend lua` on the bundled Lua VM).
     Run {
@@ -200,9 +203,21 @@ fn run(cli: Cli) -> ExitCode {
     let color = ColorMode::from(cli.color);
     let level = cli.opt.into();
     match cli.command {
-        Command::Build { file, out, emit } => build(&file, out.as_deref(), emit, color, level),
+        Command::Build { file, out, emit, image, exe } => {
+            let product = if exe {
+                Product::Exe
+            } else if image {
+                Product::Image
+            } else {
+                Product::Lua
+            };
+            build(&file, out.as_deref(), emit, product, color, level)
+        }
         Command::Check { file } => check(&file, color),
         Command::Run { file, backend: Backend::Lua, args } => run_file(&file, &args, color),
+        Command::Run { file, backend: Backend::Vm, args } if file.extension().is_some_and(|e| e == IMAGE_EXTENSION) => {
+            run_image(&file, args)
+        }
         Command::Run { file, backend: Backend::Vm, args } => run_vm(&file, &args, color, level),
         Command::Test { file, backend: Backend::Lua } => test_file(&file, color),
         Command::Test { file, backend: Backend::Vm } => test_vm(&file, color, level),
@@ -313,7 +328,14 @@ fn compile_with(path: &Path, color: ColorMode, lowering: Lowering) -> Result<(So
     }
 }
 
-fn build(path: &Path, out: Option<&Path>, emit: Option<Emit>, color: ColorMode, level: Level) -> ExitCode {
+fn build(
+    path: &Path,
+    out: Option<&Path>,
+    emit: Option<Emit>,
+    product: Product,
+    color: ColorMode,
+    level: Level,
+) -> ExitCode {
     let run = || -> Result<(), ExitCode> {
         let (db, id) = load(path)?;
         let text = match emit {
@@ -335,6 +357,15 @@ fn build(path: &Path, out: Option<&Path>, emit: Option<Emit>, color: ColorMode, 
             Some(Emit::Lua) => compile(path, color)?.1.lua,
             Some(Emit::Heddle) => loom_compiler::heddle::print(&compile_vm(path, color, level)?.heddle),
             Some(Emit::Bytecode) => loom_isa::disassemble(&compile_vm(path, color, level)?.image),
+            None if product != Product::Lua => {
+                let compiled = compile_vm(path, color, level)?;
+                let image = loom_isa::encode(&compiled.image);
+                let out = match product {
+                    Product::Exe => exe_output(path, out),
+                    _ => out.map(Path::to_path_buf).unwrap_or_else(|| image_output(path)),
+                };
+                return write_output(&out, &image, product);
+            }
             None => {
                 // A bundle and its source map.
                 let (_, bundle) = compile(path, color)?;
@@ -350,6 +381,84 @@ fn build(path: &Path, out: Option<&Path>, emit: Option<Emit>, color: ColorMode, 
         Ok(())
     };
     run().err().unwrap_or(ExitCode::SUCCESS)
+}
+
+/// What `loom build` writes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Product {
+    /// A Lua bundle and its source map.
+    Lua,
+    /// Treadle's image.
+    Image,
+    /// A standalone executable.
+    Exe,
+}
+
+/// The extension of an image file, which `loom run` runs as it is.
+const IMAGE_EXTENSION: &str = "lmi";
+
+/// `tour.loom` → `tour.lmi` in the current directory.
+fn image_output(path: &Path) -> PathBuf {
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("out");
+    PathBuf::from(format!("{stem}.{IMAGE_EXTENSION}"))
+}
+
+/// `tour.loom` → `tour` (`tour.exe` on Windows) in the current directory; a
+/// name given gets the suffix if it lacks it.
+fn exe_output(path: &Path, out: Option<&Path>) -> PathBuf {
+    let suffix = std::env::consts::EXE_SUFFIX;
+    let mut name = match out {
+        Some(out) => out.as_os_str().to_os_string(),
+        None => path.file_stem().unwrap_or(std::ffi::OsStr::new("out")).to_os_string(),
+    };
+    if !suffix.is_empty() && !name.to_string_lossy().ends_with(suffix) {
+        name.push(suffix);
+    }
+    PathBuf::from(name)
+}
+
+/// Writes `image` to `path`: as it is, or after the runner stub, as an
+/// executable.
+fn write_output(path: &Path, image: &[u8], product: Product) -> Result<(), ExitCode> {
+    let write = |bytes: &[u8]| {
+        std::fs::write(path, bytes).map_err(|e| {
+            eprintln!("error: can't write `{}`: {e}", path.display());
+            ExitCode::from(EXIT_COMPILE_ERROR)
+        })
+    };
+    if product != Product::Exe {
+        return write(image);
+    }
+    let fail = |what: String| {
+        eprintln!("error: {what}");
+        ExitCode::from(EXIT_FAILED)
+    };
+    let here = std::env::current_exe().map_err(|e| fail(format!("can't find the loom executable: {e}")))?;
+    let runner = here.with_file_name(format!("loom_runner{}", std::env::consts::EXE_SUFFIX));
+    let stub = std::fs::read(&runner).map_err(|e| {
+        fail(format!("can't read the runner `{}` (build it with `cargo build -p loom_runner`): {e}", runner.display()))
+    })?;
+    write(&loom_runner::exe_bytes(&stub, image))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+            .map_err(|e| fail(format!("can't make `{}` executable: {e}", path.display())))?;
+    }
+    Ok(())
+}
+
+/// `loom run x.lmi`: runs an image `loom build --image` wrote.
+fn run_image(path: &Path, args: Vec<String>) -> ExitCode {
+    let image =
+        std::fs::read(path).map_err(|e| e.to_string()).and_then(|b| loom_isa::decode(&b).map_err(|e| e.to_string()));
+    match image {
+        Ok(image) => loom_runner::run(&image, path.display().to_string(), args, true),
+        Err(e) => {
+            eprintln!("loom: {}: {e}", path.display());
+            ExitCode::from(EXIT_FAILED)
+        }
+    }
 }
 
 /// `tour.loom` → `tour.lua` in the current directory.
@@ -403,97 +512,10 @@ fn compile_vm(path: &Path, color: ColorMode, level: Level) -> Result<treadle::Co
 }
 
 /// `loom run --backend vm`: compile for Treadle and run the program here.
-/// How many workers run a program's threads on Treadle: `LOOM_THREADS`, or
-/// one for each core. `LOOM_THREADS=1` gives the reference schedule
-/// (design/vm.md §11.1), the one the Lua backend always runs.
-fn worker_count() -> usize {
-    std::env::var("LOOM_THREADS")
-        .ok()
-        .and_then(|n| n.parse().ok())
-        .filter(|&n| n > 0)
-        .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, usize::from))
-}
-
 fn run_vm(path: &Path, args: &[String], color: ColorMode, level: Level) -> ExitCode {
     let run = || -> Result<ExitCode, ExitCode> {
         let compiled = compile_vm(path, color, level)?;
-        let args = std::iter::once(path.display().to_string()).chain(args.iter().cloned()).collect();
-        let host = Host { output: Output::Stdout, sandbox: false, args };
-        let mut trace = Vec::new();
-        let mut gap = None;
-        let config = loom_vm::Config {
-            interrupt: Some(loom_sys::interrupt::install()),
-            workers: worker_count(),
-            ..loom_vm::Config::default()
-        };
-        let outcome = match (compiled.image.entry, loom_vm::Vm::new(&compiled.image, host, &config)) {
-            (Some(entry), Ok(mut vm)) => {
-                let result = vm.call(entry, &[]);
-                let outcome = vm.ended(result);
-                trace = vm.backtrace().to_vec();
-                gap = vm.backtrace_gap();
-                // A stats build's op histogram (`LOOM_STATS=1`).
-                if let Some(stats) = vm.runtime_stats()
-                    && std::env::var_os("LOOM_STATS").is_some_and(|v| v == "3")
-                {
-                    for (i, category) in loom_vm::NATIVE_CATEGORIES.iter().enumerate() {
-                        eprintln!(
-                            "native {category}: {} calls, {} locks",
-                            stats.native_calls[i], stats.native_locks[i]
-                        );
-                    }
-                    eprintln!("task operation locks: {}", stats.task_locks);
-                    eprintln!(
-                        "scheduler probes: {} leftover, {} unfinished, {} cancellation",
-                        stats.leftover_probes, stats.unfinished_probes, stats.cancellation_probes
-                    );
-                    eprintln!("task stacks allocated: {}", stats.task_stacks);
-                    eprintln!("constant waits: {}", stats.const_waits);
-                }
-                if let (Some(counts), Some(total)) = (vm.op_counts(), vm.dispatched())
-                    && std::env::var_os("LOOM_STATS").is_some_and(|v| v == "1")
-                {
-                    eprintln!("{total} instructions dispatched");
-                    let checks = |c| counts.iter().filter(|(op, _)| op.check() == Some(c)).map(|(_, n)| n).sum::<u64>();
-                    eprintln!(
-                        "{} bounds checks, {} overflow checks",
-                        checks(loom_isa::Check::Bounds),
-                        checks(loom_isa::Check::Overflow)
-                    );
-                    for (op, n) in counts {
-                        eprintln!("{n:>14}  {:5.1}%  {}", 100.0 * n as f64 / total.max(1) as f64, op.name());
-                    }
-                }
-                // `LOOM_STATS=2`: the functions that ran most, each
-                // instruction after how many times it ran.
-                if let Some(pcs) = vm.pc_counts()
-                    && std::env::var_os("LOOM_STATS").is_some_and(|v| v == "2")
-                {
-                    let image = &compiled.image;
-                    let mut funcs: Vec<(u64, usize)> = image
-                        .funcs
-                        .iter()
-                        .enumerate()
-                        .map(|(i, f)| (pcs[f.entry as usize..(f.entry + f.len) as usize].iter().sum(), i))
-                        .collect();
-                    funcs.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
-                    for (n, i) in funcs.into_iter().take(6).filter(|(n, _)| *n > 0) {
-                        eprintln!("--- {n} in {}", image.funcs[i].name);
-                        eprint!("{}", loom_isa::disassemble_func(image, i, Some(pcs)));
-                    }
-                }
-                outcome
-            }
-            (None, _) => Outcome::Crash { message: "the image has no entry function".into(), location: None },
-            (_, Err(outcome)) => outcome,
-        };
-        if let Some(text) = describe(&outcome) {
-            eprint!("{text}");
-        }
-        if matches!(outcome, Outcome::Unravel { .. }) && std::env::var_os("LOOM_BACKTRACE").is_some_and(|v| v == "1") {
-            eprint!("{}", backtrace_text(&trace, gap));
-        }
-        Ok(exit_code(&outcome))
+        Ok(loom_runner::run(&compiled.image, path.display().to_string(), args.to_vec(), false))
     };
     run().unwrap_or_else(|code| code)
 }
@@ -636,72 +658,4 @@ fn test_report(runs: &[loom_host::TestRun]) -> ExitCode {
         return exit_code(&crash.outcome);
     }
     if failed.is_empty() { ExitCode::SUCCESS } else { ExitCode::from(EXIT_FAILED) }
-}
-
-fn exit_code(outcome: &Outcome) -> ExitCode {
-    ExitCode::from(match outcome {
-        Outcome::Finished => 0,
-        Outcome::Unravel { .. } => EXIT_UNRAVEL,
-        Outcome::Failed { .. } => EXIT_FAILED,
-        // Only compile-time code, run with limits and refusals, ends so.
-        Outcome::Crash { .. } | Outcome::OverBudget { .. } | Outcome::Refused { .. } => EXIT_INTERNAL,
-        Outcome::Exit(code) => *code,
-        Outcome::Interrupted => EXIT_INTERRUPTED,
-    })
-}
-
-/// What went wrong, for a run that didn't finish: the message, and where.
-fn describe(outcome: &Outcome) -> Option<String> {
-    Some(match outcome {
-        Outcome::Finished | Outcome::Exit(_) => return None,
-        Outcome::Interrupted => "interrupted (Ctrl-C)\n".into(),
-        Outcome::Unravel { message, location, thread } => {
-            let mut text = format!("unravel: {message}\n{}", location_text(location.as_ref()));
-            if thread.is_some() {
-                text.push_str("  = note: the thread started here unravelled\n");
-                text.push_str(&location_text(thread.as_ref()));
-            }
-            text
-        }
-        Outcome::Failed { message } => format!("error: {message}\n"),
-        Outcome::Crash { message, location } => format!(
-            "internal error: {message}\n{}  = note: this is a bug in Loom, not in your program\n",
-            location_text(location.as_ref())
-        ),
-        Outcome::OverBudget { location, .. } | Outcome::Refused { location, .. } => format!(
-            "internal error: a run was stopped by compile-time limits\n{}  = note: this is a bug in Loom, not in your program\n",
-            location_text(location.as_ref())
-        ),
-    })
-}
-
-/// `  --> file:line:col` and the source line, with a caret under the column.
-/// Every frame an unravel happened in (`LOOM_BACKTRACE=1`, on Treadle),
-/// innermost first.
-fn backtrace_text(trace: &[(String, Option<loom_host::Location>)], gap: Option<(usize, usize)>) -> String {
-    let mut out = String::from("backtrace:\n");
-    for (i, (name, at)) in trace.iter().enumerate() {
-        if let Some((before, skipped)) = gap
-            && i == before
-        {
-            out.push_str(&format!("  ... {skipped} more frames ...\n"));
-        }
-        match at {
-            Some(at) => out.push_str(&format!("  {i}: {name} at {}:{}:{}\n", at.file, at.line, at.column)),
-            None => out.push_str(&format!("  {i}: {name}\n")),
-        }
-    }
-    out
-}
-
-fn location_text(location: Option<&loom_host::Location>) -> String {
-    let Some(at) = location else { return String::new() };
-    let mut out = format!("  --> {}:{}:{}\n", at.file, at.line, at.column);
-    let Ok(text) = std::fs::read_to_string(&at.file) else { return out };
-    let Some(line) = text.lines().nth(at.line.saturating_sub(1) as usize) else { return out };
-    let number = at.line.to_string();
-    let pad = " ".repeat(number.len());
-    let caret = " ".repeat(at.column.saturating_sub(1) as usize);
-    out.push_str(&format!("{pad} |\n{number} | {line}\n{pad} | {caret}^\n"));
-    out
 }
