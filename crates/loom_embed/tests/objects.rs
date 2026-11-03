@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use loom_embed::{Embed, Program, Scalar};
+use loom_embed::{Embed, Literal, Program, Scalar};
 use loom_sys::Host;
 
 fn host() -> Host {
@@ -84,4 +84,68 @@ pub fun twice(x: f64) -> f64 { Mixed(a: -3, b: x, c: -7).b_twice() }\npub fun c_
     );
     assert_eq!(f64::from_reg(call(&program, "twice", &[2.5_f64.to_reg()])[0]), 5.0);
     assert_eq!(i64::from_reg(call(&program, "c_of", &[])[0]), -7);
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Light {
+    Red,
+    Green,
+    Off,
+}
+
+impl Scalar for Light {
+    const LOOM: &'static str = "Light";
+    fn to_reg(self) -> u64 {
+        self as u64
+    }
+    fn from_reg(reg: u64) -> Self {
+        match reg {
+            0 => Light::Red,
+            1 => Light::Green,
+            _ => Light::Off,
+        }
+    }
+    fn literal(self) -> Option<String> {
+        None
+    }
+}
+
+#[test]
+fn a_unit_enum_crosses_as_its_index() {
+    let mut embed = Embed::new("m");
+    embed.unit_enum("Light", &["Red", "Green", "Off"]).expect("declares");
+    embed
+        .fun("next", |l: Light| match l {
+            Light::Red => Light::Green,
+            Light::Green => Light::Off,
+            Light::Off => Light::Red,
+        })
+        .expect("registers");
+    let program = compile(
+        embed,
+        "use m.{next}\npub fun go() -> i64 {\n    match next(next(.Red)) {\n        .Off => 1\n        _ => 0\n    }\n}\n",
+    );
+    assert_eq!(call(&program, "go", &[]), [1]);
+}
+
+#[test]
+fn a_constant_warp_is_a_loom_constant() {
+    let mut embed = Embed::new("m");
+    let point = embed.warp("Point", &[("x", "f64"), ("y", "f64")]).expect("declares");
+    let x = Literal::of(1.5_f64).expect("a literal");
+    let y = Literal::of(2.0_f64).expect("a literal");
+    embed.constant_warp(&point, "ORIGIN", &[("y", y), ("x", x)]).expect("declares");
+    let program = compile(embed, "use m.{Point, ORIGIN}\npub fun go() -> f64 { ORIGIN.x + ORIGIN.y }\n");
+    assert_eq!(f64::from_reg(call(&program, "go", &[])[0]), 3.5);
+}
+
+#[test]
+fn a_constant_warp_checks_its_fields() {
+    let mut embed = Embed::new("m");
+    let point = embed.warp("Point", &[("x", "f64"), ("y", "f64")]).expect("declares");
+    let int = Literal::of(1_i64).expect("a literal");
+    let float = Literal::of(2.0_f64).expect("a literal");
+    assert!(embed.constant_warp(&point, "A", &[("x", int), ("y", float.clone())]).is_err(), "an i64 is not an f64");
+    assert!(embed.constant_warp(&point, "B", &[("x", float)]).is_err(), "y is missing");
+    assert!(Literal::of(f64::NAN).is_err(), "NaN has no literal");
 }

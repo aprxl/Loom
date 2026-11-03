@@ -8,15 +8,30 @@
 use loom_syntax::source::Span;
 
 use super::value::Val;
+use super::warp::tag_mem;
 use super::{Builder, ParamAbi};
 use crate::heddle::{Cmp, InstKind, Mem, VTy, Value};
 use crate::hir::{self, DefId, DefKind};
+use crate::ty::layout::Shape;
 use crate::ty::{FloatTy, Ty, TyKind};
 use crate::typeck::{ArgSource, BodyId, Call};
 use loom_syntax::ast::ParamMode;
 
 /// What the host natives give when a file operation works.
 const FINE: u64 = 3;
+
+/// How a value crosses an `extern "host"` boundary.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Crossing {
+    /// One register: a number, `bool`, `char` or float.
+    Scalar,
+    /// `str`: its address and length, in two registers.
+    Text,
+    /// A value warp (a struct of scalars): the address of a copy.
+    Warp,
+    /// A unit enum: its tag, in one register.
+    Tag,
+}
 
 impl<'a> Builder<'a> {
     /// A call of an `extern "host"` function the program declares: a
@@ -36,19 +51,14 @@ impl<'a> Builder<'a> {
             return self.unsupported(span, &format!("`host function {path}` with generic parameters on Treadle"));
         }
         let tcx = self.tcx();
-        let is_scalar =
-            |ty: Ty| matches!(tcx.kind(ty), TyKind::Int(_) | TyKind::Bool | TyKind::Char | TyKind::Float(_));
         let vty = |ty: Ty| match tcx.kind(ty) {
             TyKind::Float(FloatTy::F32) => VTy::F32,
             TyKind::Float(FloatTy::F64) => VTy::F64,
             _ => VTy::Int,
         };
-        let is_text = |ty: Ty| matches!(tcx.kind(ty), TyKind::Str);
-        let p = self.p;
-        let is_warp = |ty: Ty| matches!(tcx.kind(ty), TyKind::Adt(def, args) if args.is_empty() && !p.def_path(*def).starts_with("std."));
         for param in &sig.params {
             let ty = self.plain_ty(param.ty);
-            if !(is_scalar(ty) || is_text(ty) || is_warp(ty)) || param.mode != ParamMode::Read || param.has_default {
+            if self.crossing(ty).is_none() || param.mode != ParamMode::Read || param.has_default {
                 let shown = self.tcx().display(self.p, ty);
                 return self.unsupported(span, &format!("`host function with a parameter of type {shown}` on Treadle"));
             }
@@ -56,30 +66,33 @@ impl<'a> Builder<'a> {
         let ret = self.plain_ty(sig.ret);
         let unit = matches!(self.tcx().kind(ret), TyKind::Unit);
         let string = self.is_string(ret);
-        let warp = is_warp(ret);
-        if !unit && !string && !warp && !is_scalar(ret) {
+        let crossing = if unit || string { None } else { self.crossing(ret) };
+        if !unit && !string && !matches!(crossing, Some(Crossing::Scalar | Crossing::Warp | Crossing::Tag)) {
             let shown = self.tcx().display(self.p, ret);
             return self.unsupported(span, &format!("`host function with a result of type {shown}` on Treadle"));
         }
-        let slot = if string || warp { Some(self.temp(ret, span)?) } else { None };
+        let slot = if string || crossing == Some(Crossing::Warp) { Some(self.temp(ret, span)?) } else { None };
         let mut regs: Vec<Value> = slot.into_iter().collect();
         for k in 0..sig.params.len() {
             let Some(ArgSource::Arg(i)) = info.args.get(k) else { return self.unsupported(span, "this call") };
             let e = &args[*i].value;
             let v = self.expr(e)?;
             let ty = self.coerced_ty(e);
-            if matches!(self.tcx().kind(ty), TyKind::Str) {
-                let (p, n) = self.text_of(v, ty, span)?;
-                regs.extend([p, n]);
-            } else if is_warp(ty) {
-                let at = self.temp(ty, span)?;
-                self.store_val(at, 0, ty, &v, span)?;
-                regs.push(at);
-            } else {
-                regs.push(self.regs(v, ty, span)?[0]);
+            match self.crossing(ty).unwrap_or(Crossing::Scalar) {
+                Crossing::Text => {
+                    let (p, n) = self.text_of(v, ty, span)?;
+                    regs.extend([p, n]);
+                }
+                Crossing::Warp => {
+                    let at = self.temp(ty, span)?;
+                    self.store_val(at, 0, ty, &v, span)?;
+                    regs.push(at);
+                }
+                Crossing::Tag => regs.push(self.tag_of(&v, ty, span)?),
+                Crossing::Scalar => regs.push(self.regs(v, ty, span)?[0]),
             }
         }
-        let results = usize::from(!unit && !string && !warp);
+        let results = usize::from(!unit && !string && slot.is_none());
         let result_ty = vty(ret);
         let index = match self.host_imports.iter().position(|h| h.name == path) {
             Some(index) => index,
@@ -92,12 +105,43 @@ impl<'a> Builder<'a> {
         };
         let out =
             self.emit(InstKind::Native { name: "host.call", imm: index as u16, args: regs }, &vec![result_ty; results]);
+        if crossing == Some(Crossing::Tag) {
+            let Shape::Sum { tag, .. } = self.layout(ret)?.shape else {
+                return self.internal(span, "a unit enum laid out as something else");
+            };
+            let dst = self.temp(ret, span)?;
+            self.store(tag_mem(tag.bytes), dst, tag.offset as i64, out[0]);
+            return Some(Val::Mem(dst));
+        }
         match slot {
             Some(dst) => {
                 self.own_temp(dst, ret);
                 Some(Val::Mem(dst))
             }
             None => Some(Val::Regs(out)),
+        }
+    }
+
+    /// How a value of `ty` crosses an `extern "host"` boundary, or `None` for a
+    /// type the host can't read (a payload enum, a generic warp, a tuple).
+    fn crossing(&mut self, ty: Ty) -> Option<Crossing> {
+        let tcx = self.tcx();
+        let p = self.p;
+        match tcx.kind(ty) {
+            TyKind::Int(_) | TyKind::Bool | TyKind::Char | TyKind::Float(_) => Some(Crossing::Scalar),
+            TyKind::Str => Some(Crossing::Text),
+            TyKind::Adt(def, args) if args.is_empty() && !p.def_path(*def).starts_with("std.") => {
+                match self.layout(ty)?.shape {
+                    Shape::Fields(_) => Some(Crossing::Warp),
+                    Shape::Sum { ref shared, ref cases, .. }
+                        if shared.is_empty() && cases.iter().all(Vec::is_empty) =>
+                    {
+                        Some(Crossing::Tag)
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
         }
     }
 

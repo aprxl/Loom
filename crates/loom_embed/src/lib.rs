@@ -200,6 +200,22 @@ fn write_le(raw: &mut [u8], size: usize, value: u64) {
     }
 }
 
+/// A scalar's value as a Loom literal, for [`Embed::constant_warp`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Literal {
+    ty: &'static str,
+    text: String,
+}
+
+impl Literal {
+    /// `value` as a literal of its Loom type; a float with no literal (NaN,
+    /// infinity) is an error.
+    pub fn of<T: Scalar>(value: T) -> Result<Literal, EmbedError> {
+        let text = value.literal().ok_or_else(|| EmbedError(format!("a {} has no Loom literal", T::LOOM)))?;
+        Ok(Literal { ty: T::LOOM, text })
+    }
+}
+
 /// The size in bytes of a scalar type, if it is one.
 fn scalar_size(ty: &str) -> Option<u64> {
     Some(match ty {
@@ -218,6 +234,7 @@ pub struct Embed {
     consts: Vec<(String, String, String)>,
     warps: Vec<Warp>,
     value_warps: Vec<ValueWarp>,
+    enums: Vec<(String, Vec<String>)>,
     functions: Vec<String>,
     source: String,
     names: HashSet<String>,
@@ -293,6 +310,7 @@ impl Embed {
             source: String::new(),
             names: HashSet::new(),
             value_warps: Vec::new(),
+            enums: Vec::new(),
         }
     }
 
@@ -314,6 +332,7 @@ impl Embed {
         scalar::TYPES.contains(&t)
             || if result { t == "String" } else { t == "str" }
             || self.value_warps.iter().any(|w| w.name == t)
+            || self.enums.iter().any(|(name, _)| name == t)
     }
 
     fn add_factory(
@@ -455,6 +474,45 @@ impl Embed {
         Ok(())
     }
 
+    /// Declares `pub warp name { case … }` in the module: a unit enum that a host
+    /// function takes and gives as its tag, the index of the case. The Rust type
+    /// of the same name implements [`Scalar`], with `LOOM` `name` and `to_reg`
+    /// the index.
+    pub fn unit_enum(&mut self, name: &str, cases: &[&str]) -> Result<(), EmbedError> {
+        if cases.is_empty() {
+            return Err(EmbedError(format!("`{name}` has no cases")));
+        }
+        if let Some(bad) = cases.iter().find(|c| !lexes_as(c, &TokenKind::TypeIdent)) {
+            return Err(EmbedError(format!("`{bad}` is not a case name")));
+        }
+        self.claim(name, &TokenKind::TypeIdent)?;
+        self.enums.push((name.to_string(), cases.iter().map(|c| c.to_string()).collect()));
+        Ok(())
+    }
+
+    /// Declares `pub const name: W = W(field: value, …)` in the module, for a value
+    /// warp `w`: `values` gives each of its fields a [`Literal`] of the field's type.
+    pub fn constant_warp(&mut self, w: &WarpRef, name: &str, values: &[(&str, Literal)]) -> Result<(), EmbedError> {
+        let warp = &self.value_warps[w.index];
+        let mut parts = Vec::with_capacity(values.len());
+        for (field, literal) in values {
+            let Some((_, ty)) = warp.fields.iter().find(|(f, _)| f == field) else {
+                return Err(EmbedError(format!("`{}` has no field `{field}`", warp.name)));
+            };
+            if ty.as_str() != literal.ty {
+                return Err(EmbedError(format!("field `{field}` of `{}` is {ty}, not {}", warp.name, literal.ty)));
+            }
+            parts.push(format!("{field}: {}", literal.text));
+        }
+        if warp.fields.iter().any(|(f, _)| !values.iter().any(|(v, _)| v == f)) {
+            return Err(EmbedError(format!("a value of `{}` needs every field", warp.name)));
+        }
+        let value = format!("{}({})", warp.name, parts.join(", "));
+        self.claim(name, &TokenKind::ConstIdent)?;
+        self.consts.push((name.to_string(), w.name.clone(), value));
+        Ok(())
+    }
+
     /// Declares `pub const name: T = value` in the module.
     pub fn constant<T: Scalar>(&mut self, name: &str, value: T) -> Result<(), EmbedError> {
         let literal = value.literal().ok_or_else(|| EmbedError(format!("`{name}` has no Loom literal")))?;
@@ -483,6 +541,10 @@ impl Embed {
         }
         for (name, ty, value) in &self.consts {
             text.push_str(&format!("pub const {name}: {ty} = {value}\n"));
+        }
+        for (name, cases) in &self.enums {
+            let cases: String = cases.iter().map(|c| format!("    case {c}\n")).collect();
+            text.push_str(&format!("pub warp {name} {{\n{cases}}}\n\n"));
         }
         for warp in &self.value_warps {
             let fields: Vec<String> = warp.fields.iter().map(|(f, t)| format!("    pub {f}: {t}")).collect();

@@ -81,6 +81,30 @@ fn a_value_warp_crosses_as_its_address() {
 }
 
 #[test]
+fn a_unit_enum_crosses_as_its_tag() {
+    let image = compile(
+        "warp Light {\n    case Red\n    case Green\n    case Off\n}\n\nextern \"host\" {\n    pub fun next(l: Light) -> Light\n}\n\nfun main() {\n    next(.Red)\n}\n",
+    )
+    .expect("compiles");
+    let shape: Vec<_> = image.host_imports.iter().map(|h| (h.name.as_str(), h.args, h.results)).collect();
+    assert_eq!(shape, [("host_extern.next", 1, 1)]);
+    loom_isa::verify(&image).expect("valid");
+}
+
+#[test]
+fn a_payload_enum_is_refused_both_ways() {
+    let warp = "warp Shape {\n    case Dot\n    case Circle(r: f64)\n}\n\n";
+    rejected(
+        &format!("{warp}extern \"host\" {{\n    pub fun f(s: Shape)\n}}\n\nfun main() {{\n    f(.Dot)\n}}\n"),
+        "a parameter of type Shape",
+    );
+    rejected(
+        &format!("{warp}extern \"host\" {{\n    pub fun g() -> Shape\n}}\n\nfun main() {{\n    g()\n}}\n"),
+        "a result of type Shape",
+    );
+}
+
+#[test]
 fn other_types_are_not_implemented_yet() {
     let cases = [
         ("pub fun f(v: List[u8])", "f([1u8])", "a parameter of type"),
