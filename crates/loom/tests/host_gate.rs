@@ -1,7 +1,8 @@
 //! The speed gate of host functions (embedding): calling a function the host
 //! registers costs at most 25% more than calling the same function written
-//! in Loom, that is `loom_time / host_time >= 0.8`, on a call that does
-//! nothing (the overhead) and on one that works for a while.
+//! in Loom, that is `loom_guarded_time / host_time >= 0.8`. The cases are a
+//! call that does nothing (the overhead), one that works for a while, and two
+//! that pass text: one that reads a `str` and one that builds a `String`.
 //!
 //! `#[ignore]`d for wall-clock noise: `cargo test --release -p loom --test
 //! host_gate -- --ignored --nocapture`.
@@ -55,8 +56,22 @@ fn best(image: &Image, host: Option<fn() -> HostFn>) -> (Duration, String) {
     (best, printed)
 }
 
-fn gate(name: &str, calls: u32, loom_step: &str, guarded_step: &str, main: &str, host: fn() -> HostFn) {
-    let with_host = format!("use std.io.print\n\nextern \"host\" {{\n    pub fun step(n: u64) -> u64\n}}\n\n{main}");
+/// One case: the host function `decl` declares, against the Loom function
+/// `loom_step` and the same function with a guard, `guarded_step`, both run
+/// by `main` `calls` times.
+/// `gated`: whether the ratio is asserted; an ungated row is only reported.
+#[allow(clippy::too_many_arguments)]
+fn gate(
+    name: &str,
+    gated: bool,
+    calls: u32,
+    decl: &str,
+    loom_step: &str,
+    guarded_step: &str,
+    main: &str,
+    host: fn() -> HostFn,
+) {
+    let with_host = format!("use std.io.print\n\nextern \"host\" {{\n    {decl}\n}}\n\n{main}");
     let in_loom = format!("use std.io.print\n\n{loom_step}\n\n{main}");
     let guarded = format!("use std.io.print\n\n{guarded_step}\n\n{main}");
     let (host_time, host_out) = best(&compile(&with_host), Some(host));
@@ -73,21 +88,27 @@ fn gate(name: &str, calls: u32, loom_step: &str, guarded_step: &str, main: &str,
         per(loom_time),
         per(guarded_time)
     );
-    println!("{name}: ratio = {ratio:.2}, ratio_guarded = {ratio_guarded:.2} (at least {MIN_RATIO})");
-    assert!(ratio_guarded >= MIN_RATIO, "{name}: ratio_guarded {ratio_guarded:.2} is below {MIN_RATIO}");
+    let tag = if gated { "gated" } else { "ungated" };
+    println!("{name} ({tag}): ratio = {ratio:.2}, ratio_guarded = {ratio_guarded:.2} (at least {MIN_RATIO})");
+    if gated {
+        assert!(ratio_guarded >= MIN_RATIO, "{name}: ratio_guarded {ratio_guarded:.2} is below {MIN_RATIO}");
+    }
 }
 
 #[test]
 #[ignore = "perf gate: run with --release -- --ignored --nocapture"]
 fn a_host_call_costs_what_a_loom_call_does() {
+    println!("overhead: the guarded reference adds dispatches (jeqk, jmp), not a call");
     gate(
         "overhead",
+        true,
         10_000_000,
+        "pub fun step(n: u64) -> u64",
         "fun step(n: u64) -> u64 = n + 1",
         "fun step(x: u64) -> u64 {\n    if x == u64.MAX { step(x) } else { x + 1 }\n}",
         "fun main() {\n    var x = 0u64\n    for _ in 0..10000000 { x = step(x) }\n    print(x)\n}\n",
         || {
-            Box::new(|r| {
+            Box::new(|_, r| {
                 r[0] += 1;
                 Ok(())
             })
@@ -100,18 +121,87 @@ fn a_host_call_costs_what_a_loom_call_does() {
 fn a_host_call_that_works_costs_what_a_loom_call_does() {
     gate(
         "work",
+        true,
         100_000,
+        "pub fun step(n: u64) -> u64",
         "fun step(n: u64) -> u64 {\n    var s = 0u64\n    for k in 1..=n { s += k }\n    s\n}",
         "fun step(n: u64) -> u64 {\n    if n == u64.MAX {\n        step(n)\n    } else {\n        var s = 0u64\n        for k in 1..=n { s += k }\n        s\n    }\n}",
         "fun main() {\n    var total = 0u64\n    for _ in 0..100000 { total += step(1000) }\n    print(total)\n}\n",
         || {
-            Box::new(|r| {
+            Box::new(|_, r| {
                 let mut s = 0u64;
                 for k in 1..=black_box(r[0]) {
                     s = s.wrapping_add(black_box(k));
                 }
                 r[0] = s;
                 Ok(())
+            })
+        },
+    );
+}
+
+#[test]
+#[ignore = "perf gate: run with --release -- --ignored --nocapture"]
+fn a_length_call_is_reported_ungated() {
+    gate(
+        "len_of",
+        false,
+        10_000_000,
+        "pub fun len_of(s: str) -> u64",
+        "fun len_of(s: str) -> u64 = s.len() as u64",
+        "fun len_of(s: str) -> u64 {\n    let n = s.len() as u64;\n    if n == u64.MAX { len_of(s) } else { n }\n}",
+        "fun main() {\n    var total = 0u64\n    var k = 0u64\n    for _ in 0..10000000 {\n        let s = if k % 2 == 0 { \"héllo\" } else { \"héllo!\" }\n        total += len_of(s)\n        k += 1\n    }\n    print(total)\n}\n",
+        || {
+            Box::new(|_, r| {
+                r[0] = r[1];
+                Ok(())
+            })
+        },
+    );
+}
+
+#[test]
+#[ignore = "perf gate: run with --release -- --ignored --nocapture"]
+fn a_host_call_that_reads_every_byte_costs_what_a_loom_call_does() {
+    // Two texts of 64 bytes, with 20 and 32 spaces, picked by parity.
+    let (a, b) = ("ab cd ".repeat(10) + "efgh", "a b c d e f g h ".repeat(4));
+    assert_eq!((a.len(), b.len()), (64, 64));
+    let main = format!(
+        "fun main() {{\n    var total = 0u64\n    var k = 0u64\n    for _ in 0..1000000 {{\n        let s = if k % 2 == 0 {{ \"{a}\" }} else {{ \"{b}\" }}\n        total += count_spaces(s)\n        k += 1\n    }}\n    print(total)\n}}\n"
+    );
+    gate(
+        "count_spaces",
+        true,
+        1_000_000,
+        "pub fun count_spaces(s: str) -> u64",
+        "fun count_spaces(s: str) -> u64 {\n    var n = 0u64\n    for c in s.bytes() {\n        if c == 32u8 { n += 1 }\n    }\n    n\n}",
+        "fun count_spaces(s: str) -> u64 {\n    var n = 0u64\n    for c in s.bytes() {\n        if c == 32u8 { n += 1 }\n    }\n    if n == u64.MAX { count_spaces(s) } else { n }\n}",
+        &main,
+        || {
+            Box::new(|cx, r| {
+                let n = cx.text(r[0], r[1])?.iter().filter(|&&c| c == b' ').count() as u64;
+                r[0] = n;
+                Ok(())
+            })
+        },
+    );
+}
+
+#[test]
+#[ignore = "perf gate: run with --release -- --ignored --nocapture"]
+fn a_host_call_that_builds_a_string_costs_what_a_loom_call_does() {
+    gate(
+        "to_text",
+        true,
+        1_000_000,
+        "pub fun to_text(n: u64) -> String",
+        "fun to_text(n: u64) -> String = \"{n}\"",
+        "fun to_text(n: u64) -> String {\n    if n == u64.MAX { to_text(n) } else { \"{n}\" }\n}",
+        "fun main() {\n    var total = 0usize\n    for k in 0..1000000 { total += to_text(k).len() }\n    print(total)\n}\n",
+        || {
+            Box::new(|cx, r| {
+                let text = r[1].to_string();
+                cx.new_string(text.as_bytes(), r[0])
             })
         },
     );

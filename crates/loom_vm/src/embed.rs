@@ -4,8 +4,40 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-/// A host function: it reads its argument registers and writes its results over them.
-pub type HostFn = Box<dyn FnMut(&mut [u64]) -> Result<(), String> + Send>;
+use crate::natives::HostOps;
+
+/// What a host function reaches besides its registers: the program's text and
+/// the strings it builds. It has no output and no way back into the machine,
+/// so a host function can't reenter the program.
+pub struct HostCx<'a> {
+    ops: &'a mut dyn HostOps,
+}
+
+impl<'a> HostCx<'a> {
+    pub(crate) fn new(ops: &'a mut dyn HostOps) -> HostCx<'a> {
+        HostCx { ops }
+    }
+
+    /// The `len` bytes of text at `addr`: a `str` argument's two registers.
+    pub fn text(&self, addr: u64, len: u64) -> Result<&[u8], String> {
+        self.ops.text(addr, len)
+    }
+
+    /// Writes a `String` of `text` to `dst`, a `String` result's first register.
+    pub fn new_string(&mut self, text: &[u8], dst: u64) -> Result<(), String> {
+        self.ops.new_string(text, dst)
+    }
+}
+
+impl fmt::Debug for HostCx<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("HostCx").finish_non_exhaustive()
+    }
+}
+
+/// A host function: it reads and writes its argument registers, and reaches
+/// the program's text and strings through its [`HostCx`].
+pub type HostFn = Box<dyn for<'c, 'a> FnMut(&'c mut HostCx<'a>, &mut [u64]) -> Result<(), String> + Send>;
 
 /// The host functions of one run, by the name each import is registered under.
 #[derive(Default)]

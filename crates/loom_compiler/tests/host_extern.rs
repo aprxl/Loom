@@ -49,10 +49,31 @@ fn rejected(text: &str, what: &str) {
 }
 
 #[test]
+fn text_and_string_cross_in_registers() {
+    let image = compile(
+        "use std.io.print
+
+extern \"host\" {
+    pub fun len_of(s: str) -> u64
+    pub fun to_text(n: u64) -> String
+}
+
+fun main() {
+    print(len_of(\"h\u{e9}llo\"))
+    print(to_text(7))
+}
+",
+    )
+    .expect("compiles");
+    let shape: Vec<_> = image.host_imports.iter().map(|h| (h.name.as_str(), h.args, h.results)).collect();
+    assert_eq!(shape, [("host_extern.len_of", 2, 1), ("host_extern.to_text", 2, 0)]);
+    loom_isa::verify(&image).expect("valid");
+}
+
+#[test]
 fn other_types_are_not_implemented_yet() {
     let cases = [
-        ("pub fun f(s: str)", "f(\"a\")", "a parameter of type str"),
-        ("pub fun f() -> String", "f()", "a result of type String"),
+        ("pub fun f(v: List[u8])", "f([1u8])", "a parameter of type"),
         ("pub fun f(x: f64)", "f(1.0)", "a parameter of type f64"),
         ("pub fun f[T](x: T)", "f(1)", "generic parameters"),
         ("pub fun f(p: P)", "f(P(x: 1))", "a parameter of type P"),

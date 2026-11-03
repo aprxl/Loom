@@ -7,7 +7,7 @@
 //!
 //! let mut embed = Embed::new("editor");
 //! embed.fun2("add", |a: i64, b: i64| a + b)?;
-//! embed.fun("tick", &[], None, |_r: &mut [u64]| -> Result<(), String> { Ok(()) })?;
+//! embed.fun("tick", &[], None, |_cx, _r: &mut [u64]| -> Result<(), String> { Ok(()) })?;
 //! embed.constant("TAB_WIDTH", 4_i64)?;
 //! embed.source("pub fun width() -> i64 { TAB_WIDTH * 2 }")?;
 //! let program = embed
@@ -42,7 +42,7 @@ use loom_compiler::{treadle, typeck};
 use loom_isa::Image;
 use loom_syntax::{Diagnostic, SourceDb, TokenKind};
 use loom_sys::{Host, Outcome};
-use loom_vm::{Config, HostFn, HostTable, Vm};
+use loom_vm::{Config, HostCx, HostFn, HostTable, Vm};
 
 pub use scalar::Scalar;
 
@@ -106,7 +106,7 @@ macro_rules! typed_funs {
         {
             self.add(name, vec![$($ty::LOOM),*], Some(R::LOOM), move || {
                 let mut f = f.clone();
-                Box::new(move |r: &mut [u64]| {
+                Box::new(move |_cx: &mut HostCx<'_>, r: &mut [u64]| {
                     r[0] = f($($ty::from_reg(r[$i])),*).to_reg();
                     Ok(())
                 })
@@ -144,7 +144,10 @@ impl Embed {
     where
         I: Fn() -> HostFn + Send + 'static,
     {
-        if let Some(bad) = params.iter().chain(&ret).find(|t| !scalar::TYPES.contains(t)) {
+        if let Some(bad) = params.iter().find(|t| !scalar::TYPES.contains(t) && **t != "str") {
+            return Err(EmbedError(format!("`{bad}` is not a type that crosses into Loom")));
+        }
+        if let Some(bad) = ret.filter(|t| !scalar::TYPES.contains(t) && *t != "String") {
             return Err(EmbedError(format!("`{bad}` is not a type that crosses into Loom")));
         }
         self.claim(name, false)?;
@@ -169,7 +172,7 @@ impl Embed {
     /// (Loom type names) and writes its result, if `ret` names one, to the first.
     pub fn fun<F>(&mut self, name: &str, params: &[&str], ret: Option<&str>, f: F) -> Result<(), EmbedError>
     where
-        F: FnMut(&mut [u64]) -> Result<(), String> + Clone + Send + 'static,
+        F: FnMut(&mut HostCx<'_>, &mut [u64]) -> Result<(), String> + Clone + Send + 'static,
     {
         self.add(name, params.to_vec(), ret, move || Box::new(f.clone()))
     }

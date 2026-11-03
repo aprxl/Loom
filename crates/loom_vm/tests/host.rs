@@ -47,7 +47,7 @@ fn a_host_function_reads_and_writes_the_registers() {
     table
         .register(
             "app.increment",
-            Box::new(|r| {
+            Box::new(|_, r| {
                 r[0] += 1;
                 Ok(())
             }),
@@ -64,7 +64,7 @@ fn each_import_gets_its_own_function_and_window() {
     table
         .register(
             "app.one",
-            Box::new(|r| {
+            Box::new(|_, r| {
                 if r.len() != 1 {
                     return Err(format!("window of {}", r.len()));
                 }
@@ -76,7 +76,7 @@ fn each_import_gets_its_own_function_and_window() {
     table
         .register(
             "app.two",
-            Box::new(|r| {
+            Box::new(|_, r| {
                 if r.len() != 2 {
                     return Err(format!("window of {}", r.len()));
                 }
@@ -93,7 +93,7 @@ fn each_import_gets_its_own_function_and_window() {
 fn an_error_from_the_host_is_an_unravel() {
     let img = image(&[0], vec![import("app.fail", 1, 1)]);
     let mut table = HostTable::default();
-    table.register("app.fail", Box::new(|_| Err("boom".into()))).expect("registers");
+    table.register("app.fail", Box::new(|_, _| Err("boom".into()))).expect("registers");
     let mut vm = vm(&img, table, &Config::default()).expect("loads");
     let Err(Outcome::Unravel { message, .. }) = vm.call(0, &[5]) else { panic!("expected an unravel") };
     assert_eq!(message, "boom");
@@ -111,8 +111,8 @@ fn an_unregistered_import_does_not_load() {
 #[test]
 fn a_name_registers_once() {
     let mut table = HostTable::default();
-    table.register("app.f", Box::new(|_| Ok(()))).expect("registers");
-    assert!(table.register("app.f", Box::new(|_| Ok(()))).is_err());
+    table.register("app.f", Box::new(|_, _| Ok(()))).expect("registers");
+    assert!(table.register("app.f", Box::new(|_, _| Ok(()))).is_err());
 }
 
 #[test]
@@ -124,7 +124,7 @@ fn compile_time_code_cannot_call_the_host() {
     table
         .register(
             "app.increment",
-            Box::new(move |_| {
+            Box::new(move |_, _| {
                 seen.store(true, Ordering::Relaxed);
                 Ok(())
             }),

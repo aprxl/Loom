@@ -12,7 +12,6 @@ use loom_isa::{FmtItem, Image, Op};
 use loom_sys::Output;
 
 use crate::Trap;
-use crate::embed::HostFns;
 use crate::fmt::{self, Value};
 use crate::heap::Heap;
 
@@ -46,8 +45,6 @@ pub(crate) struct Ctx<'i> {
     /// worker (where lines are written to `cur.out` as they come).
     task_line: Vec<u8>,
     pub heap: Heap,
-    /// The functions bound to the image's host imports.
-    pub hosts: HostFns,
     /// A run that doesn't see the machine (see `host`).
     pub sandbox: bool,
     /// `env.args()`.
@@ -172,7 +169,6 @@ impl<'i> Ctx<'i> {
             split_start: 0,
             task_line: Vec::new(),
             heap: Heap::default(),
-            hosts: HostFns::default(),
             sandbox: host.sandbox,
             args: host.args,
             term: loom_sys::term::Term::default(),
@@ -552,6 +548,23 @@ impl Texts for Ctx<'_> {
         // SAFETY: callers pass a text value the compiler built, as `Ctx::text`
         // requires.
         unsafe { Ctx::text(self, ptr, len) }
+    }
+}
+
+/// What a host function reaches through its [`crate::HostCx`]: the program's
+/// text and the strings it builds, never its output.
+pub(crate) trait HostOps {
+    fn text(&self, addr: u64, len: u64) -> Result<&[u8], String>;
+    fn new_string(&mut self, text: &[u8], dst: u64) -> Result<(), String>;
+}
+
+impl HostOps for Ctx<'_> {
+    fn text(&self, addr: u64, len: u64) -> Result<&[u8], String> {
+        Texts::text(self, addr, len).map_err(|t| t.message())
+    }
+
+    fn new_string(&mut self, text: &[u8], dst: u64) -> Result<(), String> {
+        self.heap.new_string(text, dst).map_err(|t| t.message())
     }
 }
 

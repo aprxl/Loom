@@ -20,8 +20,9 @@ const FINE: u64 = 3;
 
 impl<'a> Builder<'a> {
     /// A call of an `extern "host"` function the program declares: a
-    /// `hostcall` of the import named by its path. Only integers, `bool`
-    /// and `char` cross, one register each.
+    /// `hostcall` of the import named by its path. Scalars cross in one
+    /// register each, a `str` in two (its address and length). A `String`
+    /// result is written by the host into a slot the call passes first.
     fn user_host_call(
         &mut self,
         path: &str,
@@ -31,33 +32,41 @@ impl<'a> Builder<'a> {
         span: Span,
     ) -> Option<Val> {
         let sig = self.typed.results.sigs.get(&info.callee)?.clone();
-        let tcx = self.tcx();
-        let scalar = |ty: Ty| matches!(tcx.kind(ty), TyKind::Int(_) | TyKind::Bool | TyKind::Char);
         if !f.generics.is_empty() {
             return self.unsupported(span, &format!("`host function {path}` with generic parameters on Treadle"));
         }
+        let tcx = self.tcx();
+        let is_scalar = |ty: Ty| matches!(tcx.kind(ty), TyKind::Int(_) | TyKind::Bool | TyKind::Char);
+        let is_text = |ty: Ty| matches!(tcx.kind(ty), TyKind::Str);
         for param in &sig.params {
             let ty = self.plain_ty(param.ty);
-            if !scalar(ty) || param.mode != ParamMode::Read || param.has_default {
+            if !(is_scalar(ty) || is_text(ty)) || param.mode != ParamMode::Read || param.has_default {
                 let shown = self.tcx().display(self.p, ty);
                 return self.unsupported(span, &format!("`host function with a parameter of type {shown}` on Treadle"));
             }
         }
         let ret = self.plain_ty(sig.ret);
         let unit = matches!(self.tcx().kind(ret), TyKind::Unit);
-        if !unit && !scalar(ret) {
+        let string = self.is_string(ret);
+        if !unit && !string && !is_scalar(ret) {
             let shown = self.tcx().display(self.p, ret);
             return self.unsupported(span, &format!("`host function with a result of type {shown}` on Treadle"));
         }
-        let mut regs = Vec::with_capacity(sig.params.len());
+        let slot = if string { Some(self.temp(ret, span)?) } else { None };
+        let mut regs: Vec<Value> = slot.into_iter().collect();
         for k in 0..sig.params.len() {
             let Some(ArgSource::Arg(i)) = info.args.get(k) else { return self.unsupported(span, "this call") };
             let e = &args[*i].value;
             let v = self.expr(e)?;
             let ty = self.coerced_ty(e);
-            regs.push(self.regs(v, ty, span)?[0]);
+            if matches!(self.tcx().kind(ty), TyKind::Str) {
+                let (p, n) = self.text_of(v, ty, span)?;
+                regs.extend([p, n]);
+            } else {
+                regs.push(self.regs(v, ty, span)?[0]);
+            }
         }
-        let results = usize::from(!unit);
+        let results = usize::from(!unit && !string);
         let index = match self.host_imports.iter().position(|h| h.name == path) {
             Some(index) => index,
             None => {
@@ -69,7 +78,13 @@ impl<'a> Builder<'a> {
         };
         let out =
             self.emit(InstKind::Native { name: "host.call", imm: index as u16, args: regs }, &vec![VTy::Int; results]);
-        Some(Val::Regs(out))
+        match slot {
+            Some(dst) => {
+                self.own_temp(dst, ret);
+                Some(Val::Mem(dst))
+            }
+            None => Some(Val::Regs(out)),
+        }
     }
 
     /// A call of a host extern of std, if `path` is one.

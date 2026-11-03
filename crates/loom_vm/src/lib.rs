@@ -30,7 +30,7 @@ mod slab;
 mod stack;
 mod stats;
 
-pub use embed::{HostFn, HostTable};
+pub use embed::{HostCx, HostFn, HostTable};
 pub use slab::slot_size;
 pub use stats::{NATIVE_CATEGORIES, RuntimeStats};
 
@@ -252,7 +252,7 @@ impl<'i> Vm<'i> {
             };
             bound.push((usize::from(import.args.max(import.results)), f));
         }
-        machine.ctx.hosts = HostFns(bound);
+        machine.hosts = HostFns(bound);
         Ok(Vm { image, machine, trace: Vec::new(), gap: None, memory_limited: config.limits.memory.is_some() })
     }
 

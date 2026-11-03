@@ -65,7 +65,7 @@ fn bool_and_char_round_trip() {
 fn a_raw_function_over_registers() {
     let mut embed = Embed::new("m");
     embed
-        .fun("twice", &["u32"], Some("u32"), |r: &mut [u64]| {
+        .fun("twice", &["u32"], Some("u32"), |_cx, r: &mut [u64]| {
             r[0] *= 2;
             Ok(())
         })
@@ -77,7 +77,7 @@ fn a_raw_function_over_registers() {
 #[test]
 fn an_error_from_a_raw_function_is_an_unravel() {
     let mut embed = Embed::new("m");
-    embed.fun("explode", &[], None, |_r: &mut [u64]| Err("boom".to_string())).expect("registers");
+    embed.fun("explode", &[], None, |_cx, _r: &mut [u64]| Err("boom".to_string())).expect("registers");
     let program = compile(embed, "use m.explode\npub fun go() { explode() }");
     let Err(Outcome::Unravel { message, .. }) = program.start(host()).expect("starts").call("go", &[]) else {
         panic!("expected an unravel")
@@ -96,7 +96,7 @@ fn bad_registrations_are_errors() {
     assert!(embed.constant("quiet", 1_i64).is_err(), "a constant in the case of a function");
     assert!(embed.fun0("two words", || 1_i64).is_err(), "not one name");
     assert!(embed.fun0("x // y", || 1_i64).is_err(), "a comment");
-    assert!(embed.fun("t", &["str"], None, |_r: &mut [u64]| Ok(())).is_err(), "a type that doesn't cross");
+    assert!(embed.fun("t", &["f64"], None, |_cx, _r: &mut [u64]| Ok(())).is_err(), "a type that doesn't cross");
 }
 
 #[test]
@@ -130,4 +130,30 @@ fn calling_what_is_not_there_is_an_error() {
     let mut run = program.start(host()).expect("starts");
     assert!(matches!(run.call("hidden", &[]), Err(Outcome::Crash { .. })));
     assert!(matches!(run.call("go", &[]), Err(Outcome::Crash { .. })), "wrong arity");
+}
+
+#[test]
+fn text_goes_in_and_a_string_comes_out() {
+    let mut embed = Embed::new("m");
+    embed
+        .fun("len_of", &["str"], Some("u64"), |cx, r| {
+            let n = cx.text(r[0], r[1])?.len() as u64;
+            r[0] = n;
+            Ok(())
+        })
+        .expect("registers");
+    embed
+        .fun("to_text", &["u64"], Some("String"), |cx, r| {
+            let text = r[1].to_string();
+            cx.new_string(text.as_bytes(), r[0])
+        })
+        .expect("registers");
+    embed.fun("empty", &[], Some("String"), |cx, r| cx.new_string(b"", r[0])).expect("registers");
+    let program = compile(
+        embed,
+        "use m.{len_of, to_text, empty}\npub fun bytes() -> u64 { len_of(\"h\u{e9}llo\") }\npub fun digits(n: u64) -> usize { to_text(n).len() }\npub fun nothing() -> usize { empty().len() }",
+    );
+    assert_eq!(call(&program, "bytes", &[]), [6]);
+    assert_eq!(call(&program, "digits", &[42]), [2]);
+    assert_eq!(call(&program, "nothing", &[]), [0]);
 }
