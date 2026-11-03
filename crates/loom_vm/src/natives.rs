@@ -551,6 +551,54 @@ impl Texts for Ctx<'_> {
     }
 }
 
+/// What a host function reaches through its [`crate::HostCx`]: the program's
+/// text and the strings it builds, never its output.
+pub(crate) trait HostOps {
+    fn text(&self, addr: u64, len: u64) -> Result<&[u8], String>;
+    fn new_string(&mut self, text: &[u8], dst: u64) -> Result<(), String>;
+    fn bytes(&self, addr: u64, len: u64) -> Result<&[u8], String>;
+    fn bytes_mut(&mut self, addr: u64, len: u64) -> Result<&mut [u8], String>;
+}
+
+impl HostOps for Ctx<'_> {
+    fn text(&self, addr: u64, len: u64) -> Result<&[u8], String> {
+        Texts::text(self, addr, len).map_err(|t| t.message())
+    }
+
+    fn new_string(&mut self, text: &[u8], dst: u64) -> Result<(), String> {
+        self.heap.new_string(text, dst).map_err(|t| t.message())
+    }
+
+    fn bytes(&self, addr: u64, len: u64) -> Result<&[u8], String> {
+        live_check(self, addr, len)?;
+        if len == 0 {
+            return Ok(&[]);
+        }
+        // SAFETY: `live_check` found the bytes live (in the checked build; otherwise
+        // the compiler gave a value it laid out), so they can be read while `self`
+        // is borrowed.
+        Ok(unsafe { std::slice::from_raw_parts(addr as *const u8, len as usize) })
+    }
+
+    fn bytes_mut(&mut self, addr: u64, len: u64) -> Result<&mut [u8], String> {
+        live_check(self, addr, len)?;
+        if len == 0 {
+            return Ok(&mut []);
+        }
+        // SAFETY: as for `bytes`; the host function holds the only `&mut` to the
+        // context, so nothing else in the run borrows these bytes meanwhile.
+        Ok(unsafe { std::slice::from_raw_parts_mut(addr as *mut u8, len as usize) })
+    }
+}
+
+/// `len` bytes at `addr` must be live memory in the checked build.
+fn live_check(ctx: &Ctx<'_>, addr: u64, len: u64) -> Result<(), String> {
+    if len > 0 && cfg!(feature = "checked") && !ctx.owns(addr, len) {
+        return Err(format!("{len} bytes at {addr:#x} aren't live memory"));
+    }
+    Ok(())
+}
+
 /// What a native that builds strings works on: a source of text, and the heap
 /// the strings go in.
 pub(crate) trait Strings: Texts {

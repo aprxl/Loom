@@ -1,0 +1,74 @@
+use loom_isa::word::word;
+use loom_isa::{Func, HostImport, Image, Op, verify};
+
+fn import(name: &str, args: u16, results: u16) -> HostImport {
+    HostImport { name: name.into(), args, results }
+}
+
+/// An image of one function that does `hostcall` of import `c`,
+/// in a frame of 4 registers.
+fn image(c: u16, imports: Vec<HostImport>) -> Image {
+    let code = vec![word(Op::HostCall, 0, c, 0), word(Op::Ret, 0, 1, 0)];
+    let func = Func {
+        name: "f".into(),
+        entry: 0,
+        len: code.len() as u32,
+        frame: 4,
+        params: 1,
+        results: 1,
+        lines: vec![],
+        pads: vec![],
+        sites: vec![],
+    };
+    Image { funcs: vec![func], code, host_imports: imports, entry: Some(0), ..Image::default() }
+}
+
+fn rejects(img: &Image, what: &str) {
+    let Err(e) = verify(img) else { panic!("accepted, expected `{what}`") };
+    assert!(e.what.contains(what), "{e}");
+}
+
+#[test]
+fn a_call_of_an_import_that_exists() {
+    verify(&image(0, vec![import("app.increment", 1, 1)])).expect("valid");
+}
+
+#[test]
+fn a_call_of_an_import_that_does_not_exist() {
+    rejects(&image(1, vec![import("app.increment", 1, 1)]), "no such host import");
+}
+
+#[test]
+fn an_import_must_fit_the_frame() {
+    rejects(&image(0, vec![import("app.big", 5, 1)]), "don't fit the frame");
+    rejects(&image(0, vec![import("app.big", 1, 5)]), "don't fit the frame");
+}
+
+#[test]
+fn the_largest_import_must_fit_the_frame() {
+    // Windows of 1 and 3 registers: a call at r2 in a 4-register frame fits
+    // the first but not the second, and every call site is checked against
+    // the largest.
+    let mut img = image(0, vec![import("app.small", 1, 1), import("app.big", 3, 1)]);
+    img.code[0] = word(Op::HostCall, 2, 0, 0);
+    rejects(&img, "don't fit the frame");
+    img.code[0] = word(Op::HostCall, 1, 0, 0);
+    verify(&img).expect("valid");
+}
+
+#[test]
+fn hostcall_leaves_c_zero() {
+    let mut img = image(0, vec![import("app.increment", 1, 1)]);
+    img.code[0] = word(Op::HostCall, 0, 0, 1);
+    rejects(&img, "nonzero `c`");
+}
+
+#[test]
+fn import_names_are_unique() {
+    rejects(&image(0, vec![import("app.f", 1, 1), import("app.f", 0, 0)]), "duplicate");
+}
+
+#[test]
+fn an_import_has_a_name() {
+    rejects(&image(0, vec![import("", 1, 1)]), "empty");
+}

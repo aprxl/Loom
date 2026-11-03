@@ -1,0 +1,17 @@
+[package]
+name = "loom_embed"
+description = "Loom as a library: a Rust host registers functions and constants, compiles Loom source for Treadle and runs it."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+loom_syntax.workspace = true
+loom_isa.workspace = true
+loom_vm.workspace = true
+loom_sys.workspace = true
+loom_compiler.workspace = true
+
+[lints]
+workspace = true

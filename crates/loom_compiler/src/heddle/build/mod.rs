@@ -311,6 +311,8 @@ pub(super) struct Builder<'a> {
     relocs: Vec<u32>,
     /// Word ranges of `data` that are baked values.
     plain: Vec<(u32, u32)>,
+    /// The host functions called, in the order of their first call.
+    host_imports: Vec<loom_isa::HostImport>,
     /// Each weft method called through `any`: its slot in every vtable.
     dyn_slots: IndexMap<crate::hir::DefId, u32>,
     /// The number of each type made into an `any`.
@@ -431,6 +433,7 @@ pub fn build_tests_with(
                 data: Vec::new(),
                 relocs: Vec::new(),
                 plain: Vec::new(),
+                host_imports: Vec::new(),
                 entry: FuncId(0),
                 roots: Vec::new(),
                 changed: Vec::new(),
@@ -441,6 +444,40 @@ pub fn build_tests_with(
     let mut module = b.finish(entry)?;
     module.roots = entries.iter().map(|&(_, id)| id).collect();
     Ok((module, entries))
+}
+
+/// Builds the Heddle of a program with no `main`: each `pub`, non-generic
+/// function of the root file is an entry, and the first is the module's.
+/// `loom_embed` runs them by name.
+pub fn build_exports_with(p: &Program, typed: &Typed, baked: &crate::baked::Baked) -> Result<Module, Vec<Diagnostic>> {
+    let mut b = Builder::new(p, typed);
+    b.baked = Some(baked);
+    let mut roots = Vec::new();
+    let items = p.root.map(|root| p.module(root).items.values().copied().collect::<Vec<_>>()).unwrap_or_default();
+    for def in items {
+        let DefKind::Fn(f) = &p.def(def).kind else { continue };
+        let exported = p.def(def).vis == loom_syntax::ast::Vis::Pub
+            && f.generics.is_empty()
+            && f.body.is_some()
+            && f.abi.is_none()
+            && f.qualifier != loom_syntax::ast::FnQualifier::Test;
+        let Some(id) = typed.results.find(&Instance::of(def)).filter(|_| exported) else { continue };
+        let span = p.def(def).span;
+        if typed.results.sigs.get(&id).is_some_and(|s| matches!(typed.tcx.kind(s.ret), TyKind::Result(..))) {
+            b.unsupported::<()>(span, &format!("the export `{}` returns `! E`", p.def(def).name));
+            continue;
+        }
+        b.main_span.get_or_insert(span);
+        roots.push(b.func_id(FnKey::Body(id)));
+    }
+    b.drain();
+    if !b.diags.is_empty() {
+        return Err(b.diags);
+    }
+    let Some(&entry) = roots.first() else { return Ok(Module { entry: FuncId(0), ..Module::default() }) };
+    let mut module = b.finish(entry)?;
+    module.roots = roots;
+    Ok(module)
 }
 
 impl<'a> Builder<'a> {
@@ -471,6 +508,7 @@ impl<'a> Builder<'a> {
             baked_keys: HashSet::new(),
             relocs: Vec::new(),
             plain: Vec::new(),
+            host_imports: Vec::new(),
             dyn_slots: IndexMap::new(),
             type_ids: IndexMap::new(),
             vtable_at: HashMap::new(),
@@ -506,6 +544,7 @@ impl<'a> Builder<'a> {
             data: self.data,
             relocs: self.relocs,
             plain: self.plain,
+            host_imports: self.host_imports,
             entry,
             roots: Vec::new(),
         };

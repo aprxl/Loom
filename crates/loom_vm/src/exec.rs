@@ -47,6 +47,7 @@ use crate::sched::{IDLE, Running, Sched, Step, Taken, TaskOp};
 use crate::heap::{Heap, Shared};
 use loom_sys::Host;
 
+use crate::embed::{HostCx, HostFns};
 use crate::ints::{self, IntErr};
 use crate::natives::{
     Ctx, LocalFn, NativeFn, OutBuf, Worker, WorkerFn, resolve, resolve_local, resolve_task, resolve_worker,
@@ -84,6 +85,20 @@ macro_rules! state {
             (&mut $env.local.msg, &mut $env.local.bufs, &mut $env.local.out)
         } else {
             ctx!($env).task_state()
+        }
+    };
+}
+
+macro_rules! hosts {
+    ($env:expr) => {
+        // SAFETY: `hosts` points at the machine's host table, which outlives the
+        // run; like `ctx`, one `&mut` of it is live at a time (under the pool's
+        // lock with several workers, see the `hostcall` arm).
+        {
+            #[allow(unused_unsafe)]
+            unsafe {
+                &mut *$env.hosts
+            }
         }
     };
 }
@@ -145,6 +160,9 @@ struct Env<'e, 'i> {
     /// Natives that use the worker's own output line, message and sinks too.
     worker_natives: &'e [Option<WorkerFn>],
     task_natives: &'e [Option<TaskOp>],
+    /// The registers a `hostcall` window takes: the largest import's.
+    host_window: usize,
+    hosts: *mut HostFns,
     /// The program's context and threads, by pointer: with several workers
     /// they're shared, each use under the pool's lock (see `pool.rs`), so no
     /// two `&mut` of them ever live at once.
@@ -207,6 +225,8 @@ struct Init<'a, 'i> {
     local_natives: &'a [Option<LocalFn>],
     worker_natives: &'a [Option<WorkerFn>],
     task_natives: &'a [Option<TaskOp>],
+    host_window: usize,
+    hosts: *mut HostFns,
     /// With several workers, what their heaps share.
     shared: Option<Arc<Shared>>,
     /// With several workers, where the whole lines of output go.
@@ -275,6 +295,9 @@ pub(crate) struct Machine<'i> {
     local_natives: Vec<Option<LocalFn>>,
     worker_natives: Vec<Option<WorkerFn>>,
     task_natives: Vec<Option<TaskOp>>,
+    host_window: usize,
+    /// The host functions bound to the image's imports (see `hostcall`).
+    pub(crate) hosts: HostFns,
     pub ctx: Ctx<'i>,
     stack_limit: usize,
     /// Kept between calls from outside.
@@ -350,6 +373,8 @@ impl<'i> Machine<'i> {
             local_natives: image.natives.iter().map(|name| resolve_local(name)).collect(),
             worker_natives: image.natives.iter().map(|name| resolve_worker(name)).collect(),
             task_natives: image.natives.iter().map(|name| resolve_task(name)).collect(),
+            host_window: image.host_window(),
+            hosts: HostFns::default(),
             natives,
             ctx: {
                 let mut ctx = Ctx::new(image, host);
@@ -440,6 +465,8 @@ impl<'i> Machine<'i> {
             local_natives: &self.local_natives,
             worker_natives: &self.worker_natives,
             task_natives: &self.task_natives,
+            host_window: self.host_window,
+            hosts: &raw mut self.hosts,
             shared: pool.is_some().then(|| Arc::clone(self.ctx.heap.shared())),
             out: pool.is_some().then(|| self.ctx.out_shared()),
             batched: self.ctx.batches_output(),
@@ -543,6 +570,8 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
             local_natives: init.local_natives,
             worker_natives: init.worker_natives,
             task_natives: init.task_natives,
+            host_window: init.host_window,
+            hosts: init.hosts,
             ctx: init.ctx,
             stack,
             rodata: init.rodata,
@@ -1490,6 +1519,29 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
                                 };
                                 if let Err(trap) = done {
                                     throw!(trap);
+                                }
+                            }
+                            // No `enter`/`exit`: host functions see only their registers.
+                            Op::HostCall => {
+                                if ctx!(env).refuse_host {
+                                    throw!(Trap::Refused("hostcall"));
+                                }
+                                if cfg!(feature = "stats") {
+                                    env.st_runtime.native_calls[crate::stats::HOST] += 1;
+                                }
+                                // SAFETY: the verifier checked that `a + host_window` is inside the frame.
+                                let args = unsafe { std::slice::from_raw_parts_mut(fp.add(a(w)), env.host_window) };
+                                let _held = env.pool.map(Pool::lock);
+                                if cfg!(feature = "checked") {
+                                    ctx!(env).stack = &*env.stack;
+                                }
+                                let done = {
+                                    // The verifier checked that `b` is an import, and each import has a function.
+                                    let (window, f) = &mut hosts!(env).0[b(w)];
+                                    f(&mut HostCx::new(ctx!(env)), &mut args[..*window])
+                                };
+                                if let Err(message) = done {
+                                    throw!(Trap::Unravel(message));
                                 }
                             }
                             Op::Ret => {

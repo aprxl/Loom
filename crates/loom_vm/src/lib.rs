@@ -16,6 +16,7 @@
 
 mod arena;
 mod atomic;
+mod embed;
 mod exec;
 mod fmt;
 mod heap;
@@ -29,12 +30,14 @@ mod slab;
 mod stack;
 mod stats;
 
+pub use embed::{HostCx, HostFn, HostTable};
 pub use slab::slot_size;
 pub use stats::{NATIVE_CATEGORIES, RuntimeStats};
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
+use embed::HostFns;
 use loom_isa::{CRASHES, Image, IntSpec};
 use loom_sys::{Budget, Host, Location, Outcome};
 
@@ -228,11 +231,28 @@ pub struct Vm<'i> {
 impl<'i> Vm<'i> {
     /// Verifies and loads `image`.
     pub fn new(image: &'i Image, host: Host, config: &Config) -> Result<Vm<'i>, Outcome> {
+        Self::new_hosted(image, host, config, HostTable::default())
+    }
+
+    /// Verifies and loads `image`, binding each of its host imports to the
+    /// function `hosts` registers under its name.
+    pub fn new_hosted(image: &'i Image, host: Host, config: &Config, mut hosts: HostTable) -> Result<Vm<'i>, Outcome> {
         if let Err(e) = loom_isa::verify(image) {
             return Err(Outcome::Crash { message: format!("invalid bytecode: {e}"), location: None });
         }
-        let machine =
+        let mut machine =
             exec::Machine::load(image, host, config).map_err(|message| Outcome::Crash { message, location: None })?;
+        let mut bound = Vec::with_capacity(image.host_imports.len());
+        for import in &image.host_imports {
+            let Some(f) = hosts.take(&import.name) else {
+                return Err(Outcome::Crash {
+                    message: format!("unbound host import `{}`", import.name),
+                    location: None,
+                });
+            };
+            bound.push((usize::from(import.args.max(import.results)), f));
+        }
+        machine.hosts = HostFns(bound);
         Ok(Vm { image, machine, trace: Vec::new(), gap: None, memory_limited: config.limits.memory.is_some() })
     }
 

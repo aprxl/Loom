@@ -48,6 +48,7 @@ fn run(funcs: &[Func], folded: bool) -> (Vec<Option<u64>>, usize) {
         roots: Vec::new(),
         relocs: Vec::new(),
         plain: Vec::new(),
+        host_imports: Vec::new(),
     };
     if folded {
         module = opt::run(module, &["sccp"]).expect("valid after sccp");

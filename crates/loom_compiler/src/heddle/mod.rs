@@ -27,8 +27,8 @@ mod verify;
 
 pub(crate) use build::rewrite;
 pub use build::{
-    COMPUTING, CYCLE, ConstKey, ConstSlot, DONE, FAILED, GAVE_UP, Job, JobKind, Jobs, build, build_jobs, build_tests,
-    build_tests_with, build_with, frames,
+    COMPUTING, CYCLE, ConstKey, ConstSlot, DONE, FAILED, GAVE_UP, Job, JobKind, Jobs, build, build_exports_with,
+    build_jobs, build_tests, build_tests_with, build_with, frames,
 };
 pub use print::print;
 pub(crate) use verify::uses as inst_uses;
@@ -508,6 +508,8 @@ pub struct Module {
     /// Ranges of words of `data` that are plain values (constants baked in),
     /// not function numbers as a vtable's are: `[start, end)`.
     pub plain: Vec<(u32, u32)>,
+    /// The host functions the program calls, by index (the operand of `hostcall`).
+    pub host_imports: Vec<loom_isa::HostImport>,
     /// The function to run.
     pub entry: FuncId,
     /// Functions something outside the module calls, besides the entry (a

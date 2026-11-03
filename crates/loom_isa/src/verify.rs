@@ -18,6 +18,7 @@
 //! What a register *means* isn't checked: that's the compiler's job, and the
 //! checked build's.
 
+use std::collections::HashSet;
 use std::fmt;
 
 use crate::natives::{NativeImm, NativeSig, native};
@@ -74,6 +75,12 @@ pub fn verify(image: &Image) -> Result<(), VerifyError> {
         match native(name) {
             Some(sig) => sigs.push(sig),
             None => return Err(whole(format!("unknown native `{name}`"))),
+        }
+    }
+    let mut imports = HashSet::new();
+    for import in &image.host_imports {
+        if import.name.is_empty() || !imports.insert(import.name.as_str()) {
+            return Err(whole(format!("empty or duplicate host import `{}`", import.name)));
         }
     }
     for i in 0..image.funcs.len() {
@@ -219,6 +226,17 @@ fn verify_func(image: &Image, index: usize, sigs: &[&NativeSig]) -> Result<(), V
                     }
                 }
             }
+            Form::Host => {
+                if c(w) != 0 {
+                    return Err(err(pc, "`hostcall` with a nonzero `c`".into()));
+                }
+                if b(w) >= image.host_imports.len() {
+                    return Err(err(pc, "no such host import".into()));
+                }
+                if a(w) + image.host_window() > frame {
+                    return Err(err(pc, "`hostcall`'s registers don't fit the frame".into()));
+                }
+            }
             Form::Ret => {
                 if a(w) + b(w) > frame || b(w) != usize::from(f.results) || c(w) != 0 {
                     return Err(err(pc, "`ret` doesn't match the function".into()));
@@ -353,6 +371,7 @@ mod tests {
             strings: vec![b"hi".to_vec()],
             fmts: vec![FmtItem { kind: ValueKind::Bool, debug: false, spec: None }],
             natives: vec!["out.fmt".into()],
+            host_imports: vec![],
             files: vec![],
             data: vec![0; 2],
             relocs: vec![],

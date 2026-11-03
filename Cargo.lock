@@ -347,6 +347,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "loom_compiler",
+ "loom_embed",
  "loom_host",
  "loom_isa",
  "loom_syntax",
@@ -365,6 +366,17 @@ dependencies = [
  "loom_sys",
  "loom_vm",
  "mlua",
+]
+
+[[package]]
+name = "loom_embed"
+version = "0.1.0"
+dependencies = [
+ "loom_compiler",
+ "loom_isa",
+ "loom_syntax",
+ "loom_sys",
+ "loom_vm",
 ]
 
 [[package]]

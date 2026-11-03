@@ -1,6 +1,9 @@
 //! Optional operation counts. Workers collect their own counters and merge
 //! them only when they stop; no shared atomic is added to dispatch.
 
+/// The index of "host" in [`NATIVE_CATEGORIES`]: what `hostcall` counts under.
+pub(crate) const HOST: usize = 5;
+
 /// The native categories in [`RuntimeStats::native_calls`] and
 /// [`RuntimeStats::native_locks`].
 pub const NATIVE_CATEGORIES: [&str; 7] = ["task", "heap", "atomic", "scalar", "text/map", "host", "other"];

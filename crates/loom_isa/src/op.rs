@@ -49,6 +49,9 @@ pub enum Form {
     Call,
     /// `a`: where the arguments are; `b`: the native's index; `c`: its immediate.
     Native,
+    /// `a`: where the arguments are; `b`: the index of a host import in the
+    /// image; `c`: zero.
+    Host,
     /// `a`: the first result; `b`: how many.
     Ret,
     /// `a`: a 16-bit constant.
@@ -498,6 +501,7 @@ ops! {
     // calls
     Call = "call", Call;
     CallN = "calln", Native;
+    HostCall = "hostcall", Host;
     Ret = "ret", Ret;
     // giving up
     Unravel = "unravel", AB;
