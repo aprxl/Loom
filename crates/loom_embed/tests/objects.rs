@@ -149,3 +149,68 @@ fn a_constant_warp_checks_its_fields() {
     assert!(embed.constant_warp(&point, "B", &[("x", float)]).is_err(), "y is missing");
     assert!(Literal::of(f64::NAN).is_err(), "NaN has no literal");
 }
+
+#[test]
+fn a_host_method_implements_a_weft_and_any_dispatches_to_it() {
+    let mut embed = Embed::new("m");
+    let circle = embed.warp("Circle", &[("r", "f64")]).expect("declares");
+    embed.weft("Describe", &[("describe", &[], "String"), ("scale", &["f64"], "f64")]).expect("declares");
+    embed.implement(&circle, "Describe").expect("implements");
+    embed
+        .warp_method(&circle, "describe", &[], "String", move |cx, r, l| {
+            let radius: f64 = l.read(l.bytes(cx, r[1])?, 0);
+            cx.new_string(format!("circle r={radius}").as_bytes(), r[0])
+        })
+        .expect("registers");
+    embed
+        .warp_method(&circle, "scale", &["f64"], "f64", move |cx, r, l| {
+            let radius: f64 = l.read(l.bytes(cx, r[0])?, 0);
+            r[0] = (radius * f64::from_reg(r[1])).to_reg();
+            Ok(())
+        })
+        .expect("registers");
+    let program = compile(
+        embed,
+        "use m.{Circle, Describe}\npub fun text_len(r: f64) -> usize {\n    let d: any Describe = Circle(r: r)\n    d.describe().len()\n}\npub fun scaled(r: f64) -> f64 {\n    let d: any Describe = Circle(r: r)\n    d.scale(2.0)\n}\n",
+    );
+    assert_eq!(call(&program, "text_len", &[2.0_f64.to_reg()]), [10]);
+    assert_eq!(f64::from_reg(call(&program, "scaled", &[3.0_f64.to_reg()])[0]), 6.0);
+}
+
+#[test]
+fn a_warp_missing_a_weft_method_is_refused() {
+    let mut embed = Embed::new("m");
+    let circle = embed.warp("Circle", &[("r", "f64")]).expect("declares");
+    embed.weft("Area", &[("area", &[], "f64")]).expect("declares");
+    embed.implement(&circle, "Area").expect("implements");
+    assert!(embed.compile("use m.{Circle}\npub fun go() -> f64 { 0.0 }\n").is_err());
+}
+
+#[test]
+fn implementing_an_unknown_weft_or_twice_is_an_error() {
+    let mut embed = Embed::new("m");
+    let circle = embed.warp("Circle", &[("r", "f64")]).expect("declares");
+    assert!(embed.implement(&circle, "Nope").is_err(), "no such weft");
+    embed.weft("Area", &[("area", &[], "f64")]).expect("declares");
+    embed.implement(&circle, "Area").expect("implements");
+    assert!(embed.implement(&circle, "Area").is_err(), "already implemented");
+}
+
+#[test]
+fn a_warp_shows_through_a_host_method() {
+    let mut embed = Embed::new("m");
+    let circle = embed.warp("Circle", &[("r", "f64")]).expect("declares");
+    embed
+        .warp_method(&circle, "label", &[], "String", move |cx, r, l| {
+            let radius: f64 = l.read(l.bytes(cx, r[1])?, 0);
+            cx.new_string(format!("circle r={radius}").as_bytes(), r[0])
+        })
+        .expect("registers");
+    embed.show_via(&circle, "label").expect("shows");
+    let program = compile(
+        embed,
+        "use m.{Circle}\nuse std.fmt.Show\npub fun shown_len(r: f64) -> usize {\n    \"{Circle(r: r)}\".len()\n}\npub fun any_len(r: f64) -> usize {\n    let s: any Show = Circle(r: r)\n    \"{s}\".len()\n}\n",
+    );
+    assert_eq!(call(&program, "shown_len", &[2.0_f64.to_reg()]), [10]);
+    assert_eq!(call(&program, "any_len", &[2.0_f64.to_reg()]), [10]);
+}

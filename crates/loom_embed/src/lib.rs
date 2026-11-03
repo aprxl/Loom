@@ -129,6 +129,7 @@ struct ValueWarp {
     fields: Vec<(String, String)>,
     sizes: Vec<u64>,
     methods: Vec<String>,
+    wefts: Vec<String>,
 }
 
 /// A value warp declared with [`Embed::warp`]; its methods are registered with
@@ -235,6 +236,7 @@ pub struct Embed {
     warps: Vec<Warp>,
     value_warps: Vec<ValueWarp>,
     enums: Vec<(String, Vec<String>)>,
+    wefts: Vec<(String, String)>,
     functions: Vec<String>,
     source: String,
     names: HashSet<String>,
@@ -311,6 +313,7 @@ impl Embed {
             names: HashSet::new(),
             value_warps: Vec::new(),
             enums: Vec::new(),
+            wefts: Vec::new(),
         }
     }
 
@@ -434,7 +437,13 @@ impl Embed {
         }
         self.claim(name, &TokenKind::TypeIdent)?;
         let fields = fields.iter().map(|(f, t)| (f.to_string(), t.to_string())).collect();
-        self.value_warps.push(ValueWarp { name: name.to_string(), fields, sizes, methods: Vec::new() });
+        self.value_warps.push(ValueWarp {
+            name: name.to_string(),
+            fields,
+            sizes,
+            methods: Vec::new(),
+            wefts: Vec::new(),
+        });
         Ok(WarpRef { index: self.value_warps.len() - 1, name: name.to_string() })
     }
 
@@ -513,6 +522,64 @@ impl Embed {
         Ok(())
     }
 
+    /// Declares `pub weft name { fun … }` in the module, with a method for each of
+    /// `methods`: its name, its parameter types (Loom names) and its result (`""`
+    /// for none). A value warp that implements it (see [`Embed::implement`]) gives
+    /// each method with [`Embed::warp_method`].
+    pub fn weft(&mut self, name: &str, methods: &[(&str, &[&str], &str)]) -> Result<(), EmbedError> {
+        for (method, params, ret) in methods {
+            if !lexes_as(method, &TokenKind::Ident) {
+                return Err(EmbedError(format!("`{method}` is not a method name")));
+            }
+            if let Some(bad) = params.iter().find(|t| !self.crosses(t, false)) {
+                return Err(EmbedError(format!("`{bad}` is not a type that crosses into Loom")));
+            }
+            if !ret.is_empty() && !self.crosses(ret, true) {
+                return Err(EmbedError(format!("`{ret}` is not a type that crosses into Loom")));
+            }
+        }
+        self.claim(name, &TokenKind::TypeIdent)?;
+        let mut text = format!("pub weft {name} {{\n");
+        for (method, params, ret) in methods {
+            let sep = if params.is_empty() { "" } else { ", " };
+            let ret = if ret.is_empty() { String::new() } else { format!(" -> {ret}") };
+            text.push_str(&format!("    fun {method}(self{sep}{}){ret}\n", params_text(params)));
+        }
+        text.push_str("}\n\n");
+        self.wefts.push((name.to_string(), text));
+        Ok(())
+    }
+
+    /// Makes the value warp `w` implement the weft `weft`: its methods are the ones
+    /// [`Embed::warp_method`] gave it, and an `any` of the weft takes it.
+    pub fn implement(&mut self, w: &WarpRef, weft: &str) -> Result<(), EmbedError> {
+        if !self.wefts.iter().any(|(name, _)| name == weft) {
+            return Err(EmbedError(format!("`{weft}` is not a weft of this module")));
+        }
+        let warp = &mut self.value_warps[w.index];
+        if warp.wefts.iter().any(|n| n == weft) {
+            return Err(EmbedError(format!("`{}` already implements `{weft}`", warp.name)));
+        }
+        warp.wefts.push(weft.to_string());
+        Ok(())
+    }
+
+    /// Makes the value warp `w` show through its host method `method`, a method
+    /// that gives a `String` (see [`Embed::warp_method`]): `Show`'s `show` writes
+    /// that text, so `{w}` in a template and `print(w)` show it.
+    pub fn show_via(&mut self, w: &WarpRef, method: &str) -> Result<(), EmbedError> {
+        if !lexes_as(method, &TokenKind::Ident) {
+            return Err(EmbedError(format!("`{method}` is not a method name")));
+        }
+        let warp = &mut self.value_warps[w.index];
+        if warp.wefts.iter().any(|n| n == "Show") {
+            return Err(EmbedError(format!("`{}` already shows", warp.name)));
+        }
+        warp.wefts.push("Show".to_string());
+        warp.methods.push(format!("    fun show(self, mut f: Fmt) {{\n        f.put(self.{method}())\n    }}\n"));
+        Ok(())
+    }
+
     /// Declares `pub const name: T = value` in the module.
     pub fn constant<T: Scalar>(&mut self, name: &str, value: T) -> Result<(), EmbedError> {
         let literal = value.literal().ok_or_else(|| EmbedError(format!("`{name}` has no Loom literal")))?;
@@ -530,6 +597,9 @@ impl Embed {
 
     fn module_text(&self) -> String {
         let mut text = String::new();
+        if self.value_warps.iter().any(|w| w.wefts.iter().any(|n| n == "Show")) {
+            text.push_str("use std.fmt.{Fmt, Show}\n\n");
+        }
         if !self.funs.is_empty() {
             text.push_str("extern \"host\" {\n");
             for f in &self.funs {
@@ -542,6 +612,9 @@ impl Embed {
         for (name, ty, value) in &self.consts {
             text.push_str(&format!("pub const {name}: {ty} = {value}\n"));
         }
+        for (_, weft) in &self.wefts {
+            text.push_str(weft);
+        }
         for (name, cases) in &self.enums {
             let cases: String = cases.iter().map(|c| format!("    case {c}\n")).collect();
             text.push_str(&format!("pub warp {name} {{\n{cases}}}\n\n"));
@@ -550,7 +623,8 @@ impl Embed {
             let fields: Vec<String> = warp.fields.iter().map(|(f, t)| format!("    pub {f}: {t}")).collect();
             let methods: String = warp.methods.concat();
             let sep = if methods.is_empty() { "\n" } else { ",\n" };
-            text.push_str(&format!("pub warp {} {{\n{}{sep}{methods}}}\n\n", warp.name, fields.join(",\n")));
+            let header = if warp.wefts.is_empty() { String::new() } else { format!(": {}", warp.wefts.join(", ")) };
+            text.push_str(&format!("pub warp {}{header} {{\n{}{sep}{methods}}}\n\n", warp.name, fields.join(",\n")));
         }
         for warp in &self.warps {
             text.push_str(&format!("pub warp {} {{\n    id: u64\n", warp.name));
