@@ -1,6 +1,11 @@
-// The prelude: names every module can use without a `use`.
+// The prelude: the names every module can use without a `use`. It's small on
+// purpose: the collections (`List`, `Map`, `Set`), `String`, the wefts behind
+// operators and printing (`Eq`, `Ord`, `Hash`, `Copy`, `Show`), the error
+// basics (`Error`, `Missing`, `assert`, `unravel`), streams and ranges, and a
+// few helpers like `min`, `max` and `then`.
 //
-// A module's own items and imports shadow these.
+// A module's own items and imports shadow these, so a program can always use a
+// name of its own.
 
 pub use std.string.String
 pub use std.list.List

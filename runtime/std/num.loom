@@ -1,9 +1,29 @@
-// Numbers.
+// Numbers: the methods of every integer and float type (`n.pow(2)`, `x.sqrt()`,
+// `a.gcd(b)`...), parsing text into numbers, and the `Num` weft for code that
+// works on any number. Integers come in every width from 1 to 64 bits (`u12`,
+// `i24`), and each operator says what happens on overflow.
+//
+// ```loom
+// use std.io.print
+//
+// fun main() {
+//     let n: u32 = 40
+//     print("{n.pow(2)} {n.count_ones()} {n.trailing_zeros()} {n.to_string_radix(2)}")
+//     print("{(-7).rem_euclid(3)} {12.gcd(18)} {255.to_string_radix(16)}")
+//     let x = 2.0
+//     print("{x.sqrt():.4} {x.pow(10.0)} {(1.0).atan2(1.0) * 4.0}")
+//     print("{"300".parse[u8]():?} {"-12".parse[i8]():?} {"2.5e3".parse[f64]():?}")
+// }
+// ```
 
 /// Why text didn't parse as a number.
 pub warp NumError: Error {
+    /// There was no text to parse.
     case Empty
+    /// The text isn't a number of that type: a stray character, a sign an
+    /// unsigned type can't take.
     case Invalid
+    /// The number is too big (or too small) for the type.
     case Overflow
 }
 
@@ -20,7 +40,9 @@ pub weft Num: Ord, Copy, Show {}
 pub warp Int[T] {
     /// The value without its sign. Unravels for the smallest signed value.
     pub fun abs(self) -> T
+    /// The smaller of the two.
     pub fun min(self, other: T) -> T
+    /// The larger of the two.
     pub fun max(self, other: T) -> T
     /// `self` to the power `exp`. Unravels when it doesn't fit.
     pub fun pow(self, exp: u32) -> T
@@ -42,6 +64,7 @@ pub warp Int[T] {
     /// The bits moved `n` places towards the bottom; those pushed out come
     /// back in at the top. `n` counts modulo the type's width.
     pub fun rotate_right(self, n: u32) -> T
+    /// The number as decimal text: what `{n}` prints.
     pub fun to_string(self) -> String
     /// The digits of `self` in base `radix`, lowercase, with a leading `-` when negative. Unravels unless `radix` is 2 to 36.
     pub fun to_string_radix(self, radix: u32) -> String {
@@ -131,29 +154,47 @@ pub warp Int[T] {
 /// The methods of every float type, `T`.
 #builtin
 pub warp Float[T] {
+    /// The value without its sign.
     pub fun abs(self) -> T
     /// The smaller one; a NaN loses to a number.
     pub fun min(self, other: T) -> T
+    /// The larger one; a NaN loses to a number.
     pub fun max(self, other: T) -> T
+    /// The square root; NaN below zero.
     pub fun sqrt(self) -> T
+    /// The nearest whole number at or below it.
     pub fun floor(self) -> T
+    /// The nearest whole number at or above it.
     pub fun ceil(self) -> T
     /// Halfway rounds away from zero.
     pub fun round(self) -> T
+    /// The whole-number part: the fraction dropped, towards zero.
     pub fun trunc(self) -> T
+    /// `self` to the power `exp`.
     pub fun pow(self, exp: T) -> T
+    /// Whether it is NaN, not a number (the only value not equal to itself).
     pub fun is_nan(self) -> bool
+    /// The number as text: what `{x}` prints.
     pub fun to_string(self) -> String
+    /// The sine of an angle in radians.
     pub fun sin(self) -> T
+    /// The cosine of an angle in radians.
     pub fun cos(self) -> T
+    /// The tangent of an angle in radians.
     pub fun tan(self) -> T
+    /// The angle, in radians, whose sine this is; NaN outside -1 to 1.
     pub fun asin(self) -> T
+    /// The angle, in radians, whose cosine this is; NaN outside -1 to 1.
     pub fun acos(self) -> T
+    /// The angle, in radians, whose tangent this is.
     pub fun atan(self) -> T
     /// The angle of the point (`other`, `self`), from the x axis.
     pub fun atan2(self, other: T) -> T
+    /// The hyperbolic sine.
     pub fun sinh(self) -> T
+    /// The hyperbolic cosine.
     pub fun cosh(self) -> T
+    /// The hyperbolic tangent.
     pub fun tanh(self) -> T
     /// `e` to the power `self`.
     pub fun exp(self) -> T
@@ -161,7 +202,9 @@ pub warp Float[T] {
     pub fun exp2(self) -> T
     /// The natural logarithm.
     pub fun ln(self) -> T
+    /// The base-2 logarithm.
     pub fun log2(self) -> T
+    /// The base-10 logarithm.
     pub fun log10(self) -> T
     /// The logarithm in `base`.
     pub fun log(self, base: T) -> T
@@ -169,14 +212,19 @@ pub warp Float[T] {
     pub fun hypot(self, other: T) -> T
     /// What is left after `trunc`.
     pub fun fract(self) -> T
-    /// `-1`, or `1`; NaN stays NaN.
+    /// `-1.0` or `1.0`, by the sign (so `-0.0` gives `-1.0`); NaN stays NaN.
     pub fun signum(self) -> T
     /// `self` with the sign of `sign`.
     pub fun copysign(self, sign: T) -> T
+    /// An angle in radians, in degrees.
     pub fun to_degrees(self) -> T
+    /// An angle in degrees, in radians.
     pub fun to_radians(self) -> T
+    /// Whether it is neither infinite nor NaN.
     pub fun is_finite(self) -> bool
+    /// Whether it is `inf` or `-inf`.
     pub fun is_infinite(self) -> bool
+    /// Whether its sign bit is set: true for `-0.0` and negative NaNs too.
     pub fun is_sign_negative(self) -> bool
     /// The IEEE 754 bit pattern.
     pub fun to_bits(self) -> uint(T.size * 8)

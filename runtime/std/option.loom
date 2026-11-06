@@ -1,9 +1,26 @@
-//! Optional values: `?T`.
+//! Optional values: `?T` is either `some(x)` or `none`. `x?` passes a `none` up
+//! to the caller, `x mend fallback` gives a fallback instead, and these methods
+//! transform one without unwrapping it.
+//!
+//! ```loom
+//! use std.io.print
+//!
+//! fun first_even(xs: [i32]) -> ?i32 = xs.find(_ % 2 == 0)
+//!
+//! fun main() {
+//!     let a = first_even([3, 8, 5])
+//!     let b = first_even([1, 3])
+//!     print("{a:?} {b:?}")
+//!     print(a.map(_ * 10) mend 0)
+//!     print(b.map(_ * 10) mend 0)
+//!     print("{a.is_some()} {b.ok_or("no even number"):?}")
+//! }
+//! ```
 
 /// The methods of every optional type, `?T`.
 #builtin
 pub warp Optional[T] {
-    /// The value, leaving `none` in its place.
+    /// The value, leaving `none` in its place: `let job = next.take()`.
     pub fun take(mut self) -> ?T
     /// `f` of the value, if there is one.
     pub fun map[U](take self, f: T => U) -> ?U {

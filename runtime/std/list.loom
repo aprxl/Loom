@@ -1,4 +1,20 @@
-// Growable arrays.
+// Growable arrays: `List[T]` owns its elements and grows as you push. It has
+// every method of a slice (`std.slice`) and of `Stream` too, so `xs.sort()`,
+// `xs.contains(x)` and `xs.filter(f)` all work on a list.
+//
+// ```loom
+// use std.io.print
+//
+// fun main() {
+//     var xs: List[i32] = [5, 3, 8]
+//     xs.push(1)
+//     xs.insert(0, 9)
+//     xs.sort()
+//     print("{xs} has {xs.len()} items, the largest is {xs.last():?}")
+//     xs.retain(_ % 2 == 1)
+//     print("odd ones: {xs}")
+// }
+// ```
 
 use std.iter.FromStream
 
@@ -28,7 +44,7 @@ pub warp List[T] {
             self.push(x)
         }
     }
-    /// A deep copy.
+    /// A deep copy: a new list with a copy of every element.
     pub fun copy(self) -> List[T]
     /// Keeps the elements `keep` says yes to, in their order.
     pub fun retain(mut self, keep: T => bool) {
@@ -41,7 +57,9 @@ pub warp List[T] {
         }
         self.truncate(w)
     }
-    /// Removes the elements `same_key` of which equals the one before's.
+    /// Removes each element whose `key` equals the `key` of the one before it:
+    /// `words.dedup_by_key(_.len())` keeps the first word of each run of equal
+    /// lengths.
     pub fun dedup_by_key[K: Eq](mut self, key: T => K) {
         if self.len() < 2 { return }
         var w = 1

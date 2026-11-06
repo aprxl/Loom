@@ -1,4 +1,23 @@
-// Text.
+// Text: `str` is a view of UTF-8 text, `String` owns its text and can grow.
+// Lengths and positions count bytes, slicing (`s[0..5]`) cuts on bytes and
+// unravels inside a character, and the case changes and tests follow Unicode. A
+// string literal is a template: `"{x}"` formats `x` into it.
+//
+// ```loom
+// use std.io.print
+//
+// fun main() {
+//     let line = "  name = Ada Lovelace  "
+//     if line.trim().split_once("=") is some((key, value)) {
+//         print("[{key.trim()}] -> [{value.trim()}]")
+//     }
+//     var s = String()
+//     for c in "loom".chars() { s.push(c.to_upper()) }
+//     s.push_str("!")
+//     print("{s} {s.len()} bytes, {"straße".to_upper()}")
+//     print("42".parse[u8]() mend 0)
+// }
+// ```
 
 use std.iter.{FromStream, Owned}
 use std.mem.Spool
@@ -27,6 +46,7 @@ pub warp String {
     pub fun push_str(mut self, s: str)
     /// Takes the last character off, if there is one.
     pub fun pop(mut self) -> ?char
+    /// Removes all the text.
     pub fun clear(mut self)
     /// The text the bytes spell, or where they stop being UTF-8.
     pub fun from_utf8(bytes: [u8]) -> String ! Utf8Error {
@@ -116,11 +136,15 @@ pub warp String {
 pub warp Str {
     /// How many bytes it takes.
     pub fun len(self) -> usize
+    /// Whether it has no text.
     pub fun is_empty(self) -> bool
     /// How many characters it has.
     pub fun char_count(self) -> usize
+    /// Whether `part` is in it somewhere.
     pub fun contains(self, part: str) -> bool
+    /// Whether it starts with `prefix`.
     pub fun starts_with(self, prefix: str) -> bool
+    /// Whether it ends with `suffix`.
     pub fun ends_with(self, suffix: str) -> bool
     /// The byte position of the first `part`, if there is one.
     pub fun find(self, part: str) -> ?usize
@@ -149,8 +173,7 @@ pub warp Str {
     pub fun lines(self) -> Stream[str]
     /// The words: what's between runs of white space.
     pub fun words(self) -> Stream[str]
-    /// The text as a `String` of its own.
-    /// Without the ASCII white space at both ends.
+    /// Without the ASCII white space at both ends (spaces, tabs, line breaks).
     pub fun trim_ascii(self) -> str
     /// Without the ASCII white space at the start.
     pub fun trim_ascii_start(self) -> str
@@ -160,6 +183,7 @@ pub warp Str {
     pub fun to_ascii_upper(self) -> String
     /// With only the ASCII letters in lower case.
     pub fun to_ascii_lower(self) -> String
+    /// The text as a `String` of its own.
     pub fun to_string(self) -> String
     fun char_before(self, end: usize) -> (char, usize)
     /// A `String` of its own, in the spool the call is given (the heap, when

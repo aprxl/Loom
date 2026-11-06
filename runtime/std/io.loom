@@ -1,25 +1,51 @@
-// Console input and output.
+// Console input and output: `print` and its relatives, reading standard input,
+// and the `Writer` weft. `print` writes to the `Writer` that a `given` names,
+// so code that prints can be pointed at a `Buffer` without changing it.
+//
+// ```loom
+// use std.io.{print, Buffer}
+//
+// fun report(n: i32) given out: std.io.Writer {
+//     print("report {n}")
+// }
+//
+// fun main() {
+//     report(1)                      // to standard output
+//     let kept = {
+//         given out = Buffer()       // from here on, print writes into a Buffer
+//         report(2)
+//         report(3)
+//         out.text
+//     }
+//     print("kept: {kept:?}")
+// }
+// ```
 
 #given_default(Stdout)
 /// Where `print` writes: standard output, unless a `given` says otherwise
 /// (`given out = Buffer()` keeps what is printed).
 pub weft Writer {
+    /// Writes `s`, as is.
     fun write_str(mut self, s: str)
 }
 
 /// Standard output.
 pub warp Stdout: Writer, Default {
+    /// Writes `s` to standard output.
     pub fun write_str(mut self, s: str) = write_out(s)
 }
 
 /// Keeps what is written to it, in `text`.
 pub warp Buffer: Writer, Default {
+    /// Everything written so far.
     pub text: String = ""
+    /// Adds `s` to `text`.
     pub fun write_str(mut self, s: str) = .text.push_str(s)
 }
 
 extern "host" {
-    /// Writes `x` and a newline to standard output.
+    /// Writes `x` and a newline to the `Writer` in scope: standard output,
+    /// unless a `given out = ...` says otherwise.
     pub fun print(x: any Show) given out: Writer
     /// Standard output, as is: no newline.
     pub fun write_out(text: str)

@@ -1,4 +1,32 @@
-// Errors and giving up.
+// Errors and giving up. A function that can fail returns `T ! E`; the `?`
+// operator passes an error up, `mend` handles it, and `fail` produces one. Any
+// warp that weaves `Error` can be an error, and `unravel` gives up on the whole
+// thread (as a panic does elsewhere), running `defer`s on the way out.
+//
+// ```loom
+// use std.io.print
+//
+// warp ConfigError: Error {
+//     case Missing(key: String)
+//     case Bad(key: String, value: String)
+// }
+//
+// fun port(text: str) -> u16 ! ConfigError {
+//     let (key, value) = text.split_once("=") mend fail .Missing(key: text.to_string())
+//     value.trim().parse[u16]() mend fail .Bad(key: key.to_string(), value: value.to_string())
+// }
+//
+// fun main() {
+//     print("{port("port=8080"):?}")
+//     print("{port("port=lots"):?}")
+//     print("{port("nothing"):?}")
+//     let p = port("port=99") mend e => {
+//         print("gave up: {e.message()}")
+//         0
+//     }
+//     print(p)
+// }
+// ```
 
 /// Something that went wrong. The default `message` is built from the case
 /// name and payload.

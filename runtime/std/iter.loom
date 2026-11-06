@@ -1,4 +1,21 @@
-// Iteration.
+// Iteration: the `Iter` weft (what `for` loops over), `Stream` (a lazy sequence
+// and its many methods), `Range` (`a..b`), and `Shuttle` (generators and
+// coroutines). Lists, arrays, slices, maps, sets and ranges all have the
+// methods of `Stream`, and nothing is computed until something asks for the
+// next item.
+//
+// ```loom
+// use std.io.print
+//
+// fun main() {
+//     // Nothing runs until `collect` asks for items.
+//     let squares = (1..=10).filter(_ % 2 == 0).map(n => n * n)
+//     print(squares.collect())
+//     let words = ["warp", "weft", "weave", "loom"]
+//     print(words.indexed().map(p => "{p.0}:{p.1}").join(" "))
+//     print(words.map(_.len()).sum())
+// }
+// ```
 
 use std.num.Num
 
@@ -67,9 +84,9 @@ pub warp Stream[T] {
     /// The next item, or `none` once there are no more.
     pub fun next(mut self) -> ?T
 
-    /// `f` of each item.
+    /// Each item turned into `f` of it: `(1..4).map(_ * 10)` gives 10, 20, 30.
     pub fun map[U](take self, f: T => U) -> Stream[U]
-    /// The items `f` says yes to.
+    /// The items `f` says yes to, in order: `xs.filter(_ > 0)`.
     pub fun filter(take self, f: T => bool) -> Stream[T]
     /// The first `n` items.
     pub fun take(take self, n: usize) -> Stream[T]
@@ -118,7 +135,7 @@ pub warp Stream[T] {
         assert(n > 0, "chunks: n is 0")
         Chunks(src: self, n: n)
     }
-    /// The item after skipping `n`.
+    /// The item at index `n` (counting from 0), or `none` if there are fewer.
     pub fun nth(take self, n: usize) -> ?T {
         var rest = self.skip(n)
         rest.next()
@@ -338,12 +355,14 @@ warp Flatten[U]: Iter {
     }
 }
 
-/// What `peekable` makes.
+/// What `Stream.peekable` makes: a stream that can show its next item without
+/// taking it.
 pub warp Peekable[T]: Iter {
     src: Stream[T]
     buf: List[T]
     peeked: bool
 
+    /// The items are the stream's.
     type Item = T
 
     fun next(mut self) -> ?T {
@@ -470,8 +489,10 @@ warp Chunks[T]: Iter {
 
 /// The items of `rev`: the list, emptied from the end.
 pub warp Reversed[T]: Iter {
+    /// What's left, the last item first.
     pub items: List[T]
 
+    /// The list's items.
     type Item = T
 
     fun next(mut self) -> ?T = .items.pop()
@@ -480,9 +501,12 @@ pub warp Reversed[T]: Iter {
 /// The items of a list this owns, from the first: what a method that builds
 /// its items in a list gives as a stream.
 pub warp Owned[T]: Iter {
+    /// The list it gives the items of.
     pub items: List[T]
+    /// The index of the next item.
     pub at: usize
 
+    /// The list's items.
     type Item = T
 
     fun next(mut self) -> ?T {

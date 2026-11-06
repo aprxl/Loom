@@ -1,4 +1,22 @@
-// Hash maps.
+// Hash maps: `Map[K, V]` from any `Hash` key to a value. A map remembers the
+// order its keys were first added, so going through it, printing it and
+// comparing two of them all follow that order.
+//
+// ```loom
+// use std.io.print
+//
+// fun main() {
+//     var counts: Map[String, usize] = [:]
+//     for word in "the cat and the hat and the bat".words() {
+//         counts.entry(word.to_string(), default: 0) += 1
+//     }
+//     print(counts)
+//     print("the: {counts["the"]}, dog: {counts.get("dog"):?}")
+//     for (word, n) in counts.pairs().sorted_by(_.1 > _.1).take(2) {
+//         print("{word} x{n}")
+//     }
+// }
+// ```
 
 use std.iter.FromStream
 
@@ -15,6 +33,7 @@ use std.iter.FromStream
 pub warp Map[K, V] {
     /// How many keys there are.
     pub fun len(self) -> usize
+    /// Whether there are no keys.
     pub fun is_empty(self) -> bool
     /// A copy of the value for `key` (`m[key]` is the value itself).
     pub fun get(self, key: K) -> ?V where K: Hash
@@ -40,9 +59,9 @@ pub warp Map[K, V] {
     pub fun sorted(self) -> List[(K, V)] where K: Ord
     /// A deep copy.
     pub fun copy(self) -> Map[K, V]
-    /// The oldest entry.
+    /// A copy of the oldest entry: the one whose key was added first.
     pub fun first(self) -> ?(K, V)
-    /// The newest entry.
+    /// A copy of the newest entry: the one whose key was added last.
     pub fun last(self) -> ?(K, V)
     /// A map of `pairs`; a key that comes up again keeps the last value.
     pub fun of(pairs: [(K, V)]) -> Map[K, V] where K: Hash {

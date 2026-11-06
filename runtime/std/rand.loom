@@ -1,4 +1,21 @@
-// Pseudo-random numbers.
+// Pseudo-random numbers: `Rng` is a small, fast generator that gives the same
+// numbers for the same seed on every machine, which makes programs and tests
+// reproducible. It is not for passwords or keys.
+//
+// ```loom
+// use std.io.print
+// use std.rand.Rng
+//
+// fun main() {
+//     // The same seed gives the same numbers, on every machine.
+//     var rng = Rng.seeded(42)
+//     let rolls = (0..8).map(i => rng.between(1, 6)).collect()
+//     print("dice: {rolls}")
+//     let colors = ["madder", "weld", "woad", "lichen"]
+//     print("today's dye: {rng.choose(colors):?}, heads: {rng.chance(0.5)}")
+//     print("a float in [0, 1): {rng.float():.3}")
+// }
+// ```
 
 use std.process
 use std.time

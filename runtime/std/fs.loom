@@ -1,14 +1,38 @@
-// Files.
+// Files: read and write whole files as text or bytes, append lines, look at
+// metadata, and walk directories. Every function that can fail returns `T !
+// IoError`.
+//
+// In a sandboxed run (the docs' playground, the test fixtures) the files are in
+// memory and start out empty, so a program can write a file and read it back,
+// as this one does.
+//
+// ```loom
+// use std.io.print
+// use std.fs
+//
+// fun main() ! fs.IoError {
+//     fs.write_text("notes.txt", "warp\nweft\n")?
+//     let text = fs.read_text("notes.txt")?
+//     print("{text.lines().count()} lines, {fs.file_size("notes.txt")} bytes")
+//     print("{fs.read_text("missing.txt"):?}")
+// }
+// ```
 
+/// Why a file operation failed.
 pub warp IoError: Error {
+    /// Nothing is at `path`.
     case NotFound(path: String)
+    /// The system didn't allow it.
     case Denied(path: String)
+    /// Something else went wrong; `message` says what.
     case Other(message: String)
 }
 
 /// What is known about a file or a directory.
 pub warp Meta {
+    /// The length in bytes.
     pub size: u64
+    /// Whether it is a directory.
     pub is_dir: bool
 }
 
@@ -29,11 +53,14 @@ pub fun is_file(path: str) -> bool = file_kind(path) == 1
 pub warp File {
     /// Opens `path` for appending, creating it if needed.
     pub fun append(path: str) -> File ! IoError
+    /// Writes `line` and a newline at the end of the file.
     pub fun write_line(mut self, line: str) ! IoError
 }
 
 extern "host" {
+    /// The bytes of the file at `path`.
     pub fun read(path: str) -> List[u8] ! IoError
+    /// The text of the file at `path`.
     pub fun read_text(path: str) -> String ! IoError
     /// Makes the file `path` hold `text`, replacing what was there.
     pub fun write_text(path: str, text: str) ! IoError

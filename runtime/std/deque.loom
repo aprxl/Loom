@@ -1,4 +1,20 @@
-// Double-ended queues.
+// Double-ended queues: `Deque` is a list you can push to and pop from at both
+// ends, each in constant time (on average). Reach for it when a `List` would
+// keep inserting at the front.
+//
+// ```loom
+// use std.io.print
+// use std.deque.Deque
+//
+// fun main() {
+//     var q = Deque[String].new()
+//     q.push_back("weft")
+//     q.push_back("weave")
+//     q.push_front("warp")
+//     print(q.to_list())
+//     print("{q.pop_front():?} then {q.pop_back():?}, {q.len()} left")
+// }
+// ```
 
 use std.iter.FromStream
 
@@ -16,6 +32,7 @@ pub warp Deque[T] {
     /// How many items there are.
     pub fun len(self) -> usize = .front.len() + .back.len()
 
+    /// Whether there are no items.
     pub fun is_empty(self) -> bool = .front.is_empty() and .back.is_empty()
 
     /// Adds `x` at the end.

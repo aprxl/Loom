@@ -1,9 +1,23 @@
-// Time.
+// Time: `Duration` (a span of time), `Instant` (for measuring how long
+// something takes), `SystemTime` (dates and times of day), and `sleep`.
+//
+// ```loom
+// use std.io.print
+// use std.time.{Duration, ms, secs, measure}
+//
+// fun main() {
+//     let d = secs(1).plus(ms(250))
+//     print("{d.to_string()} is {d.as_millis()} ms")
+//     let (total, took) = measure(() => (1..=1000).sum())
+//     print("sum {total}, took less than a second: {took < secs(1)}")
+// }
+// ```
 
 use std.fmt.{Fmt, Show}
 
 /// A span of time, with nanosecond precision.
 pub warp Duration: Eq, Ord, Show {
+    /// The length in nanoseconds.
     pub(get) nanos: u64
 
     /// A span of `nanos` nanoseconds.
@@ -15,10 +29,15 @@ pub warp Duration: Eq, Ord, Show {
         Duration(nanos: (secs * 1_000_000_000.0) as u64)
     }
 
+    /// The length in seconds, with the fraction: `1.5` for 1.5 s.
     pub fun as_secs_f64(self) -> f64 = .nanos as f64 / 1_000_000_000.0
+    /// The length in whole milliseconds, rounded down.
     pub fun as_millis(self) -> u64 = .nanos / 1_000_000
+    /// The length in whole microseconds, rounded down.
     pub fun as_micros(self) -> u64 = .nanos / 1_000
+    /// The length in nanoseconds.
     pub fun as_nanos(self) -> u64 = .nanos
+    /// The length in whole seconds, rounded down.
     pub fun as_secs(self) -> u64 = .nanos / 1_000_000_000
 
     /// The sum. Unravels when it doesn't fit.
@@ -30,6 +49,7 @@ pub warp Duration: Eq, Ord, Show {
     /// A part of it, rounded down. Unravels if `n` is 0.
     pub fun divide(self, n: u64) -> Duration = Duration(nanos: .nanos / n)
 
+    /// Writes the duration as `to_string` does: `1.5s`, `250ms`.
     pub fun show(self, mut f: Fmt) = f.put(.to_string())
 
     /// `1.5s`, `250ms`, `40us`, `7ns`: in the largest unit that fits.
@@ -46,10 +66,15 @@ pub warp Duration: Eq, Ord, Show {
     }
 }
 
+/// `n` nanoseconds.
 pub fun ns(n: u64) -> Duration = Duration(nanos: n)
+/// `n` microseconds.
 pub fun micros(n: u64) -> Duration = Duration(nanos: n * 1_000)
+/// `n` milliseconds: `sleep(ms(250))`.
 pub fun ms(n: u64) -> Duration = Duration(nanos: n * 1_000_000)
+/// `n` seconds.
 pub fun secs(n: u64) -> Duration = Duration(nanos: n * 1_000_000_000)
+/// `n` minutes.
 pub fun mins(n: u64) -> Duration = Duration(nanos: n * 60_000_000_000)
 
 /// A moment on a clock that only goes forward, for measuring how long

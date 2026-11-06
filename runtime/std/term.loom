@@ -1,4 +1,5 @@
-// The terminal.
+// The terminal: raw mode, which keys are held down, and its size. For games and
+// other programs that redraw the screen; a sandboxed run has no terminal.
 
 extern "host" {
     /// Turns raw mode on or off: keys arrive immediately and aren't echoed.

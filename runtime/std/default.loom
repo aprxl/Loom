@@ -1,4 +1,21 @@
-// Values with a default.
+// Values with a default: the `Default` weft, which a warp can derive.
+// `Config.default()` builds a value from each field's default, and
+// `std.mem.take` leaves one behind when it moves a value out.
+//
+// ```loom
+// use std.io.print
+//
+// warp Config: Default, Show {
+//     host: String = "localhost"
+//     port: u16
+//     verbose: bool
+// }
+//
+// fun main() {
+//     print(Config.default())
+//     print(Config(port: 8080, verbose: true))
+// }
+// ```
 
 /// Types that have a value to start from: `0`, `false`, empty text, an empty
 /// list. A warp that lists `Default` in its header and doesn't write

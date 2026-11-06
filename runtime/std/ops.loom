@@ -1,7 +1,10 @@
-// The wefts behind operators and value semantics.
+// The wefts behind operators and value semantics: `Eq` (`==`), `Ord` (`<` and
+// friends), `Hash` (map keys and set elements) and `Copy` (values that are
+// copied instead of moved).
 //
 // A warp that lists `Eq`, `Ord` or `Hash` in its header without writing the
-// method gets one that works field by field (see 02-types, "Deriving").
+// method gets one that works field by field: see "Deriving" in the [Warps,
+// wefts and weaves](page:types) chapter.
 
 /// Values that are copied rather than moved.
 pub weft Copy {}
@@ -22,7 +25,12 @@ pub weft Ord: Eq {
     fun lt(self, other: Self) -> bool
 }
 
+/// Values that can be map keys and set elements. A warp that lists `Hash` in
+/// its header without writing `hash` gets one that combines its fields' hashes.
+/// Two values that are `==` must hash the same.
 pub weft Hash {
+    /// A number that is the same for equal values. It may change between
+    /// versions of Loom: for a hash to write down, see `std.hash.fnv1a`.
     #builtin
     fun hash(self) -> u64
 }

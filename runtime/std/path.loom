@@ -1,5 +1,19 @@
-// File paths, as text. The separator is `/` on every system (Windows takes
-// it too), so a program and its tests read the same everywhere.
+// File paths, as text. The separator is `/` on every system (Windows takes it
+// too), so a program and its tests read the same everywhere. Nothing here
+// touches the file system: see `std.fs` for that.
+//
+// ```loom
+// use std.io.print
+// use std.path
+//
+// fun main() {
+//     let p = path.join("docs/lang", "start.html")
+//     print(p)
+//     print("{path.file_name(p):?} {path.stem(p):?} {path.extension(p):?}")
+//     print(path.with_extension(p, "md"))
+//     print(path.normalize("a/./b/../c"))
+// }
+// ```
 
 /// `a` and `b` as one path: `join("src", "main.loom")` is `src/main.loom`;
 /// an absolute `b` replaces `a`.

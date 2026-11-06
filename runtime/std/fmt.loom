@@ -1,4 +1,27 @@
-// Formatting.
+// Formatting: `Show` is how a value becomes text in `print` and in templates
+// (`"{x}"`), and `Fmt` is what `show` writes to. A warp that lists `Show` and
+// writes no method gets its debug form, the one `{x:?}` always gives. `dbg`
+// prints an expression and its value, and gives the value back.
+//
+// ```loom
+// use std.io.print
+// use std.fmt.dbg
+//
+// warp Rgb(u8, u8, u8)
+//
+// weave Show into Rgb {
+//     fun show(self, mut f: Fmt) {
+//         f.put("#{.0:02x}{.1:02x}{.2:02x}")
+//     }
+// }
+//
+// fun main() {
+//     let madder = Rgb(238, 122, 95)
+//     print("madder is {madder}, or {madder:?} in its debug form")
+//     let n = dbg(6 * 7) + 1
+//     print(n)
+// }
+// ```
 
 use std.io.write_err
 

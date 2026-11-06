@@ -1,4 +1,5 @@
-// The running program.
+// The running program: how to end it with an exit code, and which process it
+// is.
 
 extern "host" {
     /// Ends the program with exit code `code`: it unwinds first, as for

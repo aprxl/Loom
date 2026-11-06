@@ -1,6 +1,10 @@
-// Mathematical constants and functions.
+// Mathematical constants. The functions on numbers (`sqrt`, `sin`, `pow`,
+// `gcd`...) are methods of the number types themselves: see `std.num`.
 
+/// Half a turn in radians: the ratio of a circle's circumference to its
+/// diameter.
 pub const PI: f64 = 3.141592653589793
+/// Euler's number `e`, the base of the natural logarithm.
 pub const EULER: f64 = 2.718281828459045
 /// A full turn in radians: twice `PI`.
 pub const TAU: f64 = 6.283185307179586

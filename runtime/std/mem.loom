@@ -1,4 +1,31 @@
-// Memory: spools and sizes.
+// Memory: spools (the places values are allocated in), sizes, and moving values
+// around. `heap` is the global spool, where `^e` boxes a value. An `Arena`
+// hands out memory by bumping a pointer and frees it all at once; a `Pool[T]`
+// recycles slots of one type. A pointer into a spool can't outlive it: the
+// region checker sees to that.
+//
+// ```loom
+// use std.io.print
+// use std.mem.Arena
+//
+// warp Tree {
+//     case Leaf(i64)
+//     case Node(^Tree, ^Tree)
+// }
+//
+// fun sum(t: ^Tree) -> i64 = match t^ {
+//     .Leaf(n) => n
+//     .Node(l, r) => sum(l) + sum(r)
+// }
+//
+// fun main() {
+//     spool frame = Arena(4096)
+//     // Each `put` is a bump of a pointer; the whole arena is freed at once.
+//     let leaf = (n: i64) => frame.put(Tree.Leaf(n))
+//     let t = frame.put(Tree.Node(leaf(1), frame.put(Tree.Node(leaf(2), leaf(3)))))
+//     print("sum {sum(t)}")
+// }
+// ```
 
 /// A region to allocate in. `heap` is the global one.
 pub weft Spool {}
@@ -56,7 +83,9 @@ pub warp Pool[T]: Spool {
     pub fun reset(mut self)
 }
 
+/// `n` kibibytes, in bytes: `Arena(kib(64))`.
 pub fun kib(n: usize) -> usize = n * 1024
+/// `n` mebibytes, in bytes.
 pub fun mib(n: usize) -> usize = n * 1024 * 1024
 
 /// Exchanges the values of `a` and `b`.

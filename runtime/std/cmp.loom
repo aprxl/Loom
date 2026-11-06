@@ -1,9 +1,30 @@
-// Comparing.
+// Comparing: `Ordering` (what `x.cmp(y)` gives), `min`, `max` and `clamp`, and
+// `Reverse` for sorting the other way. A type gets `<` and friends by weaving
+// `Ord`; see `std.ops`.
+//
+// ```loom
+// use std.io.print
+//
+// warp Racer: Show {
+//     name: String
+//     time: u32
+// }
+//
+// fun main() {
+//     var racers = [Racer("Ada", 52), Racer("Grace", 48), Racer("Alan", 52)]
+//     racers.sort_by((a, b) => a.time.cmp(b.time).then(a.name.cmp(b.name)) == .Less)
+//     print(racers.map(_.name.copy()))
+//     print("{min(3, 7)} {max("warp", "weft")} {clamp(15, 0, 10)}")
+// }
+// ```
 
 /// How two values compare.
 pub warp Ordering: Eq, Ord, Show {
+    /// The first comes before the second.
     case Less
+    /// Neither comes first.
     case Equal
+    /// The first comes after the second.
     case Greater
 
     /// `Less` becomes `Greater` and the other way round.
@@ -44,7 +65,9 @@ pub fun clamp[T: Ord](x: T, lo: T, hi: T) -> T {
 /// A value that compares the other way round: sorting by `Reverse(score)`
 /// puts the highest score first.
 pub warp Reverse[T: Ord]: Ord {
+    /// The value being compared the other way round.
     pub value: T
 
+    /// Whether this comes first: when the wrapped value comes after `other`'s.
     pub fun lt(self, other: Reverse[T]) -> bool = other.value < self.value
 }

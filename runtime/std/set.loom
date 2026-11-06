@@ -1,4 +1,17 @@
-// Hash sets.
+// Hash sets: `Set[T]` holds each `Hash` value at most once, remembers the order
+// values were added, and has the usual set algebra.
+//
+// ```loom
+// use std.io.print
+//
+// fun main() {
+//     let warm = Set.of(["madder", "weld", "saffron"])
+//     let bright = Set.of(["weld", "woad", "saffron"])
+//     print(warm.intersection(bright))
+//     print(warm.union(bright).sorted())
+//     print("woad is warm: {warm.has("woad")}")
+// }
+// ```
 
 use std.iter.FromStream
 
@@ -9,7 +22,9 @@ use std.iter.FromStream
 pub warp Set[T] {
     /// A set of the elements of `xs` (each once).
     pub fun of(xs: [T]) -> Set[T] where T: Hash
+    /// How many elements there are.
     pub fun len(self) -> usize
+    /// Whether there are no elements.
     pub fun is_empty(self) -> bool
     /// Whether `x` is in the set.
     pub fun has(self, x: T) -> bool where T: Hash

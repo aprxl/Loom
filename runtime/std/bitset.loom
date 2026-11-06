@@ -1,4 +1,19 @@
-// Sets of small numbers.
+// Sets of small numbers: `BitSet` keeps one bit for each number from `0` up to
+// its length, so a set of a thousand numbers takes 128 bytes, and asking
+// whether a number is in it is one look at one bit.
+//
+// ```loom
+// use std.io.print
+// use std.bitset.BitSet
+//
+// fun main() {
+//     var seen = BitSet.new(100)
+//     for n in [3, 14, 15, 92, 65, 35] { seen.set(n) }
+//     print("{seen.count()} numbers: {seen.items()}")
+//     seen.toggle(15)
+//     print("14 is in: {seen.test(14)}, 15 is in: {seen.test(15)}")
+// }
+// ```
 
 /// A set of the numbers `0..len`, one bit each. Constant-time `set`, `clear`,
 /// `test` and `toggle`; `count` and the bulk operations work a word of 64

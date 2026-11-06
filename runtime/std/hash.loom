@@ -1,4 +1,6 @@
-// Hashes that stay the same between versions and machines.
+// Hashes that stay the same between versions and machines, for when a hash is
+// written down (in a file, a cache key, a test). `Hash.hash`, which `Map` and
+// `Set` use, makes no such promise.
 
 /// The FNV-1a hash of `bytes`: the same on every machine and in every
 /// version, unlike `Hash.hash`, which can change.

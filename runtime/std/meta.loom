@@ -1,6 +1,7 @@
 //! Reflection: what compile-time code can learn about a type. `T.name`,
 //! `T.kind`, `T.fields` and `T.cases` are known while compiling, and so is
-//! everything read from them; none of it is left in the program.
+//! everything read from them; none of it is left in the program. The
+//! `Reflection` chapter of the book shows a `ToJson` written this way.
 
 /// What kind of type a type is: `T.kind`.
 pub warp Kind: Eq, Show {
@@ -8,11 +9,17 @@ pub warp Kind: Eq, Show {
     case Record
     /// A warp with cases.
     case Sum
+    /// A tuple: `(A, B)`.
     case Tuple
+    /// The unit type, `()`.
     case Unit
+    /// `bool`.
     case Bool
+    /// An integer type of any width: `u8`, `i24`, `usize`...
     case Int
+    /// `f32` or `f64`.
     case Float
+    /// `char`.
     case Char
     /// `str` and `String`.
     case Str
@@ -20,8 +27,11 @@ pub warp Kind: Eq, Show {
     case Array
     /// `[T]`.
     case Slice
+    /// `List[T]`.
     case List
+    /// `Map[K, V]`.
     case Map
+    /// `Set[T]`.
     case Set
     /// `?T`.
     case Optional

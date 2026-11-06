@@ -1,4 +1,7 @@
-// Slices: views of contiguous elements.
+// Slices: views of elements that sit next to each other, in an array or a list.
+// `[T]` is the slice type; arrays (`[T; n]`) and lists have every method here
+// too. A slice borrows its elements: methods that change them need a `mut`
+// slice.
 
 use std.iter.Reversed
 
@@ -8,6 +11,7 @@ use std.iter.Reversed
 pub warp Slice[T] {
     /// How many elements there are.
     pub fun len(self) -> usize
+    /// Whether there are no elements.
     pub fun is_empty(self) -> bool
     /// A copy of the element at `i`, or `none` past the end. (An element
     /// can't be moved out of a slice: it gives a value of its own, a deep
@@ -25,7 +29,11 @@ pub warp Slice[T] {
     pub fun copy_from(mut self, src: [T])
     /// Sets every element to a copy of `x`.
     pub fun fill(mut self, x: T)
+    /// Exchanges the elements at `i` and `j`. Unravels if either is past the
+    /// end.
     pub fun swap(mut self, i: usize, j: usize)
+    /// Puts the elements in the opposite order, in place. (`rev` gives them
+    /// backwards without changing the slice.)
     pub fun reverse(mut self)
     /// Sorts in order, keeping equal elements in the order they were in.
     pub fun sort(mut self) where T: Ord
@@ -114,8 +122,9 @@ pub warp Slice[T] {
     pub fun rev(self) -> Stream[T] {
         Reversed(items: self.to_list())
     }
-    /// Sorts so that `less(a, b)` says whether `a` goes before `b`. Stable:
-    /// elements neither goes before the other keep their order.
+    /// Sorts in place, so that `less(a, b)` says whether `a` goes before `b`.
+    /// Stable: elements that neither goes before the other keep the order they
+    /// were in.
     pub fun sort_by(mut self, less: (T, T) => bool) {
         var order = sorted_order(self, less)
         apply_order(mut self, mut order)

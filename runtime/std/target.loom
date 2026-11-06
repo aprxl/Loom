@@ -4,29 +4,43 @@
 
 /// An operating system.
 pub warp Os: Eq, Show {
+    /// Microsoft Windows.
     case Windows
+    /// Linux.
     case Linux
+    /// Apple's macOS.
     case MacOS
+    /// An operating system Loom has no name for.
     case Other
 }
 
 /// A processor architecture.
 pub warp Arch: Eq, Show {
+    /// x86-64, also called x64 or AMD64.
     case Amd64
+    /// 64-bit ARM, also called AArch64.
     case Arm64
+    /// An architecture Loom has no name for.
     case Other
 }
 
 /// The order of a number's bytes in memory.
 pub warp Endian: Eq, Show {
+    /// The least significant byte first (x86-64, and nearly every ARM).
     case Little
+    /// The most significant byte first.
     case Big
 }
 
 /// The type of `target`, known at compile time: `const if target.os == .Windows`.
 pub warp Target {
+    /// The operating system.
     pub os: Os
+    /// The processor architecture.
     pub arch: Arch
+    /// The byte order of numbers in memory.
     pub endian: Endian
+    /// How wide a pointer (and `usize`) is: 64 on Treadle, 63 on the Lua
+    /// backend.
     pub pointer_bits: u8
 }

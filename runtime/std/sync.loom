@@ -1,11 +1,33 @@
-// Sharing between threads.
+// Sharing between threads: `Atomic` for numbers and flags, `Mutex` for anything
+// else, `Pipe` for passing values from thread to thread, and `Spun`, the handle
+// a `thread` gives. Threads run inside a `loom` block; see the Threads chapter
+// of the book.
+//
+// ```loom
+// use std.io.print
+// use std.sync.{Atomic, Mutex}
+//
+// fun main() {
+//     let hits = Atomic[u64](0)
+//     let names = Mutex[List[String]]([])
+//     loom {
+//         for i in 0..4 {
+//             thread {
+//                 hits.add(10)
+//                 names.lock().push("thread {i}")
+//             }
+//         }
+//     }
+//     print("{hits.load()} hits from {names.lock().len()} threads")
+// }
+// ```
 
-/// A value that threads can read and update without locks. `T` is an
-/// integer of 8, 16, 32 or 64 bits (`usize`, `isize` too), or `bool`.
-/// Every operation is sequentially consistent, and they all take `self` to
-/// read, so threads share one the way they share any other value.
+/// A value that threads can read and update without a lock. `T` is an integer
+/// of 8, 16, 32 or 64 bits (`usize` and `isize` too) or `bool`. Every operation
+/// is sequentially consistent, and they all take `self` to read, so threads
+/// share an atomic the way they share any other value.
 ///
-/// With one worker thread runs until it waits, so a loop that spins on
+/// On a single worker, a thread runs until it waits, so a loop that spins on
 /// `load()` never lets another thread run: call `sched_yield()` in it.
 #builtin
 pub warp Atomic[T] {
@@ -77,5 +99,6 @@ pub warp Pipe[T] {
 /// `loom(given: Crew(workers: 2)) { … }`. A thread that waits holds no
 /// worker. Unravels at the `loom` if `workers` is 0.
 pub warp Crew {
+    /// How many threads of the `loom` may run at once.
     pub workers: usize
 }

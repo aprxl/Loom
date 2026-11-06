@@ -1,4 +1,23 @@
-// Priority queues.
+// Priority queues: `PriorityQueue[T]` always gives back its largest item first.
+// Wrap items in `Reverse` (from `std.cmp`) for the smallest first.
+//
+// ```loom
+// use std.io.print
+// use std.priority.PriorityQueue
+// use std.cmp.Reverse
+//
+// fun main() {
+//     var jobs: PriorityQueue[(u8, String)] = PriorityQueue.new()
+//     jobs.push((2, "dye the yarn"))
+//     jobs.push((9, "fix the loom"))
+//     jobs.push((5, "wind the bobbin"))
+//     while jobs.pop() is some((urgency, job)) {
+//         print("{urgency}: {job}")
+//     }
+//     var smallest = PriorityQueue.from_list([Reverse(7), Reverse(3), Reverse(5)])
+//     print("smallest first: {smallest.pop().map(_.value):?}")
+// }
+// ```
 
 use std.iter.FromStream
 
@@ -25,6 +44,7 @@ pub warp PriorityQueue[T: Ord] {
     /// How many items there are.
     pub fun len(self) -> usize = .items.len()
 
+    /// Whether there are no items.
     pub fun is_empty(self) -> bool = .items.is_empty()
 
     /// A copy of the largest item.
