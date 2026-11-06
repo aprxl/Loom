@@ -1,0 +1,11 @@
+use std.io.print
+
+fun greet(name: str) -> String = "hello, {name}! that's {name.len()} letters"
+
+fun main() {
+    print(greet("weaver"))
+    for (i, word) in ["warp", "weft", "weave"].indexed() {
+        print("{i + 1}. {word}")
+    }
+}
+//@ run

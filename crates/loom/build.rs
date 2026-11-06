@@ -4,8 +4,10 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-/// What a browser needs; the generators and their data stay behind.
-const EXTENSIONS: &[&str] = &["html", "css", "svg", "png"];
+/// What a browser needs: the pages, their style, the thread and the
+/// playground's scripts (`play/loom-wasm.js` is the compiler, built for
+/// WebAssembly). The generators and their data stay behind.
+const EXTENSIONS: &[&str] = &["html", "css", "js", "svg", "png"];
 
 fn main() {
     order_code();

@@ -1,50 +1,68 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="no-js">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>Compile-time code · Loom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../style.css">
+<script src="../weave.js" defer></script>
+<script src="../play/play.js" defer></script>
 </head>
-<body>
+<body data-chapter="compile-time">
+<header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
+<rect x="6" y="3" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="6" y="24" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
+<path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
+<path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a class="current" href="../lang/index.html">The book</a><a href="../std/index.html">Library</a><a class="wide" href="../lang/diagnostics.html">Codes</a><a class="play-link" href="../playground.html">Playground</a></nav></header>
 <div class="layout">
-<nav class="sidebar">
-<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
-<ul class="sections">
-<li><a class="current" href="../lang/index.html">Language</a></li>
+<nav class="sidebar" aria-label="Contents">
+<div class="group">
+<h3>The book</h3>
+<ul class="beads">
+<li><a href="index.html" data-chapter="index"><span class="num"></span><span>Welcome to Loom</span></a></li>
+<li><a href="start.html" data-chapter="start"><span class="num">1</span><span>Getting started</span></a></li>
+<li><a href="values.html" data-chapter="values"><span class="num">2</span><span>Values and control flow</span></a></li>
+<li><a href="types.html" data-chapter="types"><span class="num">3</span><span>Warps, wefts and weaves</span></a></li>
+<li><a href="generics.html" data-chapter="generics"><span class="num">4</span><span>Generics and <code>any</code></span></a></li>
+<li><a href="collections.html" data-chapter="collections"><span class="num">5</span><span>Collections and streams</span></a></li>
+<li><a href="errors.html" data-chapter="errors"><span class="num">6</span><span>Optionals and errors</span></a></li>
+<li><a href="ownership.html" data-chapter="ownership"><span class="num">7</span><span>Moves, <code>once</code> and <code>defer</code></span></a></li>
+<li><a href="memory.html" data-chapter="memory"><span class="num">8</span><span>Pointers, spools and <code>given</code></span></a></li>
+<li><a href="gauges.html" data-chapter="gauges"><span class="num">9</span><span>Gauges</span></a></li>
+<li><a href="shuttles.html" data-chapter="shuttles"><span class="num">10</span><span>Shuttles</span></a></li>
+<li><a class="current" aria-current="page" href="compile-time.html" data-chapter="compile-time"><span class="num">11</span><span>Compile-time code</span></a></li>
+<li><a href="const-params.html" data-chapter="const-params"><span class="num">12</span><span>Const parameters and control flow</span></a></li>
+<li><a href="reflection.html" data-chapter="reflection"><span class="num">13</span><span>Reflection</span></a></li>
+<li><a href="tests.html" data-chapter="tests"><span class="num">14</span><span>Tests</span></a></li>
+<li><a href="threads.html" data-chapter="threads"><span class="num">15</span><span>Threads</span></a></li>
+<li><a href="not-yet.html" data-chapter="not-yet"><span class="num">A</span><span>Not supported yet</span></a></li>
+</ul></div>
+<div class="group">
+<h3>Also</h3>
+<ul class="plain-list">
+<li><a href="diagnostics.html">Diagnostic codes</a></li>
+<li><a href="../playground.html">Playground</a></li>
 <li><a href="../std/index.html">Standard library</a></li>
-<li><a href="../lang/diagnostics.html">Diagnostic codes</a></li>
-</ul>
-<h3>Language</h3>
-<ul>
-<li><a href="index.html">Overview</a></li>
-<li><a href="start.html">Getting started</a></li>
-<li><a href="values.html">Values and control flow</a></li>
-<li><a href="types.html">Warps, wefts and weaves</a></li>
-<li><a href="generics.html">Generics and <code>any</code></a></li>
-<li><a href="collections.html">Collections and streams</a></li>
-<li><a href="errors.html">Optionals and errors</a></li>
-<li><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
-<li><a href="gauges.html">Gauges</a></li>
-<li><a href="shuttles.html">Shuttles</a></li>
-<li><a class="current" href="compile-time.html">Compile-time code</a></li>
-<li><a href="const-params.html">Const parameters and control flow</a></li>
-<li><a href="reflection.html">Reflection</a></li>
-<li><a href="tests.html">Tests</a></li>
-<li><a href="threads.html">Threads</a></li>
-<li><a href="not-yet.html">Not supported yet</a></li>
-</ul>
+</ul></div>
 </nav>
-<main>
-<div class="crumb"><a href="index.html">Language</a> / Compile-time code</div>
+<main class="weave">
+<div class="chapter-head">
+<span class="chapter-no">Chapter 11</span>
 <h1>Compile-time code</h1>
 <p class="summary">Constants computed by ordinary code, <code>const</code> expressions, <code>const assert</code>, and the sandbox they run in.</p>
+</div>
 <p>Loom has no macro language. Code that runs while the program compiles is ordinary Loom. The keyword <code>const</code> marks where: a constant's initializer, an expression, an assertion, a parameter, a condition, a loop. This page covers the first three and the limits. <a href="const-params.html">Const parameters and control flow</a> covers the rest.</p>
-<div class="callout"><code>const fun</code> means "compile-time only" in Loom, as in Zig's <code>comptime</code>. It is not Rust's <code>const fun</code>, which means "may also run at compile time". You don't mark functions: the compiler checks each function when a compile-time expression calls it.</div>
-<h2 id="constants">Constants</h2>
+<div class="callout"><p><code>const fun</code> means "compile-time only" in Loom, as in Zig's <code>comptime</code>. It is not Rust's <code>const fun</code>, which means "may also run at compile time". You don't mark functions: the compiler checks each function when a compile-time expression calls it.</p></div>
+<h2 id="constants">Constants<a class="anchor" href="#constants" aria-label="Link to this section">#</a></h2>
 <p>A constant's initializer runs while the program compiles. It can use loops, locals and any function, so a lookup table is just code.</p>
-<div class="sample" id="sample-ct_table">
-<div class="sample-head"><span class="file">samples/ct_table.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-ct_table" data-sample="ct_table" data-mode="run" data-file="ct_table.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>ct_table.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="c">// A constant's initializer is ordinary code. It runs while the program</span>
@@ -57,97 +75,97 @@
     table
 }
 
-<span class="k">fun</span> fib(n: u64) -&gt; u64 = <span class="k">if</span> n &lt; <span class="n">2</span> { n } <span class="k">else</span> { fib(n - <span class="n">1</span>) + fib(n - <span class="n">2</span>) }
+<span class="k">fun</span> <span class="f">fib</span>(n: u64) -&gt; u64 = <span class="k">if</span> n &lt; <span class="n">2</span> { n } <span class="k">else</span> { <span class="f">fib</span>(n - <span class="n">1</span>) + <span class="f">fib</span>(n - <span class="n">2</span>) }
 
 <span class="c">// Any function can run at compile time. There's nothing to mark.</span>
-<span class="k">const</span> FIB_20 = fib(<span class="n">20</span>)
+<span class="k">const</span> FIB_20 = <span class="f">fib</span>(<span class="n">20</span>)
 
-<span class="k">const</span> assert(SQUARES[<span class="n">7</span>] == <span class="n">49</span>, <span class="s">"seven squared"</span>)
-<span class="k">const</span> assert(FIB_20 == <span class="n">6765</span>)
+<span class="k">const</span> <span class="f">assert</span>(SQUARES[<span class="n">7</span>] == <span class="n">49</span>, <span class="s">"seven squared"</span>)
+<span class="k">const</span> <span class="f">assert</span>(FIB_20 == <span class="n">6765</span>)
 
-<span class="k">fun</span> main() {
-    print(SQUARES)
-    print(FIB_20)
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">print</span>(SQUARES)
+    <span class="f">print</span>(FIB_20)
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>[0, 1, 4, 9, 16, 25, 36, 49]
 6765</code></pre></div>
 </div>
 <ul><li>A constant is named in <code>SCREAMING_CASE</code> with two or more characters.</li><li>Constants are lazy. Each is computed the first time something needs it, so the order they're written in doesn't matter.</li><li><code>const LIMIT = 15</code> with no type works like a literal: each use gets the type its context needs. <code>const LIMIT: u32 = 15</code> has one type everywhere.</li><li>The result can't depend on anything outside the program. Compile-time code is deterministic: the same source always gives the same value.</li></ul>
-<h2 id="const-expressions"><code>const</code> expressions</h2>
+<h2 id="const-expressions"><code>const</code> expressions<a class="anchor" href="#const-expressions" aria-label="Link to this section">#</a></h2>
 <p><code>const expr</code> runs <code>expr</code> while compiling, once, and every use reads the result. <code>const { ... }</code> is the block form, and its locals stay inside it. A <code>const</code> expression can go anywhere an expression can, including default arguments and field defaults. In a function body it's a constant of its own, so <code>const fib(20)</code> in a loop is computed once.</p>
-<div class="sample" id="sample-ct_expr">
-<div class="sample-head"><span class="file">samples/ct_expr.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-ct_expr" data-sample="ct_expr" data-mode="run" data-file="ct_expr.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>ct_expr.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fun</span> fib(n: u64) -&gt; u64 = <span class="k">if</span> n &lt; <span class="n">2</span> { n } <span class="k">else</span> { fib(n - <span class="n">1</span>) + fib(n - <span class="n">2</span>) }
+<span class="k">fun</span> <span class="f">fib</span>(n: u64) -&gt; u64 = <span class="k">if</span> n &lt; <span class="n">2</span> { n } <span class="k">else</span> { <span class="f">fib</span>(n - <span class="n">1</span>) + <span class="f">fib</span>(n - <span class="n">2</span>) }
 
-<span class="k">fun</span> nth_fib(i: usize) -&gt; u64 {
+<span class="k">fun</span> <span class="f">nth_fib</span>(i: usize) -&gt; u64 {
     <span class="c">// A `const` block is worked out once, while compiling. Every call</span>
     <span class="c">// of `nth_fib` reads the same table.</span>
     <span class="k">let</span> table = <span class="k">const</span> {
         <span class="k">var</span> t = [<span class="n">0u64</span>; <span class="n">20</span>]
         <span class="k">for</span> k <span class="k">in</span> <span class="n">0</span>..<span class="n">20</span> {
-            t[k] = fib(k <span class="k">as</span> u64)
+            t[k] = <span class="f">fib</span>(k <span class="k">as</span> u64)
         }
         t
     }
     table[i]
 }
 
-<span class="k">fun</span> main() {
+<span class="k">fun</span> <span class="f">main</span>() {
     <span class="c">// `const` in front of an expression: the call runs while compiling.</span>
-    print(<span class="k">const</span> fib(<span class="n">25</span>))
-    print(nth_fib(<span class="n">10</span>))
-    print(nth_fib(<span class="n">19</span>))
+    <span class="f">print</span>(<span class="k">const</span> <span class="f">fib</span>(<span class="n">25</span>))
+    <span class="f">print</span>(<span class="f">nth_fib</span>(<span class="n">10</span>))
+    <span class="f">print</span>(<span class="f">nth_fib</span>(<span class="n">19</span>))
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>75025
 55
 4181</code></pre></div>
 </div>
-<h2 id="constants-are-values">Constants are values</h2>
+<h2 id="constants-are-values">Constants are values<a class="anchor" href="#constants-are-values" aria-label="Link to this section">#</a></h2>
 <p>A constant is one value, and every use of it gets a value of its own. <code>var mine = PRIMES</code> copies the list, <code>Copy</code> or not, so changing <code>mine</code> leaves <code>PRIMES</code> alone. Reads that don't own, such as <code>PRIMES.len()</code> or <code>for x in PRIMES</code>, share it.</p>
-<div class="sample" id="sample-ct_copies">
-<div class="sample-head"><span class="file">samples/ct_copies.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-ct_copies" data-sample="ct_copies" data-mode="run" data-file="ct_copies.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>ct_copies.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="k">const</span> PRIMES: <span class="t">List</span>[u32] = [<span class="n">2</span>, <span class="n">3</span>, <span class="n">5</span>, <span class="n">7</span>]
 
-<span class="k">fun</span> main() {
+<span class="k">fun</span> <span class="f">main</span>() {
     <span class="c">// Every use of a constant gets a value of its own.</span>
     <span class="k">var</span> mine = PRIMES
-    mine.push(<span class="n">11</span>)
-    print(<span class="s">"{</span>mine<span class="s">} {</span>PRIMES<span class="s">}"</span>)
+    mine.<span class="f">push</span>(<span class="n">11</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>mine<span class="h">}</span><span class="s"> </span><span class="h">{</span>PRIMES<span class="h">}</span><span class="s">"</span>)
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>[2, 3, 5, 7, 11] [2, 3, 5, 7]</code></pre></div>
 </div>
-<h2 id="const-assert"><code>const assert</code></h2>
+<h2 id="const-assert"><code>const assert</code><a class="anchor" href="#const-assert" aria-label="Link to this section">#</a></h2>
 <p><code>const assert(condition, message)</code> is checked while compiling. It can go at the top of a module, in a warp body, or in a function body. A failed one is <a href="diagnostics.html#K0101">K0101</a>, and it stops the build. In generic code it's checked once for each instance, and the error names the instance (see <a href="const-params.html">Const parameters</a>).</p>
 <p>The condition can call any function, as <code>crc32(...)</code> in <code>examples/compile_time.loom</code> does. The message can hold <code>{...}</code> holes.</p>
-<div class="sample" id="sample-ct_err_assert">
-<div class="sample-head"><span class="file">samples/ct_err_assert.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0101">K0101</a></span></div>
+<div class="sample" id="sample-ct_err_assert" data-sample="ct_err_assert" data-mode="check" data-file="ct_err_assert.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>ct_err_assert.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0101">K0101</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">const</span> LIMIT = <span class="n">10</span>
 
-<span class="k">fun</span> double(n: i32) -&gt; i32 = n * <span class="n">2</span>
+<span class="k">fun</span> <span class="f">double</span>(n: i32) -&gt; i32 = n * <span class="n">2</span>
 
-<span class="k">const</span> assert(double(LIMIT) == <span class="n">20</span>, <span class="s">"doubling works"</span>)
-<span class="k">const</span> assert(double(LIMIT) == <span class="n">21</span>, <span class="s">"this one is wrong"</span>)
+<span class="k">const</span> <span class="f">assert</span>(<span class="f">double</span>(LIMIT) == <span class="n">20</span>, <span class="s">"doubling works"</span>)
+<span class="k">const</span> <span class="f">assert</span>(<span class="f">double</span>(LIMIT) == <span class="n">21</span>, <span class="s">"this one is wrong"</span>)
 
-<span class="k">fun</span> main() {}</code></pre>
+<span class="k">fun</span> <span class="f">main</span>() {}</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[K0101]: const assertion failed: this one is wrong</span>
 <span class="loc">  --&gt; ct_err_assert.loom:6:14</span>
-  |
-6 | const assert(double(LIMIT) == 21, "this one is wrong")
-  |              ^^^^^^^^^^^^^^^^^^^ this is false
+<span class="gut">  |</span>
+<span class="gut">6 |</span> const assert(double(LIMIT) == 21, "this one is wrong")
+<span class="gut">  |</span><span class="caret">              ^^^^^^^^^^^^^^^^^^^ this is false</span>
 
 <span class="err">error: ct_err_assert.loom failed to compile (1 error)</span></code></pre></div>
 </div>
 <p>A plain <code>assert(...)</code> inside compile-time code is a different thing. It unravels like any other code, and the unravel is a compile error (<a href="diagnostics.html#K0103">K0103</a>, below). Use <code>const assert</code> when you mean to check something while compiling.</p>
-<h2 id="the-sandbox-and-its-limits">The sandbox and its limits</h2>
+<h2 id="the-sandbox-and-its-limits">The sandbox and its limits<a class="anchor" href="#the-sandbox-and-its-limits" aria-label="Link to this section">#</a></h2>
 <p>Compile-time code runs in a sandbox: on Treadle, Loom's own VM, inside the compiler, whichever backend the program is for. Every limit is a compile error with a <code>K</code> code.</p>
-<h3 id="budget-k0102">Budget: K0102</h3>
+<h3 id="budget-k0102">Budget: K0102<a class="anchor" href="#budget-k0102" aria-label="Link to this section">#</a></h3>
 <p>All compile-time code shares one budget: 100 million steps (loop iterations and calls), 1 GiB of memory, and 20 seconds. A loop that never ends stops with <a href="diagnostics.html#K0102">K0102</a> instead of hanging the compiler.</p>
-<div class="sample" id="sample-ct_err_budget">
-<div class="sample-head"><span class="file">samples/ct_err_budget.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0102">K0102</a></span></div>
+<div class="sample" id="sample-ct_err_budget" data-sample="ct_err_budget" data-mode="check" data-file="ct_err_budget.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>ct_err_budget.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0102">K0102</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="c">// Compile-time code runs under a step budget, so a loop that never</span>
 <span class="c">// ends can't hang the compiler.</span>
 <span class="k">const</span> FOREVER: u32 = {
@@ -158,22 +176,22 @@
     n
 }
 
-<span class="k">fun</span> main() {}</code></pre>
+<span class="k">fun</span> <span class="f">main</span>() {}</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[K0102]: compile-time code ran out of steps</span>
 <span class="loc">  --&gt; ct_err_budget.loom:3:7</span>
-  |
-3 | const FOREVER: u32 = {
-  |       ^^^^^^^ while computing `FOREVER`
-  |
-  = note: stopped at ct_err_budget.loom:5:5
-  = note: compile-time code may take 100000000 steps in all; this may never stop
+<span class="gut">  |</span>
+<span class="gut">3 |</span> const FOREVER: u32 = {
+<span class="gut">  |</span><span class="caret">       ^^^^^^^ while computing `FOREVER`</span>
+<span class="gut">  |</span>
+<span class="loc">  = note: stopped at ct_err_budget.loom:5:5</span>
+<span class="loc">  = note: compile-time code may take 100000000 steps in all; this may never stop</span>
 
 <span class="err">error: ct_err_budget.loom failed to compile (1 error)</span></code></pre></div>
 </div>
-<h3 id="unravelling-k0103">Unravelling: K0103</h3>
+<h3 id="unravelling-k0103">Unravelling: K0103<a class="anchor" href="#unravelling-k0103" aria-label="Link to this section">#</a></h3>
 <p>If compile-time code unravels (overflow, a bad index, <code>unravel</code>, a failed <code>as</code>), the constant it was computing fails with <a href="diagnostics.html#K0103">K0103</a>, and the message says where it unravelled. Things that needed that constant are skipped, so one failure isn't reported many times.</p>
-<div class="sample" id="sample-ct_err_unravel">
-<div class="sample-head"><span class="file">samples/ct_err_unravel.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0103">K0103</a></span></div>
+<div class="sample" id="sample-ct_err_unravel" data-sample="ct_err_unravel" data-mode="check" data-file="ct_err_unravel.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>ct_err_unravel.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0103">K0103</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="c">// Unravelling while compiling is a compile error.</span>
 <span class="k">const</span> HUGE: u8 = {
     <span class="k">var</span> x: u8 = <span class="n">250</span>
@@ -183,153 +201,153 @@
     x
 }
 
-<span class="k">fun</span> main() {}</code></pre>
+<span class="k">fun</span> <span class="f">main</span>() {}</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[K0103]: compile-time code unravelled: arithmetic overflow</span>
 <span class="loc">  --&gt; ct_err_unravel.loom:2:7</span>
-  |
-2 | const HUGE: u8 = {
-  |       ^^^^ while computing `HUGE`
-  |
-  = note: it unravelled at ct_err_unravel.loom:5:9
-  = help: unravelling while compiling is a compile error
+<span class="gut">  |</span>
+<span class="gut">2 |</span> const HUGE: u8 = {
+<span class="gut">  |</span><span class="caret">       ^^^^ while computing `HUGE`</span>
+<span class="gut">  |</span>
+<span class="loc">  = note: it unravelled at ct_err_unravel.loom:5:9</span>
+<span class="loc">  = help: unravelling while compiling is a compile error</span>
 
 <span class="err">error: ct_err_unravel.loom failed to compile (1 error)</span></code></pre></div>
 </div>
-<h3 id="no-i-o-k0104">No I/O: K0104</h3>
+<h3 id="no-i-o-k0104">No I/O: K0104<a class="anchor" href="#no-i-o-k0104" aria-label="Link to this section">#</a></h3>
 <p>The sandbox has no way out. Everything in <code>std.io</code>, <code>std.env</code>, <code>std.fs</code>, <code>std.time</code> and <code>std.term</code> fails with <a href="diagnostics.html#K0104">K0104</a>, and the note says which call, and where it was called from.</p>
-<div class="sample" id="sample-ct_err_io">
-<div class="sample-head"><span class="file">samples/ct_err_io.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0104">K0104</a></span></div>
+<div class="sample" id="sample-ct_err_io" data-sample="ct_err_io" data-mode="check" data-file="ct_err_io.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>ct_err_io.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0104">K0104</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fun</span> loud(n: i32) -&gt; i32 {
-    print(<span class="s">"computing"</span>)
+<span class="k">fun</span> <span class="f">loud</span>(n: i32) -&gt; i32 {
+    <span class="f">print</span>(<span class="s">"computing"</span>)
     n
 }
 
 <span class="c">// Printing is I/O. The compile-time sandbox has none.</span>
-<span class="k">const</span> NOISY: i32 = loud(<span class="n">3</span>)
+<span class="k">const</span> NOISY: i32 = <span class="f">loud</span>(<span class="n">3</span>)
 
-<span class="k">fun</span> main() {}</code></pre>
+<span class="k">fun</span> <span class="f">main</span>() {}</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[K0104]: `std.io.print` can't run at compile time</span>
 <span class="loc">  --&gt; ct_err_io.loom:9:7</span>
-  |
-9 | const NOISY: i32 = loud(3)
-  |       ^^^^^ while computing `NOISY`
-  |
-  = note: called at ct_err_io.loom:4:5
-  = note: compile-time code computes; it can't read or write anything outside the compiler
+<span class="gut">  |</span>
+<span class="gut">9 |</span> const NOISY: i32 = loud(3)
+<span class="gut">  |</span><span class="caret">       ^^^^^ while computing `NOISY`</span>
+<span class="gut">  |</span>
+<span class="loc">  = note: called at ct_err_io.loom:4:5</span>
+<span class="loc">  = note: compile-time code computes; it can't read or write anything outside the compiler</span>
 
 <span class="err">error: ct_err_io.loom failed to compile (1 error)</span></code></pre></div>
 </div>
-<h3 id="no-locals-from-outside-k0105">No locals from outside: K0105</h3>
+<h3 id="no-locals-from-outside-k0105">No locals from outside: K0105<a class="anchor" href="#no-locals-from-outside-k0105" aria-label="Link to this section">#</a></h3>
 <p>Compile-time code runs before the program does, so a local variable of the surrounding function has no value yet. Constants, functions and the code's own locals are fine.</p>
-<div class="sample" id="sample-ct_err_local">
-<div class="sample-head"><span class="file">samples/ct_err_local.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0105">K0105</a></span></div>
-<pre class="code"><code><span class="k">fun</span> twice(n: i32) -&gt; i32 = n * <span class="n">2</span>
+<div class="sample" id="sample-ct_err_local" data-sample="ct_err_local" data-mode="check" data-file="ct_err_local.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>ct_err_local.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0105">K0105</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">fun</span> <span class="f">twice</span>(n: i32) -&gt; i32 = n * <span class="n">2</span>
 
-<span class="k">fun</span> f(n: i32) -&gt; i32 {
-    <span class="k">let</span> a = <span class="k">const</span> twice(<span class="n">4</span>)
-    <span class="k">let</span> b = <span class="k">const</span> twice(n)
+<span class="k">fun</span> <span class="f">f</span>(n: i32) -&gt; i32 {
+    <span class="k">let</span> a = <span class="k">const</span> <span class="f">twice</span>(<span class="n">4</span>)
+    <span class="k">let</span> b = <span class="k">const</span> <span class="f">twice</span>(n)
     a + b
 }
 
-<span class="k">fun</span> main() {}</code></pre>
+<span class="k">fun</span> <span class="f">main</span>() {}</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[K0105]: `n` has no value while compiling</span>
 <span class="loc">  --&gt; ct_err_local.loom:5:25</span>
-  |
-3 | fun f(n: i32) -&gt; i32 {
-  |       - declared outside it, so it gets its value when the program runs
-4 |     let a = const twice(4)
-5 |     let b = const twice(n)
-  |                         ^ read by compile-time code
-  |
-  = help: compile-time code can use constants, functions and its own locals
+<span class="gut">  |</span>
+<span class="gut">3 |</span> fun f(n: i32) -&gt; i32 {
+<span class="gut">  |</span><span class="caret">       - declared outside it, so it gets its value when the program runs</span>
+<span class="gut">4 |</span>     let a = const twice(4)
+<span class="gut">5 |</span>     let b = const twice(n)
+<span class="gut">  |</span><span class="caret">                         ^ read by compile-time code</span>
+<span class="gut">  |</span>
+<span class="loc">  = help: compile-time code can use constants, functions and its own locals</span>
 
 <span class="err">error: ct_err_local.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
-<h3 id="no-leaving-k0106">No leaving: K0106</h3>
+<h3 id="no-leaving-k0106">No leaving: K0106<a class="anchor" href="#no-leaving-k0106" aria-label="Link to this section">#</a></h3>
 <p><code>return</code>, <code>break</code>, <code>continue</code>, <code>?</code>, <code>yield</code> and <code>pull</code> can't leave compile-time code, exactly as in a <code>defer</code>. Handle the case inside: with <code>mend</code>, or an <code>if</code>.</p>
-<div class="sample" id="sample-ct_err_flow">
-<div class="sample-head"><span class="file">samples/ct_err_flow.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0106">K0106</a></span></div>
-<pre class="code"><code><span class="k">fun</span> f() -&gt; i32 {
+<div class="sample" id="sample-ct_err_flow" data-sample="ct_err_flow" data-mode="check" data-file="ct_err_flow.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>ct_err_flow.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0106">K0106</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">fun</span> <span class="f">f</span>() -&gt; i32 {
     <span class="k">let</span> x = <span class="k">const</span> {
         <span class="k">return</span> <span class="n">0</span>
     }
     x
 }
 
-<span class="k">fun</span> main() {}</code></pre>
+<span class="k">fun</span> <span class="f">main</span>() {}</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[K0106]: `return` can't leave compile-time code</span>
 <span class="loc">  --&gt; ct_err_flow.loom:3:9</span>
-  |  
-2 |       let x = const {
-  | /-------------'
-3 | |         return 0
-  | |         ^^^^^^^^ this would leave the `const` code
-4 | |     }
-  | \-----' it runs while compiling, from here
-  |  
-  = note: compile-time code runs before the program does, so it can't change where the program goes
-  = help: handle it inside: `mend`, or an `if`
+<span class="gut">  |</span>  
+<span class="gut">2 |</span>       let x = const {
+<span class="gut">  |</span> /-------------'
+<span class="gut">3 |</span> |         return 0
+<span class="gut">  |</span> |         ^^^^^^^^ this would leave the `const` code
+<span class="gut">4 |</span> |     }
+<span class="gut">  |</span> \-----' it runs while compiling, from here
+<span class="gut">  |</span>  
+<span class="loc">  = note: compile-time code runs before the program does, so it can't change where the program goes</span>
+<span class="loc">  = help: handle it inside: `mend`, or an `if`</span>
 
 <span class="err">error: ct_err_flow.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
-<h3 id="no-cycles-k0107">No cycles: K0107</h3>
+<h3 id="no-cycles-k0107">No cycles: K0107<a class="anchor" href="#no-cycles-k0107" aria-label="Link to this section">#</a></h3>
 <p>A constant that needs its own value, through any number of other constants and functions, is <a href="diagnostics.html#K0107">K0107</a>.</p>
-<div class="sample" id="sample-ct_err_cycle">
-<div class="sample-head"><span class="file">samples/ct_err_cycle.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0107">K0107</a></span></div>
+<div class="sample" id="sample-ct_err_cycle" data-sample="ct_err_cycle" data-mode="check" data-file="ct_err_cycle.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>ct_err_cycle.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0107">K0107</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">const</span> ALPHA: i32 = BETA + <span class="n">1</span>
-<span class="k">const</span> BETA: i32 = helper()
+<span class="k">const</span> BETA: i32 = <span class="f">helper</span>()
 
-<span class="k">fun</span> helper() -&gt; i32 = ALPHA * <span class="n">2</span>
+<span class="k">fun</span> <span class="f">helper</span>() -&gt; i32 = ALPHA * <span class="n">2</span>
 
-<span class="k">fun</span> main() {}</code></pre>
+<span class="k">fun</span> <span class="f">main</span>() {}</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[K0107]: `ALPHA` needs its own value</span>
 <span class="loc">  --&gt; ct_err_cycle.loom:1:7</span>
-  |
-1 | const ALPHA: i32 = BETA + 1
-  |       ^^^^^ computing this reads it again
-  |
-  = note: read again at ct_err_cycle.loom:4:5
+<span class="gut">  |</span>
+<span class="gut">1 |</span> const ALPHA: i32 = BETA + 1
+<span class="gut">  |</span><span class="caret">       ^^^^^ computing this reads it again</span>
+<span class="gut">  |</span>
+<span class="loc">  = note: read again at ct_err_cycle.loom:4:5</span>
 
 <span class="err">error: ct_err_cycle.loom failed to compile (1 error)</span></code></pre></div>
 </div>
-<h3 id="a-constant-can-t-change-k0108">A constant can't change: K0108</h3>
+<h3 id="a-constant-can-t-change-k0108">A constant can't change: K0108<a class="anchor" href="#a-constant-can-t-change-k0108" aria-label="Link to this section">#</a></h3>
 <p>A constant is one value that every use copies, so it can't hold something that changes as it's used: a shuttle, a stream or a <code>once</code> value.</p>
-<div class="sample" id="sample-ct_err_holds">
-<div class="sample-head"><span class="file">samples/ct_err_holds.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0108">K0108</a></span></div>
-<pre class="code"><code><span class="k">fun</span> numbers(n: i32) ~&gt; i32 {
+<div class="sample" id="sample-ct_err_holds" data-sample="ct_err_holds" data-mode="check" data-file="ct_err_holds.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>ct_err_holds.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0108">K0108</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">fun</span> <span class="f">numbers</span>(n: i32) ~&gt; i32 {
     <span class="k">for</span> i <span class="k">in</span> <span class="n">0</span>..n {
         <span class="k">yield</span> i
     }
 }
 
 <span class="c">// A constant is a value that every use copies. A shuttle can't be one.</span>
-<span class="k">const</span> NUMBERS: <span class="t">Shuttle</span>[i32, ()] = numbers(<span class="n">3</span>)
+<span class="k">const</span> NUMBERS: <span class="t">Shuttle</span>[i32, ()] = <span class="f">numbers</span>(<span class="n">3</span>)
 
-<span class="k">fun</span> main() {}</code></pre>
+<span class="k">fun</span> <span class="f">main</span>() {}</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[K0108]: a constant can't hold a shuttle</span>
 <span class="loc">  --&gt; ct_err_holds.loom:8:7</span>
-  |
-8 | const NUMBERS: Shuttle[i32, ()] = numbers(3)
-  |       ^^^^^^^ this is `Shuttle[i32, ()]`
-  |
-  = note: every use of a constant gets the same value, and a shuttle changes as it's used
-  = help: make it in a function, and call that where it's needed
+<span class="gut">  |</span>
+<span class="gut">8 |</span> const NUMBERS: Shuttle[i32, ()] = numbers(3)
+<span class="gut">  |</span><span class="caret">       ^^^^^^^ this is `Shuttle[i32, ()]`</span>
+<span class="gut">  |</span>
+<span class="loc">  = note: every use of a constant gets the same value, and a shuttle changes as it's used</span>
+<span class="loc">  = help: make it in a function, and call that where it's needed</span>
 
 <span class="err">error: ct_err_holds.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
-<h3 id="the-constant-folder">The constant folder</h3>
+<h3 id="the-constant-folder">The constant folder<a class="anchor" href="#the-constant-folder" aria-label="Link to this section">#</a></h3>
 <p>Two things are decided by a small evaluator in the compiler itself, not by the sandbox: what a <code>const</code> argument, a <code>const if</code> condition or a <code>const for</code> sequence is, and array lengths and gauge bounds. It handles literals, constants, <code>const</code> parameters, arithmetic, comparisons, <code>and</code>/<code>or</code>/<code>not</code>, an array's <code>.len()</code>, a few integer methods, and <a href="reflection.html">reflection</a>. A top-level <code>const assert</code> that it can decide is reported without running the sandbox. When it can't work something out, you get <a href="diagnostics.html#K0109">K0109</a> or <a href="diagnostics.html#K0110">K0110</a> (see the next page), or <a href="diagnostics.html#U0102">U0102</a> for an array length or a type.</p>
-<h2 id="how-it-runs">How it runs</h2>
+<h2 id="how-it-runs">How it runs<a class="anchor" href="#how-it-runs" aria-label="Link to this section">#</a></h2>
 <p>The compiler builds the "jobs": the constants, <code>const</code> expressions and <code>const assert</code>s. Only what they reach is built, as a program for Treadle, which it runs in its own process. Then it builds the real program with what the jobs computed written into it: a constant that is a number, text, a tuple, an array, a list, a record or an optional of those (not too big) is data in the program, or a literal in the Lua bundle, and nothing computes it when the program runs. A constant of another type (a map, a sum) is computed when it's first read, as it would be anyway.</p>
 <p><code>loom build</code>, <code>run</code>, <code>test</code> and <code>check</code> all run the compile-time jobs.</p>
-<h2 id="not-supported-yet">Not supported yet</h2>
+<h2 id="not-supported-yet">Not supported yet<a class="anchor" href="#not-supported-yet" aria-label="Link to this section">#</a></h2>
 <p>Types computed by <code>const fun</code>s are not built (<a href="reflection.html">reflection</a> is). <code>embed</code> and <code>embed_text</code> don't exist, and neither does <code>bolt.loom</code>. See <a href="not-yet.html">Not supported yet</a>.</p>
-<div class="pager">
-<a href="shuttles.html">&larr; Shuttles</a>
-<a href="const-params.html">Const parameters and control flow &rarr;</a>
-</div>
+<nav class="pager" aria-label="Chapters">
+<a class="prev" href="shuttles.html"><span class="dir">&larr; Chapter 10</span>Shuttles</a>
+<a class="next" href="const-params.html"><span class="dir">Chapter 12 &rarr;</span>Const parameters and control flow</a>
+</nav>
 </main>
 </div>
 </body>

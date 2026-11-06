@@ -1,46 +1,62 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="no-js">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>Diagnostic codes · Loom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../style.css">
+<script src="../weave.js" defer></script>
 </head>
 <body>
+<header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
+<rect x="6" y="3" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="6" y="24" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
+<path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
+<path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../lang/index.html">The book</a><a href="../std/index.html">Library</a><a class="wide current" href="../lang/diagnostics.html">Codes</a><a class="play-link" href="../playground.html">Playground</a></nav></header>
 <div class="layout">
-<nav class="sidebar">
-<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
-<ul class="sections">
-<li><a href="../lang/index.html">Language</a></li>
+<nav class="sidebar" aria-label="Contents">
+<div class="group">
+<h3>The book</h3>
+<ul class="beads">
+<li><a href="index.html" data-chapter="index"><span class="num"></span><span>Welcome to Loom</span></a></li>
+<li><a href="start.html" data-chapter="start"><span class="num">1</span><span>Getting started</span></a></li>
+<li><a href="values.html" data-chapter="values"><span class="num">2</span><span>Values and control flow</span></a></li>
+<li><a href="types.html" data-chapter="types"><span class="num">3</span><span>Warps, wefts and weaves</span></a></li>
+<li><a href="generics.html" data-chapter="generics"><span class="num">4</span><span>Generics and <code>any</code></span></a></li>
+<li><a href="collections.html" data-chapter="collections"><span class="num">5</span><span>Collections and streams</span></a></li>
+<li><a href="errors.html" data-chapter="errors"><span class="num">6</span><span>Optionals and errors</span></a></li>
+<li><a href="ownership.html" data-chapter="ownership"><span class="num">7</span><span>Moves, <code>once</code> and <code>defer</code></span></a></li>
+<li><a href="memory.html" data-chapter="memory"><span class="num">8</span><span>Pointers, spools and <code>given</code></span></a></li>
+<li><a href="gauges.html" data-chapter="gauges"><span class="num">9</span><span>Gauges</span></a></li>
+<li><a href="shuttles.html" data-chapter="shuttles"><span class="num">10</span><span>Shuttles</span></a></li>
+<li><a href="compile-time.html" data-chapter="compile-time"><span class="num">11</span><span>Compile-time code</span></a></li>
+<li><a href="const-params.html" data-chapter="const-params"><span class="num">12</span><span>Const parameters and control flow</span></a></li>
+<li><a href="reflection.html" data-chapter="reflection"><span class="num">13</span><span>Reflection</span></a></li>
+<li><a href="tests.html" data-chapter="tests"><span class="num">14</span><span>Tests</span></a></li>
+<li><a href="threads.html" data-chapter="threads"><span class="num">15</span><span>Threads</span></a></li>
+<li><a href="not-yet.html" data-chapter="not-yet"><span class="num">A</span><span>Not supported yet</span></a></li>
+</ul></div>
+<div class="group">
+<h3>Also</h3>
+<ul class="plain-list">
+<li><a class="current" aria-current="page" href="diagnostics.html">Diagnostic codes</a></li>
+<li><a href="../playground.html">Playground</a></li>
 <li><a href="../std/index.html">Standard library</a></li>
-<li><a class="current" href="../lang/diagnostics.html">Diagnostic codes</a></li>
-</ul>
-<h3>Language</h3>
-<ul>
-<li><a href="index.html">Overview</a></li>
-<li><a href="start.html">Getting started</a></li>
-<li><a href="values.html">Values and control flow</a></li>
-<li><a href="types.html">Warps, wefts and weaves</a></li>
-<li><a href="generics.html">Generics and <code>any</code></a></li>
-<li><a href="collections.html">Collections and streams</a></li>
-<li><a href="errors.html">Optionals and errors</a></li>
-<li><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
-<li><a href="gauges.html">Gauges</a></li>
-<li><a href="shuttles.html">Shuttles</a></li>
-<li><a href="compile-time.html">Compile-time code</a></li>
-<li><a href="const-params.html">Const parameters and control flow</a></li>
-<li><a href="reflection.html">Reflection</a></li>
-<li><a href="tests.html">Tests</a></li>
-<li><a href="threads.html">Threads</a></li>
-<li><a href="not-yet.html">Not supported yet</a></li>
-</ul>
+</ul></div>
 </nav>
-<main>
-<div class="crumb"><a href="index.html">Language</a> / Diagnostic codes</div>
+<main class="weave">
+<div class="chapter-head"><span class="chapter-no">Reference</span>
 <h1>Diagnostic codes</h1>
-<p class="summary">Every code the compiler can report, with its one-line meaning. Generated from <code>crates/loom_syntax/src/diag/codes.rs</code>.</p>
-<p>A diagnostic looks like <code>error[K0101]: const assertion failed</code>. The letter says which part of the compiler found it, and the digits are stable, so a code is safe to search for. Where a page of these docs shows the error, the code links to that sample.</p>
+<p class="summary">Every code the compiler can report, with its one-line meaning. Generated from <code>crates/loom_syntax/src/diag/codes.rs</code>.</p></div>
+<p>A diagnostic looks like <code>error[K0101]: const assertion failed</code>. The letter says which part of the compiler found it, and the digits are stable, so a code is safe to search for. Where a chapter shows the error happening, the code links to that sample, and you can run it there and poke at it.</p>
 <p>Anything the compiler doesn't do yet fails with a <code>U</code> code. It never compiles it wrongly. See <a href="not-yet.html">Not supported yet</a>.</p>
+<div class="toc-chips"><a href="#group-S01xx"><span class="kind">S</span>lexer and parser</a><a href="#group-N01xx"><span class="kind">N</span>names and modules</a><a href="#group-T01xx"><span class="kind">T</span>types</a><a href="#group-G02xx"><span class="kind">G</span>gauges</a><a href="#group-K01xx"><span class="kind">K</span>compile-time code</a><a href="#group-L03xx"><span class="kind">L</span>`once` values</a><a href="#group-M01xx"><span class="kind">M</span>moves and borrows</a><a href="#group-R01xx"><span class="kind">R</span>regions</a><a href="#group-C04xx"><span class="kind">C</span>concurrency</a><a href="#group-P01xx"><span class="kind">P</span>patterns</a><a href="#group-U01xx"><span class="kind">U</span>features not supported yet</a></div>
 <h2 id="group-S01xx">S01xx: lexer</h2>
 <table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
 <tr id="S0100"><td><code>S0100</code></td><td>unexpected character</td><td></td></tr>
@@ -152,7 +168,7 @@
 <h2 id="group-R01xx">R01xx: regions (design/v6-spools.md)</h2>
 <table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
 <tr id="R0101"><td><code>R0101</code></td><td>a value outlives the spool it points into</td><td></td></tr>
-<tr id="R0102"><td><code>R0102</code></td><td>a value is used after its spool was reset</td><td><a href="ownership.html#sample-own_err_region">Moves, once and defer</a></td></tr>
+<tr id="R0102"><td><code>R0102</code></td><td>a value is used after its spool was reset</td><td><a href="memory.html#sample-own_err_region">Pointers, spools and given</a></td></tr>
 <tr id="R0103"><td><code>R0103</code></td><td>a pointer into a spool crosses threads</td><td></td></tr>
 <tr id="R0104"><td><code>R0104</code></td><td>a value is in another spool than its parameter says</td><td></td></tr>
 </tbody></table>

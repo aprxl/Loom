@@ -1,75 +1,93 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="no-js">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>Threads · Loom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../style.css">
+<script src="../weave.js" defer></script>
+<script src="../play/play.js" defer></script>
 </head>
-<body>
+<body data-chapter="threads">
+<header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
+<rect x="6" y="3" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="6" y="24" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
+<path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
+<path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a class="current" href="../lang/index.html">The book</a><a href="../std/index.html">Library</a><a class="wide" href="../lang/diagnostics.html">Codes</a><a class="play-link" href="../playground.html">Playground</a></nav></header>
 <div class="layout">
-<nav class="sidebar">
-<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
-<ul class="sections">
-<li><a class="current" href="../lang/index.html">Language</a></li>
+<nav class="sidebar" aria-label="Contents">
+<div class="group">
+<h3>The book</h3>
+<ul class="beads">
+<li><a href="index.html" data-chapter="index"><span class="num"></span><span>Welcome to Loom</span></a></li>
+<li><a href="start.html" data-chapter="start"><span class="num">1</span><span>Getting started</span></a></li>
+<li><a href="values.html" data-chapter="values"><span class="num">2</span><span>Values and control flow</span></a></li>
+<li><a href="types.html" data-chapter="types"><span class="num">3</span><span>Warps, wefts and weaves</span></a></li>
+<li><a href="generics.html" data-chapter="generics"><span class="num">4</span><span>Generics and <code>any</code></span></a></li>
+<li><a href="collections.html" data-chapter="collections"><span class="num">5</span><span>Collections and streams</span></a></li>
+<li><a href="errors.html" data-chapter="errors"><span class="num">6</span><span>Optionals and errors</span></a></li>
+<li><a href="ownership.html" data-chapter="ownership"><span class="num">7</span><span>Moves, <code>once</code> and <code>defer</code></span></a></li>
+<li><a href="memory.html" data-chapter="memory"><span class="num">8</span><span>Pointers, spools and <code>given</code></span></a></li>
+<li><a href="gauges.html" data-chapter="gauges"><span class="num">9</span><span>Gauges</span></a></li>
+<li><a href="shuttles.html" data-chapter="shuttles"><span class="num">10</span><span>Shuttles</span></a></li>
+<li><a href="compile-time.html" data-chapter="compile-time"><span class="num">11</span><span>Compile-time code</span></a></li>
+<li><a href="const-params.html" data-chapter="const-params"><span class="num">12</span><span>Const parameters and control flow</span></a></li>
+<li><a href="reflection.html" data-chapter="reflection"><span class="num">13</span><span>Reflection</span></a></li>
+<li><a href="tests.html" data-chapter="tests"><span class="num">14</span><span>Tests</span></a></li>
+<li><a class="current" aria-current="page" href="threads.html" data-chapter="threads"><span class="num">15</span><span>Threads</span></a></li>
+<li><a href="not-yet.html" data-chapter="not-yet"><span class="num">A</span><span>Not supported yet</span></a></li>
+</ul></div>
+<div class="group">
+<h3>Also</h3>
+<ul class="plain-list">
+<li><a href="diagnostics.html">Diagnostic codes</a></li>
+<li><a href="../playground.html">Playground</a></li>
 <li><a href="../std/index.html">Standard library</a></li>
-<li><a href="../lang/diagnostics.html">Diagnostic codes</a></li>
-</ul>
-<h3>Language</h3>
-<ul>
-<li><a href="index.html">Overview</a></li>
-<li><a href="start.html">Getting started</a></li>
-<li><a href="values.html">Values and control flow</a></li>
-<li><a href="types.html">Warps, wefts and weaves</a></li>
-<li><a href="generics.html">Generics and <code>any</code></a></li>
-<li><a href="collections.html">Collections and streams</a></li>
-<li><a href="errors.html">Optionals and errors</a></li>
-<li><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
-<li><a href="gauges.html">Gauges</a></li>
-<li><a href="shuttles.html">Shuttles</a></li>
-<li><a href="compile-time.html">Compile-time code</a></li>
-<li><a href="const-params.html">Const parameters and control flow</a></li>
-<li><a href="reflection.html">Reflection</a></li>
-<li><a href="tests.html">Tests</a></li>
-<li><a class="current" href="threads.html">Threads</a></li>
-<li><a href="not-yet.html">Not supported yet</a></li>
-</ul>
+</ul></div>
 </nav>
-<main>
-<div class="crumb"><a href="index.html">Language</a> / Threads</div>
+<main class="weave">
+<div class="chapter-head">
+<span class="chapter-no">Chapter 15</span>
 <h1>Threads</h1>
 <p class="summary">Loom blocks, threads that can't outlive them, and what they may share.</p>
+</div>
 <p>A <strong>loom block</strong> is a scope where threads run, and every one of them is done before the block ends. <code>thread e</code> starts <code>e</code> as a thread of the innermost loom around it, and gives a <code>Spun[T]</code> for the <code>T</code> it computes. <code>h.join()</code> waits for it and gives the <code>T</code>.</p>
-<div class="sample" id="sample-threads_basic">
-<div class="sample-head"><span class="file">samples/threads_basic.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-threads_basic" data-sample="threads_basic" data-mode="run" data-file="threads_basic.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>threads_basic.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 <span class="k">use</span> std.sync.sched_yield
 
-<span class="k">fun</span> square(n: i32) -&gt; i32 = n * n
+<span class="k">fun</span> <span class="f">square</span>(n: i32) -&gt; i32 = n * n
 
-<span class="k">fun</span> worker(name: str, steps: i32) {
+<span class="k">fun</span> <span class="f">worker</span>(name: str, steps: i32) {
     <span class="k">for</span> i <span class="k">in</span> <span class="n">0</span>..steps {
-        print(<span class="s">"{</span>name<span class="s">} {</span>i<span class="s">}"</span>)
-        sched_yield()                    <span class="c">// let the others take a turn</span>
+        <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>name<span class="h">}</span><span class="s"> </span><span class="h">{</span>i<span class="h">}</span><span class="s">"</span>)
+        <span class="f">sched_yield</span>()                    <span class="c">// let the others take a turn</span>
     }
 }
 
-<span class="k">fun</span> main() {
+<span class="k">fun</span> <span class="f">main</span>() {
     <span class="c">// `thread` starts a thread; `join` waits for its result. The block's</span>
     <span class="c">// value is its last expression's.</span>
     <span class="k">let</span> total = <span class="k">loom</span> {
-        <span class="k">let</span> a = <span class="k">thread</span> square(<span class="n">3</span>)
-        <span class="k">let</span> b = <span class="k">thread</span> square(<span class="n">4</span>)
-        a.join() + b.join()
+        <span class="k">let</span> a = <span class="k">thread</span> <span class="f">square</span>(<span class="n">3</span>)
+        <span class="k">let</span> b = <span class="k">thread</span> <span class="f">square</span>(<span class="n">4</span>)
+        a.<span class="f">join</span>() + b.<span class="f">join</span>()
     }
-    print(<span class="s">"total {</span>total<span class="s">}"</span>)
+    <span class="f">print</span>(<span class="s">"total </span><span class="h">{</span>total<span class="h">}</span><span class="s">"</span>)
 
     <span class="c">// A thread runs as soon as it's started, until it finishes or</span>
     <span class="c">// yields. Nobody joined these: the block's end waits for them.</span>
     <span class="k">loom</span> {
-        <span class="k">thread</span> worker(<span class="s">"a"</span>, <span class="n">2</span>)
-        <span class="k">thread</span> worker(<span class="s">"b"</span>, <span class="n">2</span>)
-        print(<span class="s">"started"</span>)
+        <span class="k">thread</span> <span class="f">worker</span>(<span class="s">"a"</span>, <span class="n">2</span>)
+        <span class="k">thread</span> <span class="f">worker</span>(<span class="s">"b"</span>, <span class="n">2</span>)
+        <span class="f">print</span>(<span class="s">"started"</span>)
         ()                               <span class="c">// not a handle: it can't leave the block</span>
     }
 }</code></pre>
@@ -80,142 +98,142 @@ started
 a 1
 b 1</code></pre></div>
 </div>
-<h2 id="what-a-thread-runs">What a thread runs</h2>
+<h2 id="what-a-thread-runs">What a thread runs<a class="anchor" href="#what-a-thread-runs" aria-label="Link to this section">#</a></h2>
 <p>A thread runs as soon as it's started, until it finishes or <strong>parks</strong>: waits in a <code>join</code>, or calls <code>sched_yield()</code>, which sends it to the back of the queue. Then another one runs, and the one that started it goes on. Nothing is preempted, so a program's output is the same on every run, and on both backends. (This is the schedule with one worker, which <code>LOOM_THREADS=1</code> asks Treadle for and the Lua backend always runs. With several workers, Treadle's default, threads run side by side: what a program prints from inside threads can come in any order, and the rules below are what make its results the same.)</p>
 <p>A thread nobody joined is joined where the block ends. The block's value is its last expression's: a <code>thread</code> there would be a handle, which can't leave the block (<a href="diagnostics.html#C0404">C0404</a>), so end the block with <code>()</code>, or join it.</p>
-<h2 id="what-a-thread-may-share">What a thread may share</h2>
+<h2 id="what-a-thread-may-share">What a thread may share<a class="anchor" href="#what-a-thread-may-share" aria-label="Link to this section">#</a></h2>
 <p>Threads borrow local variables directly, with no copies and no <code>Arc</code>, because nothing outlives its loom. The checker keeps that safe:</p>
 <ul><li>What's declared <strong>outside</strong> the loom is shared. A thread may read it; if it changes it, no other thread may touch it, nor the parent, until it's joined (<a href="diagnostics.html#C0401">C0401</a>, <a href="diagnostics.html#C0402">C0402</a>).</li><li>What's declared <strong>inside</strong> the loom block (a loop variable, a local of the block, the parameter of a lambda around the <code>thread</code>) is <strong>copied</strong> into the thread when it starts: it may be gone by the time the thread runs. A thread can't change its copy (<a href="diagnostics.html#C0405">C0405</a>). A variable that owns what it holds (a <code>String</code>, a <code>List</code>) <strong>moves</strong> into the thread instead, and the parent can't use it after.</li><li><code>thread</code> is only allowed inside a <code>loom</code> (<a href="diagnostics.html#C0403">C0403</a>), and the loom is the innermost one around it, also from inside a lambda or another thread.</li></ul>
-<div class="sample" id="sample-threads_share">
-<div class="sample-head"><span class="file">samples/threads_share.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-threads_share" data-sample="threads_share" data-mode="run" data-file="threads_share.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>threads_share.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fun</span> main() {
+<span class="k">fun</span> <span class="f">main</span>() {
     <span class="c">// What's declared outside the loom is shared: a thread reads it, or</span>
     <span class="c">// changes it when no one else touches it until it's joined.</span>
     <span class="k">var</span> count = <span class="n">0</span>
     <span class="k">let</span> words = [<span class="s">"red"</span>, <span class="s">"green"</span>, <span class="s">"blue"</span>]
     <span class="k">loom</span> {
-        <span class="k">let</span> t = <span class="k">thread</span> { count = words.len() }
-        t.join()
+        <span class="k">let</span> t = <span class="k">thread</span> { count = words.<span class="f">len</span>() }
+        t.<span class="f">join</span>()
     }
-    print(<span class="s">"count {</span>count<span class="s">}"</span>)
+    <span class="f">print</span>(<span class="s">"count </span><span class="h">{</span>count<span class="h">}</span><span class="s">"</span>)
 
     <span class="c">// A thread started in a loop gets a copy of what the loop declares.</span>
     <span class="k">let</span> lens = <span class="k">loom</span> {
         <span class="k">var</span> out: <span class="t">List</span>[usize] = []
         <span class="k">for</span> w <span class="k">in</span> words {
-            <span class="k">let</span> t = <span class="k">thread</span> w.len()
-            out.push(t.join())
+            <span class="k">let</span> t = <span class="k">thread</span> w.<span class="f">len</span>()
+            out.<span class="f">push</span>(t.<span class="f">join</span>())
         }
         out
     }
-    print(<span class="s">"{</span>lens<span class="s">}"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>lens<span class="h">}</span><span class="s">"</span>)
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>count 3
 [3, 5, 4]</code></pre></div>
 </div>
 <p>The race detector is the type checker:</p>
-<div class="sample" id="sample-threads_err">
-<div class="sample-head"><span class="file">samples/threads_err.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#C0401">C0401</a></span></div>
+<div class="sample" id="sample-threads_err" data-sample="threads_err" data-mode="check" data-file="threads_err.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>threads_err.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#C0401">C0401</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fun</span> main() {
+<span class="k">fun</span> <span class="f">main</span>() {
     <span class="k">var</span> hits = <span class="n">0</span>
     <span class="k">loom</span> {
         <span class="k">thread</span> { hits += <span class="n">1</span> }
         <span class="k">thread</span> { hits += <span class="n">1</span> }
         ()
     }
-    print(hits)
+    <span class="f">print</span>(hits)
 }</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[C0401]: `hits` is changed by more than one thread</span>
 <span class="loc">  --&gt; threads_err.loom:7:18</span>
-  |
-6 |         thread { hits += 1 }
-  |         -------------------- another thread changes it
-7 |         thread { hits += 1 }
-  |                  ^^^^ changed here
-  |
-  = help: use `Atomic`, or produce a value per thread and combine them
+<span class="gut">  |</span>
+<span class="gut">6 |</span>         thread { hits += 1 }
+<span class="gut">  |</span><span class="caret">         -------------------- another thread changes it</span>
+<span class="gut">7 |</span>         thread { hits += 1 }
+<span class="gut">  |</span><span class="caret">                  ^^^^ changed here</span>
+<span class="gut">  |</span>
+<span class="loc">  = help: use `Atomic`, or produce a value per thread and combine them</span>
 
 <span class="err">error: threads_err.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
-<h2 id="one-thread-for-each-item-loom-for">One thread for each item: <code>loom for</code></h2>
+<h2 id="one-thread-for-each-item-loom-for">One thread for each item: <code>loom for</code><a class="anchor" href="#one-thread-for-each-item-loom-for" aria-label="Link to this section">#</a></h2>
 <p><code>loom for x in items { … }</code> is a loom that starts a thread for each item. The parent goes through <code>items</code> (so it's a list, a range, a stream), and each iteration runs as a thread of its own. An item that owns memory moves into its thread; one that's a view of what outlives the loop is copied.</p>
-<div class="sample" id="sample-threads_for">
-<div class="sample-head"><span class="file">samples/threads_for.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-threads_for" data-sample="threads_for" data-mode="run" data-file="threads_for.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>threads_for.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 <span class="k">use</span> std.sync.<span class="t">Atomic</span>
 
-<span class="k">fun</span> main() {
+<span class="k">fun</span> <span class="f">main</span>() {
     <span class="c">// One thread for each item; the loop ends when they're all done.</span>
     <span class="k">let</span> squares = <span class="t">Atomic</span>[u64](<span class="n">0</span>)
     <span class="k">loom</span> <span class="k">for</span> n <span class="k">in</span> <span class="n">1</span>..=<span class="n">5</span> {
-        squares.add(n * n)
+        squares.<span class="f">add</span>(n * n)
     }
-    print(<span class="s">"sum of squares {</span>squares.load()<span class="s">}"</span>)
+    <span class="f">print</span>(<span class="s">"sum of squares </span><span class="h">{</span>squares.<span class="f">load</span>()<span class="h">}</span><span class="s">"</span>)
 
     <span class="c">// An item that owns what it holds moves into its thread.</span>
     <span class="k">let</span> words = [<span class="s">"red"</span>, <span class="s">"green"</span>, <span class="s">"blue"</span>]
     <span class="k">let</span> letters = <span class="t">Atomic</span>[usize](<span class="n">0</span>)
-    <span class="k">loom</span> <span class="k">for</span> shout <span class="k">in</span> words.map(w =&gt; w.to_upper()) {
-        letters.add(shout.len())
+    <span class="k">loom</span> <span class="k">for</span> shout <span class="k">in</span> words.<span class="f">map</span>(w =&gt; w.<span class="f">to_upper</span>()) {
+        letters.<span class="f">add</span>(shout.<span class="f">len</span>())
     }
-    print(<span class="s">"letters {</span>letters.load()<span class="s">}"</span>)
+    <span class="f">print</span>(<span class="s">"letters </span><span class="h">{</span>letters.<span class="f">load</span>()<span class="h">}</span><span class="s">"</span>)
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>sum of squares 55
 letters 12</code></pre></div>
 </div>
 <p>Each iteration is a thread that ends with its body, so nothing in it can leave the loop or the function: <code>break</code>, <code>return</code>, a <code>continue</code> of an outer loop, and a <code>?</code> with no <code>mend</code> are <a href="diagnostics.html#C0406">C0406</a>. <code>continue</code> ends the iteration. A variable the iterations change is <a href="diagnostics.html#C0401">C0401</a>, as for any threads: use an <code>Atomic</code>, or a <code>Mutex</code>.</p>
-<h2 id="changing-pieces-of-a-list-chunks-mut">Changing pieces of a list: <code>chunks_mut</code></h2>
+<h2 id="changing-pieces-of-a-list-chunks-mut">Changing pieces of a list: <code>chunks_mut</code><a class="anchor" href="#changing-pieces-of-a-list-chunks-mut" aria-label="Link to this section">#</a></h2>
 <p><code>xs.chunks_mut(n)</code> gives views of <code>n</code> elements at a time, which can be changed, and don't overlap. A <code>loom for</code> over them has each thread change its own piece, with no <code>Atomic</code> and no lock: the list is the parent's again when the loop ends. Pieces that might overlap (a view made another way) are <a href="diagnostics.html#C0401">C0401</a> when two threads change them.</p>
-<div class="sample" id="sample-threads_rows">
-<div class="sample-head"><span class="file">samples/threads_rows.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-threads_rows" data-sample="threads_rows" data-mode="run" data-file="threads_rows.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>threads_rows.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fun</span> main() {
-    <span class="k">var</span> grid = <span class="t">List</span>.filled(<span class="n">0</span>, <span class="n">12</span>)
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">var</span> grid = <span class="t">List</span>.<span class="f">filled</span>(<span class="n">0</span>, <span class="n">12</span>)
     <span class="k">let</span> width = <span class="n">4</span>
     <span class="c">// One thread for each row: each changes only its own piece.</span>
-    <span class="k">loom</span> <span class="k">for</span> (row, <span class="k">mut</span> line) <span class="k">in</span> grid.chunks_mut(width).indexed() {
+    <span class="k">loom</span> <span class="k">for</span> (row, <span class="k">mut</span> line) <span class="k">in</span> grid.<span class="f">chunks_mut</span>(width).<span class="f">indexed</span>() {
         <span class="k">for</span> col <span class="k">in</span> <span class="n">0</span>..width {
             line[col] = row * <span class="n">10</span> + col
         }
     }
-    print(<span class="s">"{</span>grid<span class="s">}"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>grid<span class="h">}</span><span class="s">"</span>)
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>[0, 1, 2, 3, 10, 11, 12, 13, 20, 21, 22, 23]</code></pre></div>
 </div>
-<h2 id="sharing-what-changes-atomic">Sharing what changes: <code>Atomic</code></h2>
+<h2 id="sharing-what-changes-atomic">Sharing what changes: <code>Atomic</code><a class="anchor" href="#sharing-what-changes-atomic" aria-label="Link to this section">#</a></h2>
 <p>An <code>Atomic[T]</code> (<code>T</code> an integer of 8 to 64 bits, or <code>bool</code>) is changed through methods that only take <code>self</code> to read, so any number of threads can use one at once, with no <a href="diagnostics.html#C0401">C0401</a>. Every operation is a whole step: <code>add</code> gives the value before, <code>compare_exchange</code> says whether it swapped.</p>
-<div class="sample" id="sample-threads_atomic">
-<div class="sample-head"><span class="file">samples/threads_atomic.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-threads_atomic" data-sample="threads_atomic" data-mode="run" data-file="threads_atomic.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>threads_atomic.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 <span class="k">use</span> std.sync.<span class="t">Atomic</span>
 <span class="k">use</span> std.sync.sched_yield
 
-<span class="k">fun</span> main() {
+<span class="k">fun</span> <span class="f">main</span>() {
     <span class="k">let</span> hits = <span class="t">Atomic</span>[u32](<span class="n">0</span>)
     <span class="k">loom</span> {
         <span class="k">for</span> id <span class="k">in</span> <span class="n">0</span>..<span class="n">3</span> {
             <span class="k">thread</span> {
                 <span class="k">for</span> _ <span class="k">in</span> <span class="n">0</span>..<span class="n">2</span> {
-                    <span class="k">let</span> before = hits.add(<span class="n">1</span>)
-                    print(<span class="s">"thread {</span>id<span class="s">} saw {</span>before<span class="s">}"</span>)
-                    sched_yield()
+                    <span class="k">let</span> before = hits.<span class="f">add</span>(<span class="n">1</span>)
+                    <span class="f">print</span>(<span class="s">"thread </span><span class="h">{</span>id<span class="h">}</span><span class="s"> saw </span><span class="h">{</span>before<span class="h">}</span><span class="s">"</span>)
+                    <span class="f">sched_yield</span>()
                 }
             }
         }
         ()
     }
-    print(<span class="s">"hits {</span>hits.load()<span class="s">}"</span>)
+    <span class="f">print</span>(<span class="s">"hits </span><span class="h">{</span>hits.<span class="f">load</span>()<span class="h">}</span><span class="s">"</span>)
 
     <span class="c">// Only one of two racers gets to set it.</span>
     <span class="k">let</span> winner = <span class="t">Atomic</span>[i32](<span class="n">0</span>)
-    <span class="k">let</span> (a, b) = winner.compare_exchange(<span class="n">0</span>, <span class="n">1</span>)
-    <span class="k">let</span> (c, d) = winner.compare_exchange(<span class="n">0</span>, <span class="n">2</span>)
-    print(<span class="s">"{</span>a<span class="s">} {</span>b<span class="s">}, {</span>c<span class="s">} {</span>d<span class="s">}"</span>)
+    <span class="k">let</span> (a, b) = winner.<span class="f">compare_exchange</span>(<span class="n">0</span>, <span class="n">1</span>)
+    <span class="k">let</span> (c, d) = winner.<span class="f">compare_exchange</span>(<span class="n">0</span>, <span class="n">2</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>a<span class="h">}</span><span class="s"> </span><span class="h">{</span>b<span class="h">}</span><span class="s">, </span><span class="h">{</span>c<span class="h">}</span><span class="s"> </span><span class="h">{</span>d<span class="h">}</span><span class="s">"</span>)
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>thread 0 saw 0
 thread 1 saw 1
@@ -227,63 +245,63 @@ hits 6
 true 0, false 1</code></pre></div>
 </div>
 <p>A thread that spins on <code>load()</code> waiting for another doesn't let it run (nothing is preempted yet): put a <code>sched_yield()</code> in the loop.</p>
-<h2 id="sharing-what-needs-a-lock-mutex">Sharing what needs a lock: <code>Mutex</code></h2>
+<h2 id="sharing-what-needs-a-lock-mutex">Sharing what needs a lock: <code>Mutex</code><a class="anchor" href="#sharing-what-needs-a-lock-mutex" aria-label="Link to this section">#</a></h2>
 <p>A <code>Mutex[T]</code> holds a <code>T</code> that one thread at a time uses. <code>m.lock()</code> is the value, for the statement it's in: the lock is taken where it's evaluated, and given back when the statement ends, however it ends (an unravel too). Threads that find it taken wait for it, in the order they came.</p>
-<div class="sample" id="sample-threads_mutex">
-<div class="sample-head"><span class="file">samples/threads_mutex.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-threads_mutex" data-sample="threads_mutex" data-mode="run" data-file="threads_mutex.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>threads_mutex.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 <span class="k">use</span> std.sync.<span class="t">Mutex</span>
 <span class="k">use</span> std.sync.sched_yield
 
-<span class="k">fun</span> pause(id: i32) -&gt; i32 {
-    sched_yield()
+<span class="k">fun</span> <span class="f">pause</span>(id: i32) -&gt; i32 {
+    <span class="f">sched_yield</span>()
     id
 }
 
-<span class="k">fun</span> main() {
+<span class="k">fun</span> <span class="f">main</span>() {
     <span class="k">let</span> total = <span class="t">Mutex</span>[i32](<span class="n">0</span>)
     <span class="k">let</span> log = <span class="t">Mutex</span>[<span class="t">List</span>[i32]]([])
     <span class="k">loom</span> {
         <span class="k">for</span> id <span class="k">in</span> <span class="n">1</span>..=<span class="n">3</span> {
             <span class="k">thread</span> {
-                total.lock() += id * <span class="n">10</span>          <span class="c">// locked for this statement</span>
-                log.lock().push(pause(id))       <span class="c">// locked while `pause` waits</span>
+                total.<span class="f">lock</span>() += id * <span class="n">10</span>          <span class="c">// locked for this statement</span>
+                log.<span class="f">lock</span>().<span class="f">push</span>(<span class="f">pause</span>(id))       <span class="c">// locked while `pause` waits</span>
             }
         }
         ()
     }
-    print(<span class="s">"total {</span>total.lock()<span class="s">}, log {</span>log.lock().len()<span class="s">} entries"</span>)
+    <span class="f">print</span>(<span class="s">"total </span><span class="h">{</span>total.<span class="f">lock</span>()<span class="h">}</span><span class="s">, log </span><span class="h">{</span>log.<span class="f">lock</span>().<span class="f">len</span>()<span class="h">}</span><span class="s"> entries"</span>)
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>total 60, log 3 entries</code></pre></div>
 </div>
 <p>The lock is taken after the right-hand side of an assignment is worked out, so a thread holds it for the shortest time. A thread that locks what it holds already unravels.</p>
-<h2 id="passing-items-pipe">Passing items: <code>Pipe</code></h2>
+<h2 id="passing-items-pipe">Passing items: <code>Pipe</code><a class="anchor" href="#passing-items-pipe" aria-label="Link to this section">#</a></h2>
 <p>A <code>Pipe[T](capacity)</code> is a bounded queue. <code>send</code> puts an item in and waits while the pipe is full; <code>recv</code> takes the oldest and waits while it's empty, giving <code>none</code> once the pipe is closed and drained. <code>close</code> ends it: what's in it can still be received, and the threads waiting on it wake. A thread that waits for a pipe nobody will fill is a deadlock, which unravels the parent where it waits (after cancelling what's left).</p>
-<div class="sample" id="sample-threads_pipe">
-<div class="sample-head"><span class="file">samples/threads_pipe.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-threads_pipe" data-sample="threads_pipe" data-mode="run" data-file="threads_pipe.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>threads_pipe.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 <span class="k">use</span> std.sync.<span class="t">Pipe</span>
 
-<span class="k">fun</span> main() {
+<span class="k">fun</span> <span class="f">main</span>() {
     <span class="k">let</span> jobs = <span class="t">Pipe</span>[i32](<span class="n">2</span>)
     <span class="k">let</span> results = <span class="t">Pipe</span>[<span class="t">String</span>](<span class="n">2</span>)
     <span class="k">loom</span> {
         <span class="c">// A producer, and a worker that turns what it gets into text.</span>
         <span class="k">thread</span> {
             <span class="k">for</span> n <span class="k">in</span> <span class="n">1</span>..=<span class="n">4</span> {
-                jobs.send(n)
+                jobs.<span class="f">send</span>(n)
             }
-            jobs.close()
+            jobs.<span class="f">close</span>()
         }
         <span class="k">thread</span> {
-            <span class="k">while</span> jobs.recv() <span class="k">is</span> <span class="k">some</span>(n) {
-                results.send(<span class="s">"job {</span>n<span class="s">}"</span>)
+            <span class="k">while</span> jobs.<span class="f">recv</span>() <span class="k">is</span> <span class="k">some</span>(n) {
+                results.<span class="f">send</span>(<span class="s">"job </span><span class="h">{</span>n<span class="h">}</span><span class="s">"</span>)
             }
-            results.close()
+            results.<span class="f">close</span>()
         }
         <span class="c">// The parent reads until the worker closes the results.</span>
-        <span class="k">while</span> results.recv() <span class="k">is</span> <span class="k">some</span>(r) {
-            print(r)
+        <span class="k">while</span> results.<span class="f">recv</span>() <span class="k">is</span> <span class="k">some</span>(r) {
+            <span class="f">print</span>(r)
         }
     }
 }</code></pre>
@@ -292,15 +310,15 @@ job 2
 job 3
 job 4</code></pre></div>
 </div>
-<h2 id="when-something-goes-wrong">When something goes wrong</h2>
+<h2 id="when-something-goes-wrong">When something goes wrong<a class="anchor" href="#when-something-goes-wrong" aria-label="Link to this section">#</a></h2>
 <p>A thread that unravels fails its loom: the other threads are <strong>cancelled</strong>, and the parent unravels with the thread's message where it sees it, at the <code>join</code> or where the block ends, after everything has stopped. A cancelled thread unwinds from where it waits (<code>join</code>, <code>sched_yield</code>, a <code>yield</code> or <code>pull</code>), running its <code>defer</code>s, and nobody sees the cancel: <code>mend</code> doesn't catch it. The same goes for leaving the block early with <code>?</code>, <code>return</code> or <code>break</code>, for <code>process.exit</code> in a thread, and for Ctrl-C.</p>
 <p>A thread started in a loom that has already failed never runs.</p>
-<h2 id="rules">Rules</h2>
+<h2 id="rules">Rules<a class="anchor" href="#rules" aria-label="Link to this section">#</a></h2>
 <ul><li>A loom block's own <code>defer</code>s run when its block ends, before it waits for its threads.</li><li>Results nobody joined are dropped where the loom ends.</li><li>A <code>Spun</code> is joined once; a second <code>join</code> unravels (a <code>once</code> result makes the handle <code>once</code>, so it's <a href="diagnostics.html#L0301">L0301</a> to lose it).</li><li>A shuttle can <code>yield</code> and <code>pull</code> inside a loom block: its threads keep running while it waits, and closing it early cancels them and waits for them.</li><li>Compile-time code can't start threads (<a href="diagnostics.html#K0104">K0104</a>).</li></ul>
-<div class="pager">
-<a href="tests.html">&larr; Tests</a>
-<a href="not-yet.html">Not supported yet &rarr;</a>
-</div>
+<nav class="pager" aria-label="Chapters">
+<a class="prev" href="tests.html"><span class="dir">&larr; Chapter 14</span>Tests</a>
+<a class="next" href="not-yet.html"><span class="dir">Appendix A &rarr;</span>Not supported yet</a>
+</nav>
 </main>
 </div>
 </body>

@@ -1,49 +1,67 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="no-js">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>Generics and any · Loom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../style.css">
+<script src="../weave.js" defer></script>
+<script src="../play/play.js" defer></script>
 </head>
-<body>
+<body data-chapter="generics">
+<header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
+<rect x="6" y="3" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="6" y="24" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
+<path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
+<path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a class="current" href="../lang/index.html">The book</a><a href="../std/index.html">Library</a><a class="wide" href="../lang/diagnostics.html">Codes</a><a class="play-link" href="../playground.html">Playground</a></nav></header>
 <div class="layout">
-<nav class="sidebar">
-<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
-<ul class="sections">
-<li><a class="current" href="../lang/index.html">Language</a></li>
+<nav class="sidebar" aria-label="Contents">
+<div class="group">
+<h3>The book</h3>
+<ul class="beads">
+<li><a href="index.html" data-chapter="index"><span class="num"></span><span>Welcome to Loom</span></a></li>
+<li><a href="start.html" data-chapter="start"><span class="num">1</span><span>Getting started</span></a></li>
+<li><a href="values.html" data-chapter="values"><span class="num">2</span><span>Values and control flow</span></a></li>
+<li><a href="types.html" data-chapter="types"><span class="num">3</span><span>Warps, wefts and weaves</span></a></li>
+<li><a class="current" aria-current="page" href="generics.html" data-chapter="generics"><span class="num">4</span><span>Generics and <code>any</code></span></a></li>
+<li><a href="collections.html" data-chapter="collections"><span class="num">5</span><span>Collections and streams</span></a></li>
+<li><a href="errors.html" data-chapter="errors"><span class="num">6</span><span>Optionals and errors</span></a></li>
+<li><a href="ownership.html" data-chapter="ownership"><span class="num">7</span><span>Moves, <code>once</code> and <code>defer</code></span></a></li>
+<li><a href="memory.html" data-chapter="memory"><span class="num">8</span><span>Pointers, spools and <code>given</code></span></a></li>
+<li><a href="gauges.html" data-chapter="gauges"><span class="num">9</span><span>Gauges</span></a></li>
+<li><a href="shuttles.html" data-chapter="shuttles"><span class="num">10</span><span>Shuttles</span></a></li>
+<li><a href="compile-time.html" data-chapter="compile-time"><span class="num">11</span><span>Compile-time code</span></a></li>
+<li><a href="const-params.html" data-chapter="const-params"><span class="num">12</span><span>Const parameters and control flow</span></a></li>
+<li><a href="reflection.html" data-chapter="reflection"><span class="num">13</span><span>Reflection</span></a></li>
+<li><a href="tests.html" data-chapter="tests"><span class="num">14</span><span>Tests</span></a></li>
+<li><a href="threads.html" data-chapter="threads"><span class="num">15</span><span>Threads</span></a></li>
+<li><a href="not-yet.html" data-chapter="not-yet"><span class="num">A</span><span>Not supported yet</span></a></li>
+</ul></div>
+<div class="group">
+<h3>Also</h3>
+<ul class="plain-list">
+<li><a href="diagnostics.html">Diagnostic codes</a></li>
+<li><a href="../playground.html">Playground</a></li>
 <li><a href="../std/index.html">Standard library</a></li>
-<li><a href="../lang/diagnostics.html">Diagnostic codes</a></li>
-</ul>
-<h3>Language</h3>
-<ul>
-<li><a href="index.html">Overview</a></li>
-<li><a href="start.html">Getting started</a></li>
-<li><a href="values.html">Values and control flow</a></li>
-<li><a href="types.html">Warps, wefts and weaves</a></li>
-<li><a class="current" href="generics.html">Generics and <code>any</code></a></li>
-<li><a href="collections.html">Collections and streams</a></li>
-<li><a href="errors.html">Optionals and errors</a></li>
-<li><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
-<li><a href="gauges.html">Gauges</a></li>
-<li><a href="shuttles.html">Shuttles</a></li>
-<li><a href="compile-time.html">Compile-time code</a></li>
-<li><a href="const-params.html">Const parameters and control flow</a></li>
-<li><a href="reflection.html">Reflection</a></li>
-<li><a href="tests.html">Tests</a></li>
-<li><a href="threads.html">Threads</a></li>
-<li><a href="not-yet.html">Not supported yet</a></li>
-</ul>
+</ul></div>
 </nav>
-<main>
-<div class="crumb"><a href="index.html">Language</a> / Generics and <code>any</code></div>
+<main class="weave">
+<div class="chapter-head">
+<span class="chapter-no">Chapter 4</span>
 <h1>Generics and <code>any</code></h1>
 <p class="summary">Type parameters checked per instance, wefts as parameter types, and dynamic dispatch.</p>
-<h2 id="generics">Generics</h2>
+</div>
+<h2 id="generics">Generics<a class="anchor" href="#generics" aria-label="Link to this section">#</a></h2>
 <p>A type parameter goes in brackets, with bounds after a colon (<code>T: Ord + Copy</code>) or in a <code>where</code> clause. The compiler infers arguments where it can. To give them yourself, use brackets: <code>largest[i32](xs)</code>, <code>List[i32]()</code>, <code>s.parse[u16]()</code>.</p>
 <p>Generics are checked <strong>per instance</strong>, in the style of Zig. A generic function is type-checked once for each list of arguments it's used with, and one nobody calls isn't checked at all. An error in a generic body is reported once, with a note naming the instance it came from.</p>
-<div class="sample" id="sample-generics_basic">
-<div class="sample-head"><span class="file">samples/generics_basic.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-generics_basic" data-sample="generics_basic" data-mode="run" data-file="generics_basic.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>generics_basic.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="c">// Generics are checked per instance: `largest` is checked once for `i32`</span>
@@ -61,32 +79,32 @@
     first: A
     second: B
 
-    <span class="k">fun</span> swap(<span class="k">self</span>) -&gt; <span class="t">Pair</span>[B, A] = <span class="t">Pair</span>(.second, .first)
+    <span class="k">fun</span> <span class="f">swap</span>(<span class="k">self</span>) -&gt; <span class="t">Pair</span>[B, A] = <span class="t">Pair</span>(.second, .first)
 }
 
 <span class="c">// A weave can be generic too.</span>
 <span class="k">weft</span> <span class="t">Twice</span> {
-    <span class="k">fun</span> twice(<span class="k">self</span>) -&gt; <span class="t">String</span>
+    <span class="k">fun</span> <span class="f">twice</span>(<span class="k">self</span>) -&gt; <span class="t">String</span>
 }
 
 <span class="k">weave</span>[T: <span class="t">Show</span>] <span class="t">Twice</span> <span class="k">into</span> <span class="t">List</span>[T] {
-    <span class="k">fun</span> twice(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"{</span><span class="k">self</span><span class="s">}{</span><span class="k">self</span><span class="s">}"</span>
+    <span class="k">fun</span> <span class="f">twice</span>(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"</span><span class="h">{</span><span class="k">self</span><span class="h">}</span><span class="h">{</span><span class="k">self</span><span class="h">}</span><span class="s">"</span>
 }
 
 <span class="c">// A weft used as a parameter type is an implicit generic.</span>
-<span class="k">fun</span> show_all(xs: [<span class="t">Show</span>]) -&gt; <span class="t">String</span> = xs.map(x =&gt; <span class="s">"&lt;{</span>x<span class="s">}&gt;"</span>).join(<span class="s">""</span>)
+<span class="k">fun</span> <span class="f">show_all</span>(xs: [<span class="t">Show</span>]) -&gt; <span class="t">String</span> = xs.<span class="f">map</span>(x =&gt; <span class="s">"&lt;</span><span class="h">{</span>x<span class="h">}</span><span class="s">&gt;"</span>).<span class="f">join</span>(<span class="s">""</span>)
 
-<span class="k">fun</span> main() {
-    print(largest([<span class="n">3</span>, <span class="n">9</span>, <span class="n">4</span>]))
-    print(largest([<span class="s">"pear"</span>, <span class="s">"apple"</span>]))
-    print(largest[i32]([]))                  <span class="c">// explicit type arguments use brackets</span>
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">print</span>(<span class="f">largest</span>([<span class="n">3</span>, <span class="n">9</span>, <span class="n">4</span>]))
+    <span class="f">print</span>(<span class="f">largest</span>([<span class="s">"pear"</span>, <span class="s">"apple"</span>]))
+    <span class="f">print</span>(largest[i32]([]))                  <span class="c">// explicit type arguments use brackets</span>
 
     <span class="k">let</span> p = <span class="t">Pair</span>(<span class="n">1</span>, <span class="s">"one"</span>)
-    print(<span class="s">"{</span>p.swap():?<span class="s">}"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>p.<span class="f">swap</span>():?<span class="h">}</span><span class="s">"</span>)
 
     <span class="k">let</span> xs: <span class="t">List</span>[i32] = [<span class="n">1</span>, <span class="n">2</span>]
-    print(xs.twice())
-    print(show_all([<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]))
+    <span class="f">print</span>(xs.<span class="f">twice</span>())
+    <span class="f">print</span>(<span class="f">show_all</span>([<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]))
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>9
 pear
@@ -96,46 +114,46 @@ Pair(first: "one", second: 1)
 &lt;1&gt;&lt;2&gt;&lt;3&gt;</code></pre></div>
 </div>
 <ul><li><strong>Generic warps</strong> (<code>Pair[A, B]</code>) and their methods are compiled per list of arguments too.</li><li><strong>Generic weaves</strong> (<code>weave[T: Show] Twice into List[T]</code>) work the same way.</li><li><strong>Wefts as parameter types are implicit generics.</strong> <code>fun show_all(xs: [Show])</code> means <code>fun show_all[T: Show](xs: [T])</code>, and each use has static dispatch.</li><li>Value parameters (<code>const N: usize</code>) work too: see <a href="const-params.html">Const parameters</a>.</li><li>Generic wefts (<code>weft From[T]</code>) are not supported yet (<a href="diagnostics.html#U0102">U0102</a>).</li></ul>
-<h2 id="any-w"><code>any W</code></h2>
+<h2 id="any-w"><code>any W</code><a class="anchor" href="#any-w" aria-label="Link to this section">#</a></h2>
 <p><code>any Widget</code> is a value of some type that weaves <code>Widget</code>. Calls on it go through a table at run time, and a type test (<code>w is l: Label</code>) recovers the concrete type. A value converts to <code>any W</code> where one is expected, and an <code>any</code> of several wefts (<code>any (Widget + Show)</code>) can be used as an <code>any</code> of fewer.</p>
-<div class="sample" id="sample-generics_any">
-<div class="sample-head"><span class="file">samples/generics_any.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-generics_any" data-sample="generics_any" data-mode="run" data-file="generics_any.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>generics_any.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="k">weft</span> <span class="t">Widget</span> {
-    <span class="k">fun</span> name(<span class="k">self</span>) -&gt; <span class="t">String</span>
-    <span class="k">fun</span> width(<span class="k">self</span>) -&gt; u16 = <span class="n">1</span>
+    <span class="k">fun</span> <span class="f">name</span>(<span class="k">self</span>) -&gt; <span class="t">String</span>
+    <span class="k">fun</span> <span class="f">width</span>(<span class="k">self</span>) -&gt; u16 = <span class="n">1</span>
 }
 
 <span class="k">warp</span> <span class="t">Label</span>: <span class="t">Widget</span>, <span class="t">Show</span> {
     text: <span class="t">String</span>
-    <span class="k">fun</span> name(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"label '{</span>.text<span class="s">}'"</span>
-    <span class="k">fun</span> width(<span class="k">self</span>) -&gt; u16 = .text.len() <span class="k">as</span> u16
+    <span class="k">fun</span> <span class="f">name</span>(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"label '</span><span class="h">{</span>.text<span class="h">}</span><span class="s">'"</span>
+    <span class="k">fun</span> <span class="f">width</span>(<span class="k">self</span>) -&gt; u16 = .text.<span class="f">len</span>() <span class="k">as</span> u16
 }
 
 <span class="k">warp</span> <span class="t">Spacer</span>: <span class="t">Widget</span> {
-    <span class="k">fun</span> name(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"spacer"</span>
+    <span class="k">fun</span> <span class="f">name</span>(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"spacer"</span>
 }
 
 <span class="c">// Several wefts at once: a value that is both.</span>
-<span class="k">fun</span> describe(w: <span class="k">any</span> (<span class="t">Widget</span> + <span class="t">Show</span>)) -&gt; <span class="t">String</span> = <span class="s">"{</span>w.name()<span class="s">} = {</span>w<span class="s">}"</span>
+<span class="k">fun</span> <span class="f">describe</span>(w: <span class="k">any</span> (<span class="t">Widget</span> + <span class="t">Show</span>)) -&gt; <span class="t">String</span> = <span class="s">"</span><span class="h">{</span>w.<span class="f">name</span>()<span class="h">}</span><span class="s"> = </span><span class="h">{</span>w<span class="h">}</span><span class="s">"</span>
 
-<span class="k">fun</span> main() {
+<span class="k">fun</span> <span class="f">main</span>() {
     <span class="c">// `any Widget` holds a value of some type that weaves Widget,</span>
     <span class="c">// and calls go through a table at run time.</span>
     <span class="k">let</span> ui: <span class="t">List</span>[<span class="k">any</span> <span class="t">Widget</span>] = [<span class="t">Label</span>(<span class="s">"hi"</span>), <span class="t">Spacer</span>(), <span class="t">Label</span>(<span class="s">"there"</span>)]
     <span class="k">var</span> total: u16 = <span class="n">0</span>
     <span class="k">for</span> w <span class="k">in</span> ui {
-        print(w.name())
-        total += w.width()
+        <span class="f">print</span>(w.<span class="f">name</span>())
+        total += w.<span class="f">width</span>()
 
         <span class="c">// A type test.</span>
         <span class="k">if</span> w <span class="k">is</span> l: <span class="t">Label</span> {
-            print(<span class="s">"  a label with {</span>l.text.len()<span class="s">} letters"</span>)
+            <span class="f">print</span>(<span class="s">"  a label with </span><span class="h">{</span>l.text.<span class="f">len</span>()<span class="h">}</span><span class="s"> letters"</span>)
         }
     }
-    print(total)
-    print(describe(<span class="t">Label</span>(<span class="s">"x"</span>)))
+    <span class="f">print</span>(total)
+    <span class="f">print</span>(<span class="f">describe</span>(<span class="t">Label</span>(<span class="s">"x"</span>)))
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>label 'hi'
   a label with 2 letters
@@ -146,12 +164,12 @@ label 'there'
 label 'x' = Label(text: "x")</code></pre></div>
 </div>
 <p>Use a weft as a parameter type when the caller knows the type and you want static dispatch, and <code>any</code> when a list has to hold values of different types.</p>
-<h2 id="where-next">Where next</h2>
+<h2 id="where-next">Where next<a class="anchor" href="#where-next" aria-label="Link to this section">#</a></h2>
 <p><a href="collections.html">Collections and streams</a> uses generics all over.</p>
-<div class="pager">
-<a href="types.html">&larr; Warps, wefts and weaves</a>
-<a href="collections.html">Collections and streams &rarr;</a>
-</div>
+<nav class="pager" aria-label="Chapters">
+<a class="prev" href="types.html"><span class="dir">&larr; Chapter 3</span>Warps, wefts and weaves</a>
+<a class="next" href="collections.html"><span class="dir">Chapter 5 &rarr;</span>Collections and streams</a>
+</nav>
 </main>
 </div>
 </body>

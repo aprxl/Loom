@@ -1,42 +1,153 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="no-js">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Loom docs</title>
+<meta name="color-scheme" content="dark">
+<title>Loom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="style.css">
+<script src="weave.js" defer></script>
+<script src="play/play.js" defer></script>
 </head>
 <body>
+<header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
+<rect x="6" y="3" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="6" y="24" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
+<path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
+<path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="lang/index.html">The book</a><a href="std/index.html">Library</a><a class="wide" href="lang/diagnostics.html">Codes</a><a class="play-link" href="playground.html">Playground</a></nav></header>
 <div class="layout">
-<nav class="sidebar">
-<a class="brand" href="index.html">Loom <span class="dim">docs</span></a>
-<ul class="sections">
-<li><a href="lang/index.html">Language</a></li>
-<li><a href="std/index.html">Standard library</a></li>
+<nav class="sidebar" aria-label="Contents">
+<div class="group">
+<h3>The book</h3>
+<ul class="beads">
+<li><a href="lang/index.html" data-chapter="index"><span class="num"></span><span>Welcome to Loom</span></a></li>
+<li><a href="lang/start.html" data-chapter="start"><span class="num">1</span><span>Getting started</span></a></li>
+<li><a href="lang/values.html" data-chapter="values"><span class="num">2</span><span>Values and control flow</span></a></li>
+<li><a href="lang/types.html" data-chapter="types"><span class="num">3</span><span>Warps, wefts and weaves</span></a></li>
+<li><a href="lang/generics.html" data-chapter="generics"><span class="num">4</span><span>Generics and <code>any</code></span></a></li>
+<li><a href="lang/collections.html" data-chapter="collections"><span class="num">5</span><span>Collections and streams</span></a></li>
+<li><a href="lang/errors.html" data-chapter="errors"><span class="num">6</span><span>Optionals and errors</span></a></li>
+<li><a href="lang/ownership.html" data-chapter="ownership"><span class="num">7</span><span>Moves, <code>once</code> and <code>defer</code></span></a></li>
+<li><a href="lang/memory.html" data-chapter="memory"><span class="num">8</span><span>Pointers, spools and <code>given</code></span></a></li>
+<li><a href="lang/gauges.html" data-chapter="gauges"><span class="num">9</span><span>Gauges</span></a></li>
+<li><a href="lang/shuttles.html" data-chapter="shuttles"><span class="num">10</span><span>Shuttles</span></a></li>
+<li><a href="lang/compile-time.html" data-chapter="compile-time"><span class="num">11</span><span>Compile-time code</span></a></li>
+<li><a href="lang/const-params.html" data-chapter="const-params"><span class="num">12</span><span>Const parameters and control flow</span></a></li>
+<li><a href="lang/reflection.html" data-chapter="reflection"><span class="num">13</span><span>Reflection</span></a></li>
+<li><a href="lang/tests.html" data-chapter="tests"><span class="num">14</span><span>Tests</span></a></li>
+<li><a href="lang/threads.html" data-chapter="threads"><span class="num">15</span><span>Threads</span></a></li>
+<li><a href="lang/not-yet.html" data-chapter="not-yet"><span class="num">A</span><span>Not supported yet</span></a></li>
+</ul></div>
+<div class="group">
+<h3>Also</h3>
+<ul class="plain-list">
 <li><a href="lang/diagnostics.html">Diagnostic codes</a></li>
-</ul>
+<li><a href="playground.html">Playground</a></li>
+<li><a href="std/index.html">Standard library</a></li>
+</ul></div>
 </nav>
-<main>
+<main class="weave">
+<section class="hero">
+<span class="chapter-no">a language for weaving programs</span>
 <h1>Loom</h1>
-<p class="summary">Data is the warp. Behavior is the weft. Programs are woven.</p>
-<p>Loom is a statically typed language with no garbage collector, built around one idea:
-data and behavior are separate threads, and you weave them together. Today a Rust
-compiler turns Loom into Lua 5.4 and runs it. These pages describe what works now.</p>
+<p class="tagline">Data is the <em>warp</em>. Behavior is the <span class="w2">weft</span>. Programs are <span class="w3">woven</span>.</p>
+<svg class="hero-weave" viewBox="0 0 560 120" role="img" aria-label="A thread woven over and under six warp threads">
+<defs><linearGradient id="weft" x1="0" x2="1"><stop offset="0" stop-color="#ee7a5f"/><stop offset=".5" stop-color="#f3bd55"/><stop offset="1" stop-color="#b7c56f"/></linearGradient></defs>
+<g stroke-linecap="round">
+<line x1="70" y1="8" x2="70" y2="112" stroke="#8fb6d8" stroke-width="9" opacity=".9"/>
+<line x1="150" y1="8" x2="150" y2="112" stroke="#ec86ad" stroke-width="9" opacity=".9"/>
+<line x1="230" y1="8" x2="230" y2="112" stroke="#79c6b0" stroke-width="9" opacity=".9"/>
+<line x1="310" y1="8" x2="310" y2="112" stroke="#a7a1ec" stroke-width="9" opacity=".9"/>
+<line x1="390" y1="8" x2="390" y2="112" stroke="#f59d57" stroke-width="9" opacity=".9"/>
+<line x1="470" y1="8" x2="470" y2="112" stroke="#b7c56f" stroke-width="9" opacity=".9"/>
+<line x1="550" y1="8" x2="550" y2="112" stroke="#8fb6d8" stroke-width="9" opacity=".9"/>
+<path class="weft-under" d="M10 60 C 60 30, 80 30, 120 60 S 180 90, 220 60 S 280 30, 320 60 S 380 90, 420 60 S 480 30, 550 60" fill="none" stroke="url(#weft)" stroke-width="7"/>
+<line x1="150" y1="44" x2="150" y2="76" stroke="#1b1511" stroke-width="13"/><line x1="150" y1="40" x2="150" y2="80" stroke="#ec86ad" stroke-width="9"/>
+<line x1="310" y1="44" x2="310" y2="76" stroke="#1b1511" stroke-width="13"/><line x1="310" y1="40" x2="310" y2="80" stroke="#a7a1ec" stroke-width="9"/>
+<line x1="470" y1="44" x2="470" y2="76" stroke="#1b1511" stroke-width="13"/><line x1="470" y1="40" x2="470" y2="80" stroke="#b7c56f" stroke-width="9"/>
+</g>
+</svg>
+<p>Loom is a statically typed language with no garbage collector. You describe data with
+<strong>warps</strong>, behavior with <strong>wefts</strong>, and join them with <strong>weaves</strong>.
+It compiles to Treadle, its own fast virtual machine, and to Lua.</p>
+<div class="cta"><a class="primary" href="lang/index.html">Start reading the book</a>
+<a class="secondary" href="playground.html">Open the playground</a>
+<a class="secondary" href="std/index.html">Browse the library</a></div>
+</section>
+<h2 id="try-it">Go on, change it</h2>
+<p>Every program in these docs runs right here in your browser, on the real compiler built for
+WebAssembly. Edit this one and press <strong>Run</strong> (or <code>Ctrl</code>+<code>Enter</code>).</p>
+<div class="sample" id="sample-landing_hello" data-sample="landing_hello" data-mode="run" data-file="landing_hello.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>landing_hello.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">// A warp is data.</span>
+<span class="k">warp</span> <span class="t">Yarn</span>: <span class="t">Show</span> {
+    color: <span class="t">String</span>
+    meters: f64
+}
+
+<span class="c">// A weft is behavior...</span>
+<span class="k">weft</span> <span class="t">Knit</span> {
+    <span class="k">fun</span> <span class="f">rows</span>(<span class="k">self</span>) -&gt; i64
+}
+
+<span class="c">// ...and a weave joins the two.</span>
+<span class="k">weave</span> <span class="t">Knit</span> <span class="k">into</span> <span class="t">Yarn</span> {
+    <span class="k">fun</span> <span class="f">rows</span>(<span class="k">self</span>) -&gt; i64 = (.meters * <span class="n">4.0</span>) <span class="k">as</span> i64
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> basket = [<span class="t">Yarn</span>(<span class="s">"madder red"</span>, <span class="n">12.5</span>), <span class="t">Yarn</span>(<span class="s">"weld yellow"</span>, <span class="n">3</span>), <span class="t">Yarn</span>(<span class="s">"woad blue"</span>, <span class="n">7.25</span>)]
+    <span class="k">for</span> y <span class="k">in</span> basket {
+        <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>y.color:&lt;<span class="n">12</span><span class="h">}</span><span class="s"> </span><span class="h">{</span>y.meters:&gt;<span class="n">6.2</span><span class="h">}</span><span class="s"> m  -&gt;  </span><span class="h">{</span>y.<span class="f">rows</span>()<span class="h">}</span><span class="s"> rows"</span>)
+    }
+    <span class="k">let</span> total = basket.<span class="f">map</span>(_.meters).<span class="f">sum</span>()
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>total<span class="h">}</span><span class="s"> meters in the basket"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>madder red    12.50 m  -&gt;  50 rows
+weld yellow    3.00 m  -&gt;  12 rows
+woad blue      7.25 m  -&gt;  29 rows
+22.75 meters in the basket</code></pre></div>
+</div>
+<h2 id="the-book">The book</h2>
+<p>A tour of the language from the first <code>print</code> to threads and compile-time code,
+one feature per section, each next to what Rust, Go, Swift, Python and friends do instead.</p>
 <div class="cards two">
-<a class="card" href="lang/index.html"><span class="name">Language</span>
-<span class="desc">What the compiler runs today, with samples that are run against it: types, errors, ownership, shuttles, and compile-time code. Also what doesn't work yet.</span>
-<span class="count">16 pages</span></a>
-<a class="card" href="std/index.html"><span class="name">Standard library</span>
-<span class="desc">Every <code>std</code> module and item, copied from the doc comments in <code>runtime/std</code>.</span>
+<a class="card" href="lang/index.html"><span class="name">· &middot; Welcome to Loom</span><span class="desc">What Loom is, how this book works, and how to get the most out of its live samples.</span></a>
+<a class="card" href="lang/start.html"><span class="name">1 &middot; Getting started</span><span class="desc">A first program, the shape of a Loom file, and the <code>loom</code> command that runs it.</span></a>
+<a class="card" href="lang/values.html"><span class="name">2 &middot; Values and control flow</span><span class="desc">Numbers, text, <code>if</code>, <code>match</code>, loops, lambdas, and bit patterns.</span></a>
+<a class="card" href="lang/types.html"><span class="name">3 &middot; Warps, wefts and weaves</span><span class="desc">Data types, behavior types, and how they are joined.</span></a>
+<a class="card" href="lang/generics.html"><span class="name">4 &middot; Generics and <code>any</code></span><span class="desc">Type parameters checked per instance, wefts as parameter types, and dynamic dispatch.</span></a>
+<a class="card" href="lang/collections.html"><span class="name">5 &middot; Collections and streams</span><span class="desc">Arrays, lists, slices, maps, sets, and lazy streams.</span></a>
+<a class="card" href="lang/errors.html"><span class="name">6 &middot; Optionals and errors</span><span class="desc"><code>?T</code>, <code>T ! E</code>, and the <code>?</code> and <code>mend</code> pair.</span></a>
+<a class="card" href="lang/ownership.html"><span class="name">7 &middot; Moves, <code>once</code> and <code>defer</code></span><span class="desc">Who owns a value, what a parameter can do with it, and what runs when a scope ends.</span></a>
+<a class="card" href="lang/memory.html"><span class="name">8 &middot; Pointers, spools and <code>given</code></span><span class="desc">Boxes on the heap, arenas that free everything at once, and values passed down implicitly.</span></a>
+<a class="card" href="lang/gauges.html"><span class="name">9 &middot; Gauges</span><span class="desc">Number types limited to a range or a predicate.</span></a>
+<a class="card" href="lang/shuttles.html"><span class="name">10 &middot; Shuttles</span><span class="desc">Functions that pause, yielding values out and pulling values in.</span></a>
+<a class="card" href="lang/compile-time.html"><span class="name">11 &middot; Compile-time code</span><span class="desc">Constants computed by ordinary code, <code>const</code> expressions, <code>const assert</code>, and the sandbox they run in.</span></a>
+<a class="card" href="lang/const-params.html"><span class="name">12 &middot; Const parameters and control flow</span><span class="desc"><code>const</code> parameters, <code>uint(n)</code>, <code>const if</code>, <code>const for</code>, and <code>target</code>.</span></a>
+<a class="card" href="lang/reflection.html"><span class="name">13 &middot; Reflection</span><span class="desc">What compile-time code learns about a type, and default methods that derive from a type's shape.</span></a>
+<a class="card" href="lang/tests.html"><span class="name">14 &middot; Tests</span><span class="desc"><code>test name() { ... }</code> and <code>loom test</code>.</span></a>
+<a class="card" href="lang/threads.html"><span class="name">15 &middot; Threads</span><span class="desc">Loom blocks, threads that can't outlive them, and what they may share.</span></a>
+<a class="card" href="lang/not-yet.html"><span class="name">A &middot; Not supported yet</span><span class="desc">What the compiler doesn't do, said plainly.</span></a>
+</div>
+<h2 id="reference">Reference</h2>
+<div class="cards two">
+<a class="card" href="std/index.html"><span class="name">The standard library</span>
+<span class="desc">Every <code>std</code> module, type and function, from the doc comments in <code>runtime/std</code>.</span>
 <span class="count">31 modules</span></a>
 <a class="card" href="lang/diagnostics.html"><span class="name">Diagnostic codes</span>
-<span class="desc">Every error code the compiler reports, in one table, with what it means.</span>
+<span class="desc">Every error code the compiler reports, what it means, and where a chapter shows it.</span>
 <span class="count">99 codes</span></a>
-<a class="card" href="lang/not-yet.html"><span class="name">Not supported yet</span>
-<span class="desc">Reflection, threads, spools, <code>given</code>, <code>unsafe</code>, and the rest of the list.</span>
-<span class="count">plainly listed</span></a>
 </div>
-<footer>Generated by <code>python docs/gen.py</code>. Everything here is static HTML with relative links: it works offline, and from <code>file://</code>.</footer>
+<footer>Generated by <code>python docs/gen.py</code>. Everything here is static and works offline, from
+<code>file://</code>; <code>loom docs</code> opens it.</footer>
 </main>
 </div>
 </body>

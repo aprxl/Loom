@@ -1,52 +1,70 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="no-js">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>Reflection · Loom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../style.css">
+<script src="../weave.js" defer></script>
+<script src="../play/play.js" defer></script>
 </head>
-<body>
+<body data-chapter="reflection">
+<header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
+<rect x="6" y="3" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="6" y="24" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
+<path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
+<path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a class="current" href="../lang/index.html">The book</a><a href="../std/index.html">Library</a><a class="wide" href="../lang/diagnostics.html">Codes</a><a class="play-link" href="../playground.html">Playground</a></nav></header>
 <div class="layout">
-<nav class="sidebar">
-<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
-<ul class="sections">
-<li><a class="current" href="../lang/index.html">Language</a></li>
+<nav class="sidebar" aria-label="Contents">
+<div class="group">
+<h3>The book</h3>
+<ul class="beads">
+<li><a href="index.html" data-chapter="index"><span class="num"></span><span>Welcome to Loom</span></a></li>
+<li><a href="start.html" data-chapter="start"><span class="num">1</span><span>Getting started</span></a></li>
+<li><a href="values.html" data-chapter="values"><span class="num">2</span><span>Values and control flow</span></a></li>
+<li><a href="types.html" data-chapter="types"><span class="num">3</span><span>Warps, wefts and weaves</span></a></li>
+<li><a href="generics.html" data-chapter="generics"><span class="num">4</span><span>Generics and <code>any</code></span></a></li>
+<li><a href="collections.html" data-chapter="collections"><span class="num">5</span><span>Collections and streams</span></a></li>
+<li><a href="errors.html" data-chapter="errors"><span class="num">6</span><span>Optionals and errors</span></a></li>
+<li><a href="ownership.html" data-chapter="ownership"><span class="num">7</span><span>Moves, <code>once</code> and <code>defer</code></span></a></li>
+<li><a href="memory.html" data-chapter="memory"><span class="num">8</span><span>Pointers, spools and <code>given</code></span></a></li>
+<li><a href="gauges.html" data-chapter="gauges"><span class="num">9</span><span>Gauges</span></a></li>
+<li><a href="shuttles.html" data-chapter="shuttles"><span class="num">10</span><span>Shuttles</span></a></li>
+<li><a href="compile-time.html" data-chapter="compile-time"><span class="num">11</span><span>Compile-time code</span></a></li>
+<li><a href="const-params.html" data-chapter="const-params"><span class="num">12</span><span>Const parameters and control flow</span></a></li>
+<li><a class="current" aria-current="page" href="reflection.html" data-chapter="reflection"><span class="num">13</span><span>Reflection</span></a></li>
+<li><a href="tests.html" data-chapter="tests"><span class="num">14</span><span>Tests</span></a></li>
+<li><a href="threads.html" data-chapter="threads"><span class="num">15</span><span>Threads</span></a></li>
+<li><a href="not-yet.html" data-chapter="not-yet"><span class="num">A</span><span>Not supported yet</span></a></li>
+</ul></div>
+<div class="group">
+<h3>Also</h3>
+<ul class="plain-list">
+<li><a href="diagnostics.html">Diagnostic codes</a></li>
+<li><a href="../playground.html">Playground</a></li>
 <li><a href="../std/index.html">Standard library</a></li>
-<li><a href="../lang/diagnostics.html">Diagnostic codes</a></li>
-</ul>
-<h3>Language</h3>
-<ul>
-<li><a href="index.html">Overview</a></li>
-<li><a href="start.html">Getting started</a></li>
-<li><a href="values.html">Values and control flow</a></li>
-<li><a href="types.html">Warps, wefts and weaves</a></li>
-<li><a href="generics.html">Generics and <code>any</code></a></li>
-<li><a href="collections.html">Collections and streams</a></li>
-<li><a href="errors.html">Optionals and errors</a></li>
-<li><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
-<li><a href="gauges.html">Gauges</a></li>
-<li><a href="shuttles.html">Shuttles</a></li>
-<li><a href="compile-time.html">Compile-time code</a></li>
-<li><a href="const-params.html">Const parameters and control flow</a></li>
-<li><a class="current" href="reflection.html">Reflection</a></li>
-<li><a href="tests.html">Tests</a></li>
-<li><a href="threads.html">Threads</a></li>
-<li><a href="not-yet.html">Not supported yet</a></li>
-</ul>
+</ul></div>
 </nav>
-<main>
-<div class="crumb"><a href="index.html">Language</a> / Reflection</div>
+<main class="weave">
+<div class="chapter-head">
+<span class="chapter-no">Chapter 13</span>
 <h1>Reflection</h1>
 <p class="summary">What compile-time code learns about a type, and default methods that derive from a type's shape.</p>
+</div>
 <p>Compile-time code can ask a type about itself. The answers are known while compiling, like a <code>const</code> parameter, so <code>const if</code> and <code>const for</code> can use them, and nothing reflective is left in the program. The types involved are in <a href="../std/modules/meta.html">std.meta</a>.</p>
-<h2 id="asking-a-type">Asking a type</h2>
+<h2 id="asking-a-type">Asking a type<a class="anchor" href="#asking-a-type" aria-label="Link to this section">#</a></h2>
 <table class="plain"><thead><tr><th>Expression</th><th>Gives you</th></tr></thead><tbody><tr><td><code>T.name</code></td><td>its name, <code>"Point"</code> (a warp's, without its arguments)</td></tr><tr><td><code>T.kind</code></td><td>a case of <code>Kind</code>: <code>.Record</code>, <code>.Sum</code>, <code>.Int</code>, <code>.Str</code>, <code>.List</code>, …</td></tr><tr><td><code>T.fields</code></td><td>a record's fields, a list of <code>Field</code>s</td></tr><tr><td><code>T.cases</code></td><td>a sum's cases, a list of <code>Case</code>s</td></tr><tr><td><code>T.size</code>, <code>T.align</code></td><td>how many bytes a value takes, and what its address is a multiple of</td></tr><tr><td><code>f.name</code>, <code>f.is_pub</code>, <code>f.offset</code></td><td>a field's name, whether it's <code>pub</code>, and where it starts in the value, in bytes</td></tr><tr><td><code>c.name</code>, <code>c.fields</code></td><td>a case's name, and its payload's fields</td></tr><tr><td><code>.len()</code>, <code>.is_empty()</code></td><td>of <code>T.fields</code>, <code>T.cases</code> or <code>c.fields</code></td></tr></tbody></table>
 <p>Two things use them in code that runs:</p>
 <ul><li><code>v.(f)</code> is <code>v</code>'s field <code>f</code>, where <code>f</code> is a <code>Field</code>. It reads and assigns like <code>v.x</code>.</li><li><code>v is .(c)</code> tests whether <code>v</code> is case <code>c</code>, and <code>v.(c).(f)</code> reads a field of that case's payload. Read it inside <code>if v is .(c)</code>: on any other case it unravels.</li></ul>
 <p><code>const for f in T.fields</code> writes its body out once per field, so <code>describe</code> below turns into straight-line code for each type it's called with.</p>
-<div class="sample" id="sample-refl_describe">
-<div class="sample-head"><span class="file">samples/refl_describe.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-refl_describe" data-sample="refl_describe" data-mode="run" data-file="refl_describe.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>refl_describe.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="k">warp</span> <span class="t">Point</span>: <span class="t">Show</span> {
@@ -60,27 +78,27 @@
 }
 
 <span class="k">fun</span> describe[T](v: T) {
-    print(<span class="s">"{</span>T.name<span class="s">} is a {</span>T.kind<span class="s">}"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>T.name<span class="h">}</span><span class="s"> is a </span><span class="h">{</span>T.kind<span class="h">}</span><span class="s">"</span>)
     <span class="k">const</span> <span class="k">if</span> T.kind == .<span class="t">Record</span> {
         <span class="k">const</span> <span class="k">for</span> f <span class="k">in</span> T.fields {
-            print(<span class="s">"  {</span>f.name<span class="s">} = {</span>v.(f)<span class="s">}"</span>)
+            <span class="f">print</span>(<span class="s">"  </span><span class="h">{</span>f.name<span class="h">}</span><span class="s"> = </span><span class="h">{</span>v.(f)<span class="h">}</span><span class="s">"</span>)
         }
     } <span class="k">else</span> <span class="k">if</span> T.kind == .<span class="t">Sum</span> {
         <span class="k">const</span> <span class="k">for</span> c <span class="k">in</span> T.cases {
             <span class="k">if</span> v <span class="k">is</span> .(c) {
-                print(<span class="s">"  case {</span>c.name<span class="s">}"</span>)
+                <span class="f">print</span>(<span class="s">"  case </span><span class="h">{</span>c.name<span class="h">}</span><span class="s">"</span>)
                 <span class="k">const</span> <span class="k">for</span> f <span class="k">in</span> c.fields {
-                    print(<span class="s">"    {</span>f.name<span class="s">} = {</span>v.(c).(f)<span class="s">}"</span>)
+                    <span class="f">print</span>(<span class="s">"    </span><span class="h">{</span>f.name<span class="h">}</span><span class="s"> = </span><span class="h">{</span>v.(c).(f)<span class="h">}</span><span class="s">"</span>)
                 }
             }
         }
     }
 }
 
-<span class="k">fun</span> main() {
-    describe(<span class="t">Point</span>(<span class="n">1</span>, <span class="n">2</span>))
-    describe(<span class="t">Shape</span>.<span class="t">Circle</span>(r: <span class="n">1.5</span>))
-    describe(<span class="t">Shape</span>.<span class="t">Dot</span>)
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">describe</span>(<span class="t">Point</span>(<span class="n">1</span>, <span class="n">2</span>))
+    <span class="f">describe</span>(<span class="t">Shape</span>.<span class="t">Circle</span>(r: <span class="n">1.5</span>))
+    <span class="f">describe</span>(<span class="t">Shape</span>.<span class="t">Dot</span>)
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>Point is a Record
   x = 1
@@ -91,20 +109,20 @@ Shape is a Sum
 Shape is a Sum
   case Dot</code></pre></div>
 </div>
-<h2 id="derive-is-a-default-method">Derive is a default method</h2>
+<h2 id="derive-is-a-default-method">Derive is a default method<a class="anchor" href="#derive-is-a-default-method" aria-label="Link to this section">#</a></h2>
 <p>Loom has no derive macros. A weft gives a default method that looks at <code>Self</code>, and every warp that lists the weft gets that method, worked out for its own fields. <code>examples/compile_time.loom</code> writes <code>ToJson</code> this way.</p>
-<div class="sample" id="sample-refl_derive">
-<div class="sample-head"><span class="file">samples/refl_derive.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-refl_derive" data-sample="refl_derive" data-mode="run" data-file="refl_derive.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>refl_derive.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="c">/// Anything that can list its fields. The default body works for any</span>
 <span class="c">/// record: `const for` writes out one line per field.</span>
 <span class="k">weft</span> <span class="t">Fields</span> {
-    <span class="k">fun</span> fields(<span class="k">self</span>) -&gt; <span class="t">String</span> {
+    <span class="k">fun</span> <span class="f">fields</span>(<span class="k">self</span>) -&gt; <span class="t">String</span> {
         <span class="k">var</span> out = <span class="t">String</span>()
-        <span class="k">const</span> <span class="k">for</span> (i, f) <span class="k">in</span> <span class="k">Self</span>.fields.indexed() {
-            <span class="k">const</span> <span class="k">if</span> i &gt; <span class="n">0</span> { out.push_str(<span class="s">", "</span>) }
-            out.push_str(<span class="s">"{</span>f.name<span class="s">}={</span><span class="k">self</span>.(f)<span class="s">}"</span>)
+        <span class="k">const</span> <span class="k">for</span> (i, f) <span class="k">in</span> <span class="k">Self</span>.fields.<span class="f">indexed</span>() {
+            <span class="k">const</span> <span class="k">if</span> i &gt; <span class="n">0</span> { out.<span class="f">push_str</span>(<span class="s">", "</span>) }
+            out.<span class="f">push_str</span>(<span class="s">"</span><span class="h">{</span>f.name<span class="h">}</span><span class="s">=</span><span class="h">{</span><span class="k">self</span>.(f)<span class="h">}</span><span class="s">"</span>)
         }
         out
     }
@@ -113,18 +131,18 @@ Shape is a Sum
 <span class="k">warp</span> <span class="t">Point</span>: <span class="t">Fields</span> { x: i32, y: i32 }
 <span class="k">warp</span> <span class="t">User</span>: <span class="t">Fields</span> { name: <span class="t">String</span>, age: u8 }
 
-<span class="k">fun</span> main() {
-    print(<span class="t">Point</span>(<span class="n">3</span>, <span class="n">4</span>).fields())
-    print(<span class="t">User</span>(name: <span class="s">"Ada"</span>, age: <span class="n">36</span>).fields())
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">print</span>(<span class="t">Point</span>(<span class="n">3</span>, <span class="n">4</span>).<span class="f">fields</span>())
+    <span class="f">print</span>(<span class="t">User</span>(name: <span class="s">"Ada"</span>, age: <span class="n">36</span>).<span class="f">fields</span>())
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>x=3, y=4
 name=Ada, age=36</code></pre></div>
 </div>
 <p>Writing the method yourself replaces the default, like any other default method.</p>
-<h2 id="sizes">Sizes</h2>
+<h2 id="sizes">Sizes<a class="anchor" href="#sizes" aria-label="Link to this section">#</a></h2>
 <p><code>T.size</code>, <code>T.align</code> and <code>f.offset</code> are how values are laid out in memory: fields ordered by alignment (the largest first), cases sharing space behind a tag, and <code>?T</code> costing nothing when <code>T</code> has bit patterns it never uses. Both backends give the same answers.</p>
-<div class="sample" id="sample-refl_layout">
-<div class="sample-head"><span class="file">samples/refl_layout.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-refl_layout" data-sample="refl_layout" data-mode="run" data-file="refl_layout.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>refl_layout.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="k">warp</span> <span class="t">Header</span> { flag: u8, len: u32, id: u16 }
@@ -137,13 +155,13 @@ name=Ada, age=36</code></pre></div>
 
 <span class="k">type</span> <span class="t">MaybeToken</span> = ?<span class="t">Token</span>
 
-<span class="k">fun</span> main() {
-    print(<span class="s">"Header: {</span><span class="t">Header</span>.size<span class="s">} bytes, aligned to {</span><span class="t">Header</span>.align<span class="s">}"</span>)
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">print</span>(<span class="s">"Header: </span><span class="h">{</span><span class="t">Header</span>.size<span class="h">}</span><span class="s"> bytes, aligned to </span><span class="h">{</span><span class="t">Header</span>.align<span class="h">}</span><span class="s">"</span>)
     <span class="k">const</span> <span class="k">for</span> f <span class="k">in</span> <span class="t">Header</span>.fields {
-        print(<span class="s">"  {</span>f.name<span class="s">} at {</span>f.offset<span class="s">}"</span>)
+        <span class="f">print</span>(<span class="s">"  </span><span class="h">{</span>f.name<span class="h">}</span><span class="s"> at </span><span class="h">{</span>f.offset<span class="h">}</span><span class="s">"</span>)
     }
-    print(<span class="s">"Token: {</span><span class="t">Token</span>.size<span class="s">} bytes, ?Token: {</span><span class="t">MaybeToken</span>.size<span class="s">}"</span>)
-    <span class="k">const</span> assert(<span class="t">Header</span>.size == <span class="n">8</span>, <span class="s">"the header changed size"</span>)
+    <span class="f">print</span>(<span class="s">"Token: </span><span class="h">{</span><span class="t">Token</span>.size<span class="h">}</span><span class="s"> bytes, ?Token: </span><span class="h">{</span><span class="t">MaybeToken</span>.size<span class="h">}</span><span class="s">"</span>)
+    <span class="k">const</span> <span class="f">assert</span>(<span class="t">Header</span>.size == <span class="n">8</span>, <span class="s">"the header changed size"</span>)
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>Header: 8 bytes, aligned to 4
   flag at 6
@@ -151,34 +169,34 @@ name=Ada, age=36</code></pre></div>
   id at 4
 Token: 32 bytes, ?Token: 32</code></pre></div>
 </div>
-<h2 id="only-while-compiling">Only while compiling</h2>
+<h2 id="only-while-compiling">Only while compiling<a class="anchor" href="#only-while-compiling" aria-label="Link to this section">#</a></h2>
 <p>A <code>Field</code>, a <code>Case</code> or a list of them has no value when the program runs. Anything read from one does: a name is text, <code>.len()</code> is a number. Keeping the list itself is <a href="diagnostics.html#K0111">K0111</a>.</p>
-<div class="sample" id="sample-refl_err_runtime">
-<div class="sample-head"><span class="file">samples/refl_err_runtime.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0111">K0111</a></span></div>
+<div class="sample" id="sample-refl_err_runtime" data-sample="refl_err_runtime" data-mode="check" data-file="refl_err_runtime.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>refl_err_runtime.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0111">K0111</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="k">warp</span> <span class="t">Point</span> { x: i32, y: i32 }
 
-<span class="k">fun</span> main() {
-    print(<span class="t">Point</span>.fields.len())
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">print</span>(<span class="t">Point</span>.fields.<span class="f">len</span>())
     <span class="k">let</span> fields = <span class="t">Point</span>.fields
 }</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[K0111]: reflection only exists while compiling</span>
 <span class="loc">  --&gt; refl_err_runtime.loom:7:18</span>
-  |
-7 |     let fields = Point.fields
-  |                  ^^^^^^^^^^^^ needed when the program runs
-  |
-  = help: read what you need from it at compile time: `f.name`, `self.(f)`, `const for f in T.fields`
+<span class="gut">  |</span>
+<span class="gut">7 |</span>     let fields = Point.fields
+<span class="gut">  |</span><span class="caret">                  ^^^^^^^^^^^^ needed when the program runs</span>
+<span class="gut">  |</span>
+<span class="loc">  = help: read what you need from it at compile time: `f.name`, `self.(f)`, `const for f in T.fields`</span>
 
 <span class="err">error: refl_err_runtime.loom failed to compile (1 error)</span></code></pre></div>
 </div>
-<h2 id="not-supported-yet">Not supported yet</h2>
+<h2 id="not-supported-yet">Not supported yet<a class="anchor" href="#not-supported-yet" aria-label="Link to this section">#</a></h2>
 <ul><li><code>T.bits</code> (for <code>#layout(bits)</code>), <code>f.ty</code> and <code>T.weaves(W)</code> are <a href="diagnostics.html#U0102">U0102</a>.</li><li>std's <code>Show</code>, <code>Eq</code>, <code>Ord</code> and <code>Hash</code> for warps are still built into the compiler rather than written as default methods with reflection.</li></ul>
-<div class="pager">
-<a href="const-params.html">&larr; Const parameters and control flow</a>
-<a href="tests.html">Tests &rarr;</a>
-</div>
+<nav class="pager" aria-label="Chapters">
+<a class="prev" href="const-params.html"><span class="dir">&larr; Chapter 12</span>Const parameters and control flow</a>
+<a class="next" href="tests.html"><span class="dir">Chapter 14 &rarr;</span>Tests</a>
+</nav>
 </main>
 </div>
 </body>

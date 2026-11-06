@@ -131,11 +131,14 @@ def module_count(mod):
 
 def std_sidebar(modules, current, index=False):
     """`index` is True for docs/std/index.html (modules live one level down)."""
-    here = "std" if index else "std/modules"
     prefix = "modules/" if index else ""
-    entries = [("Overview", "index.html" if index else "../index.html", None)]
-    entries += [(esc(m["name"]), f'{prefix}{m["name"]}.html', m["name"]) for m in modules]
-    return sidebar(here, "std", "Standard library", entries, current)
+    up = "" if index else "../"
+    entries = [("Overview", f"{up}index.html", current is None, None)]
+    entries += [(esc(m["name"]), f'{prefix}{m["name"]}.html', m["name"] == current, None) for m in modules]
+    book = [("The book", f"{up}../lang/index.html", False, None),
+            ("Playground", f"{up}../playground.html", False, None),
+            ("Diagnostic codes", f"{up}../lang/diagnostics.html", False, None)]
+    return sidebar([("Standard library", entries, "mono"), ("Also", book, "plain")])
 
 
 def render_module(mod, modules):

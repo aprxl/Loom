@@ -1,5 +1,6 @@
 title: Not supported yet
 summary: What the compiler doesn't do, said plainly.
+kind: appendix
 ---
 The design in `README.md` and `design/*.md` is bigger than what runs. This is the list of what doesn't run, from `design/lua-backend.md` and from trying it.
 

@@ -1,0 +1,27 @@
+use std.io.print
+
+// A warp is data.
+warp Yarn: Show {
+    color: String
+    meters: f64
+}
+
+// A weft is behavior...
+weft Knit {
+    fun rows(self) -> i64
+}
+
+// ...and a weave joins the two.
+weave Knit into Yarn {
+    fun rows(self) -> i64 = (.meters * 4.0) as i64
+}
+
+fun main() {
+    let basket = [Yarn("madder red", 12.5), Yarn("weld yellow", 3), Yarn("woad blue", 7.25)]
+    for y in basket {
+        print("{y.color:<12} {y.meters:>6.2} m  ->  {y.rows()} rows")
+    }
+    let total = basket.map(_.meters).sum()
+    print("{total} meters in the basket")
+}
+//@ run

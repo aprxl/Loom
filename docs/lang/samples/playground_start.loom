@@ -1,0 +1,11 @@
+use std.io.print
+
+// This is your scrap of cloth: change anything, then press Run.
+fun fib(n: u64) -> u64 = if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+
+fun main() {
+    for n in 0..12 {
+        print("fib({n}) = {fib(n)}")
+    }
+}
+//@ run

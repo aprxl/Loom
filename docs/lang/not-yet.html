@@ -1,103 +1,121 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="no-js">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>Not supported yet · Loom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../style.css">
+<script src="../weave.js" defer></script>
+<script src="../play/play.js" defer></script>
 </head>
-<body>
+<body data-chapter="not-yet">
+<header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
+<rect x="6" y="3" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="6" y="24" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
+<path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
+<path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a class="current" href="../lang/index.html">The book</a><a href="../std/index.html">Library</a><a class="wide" href="../lang/diagnostics.html">Codes</a><a class="play-link" href="../playground.html">Playground</a></nav></header>
 <div class="layout">
-<nav class="sidebar">
-<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
-<ul class="sections">
-<li><a class="current" href="../lang/index.html">Language</a></li>
+<nav class="sidebar" aria-label="Contents">
+<div class="group">
+<h3>The book</h3>
+<ul class="beads">
+<li><a href="index.html" data-chapter="index"><span class="num"></span><span>Welcome to Loom</span></a></li>
+<li><a href="start.html" data-chapter="start"><span class="num">1</span><span>Getting started</span></a></li>
+<li><a href="values.html" data-chapter="values"><span class="num">2</span><span>Values and control flow</span></a></li>
+<li><a href="types.html" data-chapter="types"><span class="num">3</span><span>Warps, wefts and weaves</span></a></li>
+<li><a href="generics.html" data-chapter="generics"><span class="num">4</span><span>Generics and <code>any</code></span></a></li>
+<li><a href="collections.html" data-chapter="collections"><span class="num">5</span><span>Collections and streams</span></a></li>
+<li><a href="errors.html" data-chapter="errors"><span class="num">6</span><span>Optionals and errors</span></a></li>
+<li><a href="ownership.html" data-chapter="ownership"><span class="num">7</span><span>Moves, <code>once</code> and <code>defer</code></span></a></li>
+<li><a href="memory.html" data-chapter="memory"><span class="num">8</span><span>Pointers, spools and <code>given</code></span></a></li>
+<li><a href="gauges.html" data-chapter="gauges"><span class="num">9</span><span>Gauges</span></a></li>
+<li><a href="shuttles.html" data-chapter="shuttles"><span class="num">10</span><span>Shuttles</span></a></li>
+<li><a href="compile-time.html" data-chapter="compile-time"><span class="num">11</span><span>Compile-time code</span></a></li>
+<li><a href="const-params.html" data-chapter="const-params"><span class="num">12</span><span>Const parameters and control flow</span></a></li>
+<li><a href="reflection.html" data-chapter="reflection"><span class="num">13</span><span>Reflection</span></a></li>
+<li><a href="tests.html" data-chapter="tests"><span class="num">14</span><span>Tests</span></a></li>
+<li><a href="threads.html" data-chapter="threads"><span class="num">15</span><span>Threads</span></a></li>
+<li><a class="current" aria-current="page" href="not-yet.html" data-chapter="not-yet"><span class="num">A</span><span>Not supported yet</span></a></li>
+</ul></div>
+<div class="group">
+<h3>Also</h3>
+<ul class="plain-list">
+<li><a href="diagnostics.html">Diagnostic codes</a></li>
+<li><a href="../playground.html">Playground</a></li>
 <li><a href="../std/index.html">Standard library</a></li>
-<li><a href="../lang/diagnostics.html">Diagnostic codes</a></li>
-</ul>
-<h3>Language</h3>
-<ul>
-<li><a href="index.html">Overview</a></li>
-<li><a href="start.html">Getting started</a></li>
-<li><a href="values.html">Values and control flow</a></li>
-<li><a href="types.html">Warps, wefts and weaves</a></li>
-<li><a href="generics.html">Generics and <code>any</code></a></li>
-<li><a href="collections.html">Collections and streams</a></li>
-<li><a href="errors.html">Optionals and errors</a></li>
-<li><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
-<li><a href="gauges.html">Gauges</a></li>
-<li><a href="shuttles.html">Shuttles</a></li>
-<li><a href="compile-time.html">Compile-time code</a></li>
-<li><a href="const-params.html">Const parameters and control flow</a></li>
-<li><a href="reflection.html">Reflection</a></li>
-<li><a href="tests.html">Tests</a></li>
-<li><a href="threads.html">Threads</a></li>
-<li><a class="current" href="not-yet.html">Not supported yet</a></li>
-</ul>
+</ul></div>
 </nav>
-<main>
-<div class="crumb"><a href="index.html">Language</a> / Not supported yet</div>
+<main class="weave">
+<div class="chapter-head">
+<span class="chapter-no">Appendix A</span>
 <h1>Not supported yet</h1>
 <p class="summary">What the compiler doesn't do, said plainly.</p>
+</div>
 <p>The design in <code>README.md</code> and <code>design/*.md</code> is bigger than what runs. This is the list of what doesn't run, from <code>design/lua-backend.md</code> and from trying it.</p>
 <p>Anything not built stops with a <code>U</code> code, and most stop with <a href="diagnostics.html#U0102">U0102</a>, "not implemented yet". The compiler doesn't guess and doesn't miscompile.</p>
-<h2 id="next-in-line">Next in line</h2>
+<h2 id="next-in-line">Next in line<a class="anchor" href="#next-in-line" aria-label="Link to this section">#</a></h2>
 <p>These are planned next, in this order: the rest of threads, then the rest of <code>given</code> and Loom's own VM, Treadle (designed in <code>design/vm.md</code>). Treadle runs everything and is what <code>loom run file.loom</code> uses; <code>--backend lua</code> runs the Lua backend instead. A program over one of its limits (a frame of more than 65 535 registers, say) stops with <a href="diagnostics.html#U0103">U0103</a>.</p>
-<h3 id="threads">Threads</h3>
+<h3 id="threads">Threads<a class="anchor" href="#threads" aria-label="Link to this section">#</a></h3>
 <p><a href="threads.html">Threads</a> run, one at a time: <code>loom { }</code>, <code>thread</code>, <code>.join()</code> and <code>sched_yield()</code>. Not yet: several worker threads at once.</p>
-<h3 id="more-of-given">More of <code>given</code></h3>
+<h3 id="more-of-given">More of <code>given</code><a class="anchor" href="#more-of-given" aria-label="Link to this section">#</a></h3>
 <p><code>given</code> runs (see <a href="ownership.html">Moves</a>). Not yet: leaving a private function's <code>given</code>s to be inferred from what it calls.</p>
-<h2 id="compile-time-code">Compile-time code</h2>
+<h2 id="compile-time-code">Compile-time code<a class="anchor" href="#compile-time-code" aria-label="Link to this section">#</a></h2>
 <p>The standard library's <code>std.sys</code> is not built, and neither are <code>T.bits</code> (which needs <code>#layout(bits)</code>), <code>f.ty</code> or <code>T.weaves(W)</code>:</p>
-<div class="sample" id="sample-nyet_sys">
-<div class="sample-head"><span class="file">samples/nyet_sys.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span></div>
-<pre class="code"><code><span class="k">fun</span> main() {
-    <span class="k">let</span> size = std.sys.page_size()
+<div class="sample" id="sample-nyet_sys" data-sample="nyet_sys" data-mode="check" data-file="nyet_sys.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>nyet_sys.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> size = std.sys.<span class="f">page_size</span>()
 }</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[U0102]: not implemented yet: `std.sys`, the platform's own APIs</span>
 <span class="loc">  --&gt; nyet_sys.loom:2:20</span>
-  |
-2 |     let size = std.sys.page_size()
-  |                    ^^^ not supported by this compiler yet
+<span class="gut">  |</span>
+<span class="gut">2 |</span>     let size = std.sys.page_size()
+<span class="gut">  |</span><span class="caret">                    ^^^ not supported by this compiler yet</span>
 
 <span class="err">error: nyet_sys.loom failed to resolve (1 error)</span></code></pre></div>
 </div>
 <p>Array lengths and gauge bounds must be something the compiler's own evaluator can fold. A call to one of your functions isn't. It's <a href="diagnostics.html#U0102">U0102</a> for an array length and <a href="diagnostics.html#T0103">T0103</a> for a gauge bound.</p>
-<div class="sample" id="sample-nyet_types">
-<div class="sample-head"><span class="file">samples/nyet_types.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span></div>
+<div class="sample" id="sample-nyet_types" data-sample="nyet_types" data-mode="check" data-file="nyet_types.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>nyet_types.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="c">// A type can't depend on the compile-time sandbox yet, only on what the</span>
 <span class="c">// constant folder can work out: literals, constants, arithmetic.</span>
-<span class="k">fun</span> square(n: usize) -&gt; usize = n * n
+<span class="k">fun</span> <span class="f">square</span>(n: usize) -&gt; usize = n * n
 
-<span class="k">const</span> AREA: usize = square(<span class="n">4</span>)
+<span class="k">const</span> AREA: usize = <span class="f">square</span>(<span class="n">4</span>)
 
-<span class="k">fun</span> main() {
+<span class="k">fun</span> <span class="f">main</span>() {
     <span class="k">let</span> cells = [<span class="n">0u8</span>; AREA]
 }</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[U0102]: not implemented yet: array lengths that aren't known at compile time</span>
 <span class="loc">  --&gt; nyet_types.loom:8:23</span>
-  |
-8 |     let cells = [0u8; AREA]
-  |                       ^^^^ not supported by this compiler yet
-  |
-  = note: the type checker grows one milestone at a time; see design/lua-backend.md
+<span class="gut">  |</span>
+<span class="gut">8 |</span>     let cells = [0u8; AREA]
+<span class="gut">  |</span><span class="caret">                       ^^^^ not supported by this compiler yet</span>
+<span class="gut">  |</span>
+<span class="loc">  = note: the type checker grows one milestone at a time; see design/lua-backend.md</span>
 
 <span class="err">error: nyet_types.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
 <p>Also missing:</p>
 <ul><li><code>const fun</code>s that return types (<code>const fun fixed(...) -&gt; type</code>), and anonymous <code>warp { ... }</code> types (<a href="diagnostics.html#U0101">U0101</a>).</li><li><code>break</code> and <code>continue</code> out of a <code>const for</code>.</li><li><code>const</code> parameters that aren't integers or <code>bool</code>.</li><li><code>embed</code> and <code>embed_text</code>, and the <code>bolt.loom</code> manifest.</li></ul>
-<h2 id="memory-and-safety">Memory and safety</h2>
+<h2 id="memory-and-safety">Memory and safety<a class="anchor" href="#memory-and-safety" aria-label="Link to this section">#</a></h2>
 <ul><li>A <code>for</code> loop over a projection that lends many places, and <code>xs[i]</code> through an <code>Index</code> weave.</li><li><code>unsafe</code> blocks, raw pointers (<code>*T</code>), <code>extern "C"</code>, <code>Volatile</code>. <code>#layout(...)</code> is parsed but nothing acts on it.</li><li>User-written <code>Spool</code> weaves.</li><li>Lists, maps and sets in a spool (<code>List[i32]@frame</code>): a <code>String</code> made with <code>.copy()</code> goes in the spool, and a warp in a spool can't hold the others (<a href="diagnostics.html#U0102">U0102</a>).</li></ul>
-<h2 id="types-and-library">Types and library</h2>
+<h2 id="types-and-library">Types and library<a class="anchor" href="#types-and-library" aria-label="Link to this section">#</a></h2>
 <ul><li>Integers wider than 64 bits and <code>f16</code>.</li><li>Generic wefts (<code>weft From[T]</code>).</li><li><code>xs.sorted_by(...)</code> on a list or an array (it takes a stream: <code>xs.take(n).sorted_by(...)</code>, or <code>map.pairs().sorted_by(...)</code>), and other list methods the design mentions that std doesn't declare. <a href="../std/modules/list.html">std.list</a> and <a href="../std/modules/slice.html">std.slice</a> list what exists.</li><li>Reading standard input. <a href="../std/modules/io.html">std.io</a> has <code>print</code> and nothing else.</li><li>A <code>mut self</code> method of a scalar type can't be called through <code>any</code> yet, because the <code>any</code> holds its own copy.</li><li>A union of errors doesn't convert to <code>any Error</code>.</li><li>A warp that writes its own <code>eq</code> and <code>hash</code> is still keyed structurally in a <code>Map</code> or <code>Set</code>.</li></ul>
-<h2 id="running-programs">Running programs</h2>
+<h2 id="running-programs">Running programs<a class="anchor" href="#running-programs" aria-label="Link to this section">#</a></h2>
 <ul><li>Ctrl-C handling (exit status 130), <code>process.exit</code>, an instruction budget for <code>loom run</code>, and running a bundle in an outside Lua (<code>--lua PATH</code>).</li><li>Async I/O and composing shuttles (<code>lexer().feed(parser())</code>) aren't in the design for this version.</li><li>The emitted Lua isn't optimized: checks the compiler could prove unneeded are still emitted. Speed comes later, with Loom's own interpreter.</li></ul>
-<h2 id="the-examples">The examples</h2>
+<h2 id="the-examples">The examples<a class="anchor" href="#the-examples" aria-label="Link to this section">#</a></h2>
 <p><code>examples/tour.loom</code>, <code>examples/widgets.loom</code>, <code>examples/ledger.loom</code>, <code>examples/lexer.loom</code> and <code>examples/chip8.loom</code> compile and run. <code>examples/compile_time.loom</code> fails only at <code>std.sys</code>. <code>examples/calc.loom</code> and <code>examples/parallel.loom</code> run too.</p>
-<div class="pager">
-<a href="threads.html">&larr; Threads</a>
-<a href="diagnostics.html">Diagnostic codes &rarr;</a>
-</div>
+<nav class="pager" aria-label="Chapters">
+<a class="prev" href="threads.html"><span class="dir">&larr; Chapter 15</span>Threads</a>
+<a class="next" href="diagnostics.html"><span class="dir">Reference &rarr;</span>Diagnostic codes</a>
+</nav>
 </main>
 </div>
 </body>

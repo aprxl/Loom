@@ -1,66 +1,84 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="no-js">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>Tests · Loom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../style.css">
+<script src="../weave.js" defer></script>
+<script src="../play/play.js" defer></script>
 </head>
-<body>
+<body data-chapter="tests">
+<header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
+<rect x="6" y="3" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="6" y="24" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
+<path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
+<path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a class="current" href="../lang/index.html">The book</a><a href="../std/index.html">Library</a><a class="wide" href="../lang/diagnostics.html">Codes</a><a class="play-link" href="../playground.html">Playground</a></nav></header>
 <div class="layout">
-<nav class="sidebar">
-<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
-<ul class="sections">
-<li><a class="current" href="../lang/index.html">Language</a></li>
+<nav class="sidebar" aria-label="Contents">
+<div class="group">
+<h3>The book</h3>
+<ul class="beads">
+<li><a href="index.html" data-chapter="index"><span class="num"></span><span>Welcome to Loom</span></a></li>
+<li><a href="start.html" data-chapter="start"><span class="num">1</span><span>Getting started</span></a></li>
+<li><a href="values.html" data-chapter="values"><span class="num">2</span><span>Values and control flow</span></a></li>
+<li><a href="types.html" data-chapter="types"><span class="num">3</span><span>Warps, wefts and weaves</span></a></li>
+<li><a href="generics.html" data-chapter="generics"><span class="num">4</span><span>Generics and <code>any</code></span></a></li>
+<li><a href="collections.html" data-chapter="collections"><span class="num">5</span><span>Collections and streams</span></a></li>
+<li><a href="errors.html" data-chapter="errors"><span class="num">6</span><span>Optionals and errors</span></a></li>
+<li><a href="ownership.html" data-chapter="ownership"><span class="num">7</span><span>Moves, <code>once</code> and <code>defer</code></span></a></li>
+<li><a href="memory.html" data-chapter="memory"><span class="num">8</span><span>Pointers, spools and <code>given</code></span></a></li>
+<li><a href="gauges.html" data-chapter="gauges"><span class="num">9</span><span>Gauges</span></a></li>
+<li><a href="shuttles.html" data-chapter="shuttles"><span class="num">10</span><span>Shuttles</span></a></li>
+<li><a href="compile-time.html" data-chapter="compile-time"><span class="num">11</span><span>Compile-time code</span></a></li>
+<li><a href="const-params.html" data-chapter="const-params"><span class="num">12</span><span>Const parameters and control flow</span></a></li>
+<li><a href="reflection.html" data-chapter="reflection"><span class="num">13</span><span>Reflection</span></a></li>
+<li><a class="current" aria-current="page" href="tests.html" data-chapter="tests"><span class="num">14</span><span>Tests</span></a></li>
+<li><a href="threads.html" data-chapter="threads"><span class="num">15</span><span>Threads</span></a></li>
+<li><a href="not-yet.html" data-chapter="not-yet"><span class="num">A</span><span>Not supported yet</span></a></li>
+</ul></div>
+<div class="group">
+<h3>Also</h3>
+<ul class="plain-list">
+<li><a href="diagnostics.html">Diagnostic codes</a></li>
+<li><a href="../playground.html">Playground</a></li>
 <li><a href="../std/index.html">Standard library</a></li>
-<li><a href="../lang/diagnostics.html">Diagnostic codes</a></li>
-</ul>
-<h3>Language</h3>
-<ul>
-<li><a href="index.html">Overview</a></li>
-<li><a href="start.html">Getting started</a></li>
-<li><a href="values.html">Values and control flow</a></li>
-<li><a href="types.html">Warps, wefts and weaves</a></li>
-<li><a href="generics.html">Generics and <code>any</code></a></li>
-<li><a href="collections.html">Collections and streams</a></li>
-<li><a href="errors.html">Optionals and errors</a></li>
-<li><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
-<li><a href="gauges.html">Gauges</a></li>
-<li><a href="shuttles.html">Shuttles</a></li>
-<li><a href="compile-time.html">Compile-time code</a></li>
-<li><a href="const-params.html">Const parameters and control flow</a></li>
-<li><a href="reflection.html">Reflection</a></li>
-<li><a class="current" href="tests.html">Tests</a></li>
-<li><a href="threads.html">Threads</a></li>
-<li><a href="not-yet.html">Not supported yet</a></li>
-</ul>
+</ul></div>
 </nav>
-<main>
-<div class="crumb"><a href="index.html">Language</a> / Tests</div>
+<main class="weave">
+<div class="chapter-head">
+<span class="chapter-no">Chapter 14</span>
 <h1>Tests</h1>
 <p class="summary"><code>test name() { ... }</code> and <code>loom test</code>.</p>
+</div>
 <p>A test is written like a function, with <code>test</code> in place of <code>fun</code>. It takes no parameters and returns nothing, or <code>! E</code> so it can use <code>?</code>. <code>loom test FILE</code> runs the file's tests one after another and prints a report like cargo's.</p>
-<div class="sample" id="sample-tests_pass">
-<div class="sample-head"><span class="file">samples/tests_pass.loom</span><span class="tag ok">tests pass</span></div>
+<div class="sample" id="sample-tests_pass" data-sample="tests_pass" data-mode="test" data-file="tests_pass.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>tests_pass.loom</span><span class="tag ok">tests pass</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fun</span> clamp(n: i32, lo: i32, hi: i32) -&gt; i32 = <span class="k">if</span> n &lt; lo { lo } <span class="k">else</span> <span class="k">if</span> n &gt; hi { hi } <span class="k">else</span> { n }
+<span class="k">fun</span> <span class="f">clamp</span>(n: i32, lo: i32, hi: i32) -&gt; i32 = <span class="k">if</span> n &lt; lo { lo } <span class="k">else</span> <span class="k">if</span> n &gt; hi { hi } <span class="k">else</span> { n }
 
 <span class="c">// A test is written like a function, with `test` in place of `fun`.</span>
-<span class="k">test</span> clamps_low() = assert(clamp(-<span class="n">5</span>, <span class="n">0</span>, <span class="n">10</span>) == <span class="n">0</span>)
+<span class="k">test</span> <span class="f">clamps_low</span>() = <span class="f">assert</span>(<span class="f">clamp</span>(-<span class="n">5</span>, <span class="n">0</span>, <span class="n">10</span>) == <span class="n">0</span>)
 
-<span class="k">test</span> clamps_high() {
-    assert(clamp(<span class="n">50</span>, <span class="n">0</span>, <span class="n">10</span>) == <span class="n">10</span>, <span class="s">"50 should clamp to 10"</span>)
+<span class="k">test</span> <span class="f">clamps_high</span>() {
+    <span class="f">assert</span>(<span class="f">clamp</span>(<span class="n">50</span>, <span class="n">0</span>, <span class="n">10</span>) == <span class="n">10</span>, <span class="s">"50 should clamp to 10"</span>)
 }
 
 <span class="c">// A test may return an error, so it can use `?`.</span>
-<span class="k">test</span> parses_ports() ! <span class="k">any</span> <span class="t">Error</span> {
-    assert(<span class="s">"8080"</span>.parse[u16]()? == <span class="n">8080</span>)
+<span class="k">test</span> <span class="f">parses_ports</span>() ! <span class="k">any</span> <span class="t">Error</span> {
+    <span class="f">assert</span>(<span class="s">"8080"</span>.parse[u16]()? == <span class="n">8080</span>)
 }
 
 <span class="c">// A passing test prints nothing.</span>
-<span class="k">test</span> quiet() {
-    print(<span class="s">"you only see this when the test fails"</span>)
+<span class="k">test</span> <span class="f">quiet</span>() {
+    <span class="f">print</span>(<span class="s">"you only see this when the test fails"</span>)
 }
 
 <span class="c">// Tests aren't part of the program: `loom run` leaves them out, and</span>
@@ -74,34 +92,34 @@ test quiet ... ok
 test result: ok. 4 passed; 0 failed</code></pre></div>
 </div>
 <ul><li>A test passes when it returns. It <strong>fails</strong> when it unravels (a failed <code>assert</code>, say) or returns an error.</li><li>A passing test prints nothing. For a failing one the report shows what it printed, and then why it failed.</li><li><code>loom test</code> runs every test, even after one fails. A file of tests needs no <code>main</code>.</li><li>Tests exist only for <code>loom test</code>. <code>loom run</code> and <code>loom build</code> leave them out, and nothing can call one: a test's name isn't in scope, so a test and a function can share it. Two tests can't.</li><li>Tests go at the top level of a module (<a href="diagnostics.html#S0212">S0212</a> inside a function). A test with the wrong signature is <a href="diagnostics.html#T0119">T0119</a>.</li><li>Every command type-checks tests, so <code>loom check</code> catches a broken one.</li></ul>
-<div class="sample" id="sample-tests_fail">
-<div class="sample-head"><span class="file">samples/tests_fail.loom</span><span class="tag err">tests fail</span></div>
+<div class="sample" id="sample-tests_fail" data-sample="tests_fail" data-mode="test" data-file="tests_fail.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>tests_fail.loom</span><span class="tag err">tests fail</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="k">warp</span> <span class="t">Oops</span>: <span class="t">Error</span> {
     <span class="k">case</span> <span class="t">Bad</span>(n: i32)
 }
 
-<span class="k">fun</span> half(n: i32) -&gt; i32 ! <span class="t">Oops</span> {
+<span class="k">fun</span> <span class="f">half</span>(n: i32) -&gt; i32 ! <span class="t">Oops</span> {
     <span class="k">if</span> n % <span class="n">2</span> != <span class="n">0</span> { <span class="k">fail</span> .<span class="t">Bad</span>(n) }
     n / <span class="n">2</span>
 }
 
-<span class="k">test</span> halves() ! <span class="t">Oops</span> {
-    assert(half(<span class="n">8</span>)? == <span class="n">4</span>)
+<span class="k">test</span> <span class="f">halves</span>() ! <span class="t">Oops</span> {
+    <span class="f">assert</span>(<span class="f">half</span>(<span class="n">8</span>)? == <span class="n">4</span>)
 }
 
 <span class="c">// A test fails when it returns an error...</span>
-<span class="k">test</span> odd_number() ! <span class="t">Oops</span> {
-    print(<span class="s">"about to halve 3"</span>)
-    <span class="k">let</span> h = half(<span class="n">3</span>)?
-    print(<span class="s">"never printed: {</span>h<span class="s">}"</span>)
+<span class="k">test</span> <span class="f">odd_number</span>() ! <span class="t">Oops</span> {
+    <span class="f">print</span>(<span class="s">"about to halve 3"</span>)
+    <span class="k">let</span> h = <span class="f">half</span>(<span class="n">3</span>)?
+    <span class="f">print</span>(<span class="s">"never printed: </span><span class="h">{</span>h<span class="h">}</span><span class="s">"</span>)
 }
 
 <span class="c">// ...or unravels. `loom test` runs every test, even after a failure.</span>
-<span class="k">test</span> wrong_length() {
+<span class="k">test</span> <span class="f">wrong_length</span>() {
     <span class="k">let</span> xs = [<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]
-    assert(xs.len() == <span class="n">4</span>, <span class="s">"three is not four"</span>)
+    <span class="f">assert</span>(xs.<span class="f">len</span>() == <span class="n">4</span>, <span class="s">"three is not four"</span>)
 }</code></pre>
 <div class="sample-out"><div class="out-head">Test report</div><pre><code>running 3 tests
 test halves ... ok
@@ -124,12 +142,12 @@ unravel: three is not four
 test result: FAILED. 1 passed; 2 failed</code></pre></div>
 </div>
 <p><code>loom test</code> exits with 0 when every test passed, 1 when one failed, and 70 when a test hit a bug in Loom. Tests run unsandboxed: they can read the environment and files.</p>
-<h2 id="where-next">Where next</h2>
+<h2 id="where-next">Where next<a class="anchor" href="#where-next" aria-label="Link to this section">#</a></h2>
 <p><a href="not-yet.html">Not supported yet</a> lists what's missing.</p>
-<div class="pager">
-<a href="reflection.html">&larr; Reflection</a>
-<a href="threads.html">Threads &rarr;</a>
-</div>
+<nav class="pager" aria-label="Chapters">
+<a class="prev" href="reflection.html"><span class="dir">&larr; Chapter 13</span>Reflection</a>
+<a class="next" href="threads.html"><span class="dir">Chapter 15 &rarr;</span>Threads</a>
+</nav>
 </main>
 </div>
 </body>

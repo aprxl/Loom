@@ -21,6 +21,7 @@
 #
 #   python docs/gen.py --check [--loom PATH]     compare
 #   python docs/gen.py --bless [--loom PATH]     rewrite the .out files
+#   ... --only NAME,NAME                         just these samples
 import os
 import re
 import subprocess
@@ -50,7 +51,9 @@ def find_loom(explicit=None):
         cands.append(os.path.join(ROOT, "target", profile, "loom"))
     for c in cands:
         if c and os.path.isfile(c):
-            return c
+            # absolute: Windows looks a relative program up from the parent's
+            # directory, not the `cwd` the samples run in
+            return os.path.abspath(c)
     return None
 
 
@@ -123,9 +126,15 @@ def combine(out, err):
     return out or err
 
 
-def check(loom, bless=False):
+def check(loom, bless=False, only=None):
+    """Runs the samples (`only` those, if given) and lists what differs."""
     problems = []
     names = sample_names()
+    if only:
+        missing = [n for n in only if n not in names]
+        if missing:
+            return [], [f"no such sample: {', '.join(missing)}"]
+        names = [n for n in names if n in only]
     for name in names:
         try:
             mode = mode_of(name)
@@ -158,7 +167,7 @@ def check(loom, bless=False):
             problems.append(f"{name}: no {name}.out (run with --bless)")
         elif want != got:
             problems.append(f"{name}: output differs\n--- expected\n{want}--- got\n{got}")
-    known = set(names)
+    known = set(sample_names())
     for f in os.listdir(SAMPLES):
         if f.endswith(".out") and f[:-4] not in known:
             problems.append(f"{f}: no sample {f[:-4]}.loom")

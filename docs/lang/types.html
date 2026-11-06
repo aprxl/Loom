@@ -1,82 +1,100 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="no-js">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>Warps, wefts and weaves · Loom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../style.css">
+<script src="../weave.js" defer></script>
+<script src="../play/play.js" defer></script>
 </head>
-<body>
+<body data-chapter="types">
+<header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
+<rect x="6" y="3" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="6" y="24" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
+<path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
+<path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a class="current" href="../lang/index.html">The book</a><a href="../std/index.html">Library</a><a class="wide" href="../lang/diagnostics.html">Codes</a><a class="play-link" href="../playground.html">Playground</a></nav></header>
 <div class="layout">
-<nav class="sidebar">
-<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
-<ul class="sections">
-<li><a class="current" href="../lang/index.html">Language</a></li>
+<nav class="sidebar" aria-label="Contents">
+<div class="group">
+<h3>The book</h3>
+<ul class="beads">
+<li><a href="index.html" data-chapter="index"><span class="num"></span><span>Welcome to Loom</span></a></li>
+<li><a href="start.html" data-chapter="start"><span class="num">1</span><span>Getting started</span></a></li>
+<li><a href="values.html" data-chapter="values"><span class="num">2</span><span>Values and control flow</span></a></li>
+<li><a class="current" aria-current="page" href="types.html" data-chapter="types"><span class="num">3</span><span>Warps, wefts and weaves</span></a></li>
+<li><a href="generics.html" data-chapter="generics"><span class="num">4</span><span>Generics and <code>any</code></span></a></li>
+<li><a href="collections.html" data-chapter="collections"><span class="num">5</span><span>Collections and streams</span></a></li>
+<li><a href="errors.html" data-chapter="errors"><span class="num">6</span><span>Optionals and errors</span></a></li>
+<li><a href="ownership.html" data-chapter="ownership"><span class="num">7</span><span>Moves, <code>once</code> and <code>defer</code></span></a></li>
+<li><a href="memory.html" data-chapter="memory"><span class="num">8</span><span>Pointers, spools and <code>given</code></span></a></li>
+<li><a href="gauges.html" data-chapter="gauges"><span class="num">9</span><span>Gauges</span></a></li>
+<li><a href="shuttles.html" data-chapter="shuttles"><span class="num">10</span><span>Shuttles</span></a></li>
+<li><a href="compile-time.html" data-chapter="compile-time"><span class="num">11</span><span>Compile-time code</span></a></li>
+<li><a href="const-params.html" data-chapter="const-params"><span class="num">12</span><span>Const parameters and control flow</span></a></li>
+<li><a href="reflection.html" data-chapter="reflection"><span class="num">13</span><span>Reflection</span></a></li>
+<li><a href="tests.html" data-chapter="tests"><span class="num">14</span><span>Tests</span></a></li>
+<li><a href="threads.html" data-chapter="threads"><span class="num">15</span><span>Threads</span></a></li>
+<li><a href="not-yet.html" data-chapter="not-yet"><span class="num">A</span><span>Not supported yet</span></a></li>
+</ul></div>
+<div class="group">
+<h3>Also</h3>
+<ul class="plain-list">
+<li><a href="diagnostics.html">Diagnostic codes</a></li>
+<li><a href="../playground.html">Playground</a></li>
 <li><a href="../std/index.html">Standard library</a></li>
-<li><a href="../lang/diagnostics.html">Diagnostic codes</a></li>
-</ul>
-<h3>Language</h3>
-<ul>
-<li><a href="index.html">Overview</a></li>
-<li><a href="start.html">Getting started</a></li>
-<li><a href="values.html">Values and control flow</a></li>
-<li><a class="current" href="types.html">Warps, wefts and weaves</a></li>
-<li><a href="generics.html">Generics and <code>any</code></a></li>
-<li><a href="collections.html">Collections and streams</a></li>
-<li><a href="errors.html">Optionals and errors</a></li>
-<li><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
-<li><a href="gauges.html">Gauges</a></li>
-<li><a href="shuttles.html">Shuttles</a></li>
-<li><a href="compile-time.html">Compile-time code</a></li>
-<li><a href="const-params.html">Const parameters and control flow</a></li>
-<li><a href="reflection.html">Reflection</a></li>
-<li><a href="tests.html">Tests</a></li>
-<li><a href="threads.html">Threads</a></li>
-<li><a href="not-yet.html">Not supported yet</a></li>
-</ul>
+</ul></div>
 </nav>
-<main>
-<div class="crumb"><a href="index.html">Language</a> / Warps, wefts and weaves</div>
+<main class="weave">
+<div class="chapter-head">
+<span class="chapter-no">Chapter 3</span>
 <h1>Warps, wefts and weaves</h1>
 <p class="summary">Data types, behavior types, and how they are joined.</p>
+</div>
 <p>A <strong>warp</strong> is a data type. A <strong>weft</strong> is a set of behavior. A <strong>weave</strong> gives a warp a weft's behavior. There is no inheritance.</p>
-<h2 id="records">Records</h2>
+<h2 id="records">Records<a class="anchor" href="#records" aria-label="Link to this section">#</a></h2>
 <p>A warp with fields is a record. Fields can have defaults. A method takes <code>self</code>, and a function without <code>self</code> is an associated function, called on the type: <code>Point.origin()</code>.</p>
 <p><strong>Construction is a call.</strong> <code>Point(3, 4)</code> takes the fields in order, and <code>Point(y: 2)</code> names one and leaves the rest at their defaults. There are no <code>Point { x: 1 }</code> literals, so <code>if x == Foo {</code> is never ambiguous.</p>
 <p>A named argument with nothing after the colon passes the variable of that name: <code>Point(x:, y:)</code> is <code>Point(x: x, y: y)</code>, and <code>connect(host:, port: 8080)</code> mixes the two. It works in patterns too: <code>let Point(x:, y:) = p</code> binds <code>x</code> and <code>y</code>.</p>
-<div class="sample" id="sample-types_records">
-<div class="sample-head"><span class="file">samples/types_records.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-types_records" data-sample="types_records" data-mode="run" data-file="types_records.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>types_records.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="k">warp</span> <span class="t">Point</span>: <span class="t">Show</span> {                           <span class="c">// `Show` is derived: nothing to write</span>
     x: f64 = <span class="n">0</span>                               <span class="c">// fields can have defaults</span>
     y: f64 = <span class="n">0</span>
 
-    <span class="k">fun</span> len(<span class="k">self</span>) -&gt; f64 = (.x * .x + .y * .y).sqrt()   <span class="c">// `.x` is `self.x`</span>
-    <span class="k">fun</span> origin() -&gt; <span class="t">Point</span> = <span class="t">Point</span>()           <span class="c">// no `self`: called as `Point.origin()`</span>
-    <span class="k">fun</span> shift(<span class="k">mut</span> <span class="k">self</span>, dx: f64) { .x += dx }
+    <span class="k">fun</span> <span class="f">len</span>(<span class="k">self</span>) -&gt; f64 = (.x * .x + .y * .y).<span class="f">sqrt</span>()   <span class="c">// `.x` is `self.x`</span>
+    <span class="k">fun</span> <span class="f">origin</span>() -&gt; <span class="t">Point</span> = <span class="t">Point</span>()           <span class="c">// no `self`: called as `Point.origin()`</span>
+    <span class="k">fun</span> <span class="f">shift</span>(<span class="k">mut</span> <span class="k">self</span>, dx: f64) { .x += dx }
     <span class="k">const</span> UNIT = <span class="t">Point</span>(<span class="n">1</span>, <span class="n">0</span>)
 }
 
 <span class="k">warp</span> <span class="t">Meters</span>(f64)                             <span class="c">// a tuple warp with one field</span>
 
-<span class="k">fun</span> main() {
+<span class="k">fun</span> <span class="f">main</span>() {
     <span class="k">let</span> p = <span class="t">Point</span>(<span class="n">3</span>, <span class="n">4</span>)                      <span class="c">// construction is a call</span>
     <span class="k">let</span> q = <span class="t">Point</span>(y: <span class="n">2</span>)                      <span class="c">// named; x takes its default</span>
-    print(<span class="s">"{</span>p<span class="s">} {</span>q<span class="s">} {</span>p.len()<span class="s">}"</span>)
-    print(<span class="s">"{</span><span class="t">Point</span>.origin()<span class="s">} {</span><span class="t">Point</span>.UNIT<span class="s">}"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>p<span class="h">}</span><span class="s"> </span><span class="h">{</span>q<span class="h">}</span><span class="s"> </span><span class="h">{</span>p.<span class="f">len</span>()<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="t">Point</span>.<span class="f">origin</span>()<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="t">Point</span>.UNIT<span class="h">}</span><span class="s">"</span>)
 
     <span class="k">var</span> moving = <span class="t">Point</span>()
-    moving.shift(<span class="n">2.5</span>)
-    print(moving)
+    moving.<span class="f">shift</span>(<span class="n">2.5</span>)
+    <span class="f">print</span>(moving)
 
     <span class="c">// A dot-block edits a value and gives it back.</span>
     <span class="k">let</span> moved = p.{ .x += <span class="n">10</span> }
-    print(<span class="s">"{</span>moved<span class="s">} {</span>p<span class="s">}"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>moved<span class="h">}</span><span class="s"> </span><span class="h">{</span>p<span class="h">}</span><span class="s">"</span>)
 
     <span class="c">// Any warp can be shown in its debug form with `:?`.</span>
     <span class="k">let</span> m = <span class="t">Meters</span>(<span class="n">5.5</span>)
-    print(<span class="s">"{</span>m:?<span class="s">} {</span>m.<span class="n">0</span><span class="s">}"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>m:?<span class="h">}</span><span class="s"> </span><span class="h">{</span>m.<span class="n">0</span><span class="h">}</span><span class="s">"</span>)
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>Point(x: 3.0, y: 4.0) Point(x: 0.0, y: 2.0) 5
 Point(x: 0.0, y: 0.0) Point(x: 1.0, y: 0.0)
@@ -85,10 +103,10 @@ Point(x: 13.0, y: 4.0) Point(x: 3.0, y: 4.0)
 Meters(5.5) 5.5</code></pre></div>
 </div>
 <ul><li><strong>The leading dot.</strong> <code>.x</code> means "relative to the thing in context". In a method that's <code>self</code>, so <code>.x</code> is <code>self.x</code> and <code>.0</code> is <code>self.0</code>. In a dot-block it's the block's subject. Where a type is expected, it's one of that type's cases: <code>.Red</code> is <code>Color.Red</code>.</li><li><strong>Dot-blocks.</strong> <code>expr.{ ... }</code> opens a block with <code>expr</code> as its subject. On a fresh value or an immutable place it yields the edited value (<code>p.{ .x += 10 }</code> above). On a <code>var</code> it edits the variable in place and yields <code>()</code>.</li><li><strong>Show.</strong> A warp is shown with <code>{p}</code> only if it weaves <code>Show</code>, which needs no code. Any warp can be shown in its debug form with <code>{p:?}</code>.</li><li><strong>Tuple warps.</strong> <code>warp Meters(f64)</code> is a record with one positional field. It has no body, so its methods go in a <code>weave</code>, where <code>.0</code> means <code>self.0</code>.</li><li><strong>Visibility.</strong> Fields and items are private to their module unless marked <code>pub</code>. <code>pub(get)</code> makes a field readable everywhere and writable only inside its module.</li></ul>
-<h2 id="cases">Cases</h2>
+<h2 id="cases">Cases<a class="anchor" href="#cases" aria-label="Link to this section">#</a></h2>
 <p>A warp with <code>case</code> lines is a sum type. Fields written beside the cases belong to every case, and can be read without a <code>match</code>.</p>
-<div class="sample" id="sample-types_cases">
-<div class="sample-head"><span class="file">samples/types_cases.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-types_cases" data-sample="types_cases" data-mode="run" data-file="types_cases.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>types_cases.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="k">warp</span> <span class="t">Shape</span>: <span class="t">Show</span> {
@@ -96,7 +114,7 @@ Meters(5.5) 5.5</code></pre></div>
     <span class="k">case</span> <span class="t">Rect</span>(w: f64, h: f64)
     <span class="k">case</span> <span class="t">Dot</span>                                 <span class="c">// no payload</span>
 
-    <span class="k">fun</span> area(<span class="k">self</span>) -&gt; f64 = <span class="k">match</span> <span class="k">self</span> {
+    <span class="k">fun</span> <span class="f">area</span>(<span class="k">self</span>) -&gt; f64 = <span class="k">match</span> <span class="k">self</span> {
         .<span class="t">Circle</span>(r) =&gt; <span class="n">3.14159</span> * r * r
         .<span class="t">Rect</span>(w, h) =&gt; w * h
         .<span class="t">Dot</span> =&gt; <span class="n">0</span>
@@ -112,16 +130,16 @@ Meters(5.5) 5.5</code></pre></div>
     <span class="k">case</span> <span class="t">End</span>
 }
 
-<span class="k">fun</span> main() {
+<span class="k">fun</span> <span class="f">main</span>() {
     <span class="k">let</span> shapes = [<span class="t">Shape</span>.<span class="t">Circle</span>(<span class="n">2.0</span>), .<span class="t">Rect</span>(w: <span class="n">3</span>, h: <span class="n">4</span>), .<span class="t">Dot</span>]
     <span class="k">for</span> s <span class="k">in</span> shapes {
-        print(<span class="s">"{</span>s<span class="s">}: {</span>s.area()<span class="s">}"</span>)
+        <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>s<span class="h">}</span><span class="s">: </span><span class="h">{</span>s.<span class="f">area</span>()<span class="h">}</span><span class="s">"</span>)
     }
 
     <span class="k">let</span> t = <span class="t">Token</span>.<span class="t">Number</span>(<span class="n">42</span>, line: <span class="n">7</span>)
-    print(<span class="s">"{</span>t.line<span class="s">}: {</span>t<span class="s">}"</span>)          <span class="c">// `line` needs no `match`</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>t.line<span class="h">}</span><span class="s">: </span><span class="h">{</span>t<span class="h">}</span><span class="s">"</span>)          <span class="c">// `line` needs no `match`</span>
     <span class="k">if</span> t <span class="k">is</span> .<span class="t">Number</span>(n) <span class="k">and</span> n &gt; <span class="n">40</span> {
-        print(<span class="s">"big number {</span>n<span class="s">}"</span>)
+        <span class="f">print</span>(<span class="s">"big number </span><span class="h">{</span>n<span class="h">}</span><span class="s">"</span>)
     }
 
     <span class="c">// `match` must cover every case.</span>
@@ -130,7 +148,7 @@ Meters(5.5) 5.5</code></pre></div>
         .<span class="t">Number</span>(_) =&gt; <span class="s">"a number"</span>
         .<span class="t">End</span> =&gt; <span class="s">"the end"</span>
     }
-    print(name)
+    <span class="f">print</span>(name)
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>Circle(radius: 2.0): 12.56636
 Rect(w: 3.0, h: 4.0): 12
@@ -140,49 +158,49 @@ big number 42
 a number</code></pre></div>
 </div>
 <p><code>match</code> and <code>is</code> see the cases. A <code>match</code> that leaves a case out is an error, and the compiler says which one:</p>
-<div class="sample" id="sample-types_err_match">
-<div class="sample-head"><span class="file">samples/types_err_match.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#P0101">P0101</a></span></div>
+<div class="sample" id="sample-types_err_match" data-sample="types_err_match" data-mode="check" data-file="types_err_match.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>types_err_match.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#P0101">P0101</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">warp</span> <span class="t">Shape</span> {
     <span class="k">case</span> <span class="t">Circle</span>(radius: f64)
     <span class="k">case</span> <span class="t">Rect</span>(w: f64, h: f64)
     <span class="k">case</span> <span class="t">Dot</span>
 }
 
-<span class="k">fun</span> area(s: <span class="t">Shape</span>) -&gt; f64 = <span class="k">match</span> s {
+<span class="k">fun</span> <span class="f">area</span>(s: <span class="t">Shape</span>) -&gt; f64 = <span class="k">match</span> s {
     .<span class="t">Circle</span>(r) =&gt; <span class="n">3.14</span> * r * r
     .<span class="t">Rect</span>(w, h) =&gt; w * h
 }
 
-<span class="k">fun</span> main() {}</code></pre>
+<span class="k">fun</span> <span class="f">main</span>() {}</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[P0101]: this `match` doesn't cover every `Shape`</span>
 <span class="loc">   --&gt; types_err_match.loom:7:29</span>
-   |  
- 7 |   fun area(s: Shape) -&gt; f64 = match s {
-   | /-----------------------------^
- 8 | |     .Circle(r) =&gt; 3.14 * r * r
- 9 | |     .Rect(w, h) =&gt; w * h
-10 | | }
-   | \-^ not handled: `.Dot`
-   |  
-   = help: add an arm for `.Dot`, or `_ =&gt; …` for everything else
+<span class="gut">   |</span>  
+<span class="gut"> 7 |</span>   fun area(s: Shape) -&gt; f64 = match s {
+<span class="gut">   |</span> /-----------------------------^
+<span class="gut"> 8 |</span> |     .Circle(r) =&gt; 3.14 * r * r
+<span class="gut"> 9 |</span> |     .Rect(w, h) =&gt; w * h
+<span class="gut">10 |</span> | }
+<span class="gut">   |</span> \-^ not handled: `.Dot`
+<span class="gut">   |</span>  
+<span class="loc">   = help: add an arm for `.Dot`, or `_ =&gt; …` for everything else</span>
 
 <span class="err">error: types_err_match.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
-<h2 id="wefts-and-weaves">Wefts and weaves</h2>
+<h2 id="wefts-and-weaves">Wefts and weaves<a class="anchor" href="#wefts-and-weaves" aria-label="Link to this section">#</a></h2>
 <p>A weft lists methods. A method with a body is a default. A warp joins a weft <strong>inline</strong> by listing it in its header, or <strong>separately</strong> with <code>weave</code>, which can live in another module.</p>
-<div class="sample" id="sample-types_wefts">
-<div class="sample-head"><span class="file">samples/types_wefts.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-types_wefts" data-sample="types_wefts" data-mode="run" data-file="types_wefts.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>types_wefts.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="k">weft</span> <span class="t">Shape</span> {
-    <span class="k">fun</span> area(<span class="k">self</span>) -&gt; f64
-    <span class="k">fun</span> name(<span class="k">self</span>) -&gt; str = <span class="s">"shape"</span>           <span class="c">// a default method</span>
+    <span class="k">fun</span> <span class="f">area</span>(<span class="k">self</span>) -&gt; f64
+    <span class="k">fun</span> <span class="f">name</span>(<span class="k">self</span>) -&gt; str = <span class="s">"shape"</span>           <span class="c">// a default method</span>
 }
 
 <span class="c">// Inline: the warp lists the weft and writes its methods.</span>
 <span class="k">warp</span> <span class="t">Circle</span>: <span class="t">Shape</span> {
     radius: f64
-    <span class="k">fun</span> area(<span class="k">self</span>) -&gt; f64 = <span class="n">3.0</span> * .radius * .radius
+    <span class="k">fun</span> <span class="f">area</span>(<span class="k">self</span>) -&gt; f64 = <span class="n">3.0</span> * .radius * .radius
 }
 
 <span class="k">warp</span> <span class="t">Rect</span> {
@@ -192,28 +210,28 @@ a number</code></pre></div>
 
 <span class="c">// Separate: behavior added afterwards, possibly in another module.</span>
 <span class="k">weave</span> <span class="t">Shape</span> <span class="k">into</span> <span class="t">Rect</span> {
-    <span class="k">fun</span> area(<span class="k">self</span>) -&gt; f64 = .w * .h
-    <span class="k">fun</span> name(<span class="k">self</span>) -&gt; str = <span class="s">"rect"</span>
+    <span class="k">fun</span> <span class="f">area</span>(<span class="k">self</span>) -&gt; f64 = .w * .h
+    <span class="k">fun</span> <span class="f">name</span>(<span class="k">self</span>) -&gt; str = <span class="s">"rect"</span>
 }
 
-<span class="k">fun</span> describe(s: <span class="t">Shape</span>) -&gt; <span class="t">String</span> = <span class="s">"{</span>s.name()<span class="s">} with area {</span>s.area()<span class="s">}"</span>
+<span class="k">fun</span> <span class="f">describe</span>(s: <span class="t">Shape</span>) -&gt; <span class="t">String</span> = <span class="s">"</span><span class="h">{</span>s.<span class="f">name</span>()<span class="h">}</span><span class="s"> with area </span><span class="h">{</span>s.<span class="f">area</span>()<span class="h">}</span><span class="s">"</span>
 
-<span class="k">fun</span> main() {
-    print(describe(<span class="t">Circle</span>(<span class="n">2</span>)))
-    print(describe(<span class="t">Rect</span>(<span class="n">2</span>, <span class="n">3</span>)))
-    print(<span class="t">Shape</span>.name(<span class="t">Rect</span>(<span class="n">1</span>, <span class="n">1</span>)))            <span class="c">// call through the weft</span>
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">print</span>(<span class="f">describe</span>(<span class="t">Circle</span>(<span class="n">2</span>)))
+    <span class="f">print</span>(<span class="f">describe</span>(<span class="t">Rect</span>(<span class="n">2</span>, <span class="n">3</span>)))
+    <span class="f">print</span>(<span class="t">Shape</span>.<span class="f">name</span>(<span class="t">Rect</span>(<span class="n">1</span>, <span class="n">1</span>)))            <span class="c">// call through the weft</span>
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>shape with area 12
 rect with area 6
 rect</code></pre></div>
 </div>
 <ul><li>A weft can require other wefts (<code>weft Ord: Eq</code>) and can have associated types (<code>type Item</code>; see <code>Iter</code> in <a href="../std/modules/iter.html#Iter">std.iter</a>).</li><li><code>Shape.name(x)</code> calls a weft's method explicitly. A default method is checked for each type that uses it.</li><li><code>weave W into T</code> is allowed only when <code>W</code> or <code>T</code> is defined in your program (<a href="diagnostics.html#T0115">T0115</a> otherwise).</li><li>A weft used as a parameter type is a generic: see <a href="generics.html">Generics and <code>any</code></a>.</li></ul>
-<h2 id="deriving">Deriving</h2>
+<h2 id="deriving">Deriving<a class="anchor" href="#deriving" aria-label="Link to this section">#</a></h2>
 <p>List <code>Show</code>, <code>Eq</code>, <code>Ord</code> or <code>Hash</code> in a warp's header and leave the methods out, and the compiler supplies them:</p>
 <ul><li><code>Show</code> writes the debug form, less any fields every case shares: <code>Point(x: 3, y: 4)</code>.</li><li><code>Eq</code>: every field is equal and, for a warp with cases, it's the same case.</li><li><code>Ord</code>: fields compare in order and the first difference decides. Earlier cases come first.</li><li><code>Hash</code> makes a warp a usable map key. <code>Error</code> gets a <code>message</code> that is its <code>Show</code> form.</li></ul>
 <p>A derived method needs every field to weave the weft too.</p>
-<div class="sample" id="sample-types_derive">
-<div class="sample-head"><span class="file">samples/types_derive.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-types_derive" data-sample="types_derive" data-mode="run" data-file="types_derive.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>types_derive.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="c">// List `Show`, `Eq`, `Ord` or `Hash` and leave the methods out:</span>
@@ -229,23 +247,23 @@ rect</code></pre></div>
     <span class="k">case</span> <span class="t">High</span>
 }
 
-<span class="k">fun</span> main() {
+<span class="k">fun</span> <span class="f">main</span>() {
     <span class="k">let</span> a = <span class="t">Version</span>(<span class="n">1</span>, <span class="n">4</span>)
     <span class="k">let</span> b = <span class="t">Version</span>(<span class="n">1</span>, <span class="n">10</span>)
-    print(<span class="s">"{</span>a<span class="s">} {</span>a == b<span class="s">} {</span>a &lt; b<span class="s">}"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>a<span class="h">}</span><span class="s"> </span><span class="h">{</span>a == b<span class="h">}</span><span class="s"> </span><span class="h">{</span>a &lt; b<span class="h">}</span><span class="s">"</span>)
 
     <span class="c">// For a warp with cases, earlier cases come first.</span>
-    print(<span class="s">"{</span><span class="t">Level</span>.<span class="t">Low</span> &lt; <span class="t">Level</span>.<span class="t">High</span><span class="s">} {</span><span class="t">Level</span>.<span class="t">Mid</span>(<span class="n">3</span>) &lt; <span class="t">Level</span>.<span class="t">Mid</span>(<span class="n">5</span>)<span class="s">} {</span><span class="t">Level</span>.<span class="t">Mid</span>(<span class="n">9</span>) &lt; <span class="t">Level</span>.<span class="t">High</span><span class="s">}"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="t">Level</span>.<span class="t">Low</span> &lt; <span class="t">Level</span>.<span class="t">High</span><span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="t">Level</span>.<span class="t">Mid</span>(<span class="n">3</span>) &lt; <span class="t">Level</span>.<span class="t">Mid</span>(<span class="n">5</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="t">Level</span>.<span class="t">Mid</span>(<span class="n">9</span>) &lt; <span class="t">Level</span>.<span class="t">High</span><span class="h">}</span><span class="s">"</span>)
 
     <span class="k">var</span> versions = [b, a, <span class="t">Version</span>(<span class="n">0</span>, <span class="n">9</span>)]
-    versions.sort()
-    print(versions)
+    versions.<span class="f">sort</span>()
+    <span class="f">print</span>(versions)
 
     <span class="c">// `Hash` makes a warp usable as a map key.</span>
     <span class="k">var</span> notes: <span class="t">Map</span>[<span class="t">Version</span>, str] = <span class="t">Map</span>()
     notes[a] = <span class="s">"old"</span>
     notes[<span class="t">Version</span>(<span class="n">1</span>, <span class="n">4</span>)] = <span class="s">"still the same key"</span>
-    print(<span class="s">"{</span>notes.len()<span class="s">} {</span>notes[a]<span class="s">}"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>notes.<span class="f">len</span>()<span class="h">}</span><span class="s"> </span><span class="h">{</span>notes[a]<span class="h">}</span><span class="s">"</span>)
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>Version(major: 1, minor: 4) false true
 true true true
@@ -253,17 +271,17 @@ true true true
 1 still the same key</code></pre></div>
 </div>
 <p>Right now these defaults are built into the compiler. They're meant to become ordinary default methods that inspect the type with <a href="reflection.html">reflection</a>, as <code>ToJson</code> does.</p>
-<h2 id="through"><code>through</code></h2>
+<h2 id="through"><code>through</code><a class="anchor" href="#through" aria-label="Link to this section">#</a></h2>
 <p><code>through</code> forwards a field's methods, so a warp can reuse another's behavior without inheriting from it. Fields aren't forwarded, a method the outer warp defines wins, and a <code>Button</code> is not a <code>Frame</code>.</p>
-<div class="sample" id="sample-types_through">
-<div class="sample-head"><span class="file">samples/types_through.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-types_through" data-sample="types_through" data-mode="run" data-file="types_through.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>types_through.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="k">warp</span> <span class="t">Frame</span> {
     w: u16
     h: u16
-    <span class="k">fun</span> size(<span class="k">self</span>) -&gt; (u16, u16) = (.w, .h)
-    <span class="k">fun</span> describe(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"frame {</span>.w<span class="s">}x{</span>.h<span class="s">}"</span>
+    <span class="k">fun</span> <span class="f">size</span>(<span class="k">self</span>) -&gt; (u16, u16) = (.w, .h)
+    <span class="k">fun</span> <span class="f">describe</span>(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"frame </span><span class="h">{</span>.w<span class="h">}</span><span class="s">x</span><span class="h">{</span>.h<span class="h">}</span><span class="s">"</span>
 }
 
 <span class="c">// `through` forwards the field's methods. There is no inheritance:</span>
@@ -272,44 +290,44 @@ true true true
     <span class="k">through</span> frame: <span class="t">Frame</span>
     label: <span class="t">String</span>
 
-    <span class="k">fun</span> describe(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"button '{</span>.label<span class="s">}' over {</span>.frame.describe()<span class="s">}"</span>   <span class="c">// overrides</span>
+    <span class="k">fun</span> <span class="f">describe</span>(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"button '</span><span class="h">{</span>.label<span class="h">}</span><span class="s">' over </span><span class="h">{</span>.frame.<span class="f">describe</span>()<span class="h">}</span><span class="s">"</span>   <span class="c">// overrides</span>
 }
 
-<span class="k">fun</span> main() {
+<span class="k">fun</span> <span class="f">main</span>() {
     <span class="k">let</span> b = <span class="t">Button</span>(<span class="t">Frame</span>(<span class="n">10</span>, <span class="n">3</span>), <span class="s">"OK"</span>)
-    print(b.size())                          <span class="c">// forwarded from Frame</span>
-    print(b.describe())                      <span class="c">// Button's own</span>
-    print(b.frame.w)                         <span class="c">// fields aren't forwarded</span>
+    <span class="f">print</span>(b.<span class="f">size</span>())                          <span class="c">// forwarded from Frame</span>
+    <span class="f">print</span>(b.<span class="f">describe</span>())                      <span class="c">// Button's own</span>
+    <span class="f">print</span>(b.frame.w)                         <span class="c">// fields aren't forwarded</span>
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>(10, 3)
 button 'OK' over frame 10x3
 10</code></pre></div>
 </div>
-<h2 id="method-lookup">Method lookup</h2>
+<h2 id="method-lookup">Method lookup<a class="anchor" href="#method-lookup" aria-label="Link to this section">#</a></h2>
 <p><code>x.f(args)</code> looks for, in order:</p>
 <ol><li>a method in <code>x</code>'s warp body;</li><li>a method from a weave into <code>x</code>'s type;</li><li>for something with items that isn't a stream (an array, list, slice, range, or a type that weaves <code>Iter</code>), a method of <code>Stream</code>;</li><li>a method forwarded through <code>through</code>;</li><li>a free function in scope whose first parameter accepts <code>x</code>.</li></ol>
 <p>Two matches at one level are an ambiguity error; write <code>Weft.f(x)</code> or <code>module.f(x)</code> to choose.</p>
-<div class="sample" id="sample-types_ufcs">
-<div class="sample-head"><span class="file">samples/types_ufcs.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-types_ufcs" data-sample="types_ufcs" data-mode="run" data-file="types_ufcs.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>types_ufcs.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="c">// Any free function is a method on its first parameter.</span>
-<span class="k">fun</span> kib(n: usize) -&gt; usize = n * <span class="n">1024</span>
-<span class="k">fun</span> shout(s: str) -&gt; <span class="t">String</span> = s.to_upper()
+<span class="k">fun</span> <span class="f">kib</span>(n: usize) -&gt; usize = n * <span class="n">1024</span>
+<span class="k">fun</span> <span class="f">shout</span>(s: str) -&gt; <span class="t">String</span> = s.<span class="f">to_upper</span>()
 
-<span class="k">fun</span> main() {
-    print(<span class="n">64</span>.kib())                          <span class="c">// the same as kib(64)</span>
-    print(<span class="s">"hi"</span>.shout())
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">print</span>(<span class="n">64</span>.<span class="f">kib</span>())                          <span class="c">// the same as kib(64)</span>
+    <span class="f">print</span>(<span class="s">"hi"</span>.<span class="f">shout</span>())
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>65536
 HI</code></pre></div>
 </div>
-<h2 id="where-next">Where next</h2>
+<h2 id="where-next">Where next<a class="anchor" href="#where-next" aria-label="Link to this section">#</a></h2>
 <p><a href="generics.html">Generics and <code>any</code></a> covers type parameters and dynamic dispatch.</p>
-<div class="pager">
-<a href="values.html">&larr; Values and control flow</a>
-<a href="generics.html">Generics and <code>any</code> &rarr;</a>
-</div>
+<nav class="pager" aria-label="Chapters">
+<a class="prev" href="values.html"><span class="dir">&larr; Chapter 2</span>Values and control flow</a>
+<a class="next" href="generics.html"><span class="dir">Chapter 4 &rarr;</span>Generics and <code>any</code></a>
+</nav>
 </main>
 </div>
 </body>

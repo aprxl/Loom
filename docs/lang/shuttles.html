@@ -1,56 +1,74 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="no-js">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>Shuttles · Loom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../style.css">
+<script src="../weave.js" defer></script>
+<script src="../play/play.js" defer></script>
 </head>
-<body>
+<body data-chapter="shuttles">
+<header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
+<rect x="6" y="3" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="6" y="24" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
+<path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
+<path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a class="current" href="../lang/index.html">The book</a><a href="../std/index.html">Library</a><a class="wide" href="../lang/diagnostics.html">Codes</a><a class="play-link" href="../playground.html">Playground</a></nav></header>
 <div class="layout">
-<nav class="sidebar">
-<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
-<ul class="sections">
-<li><a class="current" href="../lang/index.html">Language</a></li>
+<nav class="sidebar" aria-label="Contents">
+<div class="group">
+<h3>The book</h3>
+<ul class="beads">
+<li><a href="index.html" data-chapter="index"><span class="num"></span><span>Welcome to Loom</span></a></li>
+<li><a href="start.html" data-chapter="start"><span class="num">1</span><span>Getting started</span></a></li>
+<li><a href="values.html" data-chapter="values"><span class="num">2</span><span>Values and control flow</span></a></li>
+<li><a href="types.html" data-chapter="types"><span class="num">3</span><span>Warps, wefts and weaves</span></a></li>
+<li><a href="generics.html" data-chapter="generics"><span class="num">4</span><span>Generics and <code>any</code></span></a></li>
+<li><a href="collections.html" data-chapter="collections"><span class="num">5</span><span>Collections and streams</span></a></li>
+<li><a href="errors.html" data-chapter="errors"><span class="num">6</span><span>Optionals and errors</span></a></li>
+<li><a href="ownership.html" data-chapter="ownership"><span class="num">7</span><span>Moves, <code>once</code> and <code>defer</code></span></a></li>
+<li><a href="memory.html" data-chapter="memory"><span class="num">8</span><span>Pointers, spools and <code>given</code></span></a></li>
+<li><a href="gauges.html" data-chapter="gauges"><span class="num">9</span><span>Gauges</span></a></li>
+<li><a class="current" aria-current="page" href="shuttles.html" data-chapter="shuttles"><span class="num">10</span><span>Shuttles</span></a></li>
+<li><a href="compile-time.html" data-chapter="compile-time"><span class="num">11</span><span>Compile-time code</span></a></li>
+<li><a href="const-params.html" data-chapter="const-params"><span class="num">12</span><span>Const parameters and control flow</span></a></li>
+<li><a href="reflection.html" data-chapter="reflection"><span class="num">13</span><span>Reflection</span></a></li>
+<li><a href="tests.html" data-chapter="tests"><span class="num">14</span><span>Tests</span></a></li>
+<li><a href="threads.html" data-chapter="threads"><span class="num">15</span><span>Threads</span></a></li>
+<li><a href="not-yet.html" data-chapter="not-yet"><span class="num">A</span><span>Not supported yet</span></a></li>
+</ul></div>
+<div class="group">
+<h3>Also</h3>
+<ul class="plain-list">
+<li><a href="diagnostics.html">Diagnostic codes</a></li>
+<li><a href="../playground.html">Playground</a></li>
 <li><a href="../std/index.html">Standard library</a></li>
-<li><a href="../lang/diagnostics.html">Diagnostic codes</a></li>
-</ul>
-<h3>Language</h3>
-<ul>
-<li><a href="index.html">Overview</a></li>
-<li><a href="start.html">Getting started</a></li>
-<li><a href="values.html">Values and control flow</a></li>
-<li><a href="types.html">Warps, wefts and weaves</a></li>
-<li><a href="generics.html">Generics and <code>any</code></a></li>
-<li><a href="collections.html">Collections and streams</a></li>
-<li><a href="errors.html">Optionals and errors</a></li>
-<li><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
-<li><a href="gauges.html">Gauges</a></li>
-<li><a class="current" href="shuttles.html">Shuttles</a></li>
-<li><a href="compile-time.html">Compile-time code</a></li>
-<li><a href="const-params.html">Const parameters and control flow</a></li>
-<li><a href="reflection.html">Reflection</a></li>
-<li><a href="tests.html">Tests</a></li>
-<li><a href="threads.html">Threads</a></li>
-<li><a href="not-yet.html">Not supported yet</a></li>
-</ul>
+</ul></div>
 </nav>
-<main>
-<div class="crumb"><a href="index.html">Language</a> / Shuttles</div>
+<main class="weave">
+<div class="chapter-head">
+<span class="chapter-no">Chapter 10</span>
 <h1>Shuttles</h1>
 <p class="summary">Functions that pause, yielding values out and pulling values in.</p>
+</div>
 <p>A <strong>shuttle</strong> is a function that can pause and resume. The return arrow says what kind it is:</p>
 <table class="plain"><thead><tr><th>Signature</th><th>Kind</th><th>Type</th></tr></thead><tbody><tr><td><code>fun f() -&gt; T</code></td><td>an ordinary function</td><td></td></tr><tr><td><code>fun f() ~&gt; T</code></td><td>a <strong>generator</strong>: yields <code>T</code>s</td><td><code>Shuttle[T, ()]</code></td></tr><tr><td><code>fun f() ~&gt; T &lt;~ U</code></td><td>a <strong>duplex</strong> shuttle: pulls in <code>U</code>s, yields <code>T</code>s</td><td><code>Shuttle[T, U]</code></td></tr><tr><td><code>fun f() &lt;~ U</code></td><td>a <strong>sink</strong>: only pulls</td><td><code>Shuttle[(), U]</code></td></tr></tbody></table>
 <p>Two expressions work only inside a shuttle. <code>yield v</code> sends <code>v</code> out and pauses. <code>pull</code> pauses until the driver pushes an input, and evaluates to <code>?U</code>: <code>none</code> once the shuttle is closed. <code>return</code> ends it.</p>
 <p><strong>Calling a shuttle function runs none of its body.</strong> It builds a suspended shuttle value. On the Lua backend that's a coroutine; on Treadle, a frame holding what the shuttle keeps between pauses, and the function that runs it from one pause to the next.</p>
-<h2 id="generators">Generators</h2>
+<h2 id="generators">Generators<a class="anchor" href="#generators" aria-label="Link to this section">#</a></h2>
 <p>A generator is a stream of what it yields: <code>for x in fib()</code>, <code>fib().take(10)</code>. Leaving a <code>for</code> loop over a generator early closes it, and that runs its <code>defer</code>s.</p>
-<div class="sample" id="sample-shuttles_gen">
-<div class="sample-head"><span class="file">samples/shuttles_gen.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-shuttles_gen" data-sample="shuttles_gen" data-mode="run" data-file="shuttles_gen.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>shuttles_gen.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="c">// `~&gt; T` marks a generator: it yields `T`s. Calling it runs none of its body.</span>
-<span class="k">fun</span> fib() ~&gt; u64 {
+<span class="k">fun</span> <span class="f">fib</span>() ~&gt; u64 {
     <span class="k">var</span> (a, b): (u64, u64) = (<span class="n">0</span>, <span class="n">1</span>)
     <span class="k">loop</span> {
         <span class="k">yield</span> a
@@ -58,8 +76,8 @@
     }
 }
 
-<span class="k">fun</span> countdown(name: str, from: i32) ~&gt; i32 {
-    <span class="k">defer</span> print(<span class="s">"{</span>name<span class="s">} closed"</span>)
+<span class="k">fun</span> <span class="f">countdown</span>(name: str, from: i32) ~&gt; i32 {
+    <span class="k">defer</span> <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>name<span class="h">}</span><span class="s"> closed"</span>)
     <span class="k">var</span> i = from
     <span class="k">while</span> i &gt; <span class="n">0</span> {
         <span class="k">yield</span> i
@@ -67,18 +85,18 @@
     }
 }
 
-<span class="k">fun</span> main() {
+<span class="k">fun</span> <span class="f">main</span>() {
     <span class="c">// A generator is a stream of what it yields.</span>
-    print(fib().take(<span class="n">10</span>).collect())
-    print(fib().skip_while(_ &lt; <span class="n">50</span>).take(<span class="n">3</span>).collect())
+    <span class="f">print</span>(<span class="f">fib</span>().<span class="f">take</span>(<span class="n">10</span>).<span class="f">collect</span>())
+    <span class="f">print</span>(<span class="f">fib</span>().<span class="f">skip_while</span>(_ &lt; <span class="n">50</span>).<span class="f">take</span>(<span class="n">3</span>).<span class="f">collect</span>())
 
     <span class="c">// Leaving a `for` loop early closes the generator, and its `defer` runs.</span>
-    <span class="k">for</span> n <span class="k">in</span> countdown(<span class="s">"early"</span>, <span class="n">5</span>) {
+    <span class="k">for</span> n <span class="k">in</span> <span class="f">countdown</span>(<span class="s">"early"</span>, <span class="n">5</span>) {
         <span class="k">if</span> n == <span class="n">3</span> { <span class="k">break</span> }
-        print(n)
+        <span class="f">print</span>(n)
     }
-    <span class="k">for</span> n <span class="k">in</span> countdown(<span class="s">"whole"</span>, <span class="n">2</span>) {
-        print(n)
+    <span class="k">for</span> n <span class="k">in</span> <span class="f">countdown</span>(<span class="s">"whole"</span>, <span class="n">2</span>) {
+        <span class="f">print</span>(n)
     }
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>[0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
@@ -90,15 +108,15 @@ early closed
 1
 whole closed</code></pre></div>
 </div>
-<h2 id="pushing-values-in">Pushing values in</h2>
+<h2 id="pushing-values-in">Pushing values in<a class="anchor" href="#pushing-values-in" aria-label="Link to this section">#</a></h2>
 <p><code>sh.push(u)</code> resumes the shuttle with <code>u</code> as the value of its pending <code>pull</code>. The first push starts it. It returns a **<code>Burst</code>**: what the shuttle yields before it next pulls. A burst is lazy, and going through it is what runs the shuttle. <code>sh.close()</code> makes pending and later <code>pull</code>s give <code>none</code>, and returns the final burst. Pushing into a closed shuttle unravels.</p>
-<div class="sample" id="sample-shuttles_duplex">
-<div class="sample-head"><span class="file">samples/shuttles_duplex.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-shuttles_duplex" data-sample="shuttles_duplex" data-mode="run" data-file="shuttles_duplex.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>shuttles_duplex.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="c">// `~&gt; T &lt;~ U` pulls `U`s in and yields `T`s out. `pull` waits for an input</span>
 <span class="c">// and gives `none` once the shuttle is closed.</span>
-<span class="k">fun</span> pairs() ~&gt; (i32, ?i32) &lt;~ i32 {
+<span class="k">fun</span> <span class="f">pairs</span>() ~&gt; (i32, ?i32) &lt;~ i32 {
     <span class="k">while</span> <span class="k">pull</span> <span class="k">is</span> <span class="k">some</span>(a) {
         <span class="k">match</span> <span class="k">pull</span> {
             <span class="k">some</span>(b) =&gt; <span class="k">yield</span> (a, <span class="k">some</span>(b)),
@@ -111,31 +129,31 @@ whole closed</code></pre></div>
 }
 
 <span class="c">// `&lt;~ U` alone is a sink: it only pulls.</span>
-<span class="k">fun</span> summer() &lt;~ i32 {
+<span class="k">fun</span> <span class="f">summer</span>() &lt;~ i32 {
     <span class="k">var</span> total = <span class="n">0</span>
-    <span class="k">defer</span> print(<span class="s">"sum: {</span>total<span class="s">}"</span>)
+    <span class="k">defer</span> <span class="f">print</span>(<span class="s">"sum: </span><span class="h">{</span>total<span class="h">}</span><span class="s">"</span>)
     <span class="k">while</span> <span class="k">pull</span> <span class="k">is</span> <span class="k">some</span>(n) {
         total += n
     }
 }
 
-<span class="k">fun</span> main() {
-    <span class="k">var</span> p = pairs()
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">var</span> p = <span class="f">pairs</span>()
     <span class="k">for</span> n <span class="k">in</span> [<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>, <span class="n">4</span>, <span class="n">5</span>] {
         <span class="c">// Each push gives a burst: what the shuttle yields before it</span>
         <span class="c">// pulls again.</span>
-        <span class="k">let</span> got = p.push(n).collect()
-        print(<span class="s">"pushed {</span>n<span class="s">}: {</span>got<span class="s">}"</span>)
+        <span class="k">let</span> got = p.<span class="f">push</span>(n).<span class="f">collect</span>()
+        <span class="f">print</span>(<span class="s">"pushed </span><span class="h">{</span>n<span class="h">}</span><span class="s">: </span><span class="h">{</span>got<span class="h">}</span><span class="s">"</span>)
     }
-    <span class="k">for</span> pair <span class="k">in</span> p.close() {
-        print(<span class="s">"closed: {</span>pair<span class="s">}"</span>)
+    <span class="k">for</span> pair <span class="k">in</span> p.<span class="f">close</span>() {
+        <span class="f">print</span>(<span class="s">"closed: </span><span class="h">{</span>pair<span class="h">}</span><span class="s">"</span>)
     }
 
-    <span class="k">var</span> s = summer()
+    <span class="k">var</span> s = <span class="f">summer</span>()
     <span class="k">for</span> n <span class="k">in</span> <span class="n">1</span>..=<span class="n">4</span> {
-        s.push(n).drain()                    <span class="c">// a burst is `once`: use it or drain it</span>
+        s.<span class="f">push</span>(n).<span class="f">drain</span>()                    <span class="c">// a burst is `once`: use it or drain it</span>
     }
-    s.close().drain()
+    s.<span class="f">close</span>().<span class="f">drain</span>()
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>pushed 1: []
 pushed 2: [(1, 2)]
@@ -146,37 +164,37 @@ closed: (5, none)
 sum: 10</code></pre></div>
 </div>
 <p>A <code>Burst</code> is a <code>once</code> warp, so the outputs of a push can't be dropped by accident. Go through it with <code>for</code> or a stream method, or call <code>.drain()</code> to throw them away on purpose:</p>
-<div class="sample" id="sample-shuttles_err">
-<div class="sample-head"><span class="file">samples/shuttles_err.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#L0301">L0301</a></span></div>
-<pre class="code"><code><span class="k">fun</span> duplex() ~&gt; i32 &lt;~ i32 {
+<div class="sample" id="sample-shuttles_err" data-sample="shuttles_err" data-mode="check" data-file="shuttles_err.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>shuttles_err.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#L0301">L0301</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">fun</span> <span class="f">duplex</span>() ~&gt; i32 &lt;~ i32 {
     <span class="k">while</span> <span class="k">pull</span> <span class="k">is</span> <span class="k">some</span>(x) {
         <span class="k">yield</span> x
     }
 }
 
-<span class="k">fun</span> main() {
-    <span class="k">var</span> d = duplex()
-    d.push(<span class="n">1</span>)
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">var</span> d = <span class="f">duplex</span>()
+    d.<span class="f">push</span>(<span class="n">1</span>)
 }</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[L0301]: loose end: this `Burst[i32]` is thrown away</span>
 <span class="loc">  --&gt; shuttles_err.loom:9:5</span>
-  |
-9 |     d.push(1)
-  |     ^^^^^^^^^ `Burst[i32]` is a `once` type: it must be used up exactly once
-  |
-  = help: go through it with `for`, or call `.drain()` to throw its items away on purpose
+<span class="gut">  |</span>
+<span class="gut">9 |</span>     d.push(1)
+<span class="gut">  |</span><span class="caret">     ^^^^^^^^^ `Burst[i32]` is a `once` type: it must be used up exactly once</span>
+<span class="gut">  |</span>
+<span class="loc">  = help: go through it with `for`, or call `.drain()` to throw its items away on purpose</span>
 
 <span class="err">error: shuttles_err.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
 <p>This push model suits lexers, protocol state machines and stream decoders: the caller keeps control of input, and the logic reads from top to bottom. <code>examples/lexer.loom</code> is one.</p>
-<h2 id="rules">Rules</h2>
+<h2 id="rules">Rules<a class="anchor" href="#rules" aria-label="Link to this section">#</a></h2>
 <ul><li><code>yield</code> in a shuttle that doesn't yield, or <code>pull</code> in one that doesn't pull, is <a href="diagnostics.html#T0120">T0120</a>. Neither can be inside a <code>defer</code> (<a href="diagnostics.html#T0118">T0118</a>).</li><li>A shuttle that calls itself is <a href="diagnostics.html#T0121">T0121</a>: its frame would contain itself.</li><li>A shuttle keeps its parameters as long as it lives. For now it only takes ones it owns: <code>take</code> parameters, and <code>Copy</code> ones, which it copies when it's made. A borrowed parameter is <a href="diagnostics.html#U0102">U0102</a>.</li><li>Leaving a <code>for</code> loop over a generator early closes it: its <code>defer</code>s that it has reached run. One of them that unravels unravels in the loop.</li><li>A shuttle dropped part-way any other way (after <code>.take(3)</code>, say) runs the <code>defer</code>s it has reached on Treadle; on the Lua backend it's left to the garbage collector, and they don't run.</li><li>An unravel inside a shuttle closes it (running its <code>defer</code>s) and is raised again where it was driven.</li></ul>
-<h2 id="frames">Frames</h2>
+<h2 id="frames">Frames<a class="anchor" href="#frames" aria-label="Link to this section">#</a></h2>
 <p>What a shuttle keeps between pauses is its <strong>frame</strong>, and its size is known while compiling: <code>fib.Frame.size</code> is how many bytes a shuttle made by <code>fib</code> keeps (24: two <code>u64</code>s and a state word), and <code>fib.Frame.align</code> its alignment. Locals that are never kept at the same pause share space. <code>examples/lexer.loom</code> checks its lexer's with <code>const assert(lexer.Frame.size &lt;= 64)</code>.</p>
-<h2 id="projections">Projections</h2>
+<h2 id="projections">Projections<a class="anchor" href="#projections" aria-label="Link to this section">#</a></h2>
 <p>A <strong>projection</strong> is a shuttle that lends a place instead of yielding a value: <code>~&gt; mut T</code> lends one to change, <code>~&gt; ref T</code> one to read, with <code>yield mut place</code> (or <code>yield ref</code>). A call of one is that place, for the statement it's in:</p>
-<div class="sample" id="sample-shuttles_lend">
-<div class="sample-head"><span class="file">samples/shuttles_lend.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-shuttles_lend" data-sample="shuttles_lend" data-mode="run" data-file="shuttles_lend.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>shuttles_lend.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="k">warp</span> <span class="t">Grid</span> {
@@ -184,30 +202,30 @@ sum: 10</code></pre></div>
     width: usize
 
     <span class="c">// `~&gt; mut T` lends a place to change.</span>
-    <span class="k">fun</span> at(<span class="k">mut</span> <span class="k">self</span>, x: usize, y: usize) ~&gt; <span class="k">mut</span> i32 {
+    <span class="k">fun</span> <span class="f">at</span>(<span class="k">mut</span> <span class="k">self</span>, x: usize, y: usize) ~&gt; <span class="k">mut</span> i32 {
         <span class="k">yield</span> <span class="k">mut</span> .cells[y * .width + x]
         <span class="c">// Runs once the statement that used the place is done.</span>
-        print(<span class="s">"  ({</span>x<span class="s">}, {</span>y<span class="s">}) is {</span>.cells[y * .width + x]<span class="s">}"</span>)
+        <span class="f">print</span>(<span class="s">"  (</span><span class="h">{</span>x<span class="h">}</span><span class="s">, </span><span class="h">{</span>y<span class="h">}</span><span class="s">) is </span><span class="h">{</span>.cells[y * .width + x]<span class="h">}</span><span class="s">"</span>)
     }
 }
 
-<span class="k">fun</span> main() {
+<span class="k">fun</span> <span class="f">main</span>() {
     <span class="k">var</span> g = <span class="t">Grid</span>(cells: [<span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>], width: <span class="n">2</span>)
-    g.at(<span class="n">1</span>, <span class="n">0</span>) = <span class="n">5</span>
-    g.at(<span class="n">1</span>, <span class="n">0</span>) += <span class="n">1</span>
-    print(g.cells)
+    g.<span class="f">at</span>(<span class="n">1</span>, <span class="n">0</span>) = <span class="n">5</span>
+    g.<span class="f">at</span>(<span class="n">1</span>, <span class="n">0</span>) += <span class="n">1</span>
+    <span class="f">print</span>(g.cells)
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>  (1, 0) is 5
   (1, 0) is 6
 [0, 6, 0, 0]</code></pre></div>
 </div>
 <p>When the statement ends, the projection resumes, so the code after its <code>yield</code> (and its <code>defer</code>s) runs. One that ends without lending a place unravels, and so does one that lends a second. A projection can borrow its parameters (<code>mut self</code> here), and what it borrows stays borrowed until the statement ends (<a href="diagnostics.html#M0104">M0104</a>). What it lends can be read or changed, but not moved out (<a href="diagnostics.html#M0103">M0103</a>). A <code>for</code> loop over a projection that lends many places isn't supported yet.</p>
-<h2 id="where-next">Where next</h2>
+<h2 id="where-next">Where next<a class="anchor" href="#where-next" aria-label="Link to this section">#</a></h2>
 <p><a href="compile-time.html">Compile-time code</a> runs ordinary Loom while the program compiles.</p>
-<div class="pager">
-<a href="gauges.html">&larr; Gauges</a>
-<a href="compile-time.html">Compile-time code &rarr;</a>
-</div>
+<nav class="pager" aria-label="Chapters">
+<a class="prev" href="gauges.html"><span class="dir">&larr; Chapter 9</span>Gauges</a>
+<a class="next" href="compile-time.html"><span class="dir">Chapter 11 &rarr;</span>Compile-time code</a>
+</nav>
 </main>
 </div>
 </body>

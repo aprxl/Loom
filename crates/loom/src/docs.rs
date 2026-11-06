@@ -82,6 +82,15 @@ mod tests {
         assert!(FILES.iter().any(|(f, _)| *f == LANDING), "no {LANDING} under docs/");
     }
 
+    /// The samples run in the browser: the playground's script and the
+    /// compiler it loads (built by `docs/play/build.py`) are built in.
+    #[test]
+    fn the_playground_is_built_in() {
+        for file in ["play/play.js", "play/loom-wasm.js", "weave.js"] {
+            assert!(FILES.iter().any(|(f, _)| *f == file), "no {file} under docs/");
+        }
+    }
+
     /// Every relative link and stylesheet points at a page that's built in,
     /// so the site works offline.
     #[test]

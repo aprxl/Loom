@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Pointers, spools and given · Loom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+<script src="../weave.js" defer></script>
+<script src="../play/play.js" defer></script>
+</head>
+<body data-chapter="memory">
+<header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
+<rect x="6" y="3" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="6" y="24" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
+<path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
+<path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a class="current" href="../lang/index.html">The book</a><a href="../std/index.html">Library</a><a class="wide" href="../lang/diagnostics.html">Codes</a><a class="play-link" href="../playground.html">Playground</a></nav></header>
+<div class="layout">
+<nav class="sidebar" aria-label="Contents">
+<div class="group">
+<h3>The book</h3>
+<ul class="beads">
+<li><a href="index.html" data-chapter="index"><span class="num"></span><span>Welcome to Loom</span></a></li>
+<li><a href="start.html" data-chapter="start"><span class="num">1</span><span>Getting started</span></a></li>
+<li><a href="values.html" data-chapter="values"><span class="num">2</span><span>Values and control flow</span></a></li>
+<li><a href="types.html" data-chapter="types"><span class="num">3</span><span>Warps, wefts and weaves</span></a></li>
+<li><a href="generics.html" data-chapter="generics"><span class="num">4</span><span>Generics and <code>any</code></span></a></li>
+<li><a href="collections.html" data-chapter="collections"><span class="num">5</span><span>Collections and streams</span></a></li>
+<li><a href="errors.html" data-chapter="errors"><span class="num">6</span><span>Optionals and errors</span></a></li>
+<li><a href="ownership.html" data-chapter="ownership"><span class="num">7</span><span>Moves, <code>once</code> and <code>defer</code></span></a></li>
+<li><a class="current" aria-current="page" href="memory.html" data-chapter="memory"><span class="num">8</span><span>Pointers, spools and <code>given</code></span></a></li>
+<li><a href="gauges.html" data-chapter="gauges"><span class="num">9</span><span>Gauges</span></a></li>
+<li><a href="shuttles.html" data-chapter="shuttles"><span class="num">10</span><span>Shuttles</span></a></li>
+<li><a href="compile-time.html" data-chapter="compile-time"><span class="num">11</span><span>Compile-time code</span></a></li>
+<li><a href="const-params.html" data-chapter="const-params"><span class="num">12</span><span>Const parameters and control flow</span></a></li>
+<li><a href="reflection.html" data-chapter="reflection"><span class="num">13</span><span>Reflection</span></a></li>
+<li><a href="tests.html" data-chapter="tests"><span class="num">14</span><span>Tests</span></a></li>
+<li><a href="threads.html" data-chapter="threads"><span class="num">15</span><span>Threads</span></a></li>
+<li><a href="not-yet.html" data-chapter="not-yet"><span class="num">A</span><span>Not supported yet</span></a></li>
+</ul></div>
+<div class="group">
+<h3>Also</h3>
+<ul class="plain-list">
+<li><a href="diagnostics.html">Diagnostic codes</a></li>
+<li><a href="../playground.html">Playground</a></li>
+<li><a href="../std/index.html">Standard library</a></li>
+</ul></div>
+</nav>
+<main class="weave">
+<div class="chapter-head">
+<span class="chapter-no">Chapter 8</span>
+<h1>Pointers, spools and <code>given</code></h1>
+<p class="summary">Boxes on the heap, arenas that free everything at once, and values passed down implicitly.</p>
+</div>
+<h2 id="pointers">Pointers<a class="anchor" href="#pointers" aria-label="Link to this section">#</a></h2>
+<p><code>^e</code> puts a value in a box on the heap and gives a pointer to it, written <code>^T</code>. A pointer owns its box: it moves like any non-<code>Copy</code> value, and dropping it drops the value and frees the box. That is how a type holds itself (<code>^Tree</code> inside <code>Tree</code>). <code>p^</code> reads the box. Fields, methods, patterns and <code>{p}</code> see through a pointer, so <code>t.value</code> and <code>match t { .Node(l, x, r) =&gt; ... }</code> work on a <code>^Tree</code>. A pointer in a <code>var</code> can be written through (<code>p.x = 1</code>, <code>p^ += 1</code>).</p>
+<div class="sample" id="sample-own_pointers" data-sample="own_pointers" data-mode="run" data-file="own_pointers.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>own_pointers.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Tree</span> {
+    <span class="k">case</span> <span class="t">Leaf</span>
+    <span class="k">case</span> <span class="t">Node</span>(left: ^<span class="t">Tree</span>, value: i32, right: ^<span class="t">Tree</span>)
+}
+
+<span class="k">fun</span> <span class="f">insert</span>(<span class="k">take</span> t: ^<span class="t">Tree</span>, v: i32) -&gt; ^<span class="t">Tree</span> = <span class="k">match</span> t {
+    .<span class="t">Leaf</span> =&gt; ^<span class="t">Tree</span>.<span class="t">Node</span>(^<span class="t">Tree</span>.<span class="t">Leaf</span>, v, ^<span class="t">Tree</span>.<span class="t">Leaf</span>)
+    .<span class="t">Node</span>(l, x, r) =&gt; <span class="k">if</span> v &lt; x {
+        ^<span class="t">Tree</span>.<span class="t">Node</span>(l.<span class="f">insert</span>(v), x, r)
+    } <span class="k">else</span> {
+        ^<span class="t">Tree</span>.<span class="t">Node</span>(l, x, r.<span class="f">insert</span>(v))
+    }
+}
+
+<span class="k">fun</span> <span class="f">sum</span>(t: ^<span class="t">Tree</span>) -&gt; i32 = <span class="k">match</span> t {
+    .<span class="t">Leaf</span> =&gt; <span class="n">0</span>
+    .<span class="t">Node</span>(l, x, r) =&gt; l.<span class="f">sum</span>() + x + r.<span class="f">sum</span>()
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">var</span> t: ^<span class="t">Tree</span> = ^<span class="t">Tree</span>.<span class="t">Leaf</span>
+    <span class="k">for</span> v <span class="k">in</span> [<span class="n">5</span>, <span class="n">2</span>, <span class="n">8</span>, <span class="n">1</span>, <span class="n">9</span>, <span class="n">3</span>] {
+        t = t.<span class="f">insert</span>(v)
+    }
+    <span class="f">print</span>(<span class="s">"sum </span><span class="h">{</span>t.<span class="f">sum</span>()<span class="h">}</span><span class="s">"</span>)
+
+    <span class="k">var</span> n = ^<span class="n">41</span>
+    n^ += <span class="n">1</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>n^<span class="h">}</span><span class="s">"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>sum 28
+42</code></pre></div>
+</div>
+<p>A <code>take</code> pointer that a <code>match</code> takes apart hands its parts to the arms by value, so the arms can move them into a new node.</p>
+<h2 id="spools">Spools<a class="anchor" href="#spools" aria-label="Link to this section">#</a></h2>
+<p>A pointer into the heap owns its box and frees it. When many values live and die together (the nodes of a tree, a frame of a game) a <strong>spool</strong> is cheaper: <code>spool frame = Arena(1.kib())</code> makes one, <code>frame.put(v)</code> moves a value into it, and <code>^e</code> allocates in the spool a function is <code>given</code>. A pointer into a spool is <code>Copy</code> and owns nothing; <code>frame.reset()</code> takes every allocation back at once, and the spool ends with its scope.</p>
+<p><code>^T@s</code> is a pointer into the spool <code>s</code>, and <code>fun tree() -&gt; ^Node@sp given sp: Spool</code> is a function that builds in whichever spool the caller gives (<code>tree(4, given: frame)</code>), or the heap if the call gives none. A parameter written <code>^Node</code> takes a tree from any spool. A warp that holds pointers (<code>Node</code>) is <code>Node@s</code> for the spool its nodes are in.</p>
+<div class="sample" id="sample-own_spools" data-sample="own_spools" data-mode="run" data-file="own_spools.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>own_spools.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.mem.{<span class="t">Arena</span>, <span class="t">Spool</span>, kib}
+
+<span class="k">warp</span> <span class="t">Node</span> {
+    <span class="k">case</span> <span class="t">Leaf</span>(i32)
+    <span class="k">case</span> <span class="t">Pair</span>(^<span class="t">Node</span>, ^<span class="t">Node</span>)
+}
+
+<span class="c">// The tree lives in whichever spool the caller gives; with none it is on the heap.</span>
+<span class="k">fun</span> <span class="f">tree</span>(depth: i32) -&gt; ^<span class="t">Node</span>@sp <span class="k">given</span> sp: <span class="t">Spool</span> {
+    <span class="k">if</span> depth == <span class="n">0</span> { <span class="k">return</span> ^<span class="t">Node</span>.<span class="t">Leaf</span>(<span class="n">1</span>) }
+    ^<span class="t">Node</span>.<span class="t">Pair</span>(<span class="f">tree</span>(depth - <span class="n">1</span>), <span class="f">tree</span>(depth - <span class="n">1</span>))
+}
+
+<span class="c">// A parameter without a region takes a tree from any spool.</span>
+<span class="k">fun</span> <span class="f">count</span>(n: ^<span class="t">Node</span>) -&gt; i32 = <span class="k">match</span> n {
+    .<span class="t">Leaf</span>(k) =&gt; k
+    .<span class="t">Pair</span>(a, b) =&gt; <span class="f">count</span>(a) + <span class="f">count</span>(b)
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">spool</span> frame = <span class="t">Arena</span>(<span class="n">1</span>.<span class="f">kib</span>())
+    <span class="k">let</span> t = <span class="f">tree</span>(<span class="n">4</span>, <span class="k">given</span>: frame)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">count</span>(t)<span class="h">}</span><span class="s">"</span>)
+    frame.<span class="f">reset</span>()                       <span class="c">// every node goes at once</span>
+    <span class="k">let</span> u = <span class="f">tree</span>(<span class="n">3</span>, <span class="k">given</span>: frame)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">count</span>(u)<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">count</span>(<span class="f">tree</span>(<span class="n">5</span>))<span class="h">}</span><span class="s">"</span>)           <span class="c">// no spool: the heap</span>
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>16
+8
+32</code></pre></div>
+</div>
+<p>The region checker keeps pointers from outliving their spool: a value that points into a spool can't be returned out of the block the spool ends with (<a href="diagnostics.html#R0101">R0101</a>), used after the spool was reset (<a href="diagnostics.html#R0102">R0102</a>), or passed where a parameter names another spool (<a href="diagnostics.html#R0104">R0104</a>). A spool can't be moved (<a href="diagnostics.html#M0107">M0107</a>).</p>
+<div class="sample" id="sample-own_err_region" data-sample="own_err_region" data-mode="check" data-file="own_err_region.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>own_err_region.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#R0102">R0102</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.mem.{<span class="t">Arena</span>, <span class="t">Spool</span>, kib}
+
+<span class="k">warp</span> <span class="t">Node</span> {
+    <span class="k">case</span> <span class="t">Leaf</span>(i32)
+    <span class="k">case</span> <span class="t">Pair</span>(^<span class="t">Node</span>, ^<span class="t">Node</span>)
+}
+
+<span class="k">fun</span> <span class="f">tree</span>(depth: i32) -&gt; ^<span class="t">Node</span>@sp <span class="k">given</span> sp: <span class="t">Spool</span> {
+    <span class="k">if</span> depth == <span class="n">0</span> { <span class="k">return</span> ^<span class="t">Node</span>.<span class="t">Leaf</span>(<span class="n">1</span>) }
+    ^<span class="t">Node</span>.<span class="t">Pair</span>(<span class="f">tree</span>(depth - <span class="n">1</span>), <span class="f">tree</span>(depth - <span class="n">1</span>))
+}
+
+<span class="k">fun</span> <span class="f">count</span>(n: ^<span class="t">Node</span>) -&gt; i32 = <span class="k">match</span> n {
+    .<span class="t">Leaf</span>(k) =&gt; k
+    .<span class="t">Pair</span>(a, b) =&gt; <span class="f">count</span>(a) + <span class="f">count</span>(b)
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">spool</span> frame = <span class="t">Arena</span>(<span class="n">1</span>.<span class="f">kib</span>())
+    <span class="k">let</span> t = <span class="f">tree</span>(<span class="n">2</span>, <span class="k">given</span>: frame)
+    frame.<span class="f">reset</span>()
+    <span class="f">count</span>(t)
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[R0102]: `t` points into `frame`, which was reset</span>
+<span class="loc">   --&gt; own_err_region.loom:22:11</span>
+<span class="gut">   |</span>
+<span class="gut">21 |</span>     frame.reset()
+<span class="gut">   |</span><span class="caret">     ------------- `frame` reset here</span>
+<span class="gut">22 |</span>     count(t)
+<span class="gut">   |</span><span class="caret">           ^ used here</span>
+<span class="gut">   |</span>
+<span class="loc">   = help: move the reset after the last use, or `.copy()` the value into another spool first</span>
+
+<span class="err">error: own_err_region.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<p>Text copied with <code>.copy()</code> goes in the spool the call is given, so an arena's tree can hold names and still go at once. A list, map or box can't be held by a warp that is in a spool yet (<a href="diagnostics.html#U0102">U0102</a>): nothing would free it.</p>
+<p>A pointer into a spool is <code>Copy</code>, so two copies see the same value: a field behind one can be written only when the warp is plain data (no text, lists or cases that own anything); otherwise it is read-only (<a href="diagnostics.html#T0107">T0107</a>).</p>
+<p><code>Pool[T](n)</code> is a spool of <code>n</code> slots of one type: <code>put</code> takes a free slot and <code>free</code> gives it back, a few instructions each. It holds plain data only. <code>SharedArena(cap)</code> is an arena threads may allocate in, and its pointers may cross to them; a pointer into any other spool can't (<a href="diagnostics.html#R0103">R0103</a>).</p>
+<h2 id="given"><code>given</code><a class="anchor" href="#given" aria-label="Link to this section">#</a></h2>
+<p>A function can say what it needs from its caller with a <code>given</code> parameter of a weft: <code>fun welcome(who: str) given g: Greeter</code>. It is passed on by the call, not in the argument list: the innermost <code>given</code> in scope supplies it, <code>given name = value</code> states one from there to the end of the block, and <code>given: x</code> gives one to a single call. A weft marked <code>#given_default(Type)</code> has one when nothing is in scope (a spool's is the heap), so a program that never says <code>given</code> still runs. A function is checked for the type it is given, so an unused <code>given</code> costs nothing. Every function spells its own <code>given</code>s: a private one doesn't infer them from what it calls yet.</p>
+<div class="sample" id="sample-own_given" data-sample="own_given" data-mode="run" data-file="own_given.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>own_given.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">// A weft with a default: a call that is given nothing gets a `Plain`.</span>
+<span class="a">#given_default</span>(<span class="t">Plain</span>)
+<span class="k">weft</span> <span class="t">Greeter</span> {
+    <span class="k">fun</span> <span class="f">greet</span>(<span class="k">self</span>) -&gt; <span class="t">String</span>
+}
+
+<span class="k">warp</span> <span class="t">Plain</span>: <span class="t">Greeter</span>, <span class="t">Default</span> {
+    <span class="k">pub</span> <span class="k">fun</span> <span class="f">greet</span>(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"hello"</span>
+}
+
+<span class="k">warp</span> <span class="t">Loud</span>: <span class="t">Greeter</span> {
+    name: <span class="t">String</span>
+
+    <span class="k">pub</span> <span class="k">fun</span> <span class="f">greet</span>(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"HELLO, </span><span class="h">{</span>.name<span class="h">}</span><span class="s">!"</span>
+}
+
+<span class="k">fun</span> <span class="f">welcome</span>(who: str) -&gt; <span class="t">String</span> <span class="k">given</span> g: <span class="t">Greeter</span> = <span class="s">"</span><span class="h">{</span>g.<span class="f">greet</span>()<span class="h">}</span><span class="s"> </span><span class="h">{</span>who<span class="h">}</span><span class="s">"</span>
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">print</span>(<span class="f">welcome</span>(<span class="s">"ann"</span>))          <span class="c">// nothing given: a Plain</span>
+    <span class="k">given</span> g = <span class="t">Loud</span>(<span class="s">"ci"</span>)           <span class="c">// from here to the end of the block</span>
+    <span class="f">print</span>(<span class="f">welcome</span>(<span class="s">"dee"</span>))
+    <span class="f">print</span>(<span class="f">welcome</span>(<span class="s">"eve"</span>, <span class="k">given</span>: <span class="t">Plain</span>()))    <span class="c">// this one call</span>
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>hello ann
+HELLO, ci! dee
+hello eve</code></pre></div>
+</div>
+<h2 id="not-supported-yet">Not supported yet<a class="anchor" href="#not-supported-yet" aria-label="Link to this section">#</a></h2>
+<p>Projections (<code>~&gt; mut T</code>), which lend a place, work: see <a href="shuttles.html">Shuttles</a>. See <a href="not-yet.html">Not supported yet</a>.</p>
+<h2 id="where-next">Where next<a class="anchor" href="#where-next" aria-label="Link to this section">#</a></h2>
+<p><a href="gauges.html">Gauges</a> restrict a number to a range.</p>
+<nav class="pager" aria-label="Chapters">
+<a class="prev" href="ownership.html"><span class="dir">&larr; Chapter 7</span>Moves, <code>once</code> and <code>defer</code></a>
+<a class="next" href="gauges.html"><span class="dir">Chapter 9 &rarr;</span>Gauges</a>
+</nav>
+</main>
+</div>
+</body>
+</html>

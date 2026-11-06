@@ -1,51 +1,69 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="no-js">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>Moves, once and defer · Loom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../style.css">
+<script src="../weave.js" defer></script>
+<script src="../play/play.js" defer></script>
 </head>
-<body>
+<body data-chapter="ownership">
+<header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
+<rect x="6" y="3" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="6" y="24" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
+<path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
+<path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a class="current" href="../lang/index.html">The book</a><a href="../std/index.html">Library</a><a class="wide" href="../lang/diagnostics.html">Codes</a><a class="play-link" href="../playground.html">Playground</a></nav></header>
 <div class="layout">
-<nav class="sidebar">
-<a class="brand" href="../index.html">Loom <span class="dim">docs</span></a>
-<ul class="sections">
-<li><a class="current" href="../lang/index.html">Language</a></li>
+<nav class="sidebar" aria-label="Contents">
+<div class="group">
+<h3>The book</h3>
+<ul class="beads">
+<li><a href="index.html" data-chapter="index"><span class="num"></span><span>Welcome to Loom</span></a></li>
+<li><a href="start.html" data-chapter="start"><span class="num">1</span><span>Getting started</span></a></li>
+<li><a href="values.html" data-chapter="values"><span class="num">2</span><span>Values and control flow</span></a></li>
+<li><a href="types.html" data-chapter="types"><span class="num">3</span><span>Warps, wefts and weaves</span></a></li>
+<li><a href="generics.html" data-chapter="generics"><span class="num">4</span><span>Generics and <code>any</code></span></a></li>
+<li><a href="collections.html" data-chapter="collections"><span class="num">5</span><span>Collections and streams</span></a></li>
+<li><a href="errors.html" data-chapter="errors"><span class="num">6</span><span>Optionals and errors</span></a></li>
+<li><a class="current" aria-current="page" href="ownership.html" data-chapter="ownership"><span class="num">7</span><span>Moves, <code>once</code> and <code>defer</code></span></a></li>
+<li><a href="memory.html" data-chapter="memory"><span class="num">8</span><span>Pointers, spools and <code>given</code></span></a></li>
+<li><a href="gauges.html" data-chapter="gauges"><span class="num">9</span><span>Gauges</span></a></li>
+<li><a href="shuttles.html" data-chapter="shuttles"><span class="num">10</span><span>Shuttles</span></a></li>
+<li><a href="compile-time.html" data-chapter="compile-time"><span class="num">11</span><span>Compile-time code</span></a></li>
+<li><a href="const-params.html" data-chapter="const-params"><span class="num">12</span><span>Const parameters and control flow</span></a></li>
+<li><a href="reflection.html" data-chapter="reflection"><span class="num">13</span><span>Reflection</span></a></li>
+<li><a href="tests.html" data-chapter="tests"><span class="num">14</span><span>Tests</span></a></li>
+<li><a href="threads.html" data-chapter="threads"><span class="num">15</span><span>Threads</span></a></li>
+<li><a href="not-yet.html" data-chapter="not-yet"><span class="num">A</span><span>Not supported yet</span></a></li>
+</ul></div>
+<div class="group">
+<h3>Also</h3>
+<ul class="plain-list">
+<li><a href="diagnostics.html">Diagnostic codes</a></li>
+<li><a href="../playground.html">Playground</a></li>
 <li><a href="../std/index.html">Standard library</a></li>
-<li><a href="../lang/diagnostics.html">Diagnostic codes</a></li>
-</ul>
-<h3>Language</h3>
-<ul>
-<li><a href="index.html">Overview</a></li>
-<li><a href="start.html">Getting started</a></li>
-<li><a href="values.html">Values and control flow</a></li>
-<li><a href="types.html">Warps, wefts and weaves</a></li>
-<li><a href="generics.html">Generics and <code>any</code></a></li>
-<li><a href="collections.html">Collections and streams</a></li>
-<li><a href="errors.html">Optionals and errors</a></li>
-<li><a class="current" href="ownership.html">Moves, <code>once</code> and <code>defer</code></a></li>
-<li><a href="gauges.html">Gauges</a></li>
-<li><a href="shuttles.html">Shuttles</a></li>
-<li><a href="compile-time.html">Compile-time code</a></li>
-<li><a href="const-params.html">Const parameters and control flow</a></li>
-<li><a href="reflection.html">Reflection</a></li>
-<li><a href="tests.html">Tests</a></li>
-<li><a href="threads.html">Threads</a></li>
-<li><a href="not-yet.html">Not supported yet</a></li>
-</ul>
+</ul></div>
 </nav>
-<main>
-<div class="crumb"><a href="index.html">Language</a> / Moves, <code>once</code> and <code>defer</code></div>
+<main class="weave">
+<div class="chapter-head">
+<span class="chapter-no">Chapter 7</span>
 <h1>Moves, <code>once</code> and <code>defer</code></h1>
 <p class="summary">Who owns a value, what a parameter can do with it, and what runs when a scope ends.</p>
-<h2 id="values-first">Values first</h2>
+</div>
+<h2 id="values-first">Values first<a class="anchor" href="#values-first" aria-label="Link to this section">#</a></h2>
 <p>Every variable owns its value. There is no type "reference to T", so there are no lifetimes to write. Assigning a value or passing it to a <code>take</code> parameter <strong>copies</strong> it if its type is <code>Copy</code> and <strong>moves</strong> it otherwise. A warp whose fields are all <code>Copy</code> is <code>Copy</code> by itself, unless it's a <code>once</code> warp.</p>
 <p>A function's parameters say what it may do:</p>
 <table class="plain"><thead><tr><th>Declared</th><th>Call site</th><th>The callee</th></tr></thead><tbody><tr><td><code>x: T</code></td><td><code>f(x)</code></td><td>reads <code>x</code>; the caller keeps it</td></tr><tr><td><code>mut x: T</code></td><td><code>f(mut x)</code></td><td>edits <code>x</code> in place; the caller keeps it, changed</td></tr><tr><td><code>take x: T</code></td><td><code>f(x)</code></td><td>owns <code>x</code>; the caller loses it unless <code>T</code> is <code>Copy</code></td></tr></tbody></table>
 <p><code>mut</code> is written at the call site as well as the declaration. Method receivers are the exception: <code>scores.sort()</code> is already clear.</p>
-<div class="sample" id="sample-own_params">
-<div class="sample-head"><span class="file">samples/own_params.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-own_params" data-sample="own_params" data-mode="run" data-file="own_params.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>own_params.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="k">warp</span> <span class="t">Counter</span>: <span class="t">Show</span> {
@@ -53,38 +71,38 @@
 }
 
 <span class="c">// `x: T` reads. `mut x: T` edits in place. `take x: T` consumes.</span>
-<span class="k">fun</span> peek(c: <span class="t">Counter</span>) -&gt; i32 = c.n
-<span class="k">fun</span> bump(<span class="k">mut</span> c: <span class="t">Counter</span>) { c.n += <span class="n">1</span> }
-<span class="k">fun</span> swap(<span class="k">mut</span> a: i32, <span class="k">mut</span> b: i32) {
+<span class="k">fun</span> <span class="f">peek</span>(c: <span class="t">Counter</span>) -&gt; i32 = c.n
+<span class="k">fun</span> <span class="f">bump</span>(<span class="k">mut</span> c: <span class="t">Counter</span>) { c.n += <span class="n">1</span> }
+<span class="k">fun</span> <span class="f">swap</span>(<span class="k">mut</span> a: i32, <span class="k">mut</span> b: i32) {
     <span class="k">let</span> t = a
     a = b
     b = t
 }
-<span class="k">fun</span> keep(<span class="k">take</span> names: <span class="t">List</span>[<span class="t">String</span>]) -&gt; usize = names.len()
+<span class="k">fun</span> <span class="f">keep</span>(<span class="k">take</span> names: <span class="t">List</span>[<span class="t">String</span>]) -&gt; usize = names.<span class="f">len</span>()
 
-<span class="k">fun</span> main() {
+<span class="k">fun</span> <span class="f">main</span>() {
     <span class="k">var</span> c = <span class="t">Counter</span>()
-    bump(<span class="k">mut</span> c)                              <span class="c">// `mut` is written at the call, too</span>
-    bump(<span class="k">mut</span> c)
-    print(<span class="s">"{</span>peek(c)<span class="s">} {</span>c<span class="s">}"</span>)
+    <span class="f">bump</span>(<span class="k">mut</span> c)                              <span class="c">// `mut` is written at the call, too</span>
+    <span class="f">bump</span>(<span class="k">mut</span> c)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">peek</span>(c)<span class="h">}</span><span class="s"> </span><span class="h">{</span>c<span class="h">}</span><span class="s">"</span>)
 
     <span class="k">var</span> a = <span class="n">1</span>
     <span class="k">var</span> b = <span class="n">2</span>
-    swap(<span class="k">mut</span> a, <span class="k">mut</span> b)
-    print(<span class="s">"{</span>a<span class="s">} {</span>b<span class="s">}"</span>)
+    <span class="f">swap</span>(<span class="k">mut</span> a, <span class="k">mut</span> b)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>a<span class="h">}</span><span class="s"> </span><span class="h">{</span>b<span class="h">}</span><span class="s">"</span>)
 
     <span class="c">// Mutable exclusivity works per field.</span>
     <span class="k">var</span> pair = (<span class="n">10</span>, <span class="n">20</span>)
-    swap(<span class="k">mut</span> pair.<span class="n">0</span>, <span class="k">mut</span> pair.<span class="n">1</span>)
-    print(pair)
+    <span class="f">swap</span>(<span class="k">mut</span> pair.<span class="n">0</span>, <span class="k">mut</span> pair.<span class="n">1</span>)
+    <span class="f">print</span>(pair)
 
     <span class="c">// Assigning a `Copy` value copies it.</span>
     <span class="k">var</span> d = c
     d.n = <span class="n">100</span>
-    print(<span class="s">"{</span>c.n<span class="s">} {</span>d.n<span class="s">}"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>c.n<span class="h">}</span><span class="s"> </span><span class="h">{</span>d.n<span class="h">}</span><span class="s">"</span>)
 
     <span class="k">let</span> names: <span class="t">List</span>[<span class="t">String</span>] = [<span class="s">"ada"</span>, <span class="s">"alan"</span>]
-    print(keep(names))
+    <span class="f">print</span>(<span class="f">keep</span>(names))
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>2 Counter(n: 2)
 2 1
@@ -92,121 +110,121 @@
 2 100
 2</code></pre></div>
 </div>
-<h2 id="moves-are-checked">Moves are checked</h2>
+<h2 id="moves-are-checked">Moves are checked<a class="anchor" href="#moves-are-checked" aria-label="Link to this section">#</a></h2>
 <p>Using a variable after it moved is an error, and so is moving a value out of a borrow (a read parameter, a loop's item, a lambda's captured variable) or out of a list's element. The check follows branches and goes through loop bodies twice.</p>
-<div class="sample" id="sample-own_err_moved">
-<div class="sample-head"><span class="file">samples/own_err_moved.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#M0101">M0101</a></span></div>
-<pre class="code"><code><span class="k">fun</span> keep(<span class="k">take</span> s: <span class="t">String</span>) -&gt; <span class="t">String</span> = s
+<div class="sample" id="sample-own_err_moved" data-sample="own_err_moved" data-mode="check" data-file="own_err_moved.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>own_err_moved.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#M0101">M0101</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">fun</span> <span class="f">keep</span>(<span class="k">take</span> s: <span class="t">String</span>) -&gt; <span class="t">String</span> = s
 
-<span class="k">fun</span> used_after(<span class="k">take</span> s: <span class="t">String</span>) -&gt; usize {
-    <span class="k">let</span> kept = keep(s)
-    s.len()
+<span class="k">fun</span> <span class="f">used_after</span>(<span class="k">take</span> s: <span class="t">String</span>) -&gt; usize {
+    <span class="k">let</span> kept = <span class="f">keep</span>(s)
+    s.<span class="f">len</span>()
 }
 
-<span class="k">fun</span> main() {}</code></pre>
+<span class="k">fun</span> <span class="f">main</span>() {}</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[M0101]: `s` is used after it was moved</span>
 <span class="loc">  --&gt; own_err_moved.loom:5:5</span>
-  |
-4 |     let kept = keep(s)
-  |                     - moved here
-5 |     s.len()
-  |     ^ used here
-  |
-  = help: copy it before it moves (`x.copy()`), or give it a new value first
+<span class="gut">  |</span>
+<span class="gut">4 |</span>     let kept = keep(s)
+<span class="gut">  |</span><span class="caret">                     - moved here</span>
+<span class="gut">5 |</span>     s.len()
+<span class="gut">  |</span><span class="caret">     ^ used here</span>
+<span class="gut">  |</span>
+<span class="loc">  = help: copy it before it moves (`x.copy()`), or give it a new value first</span>
 
 <span class="err">error: own_err_moved.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
 <p>While a variable is lent as <code>mut</code>, nothing else in the call may touch it. The check works per field, so <code>swap(mut p.x, mut p.y)</code> is fine.</p>
-<div class="sample" id="sample-own_err_overlap">
-<div class="sample-head"><span class="file">samples/own_err_overlap.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#M0104">M0104</a></span></div>
-<pre class="code"><code><span class="k">fun</span> swap(<span class="k">mut</span> a: i32, <span class="k">mut</span> b: i32) {
+<div class="sample" id="sample-own_err_overlap" data-sample="own_err_overlap" data-mode="check" data-file="own_err_overlap.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>own_err_overlap.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#M0104">M0104</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">fun</span> <span class="f">swap</span>(<span class="k">mut</span> a: i32, <span class="k">mut</span> b: i32) {
     <span class="k">let</span> t = a
     a = b
     b = t
 }
 
-<span class="k">fun</span> main() {
+<span class="k">fun</span> <span class="f">main</span>() {
     <span class="k">var</span> n = <span class="n">1</span>
-    swap(<span class="k">mut</span> n, <span class="k">mut</span> n)
+    <span class="f">swap</span>(<span class="k">mut</span> n, <span class="k">mut</span> n)
 }</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[M0104]: `n` is lent out as `mut` and used again in the same call</span>
 <span class="loc">  --&gt; own_err_overlap.loom:9:21</span>
-  |
-9 |     swap(mut n, mut n)
-  |              -      ^ used here too
-  |              |       
-  |              lent as `mut` here
-  |
-  = help: a `mut` argument must be the only way the call reaches that value
+<span class="gut">  |</span>
+<span class="gut">9 |</span>     swap(mut n, mut n)
+<span class="gut">  |</span><span class="caret">              -      ^ used here too</span>
+<span class="gut">  |</span>              |       
+<span class="gut">  |</span>              lent as `mut` here
+<span class="gut">  |</span>
+<span class="loc">  = help: a `mut` argument must be the only way the call reaches that value</span>
 
 <span class="err">error: own_err_overlap.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
 <p>A borrow lasts as long as the call that received it, so a function can't return one or store one. A local can hold a value that borrows another local (a slice of a list, a stream over one, a lambda), and it sees that local as it is now. When the local changes, a borrow made earlier can't be used:</p>
-<div class="sample" id="sample-own_err_borrow">
-<div class="sample-head"><span class="file">samples/own_err_borrow.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#M0105">M0105</a></span></div>
+<div class="sample" id="sample-own_err_borrow" data-sample="own_err_borrow" data-mode="check" data-file="own_err_borrow.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>own_err_borrow.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#M0105">M0105</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fun</span> main() {
+<span class="k">fun</span> <span class="f">main</span>() {
     <span class="k">var</span> xs: <span class="t">List</span>[i32] = [<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]
     <span class="k">let</span> tail = xs[<span class="n">1</span>..]
-    xs.push(<span class="n">4</span>)
-    print(tail)
+    xs.<span class="f">push</span>(<span class="n">4</span>)
+    <span class="f">print</span>(tail)
 }</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[M0105]: `tail` borrows `xs`, which changed after it was made</span>
 <span class="loc">  --&gt; own_err_borrow.loom:7:11</span>
-  |
-6 |     xs.push(4)
-  |     -- `xs` changes here
-7 |     print(tail)
-  |           ^^^^ used here
-  |
-  = note: `tail` reads `xs` as it is now, not as it was
-  = help: make `tail` after the change, or from a copy (`xs.copy()`)
+<span class="gut">  |</span>
+<span class="gut">6 |</span>     xs.push(4)
+<span class="gut">  |</span><span class="caret">     -- `xs` changes here</span>
+<span class="gut">7 |</span>     print(tail)
+<span class="gut">  |</span><span class="caret">           ^^^^ used here</span>
+<span class="gut">  |</span>
+<span class="loc">  = note: `tail` reads `xs` as it is now, not as it was</span>
+<span class="loc">  = help: make `tail` after the change, or from a copy (`xs.copy()`)</span>
 
 <span class="err">error: own_err_borrow.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
 <p>Nor can a borrow outlive what it borrows. A lambda that uses variables around it is passed as an argument or kept in a local, and that's all: returning it, storing it in a warp or a list, or passing it to a <code>take</code> parameter is an error, and so is keeping it in a variable declared outside the block of a variable it uses. The same goes for a slice of a local list, and a stream made from one or from such a lambda. (A lambda that uses nothing around it is a plain function value, and goes anywhere.)</p>
-<div class="sample" id="sample-own_err_escape">
-<div class="sample-head"><span class="file">samples/own_err_escape.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#M0106">M0106</a>, <a href="diagnostics.html#M0106">M0106</a></span></div>
-<pre class="code"><code><span class="k">fun</span> adder(k: i32) -&gt; i32 =&gt; i32 {
+<div class="sample" id="sample-own_err_escape" data-sample="own_err_escape" data-mode="check" data-file="own_err_escape.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>own_err_escape.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#M0106">M0106</a>, <a href="diagnostics.html#M0106">M0106</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">fun</span> <span class="f">adder</span>(k: i32) -&gt; i32 =&gt; i32 {
     x =&gt; x + k
 }
 
-<span class="k">fun</span> main() {
+<span class="k">fun</span> <span class="f">main</span>() {
     <span class="k">var</span> fs: <span class="t">List</span>[i32 =&gt; i32] = <span class="t">List</span>()
     <span class="k">for</span> i <span class="k">in</span> <span class="n">1</span>..=<span class="n">3</span> {
-        fs.push(x =&gt; x * i)
+        fs.<span class="f">push</span>(x =&gt; x * i)
     }
 }</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[M0106]: a lambda that uses `k` can't be returned</span>
 <span class="loc">  --&gt; own_err_escape.loom:2:5</span>
-  |
-1 | fun adder(k: i32) -&gt; i32 =&gt; i32 {
-  |           - `k` is here
-2 |     x =&gt; x + k
-  |     ^^^^^^^^^^ returned here, it would outlive `k`
-  |
-  = note: a lambda borrows the variables it uses; a slice or a stream, what it's made from
-  = help: pass it as an argument or keep it in a local, or have it take what it needs as parameters
+<span class="gut">  |</span>
+<span class="gut">1 |</span> fun adder(k: i32) -&gt; i32 =&gt; i32 {
+<span class="gut">  |</span><span class="caret">           - `k` is here</span>
+<span class="gut">2 |</span>     x =&gt; x + k
+<span class="gut">  |</span><span class="caret">     ^^^^^^^^^^ returned here, it would outlive `k`</span>
+<span class="gut">  |</span>
+<span class="loc">  = note: a lambda borrows the variables it uses; a slice or a stream, what it's made from</span>
+<span class="loc">  = help: pass it as an argument or keep it in a local, or have it take what it needs as parameters</span>
 
 <span class="err">error[M0106]: a lambda that uses `i` can't be stored</span>
 <span class="loc">  --&gt; own_err_escape.loom:8:17</span>
-  |
-7 |     for i in 1..=3 {
-  |         - `i` is here
-8 |         fs.push(x =&gt; x * i)
-  |                 ^^^^^^^^^^ stored here, it would outlive `i`
-  |
-  = note: a lambda borrows the variables it uses; a slice or a stream, what it's made from
-  = help: pass it as an argument or keep it in a local, or have it take what it needs as parameters
+<span class="gut">  |</span>
+<span class="gut">7 |</span>     for i in 1..=3 {
+<span class="gut">  |</span><span class="caret">         - `i` is here</span>
+<span class="gut">8 |</span>         fs.push(x =&gt; x * i)
+<span class="gut">  |</span><span class="caret">                 ^^^^^^^^^^ stored here, it would outlive `i`</span>
+<span class="gut">  |</span>
+<span class="loc">  = note: a lambda borrows the variables it uses; a slice or a stream, what it's made from</span>
+<span class="loc">  = help: pass it as an argument or keep it in a local, or have it take what it needs as parameters</span>
 
 <span class="err">error: own_err_escape.loom failed to type-check (2 errors)</span></code></pre></div>
 </div>
 <p>The codes are <a href="diagnostics.html#M0101">M0101</a> (use after move), <a href="diagnostics.html#M0102">M0102</a> (move out of a borrow), <a href="diagnostics.html#M0103">M0103</a> (move out of an element), <a href="diagnostics.html#M0104">M0104</a> (overlapping <code>mut</code>), <a href="diagnostics.html#M0105">M0105</a> (a stale borrow) and <a href="diagnostics.html#M0106">M0106</a> (a borrow that outlives what it borrows).</p>
-<h2 id="once-warps"><code>once</code> warps</h2>
+<h2 id="once-warps"><code>once</code> warps<a class="anchor" href="#once-warps" aria-label="Link to this section">#</a></h2>
 <p>A <code>once warp</code> describes values that must be used up exactly once. They can't be copied, and they can't just go out of scope. The ways to use one up are to destructure it (<code>let Tx(moves) = self</code>, which only code that can see its fields may do) or to pass it to a <code>take</code> parameter that does. A warp that holds a <code>once</code> value is <code>once</code> itself, and so is <code>List[Tx]</code>.</p>
-<div class="sample" id="sample-own_once">
-<div class="sample-head"><span class="file">samples/own_once.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-own_once" data-sample="own_once" data-mode="run" data-file="own_once.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>own_once.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="c">// A `once` value must be used up exactly once. Here that means calling</span>
@@ -214,85 +232,85 @@
 <span class="k">pub</span> <span class="k">once</span> <span class="k">warp</span> <span class="t">Tx</span> {
     moves: <span class="t">List</span>[i32] = <span class="t">List</span>()
 
-    <span class="k">pub</span> <span class="k">fun</span> begin() -&gt; <span class="t">Tx</span> = <span class="t">Tx</span>()
-    <span class="k">pub</span> <span class="k">fun</span> credit(<span class="k">mut</span> <span class="k">self</span>, amount: i32) { .moves.push(amount) }
-    <span class="k">pub</span> <span class="k">fun</span> commit(<span class="k">take</span> <span class="k">self</span>) {
+    <span class="k">pub</span> <span class="k">fun</span> <span class="f">begin</span>() -&gt; <span class="t">Tx</span> = <span class="t">Tx</span>()
+    <span class="k">pub</span> <span class="k">fun</span> <span class="f">credit</span>(<span class="k">mut</span> <span class="k">self</span>, amount: i32) { .moves.<span class="f">push</span>(amount) }
+    <span class="k">pub</span> <span class="k">fun</span> <span class="f">commit</span>(<span class="k">take</span> <span class="k">self</span>) {
         <span class="k">let</span> <span class="t">Tx</span>(moves) = <span class="k">self</span>                 <span class="c">// destructuring ties the value off</span>
-        print(<span class="s">"committed {</span>moves<span class="s">}"</span>)
+        <span class="f">print</span>(<span class="s">"committed </span><span class="h">{</span>moves<span class="h">}</span><span class="s">"</span>)
     }
-    <span class="k">pub</span> <span class="k">fun</span> rollback(<span class="k">take</span> <span class="k">self</span>) {
+    <span class="k">pub</span> <span class="k">fun</span> <span class="f">rollback</span>(<span class="k">take</span> <span class="k">self</span>) {
         <span class="k">let</span> <span class="t">Tx</span>(_) = <span class="k">self</span>
-        print(<span class="s">"rolled back"</span>)
+        <span class="f">print</span>(<span class="s">"rolled back"</span>)
     }
 }
 
-<span class="k">fun</span> transfer(good: bool) {
-    <span class="k">var</span> tx = <span class="t">Tx</span>.begin()
-    <span class="k">defer</span> tx =&gt; tx.rollback()                <span class="c">// runs only if `tx` is still loose</span>
-    tx.credit(<span class="n">5</span>)
+<span class="k">fun</span> <span class="f">transfer</span>(good: bool) {
+    <span class="k">var</span> tx = <span class="t">Tx</span>.<span class="f">begin</span>()
+    <span class="k">defer</span> tx =&gt; tx.<span class="f">rollback</span>()                <span class="c">// runs only if `tx` is still loose</span>
+    tx.<span class="f">credit</span>(<span class="n">5</span>)
     <span class="k">if</span> <span class="k">not</span> good { <span class="k">return</span> }                   <span class="c">// leaving early rolls back</span>
-    tx.commit()                              <span class="c">// used up: the defer does nothing</span>
+    tx.<span class="f">commit</span>()                              <span class="c">// used up: the defer does nothing</span>
 }
 
-<span class="k">fun</span> main() {
-    transfer(<span class="k">true</span>)
-    transfer(<span class="k">false</span>)
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">transfer</span>(<span class="k">true</span>)
+    <span class="f">transfer</span>(<span class="k">false</span>)
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>committed [5]
 rolled back</code></pre></div>
 </div>
 <p>The compiler tracks each path. A <code>once</code> value that might still be loose when its scope ends, or when a <code>return</code>, <code>fail</code>, <code>?</code> or <code>break</code> leaves, is a <strong>loose end</strong>:</p>
-<div class="sample" id="sample-own_err_loose">
-<div class="sample-head"><span class="file">samples/own_err_loose.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#L0301">L0301</a></span></div>
+<div class="sample" id="sample-own_err_loose" data-sample="own_err_loose" data-mode="check" data-file="own_err_loose.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>own_err_loose.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#L0301">L0301</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">pub</span> <span class="k">once</span> <span class="k">warp</span> <span class="t">Tx</span> {
     moves: <span class="t">List</span>[i32] = <span class="t">List</span>()
 
-    <span class="k">pub</span> <span class="k">fun</span> begin() -&gt; <span class="t">Tx</span> = <span class="t">Tx</span>()
-    <span class="k">pub</span> <span class="k">fun</span> commit(<span class="k">take</span> <span class="k">self</span>) {
+    <span class="k">pub</span> <span class="k">fun</span> <span class="f">begin</span>() -&gt; <span class="t">Tx</span> = <span class="t">Tx</span>()
+    <span class="k">pub</span> <span class="k">fun</span> <span class="f">commit</span>(<span class="k">take</span> <span class="k">self</span>) {
         <span class="k">let</span> <span class="t">Tx</span>(moves) = <span class="k">self</span>
     }
-    <span class="k">pub</span> <span class="k">fun</span> rollback(<span class="k">take</span> <span class="k">self</span>) {
+    <span class="k">pub</span> <span class="k">fun</span> <span class="f">rollback</span>(<span class="k">take</span> <span class="k">self</span>) {
         <span class="k">let</span> <span class="t">Tx</span>(_) = <span class="k">self</span>
     }
 }
 
-<span class="k">fun</span> forgetful(early: bool) {
-    <span class="k">let</span> tx = <span class="t">Tx</span>.begin()
-    <span class="k">if</span> early { tx.commit() }
+<span class="k">fun</span> <span class="f">forgetful</span>(early: bool) {
+    <span class="k">let</span> tx = <span class="t">Tx</span>.<span class="f">begin</span>()
+    <span class="k">if</span> early { tx.<span class="f">commit</span>() }
 }
 
-<span class="k">fun</span> main() {}</code></pre>
+<span class="k">fun</span> <span class="f">main</span>() {}</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[L0301]: loose end: `tx` is never tied off</span>
 <span class="loc">   --&gt; own_err_loose.loom:14:9</span>
-   |
-14 |     let tx = Tx.begin()
-   |         ^^ `Tx` is a `once` type: it must be used up exactly once
-15 |     if early { tx.commit() }
-16 | }
-   | - ...but it is still loose when the scope ends here
-   |
-   = help: tie it off with `tx.commit()` or `tx.rollback()`
-   = help: or add `defer tx =&gt; tx.commit()` right after it's created
+<span class="gut">   |</span>
+<span class="gut">14 |</span>     let tx = Tx.begin()
+<span class="gut">   |</span><span class="caret">         ^^ `Tx` is a `once` type: it must be used up exactly once</span>
+<span class="gut">15 |</span>     if early { tx.commit() }
+<span class="gut">16 |</span> }
+<span class="gut">   |</span><span class="caret"> - ...but it is still loose when the scope ends here</span>
+<span class="gut">   |</span>
+<span class="loc">   = help: tie it off with `tx.commit()` or `tx.rollback()`</span>
+<span class="loc">   = help: or add `defer tx =&gt; tx.commit()` right after it's created</span>
 
 <span class="err">error: own_err_loose.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
 <p>Nothing of this exists at run time: <code>once</code> is checked entirely at compile time.</p>
-<h2 id="defer"><code>defer</code></h2>
+<h2 id="defer"><code>defer</code><a class="anchor" href="#defer" aria-label="Link to this section">#</a></h2>
 <p><code>defer</code> runs code when its scope ends, however it ends: normally, or through <code>return</code>, <code>fail</code>, <code>?</code>, <code>break</code>, <code>continue</code> or an unravel. Defers run in reverse order of declaration. A <code>return</code> value is worked out before the defers run. A defer can't change control flow: <code>return</code>, <code>fail</code>, <code>?</code>, <code>break</code> and <code>continue</code> in one are <a href="diagnostics.html#T0118">T0118</a>.</p>
-<div class="sample" id="sample-own_defer">
-<div class="sample-head"><span class="file">samples/own_defer.loom</span><span class="tag ok">runs</span></div>
+<div class="sample" id="sample-own_defer" data-sample="own_defer" data-mode="run" data-file="own_defer.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>own_defer.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fun</span> plain() {
-    <span class="k">defer</span> print(<span class="s">"declared first, runs last"</span>)
-    <span class="k">defer</span> print(<span class="s">"declared second, runs first"</span>)
-    print(<span class="s">"body"</span>)
+<span class="k">fun</span> <span class="f">plain</span>() {
+    <span class="k">defer</span> <span class="f">print</span>(<span class="s">"declared first, runs last"</span>)
+    <span class="k">defer</span> <span class="f">print</span>(<span class="s">"declared second, runs first"</span>)
+    <span class="f">print</span>(<span class="s">"body"</span>)
 }
 
 <span class="c">// The result is worked out before the defers run.</span>
-<span class="k">fun</span> returns(n: i32) -&gt; i32 {
+<span class="k">fun</span> <span class="f">returns</span>(n: i32) -&gt; i32 {
     <span class="k">var</span> x = n
-    <span class="k">defer</span> print(<span class="s">"defer sees x = {</span>x<span class="s">}"</span>)
+    <span class="k">defer</span> <span class="f">print</span>(<span class="s">"defer sees x = </span><span class="h">{</span>x<span class="h">}</span><span class="s">"</span>)
     <span class="k">if</span> n &gt; <span class="n">5</span> { <span class="k">return</span> x * <span class="n">10</span> }
     x += <span class="n">1</span>
     x
@@ -304,24 +322,24 @@ rolled back</code></pre></div>
 
 <span class="c">// A defer runs on every way out: `return`, `fail`, `?`, `break`,</span>
 <span class="c">// `continue`, and an unravel.</span>
-<span class="k">fun</span> fails(bad: bool) -&gt; i32 ! <span class="t">Oops</span> {
-    <span class="k">defer</span> print(<span class="s">"cleanup after fails({</span>bad<span class="s">})"</span>)
+<span class="k">fun</span> <span class="f">fails</span>(bad: bool) -&gt; i32 ! <span class="t">Oops</span> {
+    <span class="k">defer</span> <span class="f">print</span>(<span class="s">"cleanup after fails(</span><span class="h">{</span>bad<span class="h">}</span><span class="s">)"</span>)
     <span class="k">if</span> bad { <span class="k">fail</span> .<span class="t">Bad</span> }
     <span class="n">1</span>
 }
 
-<span class="k">fun</span> main() {
-    plain()
-    print(returns(<span class="n">3</span>))
-    print(returns(<span class="n">9</span>))
-    print(<span class="s">"{</span>fails(<span class="k">false</span>):?<span class="s">}"</span>)
-    print(<span class="s">"{</span>fails(<span class="k">true</span>):?<span class="s">}"</span>)
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">plain</span>()
+    <span class="f">print</span>(<span class="f">returns</span>(<span class="n">3</span>))
+    <span class="f">print</span>(<span class="f">returns</span>(<span class="n">9</span>))
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">fails</span>(<span class="k">false</span>):?<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">fails</span>(<span class="k">true</span>):?<span class="h">}</span><span class="s">"</span>)
 
     <span class="k">for</span> i <span class="k">in</span> <span class="n">0</span>..<span class="n">4</span> {
-        <span class="k">defer</span> print(<span class="s">"end of iteration {</span>i<span class="s">}"</span>)
+        <span class="k">defer</span> <span class="f">print</span>(<span class="s">"end of iteration </span><span class="h">{</span>i<span class="h">}</span><span class="s">"</span>)
         <span class="k">if</span> i == <span class="n">1</span> { <span class="k">continue</span> }
         <span class="k">if</span> i == <span class="n">2</span> { <span class="k">break</span> }
-        print(<span class="s">"iteration {</span>i<span class="s">}"</span>)
+        <span class="f">print</span>(<span class="s">"iteration </span><span class="h">{</span>i<span class="h">}</span><span class="s">"</span>)
     }
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>body
@@ -341,167 +359,12 @@ end of iteration 1
 end of iteration 2</code></pre></div>
 </div>
 <p>A <strong>fallback defer</strong>, <code>defer tx =&gt; tx.rollback()</code>, names a <code>once</code> value and runs only on exits where that value is still live. It's how the <code>transfer</code> function above rolls back on an early exit without doing it after a commit. Giving <code>tx</code> a new value re-arms it.</p>
-<h2 id="pointers">Pointers</h2>
-<p><code>^e</code> puts a value in a box on the heap and gives a pointer to it, written <code>^T</code>. A pointer owns its box: it moves like any non-<code>Copy</code> value, and dropping it drops the value and frees the box. That is how a type holds itself (<code>^Tree</code> inside <code>Tree</code>). <code>p^</code> reads the box. Fields, methods, patterns and <code>{p}</code> see through a pointer, so <code>t.value</code> and <code>match t { .Node(l, x, r) =&gt; ... }</code> work on a <code>^Tree</code>. A pointer in a <code>var</code> can be written through (<code>p.x = 1</code>, <code>p^ += 1</code>).</p>
-<div class="sample" id="sample-own_pointers">
-<div class="sample-head"><span class="file">samples/own_pointers.loom</span><span class="tag ok">runs</span></div>
-<pre class="code"><code><span class="k">use</span> std.io.print
-
-<span class="k">warp</span> <span class="t">Tree</span> {
-    <span class="k">case</span> <span class="t">Leaf</span>
-    <span class="k">case</span> <span class="t">Node</span>(left: ^<span class="t">Tree</span>, value: i32, right: ^<span class="t">Tree</span>)
-}
-
-<span class="k">fun</span> insert(<span class="k">take</span> t: ^<span class="t">Tree</span>, v: i32) -&gt; ^<span class="t">Tree</span> = <span class="k">match</span> t {
-    .<span class="t">Leaf</span> =&gt; ^<span class="t">Tree</span>.<span class="t">Node</span>(^<span class="t">Tree</span>.<span class="t">Leaf</span>, v, ^<span class="t">Tree</span>.<span class="t">Leaf</span>)
-    .<span class="t">Node</span>(l, x, r) =&gt; <span class="k">if</span> v &lt; x {
-        ^<span class="t">Tree</span>.<span class="t">Node</span>(l.insert(v), x, r)
-    } <span class="k">else</span> {
-        ^<span class="t">Tree</span>.<span class="t">Node</span>(l, x, r.insert(v))
-    }
-}
-
-<span class="k">fun</span> sum(t: ^<span class="t">Tree</span>) -&gt; i32 = <span class="k">match</span> t {
-    .<span class="t">Leaf</span> =&gt; <span class="n">0</span>
-    .<span class="t">Node</span>(l, x, r) =&gt; l.sum() + x + r.sum()
-}
-
-<span class="k">fun</span> main() {
-    <span class="k">var</span> t: ^<span class="t">Tree</span> = ^<span class="t">Tree</span>.<span class="t">Leaf</span>
-    <span class="k">for</span> v <span class="k">in</span> [<span class="n">5</span>, <span class="n">2</span>, <span class="n">8</span>, <span class="n">1</span>, <span class="n">9</span>, <span class="n">3</span>] {
-        t = t.insert(v)
-    }
-    print(<span class="s">"sum {</span>t.sum()<span class="s">}"</span>)
-
-    <span class="k">var</span> n = ^<span class="n">41</span>
-    n^ += <span class="n">1</span>
-    print(<span class="s">"{</span>n^<span class="s">}"</span>)
-}</code></pre>
-<div class="sample-out"><div class="out-head">Output</div><pre><code>sum 28
-42</code></pre></div>
-</div>
-<p>A <code>take</code> pointer that a <code>match</code> takes apart hands its parts to the arms by value, so the arms can move them into a new node.</p>
-<h2 id="spools">Spools</h2>
-<p>A pointer into the heap owns its box and frees it. When many values live and die together (the nodes of a tree, a frame of a game) a <strong>spool</strong> is cheaper: <code>spool frame = Arena(1.kib())</code> makes one, <code>frame.put(v)</code> moves a value into it, and <code>^e</code> allocates in the spool a function is <code>given</code>. A pointer into a spool is <code>Copy</code> and owns nothing; <code>frame.reset()</code> takes every allocation back at once, and the spool ends with its scope.</p>
-<p><code>^T@s</code> is a pointer into the spool <code>s</code>, and <code>fun tree() -&gt; ^Node@sp given sp: Spool</code> is a function that builds in whichever spool the caller gives (<code>tree(4, given: frame)</code>), or the heap if the call gives none. A parameter written <code>^Node</code> takes a tree from any spool. A warp that holds pointers (<code>Node</code>) is <code>Node@s</code> for the spool its nodes are in.</p>
-<div class="sample" id="sample-own_spools">
-<div class="sample-head"><span class="file">samples/own_spools.loom</span><span class="tag ok">runs</span></div>
-<pre class="code"><code><span class="k">use</span> std.io.print
-<span class="k">use</span> std.mem.{<span class="t">Arena</span>, <span class="t">Spool</span>, kib}
-
-<span class="k">warp</span> <span class="t">Node</span> {
-    <span class="k">case</span> <span class="t">Leaf</span>(i32)
-    <span class="k">case</span> <span class="t">Pair</span>(^<span class="t">Node</span>, ^<span class="t">Node</span>)
-}
-
-<span class="c">// The tree lives in whichever spool the caller gives; with none it is on the heap.</span>
-<span class="k">fun</span> tree(depth: i32) -&gt; ^<span class="t">Node</span>@sp <span class="k">given</span> sp: <span class="t">Spool</span> {
-    <span class="k">if</span> depth == <span class="n">0</span> { <span class="k">return</span> ^<span class="t">Node</span>.<span class="t">Leaf</span>(<span class="n">1</span>) }
-    ^<span class="t">Node</span>.<span class="t">Pair</span>(tree(depth - <span class="n">1</span>), tree(depth - <span class="n">1</span>))
-}
-
-<span class="c">// A parameter without a region takes a tree from any spool.</span>
-<span class="k">fun</span> count(n: ^<span class="t">Node</span>) -&gt; i32 = <span class="k">match</span> n {
-    .<span class="t">Leaf</span>(k) =&gt; k
-    .<span class="t">Pair</span>(a, b) =&gt; count(a) + count(b)
-}
-
-<span class="k">fun</span> main() {
-    <span class="k">spool</span> frame = <span class="t">Arena</span>(<span class="n">1</span>.kib())
-    <span class="k">let</span> t = tree(<span class="n">4</span>, <span class="k">given</span>: frame)
-    print(<span class="s">"{</span>count(t)<span class="s">}"</span>)
-    frame.reset()                       <span class="c">// every node goes at once</span>
-    <span class="k">let</span> u = tree(<span class="n">3</span>, <span class="k">given</span>: frame)
-    print(<span class="s">"{</span>count(u)<span class="s">}"</span>)
-    print(<span class="s">"{</span>count(tree(<span class="n">5</span>))<span class="s">}"</span>)           <span class="c">// no spool: the heap</span>
-}</code></pre>
-<div class="sample-out"><div class="out-head">Output</div><pre><code>16
-8
-32</code></pre></div>
-</div>
-<p>The region checker keeps pointers from outliving their spool: a value that points into a spool can't be returned out of the block the spool ends with (<a href="diagnostics.html#R0101">R0101</a>), used after the spool was reset (<a href="diagnostics.html#R0102">R0102</a>), or passed where a parameter names another spool (<a href="diagnostics.html#R0104">R0104</a>). A spool can't be moved (<a href="diagnostics.html#M0107">M0107</a>).</p>
-<div class="sample" id="sample-own_err_region">
-<div class="sample-head"><span class="file">samples/own_err_region.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#R0102">R0102</a></span></div>
-<pre class="code"><code><span class="k">use</span> std.mem.{<span class="t">Arena</span>, <span class="t">Spool</span>, kib}
-
-<span class="k">warp</span> <span class="t">Node</span> {
-    <span class="k">case</span> <span class="t">Leaf</span>(i32)
-    <span class="k">case</span> <span class="t">Pair</span>(^<span class="t">Node</span>, ^<span class="t">Node</span>)
-}
-
-<span class="k">fun</span> tree(depth: i32) -&gt; ^<span class="t">Node</span>@sp <span class="k">given</span> sp: <span class="t">Spool</span> {
-    <span class="k">if</span> depth == <span class="n">0</span> { <span class="k">return</span> ^<span class="t">Node</span>.<span class="t">Leaf</span>(<span class="n">1</span>) }
-    ^<span class="t">Node</span>.<span class="t">Pair</span>(tree(depth - <span class="n">1</span>), tree(depth - <span class="n">1</span>))
-}
-
-<span class="k">fun</span> count(n: ^<span class="t">Node</span>) -&gt; i32 = <span class="k">match</span> n {
-    .<span class="t">Leaf</span>(k) =&gt; k
-    .<span class="t">Pair</span>(a, b) =&gt; count(a) + count(b)
-}
-
-<span class="k">fun</span> main() {
-    <span class="k">spool</span> frame = <span class="t">Arena</span>(<span class="n">1</span>.kib())
-    <span class="k">let</span> t = tree(<span class="n">2</span>, <span class="k">given</span>: frame)
-    frame.reset()
-    count(t)
-}</code></pre>
-<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[R0102]: `t` points into `frame`, which was reset</span>
-<span class="loc">   --&gt; own_err_region.loom:22:11</span>
-   |
-21 |     frame.reset()
-   |     ------------- `frame` reset here
-22 |     count(t)
-   |           ^ used here
-   |
-   = help: move the reset after the last use, or `.copy()` the value into another spool first
-
-<span class="err">error: own_err_region.loom failed to type-check (1 error)</span></code></pre></div>
-</div>
-<p>Text copied with <code>.copy()</code> goes in the spool the call is given, so an arena's tree can hold names and still go at once. A list, map or box can't be held by a warp that is in a spool yet (<a href="diagnostics.html#U0102">U0102</a>): nothing would free it.</p>
-<p>A pointer into a spool is <code>Copy</code>, so two copies see the same value: a field behind one can be written only when the warp is plain data (no text, lists or cases that own anything); otherwise it is read-only (<a href="diagnostics.html#T0107">T0107</a>).</p>
-<p><code>Pool[T](n)</code> is a spool of <code>n</code> slots of one type: <code>put</code> takes a free slot and <code>free</code> gives it back, a few instructions each. It holds plain data only. <code>SharedArena(cap)</code> is an arena threads may allocate in, and its pointers may cross to them; a pointer into any other spool can't (<a href="diagnostics.html#R0103">R0103</a>).</p>
-<h2 id="given"><code>given</code></h2>
-<p>A function can say what it needs from its caller with a <code>given</code> parameter of a weft: <code>fun welcome(who: str) given g: Greeter</code>. It is passed on by the call, not in the argument list: the innermost <code>given</code> in scope supplies it, <code>given name = value</code> states one from there to the end of the block, and <code>given: x</code> gives one to a single call. A weft marked <code>#given_default(Type)</code> has one when nothing is in scope (a spool's is the heap), so a program that never says <code>given</code> still runs. A function is checked for the type it is given, so an unused <code>given</code> costs nothing. Every function spells its own <code>given</code>s: a private one doesn't infer them from what it calls yet.</p>
-<div class="sample" id="sample-own_given">
-<div class="sample-head"><span class="file">samples/own_given.loom</span><span class="tag ok">runs</span></div>
-<pre class="code"><code><span class="k">use</span> std.io.print
-
-<span class="c">// A weft with a default: a call that is given nothing gets a `Plain`.</span>
-<span class="k">#given_default</span>(<span class="t">Plain</span>)
-<span class="k">weft</span> <span class="t">Greeter</span> {
-    <span class="k">fun</span> greet(<span class="k">self</span>) -&gt; <span class="t">String</span>
-}
-
-<span class="k">warp</span> <span class="t">Plain</span>: <span class="t">Greeter</span>, <span class="t">Default</span> {
-    <span class="k">pub</span> <span class="k">fun</span> greet(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"hello"</span>
-}
-
-<span class="k">warp</span> <span class="t">Loud</span>: <span class="t">Greeter</span> {
-    name: <span class="t">String</span>
-
-    <span class="k">pub</span> <span class="k">fun</span> greet(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"HELLO, {</span>.name<span class="s">}!"</span>
-}
-
-<span class="k">fun</span> welcome(who: str) -&gt; <span class="t">String</span> <span class="k">given</span> g: <span class="t">Greeter</span> = <span class="s">"{</span>g.greet()<span class="s">} {</span>who<span class="s">}"</span>
-
-<span class="k">fun</span> main() {
-    print(welcome(<span class="s">"ann"</span>))          <span class="c">// nothing given: a Plain</span>
-    <span class="k">given</span> g = <span class="t">Loud</span>(<span class="s">"ci"</span>)           <span class="c">// from here to the end of the block</span>
-    print(welcome(<span class="s">"dee"</span>))
-    print(welcome(<span class="s">"eve"</span>, <span class="k">given</span>: <span class="t">Plain</span>()))    <span class="c">// this one call</span>
-}</code></pre>
-<div class="sample-out"><div class="out-head">Output</div><pre><code>hello ann
-HELLO, ci! dee
-hello eve</code></pre></div>
-</div>
-<h2 id="not-supported-yet">Not supported yet</h2>
-<p>Projections (<code>~&gt; mut T</code>), which lend a place, work: see <a href="shuttles.html">Shuttles</a>. See <a href="not-yet.html">Not supported yet</a>.</p>
-<h2 id="where-next">Where next</h2>
-<p><a href="gauges.html">Gauges</a> restrict a number to a range.</p>
-<div class="pager">
-<a href="errors.html">&larr; Optionals and errors</a>
-<a href="gauges.html">Gauges &rarr;</a>
-</div>
+<h2 id="where-next">Where next<a class="anchor" href="#where-next" aria-label="Link to this section">#</a></h2>
+<p><a href="memory.html">Pointers, spools and <code>given</code></a> puts values on the heap and in arenas.</p>
+<nav class="pager" aria-label="Chapters">
+<a class="prev" href="errors.html"><span class="dir">&larr; Chapter 6</span>Optionals and errors</a>
+<a class="next" href="memory.html"><span class="dir">Chapter 8 &rarr;</span>Pointers, spools and <code>given</code></a>
+</nav>
 </main>
 </div>
 </body>
