@@ -1,0 +1,50 @@
+use std.io.print
+
+weft Widget {
+    fun name(self) -> String
+}
+
+warp Label: Widget, Show {
+    text: String
+    fun name(self) -> String = "label '{.text}'"
+}
+
+warp Spacer: Widget, Show {
+    fun name(self) -> String = "spacer"
+}
+
+// Several wefts at once: a value that is both.
+fun describe(w: any (Widget + Show)) -> String = "{w.name()} = {w}"
+
+// An `any` of more wefts can be used as an `any` of fewer.
+fun just_name(w: any Widget) -> String = w.name()
+
+fun both(w: any (Widget + Show)) -> String = just_name(w)
+
+fun main() {
+    let ui: List[any Widget] = [Label("hi"), Spacer(), Label("there")]
+
+    // A type test recovers the concrete type, and binds it.
+    var letters = 0
+    for w in ui {
+        if w is l: Label { letters += l.text.len() }
+    }
+    print("{letters} letters")
+
+    // `match` can test types too.
+    for w in ui {
+        let kind = match w {
+            l: Label => "label of {l.text.len()}"
+            _ => "something else"
+        }
+        print(kind)
+    }
+
+    print(describe(Label("x")))
+    print(both(Spacer()))
+
+    // Any value that is `Show` fits in `any Show`.
+    let things: List[any Show] = [1, "two", 3.5, Spacer()]
+    for t in things { print(t) }
+}
+//@ run

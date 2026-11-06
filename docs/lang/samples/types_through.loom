@@ -1,6 +1,10 @@
 use std.io.print
 
-warp Frame {
+weft Describe {
+    fun describe(self) -> String
+}
+
+warp Frame: Describe {
     w: u16
     h: u16
     fun size(self) -> (u16, u16) = (.w, .h)
@@ -9,17 +13,29 @@ warp Frame {
 
 // `through` forwards the field's methods. There is no inheritance:
 // a Button is not a Frame.
-warp Button {
+warp Button: Describe {
     through frame: Frame
     label: String
 
-    fun describe(self) -> String = "button '{.label}' over {.frame.describe()}"   // overrides
+    // The outer warp's own method wins over the forwarded one.
+    fun describe(self) -> String = "button '{.label}' over {.frame.describe()}"
 }
+
+// A Sticker writes nothing of its own, and still weaves Describe:
+// forwarded methods count.
+warp Sticker: Describe {
+    through frame: Frame
+}
+
+fun show_it(d: Describe) -> String = d.describe()
 
 fun main() {
     let b = Button(Frame(10, 3), "OK")
     print(b.size())                          // forwarded from Frame
     print(b.describe())                      // Button's own
     print(b.frame.w)                         // fields aren't forwarded
+
+    print(show_it(Sticker(Frame(2, 2))))     // Sticker is a Describe through its frame
+    print(show_it(b))
 }
 //@ run

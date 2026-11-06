@@ -1,0 +1,7 @@
+error[T0107]: can't change what a pointer into a spool points at
+   --> docs/lang/samples/mem_err_write.loom:12:5
+   |
+12 |     n.hits = 5
+   |     ^^^^^^ it holds more than plain data
+
+error: docs/lang/samples/mem_err_write.loom failed to type-check (1 error)

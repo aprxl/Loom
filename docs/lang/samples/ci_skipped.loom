@@ -1,0 +1,22 @@
+use std.io.print
+
+const FAST = true
+
+fun checksum(data: [u8]) -> u32 {
+    // The branch that isn't taken is parsed, but never checked: it can use
+    // names that don't exist, or types that don't fit.
+    const if FAST {
+        var sum = 0u32
+        for b in data {
+            sum +%= b as u32
+        }
+        sum
+    } else {
+        slow_hardware_checksum(data, "not even the right arguments")
+    }
+}
+
+fun main() {
+    print(checksum(b"loom"))
+}
+//@ run

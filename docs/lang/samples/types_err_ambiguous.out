@@ -1,0 +1,9 @@
+error[T0116]: `Greeting` has more than one method `hi`
+   --> docs/lang/samples/types_err_ambiguous.loom:18:13
+   |
+18 |     let s = g.hi()
+   |             ^^^^ could be `Hello.hi` or `Howdy.hi`
+   |
+   = help: say which one: `Hello.hi(x)`
+
+error: docs/lang/samples/types_err_ambiguous.loom failed to type-check (1 error)

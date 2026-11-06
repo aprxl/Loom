@@ -1,11 +1,20 @@
 [4, 16, 36, 64]
-9
-one-two-three
-[4, 3, 2, 1]
-15
+[15, 23]
+[4, 8, 15]
+[1, 2, 3, 7, 8, 9]
+[1, 1, 2, 1, 2, 3]
+[4, 7, 1, 7, 19]
+[4, 7, 1, 7, 19]
 0: a
 1: b
 2: c
-108 some(42) some(2)
-true true 5
-[4, 7, 1, 7, 19]
+108 108 some(108)
+some(42) some(4) 6 some(42)
+true true some(15) some(2)
+a-b-c
+item 4
+item 8
+item 15
+item 16
+item 23
+item 42

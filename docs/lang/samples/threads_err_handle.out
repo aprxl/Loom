@@ -1,0 +1,7 @@
+error[C0404]: a thread's handle can't leave its `loom` block
+  --> docs/lang/samples/threads_err_handle.loom:3:9
+  |
+3 |         thread 1 + 1                 // the block's value would be a handle
+  |         ^^^^^^^^^^^^ the threads are done when the block ends: `join` it, or end the block with `()`
+
+error: docs/lang/samples/threads_err_handle.loom failed to type-check (1 error)

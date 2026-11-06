@@ -1,0 +1,12 @@
+// A few limits of the type system, each stopped with U0102.
+
+// A weft can't take type parameters yet.
+weft From[T] {
+    fun from(x: T) -> Self
+}
+
+fun main() {
+    // Integers stop at 64 bits.
+    let wide: i128 = 1
+}
+//@ check-fail U0102 U0102

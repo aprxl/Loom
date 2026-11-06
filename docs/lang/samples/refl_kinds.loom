@@ -1,0 +1,25 @@
+use std.io.print
+
+warp Pair[A, B] { a: A, b: B }
+
+warp Light {
+    case Red
+    case Green(blink: bool)
+}
+
+/// Every type can be asked its name and kind, and how many bytes it takes.
+fun ask[T]() {
+    print("{T.name}: {T.kind}, {T.size} bytes")
+}
+
+fun main() {
+    ask[i32]()
+    ask[f64]()
+    ask[String]()
+    ask[List[i32]]()
+    ask[?i32]()
+    ask[[u8; 4]]()
+    ask[Pair[i32, str]]()
+    ask[Light]()
+}
+//@ run

@@ -1,0 +1,20 @@
+use std.io.print
+
+fun bump(mut p: ^i32) {
+    p^ += 1                        // write through the box
+}
+
+fun main() {
+    var n = ^41                    // 41, in a box on the heap
+    bump(mut n)
+    print("{n^}")                  // `n^` reads what's in the box
+
+    let s = ^"moved".to_string()
+    let t = s^                     // a `String` isn't `Copy`: this moves it out
+    print(t)
+
+    let a = ^[1, 2, 3]
+    let b = ^[1, 2, 3]
+    print("{a == b} {a.len()} {a}")   // `==`, methods and `{}` look through the box
+}
+//@ run

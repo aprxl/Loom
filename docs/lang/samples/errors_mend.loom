@@ -1,0 +1,47 @@
+use std.io.print
+
+fun env_port() -> ?u16 = none
+
+fun main() {
+    let counts: Map[str, i32] = ["a": 2]
+
+    // A fallback value.
+    let port = "80x".parse[u16]() mend 8080
+    print(port)
+
+    // `mend` binds loosest, so wrap it in arithmetic.
+    print((counts.get("a") mend 0) + 1)
+    print((counts.get("z") mend 0) + 1)
+
+    // A chain: the first that works wins.
+    let chosen = "".parse[u16]() mend env_port() mend 3000
+    print(chosen)
+
+    // A handler sees what went wrong.
+    let n = "abc".parse[i32]() mend e => {
+        print("could not parse: {e}")
+        -1
+    }
+    print(n)
+
+    // A `?` inside a block jumps to the `mend` after it: a try block.
+    let sum = {
+        let a = "12".parse[i32]()?
+        let b = "x".parse[i32]()?
+        a + b
+    } mend 0
+    print(sum)
+
+    // The fallback can leave instead: `continue` here.
+    var total = 0
+    for s in ["4", "x", "10"] {
+        let v = s.parse[i32]() mend { continue }
+        total += v
+    }
+    print(total)
+
+    // Or give up: `mend unravel(..)` is Rust's `expect`.
+    let must = "9".parse[i32]() mend unravel("not a number")
+    print(must)
+}
+//@ run

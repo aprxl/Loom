@@ -1,0 +1,24 @@
+use std.io.print
+
+weft Clock {
+    fun now(self) -> u64
+}
+
+warp Fixed: Clock {
+    t: u64
+
+    pub fun now(self) -> u64 = .t
+}
+
+fun stamp(msg: str) -> String given c: Clock = "[{c.now()}] {msg}"
+
+// `log_line` calls `stamp`, but doesn't say it needs a `Clock` itself.
+fun log_line(msg: str) {
+    print(stamp(msg))
+}
+
+fun main() {
+    given c = Fixed(42)
+    log_line("started")
+}
+//@ check-fail T0104

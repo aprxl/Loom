@@ -1,0 +1,23 @@
+use std.io.print
+use std.sync.sched_yield
+
+fun main() {
+    loom {
+        thread {
+            defer print("slow: cleaned up")
+            while true {
+                print("slow: working")
+                sched_yield()
+            }
+        }
+        thread {
+            sched_yield()
+            let xs = [1, 2, 3]
+            let i = 7
+            print(xs[i])             // unravels
+        }
+        ()
+    }
+    print("not reached")
+}
+//@ unravel

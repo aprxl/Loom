@@ -1,0 +1,10 @@
+7 letters
+label of 2
+something else
+label of 5
+label 'x' = Label(text: "x")
+spacer
+1
+two
+3.5
+Spacer()

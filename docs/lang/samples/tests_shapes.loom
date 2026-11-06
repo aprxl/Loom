@@ -1,0 +1,33 @@
+use std.io.print
+
+/// A stack of numbers.
+warp Stack {
+    items: List[i32] = []
+
+    fun push(mut self, n: i32) { .items.push(n) }
+    fun pop(mut self) -> ?i32 = .items.pop()
+    fun len(self) -> usize = .items.len()
+}
+
+fun main() {
+    print("main is what `loom run` starts; `loom test` never calls it")
+}
+
+test push_then_pop() {
+    var s = Stack()
+    s.push(1)
+    s.push(2)
+    assert(s.len() == 2)
+    assert(s.pop() == some(2), "last in, first out")
+    assert(s.pop() == some(1))
+    assert(s.pop() == none, "nothing left")
+}
+
+// A test may have the same name as a function: its name isn't in scope.
+fun len() -> i32 = 0
+
+test len() {
+    assert(Stack().len() == 0)
+    assert(len() == 0)
+}
+//@ test

@@ -1,13 +1,16 @@
 [ada: 37, alan: 41, grace: 85] 3
 41 none true
+0
 ada is 37
 alan is 41
 grace is 85
-[ada, alan, grace]
-41
-[(ada, 37), (grace, 85)]
-[the: 3, cat: 1, and: 2, hat: 1, bat: 1]
-new: 3
-new: 1
-new: 2
-{3, 1, 2} [1, 2, 3] true
+[ada, alan, grace] 163
+some(41) none [ada: 37, grace: 85]
+[(ada, 37), (bob, 20), (grace, 85)]
+[7: true]
+--- stderr ---
+unravel: key not found: "zed"
+  --> docs/lang/samples/coll_maps.loom:32:5
+   |
+32 |     print(ages["zed"])
+   |     ^

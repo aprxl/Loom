@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>Reflection · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -55,14 +56,55 @@
 <div class="chapter-head">
 <span class="chapter-no">Chapter 13</span>
 <h1>Reflection</h1>
-<p class="summary">What compile-time code learns about a type, and default methods that derive from a type's shape.</p>
+<p class="summary">Asking a type about itself while compiling, and default methods that derive from a type's shape.</p>
 </div>
-<p>Compile-time code can ask a type about itself. The answers are known while compiling, like a <code>const</code> parameter, so <code>const if</code> and <code>const for</code> can use them, and nothing reflective is left in the program. The types involved are in <a href="../std/modules/meta.html">std.meta</a>.</p>
+<p>Plenty of code depends on the <em>shape</em> of a type rather than on what it does: print any record, compare any two values, write a struct out as JSON, check that a header is eight bytes. In most languages that means one of two things. Either a run-time reflection API, where the program carries descriptions of its own types and looks them up as it runs, or a macro system that rewrites code before it's compiled.</p>
+<p>Loom takes a third path. Compile-time code can ask a type about itself, and the answers are known while compiling, like a <code>const</code> parameter. Together with <code>const if</code> and <code>const for</code> from the <a href="const-params.html">last chapter</a>, that is enough to write code that adapts to any type, and <strong>nothing reflective is left in the program</strong>. The types involved are in <a href="../std/modules/meta.html">std.meta</a>.</p>
 <h2 id="asking-a-type">Asking a type<a class="anchor" href="#asking-a-type" aria-label="Link to this section">#</a></h2>
+<p>Every type has a few properties you can read in compile-time code, and in generic functions, where <code>T</code> is whatever the caller used:</p>
 <table class="plain"><thead><tr><th>Expression</th><th>Gives you</th></tr></thead><tbody><tr><td><code>T.name</code></td><td>its name, <code>"Point"</code> (a warp's, without its arguments)</td></tr><tr><td><code>T.kind</code></td><td>a case of <code>Kind</code>: <code>.Record</code>, <code>.Sum</code>, <code>.Int</code>, <code>.Str</code>, <code>.List</code>, …</td></tr><tr><td><code>T.fields</code></td><td>a record's fields, a list of <code>Field</code>s</td></tr><tr><td><code>T.cases</code></td><td>a sum's cases, a list of <code>Case</code>s</td></tr><tr><td><code>T.size</code>, <code>T.align</code></td><td>how many bytes a value takes, and what its address is a multiple of</td></tr><tr><td><code>f.name</code>, <code>f.is_pub</code>, <code>f.offset</code></td><td>a field's name, whether it's <code>pub</code>, and where it starts in the value, in bytes</td></tr><tr><td><code>c.name</code>, <code>c.fields</code></td><td>a case's name, and its payload's fields</td></tr><tr><td><code>.len()</code>, <code>.is_empty()</code></td><td>of <code>T.fields</code>, <code>T.cases</code> or <code>c.fields</code></td></tr></tbody></table>
-<p>Two things use them in code that runs:</p>
+<p><code>T.kind</code> is a case of <a href="../std/modules/meta.html#Kind"><code>Kind</code></a>: <code>Record</code> for a warp with fields, <code>Sum</code> for one with cases, and one for each of the built-in families (<code>Int</code>, <code>Float</code>, <code>Str</code>, <code>List</code>, <code>Optional</code>, <code>Array</code>...).</p>
+<div class="sample" id="sample-refl_kinds" data-sample="refl_kinds" data-mode="run" data-file="refl_kinds.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>refl_kinds.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Pair</span>[A, B] { a: A, b: B }
+
+<span class="k">warp</span> <span class="t">Light</span> {
+    <span class="k">case</span> <span class="t">Red</span>
+    <span class="k">case</span> <span class="t">Green</span>(blink: bool)
+}
+
+<span class="c">/// Every type can be asked its name and kind, and how many bytes it takes.</span>
+<span class="k">fun</span> ask[T]() {
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>T.name<span class="h">}</span><span class="s">: </span><span class="h">{</span>T.kind<span class="h">}</span><span class="s">, </span><span class="h">{</span>T.size<span class="h">}</span><span class="s"> bytes"</span>)
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    ask[i32]()
+    ask[f64]()
+    ask[<span class="t">String</span>]()
+    ask[<span class="t">List</span>[i32]]()
+    ask[?i32]()
+    ask[[u8; <span class="n">4</span>]]()
+    ask[<span class="t">Pair</span>[i32, str]]()
+    ask[<span class="t">Light</span>]()
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>i32: Int, 4 bytes
+f64: Float, 8 bytes
+String: Str, 24 bytes
+List: List, 24 bytes
+?i32: Optional, 8 bytes
+[u8; 4]: Array, 4 bytes
+Pair: Record, 24 bytes
+Light: Sum, 2 bytes</code></pre></div>
+</div>
+<p>Notice that <code>str</code> and <code>String</code> are both <code>Str</code>, that a generic warp's name leaves off its arguments, and that <code>Light</code> takes two bytes: a tag, and a <code>bool</code> for the one case that has a payload.</p>
+<div class="try"><p>Add <code>ask[u8]()</code> and <code>ask[Map[str, i32]]()</code> to <code>main</code>, and compare their sizes with what you'd guess. Then try <code>ask[Light]()</code> with another case that carries a <code>u64</code>, and watch <code>Light</code>'s size grow.</p></div>
+<h2 id="fields-and-cases">Fields and cases<a class="anchor" href="#fields-and-cases" aria-label="Link to this section">#</a></h2>
+<p>Properties are only half of it. Two forms use a field or a case that you've got in a compile-time variable:</p>
 <ul><li><code>v.(f)</code> is <code>v</code>'s field <code>f</code>, where <code>f</code> is a <code>Field</code>. It reads and assigns like <code>v.x</code>.</li><li><code>v is .(c)</code> tests whether <code>v</code> is case <code>c</code>, and <code>v.(c).(f)</code> reads a field of that case's payload. Read it inside <code>if v is .(c)</code>: on any other case it unravels.</li></ul>
-<p><code>const for f in T.fields</code> writes its body out once per field, so <code>describe</code> below turns into straight-line code for each type it's called with.</p>
+<p><code>const for f in T.fields</code> writes its body out once per field, so <code>describe</code> below turns into straight-line code for each type it's called with. The code that comes out has no loop, no field names looked up, and no table: for <code>Point</code> it is two prints.</p>
 <div class="sample" id="sample-refl_describe" data-sample="refl_describe" data-mode="run" data-file="refl_describe.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>refl_describe.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -109,8 +151,47 @@ Shape is a Sum
 Shape is a Sum
   case Dot</code></pre></div>
 </div>
+<p>Two things in it are decided at different times. <code>const if T.kind == .Record</code> and the <code>const for</code> are worked out while compiling. The <code>if v is .(c)</code> is an ordinary test at run time: it asks which case this particular value is in, and the compiler wrote one such test per case.</p>
+<div class="try"><p>In <code>main</code>, call <code>describe(3)</code> as well. An integer is neither a record nor a sum, so it prints only <code>i32 is a Int</code>: both <code>const if</code> branches are skipped.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="zig" data-label="Zig">
+<h4>Zig</h4>
+<p>Zig's <code>@typeInfo</code> is the closest match: it hands compile-time code a description of the type, <code>inline for</code> walks it, and <code>@field</code> reads a field chosen at compile time (the counterpart of <code>v.(f)</code>).</p>
+<pre class="foreign" data-lang="zig"><code><span class="k">fn</span> <span class="f">describe</span>(v: anytype) void {
+    <span class="k">const</span> T = @<span class="t">TypeOf</span>(v);
+    inline <span class="k">for</span> (@<span class="f">typeInfo</span>(T).@<span class="s">"struct"</span>.fields) |f| {
+        std.debug.<span class="f">print</span>(<span class="s">"{s} = {any}\n"</span>, .{ f.name, @<span class="f">field</span>(v, f.name) });
+    }
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Go's <code>reflect</code> does this at run time, on a value of type <code>any</code>. It works on any struct, with no help from the compiler, but it does its lookups on every call, and a mistake is a panic instead of a compile error.</p>
+<pre class="foreign" data-lang="go"><code><span class="k">func</span> <span class="f">describe</span>(v any) {
+    t, rv := reflect.<span class="t">TypeOf</span>(v), reflect.<span class="t">ValueOf</span>(v)
+    <span class="k">for</span> i := <span class="n">0</span>; i &lt; t.<span class="t">NumField</span>(); i++ {
+        fmt.<span class="t">Println</span>(t.<span class="t">Field</span>(i).<span class="t">Name</span>, <span class="s">"="</span>, rv.<span class="t">Field</span>(i).<span class="t">Interface</span>())
+    }
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="c" data-label="C#">
+<h4>C#</h4>
+<p>C# reflection is also a run-time API: the program carries metadata about its types, and you ask for it. The assembly is bigger for it, and trimming or ahead-of-time compilation has to be told what reflection may touch.</p>
+<pre class="foreign" data-lang="csharp"><code><span class="k">foreach</span> (<span class="k">var</span> f <span class="k">in</span> v.<span class="t">GetType</span>().<span class="t">GetFields</span>())
+    <span class="t">Console</span>.<span class="t">WriteLine</span>($<span class="s">"{f.Name} = {f.GetValue(v)}"</span>);</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="java" data-label="Java">
+<h4>Java</h4>
+<p>Java's reflection is run-time too. Annotations can tag fields and classes, and either a framework reads them by reflection at run time, or an annotation processor generates code at build time.</p>
+<pre class="foreign" data-lang="java"><code><span class="k">for</span> (<span class="t">Field</span> f : v.<span class="f">getClass</span>().<span class="f">getDeclaredFields</span>()) {
+    f.<span class="f">setAccessible</span>(<span class="k">true</span>);
+    <span class="t">System</span>.out.<span class="f">println</span>(f.<span class="f">getName</span>() + <span class="s">" = "</span> + f.<span class="f">get</span>(v));
+}</code></pre>
+</div>
+</div>
 <h2 id="derive-is-a-default-method">Derive is a default method<a class="anchor" href="#derive-is-a-default-method" aria-label="Link to this section">#</a></h2>
-<p>Loom has no derive macros. A weft gives a default method that looks at <code>Self</code>, and every warp that lists the weft gets that method, worked out for its own fields. <code>examples/compile_time.loom</code> writes <code>ToJson</code> this way.</p>
+<p>Loom has no derive macros. A weft gives a default method that looks at <code>Self</code>, and every warp that lists the weft gets that method, worked out for its own fields. You write it in the same language as everything else, and you can read it, step through it and test it like any other function. <code>examples/compile_time.loom</code> writes <code>ToJson</code> this way.</p>
 <div class="sample" id="sample-refl_derive" data-sample="refl_derive" data-mode="run" data-file="refl_derive.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>refl_derive.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -138,7 +219,133 @@ Shape is a Sum
 <div class="sample-out"><div class="out-head">Output</div><pre><code>x=3, y=4
 name=Ada, age=36</code></pre></div>
 </div>
+<p><code>Fields</code> has no required methods. <code>Point</code> and <code>User</code> list it, and each gets a <code>fields()</code> whose body is straight-line code for its own fields, with no loop and no table of names.</p>
 <p>Writing the method yourself replaces the default, like any other default method.</p>
+<p>The same forms work for writing. This <code>Scale</code> multiplies every field of a record by a number, and <code>CaseName</code> finds which case a sum is in. <code>CaseName</code> returns from inside a <code>const for</code>: the loop is unrolled into the function, so its body is ordinary run-time code, not code the sandbox runs.</p>
+<div class="sample" id="sample-refl_scale" data-sample="refl_scale" data-mode="run" data-file="refl_scale.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>refl_scale.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">/// `self.(f)` reads and assigns a field chosen at compile time, so one</span>
+<span class="c">/// default method scales any record whose fields are numbers.</span>
+<span class="k">weft</span> <span class="t">Scale</span> {
+    <span class="k">fun</span> <span class="f">scale</span>(<span class="k">mut</span> <span class="k">self</span>, by: i32) {
+        <span class="k">const</span> <span class="k">for</span> f <span class="k">in</span> <span class="k">Self</span>.fields {
+            <span class="k">self</span>.(f) *= by
+        }
+    }
+}
+
+<span class="c">/// Names the case a value is in. `v is .(c)` is an ordinary test at run</span>
+<span class="c">/// time; `c` is the compile-time case it tests for.</span>
+<span class="k">weft</span> <span class="t">CaseName</span> {
+    <span class="k">fun</span> <span class="f">case_name</span>(<span class="k">self</span>) -&gt; str {
+        <span class="k">const</span> <span class="k">for</span> c <span class="k">in</span> <span class="k">Self</span>.cases {
+            <span class="k">if</span> <span class="k">self</span> <span class="k">is</span> .(c) { <span class="k">return</span> c.name }
+        }
+        <span class="s">"?"</span>
+    }
+}
+
+<span class="k">warp</span> <span class="t">Vec3</span>: <span class="t">Scale</span>, <span class="t">Show</span> { x: i32, y: i32, z: i32 }
+
+<span class="k">warp</span> <span class="t">Light</span>: <span class="t">CaseName</span> {
+    <span class="k">case</span> <span class="t">Red</span>
+    <span class="k">case</span> <span class="t">Amber</span>
+    <span class="k">case</span> <span class="t">Green</span>(blink: bool)
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">var</span> v = <span class="t">Vec3</span>(<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>)
+    v.<span class="f">scale</span>(<span class="n">10</span>)
+    <span class="f">print</span>(v)
+    <span class="f">print</span>(<span class="t">Light</span>.<span class="t">Amber</span>.<span class="f">case_name</span>())
+    <span class="f">print</span>(<span class="t">Light</span>.<span class="t">Green</span>(blink: <span class="k">true</span>).<span class="f">case_name</span>())
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>Vec3(x: 10, y: 20, z: 30)
+Amber
+Green</code></pre></div>
+</div>
+<div class="try"><p>Give <code>Vec3</code> a field that isn't a number: add <code>label: String = "v"</code> after <code>z</code>. The line <code>self.(f) *= by</code> is checked for that field too, the compiler says a <code>String</code> can't be multiplied, and the note names the instance, <code>Scale.scale</code> for <code>Vec3</code>.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p><code>#[derive]</code> runs a procedural macro: a function, in a separate crate, that reads the struct as a stream of tokens and writes more tokens. It sees the tokens of the struct, not the types of its fields, and it has to be compiled as a crate of its own. Loom's default method is written in the language itself.</p>
+<pre class="foreign" data-lang="rust"><code>#[<span class="f">derive</span>(<span class="t">Debug</span>, <span class="t">Clone</span>, <span class="t">PartialEq</span>, serde::<span class="t">Serialize</span>)]
+<span class="k">struct</span> <span class="t">Point</span> {
+    x: i32,
+    y: i32,
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="java" data-label="Java">
+<h4>Java</h4>
+<p>Java uses annotations to mark types and then either run-time reflection (Jackson reads <code>@JsonProperty</code> while the program runs) or an annotation processor that generates source files before compilation.</p>
+<pre class="foreign" data-lang="java"><code><span class="k">public</span> <span class="k">record</span> <span class="t">Point</span>(@<span class="t">JsonProperty</span>(<span class="s">"x"</span>) <span class="k">int</span> x, @<span class="t">JsonProperty</span>(<span class="s">"y"</span>) <span class="k">int</span> y) {}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="c" data-label="C#">
+<h4>C#</h4>
+<p>C# source generators are the build-time route: a program the compiler loads that looks at the code being compiled and adds more. System.Text.Json uses one so serialization needs no run-time reflection.</p>
+<pre class="foreign" data-lang="csharp"><code>[<span class="t">JsonSerializable</span>(<span class="f">typeof</span>(<span class="t">Point</span>))]
+partial <span class="k">class</span> <span class="t">PointContext</span> : <span class="t">JsonSerializerContext</span> {}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Go has no derive at all. Standard-library packages like <code>encoding/json</code> use run-time reflection on the struct's fields, steered by struct tags; code generators (<code>go generate</code>) cover the rest.</p>
+<pre class="foreign" data-lang="go"><code><span class="k">type</span> <span class="t">Point</span> <span class="k">struct</span> {
+    X int <span class="s">`json:"x"`</span>
+    Y int <span class="s">`json:"y"`</span>
+}</code></pre>
+</div>
+</div>
+<h3 id="refusing-a-type">Refusing a type<a class="anchor" href="#refusing-a-type" aria-label="Link to this section">#</a></h3>
+<p>A default method can also say what it can't do. A <code>const unravel</code> in a branch nobody takes costs nothing, and in a branch somebody takes it stops the build, and says which type did it:</p>
+<div class="sample" id="sample-refl_err_kind" data-sample="refl_err_kind" data-mode="check" data-file="refl_err_kind.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>refl_err_kind.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0103">K0103</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">/// Lists the field names. Only a record has fields, so any other type is</span>
+<span class="c">/// refused while the program compiles.</span>
+<span class="k">weft</span> <span class="t">Names</span> {
+    <span class="k">fun</span> <span class="f">names</span>(<span class="k">self</span>) -&gt; <span class="t">String</span> {
+        <span class="k">const</span> <span class="k">if</span> <span class="k">Self</span>.kind == .<span class="t">Record</span> {
+            <span class="k">var</span> out = <span class="t">String</span>()
+            <span class="k">const</span> <span class="k">for</span> (i, f) <span class="k">in</span> <span class="k">Self</span>.fields.<span class="f">indexed</span>() {
+                <span class="k">const</span> <span class="k">if</span> i &gt; <span class="n">0</span> { out.<span class="f">push_str</span>(<span class="s">", "</span>) }
+                out.<span class="f">push_str</span>(f.name)
+            }
+            out
+        } <span class="k">else</span> {
+            <span class="k">const</span> <span class="f">unravel</span>(<span class="s">"Names only works on records, not </span><span class="h">{</span><span class="k">Self</span>.name<span class="h">}</span><span class="s">"</span>)
+        }
+    }
+}
+
+<span class="k">warp</span> <span class="t">Point</span>: <span class="t">Names</span> { x: i32, y: i32 }
+
+<span class="k">warp</span> <span class="t">Light</span>: <span class="t">Names</span> {
+    <span class="k">case</span> <span class="t">Red</span>
+    <span class="k">case</span> <span class="t">Green</span>
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">print</span>(<span class="t">Point</span>(<span class="n">1</span>, <span class="n">2</span>).<span class="f">names</span>())
+    <span class="f">print</span>(<span class="t">Light</span>.<span class="t">Red</span>.<span class="f">names</span>())
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[K0103]: compile-time code unravelled: Names only works on records, not Light</span>
+<span class="loc">   --&gt; refl_err_kind.loom:15:13</span>
+<span class="gut">   |</span>
+<span class="gut">15 |</span>             const unravel("Names only works on records, not {Self.name}")
+<span class="gut">   |</span><span class="caret">             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ while running this</span>
+<span class="gut">   |</span>
+<span class="loc">   = note: it unravelled at refl_err_kind.loom:15:19</span>
+<span class="loc">   = help: unravelling while compiling is a compile error</span>
+<span class="loc">   = note: in `Names.names` for `Light`</span>
+
+<span class="err">error: refl_err_kind.loom failed to compile (1 error)</span></code></pre></div>
+</div>
+<p>Both <code>Point</code> and <code>Light</code> list <code>Names</code>, but only <code>Light</code> reaches the <code>else</code>, so only <code>Light</code> is reported.</p>
+<div class="try"><p>Delete <code>Light.Red.names()</code> and <code>warp Light</code> from the program. It compiles, runs, and prints <code>x, y</code>: the refusal only costs something when somebody asks for it.</p></div>
 <h2 id="sizes">Sizes<a class="anchor" href="#sizes" aria-label="Link to this section">#</a></h2>
 <p><code>T.size</code>, <code>T.align</code> and <code>f.offset</code> are how values are laid out in memory: fields ordered by alignment (the largest first), cases sharing space behind a tag, and <code>?T</code> costing nothing when <code>T</code> has bit patterns it never uses. Both backends give the same answers.</p>
 <div class="sample" id="sample-refl_layout" data-sample="refl_layout" data-mode="run" data-file="refl_layout.loom" data-runnable>
@@ -169,8 +376,34 @@ name=Ada, age=36</code></pre></div>
   id at 4
 Token: 32 bytes, ?Token: 32</code></pre></div>
 </div>
+<p>Look at the offsets: <code>len</code> (4 bytes) comes first, then <code>id</code> (2), then <code>flag</code> (1), which is not the order they were written in. The header takes 8 bytes because Loom put the largest fields first and the padding last. A <code>const assert</code> on <code>Header.size</code> is the way to be told the day an edit changes it.</p>
+<div class="try"><p>Change <code>flag: u8</code> to <code>flag: u64</code> and run it. The header grows, the offsets move, and the <code>const assert</code> fails with K0101.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p><code>size_of</code>, <code>align_of</code> and <code>offset_of!</code> (stable since Rust 1.77) ask the same questions. Rust's default <code>repr</code> is also free to reorder fields, which is why a Rust struct of the same fields comes out at 8 bytes too (though the layout isn't promised); only <code>#[repr(C)]</code> keeps the order you wrote.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">struct</span> <span class="t">Header</span> { flag: u8, len: u32, id: u16 }
+<span class="k">const</span> _: () = <span class="f">assert!</span>(std::mem::size_of::&lt;<span class="t">Header</span>&gt;() == <span class="n">8</span>);</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="c" data-label="C">
+<h4>C</h4>
+<p>C never reorders: the struct is laid out in the order written, with padding between fields, so the same three fields take 12 bytes. You find out with <code>sizeof</code> and <code>offsetof</code>, and reorder by hand.</p>
+<pre class="foreign" data-lang="c"><code><span class="k">struct</span> <span class="t">Header</span> { uint8_t flag; uint32_t len; uint16_t id; };
+<span class="f">_Static_assert</span>(<span class="k">sizeof</span>(<span class="k">struct</span> <span class="t">Header</span>) == <span class="n">12</span>, <span class="s">"padding"</span>);
+<span class="f">_Static_assert</span>(<span class="f">offsetof</span>(<span class="k">struct</span> <span class="t">Header</span>, id) == <span class="n">8</span>, <span class="s">"after len"</span>);</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="zig" data-label="Zig">
+<h4>Zig</h4>
+<p>Zig's <code>@sizeOf</code>, <code>@alignOf</code> and <code>@offsetOf</code> are compile-time too. A plain <code>struct</code> has an unspecified layout and may be reordered; <code>extern struct</code> follows C.</p>
+<pre class="foreign" data-lang="zig"><code><span class="k">const</span> <span class="t">Header</span> = <span class="k">struct</span> { flag: u8, len: u32, id: u16 };
+<span class="k">comptime</span> {
+    std.debug.<span class="f">assert</span>(@<span class="f">sizeOf</span>(<span class="t">Header</span>) == <span class="n">8</span>);
+}</code></pre>
+</div>
+</div>
 <h2 id="only-while-compiling">Only while compiling<a class="anchor" href="#only-while-compiling" aria-label="Link to this section">#</a></h2>
-<p>A <code>Field</code>, a <code>Case</code> or a list of them has no value when the program runs. Anything read from one does: a name is text, <code>.len()</code> is a number. Keeping the list itself is <a href="diagnostics.html#K0111">K0111</a>.</p>
+<p>A <code>Field</code>, a <code>Case</code> or a list of them has no value when the program runs. Anything <em>read</em> from one does: a name is text, <code>.len()</code> is a number. Keeping the list itself is <a href="diagnostics.html#K0111">K0111</a>.</p>
 <div class="sample" id="sample-refl_err_runtime" data-sample="refl_err_runtime" data-mode="check" data-file="refl_err_runtime.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>refl_err_runtime.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0111">K0111</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -191,8 +424,11 @@ Token: 32 bytes, ?Token: 32</code></pre></div>
 
 <span class="err">error: refl_err_runtime.loom failed to compile (1 error)</span></code></pre></div>
 </div>
-<h2 id="not-supported-yet">Not supported yet<a class="anchor" href="#not-supported-yet" aria-label="Link to this section">#</a></h2>
-<ul><li><code>T.bits</code> (for <code>#layout(bits)</code>), <code>f.ty</code> and <code>T.weaves(W)</code> are <a href="diagnostics.html#U0102">U0102</a>.</li><li>std's <code>Show</code>, <code>Eq</code>, <code>Ord</code> and <code>Hash</code> for warps are still built into the compiler rather than written as default methods with reflection.</li></ul>
+<p>The line <code>print(Point.fields.len())</code> is fine: it's a number. <code>let fields = Point.fields</code> asks the program to hold the list when it runs, and there's no such value. The fix is in the message: read what you need from it at compile time, <code>f.name</code>, <code>self.(f)</code>, <code>const for f in T.fields</code>.</p>
+<div class="try"><p>Replace <code>let fields = Point.fields</code> with <code>let n = Point.fields.len()</code>. It compiles: <code>n</code> is a plain number the compiler already knows.</p></div>
+<h2 id="where-next">Where next<a class="anchor" href="#where-next" aria-label="Link to this section">#</a></h2>
+<p>The pieces on this page are the whole of reflection today. <code>T.bits</code> (for <code>#layout(bits)</code>), <code>f.ty</code> (a field's type) and <code>T.weaves(W)</code> (whether a type weaves a weft) are not built, and <code>Show</code>, <code>Eq</code>, <code>Ord</code> and <code>Hash</code> for warps are still done inside the compiler rather than written as default methods; <a href="not-yet.html">Not supported yet</a> has the list.</p>
+<p>Next, <a href="tests.html">Tests</a> shows how to check all of this: <code>test</code> blocks and <code>loom test</code>.</p>
 <nav class="pager" aria-label="Chapters">
 <a class="prev" href="const-params.html"><span class="dir">&larr; Chapter 12</span>Const parameters and control flow</a>
 <a class="next" href="tests.html"><span class="dir">Chapter 14 &rarr;</span>Tests</a>

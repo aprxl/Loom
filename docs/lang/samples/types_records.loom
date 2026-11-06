@@ -3,30 +3,41 @@ use std.io.print
 warp Point: Show {                           // `Show` is derived: nothing to write
     x: f64 = 0                               // fields can have defaults
     y: f64 = 0
-
-    fun len(self) -> f64 = (.x * .x + .y * .y).sqrt()   // `.x` is `self.x`
-    fun origin() -> Point = Point()           // no `self`: called as `Point.origin()`
-    fun shift(mut self, dx: f64) { .x += dx }
-    const UNIT = Point(1, 0)
 }
 
-warp Meters(f64)                             // a tuple warp with one field
+warp Window: Show {
+    title: String
+    width: u32 = 800
+    height: u32 = 600
+}
+
+// A tuple warp: positional fields, no names. Handy for newtypes.
+warp Meters(f64)
 
 fun main() {
     let p = Point(3, 4)                      // construction is a call
     let q = Point(y: 2)                      // named; x takes its default
-    print("{p} {q} {p.len()}")
-    print("{Point.origin()} {Point.UNIT}")
+    let origin = Point()                     // everything defaults
+    print("{p} {q} {origin}")
 
-    var moving = Point()
-    moving.shift(2.5)
-    print(moving)
+    let w = Window("notes", height: 480)     // positional, then named
+    print(w)
 
-    // A dot-block edits a value and gives it back.
-    let moved = p.{ .x += 10 }
-    print("{moved} {p}")
+    // A named argument with nothing after the colon passes the variable of that name.
+    let x = 10.0
+    let y = 20.0
+    let moved = Point(x:, y:)
+    print(moved)
 
-    // Any warp can be shown in its debug form with `:?`.
+    // A pattern takes a record apart. (`Point(x:, y:)` would bind `x` and `y`.)
+    let Point(x: px, y: py) = p
+    let Point(x: a, y: b) = moved
+    print("{px} {py} {a} {b}")
+
+    // Fields are read with a dot.
+    print("{w.title} is {w.width}x{w.height}")
+
+    // A tuple warp's fields are numbered. `{m:?}` is the debug form.
     let m = Meters(5.5)
     print("{m:?} {m.0}")
 }

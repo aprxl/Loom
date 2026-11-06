@@ -1,0 +1,31 @@
+use std.io.print
+
+/// Lists the field names. Only a record has fields, so any other type is
+/// refused while the program compiles.
+weft Names {
+    fun names(self) -> String {
+        const if Self.kind == .Record {
+            var out = String()
+            const for (i, f) in Self.fields.indexed() {
+                const if i > 0 { out.push_str(", ") }
+                out.push_str(f.name)
+            }
+            out
+        } else {
+            const unravel("Names only works on records, not {Self.name}")
+        }
+    }
+}
+
+warp Point: Names { x: i32, y: i32 }
+
+warp Light: Names {
+    case Red
+    case Green
+}
+
+fun main() {
+    print(Point(1, 2).names())
+    print(Light.Red.names())
+}
+//@ check-fail K0103

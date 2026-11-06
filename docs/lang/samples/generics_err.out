@@ -1,0 +1,17 @@
+error[T0108]: `Blob` doesn't weave `Ord`
+   --> docs/lang/samples/generics_err.loom:23:11
+   |
+23 |     print(smallest([Blob(1)]))
+   |           ^^^^^^^^^^^^^^^^^^^ `smallest` needs `T` to weave `Ord`
+   |
+   = note: here `T` is `Blob`
+
+error[T0103]: `Blob` can't be ordered with `>=`
+   --> docs/lang/samples/generics_err.loom:11:32
+   |
+11 |         if best is some(b) and b >= x { continue }
+   |                                ^^^^^^ here
+   |
+   = note: in `biggest` with `T = Blob`
+
+error: docs/lang/samples/generics_err.loom failed to type-check (2 errors)

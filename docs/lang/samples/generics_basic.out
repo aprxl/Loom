@@ -1,6 +1,8 @@
 9
 pear
+2.5
+(one, 1)
+4242
 none
-Pair(first: "one", second: 1)
-[1, 2][1, 2]
-<1><2><3>
+ok(300)
+0

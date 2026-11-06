@@ -1,0 +1,33 @@
+use std.io.print
+
+fun main() {
+    // An array has its length in its type: `[i32; 3]`.
+    let fixed = [1, 2, 3]
+    let zeros = [0u8; 4]                     // repeat: four zero bytes
+    let grid = [[0; 3]; 2]                   // two rows of three
+    print("{fixed} {zeros} {grid} {fixed.len()}")
+
+    // Indexing is checked: an index past the end unravels.
+    print("{fixed[0]} {fixed[2]} {fixed.get(7):?}")
+
+    // `var` arrays can be changed in place.
+    var board = [['.'; 3]; 3]
+    board[1][1] = 'X'
+    board[0][2] = 'O'
+    for row in board {
+        var line = String()
+        for cell in row { line.push(cell) }
+        print(line)
+    }
+
+    // Arrays compare by value, and know their own contents.
+    print("{fixed == [1, 2, 3]} {fixed.contains(2)} {fixed.index_of(3):?}")
+
+    // `for mut` changes each element where it stands.
+    var scores = [10, 20, 30]
+    for mut s in scores { s += 1 }
+    print(scores)
+
+    print(fixed[3])                          // one past the end
+}
+//@ unravel

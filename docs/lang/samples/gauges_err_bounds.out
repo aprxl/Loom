@@ -1,0 +1,7 @@
+error[T0103]: a gauge's bounds must be known at compile time
+  --> docs/lang/samples/gauges_err_bounds.loom:3:27
+  |
+3 | type Small = u16 where 0..limit()
+  |                           ^^^^^^^ not a literal or a constant
+
+error: docs/lang/samples/gauges_err_bounds.loom failed to type-check (1 error)

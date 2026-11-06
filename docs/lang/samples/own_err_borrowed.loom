@@ -1,0 +1,14 @@
+fun consume(take s: String) {}
+
+// `s` belongs to the caller, so this function can't give it away.
+fun peek(s: String) {
+    consume(s)
+}
+
+fun main() {
+    let names: List[String] = ["ann", "bo"]
+    // Nor can you take a `String` out of the list and leave a hole behind.
+    let first = names[0]
+    consume(first)
+}
+//@ check-fail M0102 M0103

@@ -1,0 +1,26 @@
+use std.io.print
+
+fun main() {
+    // Escapes: \n \t \" \\ and \u{...} for any Unicode scalar.
+    print("tab:\there, quote:\" backslash:\\ yarn:\u{1F9F6}")
+
+    // A raw string has no escapes and no templates.
+    let n = 3
+    print(r"C:\temp\{n} is not interpolated")
+
+    // A triple-quoted string spans lines and drops the common indentation.
+    let poem = """
+        warp runs up,
+          weft runs across.
+        """
+    print(poem)
+
+    // `char` is one Unicode scalar; `as` converts to and from numbers.
+    let c = 'é'
+    print("{c} {c as u32} {c.is_alphabetic()} {65 as char} {'a' < 'b'}")
+
+    // A byte string is an array of bytes, ASCII only.
+    let get = b"GET"
+    print("{get} {get.len()}")
+}
+//@ run

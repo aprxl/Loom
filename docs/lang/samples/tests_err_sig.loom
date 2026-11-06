@@ -1,0 +1,6 @@
+// A test takes nothing and returns nothing, or `! E` so it can use `?`.
+test takes_an_argument(n: i32) {
+}
+
+test returns_a_value() -> i32 = 3
+//@ check-fail T0119 T0119

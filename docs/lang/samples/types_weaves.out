@@ -1,0 +1,3 @@
+$12.34 costs true Money(cents: 1234)
+[Card(rank: 2, suit: 's'), Card(rank: 7, suit: 'd'), Card(rank: 10, suit: 'h')]
+true some(Card(rank: 10, suit: 'h'))

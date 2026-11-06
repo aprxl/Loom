@@ -1,0 +1,15 @@
+use std.mem.{Arena, kib}
+
+warp Cell {
+    n: i32
+}
+
+fun main() {
+    spool a = Arena(1.kib())
+    let p = a.put(Cell(1))
+    loom {
+        let t = thread p.n + 1
+        t.join()
+    }
+}
+//@ check-fail R0103

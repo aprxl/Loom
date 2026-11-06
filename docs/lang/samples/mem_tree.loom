@@ -1,10 +1,13 @@
 use std.io.print
 
+// A tree holds itself through pointers: a `^Tree` is a box with a `Tree` in it.
 warp Tree {
     case Leaf
     case Node(left: ^Tree, value: i32, right: ^Tree)
 }
 
+// A `take` pointer taken apart by `match` hands its parts over by value,
+// so the arms can move them into a new node.
 fun insert(take t: ^Tree, v: i32) -> ^Tree = match t {
     .Leaf => ^Tree.Node(^Tree.Leaf, v, ^Tree.Leaf)
     .Node(l, x, r) => if v < x {
@@ -14,9 +17,15 @@ fun insert(take t: ^Tree, v: i32) -> ^Tree = match t {
     }
 }
 
+// A read parameter just looks: `match`, methods and fields see through `^`.
 fun sum(t: ^Tree) -> i32 = match t {
     .Leaf => 0
     .Node(l, x, r) => l.sum() + x + r.sum()
+}
+
+fun depth(t: ^Tree) -> i32 = match t {
+    .Leaf => 0
+    .Node(l, _, r) => 1 + l.depth().max(r.depth())
 }
 
 fun main() {
@@ -24,11 +33,6 @@ fun main() {
     for v in [5, 2, 8, 1, 9, 3] {
         t = t.insert(v)
     }
-    print("sum {t.sum()}")
-
-    var n = ^41
-    n^ += 1
-    print("{n^}")
+    print("sum {t.sum()}, depth {t.depth()}")
 }
-
 //@ run

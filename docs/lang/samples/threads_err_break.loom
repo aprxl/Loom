@@ -1,0 +1,10 @@
+use std.sync.Atomic
+
+fun main() {
+    let hits = Atomic[i32](0)
+    loom for i in 0..10 {
+        if i == 5 { break }          // each iteration is a thread of its own
+        hits.add(1)
+    }
+}
+//@ check-fail C0406

@@ -1,0 +1,21 @@
+use std.io.print
+
+fun main() {
+    // A set holds each value once, in the order it first arrived.
+    var seen: Set[i32] = Set()
+    for n in [3, 1, 3, 2, 1] {
+        if seen.insert(n) { print("new: {n}") }      // `insert` says whether it was new
+    }
+    print("{seen} {seen.len()} {seen.has(2)} {seen.sorted()}")
+
+    // The usual set algebra.
+    let a = Set.of([1, 2, 3, 4])
+    let b = Set.of([3, 4, 5])
+    print("{a.union(b)} {a.intersection(b)} {a.difference(b)} {a.symmetric_difference(b)}")
+    print("{Set.of([3]).is_subset(a)} {a.is_disjoint(Set.of([9]))} {a == Set.of([4, 3, 2, 1])}")
+
+    // Removing, and sets of text.
+    var tags: Set[str] = Set.of(["red", "green"])
+    print("{tags.remove("red")} {tags.remove("red")} {tags}")
+}
+//@ run

@@ -1,0 +1,10 @@
+// A shuttle's frame lives inside the shuttle, so it can't contain itself.
+fun count_down(n: i32) ~> i32 {
+    if n > 0 {
+        for x in count_down(n - 1) { yield x }
+    }
+    yield n
+}
+
+fun main() {}
+//@ check-fail T0121

@@ -1,0 +1,11 @@
+use std.io.print
+
+fun main() {
+    var count = 0
+    loom {
+        let t = thread { count += 1 }
+        print(count)                 // the thread may be changing it
+        t.join()
+    }
+}
+//@ check-fail C0402

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -121,21 +122,21 @@ one feature per section, each next to what Rust, Go, Swift, Python and friends d
 <div class="cards two">
 <a class="card" href="lang/index.html"><span class="name">· &middot; Welcome to Loom</span><span class="desc">What Loom is, how this book works, and how to get the most out of its live samples.</span></a>
 <a class="card" href="lang/start.html"><span class="name">1 &middot; Getting started</span><span class="desc">A first program, the shape of a Loom file, and the <code>loom</code> command that runs it.</span></a>
-<a class="card" href="lang/values.html"><span class="name">2 &middot; Values and control flow</span><span class="desc">Numbers, text, <code>if</code>, <code>match</code>, loops, lambdas, and bit patterns.</span></a>
+<a class="card" href="lang/values.html"><span class="name">2 &middot; Values and control flow</span><span class="desc">Numbers, text, functions, <code>match</code>, loops, lambdas, and bit patterns.</span></a>
 <a class="card" href="lang/types.html"><span class="name">3 &middot; Warps, wefts and weaves</span><span class="desc">Data types, behavior types, and how they are joined.</span></a>
 <a class="card" href="lang/generics.html"><span class="name">4 &middot; Generics and <code>any</code></span><span class="desc">Type parameters checked per instance, wefts as parameter types, and dynamic dispatch.</span></a>
 <a class="card" href="lang/collections.html"><span class="name">5 &middot; Collections and streams</span><span class="desc">Arrays, lists, slices, maps, sets, and lazy streams.</span></a>
-<a class="card" href="lang/errors.html"><span class="name">6 &middot; Optionals and errors</span><span class="desc"><code>?T</code>, <code>T ! E</code>, and the <code>?</code> and <code>mend</code> pair.</span></a>
-<a class="card" href="lang/ownership.html"><span class="name">7 &middot; Moves, <code>once</code> and <code>defer</code></span><span class="desc">Who owns a value, what a parameter can do with it, and what runs when a scope ends.</span></a>
-<a class="card" href="lang/memory.html"><span class="name">8 &middot; Pointers, spools and <code>given</code></span><span class="desc">Boxes on the heap, arenas that free everything at once, and values passed down implicitly.</span></a>
-<a class="card" href="lang/gauges.html"><span class="name">9 &middot; Gauges</span><span class="desc">Number types limited to a range or a predicate.</span></a>
-<a class="card" href="lang/shuttles.html"><span class="name">10 &middot; Shuttles</span><span class="desc">Functions that pause, yielding values out and pulling values in.</span></a>
-<a class="card" href="lang/compile-time.html"><span class="name">11 &middot; Compile-time code</span><span class="desc">Constants computed by ordinary code, <code>const</code> expressions, <code>const assert</code>, and the sandbox they run in.</span></a>
-<a class="card" href="lang/const-params.html"><span class="name">12 &middot; Const parameters and control flow</span><span class="desc"><code>const</code> parameters, <code>uint(n)</code>, <code>const if</code>, <code>const for</code>, and <code>target</code>.</span></a>
-<a class="card" href="lang/reflection.html"><span class="name">13 &middot; Reflection</span><span class="desc">What compile-time code learns about a type, and default methods that derive from a type's shape.</span></a>
-<a class="card" href="lang/tests.html"><span class="name">14 &middot; Tests</span><span class="desc"><code>test name() { ... }</code> and <code>loom test</code>.</span></a>
-<a class="card" href="lang/threads.html"><span class="name">15 &middot; Threads</span><span class="desc">Loom blocks, threads that can't outlive them, and what they may share.</span></a>
-<a class="card" href="lang/not-yet.html"><span class="name">A &middot; Not supported yet</span><span class="desc">What the compiler doesn't do, said plainly.</span></a>
+<a class="card" href="lang/errors.html"><span class="name">6 &middot; Optionals and errors</span><span class="desc"><code>?T</code> for a value that may be missing, <code>T ! E</code> for work that may fail, and the <code>?</code> and <code>mend</code> pair that deals with both.</span></a>
+<a class="card" href="lang/ownership.html"><span class="name">7 &middot; Moves, <code>once</code> and <code>defer</code></span><span class="desc">Who owns a value, what a parameter can do with it, which resources must be used up, and what runs when a scope ends.</span></a>
+<a class="card" href="lang/memory.html"><span class="name">8 &middot; Pointers, spools and <code>given</code></span><span class="desc">Boxes on the heap, arenas that free everything at once, regions that keep pointers honest, and values passed down implicitly.</span></a>
+<a class="card" href="lang/gauges.html"><span class="name">9 &middot; Gauges</span><span class="desc">Number types limited to a range or a predicate, checked once on the way in and tracked by the compiler afterwards.</span></a>
+<a class="card" href="lang/shuttles.html"><span class="name">10 &middot; Shuttles</span><span class="desc">Functions that pause: generators that yield values out, duplex shuttles that take values in, and projections that lend a place.</span></a>
+<a class="card" href="lang/compile-time.html"><span class="name">11 &middot; Compile-time code</span><span class="desc">Constants and expressions computed by ordinary code while the program compiles, <code>const assert</code>, and the limits of the sandbox they run in.</span></a>
+<a class="card" href="lang/const-params.html"><span class="name">12 &middot; Const parameters and control flow</span><span class="desc"><code>const</code> parameters that become part of a type, <code>uint(n)</code>, <code>const if</code>, <code>const for</code>, <code>const unravel</code> and <code>target</code>.</span></a>
+<a class="card" href="lang/reflection.html"><span class="name">13 &middot; Reflection</span><span class="desc">Asking a type about itself while compiling, and default methods that derive from a type's shape.</span></a>
+<a class="card" href="lang/tests.html"><span class="name">14 &middot; Tests</span><span class="desc"><code>test name() { ... }</code>, what makes a test pass or fail, and <code>loom test</code>.</span></a>
+<a class="card" href="lang/threads.html"><span class="name">15 &middot; Threads</span><span class="desc">Loom blocks, threads that can't outlive them, what they may share, and how the compiler keeps data races out.</span></a>
+<a class="card" href="lang/not-yet.html"><span class="name">A &middot; Not supported yet</span><span class="desc">What the compiler doesn't do, said plainly, chapter by chapter.</span></a>
 </div>
 <h2 id="reference">Reference</h2>
 <div class="cards two">

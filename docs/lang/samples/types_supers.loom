@@ -1,0 +1,39 @@
+use std.io.print
+
+weft Named {
+    fun name(self) -> str
+}
+
+// `: Named` makes Named a requirement: whatever weaves Greeter weaves Named.
+weft Greeter: Named {
+    fun greet(self) -> String = "hello, {self.name()}!"
+}
+
+// A weft can name a type that each weave fills in.
+weft Container {
+    type Item
+    fun first(self) -> ?Item
+    fun is_empty(self) -> bool = self.first() is none
+}
+
+warp Cat: Greeter, Named {
+    fun name(self) -> str = "cat"
+}
+
+warp Bag: Container {
+    items: List[i32]
+    type Item = i32                          // this weave's answer
+    fun first(self) -> ?i32 = .items.first()
+}
+
+// `C.Item` is the associated type of whichever C comes in.
+fun first_or[C: Container](c: C, fallback: C.Item) -> C.Item = c.first() mend fallback
+
+fun main() {
+    print(Cat().greet())
+    let full = Bag([4, 5])
+    let empty = Bag([])
+    print("{full.first():?} {full.is_empty()} {empty.is_empty()}")
+    print("{first_or(full, 0)} {first_or(empty, -1)}")
+}
+//@ run

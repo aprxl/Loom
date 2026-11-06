@@ -1,0 +1,17 @@
+error[T0120]: `yield` doesn't fit this shuttle
+  --> docs/lang/samples/shuttles_err_kind.loom:3:5
+  |
+3 |     yield 1
+  |     ^^^^^^^ this shuttle only pulls: it has no `~> T`
+  |
+  = help: the signature says what a shuttle does: `~> T` yields `T`s, `<~ U` pulls `U`s
+
+error[T0120]: `pull` doesn't fit this shuttle
+  --> docs/lang/samples/shuttles_err_kind.loom:8:13
+  |
+8 |     let x = pull
+  |             ^^^^ this shuttle only yields: it has no `<~ U`
+  |
+  = help: the signature says what a shuttle does: `~> T` yields `T`s, `<~ U` pulls `U`s
+
+error: docs/lang/samples/shuttles_err_kind.loom failed to type-check (2 errors)

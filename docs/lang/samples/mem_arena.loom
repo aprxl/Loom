@@ -1,0 +1,27 @@
+use std.io.print
+use std.mem.{Arena, kib}
+
+warp Particle: Show {
+    x: i32
+    y: i32
+}
+
+fun main() {
+    spool frame = Arena(1.kib())
+    var p = frame.put(Particle(1, 2))   // a `^Particle@frame`
+    var q = p                           // a copy of the pointer, not of the particle
+    q.x = 50
+    print("{p} {q}")                    // both see the write
+
+    var total = 0
+    for i in 0..100 {
+        let r = frame.put(Particle(i, i * 2))
+        total += r.x + r.y
+    }
+    print(total)
+
+    frame.reset()                       // every particle goes at once
+    let s = frame.put(Particle(5, 6))
+    print(s)
+}
+//@ run

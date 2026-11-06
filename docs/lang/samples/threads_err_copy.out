@@ -1,0 +1,9 @@
+error[C0405]: `seen` doesn't outlive the loom, so a thread gets a copy of it
+  --> docs/lang/samples/threads_err_copy.loom:4:18
+  |
+4 |         thread { seen += 1 }         // so the thread gets a copy
+  |                  ^^^^ this changes the thread's copy, which nobody sees
+  |
+  = help: declare it outside the `loom`, or return the new value from the thread
+
+error: docs/lang/samples/threads_err_copy.loom failed to type-check (1 error)

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>Optionals and errors · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -55,12 +56,15 @@
 <div class="chapter-head">
 <span class="chapter-no">Chapter 6</span>
 <h1>Optionals and errors</h1>
-<p class="summary"><code>?T</code>, <code>T ! E</code>, and the <code>?</code> and <code>mend</code> pair.</p>
+<p class="summary"><code>?T</code> for a value that may be missing, <code>T ! E</code> for work that may fail, and the <code>?</code> and <code>mend</code> pair that deals with both.</p>
 </div>
-<p>Loom has two kinds of "didn't work": <strong>absence</strong> (<code>?T</code>) and <strong>failure</strong> (<code>T ! E</code>). One operator leaves either, and one keyword recovers from either.</p>
+<p>Sooner or later a function can't give you what you asked for. Maybe there was nothing to find, maybe the text wasn't a number, maybe the file wasn't there. Loom keeps two kinds of "didn't work" apart, and gives each its own type:</p>
+<ul><li><strong>Absence</strong> is <code>?T</code>: there may be a <code>T</code>, or there may be nothing. Nothing went <em>wrong</em>; the map simply doesn't have that key.</li><li><strong>Failure</strong> is <code>T ! E</code>: there's a <code>T</code>, or an error of type <code>E</code> that says what went wrong.</li></ul>
+<p>Both are ordinary values, checked by the compiler, and there are no exceptions. One postfix operator, <code>?</code>, leaves a function (or a block) when either one comes up empty, and one keyword, <code>mend</code>, patches the hole.</p>
 <table class="plain"><thead><tr><th></th><th>Syntax</th></tr></thead><tbody><tr><td>optional</td><td><code>?T</code>, with values <code>some(x)</code> and <code>none</code></td></tr><tr><td>result</td><td><code>T ! E</code>, with values <code>ok(v)</code> and <code>err(e)</code>; <code>fun f() ! E</code> when there's no success value</td></tr><tr><td>raise</td><td><code>fail e</code></td></tr><tr><td>bail out</td><td>postfix <code>?</code></td></tr><tr><td>recover</td><td><code>expr mend fallback</code>, <code>expr mend e =&gt; handler</code></td></tr><tr><td>give up</td><td><code>unravel("message")</code></td></tr></tbody></table>
-<h2 id="optionals">Optionals<a class="anchor" href="#optionals" aria-label="Link to this section">#</a></h2>
-<p>A <code>T</code> converts to <code>?T</code> by itself, so a function that returns <code>?i32</code> can end with a plain number. <code>?</code> unwraps an optional. If there's no value, it jumps to the nearest <code>mend</code> around it, or leaves the function with <code>none</code> if there isn't one. That one rule covers early return, optional chaining and try/catch.</p>
+<p>The last row is a different animal. <code>unravel</code> is for <em>bugs</em>, the things that should never happen, and it's the only thing in this chapter that unwinds the stack. It gets its own section at the end.</p>
+<h2 id="absence-t">Absence: <code>?T</code><a class="anchor" href="#absence-t" aria-label="Link to this section">#</a></h2>
+<p><code>?T</code> is either <code>some(x)</code> or <code>none</code>. A <code>T</code> converts to <code>?T</code> on its own, so a function that returns <code>?i32</code> can end with a plain number and only write <code>none</code> for the empty case. The standard library uses optionals wherever "not there" is an ordinary answer: <a href="../std/modules/map.html"><code>Map.get</code></a>, <code>List.first</code>, <a href="../std/modules/io.html"><code>read_line</code></a> at the end of the input.</p>
 <div class="sample" id="sample-errors_optional" data-sample="errors_optional" data-mode="run" data-file="errors_optional.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>errors_optional.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -72,49 +76,298 @@
     <span class="k">none</span>
 }
 
-<span class="k">fun</span> <span class="f">first_even_plus_one</span>(xs: [i32]) -&gt; ?i32 {
-    <span class="k">let</span> e = xs.<span class="f">find</span>(_ % <span class="n">2</span> == <span class="n">0</span>)?             <span class="c">// no value: leave the function with `none`</span>
-    e + <span class="n">1</span>                                    <span class="c">// a plain value converts to `?i32`</span>
+<span class="c">// A plain value converts to `?i32` by itself.</span>
+<span class="k">fun</span> <span class="f">halve</span>(n: i32) -&gt; ?i32 {
+    <span class="k">if</span> n % <span class="n">2</span> == <span class="n">0</span> { n / <span class="n">2</span> } <span class="k">else</span> { <span class="k">none</span> }
 }
 
 <span class="k">fun</span> <span class="f">main</span>() {
     <span class="k">let</span> xs = [<span class="n">3</span>, <span class="n">5</span>, <span class="n">8</span>, <span class="n">9</span>]
     <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">find</span>(xs, <span class="n">8</span>):?<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="f">find</span>(xs, <span class="n">4</span>):?<span class="h">}</span><span class="s">"</span>)
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">first_even_plus_one</span>(xs):?<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="f">first_even_plus_one</span>([<span class="n">1</span>, <span class="n">3</span>]):?<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">halve</span>(<span class="n">10</span>):?<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="f">halve</span>(<span class="n">7</span>):?<span class="h">}</span><span class="s">"</span>)
 
-    <span class="c">// `mend` gives a fallback.</span>
-    <span class="k">let</span> i = <span class="f">find</span>(xs, <span class="n">4</span>) <span class="k">mend</span> <span class="n">0</span>
-    <span class="f">print</span>(i)
+    <span class="c">// `?T` has methods of its own.</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">halve</span>(<span class="n">10</span>).<span class="f">map</span>(_ + <span class="n">1</span>):?<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="f">halve</span>(<span class="n">10</span>).<span class="f">filter</span>(_ &gt; <span class="n">9</span>):?<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">halve</span>(<span class="n">7</span>).<span class="f">is_none</span>()<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="f">halve</span>(<span class="n">10</span>).<span class="f">ok_or</span>(<span class="s">"odd"</span>):?<span class="h">}</span><span class="s">"</span>)
 
-    <span class="c">// `?` jumps to the nearest `mend`, so a block can be a `try`.</span>
-    <span class="k">let</span> n = {
-        <span class="k">let</span> a = <span class="s">"12"</span>.parse[i32]()?
-        <span class="k">let</span> b = <span class="s">"x"</span>.parse[i32]()?
-        a + b
-    } <span class="k">mend</span> e =&gt; {
-        <span class="f">print</span>(<span class="s">"could not add: </span><span class="h">{</span>e:?<span class="h">}</span><span class="s">"</span>)
+    <span class="c">// `match` takes it apart; `is` binds, and `and` sees the binding.</span>
+    <span class="k">match</span> <span class="f">find</span>(xs, <span class="n">5</span>) {
+        <span class="k">some</span>(i) =&gt; <span class="f">print</span>(<span class="s">"5 is at </span><span class="h">{</span>i<span class="h">}</span><span class="s">"</span>)
+        <span class="k">none</span> =&gt; <span class="f">print</span>(<span class="s">"no 5"</span>)
+    }
+    <span class="k">if</span> <span class="f">find</span>(xs, <span class="n">9</span>) <span class="k">is</span> <span class="k">some</span>(k) <span class="k">and</span> k &gt; <span class="n">2</span> {
+        <span class="f">print</span>(<span class="s">"9 is late, at </span><span class="h">{</span>k<span class="h">}</span><span class="s">"</span>)
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>some(2) none
+some(5) none
+some(6) none
+true ok(5)
+5 is at 1
+9 is late, at 3</code></pre></div>
+</div>
+<p>You take an optional apart in three ways: <code>match</code> with <code>some(..)</code> and <code>none</code> arms, <code>is</code> (which binds the value for the rest of the condition, so <code>and</code> can use it), and the methods on <code>?T</code>: <code>map</code>, <code>filter</code>, <code>zip</code>, <code>is_some</code>, <code>is_none</code>, <code>ok_or</code> and a few more, all in <a href="../std/modules/option.html">std.option</a>. The <code>{x:?}</code> in a template is the debug form, which shows <code>some(..)</code> and <code>none</code> rather than failing to format.</p>
+<ul><li>Nesting is real: <code>??i32</code> is a different type from <code>?i32</code>, so <code>some(none)</code> and <code>none</code> stay distinct. A plain <code>?i32</code> converts to <code>??i32</code> as <code>some(..)</code>.</li><li>A bare <code>none</code> has no type of its own. Where the compiler can't tell, it asks for one: <code>let x: ?i32 = none</code> (<a href="diagnostics.html#T0110">T0110</a>).</li></ul>
+<div class="try"><p>Change <code>halve(10)</code> to <code>halve(7)</code> in the <code>map</code> line and run it again: every <code>some</code> becomes <code>none</code>, and nothing crashes. Then ask <code>find(xs, 9)</code> for <code>k &gt; 20</code> and see the <code>if</code> body skipped.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="swift" data-label="Swift">
+<h4>Swift</h4>
+<p>Swift's <code>T?</code> is the same idea, and <code>if let</code> is close to Loom's <code>is some(x)</code>. Swift spells the empty value <code>nil</code> and promotes a plain value to an optional automatically, as Loom does.</p>
+<pre class="foreign" data-lang="swift"><code><span class="k">func</span> <span class="f">halve</span>(_ n: <span class="t">Int</span>) -&gt; <span class="t">Int?</span> {
+    n % <span class="n">2</span> == <span class="n">0</span> ? n / <span class="n">2</span> : <span class="k">nil</span>
+}
+<span class="k">if</span> <span class="k">let</span> h = <span class="f">halve</span>(<span class="n">10</span>), h &gt; <span class="n">4</span> { <span class="f">print</span>(h) }</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="kotlin" data-label="Kotlin">
+<h4>Kotlin</h4>
+<p>Kotlin's <code>Int?</code> is a nullable type rather than a wrapper: <code>Int??</code> collapses to <code>Int?</code>, and there is no <code>Some</code>. In Loom <code>?T</code> is a real two-case type, which is why <code>??T</code> means something. The surface looks alike all the same: <code>?.</code> and <code>?:</code> in Kotlin are <code>?</code> and <code>mend</code> here.</p>
+<pre class="foreign" data-lang="kotlin"><code><span class="k">fun</span> <span class="f">halve</span>(n: <span class="t">Int</span>): <span class="t">Int?</span> = <span class="k">if</span> (n % <span class="n">2</span> == <span class="n">0</span>) n / <span class="n">2</span> <span class="k">else</span> <span class="k">null</span>
+<span class="k">val</span> bigger = <span class="f">halve</span>(<span class="n">10</span>)?.<span class="f">plus</span>(<span class="n">1</span>)</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust's <code>Option&lt;T&gt;</code> is the same type under another name. The difference is convenience: Loom converts <code>T</code> to <code>?T</code> for you, so you never write <code>Some(x)</code> just to return a value.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">fn</span> <span class="f">halve</span>(n: i32) -&gt; <span class="t">Option</span>&lt;i32&gt; {
+    <span class="k">if</span> n % <span class="n">2</span> == <span class="n">0</span> { <span class="k">Some</span>(n / <span class="n">2</span>) } <span class="k">else</span> { <span class="k">None</span> }
+}</code></pre>
+</div>
+</div>
+<h2 id="leaving-early">Leaving early: <code>?</code><a class="anchor" href="#leaving-early" aria-label="Link to this section">#</a></h2>
+<p>Postfix <code>?</code> unwraps an optional. If there is a value, you get it. If there isn't, <code>?</code> <strong>jumps to the nearest <code>mend</code> around it</strong>; and when there is no <code>mend</code>, it leaves the function, returning <code>none</code>. That one rule covers early return, optional chaining and the try block of other languages, which is why Loom has no separate <code>?.</code>: <code>owners.get(pet)?</code> followed by a method call is already a chain.</p>
+<div class="sample" id="sample-errors_question" data-sample="errors_question" data-mode="run" data-file="errors_question.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>errors_question.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">// Each lookup can come up empty. `?` ends the function at the first one that does.</span>
+<span class="k">fun</span> <span class="f">zip_of</span>(pet: str, owners: <span class="t">Map</span>[str, str], zips: <span class="t">Map</span>[str, u32]) -&gt; ?u32 {
+    <span class="k">let</span> owner = owners.<span class="f">get</span>(pet)?
+    <span class="k">let</span> zip = zips.<span class="f">get</span>(owner)?
+    zip
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> owners: <span class="t">Map</span>[str, str] = [<span class="s">"rex"</span>: <span class="s">"ann"</span>, <span class="s">"tom"</span>: <span class="s">"bo"</span>, <span class="s">"ivy"</span>: <span class="s">"cy"</span>]
+    <span class="k">let</span> zips: <span class="t">Map</span>[str, u32] = [<span class="s">"ann"</span>: <span class="n">1000</span>, <span class="s">"bo"</span>: <span class="n">2000</span>]
+    <span class="k">for</span> pet <span class="k">in</span> [<span class="s">"rex"</span>, <span class="s">"ivy"</span>, <span class="s">"max"</span>] {
+        <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>pet<span class="h">}</span><span class="s">: </span><span class="h">{</span><span class="f">zip_of</span>(pet, owners, zips):?<span class="h">}</span><span class="s">"</span>)
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>rex: some(1000)
+ivy: none
+max: none</code></pre></div>
+</div>
+<p>Here each <code>?</code> stops <code>zip_of</code> at the first lookup that comes up empty. The function's own type, <code>?u32</code>, is what makes that legal: <code>?</code> only leaves a function that can say "nothing" or "failed" back to its caller.</p>
+<div class="sample" id="sample-errors_err_question" data-sample="errors_err_question" data-mode="check" data-file="errors_err_question.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>errors_err_question.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#T0101">T0101</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">// `main` can't fail, and nothing here catches, so `?` has nowhere to go.</span>
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> n = <span class="s">"12"</span>.parse[i32]()?
+    <span class="f">print</span>(n)
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[T0101]: `?` has nowhere to go</span>
+<span class="loc">  --&gt; errors_err_question.loom:5:13</span>
+<span class="gut">  |</span>
+<span class="gut">5 |</span>     let n = "12".parse[i32]()?
+<span class="gut">  |</span><span class="caret">             ^^^^^^^^^^^^^^^^^^ no `mend` around it, and the function can't fail</span>
+<span class="gut">  |</span>
+<span class="loc">  = help: put it inside the left of a `mend`, or return `?T` or `T ! E`</span>
+
+<span class="err">error: errors_err_question.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<ul><li><code>?</code> on a result (<code>T ! E</code>) works the same way, and then it <em>propagates the error</em>: it leaves with <code>err(e)</code>. You'll see that two sections down.</li><li>A <code>?</code> has to sit inside the <strong>left</strong> side of the <code>mend</code> it jumps to. It can cross loops and blocks, but not a lambda or a shuttle, because those are separate functions.</li><li>A <code>?</code> that finds no <code>mend</code> and sits in a function that can't fail is <a href="diagnostics.html#T0101">T0101</a>.</li></ul>
+<div class="try"><p>In <code>errors_question</code>, change the return type of <code>zip_of</code> from <code>?u32</code> to <code>u32</code>. The <code>?</code>s are now in a function that can't hand back <code>none</code>, and the compiler says so.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Loom's <code>?</code> is Rust's <code>?</code> with one extra target. In Rust <code>?</code> always returns from the function (or the closure, or the unstable <code>try</code> block); in Loom it first looks for a <code>mend</code>. The <code>Option</code> and <code>Result</code> cases are one operator here, and the same function can use <code>?</code> on both when its error type has room for <code>Missing</code>.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">fn</span> <span class="f">zip_of</span>(pet: &amp;str, owners: &amp;<span class="t">HashMap</span>&lt;&amp;str, &amp;str&gt;, zips: &amp;<span class="t">HashMap</span>&lt;&amp;str, u32&gt;) -&gt; <span class="t">Option</span>&lt;u32&gt; {
+    <span class="k">let</span> owner = owners.<span class="f">get</span>(pet)?;
+    zips.<span class="f">get</span>(owner).<span class="f">copied</span>()
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="swift" data-label="Swift">
+<h4>Swift</h4>
+<p>Swift writes optional chaining as <code>?.</code> and error propagation as <code>try</code>; the two never share a symbol. Loom has one operator for both, and a call after <code>?</code> is already a chain.</p>
+<pre class="foreign" data-lang="swift"><code><span class="k">let</span> zip = owners[pet].flatMap { zips[$<span class="n">0</span>] }
+<span class="k">let</span> city = user?.address?.city ?? <span class="s">"unknown"</span></code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="zig" data-label="Zig">
+<h4>Zig</h4>
+<p>Zig's <code>try x</code> is the closest relative: unwrap, or return the error from the function. Zig keeps optionals (<code>orelse</code>) and error unions (<code>catch</code>) apart; Loom lets one <code>mend</code> handle both.</p>
+<pre class="foreign" data-lang="zig"><code><span class="k">fn</span> <span class="f">load</span>(path: []<span class="k">const</span> u8) !<span class="t">Config</span> {
+    <span class="k">const</span> text = <span class="k">try</span> <span class="f">readFile</span>(path);
+    <span class="k">return</span> <span class="f">parse</span>(text);
+}</code></pre>
+</div>
+</div>
+<h2 id="recovering-mend">Recovering: <code>mend</code><a class="anchor" href="#recovering-mend" aria-label="Link to this section">#</a></h2>
+<p><code>expr mend fallback</code> evaluates <code>expr</code>; if it came up empty or failed, the result is <code>fallback</code> instead. The name is a weaver's: you've found a dropped thread and tied it back in. A <code>mend</code> works on optionals and results alike, and takes a few shapes:</p>
+<div class="sample" id="sample-errors_mend" data-sample="errors_mend" data-mode="run" data-file="errors_mend.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>errors_mend.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fun</span> <span class="f">env_port</span>() -&gt; ?u16 = <span class="k">none</span>
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> counts: <span class="t">Map</span>[str, i32] = [<span class="s">"a"</span>: <span class="n">2</span>]
+
+    <span class="c">// A fallback value.</span>
+    <span class="k">let</span> port = <span class="s">"80x"</span>.parse[u16]() <span class="k">mend</span> <span class="n">8080</span>
+    <span class="f">print</span>(port)
+
+    <span class="c">// `mend` binds loosest, so wrap it in arithmetic.</span>
+    <span class="f">print</span>((counts.<span class="f">get</span>(<span class="s">"a"</span>) <span class="k">mend</span> <span class="n">0</span>) + <span class="n">1</span>)
+    <span class="f">print</span>((counts.<span class="f">get</span>(<span class="s">"z"</span>) <span class="k">mend</span> <span class="n">0</span>) + <span class="n">1</span>)
+
+    <span class="c">// A chain: the first that works wins.</span>
+    <span class="k">let</span> chosen = <span class="s">""</span>.parse[u16]() <span class="k">mend</span> <span class="f">env_port</span>() <span class="k">mend</span> <span class="n">3000</span>
+    <span class="f">print</span>(chosen)
+
+    <span class="c">// A handler sees what went wrong.</span>
+    <span class="k">let</span> n = <span class="s">"abc"</span>.parse[i32]() <span class="k">mend</span> e =&gt; {
+        <span class="f">print</span>(<span class="s">"could not parse: </span><span class="h">{</span>e<span class="h">}</span><span class="s">"</span>)
         -<span class="n">1</span>
     }
     <span class="f">print</span>(n)
 
-    <span class="c">// `is` binds, and `and` sees the binding.</span>
-    <span class="k">if</span> <span class="f">find</span>(xs, <span class="n">9</span>) <span class="k">is</span> <span class="k">some</span>(k) <span class="k">and</span> k &gt; <span class="n">2</span> {
-        <span class="f">print</span>(<span class="s">"found late at </span><span class="h">{</span>k<span class="h">}</span><span class="s">"</span>)
+    <span class="c">// A `?` inside a block jumps to the `mend` after it: a try block.</span>
+    <span class="k">let</span> sum = {
+        <span class="k">let</span> a = <span class="s">"12"</span>.parse[i32]()?
+        <span class="k">let</span> b = <span class="s">"x"</span>.parse[i32]()?
+        a + b
+    } <span class="k">mend</span> <span class="n">0</span>
+    <span class="f">print</span>(sum)
+
+    <span class="c">// The fallback can leave instead: `continue` here.</span>
+    <span class="k">var</span> total = <span class="n">0</span>
+    <span class="k">for</span> s <span class="k">in</span> [<span class="s">"4"</span>, <span class="s">"x"</span>, <span class="s">"10"</span>] {
+        <span class="k">let</span> v = s.parse[i32]() <span class="k">mend</span> { <span class="k">continue</span> }
+        total += v
     }
+    <span class="f">print</span>(total)
+
+    <span class="c">// Or give up: `mend unravel(..)` is Rust's `expect`.</span>
+    <span class="k">let</span> must = <span class="s">"9"</span>.parse[i32]() <span class="k">mend</span> <span class="f">unravel</span>(<span class="s">"not a number"</span>)
+    <span class="f">print</span>(must)
 }</code></pre>
-<div class="sample-out"><div class="out-head">Output</div><pre><code>some(2) none
-some(9) none
-0
-could not add: Invalid
+<div class="sample-out"><div class="out-head">Output</div><pre><code>8080
+3
+1
+3000
+could not parse: Invalid
 -1
-found late at 3</code></pre></div>
+0
+14
+9</code></pre></div>
 </div>
-<ul><li><code>mend</code> has the lowest precedence of any binary operator, so put parentheses around it in arithmetic: <code>(counts.get(k) mend 0) + 1</code>.</li><li>A <code>?</code> has to sit inside the left side of the <code>mend</code> it jumps to. It can cross loops and blocks, but not a lambda or a shuttle.</li><li><code>mend</code> chains left to right: <code>a() mend b() mend 8080</code>.</li><li>In <code>mend e =&gt; ...</code>, <code>e</code> is the union of everything that can reach the <code>mend</code>.</li></ul>
-<h2 id="results-and-error-types">Results and error types<a class="anchor" href="#results-and-error-types" aria-label="Link to this section">#</a></h2>
-<p>An error is a warp that weaves <code>Error</code>, usually with cases. <code>Error</code> gives it a <code>message</code> that shows the case and its payload. <code>fail .Empty</code> leaves the function with an error, and the leading dot picks the case from the declared error type.</p>
-<p>A <code>?</code> that leaves a function converts the error. A <code>from</code> case absorbs another error type: <code>case Parse(from ParseError)</code> means a <code>?</code> on a <code>ParseError</code> wraps it as <code>.Parse(...)</code>. At most one case can absorb a given type.</p>
-<div class="sample" id="sample-errors_results" data-sample="errors_results" data-mode="run" data-file="errors_results.loom" data-runnable>
-<div class="sample-head"><span class="file"><span class="dot"></span>errors_results.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<ul><li><strong>A value.</strong> <code>s.parse[u16]() mend 8080</code>.</li><li><strong>A chain.</strong> <code>a() mend b() mend 8080</code> reads left to right, and the first that works wins.</li><li><strong>A handler.</strong> <code>mend e =&gt; { ... }</code> runs a block that sees the error. <code>e</code> has the type of everything that could reach the <code>mend</code>: if a <code>?</code> on an optional can reach it, <code>Missing</code> is part of that type.</li><li><strong>A way out.</strong> If the right-hand side can't produce a value (<code>continue</code>, <code>break</code>, <code>return</code>, <code>fail</code>, <code>unravel</code>), that's fine: the <code>mend</code> never returns normally. <code>mend unravel("...")</code> is the <code>expect</code> of other languages.</li><li>A block on the left makes a try block: <code>{ let a = f()?; let b = g()?; a + b } mend 0</code>. The <code>?</code>s jump to the <code>mend</code> after the brace.</li><li><strong>Precedence.</strong> <code>mend</code> binds more loosely than any other binary operator. In arithmetic, parenthesize it: <code>(counts.get(k) mend 0) + 1</code>.</li><li>Whatever the left side would have produced, the right side must have the same type, unless it diverges.</li></ul>
+<div class="try"><p>Remove the parentheses around <code>counts.get("a") mend 0</code> in the arithmetic line. The <code>+ 1</code> is now part of the fallback, so the key that <em>is</em> there prints 2 instead of 3.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="kotlin" data-label="Kotlin">
+<h4>Kotlin</h4>
+<p>Kotlin's elvis operator <code>?:</code> covers the fallback, and <code>try</code>/<code>catch</code> is an <em>expression</em> there too. Loom has one construct for both: <code>mend</code> after a value is <code>?:</code>, and <code>mend e =&gt; ...</code> after a block is <code>catch</code>.</p>
+<pre class="foreign" data-lang="kotlin"><code><span class="k">val</span> port = text.<span class="f">toIntOrNull</span>() ?: <span class="n">8080</span>
+<span class="k">val</span> sum = <span class="k">try</span> { <span class="f">a</span>() + <span class="f">b</span>() } catch (e: <span class="t">Exception</span>) { <span class="n">0</span> }</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="swift" data-label="Swift">
+<h4>Swift</h4>
+<p>Swift's <code>??</code> supplies a fallback for an optional, and failing calls need <code>do</code>/<code>catch</code> (or <code>try?</code>, which turns an error into <code>nil</code>). <code>mend</code> is <code>??</code> and <code>try?</code> and <code>catch</code> in one.</p>
+<pre class="foreign" data-lang="swift"><code><span class="k">let</span> port = <span class="t">Int</span>(text) ?? <span class="n">8080</span>
+<span class="k">let</span> n = (try? <span class="f">parse</span>(text)) ?? <span class="n">0</span></code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust spells the fallbacks as methods: <code>unwrap_or</code>, <code>unwrap_or_else</code>, <code>expect</code>. <code>mend</code> is the operator version, and because the handler is just an expression it can <code>continue</code> or <code>return</code> without a closure getting in the way.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> port = text.parse::&lt;u16&gt;().<span class="f">unwrap_or</span>(<span class="n">8080</span>);
+<span class="k">let</span> n = text.parse::&lt;i32&gt;().<span class="f">unwrap_or_else</span>(|e| {
+    <span class="f">eprintln!</span>(<span class="s">"could not parse: {e}"</span>);
+    -<span class="n">1</span>
+});</code></pre>
+</div>
+</div>
+<h2 id="failure-t-e">Failure: <code>T ! E</code><a class="anchor" href="#failure-t-e" aria-label="Link to this section">#</a></h2>
+<p>A function that can fail says so in its return type: <code>-&gt; u8 ! AgeError</code> returns a <code>u8</code> or an <code>AgeError</code>. Its values are <code>ok(v)</code> and <code>err(e)</code>, and a plain <code>u8</code> converts to <code>ok(v)</code> as a plain value converts to <code>some(v)</code>. A function with no success value drops the <code>-&gt; T</code>: <code>fun greet(age: i32) ! AgeError</code>.</p>
+<p>An error is a warp that weaves <code>Error</code>, usually with a few cases. <code>Error</code> gives it a <code>message</code> that shows the case and its payload, so you write no code to print one. <code>fail e</code> leaves the function with an error, and the leading dot picks the case from the declared error type: <code>fail .Negative</code>.</p>
+<div class="sample" id="sample-errors_basic" data-sample="errors_basic" data-mode="run" data-file="errors_basic.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>errors_basic.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">// An error is a warp that weaves `Error`; its `message` shows case and payload.</span>
+<span class="k">warp</span> <span class="t">AgeError</span>: <span class="t">Error</span> {
+    <span class="k">case</span> <span class="t">Negative</span>
+    <span class="k">case</span> <span class="t">TooOld</span>(age: i32)
+}
+
+<span class="k">fun</span> <span class="f">check</span>(age: i32) -&gt; u8 ! <span class="t">AgeError</span> {
+    <span class="k">if</span> age &lt; <span class="n">0</span> { <span class="k">fail</span> .<span class="t">Negative</span> }            <span class="c">// the leading dot picks a case of AgeError</span>
+    age <span class="k">as</span>? u8 <span class="k">mend</span> <span class="k">fail</span> .<span class="t">TooOld</span>(age: age)
+}
+
+<span class="c">// No `-&gt; T`: it either works or fails.</span>
+<span class="k">fun</span> <span class="f">greet</span>(age: i32) ! <span class="t">AgeError</span> {
+    <span class="k">let</span> a = <span class="f">check</span>(age)?
+    <span class="f">print</span>(<span class="s">"hello, </span><span class="h">{</span>a<span class="h">}</span><span class="s"> year old"</span>)
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">check</span>(<span class="n">30</span>):?<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="f">check</span>(-<span class="n">1</span>):?<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="f">check</span>(<span class="n">300</span>):?<span class="h">}</span><span class="s">"</span>)
+
+    <span class="k">match</span> <span class="f">check</span>(<span class="n">300</span>) {
+        <span class="k">ok</span>(a) =&gt; <span class="f">print</span>(<span class="s">"fine: </span><span class="h">{</span>a<span class="h">}</span><span class="s">"</span>)
+        <span class="k">err</span>(.<span class="t">Negative</span>) =&gt; <span class="f">print</span>(<span class="s">"negative"</span>)
+        <span class="k">err</span>(e) =&gt; <span class="f">print</span>(<span class="s">"problem: </span><span class="h">{</span>e.<span class="f">message</span>()<span class="h">}</span><span class="s">"</span>)
+    }
+
+    <span class="k">let</span> r = <span class="f">check</span>(<span class="n">7</span>).<span class="f">map</span>(_ + <span class="n">1</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>r:?<span class="h">}</span><span class="s"> </span><span class="h">{</span>r.<span class="f">is_ok</span>()<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="f">check</span>(-<span class="n">2</span>).<span class="f">error</span>():?<span class="h">}</span><span class="s">"</span>)
+    <span class="f">greet</span>(<span class="n">20</span>) <span class="k">mend</span> e =&gt; <span class="f">print</span>(<span class="s">"greet failed: </span><span class="h">{</span>e<span class="h">}</span><span class="s">"</span>)
+    <span class="f">greet</span>(-<span class="n">5</span>) <span class="k">mend</span> e =&gt; <span class="f">print</span>(<span class="s">"greet failed: </span><span class="h">{</span>e<span class="h">}</span><span class="s">"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>ok(30) err(Negative) err(TooOld(age: 300))
+problem: TooOld(age: 300)
+ok(8) true some(Negative)
+hello, 20 year old
+greet failed: Negative</code></pre></div>
+</div>
+<p>Results have methods much as optionals do (<code>map</code>, <code>map_err</code>, <code>value</code>, <code>error</code>, <code>is_ok</code>; see <a href="../std/modules/error.html">std.error</a>), and <code>match</code> takes one apart with patterns inside <code>err(..)</code>.</p>
+<ul><li><code>err(e)</code> builds an error value without leaving the function; <code>fail e</code> builds it <em>and</em> leaves.</li><li><code>fail</code> always leaves the function, even from inside the left of a <code>mend</code>. Only <code>?</code> jumps to a <code>mend</code>.</li><li><code>age as? u8 mend fail .TooOld(age: age)</code> is a common shape: try a conversion that may not fit, and turn a miss into your own error.</li><li>Inside the function, <code>?</code> on a result with the same error type passes the error straight out. The next section is about what happens when the types differ.</li></ul>
+<div class="try"><p>Change the <code>err(e)</code> arm to <code>err(.TooOld(a))</code> and print <code>a</code>. Then delete the <code>err(.Negative)</code> arm and see that the <code>match</code> still compiles: the last arm catches the rest.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Go returns the error beside the value and leaves checking it to you, which is clear and a little repetitive. In Loom the result is one value, you can't use the success side without handling the error side, and <code>?</code> replaces the <code>if err != nil</code> block.</p>
+<pre class="foreign" data-lang="go"><code>n, err := strconv.<span class="t">Atoi</span>(text)
+<span class="k">if</span> err != <span class="k">nil</span> {
+    <span class="k">return</span> <span class="n">0</span>, err
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p><code>T ! E</code> is <code>Result&lt;T, E&gt;</code>, <code>ok</code> and <code>err</code> are <code>Ok</code> and <code>Err</code>, and <code>fail e</code> is <code>return Err(e)</code>. The difference is mostly spelling and conversions, which the next section covers.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">fn</span> <span class="f">check</span>(age: i32) -&gt; <span class="t">Result</span>&lt;u8, <span class="t">AgeError</span>&gt; {
+    <span class="k">if</span> age &lt; <span class="n">0</span> { <span class="k">return</span> <span class="k">Err</span>(<span class="t">AgeError</span>::<span class="t">Negative</span>) }
+    u8::<span class="f">try_from</span>(age).<span class="f">map_err</span>(|_| <span class="t">AgeError</span>::<span class="t">TooOld</span>(age))
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="java" data-label="Java">
+<h4>Java</h4>
+<p>Java's checked exceptions put the possible errors in the signature, like <code>T ! E</code>, but a thrown exception unwinds the stack and can be caught far away. A Loom error is a returned value: you see it at the call, and nothing unwinds.</p>
+<pre class="foreign" data-lang="java"><code><span class="k">static</span> <span class="k">int</span> <span class="f">check</span>(<span class="k">int</span> age) <span class="k">throws</span> <span class="t">AgeException</span> {
+    <span class="k">if</span> (age &lt; <span class="n">0</span>) <span class="k">throw</span> <span class="k">new</span> <span class="t">AgeException</span>(<span class="s">"negative"</span>);
+    <span class="k">return</span> age;
+}</code></pre>
+</div>
+</div>
+<h2 id="converting-errors">Converting errors<a class="anchor" href="#converting-errors" aria-label="Link to this section">#</a></h2>
+<p>When a <code>?</code> leaves a function, the error has to fit the function's declared error type. If the types differ, the compiler converts for you where it can. The standard way is a <strong><code>from</code> case</strong>: <code>case Parse(from ParseError)</code> says "this case absorbs a <code>ParseError</code>", and a <code>?</code> on a <code>ParseError</code> wraps it as <code>.Parse(...)</code>. Give at most one case per absorbed type, so it's clear where an error goes.</p>
+<div class="sample" id="sample-errors_from" data-sample="errors_from" data-mode="run" data-file="errors_from.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>errors_from.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="k">warp</span> <span class="t">ParseError</span>: <span class="t">Error</span> {
@@ -158,8 +411,30 @@ error: Parse(Empty)
 error: Parse(NotANumber(text: "abc"))
 error: Range(TooBig(limit: 255))</code></pre></div>
 </div>
+<p>The output shows the wrapping: <code>error: Parse(Empty)</code> is an <code>AppError.Parse</code> holding a <code>ParseError.Empty</code>. This replaces the <code>From</code> impls and the <code>#[from]</code> attributes of other languages with one word in the case.</p>
+<div class="try"><p>Change <code>load</code> to return <code>u8 ! ParseError</code>. The <code>?</code> on <code>small(n)</code> now has a <code>RangeError</code> and nowhere to put it: <a href="diagnostics.html#T0108">T0108</a> says the error can't become a <code>ParseError</code>, and suggests two ways out, widening the type or adding a <code>from</code> case.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>In Rust you write <code>impl From&lt;ParseError&gt; for AppError</code> (or <code>#[from]</code> with the <code>thiserror</code> crate) so that <code>?</code> can convert. In Loom the conversion is declared once, in the case that carries it.</p>
+<pre class="foreign" data-lang="rust"><code>#[<span class="f">derive</span>(<span class="t">Debug</span>, thiserror::<span class="t">Error</span>)]
+<span class="k">enum</span> <span class="t">AppError</span> {
+    #[<span class="f">error</span>(<span class="s">"parse"</span>)] <span class="t">Parse</span>(#[from] <span class="t">ParseError</span>),
+    #[<span class="f">error</span>(<span class="s">"range"</span>)] <span class="t">Range</span>(#[from] <span class="t">RangeError</span>),
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="zig" data-label="Zig">
+<h4>Zig</h4>
+<p>Zig infers error sets: a function lists nothing and the compiler works out the union of everything its <code>try</code>s can return. Loom asks you to say it. (A <code>! _</code> that infers the set is designed but <a href="not-yet.html">not supported yet</a>.)</p>
+<pre class="foreign" data-lang="zig"><code><span class="k">fn</span> <span class="f">load</span>(text: []<span class="k">const</span> u8) !u8 {
+    <span class="k">const</span> n = <span class="k">try</span> <span class="f">parse</span>(text);
+    <span class="k">return</span> <span class="k">try</span> <span class="f">small</span>(n);
+}</code></pre>
+</div>
+</div>
 <h2 id="several-error-types">Several error types<a class="anchor" href="#several-error-types" aria-label="Link to this section">#</a></h2>
-<p><code>A | B</code> is a union type, mostly used for errors. Each member converts to the union, and a <code>match</code> takes the members apart with type patterns. <code>any Error</code> accepts an error of any one type, which is handy for <code>main</code> and scripts.</p>
+<p>Sometimes the right answer is not to wrap but to <em>list</em>. <code>A | B</code> is a <strong>union type</strong>, mostly used for errors: each member converts into the union, and a <code>match</code> takes the members apart with type patterns (<code>err(e: IoProblem)</code>). <code>any Error</code> is wider still: it accepts an error of any type, which is handy in <code>main</code> and scripts where you only want to report it.</p>
 <div class="sample" id="sample-errors_union" data-sample="errors_union" data-mode="run" data-file="errors_union.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>errors_union.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -212,9 +487,25 @@ text: Garbled
 loaded 42
 run failed: Garbled</code></pre></div>
 </div>
-<div class="callout"><p>A union of errors doesn't convert to <code>any Error</code> yet: <code>?</code> on a <code>! (A | B)</code> inside a <code>! any Error</code> function is <a href="diagnostics.html#T0108">T0108</a>. Widen the function's errors to the union instead.</p></div>
-<h2 id="main"><code>main</code><a class="anchor" href="#main" aria-label="Link to this section">#</a></h2>
-<p><code>fun main() ! E</code> lets <code>?</code> leave <code>main</code>. An error that reaches the end is printed as <code>error: ...</code> on stderr, and the program exits with status 1.</p>
+<ul><li>A <code>?</code> inside a function declared <code>! (A | B)</code> accepts an error of either member.</li><li>A union of errors doesn't convert to <code>any Error</code> yet: <code>?</code> on a <code>! (A | B)</code> inside a <code>! any Error</code> function is <a href="diagnostics.html#T0108">T0108</a>. Name the union itself as the function's error type instead.</li></ul>
+<div class="try"><p>Narrow <code>load</code> to <code>! IoProblem</code> and run it. The <code>?</code> on <code>decode</code> has a <code>BadText</code> that no longer fits (<a href="diagnostics.html#T0108">T0108</a>), and the compiler suggests widening the union.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="java" data-label="Java">
+<h4>Java</h4>
+<p>A Java <code>throws IoException, ParseException</code> is a union too, and so is <code>catch (A | B e)</code>. The difference is that Loom's union is a plain return type, so it sits in a signature, a variable or a <code>match</code> like any other.</p>
+<pre class="foreign" data-lang="java"><code><span class="k">int</span> <span class="f">load</span>(<span class="t">String</span> path) <span class="k">throws</span> <span class="t">IOException</span>, <span class="t">ParseException</span> { /* ... */ }</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="swift" data-label="Swift">
+<h4>Swift</h4>
+<p>Swift has typed <code>throws</code> (<code>throws(ParseError)</code>) and the untyped <code>any Error</code>. Loom has both too, but <code>any Error</code> is a type like any other, not an escape hatch from the checker.</p>
+<pre class="foreign" data-lang="swift"><code><span class="k">func</span> <span class="f">run</span>(_ path: <span class="t">String</span>) <span class="k">throws</span> {   <span class="c">// throws any Error</span>
+    <span class="k">let</span> v = <span class="k">try</span> <span class="f">decode</span>(<span class="f">read</span>(path))
+}</code></pre>
+</div>
+</div>
+<h2 id="main-can-fail"><code>main</code> can fail<a class="anchor" href="#main-can-fail" aria-label="Link to this section">#</a></h2>
+<p><code>fun main() ! E</code> lets <code>?</code> leave <code>main</code>. An error that reaches the end is printed as <code>error: ...</code> on standard error, and the program exits with status 1. That makes a small script as honest as a library: no <code>try</code>/<code>catch</code> at the top, just a type.</p>
 <div class="sample" id="sample-errors_main" data-sample="errors_main" data-mode="run" data-file="errors_main.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>errors_main.loom</span><span class="tag warn">exits with an error</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -235,8 +526,9 @@ run failed: Garbled</code></pre></div>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>starting</code></pre></div>
 <div class="sample-out"><div class="out-head">Error output</div><pre><code><span class="err">error: Missing(key: "port")</span></code></pre></div>
 </div>
-<h2 id="unravel"><code>unravel</code><a class="anchor" href="#unravel" aria-label="Link to this section">#</a></h2>
-<p><code>unravel(message)</code> is for bugs, not for expected failures. Its type is <code>never</code>. It unwinds the current thread and runs <code>defer</code>s on the way out. Plain arithmetic overflow, a failed <code>as</code>, an out-of-range index and a failed <code>assert</code> all unravel. The program exits with status 101.</p>
+<p>The "starting" line is printed; the second print never is. Status 1 means "<code>main</code> returned an error"; see the exit codes in <a href="start.html#the-loom-command">Getting started</a>.</p>
+<h2 id="giving-up-unravel">Giving up: <code>unravel</code><a class="anchor" href="#giving-up-unravel" aria-label="Link to this section">#</a></h2>
+<p><code>unravel(message)</code> is for bugs, not for expected failures. Its type is <code>never</code>, because it doesn't return. It <strong>unwinds the current thread</strong>, running each <code>defer</code> on the way out, and the program then exits with status 101. Arithmetic overflow, a failed <code>as</code>, an out-of-range index and a failed <code>assert</code> all unravel.</p>
 <div class="sample" id="sample-errors_unravel" data-sample="errors_unravel" data-mode="run" data-file="errors_unravel.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>errors_unravel.loom</span><span class="tag warn">unravels</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -260,9 +552,30 @@ outer cleanup</code></pre></div>
 <span class="gut">5 |</span>     unravel("something that should never happen")
 <span class="gut">  |</span><span class="caret">     ^</span></code></pre></div>
 </div>
-<p><code>assert(condition, message)</code> unravels unless the condition holds. In compile-time code a failed assertion is a compile error: see <a href="compile-time.html">Compile-time code</a>.</p>
+<p><code>assert(condition, message)</code> unravels unless the condition holds. In <a href="compile-time.html">compile-time code</a> a failed assertion is a compile error instead.</p>
+<p>Expected failures, like a missing file or a number typed wrong, belong in <code>T ! E</code>. A caller can decide what to do about them. An unravel is the program saying it has reached a state it was written never to reach.</p>
+<div class="try"><p>Replace the call to <code>unravel</code> with <code>assert(1 + 1 == 3, "arithmetic is broken")</code>. The report changes, the <code>defer</code>s still run, and the exit status is still 101.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p><code>unravel</code> is Rust's <code>panic!</code>: it unwinds, runs destructors (Loom's <code>defer</code>s) and ends with a failure status. Rust's <code>Result</code> and Loom's <code>T ! E</code> are for what you expect to go wrong.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">fn</span> <span class="f">inner</span>() {
+    <span class="k">let</span> _guard = <span class="t">Guard</span>;           <span class="c">// dropped while unwinding</span>
+    <span class="f">panic!</span>(<span class="s">"something that should never happen"</span>);
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Go's <code>panic</code> also runs deferred calls on the way out. Go programs sometimes <code>recover</code> from a panic to keep a server up; Loom's unravel is a report that ends the thread, and the exit code (101) tells a script it happened.</p>
+<pre class="foreign" data-lang="go"><code><span class="k">func</span> <span class="f">inner</span>() {
+    <span class="k">defer</span> fmt.<span class="t">Println</span>(<span class="s">"inner cleanup"</span>)
+    <span class="f">panic</span>(<span class="s">"something that should never happen"</span>)
+}</code></pre>
+</div>
+</div>
 <h2 id="where-next">Where next<a class="anchor" href="#where-next" aria-label="Link to this section">#</a></h2>
-<p><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a> is about who owns a value and what runs when a scope ends.</p>
+<p><a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a> is about who owns a value and what runs when a scope ends. That's where <code>defer</code> lives, the thing that keeps cleanup honest on all of the exits you just met.</p>
 <nav class="pager" aria-label="Chapters">
 <a class="prev" href="collections.html"><span class="dir">&larr; Chapter 5</span>Collections and streams</a>
 <a class="next" href="ownership.html"><span class="dir">Chapter 7 &rarr;</span>Moves, <code>once</code> and <code>defer</code></a>

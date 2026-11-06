@@ -1,0 +1,32 @@
+use std.io.print
+
+weft Twice {
+    fun twice(self) -> String
+}
+
+// A generic weave: every `List[T]` whose items can be shown is `Twice`.
+weave[T: Show] Twice into List[T] {
+    fun twice(self) -> String = "{self}{self}"
+}
+
+weft Total {
+    fun total(self) -> i64
+}
+
+// A weave for one instance only.
+weave Total into List[i32] {
+    fun total(self) -> i64 {
+        var t: i64 = 0
+        for x in self { t += x as i64 }
+        t
+    }
+}
+
+fun main() {
+    let xs: List[i32] = [1, 2]
+    print(xs.twice())
+    let names: List[str] = ["a", "b"]
+    print(names.twice())
+    print(xs.total())
+}
+//@ run

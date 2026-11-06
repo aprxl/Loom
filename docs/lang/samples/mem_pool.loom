@@ -1,0 +1,27 @@
+use std.io.print
+use std.mem.Pool
+
+warp Particle {
+    x: i32
+    y: i32
+}
+
+fun main() {
+    spool slots = Pool[Particle](3)       // room for three, no more
+    let a = slots.put(Particle(1, 2))
+    let b = slots.put(Particle(3, 4))
+    print("{a.x + b.y}")
+
+    slots.free(a)                         // gives the slot back...
+    let c = slots.put(Particle(5, 6))     // ...and it is the next one handed out
+    print("{c.x} {b.x}")
+
+    var sum = 0
+    for i in 0..10 {
+        let p = slots.put(Particle(i, i))
+        sum += p.x
+        slots.free(p)
+    }
+    print(sum)
+}
+//@ run

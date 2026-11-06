@@ -1,7 +1,6 @@
 use std.io.print
 
-// Generics are checked per instance: `largest` is checked once for `i32`
-// and once for `str`. A function nobody calls isn't checked at all.
+// `T` is a type parameter. `Ord + Copy` are bounds: T must be orderable and copyable.
 fun largest[T: Ord + Copy](xs: [T]) -> ?T {
     var best: ?T = none
     for x in xs {
@@ -11,35 +10,24 @@ fun largest[T: Ord + Copy](xs: [T]) -> ?T {
     best
 }
 
-warp Pair[A, B] {
-    first: A
-    second: B
+// Two parameters, no bounds: the body only moves values around.
+fun swap[A, B](pair: (A, B)) -> (B, A) = (pair.1, pair.0)
 
-    fun swap(self) -> Pair[B, A] = Pair(.second, .first)
-}
-
-// A weave can be generic too.
-weft Twice {
-    fun twice(self) -> String
-}
-
-weave[T: Show] Twice into List[T] {
-    fun twice(self) -> String = "{self}{self}"
-}
-
-// A weft used as a parameter type is an implicit generic.
-fun show_all(xs: [Show]) -> String = xs.map(x => "<{x}>").join("")
+// A `where` clause says the same as a bound, after the signature.
+fun twice[T](x: T) -> String where T: Show = "{x}{x}"
 
 fun main() {
+    // The compiler infers T from the arguments...
     print(largest([3, 9, 4]))
     print(largest(["pear", "apple"]))
-    print(largest[i32]([]))                  // explicit type arguments use brackets
+    print(largest([2.5, 0.5]))
+    print(swap((1, "one")))
+    print(twice(42))
 
-    let p = Pair(1, "one")
-    print("{p.swap():?}")
-
-    let xs: List[i32] = [1, 2]
-    print(xs.twice())
-    print(show_all([1, 2, 3]))
+    // ...or you give it in brackets.
+    print(largest[i32]([]))
+    print("{"300".parse[u16]():?}")
+    let empty = List[str]()
+    print(empty.len())
 }
 //@ run

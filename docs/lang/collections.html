@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>Collections and streams · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -57,113 +58,687 @@
 <h1>Collections and streams</h1>
 <p class="summary">Arrays, lists, slices, maps, sets, and lazy streams.</p>
 </div>
-<h2 id="arrays-lists-and-slices">Arrays, lists and slices<a class="anchor" href="#arrays-lists-and-slices" aria-label="Link to this section">#</a></h2>
-<ul><li><code>[T; N]</code> is a fixed-size array. <code>[1, 2, 3]</code> is one, and <code>[0u8; 4]</code> repeats a value.</li><li><code>List[T]</code> is a growable array. A literal becomes a list where a list is expected: <code>let xs: List[i32] = [1, 2]</code>.</li><li><code>[T]</code> is a slice, a view of contiguous <code>T</code>s. An array or a list passes as a slice, and has every slice method.</li></ul>
-<p>Indexing is bounds-checked, and an out-of-range index unravels. <code>get</code> gives an optional instead. <code>xs[a..b]</code> makes a view without copying. A view reads the list as it is now, so changing the list while a view is live is an error (<a href="diagnostics.html#M0105">M0105</a>). <code>for mut x in xs</code> edits the elements in place.</p>
+<p>Most programs are mostly about <em>many</em> of something: lines, scores, words, users. Loom gives you a small family of collections for that: arrays for a fixed number of items, lists that grow, slices to look at part of either, maps and sets for lookup, and <strong>streams</strong>, lazy sequences that all of the above can turn into.</p>
+<p>The collections are ordinary generic warps from the standard library (see <a href="generics.html">Generics and <code>any</code></a>), so their methods are listed in <a href="../std/modules/list.html#List">std.list</a>, <a href="../std/modules/slice.html#Slice">std.slice</a>, <a href="../std/modules/map.html#Map">std.map</a>, <a href="../std/modules/set.html#Set">std.set</a> and <a href="../std/modules/iter.html#Stream">std.iter</a>. This chapter is the tour, and the ideas that connect them.</p>
+<h2 id="arrays">Arrays<a class="anchor" href="#arrays" aria-label="Link to this section">#</a></h2>
+<p>An array has its length in its type: <code>[i32; 3]</code>. <code>[1, 2, 3]</code> is one, <code>[0u8; 4]</code> repeats a value four times, and <code>[[0; 3]; 2]</code> is two rows of three. Because the length is part of the type, arrays live inline, with no allocation. The length is worked out when compiling, from literals, constants and arithmetic on them.</p>
+<div class="sample" id="sample-coll_arrays" data-sample="coll_arrays" data-mode="run" data-file="coll_arrays.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>coll_arrays.loom</span><span class="tag warn">unravels</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="c">// An array has its length in its type: `[i32; 3]`.</span>
+    <span class="k">let</span> fixed = [<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]
+    <span class="k">let</span> zeros = [<span class="n">0u8</span>; <span class="n">4</span>]                     <span class="c">// repeat: four zero bytes</span>
+    <span class="k">let</span> grid = [[<span class="n">0</span>; <span class="n">3</span>]; <span class="n">2</span>]                   <span class="c">// two rows of three</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>fixed<span class="h">}</span><span class="s"> </span><span class="h">{</span>zeros<span class="h">}</span><span class="s"> </span><span class="h">{</span>grid<span class="h">}</span><span class="s"> </span><span class="h">{</span>fixed.<span class="f">len</span>()<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// Indexing is checked: an index past the end unravels.</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>fixed[<span class="n">0</span>]<span class="h">}</span><span class="s"> </span><span class="h">{</span>fixed[<span class="n">2</span>]<span class="h">}</span><span class="s"> </span><span class="h">{</span>fixed.<span class="f">get</span>(<span class="n">7</span>):?<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// `var` arrays can be changed in place.</span>
+    <span class="k">var</span> board = [[<span class="s">'.'</span>; <span class="n">3</span>]; <span class="n">3</span>]
+    board[<span class="n">1</span>][<span class="n">1</span>] = <span class="s">'X'</span>
+    board[<span class="n">0</span>][<span class="n">2</span>] = <span class="s">'O'</span>
+    <span class="k">for</span> row <span class="k">in</span> board {
+        <span class="k">var</span> line = <span class="t">String</span>()
+        <span class="k">for</span> cell <span class="k">in</span> row { line.<span class="f">push</span>(cell) }
+        <span class="f">print</span>(line)
+    }
+
+    <span class="c">// Arrays compare by value, and know their own contents.</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>fixed == [<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]<span class="h">}</span><span class="s"> </span><span class="h">{</span>fixed.<span class="f">contains</span>(<span class="n">2</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span>fixed.<span class="f">index_of</span>(<span class="n">3</span>):?<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// `for mut` changes each element where it stands.</span>
+    <span class="k">var</span> scores = [<span class="n">10</span>, <span class="n">20</span>, <span class="n">30</span>]
+    <span class="k">for</span> <span class="k">mut</span> s <span class="k">in</span> scores { s += <span class="n">1</span> }
+    <span class="f">print</span>(scores)
+
+    <span class="f">print</span>(fixed[<span class="n">3</span>])                          <span class="c">// one past the end</span>
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>[1, 2, 3] [0, 0, 0, 0] [[0, 0, 0], [0, 0, 0]] 3
+1 3 none
+..O
+.X.
+...
+true true some(2)
+[11, 21, 31]</code></pre></div>
+<div class="sample-out"><div class="out-head">Error output</div><pre><code><span class="err">unravel: index 3 is out of bounds (len 3)</span>
+<span class="loc">  --&gt; coll_arrays.loom:31:5</span>
+<span class="gut">   |</span>
+<span class="gut">31 |</span>     print(fixed[3])                          // one past the end
+<span class="gut">   |</span><span class="caret">     ^</span></code></pre></div>
+</div>
+<ul><li><strong>Indexing is bounds-checked.</strong> <code>fixed[3]</code> on a three-item array unravels (the last line of the sample), and <code>get</code> gives an optional instead: <code>fixed.get(7)</code> is <code>none</code>.</li><li>An index whose type can't reach past the end needs no check at all: a <code>u4</code> into a <code>[u8; 16]</code> is always in range, which is why a CHIP-8 emulator can keep its registers in a <code>[u8; 16]</code> for free.</li><li><code>for mut x in xs</code> gives you each element to change in place.</li><li>Arrays compare with <code>==</code> by value.</li></ul>
+<div class="callout"><p><code>print</code> of an optional shows the value or <code>none</code>; <code>{x:?}</code> shows <code>some(...)</code>. Use whichever reads better.</p></div>
+<div class="try"><p>Replace <code>fixed[3]</code> with <code>fixed[2]</code> and the program ends normally. Then change <code>[0u8; 4]</code> to <code>[0u8; 2 + 2]</code>: the length is a constant expression, so that works too. Try <code>[0u8; n]</code> after a <code>var n = 4</code>: the length has to be known when compiling, and the compiler says <code>n</code> has no value then (<a href="diagnostics.html#K0105">K0105</a>).</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust's <code>[T; N]</code> is the same type, with the same inline layout. Indexing panics out of range in both languages; <code>get</code> returns an <code>Option</code> in both.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> fixed = [<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>];
+<span class="k">let</span> zeros = [0u8; <span class="n">4</span>];
+<span class="k">let</span> grid = [[<span class="n">0</span>; <span class="n">3</span>]; <span class="n">2</span>];
+<span class="k">let</span> x = fixed.<span class="f">get</span>(<span class="n">7</span>); <span class="c">// None</span></code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Go's arrays are values, copied on assignment, and their length is part of the type, too. In practice Go programs use slices almost everywhere, because an array is awkward to pass around.</p>
+<pre class="foreign" data-lang="go"><code>fixed := [<span class="n">3</span>]int{<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>}
+<span class="k">var</span> zeros [<span class="n">4</span>]uint8</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="c" data-label="C++">
+<h4>C++</h4>
+<p><code>std::array&lt;int, 3&gt;</code> is the safe counterpart of a C array. <code>operator[]</code> is unchecked, and <code>.at(i)</code> throws; Loom's plain index is the checked one.</p>
+<pre class="foreign" data-lang="cpp"><code>std::array&lt;<span class="k">int</span>, <span class="n">3</span>&gt; fixed{<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>};
+fixed.<span class="f">at</span>(<span class="n">7</span>); <span class="c">// throws std::out_of_range</span></code></pre>
+</div>
+</div>
+<h2 id="lists">Lists<a class="anchor" href="#lists" aria-label="Link to this section">#</a></h2>
+<p><code>List[T]</code> is a growable array: push, insert, remove, in any order, and it's yours alone (it owns its items). A literal becomes a list where a list is expected: <code>let xs: List[i32] = [1, 2]</code>. <code>List.filled(0, 4)</code> makes four zeros, and <code>.copy()</code> makes an independent copy.</p>
 <div class="sample" id="sample-coll_lists" data-sample="coll_lists" data-mode="run" data-file="coll_lists.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>coll_lists.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fun</span> <span class="f">total</span>(xs: [i32]) -&gt; i32 {                 <span class="c">// `[i32]` is a slice: arrays and lists pass as one</span>
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="c">// `List[T]` grows. A literal becomes a list where a list is expected.</span>
+    <span class="k">var</span> xs: <span class="t">List</span>[i32] = [<span class="n">5</span>, <span class="n">3</span>, <span class="n">8</span>]
+    xs.<span class="f">push</span>(<span class="n">1</span>)                               <span class="c">// add at the end</span>
+    xs.<span class="f">insert</span>(<span class="n">0</span>, <span class="n">9</span>)                          <span class="c">// add at a position</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>xs<span class="h">}</span><span class="s"> len </span><span class="h">{</span>xs.<span class="f">len</span>()<span class="h">}</span><span class="s"> first </span><span class="h">{</span>xs.<span class="f">first</span>():?<span class="h">}</span><span class="s"> last </span><span class="h">{</span>xs.<span class="f">last</span>():?<span class="h">}</span><span class="s">"</span>)
+
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>xs.<span class="f">pop</span>():?<span class="h">}</span><span class="s"> </span><span class="h">{</span>xs.<span class="f">remove</span>(<span class="n">0</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span>xs<span class="h">}</span><span class="s">"</span>)
+
+    xs.<span class="f">extend</span>([<span class="n">4</span>, <span class="n">4</span>, <span class="n">7</span>, <span class="n">7</span>, <span class="n">7</span>])               <span class="c">// add many at once</span>
+    xs.<span class="f">dedup</span>()                               <span class="c">// collapse runs of equal items</span>
+    xs.<span class="f">sort</span>()
+    <span class="f">print</span>(xs)
+
+    xs.<span class="f">retain</span>(_ != <span class="n">4</span>)                        <span class="c">// keep what the lambda likes</span>
+    xs.<span class="f">truncate</span>(<span class="n">3</span>)
+    <span class="f">print</span>(xs)
+
+    <span class="c">// Searching and getting.</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>xs.<span class="f">contains</span>(<span class="n">8</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span>xs.<span class="f">index_of</span>(<span class="n">8</span>):?<span class="h">}</span><span class="s"> </span><span class="h">{</span>xs.<span class="f">get</span>(<span class="n">99</span>):?<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// A list of a given size, and a copy that is independent.</span>
+    <span class="k">var</span> row = <span class="t">List</span>.<span class="f">filled</span>(<span class="n">0</span>, <span class="n">4</span>)
+    <span class="k">let</span> backup = row.<span class="f">copy</span>()
+    row[<span class="n">2</span>] = <span class="n">7</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>row<span class="h">}</span><span class="s"> </span><span class="h">{</span>backup<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// Not every list is full of numbers.</span>
+    <span class="k">var</span> names: <span class="t">List</span>[<span class="t">String</span>] = <span class="t">List</span>()
+    names.<span class="f">push</span>(<span class="s">"ada"</span>)
+    names.<span class="f">push</span>(<span class="s">"grace"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>names<span class="h">}</span><span class="s"> </span><span class="h">{</span>names.<span class="f">len</span>()<span class="h">}</span><span class="s">"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>[9, 5, 3, 8, 1] len 5 first some(9) last some(1)
+some(1) 9 [5, 3, 8]
+[3, 4, 5, 7, 8]
+[3, 5, 7]
+false none none
+[0, 0, 7, 0] [0, 0, 0, 0]
+[ada, grace] 2</code></pre></div>
+</div>
+<ul><li>Everything that changes the list (<code>push</code>, <code>insert</code>, <code>remove</code>, <code>pop</code>, <code>extend</code>, <code>retain</code>, <code>dedup</code>, <code>truncate</code>, <code>sort</code>) needs the list to be a <code>var</code>.</li><li><code>remove(i)</code> gives back the item and <code>pop()</code> gives an optional, because a list can be empty. <code>first()</code> and <code>last()</code> are optionals too.</li><li><code>extend</code> takes a stream, so <code>xs.extend(other.map(...))</code> doesn't build an intermediate list.</li><li>Lists are not limited to numbers: <code>List[String]</code> owns its strings, and what <code>xs</code> owns is freed when <code>xs</code> goes out of scope, with no collector involved.</li><li><code>list.map(f)</code> and <code>list.filter(f)</code> are <strong>eager</strong> and give a new list; the stream methods are lazy. <a href="collections.html#streams">Streams</a> says more.</li></ul>
+<div class="try"><p>Make <code>xs</code> a <code>let</code> instead of a <code>var</code>, and run it. Every <code>push</code> and <code>insert</code> is now an error: <code>push</code> changes the value it's called on, and a <code>let</code> can't be changed (<a href="diagnostics.html#T0107">T0107</a>). Then try <code>xs.remove(99)</code>: out of range unravels.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p><code>Vec&lt;T&gt;</code> is the same thing. Loom's methods are named for what they do to the list (<code>remove</code>, <code>retain</code>, <code>dedup</code>), and several take a stream where Rust takes an iterator.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> <span class="k">mut</span> xs: <span class="t">Vec</span>&lt;i32&gt; = vec![<span class="n">5</span>, <span class="n">3</span>, <span class="n">8</span>];
+xs.<span class="f">push</span>(<span class="n">1</span>);
+xs.<span class="f">insert</span>(<span class="n">0</span>, <span class="n">9</span>);
+xs.<span class="f">retain</span>(|&amp;n| n != <span class="n">4</span>);
+xs.<span class="f">dedup</span>();</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="python" data-label="Python">
+<h4>Python</h4>
+<p>A Python <code>list</code> is a growable array of references to objects. Loom's <code>List[i32]</code> holds the numbers themselves, and every item has the same type.</p>
+<pre class="foreign" data-lang="python"><code>xs = [<span class="n">5</span>, <span class="n">3</span>, <span class="n">8</span>]
+xs.<span class="f">append</span>(<span class="n">1</span>)
+xs.<span class="f">insert</span>(<span class="n">0</span>, <span class="n">9</span>)
+xs = [n <span class="k">for</span> n <span class="k">in</span> xs <span class="k">if</span> n != <span class="n">4</span>]</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Go's slices grow with <code>append</code>, and the old slice may or may not alias the new one. A <code>List</code> is one owner, so there's no aliasing to reason about.</p>
+<pre class="foreign" data-lang="go"><code>xs := []int{<span class="n">5</span>, <span class="n">3</span>, <span class="n">8</span>}
+xs = <span class="f">append</span>(xs, <span class="n">1</span>)</code></pre>
+</div>
+</div>
+<h2 id="slices-and-views">Slices and views<a class="anchor" href="#slices-and-views" aria-label="Link to this section">#</a></h2>
+<p><code>[T]</code> is a <strong>slice</strong>: a view of contiguous items, without owning them. An array or a list passes where a slice is wanted, and has every slice method (<code>len</code>, <code>get</code>, <code>sort</code>, <code>contains</code>, <code>chunks</code>, ...). Write a function over <code>[i32]</code> once and it works for both.</p>
+<p><code>xs[a..b]</code> makes a view of part of a list, without copying (and the end is left out, like a range). Views of <code>var</code>s can be changed through: <code>list[1..3].sort()</code> sorts those two items in the list itself.</p>
+<div class="sample" id="sample-coll_slices" data-sample="coll_slices" data-mode="run" data-file="coll_slices.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>coll_slices.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">// `[i32]` is a slice: a view of contiguous items. Arrays and lists pass as one.</span>
+<span class="k">fun</span> <span class="f">total</span>(xs: [i32]) -&gt; i32 {
     <span class="k">var</span> t = <span class="n">0</span>
     <span class="k">for</span> x <span class="k">in</span> xs { t += x }
     t
 }
 
+<span class="k">fun</span> <span class="f">zero_out</span>(<span class="k">mut</span> xs: [i32]) {
+    <span class="k">for</span> <span class="k">mut</span> x <span class="k">in</span> xs { x = <span class="n">0</span> }
+}
+
 <span class="k">fun</span> <span class="f">main</span>() {
-    <span class="k">let</span> fixed = [<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]                    <span class="c">// an array: `[i32; 3]`</span>
-    <span class="k">let</span> zeros = [<span class="n">0u8</span>; <span class="n">4</span>]                     <span class="c">// repeat: four zero bytes</span>
-    <span class="k">var</span> xs: <span class="t">List</span>[i32] = [<span class="n">5</span>, <span class="n">3</span>, <span class="n">8</span>]            <span class="c">// a literal where a list is expected</span>
-    xs.<span class="f">push</span>(<span class="n">1</span>)
-    xs.<span class="f">insert</span>(<span class="n">0</span>, <span class="n">9</span>)
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>xs<span class="h">}</span><span class="s"> len </span><span class="h">{</span>xs.<span class="f">len</span>()<span class="h">}</span><span class="s"> first </span><span class="h">{</span>xs.<span class="f">first</span>():?<span class="h">}</span><span class="s"> last </span><span class="h">{</span>xs.<span class="f">last</span>():?<span class="h">}</span><span class="s">"</span>)
+    <span class="k">let</span> fixed = [<span class="n">4</span>, <span class="n">8</span>, <span class="n">15</span>]
+    <span class="k">var</span> list: <span class="t">List</span>[i32] = [<span class="n">16</span>, <span class="n">42</span>, <span class="n">23</span>, <span class="n">7</span>]
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">total</span>(fixed)<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="f">total</span>(list)<span class="h">}</span><span class="s">"</span>)
 
-    xs.<span class="f">sort</span>()
-    <span class="f">print</span>(xs)
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">total</span>(fixed)<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="f">total</span>(xs)<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="f">total</span>(xs[<span class="n">1</span>..<span class="n">3</span>])<span class="h">}</span><span class="s">"</span>)   <span class="c">// slicing makes a view</span>
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>zeros<span class="h">}</span><span class="s"> </span><span class="h">{</span>xs.<span class="f">contains</span>(<span class="n">8</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span>xs.<span class="f">index_of</span>(<span class="n">8</span>):?<span class="h">}</span><span class="s">"</span>)
+    <span class="c">// `xs[a..b]` is a view: no copy, and the end is left out.</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>list[<span class="n">1</span>..<span class="n">3</span>]<span class="h">}</span><span class="s"> </span><span class="h">{</span>list[..<span class="n">2</span>]<span class="h">}</span><span class="s"> </span><span class="h">{</span>list[<span class="n">2</span>..]<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="f">total</span>(list[<span class="n">1</span>..<span class="n">3</span>])<span class="h">}</span><span class="s">"</span>)
 
-    <span class="c">// Indexing is bounds-checked; `get` gives an optional instead.</span>
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>xs[<span class="n">0</span>]<span class="h">}</span><span class="s"> </span><span class="h">{</span>xs.<span class="f">get</span>(<span class="n">99</span>):?<span class="h">}</span><span class="s">"</span>)
+    <span class="c">// A view of a `var` can change its items, and the list sees it.</span>
+    list[<span class="n">1</span>..<span class="n">3</span>].<span class="f">sort</span>()
+    <span class="f">zero_out</span>(<span class="k">mut</span> list[..<span class="n">1</span>])
+    <span class="f">print</span>(list)
 
-    <span class="c">// `for mut` edits the elements in place.</span>
-    <span class="k">for</span> <span class="k">mut</span> x <span class="k">in</span> xs { x *= <span class="n">2</span> }
-    <span class="f">print</span>(xs)
+    <span class="c">// Inside brackets, `#` is the length of what is being indexed.</span>
+    <span class="k">let</span> xs = [<span class="n">10</span>, <span class="n">20</span>, <span class="n">30</span>, <span class="n">40</span>, <span class="n">50</span>]
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>xs[#-<span class="n">1</span>]<span class="h">}</span><span class="s"> </span><span class="h">{</span>xs[#-<span class="n">3</span>..]<span class="h">}</span><span class="s"> </span><span class="h">{</span>xs[<span class="n">1</span>..#-<span class="n">1</span>]<span class="h">}</span><span class="s"> </span><span class="h">{</span>xs[#/<span class="n">2</span>]<span class="h">}</span><span class="s">"</span>)
 
-    <span class="f">print</span>(xs.<span class="f">map</span>(_ + <span class="n">1</span>))
+    <span class="c">// Pieces of a slice: each is a lazy stream of views.</span>
     <span class="f">print</span>(xs.<span class="f">chunks</span>(<span class="n">2</span>).<span class="f">collect</span>())
+    <span class="f">print</span>(xs.<span class="f">windows</span>(<span class="n">3</span>).<span class="f">map</span>(w =&gt; <span class="f">total</span>(w)).<span class="f">collect</span>())
 }</code></pre>
-<div class="sample-out"><div class="out-head">Output</div><pre><code>[9, 5, 3, 8, 1] len 5 first some(9) last some(1)
-[1, 3, 5, 8, 9]
-6 26 8
-[0, 0, 0, 0] true some(3)
-1 none
-[2, 6, 10, 16, 18]
-[3, 7, 11, 17, 19]
-[[2, 6], [10, 16], [18]]</code></pre></div>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>27 88
+[42, 23] [16, 42] [23, 7] 65
+[0, 23, 42, 7]
+50 [30, 40, 50] [20, 30, 40] 30
+[[10, 20], [30, 40], [50]]
+[60, 90, 120]</code></pre></div>
 </div>
-<p>An index whose type can't reach past the end (a <code>u4</code> into a <code>[u8; 16]</code>) needs no check.</p>
-<p>The methods are listed in <a href="../std/modules/list.html#List">std.list</a> and <a href="../std/modules/slice.html#Slice">std.slice</a>. On slices and lists, <code>map</code> and <code>filter</code> are eager and make new lists. The stream methods are lazy.</p>
-<p>Inside <code>x[...]</code>, <code>#</code> is the length of <code>x</code>: <code>xs[#-1]</code> is the last element, <code>xs[1..#-1]</code> leaves out the first and last, and <code>xs[#-3..]</code> is the last three. On text it's the length in bytes. <code>x</code> has to be a name or a field (<code>self.items[#-1]</code>), so it's never evaluated twice; for anything else, bind it with <code>let</code> first. <code>xs[#-1]</code> on an empty list unravels, because <code>#-1</code> overflows.</p>
-<p>A list comprehension builds a list from a loop: <code>[for n in 1..=10 if n % 2 == 0 =&gt; n * n]</code> is <code>[4, 16, 36, 64, 100]</code>. The <code>if</code> is optional, the pattern is a <code>for</code> pattern, and the result is always a <code>List</code>. It is the loop that pushes each element, so <code>?</code>, moves and borrows inside it work as they would in that loop.</p>
-<h2 id="maps-and-sets">Maps and sets<a class="anchor" href="#maps-and-sets" aria-label="Link to this section">#</a></h2>
-<p><code>Map[K, V]</code> and <code>Set[T]</code> remember the order things were first added, and going through one, or showing it, follows that order. Keys must weave <code>Hash</code>, which a warp gets by listing it. <code>m[k]</code> unravels when the key is missing, and <code>m.get(k)</code> gives an optional. <code>m[k] = v</code> adds or replaces. <code>[:]</code> is the empty map literal.</p>
-<div class="sample" id="sample-coll_maps" data-sample="coll_maps" data-mode="run" data-file="coll_maps.loom" data-runnable>
-<div class="sample-head"><span class="file"><span class="dot"></span>coll_maps.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<ul><li>Inside <code>x[...]</code>, <strong><code>#</code> is the length of <code>x</code></strong>. <code>xs[#-1]</code> is the last item, <code>xs[1..#-1]</code> leaves out the first and last, and <code>xs[#-3..]</code> is the last three. On text it's the length in bytes.</li><li><code>x</code> has to be a name or a field (<code>self.items[#-1]</code>), so that it's never evaluated twice. For anything else, bind it with <code>let</code> first.</li><li><code>xs[#-1]</code> on an empty list unravels, because <code>#-1</code> overflows.</li><li>A <code>mut</code> slice parameter lets a function change its caller's items: <code>zero_out(mut list[..1])</code>.</li><li><strong>A view reads the list as it is now.</strong> Changing the list while a view of it is still going to be used is an error (<a href="diagnostics.html#M0105">M0105</a>), because the list might have moved.</li></ul>
+<div class="try"><p>After <code>let v = list[1..3]</code>, add <code>list.push(1)</code> and then <code>print(v)</code>. The compiler says <code>v</code> borrows <code>list</code>, which changed after the view was made (<a href="diagnostics.html#M0105">M0105</a>); swap the two lines and it's fine. The fix it suggests is <code>list.copy()</code>.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust's <code>&amp;[T]</code> and <code>&amp;mut [T]</code> are the same view, with the same range syntax. The borrow checker enforces the same rule (no growing a <code>Vec</code> while a slice of it lives), but through lifetimes on the reference; Loom checks it without a lifetime in sight. Rust has no <code>#</code>; the idiom is <code>xs[xs.len() - 1]</code>.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> xs = [<span class="n">10</span>, <span class="n">20</span>, <span class="n">30</span>, <span class="n">40</span>, <span class="n">50</span>];
+<span class="k">let</span> last = xs[xs.<span class="f">len</span>() - <span class="n">1</span>];
+<span class="k">let</span> mid = &amp;xs[<span class="n">1</span>..xs.<span class="f">len</span>() - <span class="n">1</span>];</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="python" data-label="Python">
+<h4>Python</h4>
+<p>Python slicing copies. <code>xs[-1]</code> counts from the end with a negative index, and nothing is ever out of date, at the price of copying and of a view that isn't a view.</p>
+<pre class="foreign" data-lang="python"><code>xs = [<span class="n">10</span>, <span class="n">20</span>, <span class="n">30</span>, <span class="n">40</span>, <span class="n">50</span>]
+xs[-<span class="n">1</span>]; xs[<span class="n">1</span>:-<span class="n">1</span>]; xs[-<span class="n">3</span>:]</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>A Go slice is a view too, and it famously shares storage with the slice it was cut from: an <code>append</code> may or may not write to the original. Loom's M0105 is the compiler refusing that situation.</p>
+<pre class="foreign" data-lang="go"><code>xs := []int{<span class="n">10</span>, <span class="n">20</span>, <span class="n">30</span>, <span class="n">40</span>, <span class="n">50</span>}
+mid := xs[<span class="n">1</span> : <span class="f">len</span>(xs)-<span class="n">1</span>]</code></pre>
+</div>
+</div>
+<h2 id="list-comprehensions">List comprehensions<a class="anchor" href="#list-comprehensions" aria-label="Link to this section">#</a></h2>
+<p><code>[for n in 1..=10 if n % 2 == 0 =&gt; n * n]</code> is <code>[4, 16, 36, 64, 100]</code>. After <code>for</code> comes a pattern, then <code>in</code> and anything you can loop over, an optional <code>if</code>, and the value after <code>=&gt;</code>. The result is always a <code>List</code>. It's the loop that pushes each item, so <code>?</code>, moves and borrows inside it behave as they would in that loop.</p>
+<div class="sample" id="sample-coll_comprehensions" data-sample="coll_comprehensions" data-mode="run" data-file="coll_comprehensions.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>coll_comprehensions.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="k">fun</span> <span class="f">main</span>() {
-    <span class="c">// Maps and sets remember insertion order.</span>
+    <span class="c">// `[for pattern in items if condition =&gt; value]` builds a List.</span>
+    <span class="k">let</span> squares = [<span class="k">for</span> n <span class="k">in</span> <span class="n">1</span>..=<span class="n">5</span> =&gt; n * n]
+    <span class="k">let</span> even_squares = [<span class="k">for</span> n <span class="k">in</span> <span class="n">1</span>..=<span class="n">10</span> <span class="k">if</span> n % <span class="n">2</span> == <span class="n">0</span> =&gt; n * n]
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>squares<span class="h">}</span><span class="s"> </span><span class="h">{</span>even_squares<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// The pattern can take a tuple apart.</span>
+    <span class="k">let</span> labels = [<span class="k">for</span> (i, c) <span class="k">in</span> <span class="s">"abc"</span>.<span class="f">chars</span>().<span class="f">indexed</span>() =&gt; <span class="s">"</span><span class="h">{</span>i<span class="h">}</span><span class="h">{</span>c<span class="h">}</span><span class="s">"</span>]
+    <span class="f">print</span>(labels)
+
+    <span class="c">// It is the loop that pushes each item, so it works over any collection.</span>
+    <span class="k">let</span> names = [<span class="s">"ada"</span>, <span class="s">"grace"</span>, <span class="s">"alan"</span>, <span class="s">"edsger"</span>]
+    <span class="k">let</span> shout = [<span class="k">for</span> s <span class="k">in</span> names <span class="k">if</span> s.<span class="f">starts_with</span>(<span class="s">"a"</span>) =&gt; s.<span class="f">to_upper</span>()]
+    <span class="f">print</span>(shout)
+
+    <span class="c">// A comprehension inside a comprehension: a multiplication table.</span>
+    <span class="k">let</span> table = [<span class="k">for</span> r <span class="k">in</span> <span class="n">1</span>..=<span class="n">3</span> =&gt; [<span class="k">for</span> c <span class="k">in</span> <span class="n">1</span>..=<span class="n">3</span> =&gt; r * c]]
+    <span class="f">print</span>(table)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>[1, 4, 9, 16, 25] [4, 16, 36, 64, 100]
+[0a, 1b, 2c]
+[ADA, ALAN]
+[[1, 2, 3], [2, 4, 6], [3, 6, 9]]</code></pre></div>
+</div>
+<p>A comprehension has one <code>for</code>. For a grid, nest one inside another, as <code>table</code> does.</p>
+<div class="try"><p>Add <code>if r != c</code> to the inner comprehension of <code>table</code>, and the rows lose their diagonal items. Then try writing a second <code>for</code> in the same brackets and see the parser's complaint: nest them instead.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="python" data-label="Python">
+<h4>Python</h4>
+<p>The inspiration, in a different order: Python puts the value first.</p>
+<pre class="foreign" data-lang="python"><code>[n * n <span class="k">for</span> n <span class="k">in</span> <span class="f">range</span>(<span class="n">1</span>, <span class="n">11</span>) <span class="k">if</span> n % <span class="n">2</span> == <span class="n">0</span>]</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust has no comprehensions; a chain of iterator adaptors does the same job.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> v: <span class="t">Vec</span>&lt;i32&gt; = (<span class="n">1</span>..=<span class="n">10</span>).<span class="f">filter</span>(|n| n % <span class="n">2</span> == <span class="n">0</span>).<span class="f">map</span>(|n| n * n).<span class="f">collect</span>();</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="haskell" data-label="Haskell">
+<h4>Haskell</h4>
+<p>List comprehensions are Haskell's too, with the value first and the guard last.</p>
+<pre class="foreign" data-lang="haskell"><code>[n * n | n &lt;- [<span class="n">1</span>..<span class="n">10</span>], even n]</code></pre>
+</div>
+</div>
+<h2 id="maps">Maps<a class="anchor" href="#maps" aria-label="Link to this section">#</a></h2>
+<p><code>Map[K, V]</code> is a table from keys to values. Keys must weave <code>Hash</code> (numbers, text, and warps that list <code>Hash</code> do: see <a href="types.html#deriving">Deriving</a>). A literal has <code>key: value</code> pairs, <code>[:]</code> is the empty map, and <code>m[k] = v</code> adds or replaces. <strong>A map remembers the order keys were first added</strong>, and going through one, or showing it, follows that order. Sorting is something you ask for.</p>
+<div class="sample" id="sample-coll_maps" data-sample="coll_maps" data-mode="run" data-file="coll_maps.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>coll_maps.loom</span><span class="tag warn">unravels</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="c">// A map literal has `key: value` pairs. `[:]` is the empty one.</span>
     <span class="k">var</span> ages: <span class="t">Map</span>[str, u8] = [<span class="s">"ada"</span>: <span class="n">36</span>, <span class="s">"alan"</span>: <span class="n">41</span>]
     ages[<span class="s">"grace"</span>] = <span class="n">85</span>                       <span class="c">// adds a key</span>
     ages[<span class="s">"ada"</span>] = <span class="n">37</span>                         <span class="c">// replaces a value</span>
     <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>ages<span class="h">}</span><span class="s"> </span><span class="h">{</span>ages.<span class="f">len</span>()<span class="h">}</span><span class="s">"</span>)
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>ages[<span class="s">"alan"</span>]<span class="h">}</span><span class="s"> </span><span class="h">{</span>ages.<span class="f">get</span>(<span class="s">"nobody"</span>):?<span class="h">}</span><span class="s"> </span><span class="h">{</span>ages.<span class="f">has</span>(<span class="s">"ada"</span>)<span class="h">}</span><span class="s">"</span>)
 
+    <span class="c">// `m[k]` unravels when the key is missing; `get` gives an optional.</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>ages[<span class="s">"alan"</span>]<span class="h">}</span><span class="s"> </span><span class="h">{</span>ages.<span class="f">get</span>(<span class="s">"nobody"</span>):?<span class="h">}</span><span class="s"> </span><span class="h">{</span>ages.<span class="f">has</span>(<span class="s">"ada"</span>)<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>ages.<span class="f">get_or</span>(<span class="s">"nobody"</span>, <span class="n">0</span>)<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// Going through a map follows the order keys were first added.</span>
     <span class="k">for</span> (name, age) <span class="k">in</span> ages {
         <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>name<span class="h">}</span><span class="s"> is </span><span class="h">{</span>age<span class="h">}</span><span class="s">"</span>)
     }
-    <span class="f">print</span>(ages.<span class="f">keys</span>().<span class="f">collect</span>())
-    <span class="f">print</span>(ages.<span class="f">remove</span>(<span class="s">"alan"</span>))
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>ages.<span class="f">keys</span>().<span class="f">collect</span>()<span class="h">}</span><span class="s"> </span><span class="h">{</span>ages.<span class="f">values</span>().<span class="f">sum</span>()<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// `remove` gives back what was there.</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>ages.<span class="f">remove</span>(<span class="s">"alan"</span>):?<span class="h">}</span><span class="s"> </span><span class="h">{</span>ages.<span class="f">remove</span>(<span class="s">"alan"</span>):?<span class="h">}</span><span class="s"> </span><span class="h">{</span>ages<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// Sorting is explicit.</span>
+    ages[<span class="s">"bob"</span>] = <span class="n">20</span>
     <span class="f">print</span>(ages.<span class="f">sorted</span>())
 
-    <span class="c">// Counting words.</span>
-    <span class="k">var</span> counts: <span class="t">Map</span>[<span class="t">String</span>, u32] = <span class="t">Map</span>()
-    <span class="k">for</span> word <span class="k">in</span> <span class="s">"the cat and the hat and the bat"</span>.<span class="f">words</span>() {
-        counts[word.<span class="f">to_string</span>()] = (counts.<span class="f">get</span>(word.<span class="f">to_string</span>()) <span class="k">mend</span> <span class="n">0</span>) + <span class="n">1</span>
-    }
-    <span class="f">print</span>(counts)
+    <span class="c">// An empty map needs its type from somewhere.</span>
+    <span class="k">var</span> seen: <span class="t">Map</span>[i32, bool] = [:]
+    seen[<span class="n">7</span>] = <span class="k">true</span>
+    <span class="f">print</span>(seen)
 
-    <span class="k">var</span> seen: <span class="t">Set</span>[i32] = <span class="t">Set</span>()
-    <span class="k">for</span> n <span class="k">in</span> [<span class="n">3</span>, <span class="n">1</span>, <span class="n">3</span>, <span class="n">2</span>, <span class="n">1</span>] {
-        <span class="k">if</span> seen.<span class="f">insert</span>(n) { <span class="f">print</span>(<span class="s">"new: </span><span class="h">{</span>n<span class="h">}</span><span class="s">"</span>) }
-    }
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>seen<span class="h">}</span><span class="s"> </span><span class="h">{</span>seen.<span class="f">sorted</span>()<span class="h">}</span><span class="s"> </span><span class="h">{</span>seen.<span class="f">has</span>(<span class="n">2</span>)<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(ages[<span class="s">"zed"</span>])
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>[ada: 37, alan: 41, grace: 85] 3
 41 none true
+0
 ada is 37
 alan is 41
 grace is 85
-[ada, alan, grace]
-41
-[(ada, 37), (grace, 85)]
-[the: 3, cat: 1, and: 2, hat: 1, bat: 1]
-new: 3
+[ada, alan, grace] 163
+some(41) none [ada: 37, grace: 85]
+[(ada, 37), (bob, 20), (grace, 85)]
+[7: true]</code></pre></div>
+<div class="sample-out"><div class="out-head">Error output</div><pre><code><span class="err">unravel: key not found: "zed"</span>
+<span class="loc">  --&gt; coll_maps.loom:32:5</span>
+<span class="gut">   |</span>
+<span class="gut">32 |</span>     print(ages["zed"])
+<span class="gut">   |</span><span class="caret">     ^</span></code></pre></div>
+</div>
+<ul><li><code>m[k]</code> unravels when the key is missing, and <code>m.get(k)</code> gives an optional. <code>get_or(k, d)</code> supplies a default.</li><li><code>remove(k)</code> gives back the old value as an optional. <code>insert(k, v)</code> does too.</li><li><code>keys()</code>, <code>values()</code> and <code>pairs()</code> are streams. <code>sorted()</code> gives a list of pairs ordered by key.</li><li>Two maps are equal when they hold the same pairs, in any order.</li><li>A warp that writes its own <code>eq</code> and <code>hash</code> is still keyed structurally (<a href="not-yet.html#types-and-library">Not supported yet</a>).</li></ul>
+<div class="try"><p>Change <code>ages.sorted()</code> to <code>ages.pairs().collect()</code> and compare the order. Then declare the map as <code>Map[f64, u8]</code> and see that <code>f64</code> can't be a key because it doesn't weave <code>Hash</code> (<a href="diagnostics.html#T0108">T0108</a>).</p></div>
+<h3 id="counting-and-updating">Counting and updating<a class="anchor" href="#counting-and-updating" aria-label="Link to this section">#</a></h3>
+<p>The most common thing to do with a map is to change one value in it. <code>entry(key, default)</code> gives a place you can assign to: the key is added with the default if it's new. <code>update(key, f)</code> applies a function, <code>retain</code> filters, and <code>merge</code> combines two maps.</p>
+<div class="sample" id="sample-coll_counting" data-sample="coll_counting" data-mode="run" data-file="coll_counting.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>coll_counting.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="c">// `entry(key, default)` is a place you can change: it adds the key if it is new.</span>
+    <span class="k">var</span> counts: <span class="t">Map</span>[<span class="t">String</span>, u32] = <span class="t">Map</span>()
+    <span class="k">for</span> word <span class="k">in</span> <span class="s">"the cat and the hat and the bat"</span>.<span class="f">words</span>() {
+        counts.<span class="f">entry</span>(word.<span class="f">to_string</span>(), <span class="n">0</span>) += <span class="n">1</span>
+    }
+    <span class="f">print</span>(counts)
+
+    <span class="c">// `update` applies a function to one value.</span>
+    counts.<span class="f">update</span>(<span class="s">"cat"</span>, _ * <span class="n">10</span>)
+    <span class="f">print</span>(counts.<span class="f">get</span>(<span class="s">"cat"</span>))
+
+    <span class="c">// Maps can hold lists.</span>
+    <span class="k">var</span> by_len: <span class="t">Map</span>[usize, <span class="t">List</span>[<span class="t">String</span>]] = <span class="t">Map</span>()
+    <span class="k">for</span> word <span class="k">in</span> [<span class="s">"one"</span>, <span class="s">"two"</span>, <span class="s">"three"</span>, <span class="s">"four"</span>, <span class="s">"five"</span>] {
+        by_len.<span class="f">entry</span>(word.<span class="f">len</span>(), []).<span class="f">push</span>(word.<span class="f">to_string</span>())
+    }
+    <span class="f">print</span>(by_len)
+
+    <span class="c">// Keep only some entries, then merge another map in.</span>
+    counts.<span class="f">retain</span>((k, n) =&gt; n &gt; <span class="n">1</span>)
+    <span class="k">let</span> extra: <span class="t">Map</span>[<span class="t">String</span>, u32] = [<span class="s">"the"</span>: <span class="n">100</span>, <span class="s">"end"</span>: <span class="n">1</span>]
+    counts.<span class="f">merge</span>(extra, (a, b) =&gt; a + b)
+    <span class="f">print</span>(counts)
+
+    <span class="c">// The same map, built another way: counts of a stream.</span>
+    <span class="f">print</span>(<span class="s">"mississippi"</span>.<span class="f">chars</span>().<span class="f">counts</span>())
+    <span class="f">print</span>(<span class="s">"a1b22c333"</span>.<span class="f">chars</span>().<span class="f">filter</span>(_.<span class="f">is_digit</span>()).<span class="f">counts</span>().<span class="f">get</span>(<span class="s">'3'</span>))
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>[the: 3, cat: 1, and: 2, hat: 1, bat: 1]
+10
+[3: [one, two], 5: [three], 4: [four, five]]
+[the: 103, cat: 10, and: 2, end: 1]
+[m: 1, i: 4, s: 4, p: 2]
+3</code></pre></div>
+</div>
+<p>This is word counting in a loop: <code>counts.entry(word, 0) += 1</code>. For the common cases there are shortcuts, like <code>chars().counts()</code> on a stream.</p>
+<div class="try"><p>Change <code>counts.entry(word.to_string(), 0) += 1</code> to <code>counts[word.to_string()] += 1</code>. The first new word unravels, because the key isn't there yet; <code>entry</code> is the version that adds it.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="python" data-label="Python">
+<h4>Python</h4>
+<p>A <code>dict</code> keeps insertion order since 3.7, the same as Loom's <code>Map</code>. The idiom for counting is <code>Counter</code> or <code>defaultdict</code>; Loom's <code>entry(k, default)</code> does the second.</p>
+<pre class="foreign" data-lang="python"><code><span class="k">from</span> collections <span class="k">import</span> <span class="t">Counter</span>
+counts = <span class="t">Counter</span>(<span class="s">"the cat and the hat"</span>.<span class="f">split</span>())</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p><code>HashMap</code> iterates in an unspecified order, which makes output differ between runs; Loom's order is always defined. The <code>entry</code> API is the model for Loom's.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> <span class="k">mut</span> counts: <span class="t">HashMap</span>&lt;<span class="t">String</span>, u32&gt; = <span class="t">HashMap</span>::<span class="f">new</span>();
+<span class="k">for</span> word <span class="k">in</span> text.<span class="f">split_whitespace</span>() {
+    *counts.<span class="f">entry</span>(word.<span class="f">to_string</span>()).<span class="f">or_insert</span>(<span class="n">0</span>) += <span class="n">1</span>;
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Go randomizes map iteration order on purpose, so that nobody relies on it. Loom goes the other way and promises one. Missing keys read as the zero value in Go; in Loom they unravel (<code>m[k]</code>) or are an optional (<code>m.get(k)</code>).</p>
+<pre class="foreign" data-lang="go"><code>counts := <span class="k">map</span>[string]int{}
+<span class="k">for</span> _, w := <span class="k">range</span> strings.<span class="t">Fields</span>(text) {
+    counts[w]++
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="java" data-label="Java">
+<h4>Java</h4>
+<p><code>LinkedHashMap</code> keeps insertion order like Loom's <code>Map</code>; plain <code>HashMap</code> doesn't.</p>
+<pre class="foreign" data-lang="java"><code><span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; counts = <span class="k">new</span> <span class="t">LinkedHashMap</span>&lt;&gt;();
+<span class="k">for</span> (<span class="t">String</span> w : text.<span class="f">split</span>(<span class="s">" "</span>)) counts.<span class="f">merge</span>(w, <span class="n">1</span>, <span class="t">Integer</span>::sum);</code></pre>
+</div>
+</div>
+<h2 id="sets">Sets<a class="anchor" href="#sets" aria-label="Link to this section">#</a></h2>
+<p><code>Set[T]</code> holds each value once, with the same order rule as maps, and its elements must weave <code>Hash</code>. <code>insert</code> returns whether the value was new. <code>Set.of([...])</code> builds one from an array, and the algebra you'd expect is there: <code>union</code>, <code>intersection</code>, <code>difference</code>, <code>symmetric_difference</code>, <code>is_subset</code>, <code>is_superset</code>, <code>is_disjoint</code>.</p>
+<div class="sample" id="sample-coll_sets" data-sample="coll_sets" data-mode="run" data-file="coll_sets.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>coll_sets.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="c">// A set holds each value once, in the order it first arrived.</span>
+    <span class="k">var</span> seen: <span class="t">Set</span>[i32] = <span class="t">Set</span>()
+    <span class="k">for</span> n <span class="k">in</span> [<span class="n">3</span>, <span class="n">1</span>, <span class="n">3</span>, <span class="n">2</span>, <span class="n">1</span>] {
+        <span class="k">if</span> seen.<span class="f">insert</span>(n) { <span class="f">print</span>(<span class="s">"new: </span><span class="h">{</span>n<span class="h">}</span><span class="s">"</span>) }      <span class="c">// `insert` says whether it was new</span>
+    }
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>seen<span class="h">}</span><span class="s"> </span><span class="h">{</span>seen.<span class="f">len</span>()<span class="h">}</span><span class="s"> </span><span class="h">{</span>seen.<span class="f">has</span>(<span class="n">2</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span>seen.<span class="f">sorted</span>()<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// The usual set algebra.</span>
+    <span class="k">let</span> a = <span class="t">Set</span>.<span class="f">of</span>([<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>, <span class="n">4</span>])
+    <span class="k">let</span> b = <span class="t">Set</span>.<span class="f">of</span>([<span class="n">3</span>, <span class="n">4</span>, <span class="n">5</span>])
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>a.<span class="f">union</span>(b)<span class="h">}</span><span class="s"> </span><span class="h">{</span>a.<span class="f">intersection</span>(b)<span class="h">}</span><span class="s"> </span><span class="h">{</span>a.<span class="f">difference</span>(b)<span class="h">}</span><span class="s"> </span><span class="h">{</span>a.<span class="f">symmetric_difference</span>(b)<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="t">Set</span>.<span class="f">of</span>([<span class="n">3</span>]).<span class="f">is_subset</span>(a)<span class="h">}</span><span class="s"> </span><span class="h">{</span>a.<span class="f">is_disjoint</span>(<span class="t">Set</span>.<span class="f">of</span>([<span class="n">9</span>]))<span class="h">}</span><span class="s"> </span><span class="h">{</span>a == <span class="t">Set</span>.<span class="f">of</span>([<span class="n">4</span>, <span class="n">3</span>, <span class="n">2</span>, <span class="n">1</span>])<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// Removing, and sets of text.</span>
+    <span class="k">var</span> tags: <span class="t">Set</span>[str] = <span class="t">Set</span>.<span class="f">of</span>([<span class="s">"red"</span>, <span class="s">"green"</span>])
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>tags.<span class="f">remove</span>(<span class="s">"red"</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span>tags.<span class="f">remove</span>(<span class="s">"red"</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span>tags<span class="h">}</span><span class="s">"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>new: 3
 new: 1
 new: 2
-{3, 1, 2} [1, 2, 3] true</code></pre></div>
+{3, 1, 2} 3 true [1, 2, 3]
+{1, 2, 3, 4, 5} {3, 4} {1, 2} {1, 2, 5}
+true true true
+true false {green}</code></pre></div>
 </div>
-<p>Two maps are equal when they hold the same pairs in any order. See <a href="../std/modules/map.html#Map">std.map</a> and <a href="../std/modules/set.html#Set">std.set</a>.</p>
+<p>Two sets are equal when they hold the same members, in any order. Also see <a href="../std/modules/set.html#Set">std.set</a>.</p>
+<div class="try"><p>Change <code>Set.of([3])</code> to <code>Set.of([3, 9])</code> and run it: <code>is_subset</code> becomes <code>false</code>. Next make <code>tags</code> a <code>Set[i32]</code> and see what happens to <code>Set.of(["red", "green"])</code>.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="python" data-label="Python">
+<h4>Python</h4>
+<p>Python's <code>set</code> has the same algebra, spelled with operators, and has no defined order.</p>
+<pre class="foreign" data-lang="python"><code>a, b = {<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>, <span class="n">4</span>}, {<span class="n">3</span>, <span class="n">4</span>, <span class="n">5</span>}
+a | b; a &amp; b; a - b; a ^ b</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p><code>HashSet</code> and <code>BTreeSet</code>: Loom's <code>Set</code> is hashing with an insertion order, and <code>sorted()</code> gives the <code>BTreeSet</code> view.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> a: <span class="t">HashSet</span>&lt;i32&gt; = [<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>, <span class="n">4</span>].<span class="f">into</span>();
+<span class="k">let</span> b: <span class="t">HashSet</span>&lt;i32&gt; = [<span class="n">3</span>, <span class="n">4</span>, <span class="n">5</span>].<span class="f">into</span>();
+a.<span class="f">union</span>(&amp;b); a.<span class="f">intersection</span>(&amp;b);</code></pre>
+</div>
+</div>
 <h2 id="streams">Streams<a class="anchor" href="#streams" aria-label="Link to this section">#</a></h2>
-<p>A <code>Stream[T]</code> is a lazy sequence: nothing runs until something asks for the next item. Every stream method takes the stream, so a stream is read once: using it again after <code>s.map(f)</code> or <code>s.count()</code> is a move error (M0101). <code>chars()</code>, <code>bytes()</code>, <code>lines()</code>, <code>words()</code>, <code>indexed()</code>, <code>chunks(n)</code> and <code>windows(n)</code> make streams. Ranges, arrays, lists, slices and maps have every stream method, and so does any type that weaves <code>Iter</code>. <code>for</code> loops over any of them.</p>
-<p>To make your own, weave <code>Iter</code>: give the type an <code>Item</code> and a <code>next</code> that returns <code>?Item</code>.</p>
+<p>A <code>Stream[T]</code> is a <strong>lazy</strong> sequence: nothing runs until something asks for the next item. <code>map</code>, <code>filter</code>, <code>take</code> and the other adapters build a bigger stream out of a smaller one; a <em>consumer</em> (<code>collect</code>, <code>sum</code>, <code>count</code>, a <code>for</code> loop) pulls the items through. That means a stream can be infinite (<code>1..</code> counts forever) so long as something stops pulling.</p>
+<div class="sample" id="sample-coll_lazy" data-sample="coll_lazy" data-mode="run" data-file="coll_lazy.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>coll_lazy.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="c">// `inspect` runs a function on each item as it goes by.</span>
+    <span class="c">// Building the pipeline runs nothing...</span>
+    <span class="k">let</span> pipeline = (<span class="n">1</span>..).<span class="f">inspect</span>(n =&gt; <span class="f">print</span>(<span class="s">"  making </span><span class="h">{</span>n<span class="h">}</span><span class="s">"</span>))
+        .<span class="f">filter</span>(_ % <span class="n">2</span> == <span class="n">0</span>)
+        .<span class="f">map</span>(n =&gt; n * <span class="n">10</span>)
+    <span class="f">print</span>(<span class="s">"pipeline built"</span>)
+
+    <span class="c">// ...and the pull from `take` and `collect` sets it going.</span>
+    <span class="c">// `1..` never ends, but only as many numbers are made as are needed.</span>
+    <span class="f">print</span>(pipeline.<span class="f">take</span>(<span class="n">2</span>).<span class="f">collect</span>())
+
+    <span class="c">// On a list, `map` and `filter` are eager: they run at once and make a list.</span>
+    <span class="k">let</span> xs = [<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]
+    <span class="k">let</span> eager = xs.<span class="f">map</span>(n =&gt; { <span class="f">print</span>(<span class="s">"  mapping </span><span class="h">{</span>n<span class="h">}</span><span class="s">"</span>); n * <span class="n">2</span> })
+    <span class="f">print</span>(<span class="s">"after the eager map"</span>)
+    <span class="f">print</span>(eager)
+
+    <span class="c">// `chars`, `lines`, `words`, `indexed` and `windows` are streams too.</span>
+    <span class="k">let</span> longest = <span class="s">"a bb cccc ddd"</span>.<span class="f">words</span>().<span class="f">max_by_key</span>(w =&gt; w.<span class="f">len</span>())
+    <span class="f">print</span>(longest)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>pipeline built
+  making 1
+  making 2
+  making 3
+  making 4
+[20, 40]
+  mapping 1
+  mapping 2
+  mapping 3
+after the eager map
+[2, 4, 6]
+cccc</code></pre></div>
+</div>
+<p>Read the output in order. <code>pipeline built</code> comes before any <code>making</code>: building did nothing. <code>take(2)</code> asked for two even numbers, so the range made 1, 2, 3 and 4 and no more. The eager <code>xs.map(...)</code> on the list printed all its <code>mapping</code> lines at once, and before <code>after the eager map</code>.</p>
+<p>Where streams come from:</p>
+<ul><li><code>chars()</code>, <code>bytes()</code>, <code>lines()</code> and <code>words()</code> on text, <code>keys()</code>, <code>values()</code> and <code>pairs()</code> on maps, <code>indexed()</code>, <code>chunks(n)</code> and <code>windows(n)</code> on anything with items.</li><li>A range (<code>1..10</code>, <code>1..</code>), an array, a list, a slice, a map, or any type that weaves <code>Iter</code> has every stream method too, so <code>(1..=20).filter(...)</code> and <code>xs.sum()</code> just work.</li><li>A generator function: see <a href="shuttles.html">Shuttles</a>.</li></ul>
+<p><strong>A stream is read once.</strong> Each method takes the stream (it moves, in the sense of <a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a>), so using it again after <code>s.count()</code> is a compile-time error, not a surprise empty result:</p>
+<div class="sample" id="sample-coll_err_once" data-sample="coll_err_once" data-mode="check" data-file="coll_err_once.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>coll_err_once.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#M0101">M0101</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> evens = (<span class="n">1</span>..=<span class="n">10</span>).<span class="f">filter</span>(_ % <span class="n">2</span> == <span class="n">0</span>)
+    <span class="f">print</span>(evens.<span class="f">count</span>())                     <span class="c">// reads the stream to the end</span>
+    <span class="f">print</span>(evens.<span class="f">sum</span>())                       <span class="c">// there is nothing left to read</span>
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[M0101]: `evens` is used after it was moved</span>
+<span class="loc">  --&gt; coll_err_once.loom:6:11</span>
+<span class="gut">  |</span>
+<span class="gut">5 |</span>     print(evens.count())                     // reads the stream to the end
+<span class="gut">  |</span><span class="caret">           ----- moved here: this used up the stream</span>
+<span class="gut">6 |</span>     print(evens.sum())                       // there is nothing left to read
+<span class="gut">  |</span><span class="caret">           ^^^^^ used here</span>
+<span class="gut">  |</span>
+<span class="loc">  = note: a stream is read once: each of its methods takes it</span>
+<span class="loc">  = help: make a new stream for each use (`xs.indexed()` again), or collect it into a list first</span>
+
+<span class="err">error: coll_err_once.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<p>If you need the items twice, <code>collect</code> them into a list first, or make the stream again.</p>
+<div class="try"><p>Change <code>let evens = ...</code> to <code>let evens = (1..=10).filter(_ % 2 == 0).collect()</code>. It's a list now, so it can be counted and then summed.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust's iterators are the model: lazy adapters, consumers, and an iterator that is consumed by the adapter that takes it. The compiler enforces the single use there too, through the move.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> first = (<span class="n">1</span>..)
+    .<span class="f">filter</span>(|n| n % <span class="n">2</span> == <span class="n">0</span>)
+    .<span class="f">map</span>(|n| n * <span class="n">10</span>)
+    .<span class="f">take</span>(<span class="n">2</span>)
+    .collect::&lt;<span class="t">Vec</span>&lt;_&gt;&gt;();</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="python" data-label="Python">
+<h4>Python</h4>
+<p>Generators and iterators are lazy as well, but reuse is silent: once exhausted, the second <code>sum</code> returns 0 and nothing complains.</p>
+<pre class="foreign" data-lang="python"><code>evens = (n <span class="k">for</span> n <span class="k">in</span> <span class="f">range</span>(<span class="n">1</span>, <span class="n">11</span>) <span class="k">if</span> n % <span class="n">2</span> == <span class="n">0</span>)
+<span class="f">print</span>(<span class="f">sum</span>(<span class="n">1</span> <span class="k">for</span> _ <span class="k">in</span> evens))   <span class="c"># 5</span>
+<span class="f">print</span>(<span class="f">sum</span>(evens))              <span class="c"># 0: already used up</span></code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="java" data-label="Java">
+<h4>Java</h4>
+<p><code>Stream&lt;T&gt;</code> is lazy and single-use too, but reuse is a runtime <code>IllegalStateException</code>. Loom refuses to compile it.</p>
+<pre class="foreign" data-lang="java"><code><span class="k">var</span> evens = <span class="t">IntStream</span>.<span class="f">rangeClosed</span>(<span class="n">1</span>, <span class="n">10</span>).<span class="f">filter</span>(n -&gt; n % <span class="n">2</span> == <span class="n">0</span>);
+evens.<span class="f">count</span>();
+evens.<span class="f">sum</span>(); <span class="c">// throws IllegalStateException</span></code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="haskell" data-label="Haskell">
+<h4>Haskell</h4>
+<p>Lists are lazy and reusable, because values are immutable and shared by a garbage collector. With ownership and no collector, Loom's streams are consumed.</p>
+<pre class="foreign" data-lang="haskell"><code>take <span class="n">2</span> (map (* <span class="n">10</span>) (filter even [<span class="n">1</span> ..]))</code></pre>
+</div>
+</div>
+<h2 id="using-streams">Using streams<a class="anchor" href="#using-streams" aria-label="Link to this section">#</a></h2>
+<p>The adapters, in groups:</p>
+<table class="plain"><thead><tr><th>Group</th><th>Methods</th></tr></thead><tbody><tr><td>shape one stream</td><td><code>map</code>, <code>filter</code>, <code>filter_map</code>, <code>flat_map</code>, <code>take</code>, <code>skip</code>, <code>take_while</code>, <code>skip_while</code>, <code>step_by</code>, <code>inspect</code>, <code>scan</code></td></tr><tr><td>combine</td><td><code>zip</code>, <code>chain</code>, <code>indexed</code>, <code>cycle</code></td></tr><tr><td>group the items</td><td><code>chunks(n)</code>, <code>windows(n)</code></td></tr><tr><td>answer one question</td><td><code>fold</code>, <code>reduce</code>, <code>all</code>, <code>exists</code>, <code>find</code>, <code>position</code>, <code>count</code>, <code>last</code>, <code>nth</code>, <code>each</code></td></tr><tr><td>need a bound on <code>T</code></td><td><code>sum</code>, <code>product</code> (<code>Num</code>), <code>min</code>, <code>max</code> (<code>Ord</code>), <code>join</code> (<code>Show</code>)</td></tr></tbody></table>
 <div class="sample" id="sample-coll_streams" data-sample="coll_streams" data-mode="run" data-file="coll_streams.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>coll_streams.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="c">// Anything `for` can loop over is an `Iter`. Give a type `next` and it</span>
-<span class="c">// gets every `Stream` method for free.</span>
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> xs = [<span class="n">4</span>, <span class="n">8</span>, <span class="n">15</span>, <span class="n">16</span>, <span class="n">23</span>, <span class="n">42</span>]
+
+    <span class="c">// Adapters give another stream: nothing happens yet.</span>
+    <span class="f">print</span>((<span class="n">1</span>..=<span class="n">20</span>).<span class="f">filter</span>(_ % <span class="n">2</span> == <span class="n">0</span>).<span class="f">map</span>(n =&gt; n * n).<span class="f">take</span>(<span class="n">4</span>).<span class="f">collect</span>())
+    <span class="f">print</span>(xs.<span class="f">skip</span>(<span class="n">2</span>).<span class="f">step_by</span>(<span class="n">2</span>).<span class="f">collect</span>())
+    <span class="f">print</span>(xs.<span class="f">take_while</span>(_ &lt; <span class="n">16</span>).<span class="f">collect</span>())
+    <span class="f">print</span>((<span class="n">1</span>..=<span class="n">3</span>).<span class="f">chain</span>(<span class="n">7</span>..=<span class="n">9</span>).<span class="f">collect</span>())
+    <span class="f">print</span>((<span class="n">1</span>..=<span class="n">3</span>).<span class="f">flat_map</span>(n =&gt; (<span class="n">1</span>..=n)).<span class="f">collect</span>())
+    <span class="f">print</span>(xs.<span class="f">zip</span>(xs.<span class="f">skip</span>(<span class="n">1</span>)).<span class="f">map</span>(p =&gt; p.<span class="n">1</span> - p.<span class="n">0</span>).<span class="f">collect</span>())
+    <span class="f">print</span>(xs.<span class="f">windows</span>(<span class="n">2</span>).<span class="f">map</span>(w =&gt; w[<span class="n">1</span>] - w[<span class="n">0</span>]).<span class="f">collect</span>())
+    <span class="k">for</span> (i, line) <span class="k">in</span> <span class="s">"a\nb\nc"</span>.<span class="f">lines</span>().<span class="f">indexed</span>() {
+        <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>i<span class="h">}</span><span class="s">: </span><span class="h">{</span>line<span class="h">}</span><span class="s">"</span>)
+    }
+
+    <span class="c">// Consumers run the stream and give back one answer.</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>xs.<span class="f">fold</span>(<span class="n">0</span>, (acc, x) =&gt; acc + x)<span class="h">}</span><span class="s"> </span><span class="h">{</span>xs.<span class="f">sum</span>()<span class="h">}</span><span class="s"> </span><span class="h">{</span>xs.<span class="f">reduce</span>(_ + _):?<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>xs.<span class="f">max</span>():?<span class="h">}</span><span class="s"> </span><span class="h">{</span>xs.<span class="f">min</span>():?<span class="h">}</span><span class="s"> </span><span class="h">{</span>xs.<span class="f">count</span>()<span class="h">}</span><span class="s"> </span><span class="h">{</span>xs.<span class="f">last</span>():?<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>xs.<span class="f">all</span>(_ &gt; <span class="n">3</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span>xs.<span class="f">exists</span>(_ &gt; <span class="n">40</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span>xs.<span class="f">find</span>(_ &gt; <span class="n">10</span>):?<span class="h">}</span><span class="s"> </span><span class="h">{</span>xs.<span class="f">position</span>(_ == <span class="n">15</span>):?<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>[<span class="s">"a"</span>, <span class="s">"b"</span>, <span class="s">"c"</span>].<span class="f">join</span>(<span class="s">"-"</span>)<span class="h">}</span><span class="s">"</span>)
+    xs.<span class="f">each</span>(x =&gt; <span class="f">print</span>(<span class="s">"item </span><span class="h">{</span>x<span class="h">}</span><span class="s">"</span>))
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>[4, 16, 36, 64]
+[15, 23]
+[4, 8, 15]
+[1, 2, 3, 7, 8, 9]
+[1, 1, 2, 1, 2, 3]
+[4, 7, 1, 7, 19]
+[4, 7, 1, 7, 19]
+0: a
+1: b
+2: c
+108 108 some(108)
+some(42) some(4) 6 some(42)
+true true some(15) some(2)
+a-b-c
+item 4
+item 8
+item 15
+item 16
+item 23
+item 42</code></pre></div>
+</div>
+<ul><li><code>sum</code> and <code>product</code> need <code>Num</code>, <code>min</code> and <code>max</code> need <code>Ord</code>, and <code>join</code> needs <code>Show</code>. <a href="../std/modules/iter.html#Stream">std.iter</a> has the whole list.</li><li><code>max</code> and <code>min</code> give optionals, because a stream can be empty. <code>reduce</code> does too; <code>fold</code> takes a starting value and doesn't need to.</li><li><code>xs.map(...)</code> and <code>xs.filter(...)</code> directly on a list or an array are eager. Put <code>.take(...)</code>, <code>.skip(...)</code>, <code>.indexed()</code> or any other stream method first and the rest stay lazy.</li></ul>
+<div class="try"><p>Replace <code>xs.fold(0, (acc, x) =&gt; acc + x)</code> with <code>xs.reduce(_ + _)</code>. It gives an optional instead, because <code>reduce</code> has no starting value. Then replace <code>xs.all(_ &gt; 3)</code> with <code>xs.all(_ &gt; 4)</code> and watch the answer change.</p></div>
+<h2 id="collecting">Collecting<a class="anchor" href="#collecting" aria-label="Link to this section">#</a></h2>
+<p>Streams end by <em>collecting</em> into something: <code>collect()</code> makes a list, and <code>collect_as()</code> makes whatever collection you name (a <code>Set</code>, a <code>Map</code> from a stream of pairs, a <code>List</code>). A few consumers collect in a particular shape: <code>partition(f)</code> gives two lists, <code>group_by(key)</code> gives a map of lists, and <code>counts()</code> gives a map of counts.</p>
+<div class="sample" id="sample-coll_collect" data-sample="coll_collect" data-mode="run" data-file="coll_collect.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>coll_collect.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Person</span>: <span class="t">Show</span> {
+    name: str
+    age: u8
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> people = [<span class="t">Person</span>(<span class="s">"ada"</span>, <span class="n">36</span>), <span class="t">Person</span>(<span class="s">"alan"</span>, <span class="n">41</span>), <span class="t">Person</span>(<span class="s">"grace"</span>, <span class="n">85</span>), <span class="t">Person</span>(<span class="s">"bob"</span>, <span class="n">20</span>)]
+
+    <span class="c">// `collect` makes a list. `collect_as` makes whatever you name.</span>
+    <span class="k">let</span> ages: <span class="t">List</span>[u8] = people.<span class="f">map</span>(_.age).<span class="f">collect</span>()
+    <span class="k">let</span> names: <span class="t">Set</span>[str] = people.<span class="f">map</span>(_.name).<span class="f">collect_as</span>()
+    <span class="k">let</span> lookup: <span class="t">Map</span>[str, u8] = people.<span class="f">map</span>(p =&gt; (p.name, p.age)).<span class="f">collect_as</span>()
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>ages<span class="h">}</span><span class="s"> </span><span class="h">{</span>names<span class="h">}</span><span class="s"> </span><span class="h">{</span>lookup<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// `partition` splits in two, `group_by` into as many as there are keys.</span>
+    <span class="k">let</span> (old, young) = people.<span class="f">partition</span>(_.age &gt; <span class="n">40</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>old.<span class="f">len</span>()<span class="h">}</span><span class="s"> old, </span><span class="h">{</span>young.<span class="f">len</span>()<span class="h">}</span><span class="s"> young"</span>)
+    <span class="k">let</span> by_letter = people.<span class="f">map</span>(_.name).<span class="f">group_by</span>(s =&gt; s[<span class="n">0</span>..<span class="n">1</span>])
+    <span class="f">print</span>(by_letter)
+
+    <span class="c">// Counting, sorting, extremes.</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>people.<span class="f">map</span>(_.name[<span class="n">0</span>..<span class="n">1</span>]).<span class="f">counts</span>()<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(people.<span class="f">sorted_by_key</span>(_.age).<span class="f">map</span>(_.name).<span class="f">collect</span>())
+    <span class="f">print</span>(people.<span class="f">sorted_by</span>(_.name.<span class="f">len</span>() &lt; _.name.<span class="f">len</span>()).<span class="f">map</span>(_.name).<span class="f">collect</span>())
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>people.<span class="f">max_by_key</span>(_.age):?<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// A map's entries are a stream of pairs too.</span>
+    <span class="k">let</span> total_age = lookup.<span class="f">pairs</span>().<span class="f">map</span>(p =&gt; p.<span class="n">1</span> <span class="k">as</span> u32).<span class="f">sum</span>()
+    <span class="f">print</span>(total_age)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>[36, 41, 85, 20] {ada, alan, grace, bob} [ada: 36, alan: 41, grace: 85, bob: 20]
+2 old, 2 young
+[a: [ada, alan], g: [grace], b: [bob]]
+[a: 2, g: 1, b: 1]
+[bob, ada, alan, grace]
+[ada, bob, alan, grace]
+some(Person(name: "grace", age: 85))
+182</code></pre></div>
+</div>
+<ul><li><code>sorted()</code>, <code>sorted_by(before)</code> and <code>sorted_by_key(key)</code> take a stream and return a sorted list. <code>before</code> is a "comes first" function: <code>_.len() &lt; _.len()</code>.</li><li><code>max_by_key</code> and <code>min_by_key</code> give the item whose key is largest or smallest, as an optional.</li><li>The type of <code>collect_as()</code> comes from where it's going: a <code>let</code> with a type, or <code>collect_as[List[i32]]()</code>.</li></ul>
+<div class="try"><p>Change <code>Set[str]</code> to <code>List[str]</code> on the <code>names</code> line and <code>collect_as()</code> makes a list. Then make <code>lookup</code> a <code>Map[str, str]</code> and let the compiler tell you that the pairs are <code>(str, u8)</code>.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p><code>collect::&lt;T&gt;()</code> is the one generic consumer, and the target type decides what it builds. Loom splits it into <code>collect()</code> for the list and <code>collect_as()</code> for anything else.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> names: <span class="t">HashSet</span>&lt;&amp;str&gt; = people.<span class="f">iter</span>().<span class="f">map</span>(|p| p.name).<span class="f">collect</span>();
+<span class="k">let</span> (old, young): (<span class="t">Vec</span>&lt;_&gt;, <span class="t">Vec</span>&lt;_&gt;) = people.<span class="f">iter</span>().<span class="f">partition</span>(|p| p.age &gt; <span class="n">40</span>);</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="python" data-label="Python">
+<h4>Python</h4>
+<p>Comprehensions build any collection, and <code>itertools.groupby</code> needs a sorted input. Loom's <code>group_by</code> collects as it goes.</p>
+<pre class="foreign" data-lang="python"><code>names = {p.name <span class="k">for</span> p <span class="k">in</span> people}
+lookup = {p.name: p.age <span class="k">for</span> p <span class="k">in</span> people}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="java" data-label="Java">
+<h4>Java</h4>
+<p><code>Collectors.groupingBy</code> and <code>partitioningBy</code> are the same operations.</p>
+<pre class="foreign" data-lang="java"><code><span class="t">Map</span>&lt;<span class="t">Boolean</span>, <span class="t">List</span>&lt;<span class="t">Person</span>&gt;&gt; split = people.<span class="f">stream</span>()
+    .<span class="f">collect</span>(<span class="t">Collectors</span>.<span class="f">partitioningBy</span>(p -&gt; p.<span class="f">age</span>() &gt; <span class="n">40</span>));</code></pre>
+</div>
+</div>
+<h2 id="your-own-streams">Your own streams<a class="anchor" href="#your-own-streams" aria-label="Link to this section">#</a></h2>
+<p>Anything that weaves <code>Iter</code> is a stream. The weft is small: a type <code>Item</code> and a <code>next</code> that returns the next item, or <code>none</code> when it's done. Write those and the type gets every stream method, and <code>for</code> loops over it.</p>
+<div class="sample" id="sample-coll_iter" data-sample="coll_iter" data-mode="run" data-file="coll_iter.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>coll_iter.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.iter.{from_fn, successors}
+
+<span class="c">// Anything with a `next` that returns `?Item` is an `Iter`.</span>
+<span class="c">// Give a type that, and it gets every stream method for free.</span>
 <span class="k">warp</span> <span class="t">Countdown</span>: <span class="t">Iter</span> {
     n: u32
     <span class="k">type</span> <span class="t">Item</span> = u32
@@ -175,39 +750,56 @@ new: 2
 }
 
 <span class="k">fun</span> <span class="f">main</span>() {
-    <span class="c">// Streams are lazy: nothing runs until something asks for an item.</span>
-    <span class="k">let</span> evens = (<span class="n">1</span>..=<span class="n">20</span>).<span class="f">filter</span>(_ % <span class="n">2</span> == <span class="n">0</span>).<span class="f">map</span>(n =&gt; n * n)
-    <span class="f">print</span>(evens.<span class="f">take</span>(<span class="n">4</span>).<span class="f">collect</span>())
-
-    <span class="f">print</span>(<span class="s">"hello world"</span>.<span class="f">chars</span>().<span class="f">filter</span>(_ != <span class="s">'o'</span>).<span class="f">count</span>())
-    <span class="f">print</span>(<span class="s">"one two  three"</span>.<span class="f">words</span>().<span class="f">join</span>(<span class="s">"-"</span>))
     <span class="f">print</span>(<span class="t">Countdown</span>(<span class="n">4</span>).<span class="f">collect</span>())
     <span class="f">print</span>(<span class="t">Countdown</span>(<span class="n">5</span>).<span class="f">sum</span>())
+    <span class="f">print</span>(<span class="t">Countdown</span>(<span class="n">10</span>).<span class="f">filter</span>(_ % <span class="n">3</span> == <span class="n">0</span>).<span class="f">map</span>(n =&gt; n * n).<span class="f">collect</span>())
 
-    <span class="k">for</span> (i, line) <span class="k">in</span> <span class="s">"a\nb\nc"</span>.<span class="f">lines</span>().<span class="f">indexed</span>() {
-        <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>i<span class="h">}</span><span class="s">: </span><span class="h">{</span>line<span class="h">}</span><span class="s">"</span>)
-    }
+    <span class="c">// `for` loops over it, too.</span>
+    <span class="k">for</span> n <span class="k">in</span> <span class="t">Countdown</span>(<span class="n">3</span>) { <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>n<span class="h">}</span><span class="s">..."</span>) }
+    <span class="f">print</span>(<span class="s">"liftoff"</span>)
 
-    <span class="k">let</span> xs = [<span class="n">4</span>, <span class="n">8</span>, <span class="n">15</span>, <span class="n">16</span>, <span class="n">23</span>, <span class="n">42</span>]
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>xs.<span class="f">fold</span>(<span class="n">0</span>, (acc, x) =&gt; acc + x)<span class="h">}</span><span class="s"> </span><span class="h">{</span>xs.<span class="f">max</span>():?<span class="h">}</span><span class="s"> </span><span class="h">{</span>xs.<span class="f">position</span>(_ == <span class="n">15</span>):?<span class="h">}</span><span class="s">"</span>)
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>xs.<span class="f">all</span>(_ &gt; <span class="n">3</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span>xs.<span class="f">exists</span>(_ &gt; <span class="n">40</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span>xs.<span class="f">zip</span>(xs.<span class="f">skip</span>(<span class="n">1</span>)).<span class="f">count</span>()<span class="h">}</span><span class="s">"</span>)
-    <span class="f">print</span>(xs.<span class="f">windows</span>(<span class="n">2</span>).<span class="f">map</span>(w =&gt; w[<span class="n">1</span>] - w[<span class="n">0</span>]).<span class="f">collect</span>())
+    <span class="c">// Without a new type: each step makes the next item from the last.</span>
+    <span class="f">print</span>(<span class="f">successors</span>(<span class="k">some</span>(<span class="n">1</span>), n =&gt; <span class="k">if</span> n &lt; <span class="n">100</span> { <span class="k">some</span>(n * <span class="n">3</span>) } <span class="k">else</span> { <span class="k">none</span> }).<span class="f">collect</span>())
+    <span class="k">let</span> fib = <span class="f">from_fn</span>((<span class="n">0</span>, <span class="n">1</span>), p =&gt; <span class="k">some</span>(((p.<span class="n">1</span>, p.<span class="n">0</span> + p.<span class="n">1</span>), p.<span class="n">0</span>)))
+    <span class="f">print</span>(fib.<span class="f">take</span>(<span class="n">10</span>).<span class="f">collect</span>())
 }</code></pre>
-<div class="sample-out"><div class="out-head">Output</div><pre><code>[4, 16, 36, 64]
-9
-one-two-three
-[4, 3, 2, 1]
+<div class="sample-out"><div class="out-head">Output</div><pre><code>[4, 3, 2, 1]
 15
-0: a
-1: b
-2: c
-108 some(42) some(2)
-true true 5
-[4, 7, 1, 7, 19]</code></pre></div>
+[81, 36, 9]
+3...
+2...
+1...
+liftoff
+[1, 3, 9, 27, 81, 243]
+[0, 1, 1, 2, 3, 5, 8, 13, 21, 34]</code></pre></div>
 </div>
-<p><code>sum</code> and <code>product</code> need <code>Num</code>, <code>min</code> and <code>max</code> need <code>Ord</code>, and <code>join</code> needs <code>Show</code>. See <a href="../std/modules/iter.html#Stream">std.iter</a> for the whole list. A generator function makes a stream too: see <a href="shuttles.html">Shuttles</a>.</p>
+<p><code>next</code> is <code>mut self</code>, because an iterator changes as it's pulled. When a whole type is more than you need, <code>successors</code> makes a stream from a first item and a function that finds the next, and <code>from_fn</code> carries a state along. For a function that produces items as it runs, with <code>yield</code>, see <a href="shuttles.html">Shuttles</a>.</p>
+<div class="try"><p>Make <code>Countdown</code> skip by two: change <code>.n -= 1</code> to <code>.n -= 2</code>, and <code>.n + 1</code> to <code>.n + 2</code>. Counting down from 5 steps below zero and unravels with an arithmetic overflow: <code>next</code> is ordinary code, with the usual checks.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p><code>impl Iterator for Countdown</code> with an <code>Item</code> type and a <code>next</code> is the same shape, and gives every adapter. Loom's <code>next</code> takes <code>mut self</code> rather than <code>&amp;mut self</code>.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">impl</span> <span class="t">Iterator</span> <span class="k">for</span> <span class="t">Countdown</span> {
+    <span class="k">type</span> <span class="t">Item</span> = u32;
+    <span class="k">fn</span> <span class="f">next</span>(&amp;<span class="k">mut</span> <span class="k">self</span>) -&gt; <span class="t">Option</span>&lt;u32&gt; {
+        <span class="k">if</span> <span class="k">self</span>.n == <span class="n">0</span> { <span class="k">return</span> <span class="k">None</span>; }
+        <span class="k">self</span>.n -= <span class="n">1</span>;
+        <span class="k">Some</span>(<span class="k">self</span>.n + <span class="n">1</span>)
+    }
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="python" data-label="Python">
+<h4>Python</h4>
+<p><code>__iter__</code> and <code>__next__</code> are the protocol, and the generator is the shortcut. Loom's shuttles (<code>yield</code>) are the generator form.</p>
+<pre class="foreign" data-lang="python"><code><span class="k">def</span> <span class="f">countdown</span>(n):
+    <span class="k">while</span> n &gt; <span class="n">0</span>:
+        <span class="k">yield</span> n
+        n -= <span class="n">1</span></code></pre>
+</div>
+</div>
 <h2 id="where-next">Where next<a class="anchor" href="#where-next" aria-label="Link to this section">#</a></h2>
-<p><a href="errors.html">Optionals and errors</a> covers <code>?T</code> and <code>T ! E</code>.</p>
+<p><a href="errors.html">Optionals and errors</a> covers <code>?T</code> and <code>T ! E</code>, which you've been meeting in <code>get</code>, <code>pop</code> and <code>parse</code> all through this chapter.</p>
 <nav class="pager" aria-label="Chapters">
 <a class="prev" href="generics.html"><span class="dir">&larr; Chapter 4</span>Generics and <code>any</code></a>
 <a class="next" href="errors.html"><span class="dir">Chapter 6 &rarr;</span>Optionals and errors</a>

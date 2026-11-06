@@ -1,0 +1,33 @@
+use std.io.print
+
+warp Person: Show {
+    name: str
+    age: u8
+}
+
+fun main() {
+    let people = [Person("ada", 36), Person("alan", 41), Person("grace", 85), Person("bob", 20)]
+
+    // `collect` makes a list. `collect_as` makes whatever you name.
+    let ages: List[u8] = people.map(_.age).collect()
+    let names: Set[str] = people.map(_.name).collect_as()
+    let lookup: Map[str, u8] = people.map(p => (p.name, p.age)).collect_as()
+    print("{ages} {names} {lookup}")
+
+    // `partition` splits in two, `group_by` into as many as there are keys.
+    let (old, young) = people.partition(_.age > 40)
+    print("{old.len()} old, {young.len()} young")
+    let by_letter = people.map(_.name).group_by(s => s[0..1])
+    print(by_letter)
+
+    // Counting, sorting, extremes.
+    print("{people.map(_.name[0..1]).counts()}")
+    print(people.sorted_by_key(_.age).map(_.name).collect())
+    print(people.sorted_by(_.name.len() < _.name.len()).map(_.name).collect())
+    print("{people.max_by_key(_.age):?}")
+
+    // A map's entries are a stream of pairs too.
+    let total_age = lookup.pairs().map(p => p.1 as u32).sum()
+    print(total_age)
+}
+//@ run

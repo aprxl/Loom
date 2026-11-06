@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>Moves, once and defer · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -55,13 +56,70 @@
 <div class="chapter-head">
 <span class="chapter-no">Chapter 7</span>
 <h1>Moves, <code>once</code> and <code>defer</code></h1>
-<p class="summary">Who owns a value, what a parameter can do with it, and what runs when a scope ends.</p>
+<p class="summary">Who owns a value, what a parameter can do with it, which resources must be used up, and what runs when a scope ends.</p>
 </div>
-<h2 id="values-first">Values first<a class="anchor" href="#values-first" aria-label="Link to this section">#</a></h2>
-<p>Every variable owns its value. There is no type "reference to T", so there are no lifetimes to write. Assigning a value or passing it to a <code>take</code> parameter <strong>copies</strong> it if its type is <code>Copy</code> and <strong>moves</strong> it otherwise. A warp whose fields are all <code>Copy</code> is <code>Copy</code> by itself, unless it's a <code>once</code> warp.</p>
-<p>A function's parameters say what it may do:</p>
+<p>Without a garbage collector, someone has to decide when a value's memory comes back. Loom's answer is the one you'd give at a workbench: <strong>every value has exactly one owner, and the owner's scope decides when it goes</strong>. That one rule, and the compiler checking it, is what lets Loom free memory without a collector and without a reference count.</p>
+<p>This chapter is the rules of that ownership, in the order you'll meet them. First, values: what assigning one does. Then how a function can read, edit or take what you pass it, and what the compiler refuses. Then two tools for resources that need more care than memory does: <code>once</code> warps, which can't be forgotten, and <code>defer</code>, which runs cleanup however a scope ends.</p>
+<h2 id="one-owner-copies-and-moves">One owner: copies and moves<a class="anchor" href="#one-owner-copies-and-moves" aria-label="Link to this section">#</a></h2>
+<p>Every variable owns its value. There is no type "reference to <code>T</code>" that you can hold on to, so there are no lifetimes to write. Assigning a value, or passing it to a <code>take</code> parameter, does one of two things:</p>
+<ul><li>If the type is <code>Copy</code>, the value is <strong>copied</strong>, and both sides keep a value of their own. Numbers, <code>bool</code>, <code>char</code> and tuples of those are <code>Copy</code>, and so is a warp whose fields are all <code>Copy</code>.</li><li>Otherwise it is <strong>moved</strong>: the new owner has it and the old one is gone. A <code>String</code>, a list, a map and any warp that holds one are not <code>Copy</code>.</li></ul>
+<div class="sample" id="sample-own_values" data-sample="own_values" data-mode="run" data-file="own_values.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>own_values.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">// Every field is `Copy`, so a `Point` is too.</span>
+<span class="k">warp</span> <span class="t">Point</span>: <span class="t">Show</span> {
+    x: i32
+    y: i32
+}
+
+<span class="c">// A `String` owns its text, so a `Person` moves.</span>
+<span class="k">warp</span> <span class="t">Person</span>: <span class="t">Show</span> {
+    name: <span class="t">String</span>
+    age: u8
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> a = <span class="t">Point</span>(<span class="n">1</span>, <span class="n">2</span>)
+    <span class="k">var</span> b = a                       <span class="c">// a copy: two separate points</span>
+    b.x = <span class="n">10</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>a<span class="h">}</span><span class="s"> </span><span class="h">{</span>b<span class="h">}</span><span class="s">"</span>)
+
+    <span class="k">let</span> p = <span class="t">Person</span>(<span class="s">"ann"</span>, <span class="n">30</span>)
+    <span class="k">let</span> q = p                       <span class="c">// a move: `q` owns it now</span>
+    <span class="f">print</span>(q)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>Point(x: 1, y: 2) Point(x: 10, y: 2)
+Person(name: "ann", age: 30)</code></pre></div>
+</div>
+<p><code>Point</code> is made only of numbers, so <code>var b = a</code> leaves <code>a</code> untouched. <code>Person</code> holds a <code>String</code>, so <code>let q = p</code> moves it, and <code>p</code> can't be used again. (A <code>once</code> warp is never <code>Copy</code>, whatever its fields are; see below.)</p>
+<div class="try"><p>After <code>let q = p</code>, add <code>print(p)</code>. The compiler says <code>p</code> was used after it moved, and points at both places. Then give <code>Person</code> a <code>Copy</code>-only field list (delete <code>name</code>) and watch the error disappear.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust's moves are the same: a move empties the old variable, and the compiler tracks it. The difference is that Rust makes you opt in to copying with <code>#[derive(Copy, Clone)]</code>, while Loom decides from the fields.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> p = <span class="t">Person</span> { name: <span class="s">"ann"</span>.<span class="f">to_string</span>(), age: <span class="n">30</span> };
+<span class="k">let</span> q = p;                  <span class="c">// moved</span>
+<span class="f">println!</span>(<span class="s">"{}"</span>, p.age);      <span class="c">// error[E0382]: `p` was moved</span></code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="c" data-label="C++">
+<h4>C++</h4>
+<p>C++ copies by default and moves only when asked (<code>std::move</code>). A moved-from object is left in a valid but unspecified state, and the compiler won't stop you from using it. In Loom, using it is a compile error.</p>
+<pre class="foreign" data-lang="cpp"><code>std::string a = <span class="s">"ann"</span>;
+std::string b = std::<span class="f">move</span>(a);   <span class="c">// `a` is valid, but empty in practice</span></code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="swift" data-label="Swift">
+<h4>Swift</h4>
+<p>Swift's structs are value types that copy by default, with copy-on-write behind the scenes. Swift 5.9 added <code>consume</code>, which ends a variable's life like a Loom move does.</p>
+<pre class="foreign" data-lang="swift"><code><span class="k">let</span> a = <span class="s">"ann"</span>
+<span class="k">let</span> b = consume a      <span class="c">// `a` can't be used after this</span></code></pre>
+</div>
+</div>
+<h2 id="reading-editing-and-taking-parameters">Reading, editing and taking: parameters<a class="anchor" href="#reading-editing-and-taking-parameters" aria-label="Link to this section">#</a></h2>
+<p>A function's parameters say what it may do with what you pass it, and the call site repeats the interesting part:</p>
 <table class="plain"><thead><tr><th>Declared</th><th>Call site</th><th>The callee</th></tr></thead><tbody><tr><td><code>x: T</code></td><td><code>f(x)</code></td><td>reads <code>x</code>; the caller keeps it</td></tr><tr><td><code>mut x: T</code></td><td><code>f(mut x)</code></td><td>edits <code>x</code> in place; the caller keeps it, changed</td></tr><tr><td><code>take x: T</code></td><td><code>f(x)</code></td><td>owns <code>x</code>; the caller loses it unless <code>T</code> is <code>Copy</code></td></tr></tbody></table>
-<p><code>mut</code> is written at the call site as well as the declaration. Method receivers are the exception: <code>scores.sort()</code> is already clear.</p>
+<p><code>mut</code> is written at the call as well as the declaration, so a reader of the caller can see which arguments change. Method receivers are the exception, because <code>scores.sort()</code> is already clear.</p>
 <div class="sample" id="sample-own_params" data-sample="own_params" data-mode="run" data-file="own_params.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>own_params.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -110,8 +168,36 @@
 2 100
 2</code></pre></div>
 </div>
+<p>The compiler chooses whether a read parameter is passed by value or by address, depending on size; that is not something you spell out. A <code>mut</code> parameter of a scalar type (<code>swap(mut a, mut b)</code> above) is copied back to the caller when the function returns.</p>
+<ul><li>A read or <code>mut</code> parameter is a <strong>borrow</strong>: it lasts exactly as long as the call. Nothing can return one or store one (more on that below).</li><li><code>take</code> is the only way to hand a value over. After <code>keep(names)</code> the caller's <code>names</code> is gone, but <code>bump(mut c)</code> leaves <code>c</code> right where it was, only changed.</li><li>Taking a <code>Copy</code> value copies it, so the caller still has its own.</li></ul>
+<div class="try"><p>Add <code>print(names.len())</code> after <code>keep(names)</code>. The list moved into <code>keep</code>, so this is a use after a move (<a href="diagnostics.html#M0101">M0101</a>). Then change <code>keep</code>'s parameter from <code>take names</code> to <code>names</code> and watch the error go away.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust has the same three modes, but names them in the type: <code>T</code>, <code>&amp;T</code> and <code>&amp;mut T</code>. The borrowed forms are real types that can sit in structs and need lifetimes when returned. Loom's <code>x: T</code> and <code>mut x: T</code> are modes of the <em>parameter</em>, not types, which is why they need no lifetimes.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">fn</span> <span class="f">peek</span>(c: &amp;<span class="t">Counter</span>) -&gt; i32 { c.n }
+<span class="k">fn</span> <span class="f">bump</span>(c: &amp;<span class="k">mut</span> <span class="t">Counter</span>) { c.n += <span class="n">1</span> }
+<span class="k">fn</span> <span class="f">keep</span>(names: <span class="t">Vec</span>&lt;<span class="t">String</span>&gt;) -&gt; usize { names.<span class="f">len</span>() }
+<span class="f">bump</span>(&amp;<span class="k">mut</span> c);</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="swift" data-label="Swift">
+<h4>Swift</h4>
+<p>Swift's <code>inout</code> is a <code>mut</code> parameter: exclusive access, written <code>&amp;</code> at the call site. Swift 5.9 spells the other two modes <code>borrowing</code> and <code>consuming</code>.</p>
+<pre class="foreign" data-lang="swift"><code><span class="k">func</span> <span class="f">bump</span>(_ c: <span class="k">inout</span> <span class="t">Counter</span>) { c.n += <span class="n">1</span> }
+<span class="k">func</span> <span class="f">keep</span>(_ names: consuming [<span class="t">String</span>]) -&gt; <span class="t">Int</span> { names.count }
+<span class="f">bump</span>(&amp;c)</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="c" data-label="C++">
+<h4>C++</h4>
+<p>C++ gets the same effect with conventions: <code>const T&amp;</code> to read, <code>T&amp;</code> to edit, and a by-value or <code>T&amp;&amp;</code> parameter to take. Nothing stops a <code>const T&amp;</code> from outliving what it refers to; Loom's borrows can't.</p>
+<pre class="foreign" data-lang="cpp"><code><span class="k">int</span> <span class="f">peek</span>(<span class="k">const</span> <span class="t">Counter</span>&amp; c) { <span class="k">return</span> c.n; }
+<span class="k">void</span> <span class="f">bump</span>(<span class="t">Counter</span>&amp; c) { c.n += <span class="n">1</span>; }
+size_t <span class="f">keep</span>(std::vector&lt;std::string&gt; names) { <span class="k">return</span> names.<span class="f">size</span>(); }</code></pre>
+</div>
+</div>
 <h2 id="moves-are-checked">Moves are checked<a class="anchor" href="#moves-are-checked" aria-label="Link to this section">#</a></h2>
-<p>Using a variable after it moved is an error, and so is moving a value out of a borrow (a read parameter, a loop's item, a lambda's captured variable) or out of a list's element. The check follows branches and goes through loop bodies twice.</p>
+<p>Using a variable after it moved is an error (<a href="diagnostics.html#M0101">M0101</a>). The check follows branches and goes through loop bodies twice, so a move inside a loop is caught on the second round.</p>
 <div class="sample" id="sample-own_err_moved" data-sample="own_err_moved" data-mode="check" data-file="own_err_moved.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>own_err_moved.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#M0101">M0101</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">fun</span> <span class="f">keep</span>(<span class="k">take</span> s: <span class="t">String</span>) -&gt; <span class="t">String</span> = s
@@ -134,7 +220,45 @@
 
 <span class="err">error: own_err_moved.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
-<p>While a variable is lent as <code>mut</code>, nothing else in the call may touch it. The check works per field, so <code>swap(mut p.x, mut p.y)</code> is fine.</p>
+<p>Two more moves are refused because the value isn't yours to give away. You can't move a value <strong>out of a borrow</strong>: a read parameter, a loop's item, a lambda's captured variable (<a href="diagnostics.html#M0102">M0102</a>). And you can't move a value <strong>out of an element</strong> of a list, because that would leave a hole (<a href="diagnostics.html#M0103">M0103</a>).</p>
+<div class="sample" id="sample-own_err_borrowed" data-sample="own_err_borrowed" data-mode="check" data-file="own_err_borrowed.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>own_err_borrowed.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#M0102">M0102</a>, <a href="diagnostics.html#M0103">M0103</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">fun</span> <span class="f">consume</span>(<span class="k">take</span> s: <span class="t">String</span>) {}
+
+<span class="c">// `s` belongs to the caller, so this function can't give it away.</span>
+<span class="k">fun</span> <span class="f">peek</span>(s: <span class="t">String</span>) {
+    <span class="f">consume</span>(s)
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> names: <span class="t">List</span>[<span class="t">String</span>] = [<span class="s">"ann"</span>, <span class="s">"bo"</span>]
+    <span class="c">// Nor can you take a `String` out of the list and leave a hole behind.</span>
+    <span class="k">let</span> first = names[<span class="n">0</span>]
+    <span class="f">consume</span>(first)
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[M0102]: can't move `s`: it's borrowed</span>
+<span class="loc">  --&gt; own_err_borrowed.loom:5:13</span>
+<span class="gut">  |</span>
+<span class="gut">5 |</span>     consume(s)
+<span class="gut">  |</span><span class="caret">             ^ moved here</span>
+<span class="gut">  |</span>
+<span class="loc">  = note: `s` is a parameter the caller still owns</span>
+<span class="loc">  = help: copy it (`x.copy()`), or take ownership with a `take` parameter</span>
+
+<span class="err">error[M0103]: can't move a value out of an element of `names`</span>
+<span class="loc">   --&gt; own_err_borrowed.loom:11:17</span>
+<span class="gut">   |</span>
+<span class="gut">11 |</span>     let first = names[0]
+<span class="gut">   |</span><span class="caret">                 ^^^^^^^^ this would take it out of the list</span>
+<span class="gut">   |</span>
+<span class="loc">   = help: copy it (`x.copy()`), or take it out with `remove` or `pop`</span>
+
+<span class="err">error: own_err_borrowed.loom failed to type-check (2 errors)</span></code></pre></div>
+</div>
+<p>The fixes are in the help text each error prints: copy the value (<code>s.copy()</code>), take ownership with a <code>take</code> parameter, or remove it from the list (<code>remove</code>, <code>pop</code>), which hands you the element and closes the gap.</p>
+<div class="try"><p>Change <code>consume(s)</code> in <code>peek</code> to <code>consume(s.copy())</code>. The first error goes; the second stays, because <code>names[0]</code> still has to be copied or removed.</p></div>
+<h2 id="one-mut-at-a-time">One <code>mut</code> at a time<a class="anchor" href="#one-mut-at-a-time" aria-label="Link to this section">#</a></h2>
+<p>While a variable is lent as <code>mut</code>, nothing else in the call may touch it. <code>swap(mut n, mut n)</code> would give the callee two names for one place, so it's an error (<a href="diagnostics.html#M0104">M0104</a>). The check works per field, so <code>swap(mut p.x, mut p.y)</code> is fine, as <code>own_params</code> showed.</p>
 <div class="sample" id="sample-own_err_overlap" data-sample="own_err_overlap" data-mode="check" data-file="own_err_overlap.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>own_err_overlap.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#M0104">M0104</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">fun</span> <span class="f">swap</span>(<span class="k">mut</span> a: i32, <span class="k">mut</span> b: i32) {
@@ -159,7 +283,11 @@
 
 <span class="err">error: own_err_overlap.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
-<p>A borrow lasts as long as the call that received it, so a function can't return one or store one. A local can hold a value that borrows another local (a slice of a list, a stream over one, a lambda), and it sees that local as it is now. When the local changes, a borrow made earlier can't be used:</p>
+<p>This is Rust's "one <code>&amp;mut</code> at a time" rule in a smaller form. It applies inside a single call, since a <code>mut</code> borrow can't outlive the call that received it.</p>
+<div class="try"><p>Change the second <code>mut n</code> to <code>mut m</code> and declare <code>var m = 2</code> above. Now there are two places, and the call compiles.</p></div>
+<h2 id="borrows-are-second-class">Borrows are second-class<a class="anchor" href="#borrows-are-second-class" aria-label="Link to this section">#</a></h2>
+<p>A borrow lasts as long as the call that received it. A function can't return one or store one. That is the whole reason Loom signatures never mention a lifetime.</p>
+<p>But a <em>local</em> can hold something that borrows another local: a slice of a list (<code>xs[1..]</code>), a stream over one, a lambda that uses variables around it. Such a value sees the local <strong>as it is now</strong>, so if the local changes, a borrow made earlier can't be used (<a href="diagnostics.html#M0105">M0105</a>):</p>
 <div class="sample" id="sample-own_err_borrow" data-sample="own_err_borrow" data-mode="check" data-file="own_err_borrow.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>own_err_borrow.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#M0105">M0105</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -183,7 +311,28 @@
 
 <span class="err">error: own_err_borrow.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
-<p>Nor can a borrow outlive what it borrows. A lambda that uses variables around it is passed as an argument or kept in a local, and that's all: returning it, storing it in a warp or a list, or passing it to a <code>take</code> parameter is an error, and so is keeping it in a variable declared outside the block of a variable it uses. The same goes for a slice of a local list, and a stream made from one or from such a lambda. (A lambda that uses nothing around it is a plain function value, and goes anywhere.)</p>
+<p>The same goes for a <code>for</code> loop. The loop reads the list as it goes, so its body can't change what it goes over:</p>
+<div class="sample" id="sample-own_err_loop" data-sample="own_err_loop" data-mode="check" data-file="own_err_loop.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>own_err_loop.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#M0105">M0105</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">var</span> xs: <span class="t">List</span>[i32] = [<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]
+    <span class="k">for</span> x <span class="k">in</span> xs {
+        <span class="k">if</span> x == <span class="n">2</span> { xs.<span class="f">push</span>(<span class="n">9</span>) }
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[M0105]: `xs` changes while a loop goes over it</span>
+<span class="loc">  --&gt; own_err_loop.loom:4:21</span>
+<span class="gut">  |</span>
+<span class="gut">3 |</span>     for x in xs {
+<span class="gut">  |</span><span class="caret">              -- the loop reads it as it goes</span>
+<span class="gut">4 |</span>         if x == 2 { xs.push(9) }
+<span class="gut">  |</span><span class="caret">                     ^^ changed here</span>
+<span class="gut">  |</span>
+<span class="loc">  = help: go over a copy (`xs.copy()`), or collect the changes and make them after the loop</span>
+
+<span class="err">error: own_err_loop.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<p>Nor can a borrow outlive what it borrows (<a href="diagnostics.html#M0106">M0106</a>). A lambda that uses variables around it is passed as an argument or kept in a local, and that's all. Returning it, storing it in a warp or a list, or passing it to a <code>take</code> parameter is an error, and so is keeping it in a variable declared outside the block of a variable it uses. The same goes for a slice of a local list, and for a stream made from one or from such a lambda. A lambda that uses nothing around it is a plain function value and goes anywhere.</p>
 <div class="sample" id="sample-own_err_escape" data-sample="own_err_escape" data-mode="check" data-file="own_err_escape.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>own_err_escape.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#M0106">M0106</a>, <a href="diagnostics.html#M0106">M0106</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">fun</span> <span class="f">adder</span>(k: i32) -&gt; i32 =&gt; i32 {
@@ -220,9 +369,35 @@
 
 <span class="err">error: own_err_escape.loom failed to type-check (2 errors)</span></code></pre></div>
 </div>
-<p>The codes are <a href="diagnostics.html#M0101">M0101</a> (use after move), <a href="diagnostics.html#M0102">M0102</a> (move out of a borrow), <a href="diagnostics.html#M0103">M0103</a> (move out of an element), <a href="diagnostics.html#M0104">M0104</a> (overlapping <code>mut</code>), <a href="diagnostics.html#M0105">M0105</a> (a stale borrow) and <a href="diagnostics.html#M0106">M0106</a> (a borrow that outlives what it borrows).</p>
+<p>The lambda <code>x =&gt; x + k</code> borrows <code>k</code>, which dies when <code>adder</code> returns; <code>x =&gt; x * i</code> borrows the loop variable. Both would dangle. The help text names the fix: take what you need as parameters, or keep the lambda local. (When you really need a value to outlive its scope, it goes on the heap or in a spool: see <a href="memory.html">Pointers, spools and <code>given</code></a>.)</p>
+<div class="try"><p>In <code>own_err_borrow</code>, move <code>xs.push(4)</code> above the <code>let tail</code> line. A slice made after the change is fine, and the error is gone.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust lets you name how long a borrow lives (<code>'a</code>) and returns references from functions; the borrow checker proves they don't dangle. Loom trades that power for simplicity: borrows are not values, so they can't be returned or stored, and there's nothing to annotate.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">fn</span> longest&lt;'a&gt;(a: &amp;'a str, b: &amp;'a str) -&gt; &amp;'a str {
+    <span class="k">if</span> a.<span class="f">len</span>() &gt; b.<span class="f">len</span>() { a } <span class="k">else</span> { b }
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="swift" data-label="Swift">
+<h4>Swift</h4>
+<p>Swift's mutable value semantics are the nearest relative: <code>inout</code> access is exclusive and lasts a call. Swift has no equivalent of M0105, since its collections are copied before they're changed.</p>
+<pre class="foreign" data-lang="swift"><code><span class="k">var</span> xs = [<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]
+<span class="k">let</span> tail = xs[<span class="n">1</span>...]
+xs.<span class="f">append</span>(<span class="n">4</span>)      <span class="c">// `tail` still sees the old array</span></code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Go has no borrow rules at all. A slice shares its backing array, so appending to the original may or may not be visible through the slice. Loom's M0105 stops the question from arising.</p>
+<pre class="foreign" data-lang="go"><code>xs := []int{<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>}
+tail := xs[<span class="n">1</span>:]
+xs = <span class="f">append</span>(xs, <span class="n">4</span>)   <span class="c">// does `tail` see the change? it depends on capacity</span></code></pre>
+</div>
+</div>
 <h2 id="once-warps"><code>once</code> warps<a class="anchor" href="#once-warps" aria-label="Link to this section">#</a></h2>
-<p>A <code>once warp</code> describes values that must be used up exactly once. They can't be copied, and they can't just go out of scope. The ways to use one up are to destructure it (<code>let Tx(moves) = self</code>, which only code that can see its fields may do) or to pass it to a <code>take</code> parameter that does. A warp that holds a <code>once</code> value is <code>once</code> itself, and so is <code>List[Tx]</code>.</p>
+<p>Memory isn't the only thing that needs care. A transaction that was begun should be committed or rolled back; a file handle should be closed; a builder should be finished. Forgetting any of these is a bug the compiler can find.</p>
+<p>A <code>once warp</code> describes values that must be <strong>used up exactly once</strong>. They can't be copied, and they can't just go out of scope. The ways to use one up are to <em>destructure</em> it (<code>let Tx(moves) = self</code>, which only code that can see its fields may do, normally its own module) or to pass it to a <code>take</code> parameter that does. So the module that defines a <code>once</code> type decides which functions can tie it off.</p>
 <div class="sample" id="sample-own_once" data-sample="own_once" data-mode="run" data-file="own_once.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>own_once.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -244,22 +419,22 @@
     }
 }
 
-<span class="k">fun</span> <span class="f">transfer</span>(good: bool) {
-    <span class="k">var</span> tx = <span class="t">Tx</span>.<span class="f">begin</span>()
-    <span class="k">defer</span> tx =&gt; tx.<span class="f">rollback</span>()                <span class="c">// runs only if `tx` is still loose</span>
-    tx.<span class="f">credit</span>(<span class="n">5</span>)
-    <span class="k">if</span> <span class="k">not</span> good { <span class="k">return</span> }                   <span class="c">// leaving early rolls back</span>
-    tx.<span class="f">commit</span>()                              <span class="c">// used up: the defer does nothing</span>
-}
-
 <span class="k">fun</span> <span class="f">main</span>() {
-    <span class="f">transfer</span>(<span class="k">true</span>)
-    <span class="f">transfer</span>(<span class="k">false</span>)
+    <span class="k">var</span> a = <span class="t">Tx</span>.<span class="f">begin</span>()
+    a.<span class="f">credit</span>(<span class="n">5</span>)
+    a.<span class="f">credit</span>(<span class="n">7</span>)
+    a.<span class="f">commit</span>()
+
+    <span class="k">var</span> b = <span class="t">Tx</span>.<span class="f">begin</span>()
+    b.<span class="f">credit</span>(<span class="n">1</span>)
+    b.<span class="f">rollback</span>()
 }</code></pre>
-<div class="sample-out"><div class="out-head">Output</div><pre><code>committed [5]
+<div class="sample-out"><div class="out-head">Output</div><pre><code>committed [5, 7]
 rolled back</code></pre></div>
 </div>
-<p>The compiler tracks each path. A <code>once</code> value that might still be loose when its scope ends, or when a <code>return</code>, <code>fail</code>, <code>?</code> or <code>break</code> leaves, is a <strong>loose end</strong>:</p>
+<p><code>commit</code> and <code>rollback</code> are the two ways out. Each takes <code>self</code> and unpacks it, which ties the value off.</p>
+<ul><li>A warp that holds a <code>once</code> value is <code>once</code> itself, and so is a list of them.</li><li>A <code>once</code> warp is never <code>Copy</code>, whatever its fields are.</li><li>Nothing about <code>once</code> exists at run time. It is checked entirely at compile time.</li></ul>
+<p>A <code>once</code> value that might still be loose when its scope ends, or when a <code>return</code>, <code>fail</code>, <code>?</code> or <code>break</code> leaves, is a <strong>loose end</strong> (<a href="diagnostics.html#L0301">L0301</a>). The error says where it was made and where it is still loose, and suggests the ways to tie it off:</p>
 <div class="sample" id="sample-own_err_loose" data-sample="own_err_loose" data-mode="check" data-file="own_err_loose.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>own_err_loose.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#L0301">L0301</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">pub</span> <span class="k">once</span> <span class="k">warp</span> <span class="t">Tx</span> {
@@ -294,9 +469,30 @@ rolled back</code></pre></div>
 
 <span class="err">error: own_err_loose.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
-<p>Nothing of this exists at run time: <code>once</code> is checked entirely at compile time.</p>
+<div class="try"><p>In <code>own_once</code>, delete the <code>a.commit()</code> line. Variable <code>a</code> is now loose when <code>main</code> ends, and the compiler says so.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust values can always be dropped, so the nearest tool is <code>#[must_use]</code>, which only warns when a <em>returned</em> value is ignored. The usual workaround is a <code>Drop</code> that cleans up (rolling back, say) whether or not you meant to. A <code>once</code> warp makes forgetting an error, and lets you pick between <code>commit</code> and <code>rollback</code> by name.</p>
+<pre class="foreign" data-lang="rust"><code>#[must_use = <span class="s">"commit or roll back"</span>]
+<span class="k">struct</span> <span class="t">Tx</span> { moves: <span class="t">Vec</span>&lt;i32&gt; }</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="swift" data-label="Swift">
+<h4>Swift</h4>
+<p>Swift's noncopyable types (<code>~Copyable</code>) have <code>consuming</code> methods that end a value's life, which is the same idea. Dropping one just runs <code>deinit</code>, though, so forgetting <code>commit</code> still compiles.</p>
+<pre class="foreign" data-lang="swift"><code><span class="k">struct</span> <span class="t">Tx</span>: ~<span class="t">Copyable</span> {
+    consuming <span class="k">func</span> <span class="f">commit</span>() { /* ... */ }
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="c" data-label="C++">
+<h4>C++</h4>
+<p>C++ ties cleanup to a destructor, so a forgotten transaction rolls back by itself. That is safe, but it can't <em>force</em> you to make a choice, and exceptions from destructors are a minefield.</p>
+<pre class="foreign" data-lang="cpp"><code><span class="k">struct</span> <span class="t">Tx</span> { ~<span class="t">Tx</span>() { <span class="k">if</span> (!done) <span class="f">rollback</span>(); } };</code></pre>
+</div>
+</div>
 <h2 id="defer"><code>defer</code><a class="anchor" href="#defer" aria-label="Link to this section">#</a></h2>
-<p><code>defer</code> runs code when its scope ends, however it ends: normally, or through <code>return</code>, <code>fail</code>, <code>?</code>, <code>break</code>, <code>continue</code> or an unravel. Defers run in reverse order of declaration. A <code>return</code> value is worked out before the defers run. A defer can't change control flow: <code>return</code>, <code>fail</code>, <code>?</code>, <code>break</code> and <code>continue</code> in one are <a href="diagnostics.html#T0118">T0118</a>.</p>
+<p><code>defer</code> runs code when its scope ends, <strong>however it ends</strong>: normally, or through <code>return</code>, <code>fail</code>, <code>?</code>, <code>break</code>, <code>continue</code> or an unravel. Defers run in reverse order of declaration. A <code>return</code> value is worked out before the defers run, and a defer sees variables as they are when it runs, not as they were when it was written.</p>
 <div class="sample" id="sample-own_defer" data-sample="own_defer" data-mode="run" data-file="own_defer.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>own_defer.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -358,9 +554,131 @@ end of iteration 0
 end of iteration 1
 end of iteration 2</code></pre></div>
 </div>
-<p>A <strong>fallback defer</strong>, <code>defer tx =&gt; tx.rollback()</code>, names a <code>once</code> value and runs only on exits where that value is still live. It's how the <code>transfer</code> function above rolls back on an early exit without doing it after a commit. Giving <code>tx</code> a new value re-arms it.</p>
+<p><code>defer</code> is how you keep cleanup next to the thing it cleans: open something, defer its closing, and no exit path can skip it.</p>
+<ul><li>A scope is a block: a loop body, an <code>if</code> branch and a function body all have their own defers.</li><li>A defer can't change control flow. <code>return</code>, <code>fail</code>, <code>?</code>, <code>break</code> and <code>continue</code> inside one are <a href="diagnostics.html#T0118">T0118</a>. It may <code>unravel</code>.</li></ul>
+<div class="sample" id="sample-own_err_defer" data-sample="own_err_defer" data-mode="check" data-file="own_err_defer.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>own_err_defer.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#T0118">T0118</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fun</span> <span class="f">f</span>() -&gt; i32 {
+    <span class="k">defer</span> <span class="k">return</span> <span class="n">3</span>
+    <span class="n">1</span>
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">print</span>(<span class="f">f</span>())
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[T0118]: `return` can't leave a `defer`</span>
+<span class="loc">  --&gt; own_err_defer.loom:4:11</span>
+<span class="gut">  |</span>
+<span class="gut">4 |</span>     defer return 3
+<span class="gut">  |</span><span class="caret">           ^^^^^^^^</span>
+<span class="gut">  |</span>           |
+<span class="gut">  |</span>           this would leave the deferred code
+<span class="gut">  |</span>           it runs when the scope ends, from here
+<span class="gut">  |</span>
+<span class="loc">  = note: a `defer` runs while its scope is already ending, so it can't change where that goes</span>
+<span class="loc">  = help: handle it inside: `mend`, or an `if`</span>
+
+<span class="err">error: own_err_defer.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<div class="try"><p>In <code>own_defer</code>'s <code>main</code>, move <code>continue</code> above the <code>defer</code> line in the loop. The defer is only registered once the scope reaches it, so iteration 1 no longer prints an "end of iteration" line.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Go's <code>defer</code> is about the whole <em>function</em>: deferred calls run when the function returns, even if the <code>defer</code> was in a loop (so they pile up). Loom's <code>defer</code> belongs to its block, so the loop body above cleans up on every iteration.</p>
+<pre class="foreign" data-lang="go"><code><span class="k">func</span> <span class="f">f</span>() {
+    <span class="k">defer</span> fmt.<span class="t">Println</span>(<span class="s">"declared first, runs last"</span>)
+    <span class="k">defer</span> fmt.<span class="t">Println</span>(<span class="s">"declared second, runs first"</span>)
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="swift" data-label="Swift">
+<h4>Swift</h4>
+<p>Swift's <code>defer</code> is block-scoped like Loom's, and runs in reverse order too. Neither can <code>return</code> from inside one.</p>
+<pre class="foreign" data-lang="swift"><code><span class="k">func</span> <span class="f">plain</span>() {
+    <span class="k">defer</span> { <span class="f">print</span>(<span class="s">"declared first, runs last"</span>) }
+    <span class="k">defer</span> { <span class="f">print</span>(<span class="s">"declared second, runs first"</span>) }
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="zig" data-label="Zig">
+<h4>Zig</h4>
+<p>Zig has <code>defer</code> with the same block scope. For the error-only variant, Zig has <code>errdefer</code>; Loom's answer is the fallback defer below.</p>
+<pre class="foreign" data-lang="zig"><code><span class="k">fn</span> <span class="f">plain</span>() void {
+    <span class="k">defer</span> std.debug.<span class="f">print</span>(<span class="s">"declared first, runs last\n"</span>, .{});
+    <span class="k">defer</span> std.debug.<span class="f">print</span>(<span class="s">"declared second, runs first\n"</span>, .{});
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust cleans up through <code>Drop</code>, which runs when an owner goes out of scope. That is the same guarantee for a single value; <code>defer</code> is for ad-hoc cleanup that doesn't belong to a type.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">struct</span> <span class="t">Guard</span>;
+<span class="k">impl</span> <span class="t">Drop</span> <span class="k">for</span> <span class="t">Guard</span> {
+    <span class="k">fn</span> <span class="f">drop</span>(&amp;<span class="k">mut</span> <span class="k">self</span>) { <span class="f">println!</span>(<span class="s">"cleanup"</span>); }
+}</code></pre>
+</div>
+</div>
+<h2 id="fallback-defers">Fallback defers<a class="anchor" href="#fallback-defers" aria-label="Link to this section">#</a></h2>
+<p>A <strong>fallback defer</strong>, <code>defer tx =&gt; tx.rollback()</code>, names a <code>once</code> value and runs only on the exits where that value is <em>still loose</em>. It is how <code>transfer</code> rolls back on an early exit without also rolling back after a commit:</p>
+<div class="sample" id="sample-own_fallback" data-sample="own_fallback" data-mode="run" data-file="own_fallback.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>own_fallback.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">pub</span> <span class="k">once</span> <span class="k">warp</span> <span class="t">Tx</span> {
+    moves: <span class="t">List</span>[i32] = <span class="t">List</span>()
+
+    <span class="k">pub</span> <span class="k">fun</span> <span class="f">begin</span>() -&gt; <span class="t">Tx</span> = <span class="t">Tx</span>()
+    <span class="k">pub</span> <span class="k">fun</span> <span class="f">credit</span>(<span class="k">mut</span> <span class="k">self</span>, amount: i32) { .moves.<span class="f">push</span>(amount) }
+    <span class="k">pub</span> <span class="k">fun</span> <span class="f">commit</span>(<span class="k">take</span> <span class="k">self</span>) {
+        <span class="k">let</span> <span class="t">Tx</span>(moves) = <span class="k">self</span>
+        <span class="f">print</span>(<span class="s">"committed </span><span class="h">{</span>moves<span class="h">}</span><span class="s">"</span>)
+    }
+    <span class="k">pub</span> <span class="k">fun</span> <span class="f">rollback</span>(<span class="k">take</span> <span class="k">self</span>) {
+        <span class="k">let</span> <span class="t">Tx</span>(_) = <span class="k">self</span>
+        <span class="f">print</span>(<span class="s">"rolled back"</span>)
+    }
+}
+
+<span class="k">fun</span> <span class="f">transfer</span>(good: bool) {
+    <span class="k">var</span> tx = <span class="t">Tx</span>.<span class="f">begin</span>()
+    <span class="k">defer</span> tx =&gt; tx.<span class="f">rollback</span>()                <span class="c">// runs only if `tx` is still loose</span>
+    tx.<span class="f">credit</span>(<span class="n">5</span>)
+    <span class="k">if</span> <span class="k">not</span> good { <span class="k">return</span> }                   <span class="c">// leaving early rolls back</span>
+    tx.<span class="f">commit</span>()                              <span class="c">// used up: the defer does nothing</span>
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">transfer</span>(<span class="k">true</span>)
+    <span class="f">transfer</span>(<span class="k">false</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>committed [5]
+rolled back</code></pre></div>
+</div>
+<p>At every exit the compiler already knows whether <code>tx</code> was used up on that path, since it has to know that to check <code>once</code> at all. So a fallback defer costs nothing on the paths that don't need it. Giving <code>tx</code> a new value (<code>tx = Tx.begin()</code>) re-arms it.</p>
+<p>In <code>transfer(false)</code> the early <code>return</code> leaves with <code>tx</code> still loose, so the defer fires and "rolled back" is printed. In <code>transfer(true)</code> the <code>commit</code> has already used <code>tx</code> up, so the defer stays quiet.</p>
+<div class="try"><p>Delete the <code>defer tx =&gt; tx.rollback()</code> line. The <code>return</code> inside <code>if not good</code> is now a loose end (<a href="diagnostics.html#L0301">L0301</a>), and the compiler even suggests the defer.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="zig" data-label="Zig">
+<h4>Zig</h4>
+<p><code>errdefer</code> is the ancestor: it runs only when the function returns an error. A Loom fallback defer is keyed on the <em>resource</em> instead of on "an error happened", so it also covers an early <code>return</code> that isn't an error, and stays silent after a commit.</p>
+<pre class="foreign" data-lang="zig"><code><span class="k">var</span> tx = <span class="k">try</span> <span class="t">Tx</span>.<span class="f">begin</span>();
+<span class="k">errdefer</span> tx.<span class="f">rollback</span>();
+<span class="k">try</span> tx.<span class="f">credit</span>(<span class="n">5</span>);
+tx.<span class="f">commit</span>();</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>In Rust the same pattern is a <code>Drop</code> guard with a flag the commit sets. Loom's compiler knows the flag's value on every path, so the flag isn't stored.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">impl</span> <span class="t">Drop</span> <span class="k">for</span> <span class="t">Tx</span> {
+    <span class="k">fn</span> <span class="f">drop</span>(&amp;<span class="k">mut</span> <span class="k">self</span>) {
+        <span class="k">if</span> !<span class="k">self</span>.done { <span class="k">self</span>.<span class="f">rollback</span>(); }
+    }
+}</code></pre>
+</div>
+</div>
 <h2 id="where-next">Where next<a class="anchor" href="#where-next" aria-label="Link to this section">#</a></h2>
-<p><a href="memory.html">Pointers, spools and <code>given</code></a> puts values on the heap and in arenas.</p>
+<p><a href="memory.html">Pointers, spools and <code>given</code></a> puts values on the heap and in arenas: the next step when a value has to outlive its scope.</p>
 <nav class="pager" aria-label="Chapters">
 <a class="prev" href="errors.html"><span class="dir">&larr; Chapter 6</span>Optionals and errors</a>
 <a class="next" href="memory.html"><span class="dir">Chapter 8 &rarr;</span>Pointers, spools and <code>given</code></a>

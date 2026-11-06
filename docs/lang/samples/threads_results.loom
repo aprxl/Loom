@@ -1,0 +1,26 @@
+use std.io.print
+
+warp Odd: Error {
+    case Number(n: i32)
+}
+
+fun half(n: i32) -> i32 ! Odd {
+    if n % 2 != 0 { fail .Number(n) }
+    n / 2
+}
+
+fun main() {
+    loom {
+        let a = thread half(8)
+        let b = thread half(7)
+        // `join` hands back the thread's own result, here an `i32 ! Odd`.
+        // An error is a value, so it doesn't stop the other thread.
+        for r in [a.join(), b.join()] {
+            match r {
+                ok(v) => print("half is {v}"),
+                err(e) => print("failed: {e}"),
+            }
+        }
+    }
+}
+//@ run

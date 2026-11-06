@@ -1,0 +1,12 @@
+error[R0103]: `p` reaches the spool `a` from another thread
+   --> docs/lang/samples/mem_err_thread.loom:11:24
+   |
+ 8 |     spool a = Arena(1.kib())
+   |           - spool declared here
+   .
+11 |         let t = thread p.n + 1
+   |                        ^ used by a thread here
+   |
+   = help: allocate in a `SharedArena`, which threads may use
+
+error: docs/lang/samples/mem_err_thread.loom failed to type-check (1 error)

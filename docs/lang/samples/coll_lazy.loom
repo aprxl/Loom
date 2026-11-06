@@ -1,0 +1,25 @@
+use std.io.print
+
+fun main() {
+    // `inspect` runs a function on each item as it goes by.
+    // Building the pipeline runs nothing...
+    let pipeline = (1..).inspect(n => print("  making {n}"))
+        .filter(_ % 2 == 0)
+        .map(n => n * 10)
+    print("pipeline built")
+
+    // ...and the pull from `take` and `collect` sets it going.
+    // `1..` never ends, but only as many numbers are made as are needed.
+    print(pipeline.take(2).collect())
+
+    // On a list, `map` and `filter` are eager: they run at once and make a list.
+    let xs = [1, 2, 3]
+    let eager = xs.map(n => { print("  mapping {n}"); n * 2 })
+    print("after the eager map")
+    print(eager)
+
+    // `chars`, `lines`, `words`, `indexed` and `windows` are streams too.
+    let longest = "a bb cccc ddd".words().max_by_key(w => w.len())
+    print(longest)
+}
+//@ run

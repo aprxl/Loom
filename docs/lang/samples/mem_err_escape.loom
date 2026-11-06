@@ -1,0 +1,17 @@
+use std.mem.{Arena, Spool, kib}
+
+warp Expr {
+    case Num(f64)
+    case Neg(^Expr)
+}
+
+fun parse(n: f64) -> ^Expr@sp given sp: Spool = ^Expr.Neg(^Expr.Num(n))
+
+// `tmp` ends with this function, and the tree it holds would end with it.
+fun dangling() -> ^Expr {
+    spool tmp = Arena(1.kib())
+    parse(1.0, given: tmp)
+}
+
+fun main() {}
+//@ check-fail R0101

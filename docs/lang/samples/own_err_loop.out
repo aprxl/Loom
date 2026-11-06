@@ -1,0 +1,11 @@
+error[M0105]: `xs` changes while a loop goes over it
+  --> docs/lang/samples/own_err_loop.loom:4:21
+  |
+3 |     for x in xs {
+  |              -- the loop reads it as it goes
+4 |         if x == 2 { xs.push(9) }
+  |                     ^^ changed here
+  |
+  = help: go over a copy (`xs.copy()`), or collect the changes and make them after the loop
+
+error: docs/lang/samples/own_err_loop.loom failed to type-check (1 error)

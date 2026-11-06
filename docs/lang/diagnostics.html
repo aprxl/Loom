@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>Diagnostic codes · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -110,14 +111,14 @@
 </tbody></table>
 <h2 id="group-T01xx">T01xx: types</h2>
 <table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
-<tr id="T0101"><td><code>T0101</code></td><td>mismatched types</td><td></td></tr>
+<tr id="T0101"><td><code>T0101</code></td><td>mismatched types</td><td><a href="const-params.html#sample-cp_err_type">Const parameters and control flow</a>, <a href="errors.html#sample-errors_err_question">Optionals and errors</a>, <a href="gauges.html#sample-gauges_err_arith">Gauges</a></td></tr>
 <tr id="T0102"><td><code>T0102</code></td><td>literal out of range</td><td><a href="const-params.html#sample-cp_err_range">Const parameters and control flow</a></td></tr>
-<tr id="T0103"><td><code>T0103</code></td><td>operator doesn't apply to this type</td><td></td></tr>
-<tr id="T0104"><td><code>T0104</code></td><td>wrong number of arguments</td><td></td></tr>
+<tr id="T0103"><td><code>T0103</code></td><td>operator doesn't apply to this type</td><td><a href="gauges.html#sample-gauges_err_bounds">Gauges</a>, <a href="generics.html#sample-generics_err">Generics and any</a></td></tr>
+<tr id="T0104"><td><code>T0104</code></td><td>wrong number of arguments</td><td><a href="memory.html#sample-mem_err_given">Pointers, spools and given</a></td></tr>
 <tr id="T0105"><td><code>T0105</code></td><td>bad named argument</td><td></td></tr>
 <tr id="T0106"><td><code>T0106</code></td><td>not callable</td><td></td></tr>
-<tr id="T0107"><td><code>T0107</code></td><td>can't assign here</td><td></td></tr>
-<tr id="T0108"><td><code>T0108</code></td><td>type doesn't weave a required weft</td><td></td></tr>
+<tr id="T0107"><td><code>T0107</code></td><td>can't assign here</td><td><a href="memory.html#sample-mem_err_write">Pointers, spools and given</a></td></tr>
+<tr id="T0108"><td><code>T0108</code></td><td>type doesn't weave a required weft</td><td><a href="generics.html#sample-generics_err">Generics and any</a></td></tr>
 <tr id="T0109"><td><code>T0109</code></td><td>cast not allowed</td><td></td></tr>
 <tr id="T0110"><td><code>T0110</code></td><td>can't infer a type</td><td></td></tr>
 <tr id="T0111"><td><code>T0111</code></td><td>not a value of this kind</td><td></td></tr>
@@ -125,12 +126,12 @@
 <tr id="T0113"><td><code>T0113</code></td><td>weave is missing a method</td><td></td></tr>
 <tr id="T0114"><td><code>T0114</code></td><td>method doesn't match its weft</td><td></td></tr>
 <tr id="T0115"><td><code>T0115</code></td><td>weave not allowed</td><td></td></tr>
-<tr id="T0116"><td><code>T0116</code></td><td>ambiguous method</td><td></td></tr>
+<tr id="T0116"><td><code>T0116</code></td><td>ambiguous method</td><td><a href="types.html#sample-types_err_ambiguous">Warps, wefts and weaves</a></td></tr>
 <tr id="T0117"><td><code>T0117</code></td><td>not a format spec</td><td></td></tr>
-<tr id="T0118"><td><code>T0118</code></td><td>control flow can't leave a <code>defer</code></td><td></td></tr>
-<tr id="T0119"><td><code>T0119</code></td><td>a test's signature isn't <code>test name()</code> or <code>test name() ! E</code></td><td></td></tr>
-<tr id="T0120"><td><code>T0120</code></td><td><code>yield</code> or <code>pull</code> doesn't fit the shuttle</td><td></td></tr>
-<tr id="T0121"><td><code>T0121</code></td><td>shuttle calls itself</td><td></td></tr>
+<tr id="T0118"><td><code>T0118</code></td><td>control flow can't leave a <code>defer</code></td><td><a href="ownership.html#sample-own_err_defer">Moves, once and defer</a></td></tr>
+<tr id="T0119"><td><code>T0119</code></td><td>a test's signature isn't <code>test name()</code> or <code>test name() ! E</code></td><td><a href="tests.html#sample-tests_err_sig">Tests</a></td></tr>
+<tr id="T0120"><td><code>T0120</code></td><td><code>yield</code> or <code>pull</code> doesn't fit the shuttle</td><td><a href="shuttles.html#sample-shuttles_err_kind">Shuttles</a></td></tr>
+<tr id="T0121"><td><code>T0121</code></td><td>shuttle calls itself</td><td><a href="shuttles.html#sample-shuttles_err_recurse">Shuttles</a></td></tr>
 <tr id="T0122"><td><code>T0122</code></td><td>instances nest without end</td><td></td></tr>
 </tbody></table>
 <h2 id="group-G02xx">G02xx: gauges</h2>
@@ -140,8 +141,8 @@
 <h2 id="group-K01xx">K01xx: compile-time code</h2>
 <table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
 <tr id="K0101"><td><code>K0101</code></td><td>a <code>const assert</code> failed</td><td><a href="const-params.html#sample-cp_err_assert">Const parameters and control flow</a>, <a href="compile-time.html#sample-ct_err_assert">Compile-time code</a></td></tr>
-<tr id="K0102"><td><code>K0102</code></td><td>compile-time code ran out of its budget</td><td><a href="compile-time.html#sample-ct_err_budget">Compile-time code</a></td></tr>
-<tr id="K0103"><td><code>K0103</code></td><td>compile-time code unravelled</td><td><a href="compile-time.html#sample-ct_err_unravel">Compile-time code</a></td></tr>
+<tr id="K0102"><td><code>K0102</code></td><td>compile-time code ran out of its budget</td><td><a href="const-params.html#sample-ci_err_limit">Const parameters and control flow</a>, <a href="compile-time.html#sample-ct_err_budget">Compile-time code</a></td></tr>
+<tr id="K0103"><td><code>K0103</code></td><td>compile-time code unravelled</td><td><a href="const-params.html#sample-ci_unravel">Const parameters and control flow</a>, <a href="compile-time.html#sample-ct_err_unravel">Compile-time code</a>, <a href="reflection.html#sample-refl_err_kind">Reflection</a></td></tr>
 <tr id="K0104"><td><code>K0104</code></td><td>compile-time code can't do I/O</td><td><a href="compile-time.html#sample-ct_err_io">Compile-time code</a></td></tr>
 <tr id="K0105"><td><code>K0105</code></td><td>a runtime value in compile-time code</td><td><a href="const-params.html#sample-ci_err_known">Const parameters and control flow</a>, <a href="compile-time.html#sample-ct_err_local">Compile-time code</a></td></tr>
 <tr id="K0106"><td><code>K0106</code></td><td>control flow can't leave compile-time code</td><td><a href="compile-time.html#sample-ct_err_flow">Compile-time code</a></td></tr>
@@ -157,29 +158,29 @@
 </tbody></table>
 <h2 id="group-M01xx">M01xx: moves and borrows</h2>
 <table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
-<tr id="M0101"><td><code>M0101</code></td><td>use of a moved value</td><td><a href="ownership.html#sample-own_err_moved">Moves, once and defer</a></td></tr>
-<tr id="M0102"><td><code>M0102</code></td><td>move out of a borrow</td><td></td></tr>
-<tr id="M0103"><td><code>M0103</code></td><td>move out of an element</td><td></td></tr>
+<tr id="M0101"><td><code>M0101</code></td><td>use of a moved value</td><td><a href="collections.html#sample-coll_err_once">Collections and streams</a>, <a href="ownership.html#sample-own_err_moved">Moves, once and defer</a></td></tr>
+<tr id="M0102"><td><code>M0102</code></td><td>move out of a borrow</td><td><a href="ownership.html#sample-own_err_borrowed">Moves, once and defer</a></td></tr>
+<tr id="M0103"><td><code>M0103</code></td><td>move out of an element</td><td><a href="ownership.html#sample-own_err_borrowed">Moves, once and defer</a></td></tr>
 <tr id="M0104"><td><code>M0104</code></td><td><code>mut</code> access overlaps another use</td><td><a href="ownership.html#sample-own_err_overlap">Moves, once and defer</a></td></tr>
 <tr id="M0105"><td><code>M0105</code></td><td>a borrow is used after what it borrows changed</td><td><a href="ownership.html#sample-own_err_borrow">Moves, once and defer</a></td></tr>
 <tr id="M0106"><td><code>M0106</code></td><td>a borrow outlives what it borrows</td><td><a href="ownership.html#sample-own_err_escape">Moves, once and defer</a></td></tr>
-<tr id="M0107"><td><code>M0107</code></td><td>a spool can't be moved</td><td></td></tr>
+<tr id="M0107"><td><code>M0107</code></td><td>a spool can't be moved</td><td><a href="memory.html#sample-mem_err_move">Pointers, spools and given</a></td></tr>
 </tbody></table>
 <h2 id="group-R01xx">R01xx: regions (design/v6-spools.md)</h2>
 <table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
-<tr id="R0101"><td><code>R0101</code></td><td>a value outlives the spool it points into</td><td></td></tr>
-<tr id="R0102"><td><code>R0102</code></td><td>a value is used after its spool was reset</td><td><a href="memory.html#sample-own_err_region">Pointers, spools and given</a></td></tr>
-<tr id="R0103"><td><code>R0103</code></td><td>a pointer into a spool crosses threads</td><td></td></tr>
-<tr id="R0104"><td><code>R0104</code></td><td>a value is in another spool than its parameter says</td><td></td></tr>
+<tr id="R0101"><td><code>R0101</code></td><td>a value outlives the spool it points into</td><td><a href="memory.html#sample-mem_err_escape">Pointers, spools and given</a></td></tr>
+<tr id="R0102"><td><code>R0102</code></td><td>a value is used after its spool was reset</td><td><a href="memory.html#sample-mem_err_reset">Pointers, spools and given</a></td></tr>
+<tr id="R0103"><td><code>R0103</code></td><td>a pointer into a spool crosses threads</td><td><a href="memory.html#sample-mem_err_thread">Pointers, spools and given</a></td></tr>
+<tr id="R0104"><td><code>R0104</code></td><td>a value is in another spool than its parameter says</td><td><a href="memory.html#sample-mem_err_mixed">Pointers, spools and given</a></td></tr>
 </tbody></table>
 <h2 id="group-C04xx">C04xx: threads (design/vm.md §11.3)</h2>
 <table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
 <tr id="C0401"><td><code>C0401</code></td><td>a variable is changed by more than one thread</td><td><a href="threads.html#sample-threads_err">Threads</a></td></tr>
-<tr id="C0402"><td><code>C0402</code></td><td>a variable is used while a thread has it</td><td></td></tr>
+<tr id="C0402"><td><code>C0402</code></td><td>a variable is used while a thread has it</td><td><a href="threads.html#sample-threads_err_join">Threads</a></td></tr>
 <tr id="C0403"><td><code>C0403</code></td><td><code>thread</code> outside a <code>loom</code> block</td><td></td></tr>
-<tr id="C0404"><td><code>C0404</code></td><td>a thread handle outlives its <code>loom</code> block</td><td></td></tr>
-<tr id="C0405"><td><code>C0405</code></td><td>a thread can't keep a variable that doesn't outlive its loom</td><td></td></tr>
-<tr id="C0406"><td><code>C0406</code></td><td>an iteration of a <code>loom for</code> can't leave itself</td><td></td></tr>
+<tr id="C0404"><td><code>C0404</code></td><td>a thread handle outlives its <code>loom</code> block</td><td><a href="threads.html#sample-threads_err_handle">Threads</a></td></tr>
+<tr id="C0405"><td><code>C0405</code></td><td>a thread can't keep a variable that doesn't outlive its loom</td><td><a href="threads.html#sample-threads_err_copy">Threads</a></td></tr>
+<tr id="C0406"><td><code>C0406</code></td><td>an iteration of a <code>loom for</code> can't leave itself</td><td><a href="threads.html#sample-threads_err_break">Threads</a></td></tr>
 </tbody></table>
 <h2 id="group-P01xx">P01xx: patterns</h2>
 <table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
@@ -189,7 +190,7 @@
 <h2 id="group-U01xx">U01xx: features the v1 compiler doesn't support (see design/lua-backend.md)</h2>
 <table class="plain codes"><thead><tr><th>Code</th><th>Meaning</th><th>Shown in</th></tr></thead><tbody>
 <tr id="U0101"><td><code>U0101</code></td><td>anonymous warp types aren't supported yet</td><td></td></tr>
-<tr id="U0102"><td><code>U0102</code></td><td>not implemented yet</td><td><a href="not-yet.html#sample-nyet_sys">Not supported yet</a></td></tr>
+<tr id="U0102"><td><code>U0102</code></td><td>not implemented yet</td><td><a href="generics.html#sample-generics_err_weft">Generics and any</a>, <a href="not-yet.html#sample-nyet_limits">Not supported yet</a></td></tr>
 <tr id="U0103"><td><code>U0103</code></td><td>over one of Treadle's limits</td><td></td></tr>
 </tbody></table>
 <p>The letters I (interop) are set aside for features that aren't built yet. No code uses them.</p>

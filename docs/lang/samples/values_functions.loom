@@ -1,0 +1,38 @@
+use std.io.print
+
+// A block body: the last expression is the result.
+fun area(w: f64, h: f64 = 1.0) -> f64 {
+    w * h
+}
+
+// An expression body.
+fun cube(n: i64) -> i64 = n * n * n
+
+// Several results travel as a tuple.
+fun divmod(a: i32, b: i32) -> (i32, i32) = (a / b, a % b)
+
+// `return` leaves early.
+fun fact(n: u64) -> u64 {
+    if n <= 1 { return 1 }
+    n * fact(n - 1)
+}
+
+// `mut` lets the function change the caller's variable.
+fun bump(mut n: i32) { n += 1 }
+
+fun main() {
+    print(area(2.0))                         // h takes its default
+    print(area(2.0, 3.0))
+    print(area(h: 3.0, w: 2.0))              // named arguments, in any order
+    print("{cube(-3)} {fact(20)}")
+
+    let (q, r) = divmod(17, 5)               // take the tuple apart
+    let pair = divmod(-17, 5)
+    print("{q} {r} {pair.0} {pair.1}")
+
+    var k = 1
+    bump(mut k)                              // the call says so, too
+    bump(mut k)
+    print(k)
+}
+//@ run

@@ -1,0 +1,8 @@
+fun main() {
+    loom {
+        var seen = 0                 // declared inside the loom
+        thread { seen += 1 }         // so the thread gets a copy
+        ()
+    }
+}
+//@ check-fail C0405

@@ -1,7 +1,4 @@
 label 'hi'
-  a label with 2 letters
 spacer
 label 'there'
-  a label with 5 letters
-8
-label 'x' = Label(text: "x")
+total width 8

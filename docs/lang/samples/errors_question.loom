@@ -1,0 +1,17 @@
+use std.io.print
+
+// Each lookup can come up empty. `?` ends the function at the first one that does.
+fun zip_of(pet: str, owners: Map[str, str], zips: Map[str, u32]) -> ?u32 {
+    let owner = owners.get(pet)?
+    let zip = zips.get(owner)?
+    zip
+}
+
+fun main() {
+    let owners: Map[str, str] = ["rex": "ann", "tom": "bo", "ivy": "cy"]
+    let zips: Map[str, u32] = ["ann": 1000, "bo": 2000]
+    for pet in ["rex", "ivy", "max"] {
+        print("{pet}: {zip_of(pet, owners, zips):?}")
+    }
+}
+//@ run

@@ -1,0 +1,15 @@
+use std.io.print
+use std.sync.{Atomic, Crew}
+
+fun main() {
+    let done = Atomic[u32](0)
+    // At most two of these eight threads run at the same moment.
+    loom(given: Crew(workers: 2)) {
+        for _ in 0..8 {
+            thread { done.add(1) }
+        }
+        ()
+    }
+    print("{done.load()} threads ran")
+}
+//@ run

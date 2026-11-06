@@ -1,0 +1,18 @@
+error[M0102]: can't move `s`: it's borrowed
+  --> docs/lang/samples/own_err_borrowed.loom:5:13
+  |
+5 |     consume(s)
+  |             ^ moved here
+  |
+  = note: `s` is a parameter the caller still owns
+  = help: copy it (`x.copy()`), or take ownership with a `take` parameter
+
+error[M0103]: can't move a value out of an element of `names`
+   --> docs/lang/samples/own_err_borrowed.loom:11:17
+   |
+11 |     let first = names[0]
+   |                 ^^^^^^^^ this would take it out of the list
+   |
+   = help: copy it (`x.copy()`), or take it out with `remove` or `pop`
+
+error: docs/lang/samples/own_err_borrowed.loom failed to type-check (2 errors)

@@ -1,0 +1,33 @@
+use std.io.print
+
+warp Point: Show {
+    x: i32
+    y: i32
+}
+
+fun main() {
+    let pi = 3.14159265
+    let n = 42
+    let name = "loom"
+
+    // Any expression goes between the braces.
+    print("n + 1 = {n + 1}, big? {n > 40}, upper: {name.to_upper()}")
+
+    // After a `:` comes the format spec: [fill][align][sign][0][width][.precision][type]
+    print("[{pi:.3}] [{pi:10.2}] [{n:6}] [{n:<6}] [{n:^6}] [{n:06}] [{n:+}]")
+    print("[{name:>8}] [{name:*^10}] [{name:-<7}]")
+
+    // Integer types: x X b o, and # adds the prefix.
+    print("{255:x} {255:X} {255:#x} {255:#b} {8:o} {255:08b}")
+
+    // `?` is the debug form: strings and chars come quoted.
+    print("{name} {name:?} {'x':?} {Point(1, 2)} {Point(1, 2):?}")
+
+    // Literal braces are doubled; a `:` of your own needs parentheses.
+    print("{{n}} is {n}; {(if n > 40 { "big" } else { "small" })}")
+
+    // A template is an ordinary string: it can be stored, or nested.
+    let line = "{name}:{n:>4}"
+    print("<{line}>")
+}
+//@ run

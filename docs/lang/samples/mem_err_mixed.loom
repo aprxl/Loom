@@ -1,0 +1,19 @@
+use std.mem.{Arena, Spool, kib}
+
+warp Expr {
+    case Num(f64)
+    case Neg(^Expr)
+}
+
+fun parse(n: f64) -> ^Expr@sp given sp: Spool = ^Expr.Neg(^Expr.Num(n))
+
+// Both the argument and the result live in `sp`.
+fun same(e: ^Expr@sp) -> ^Expr@sp given sp: Spool = e
+
+fun main() {
+    spool a = Arena(1.kib())
+    spool b = Arena(1.kib())
+    let x = parse(1.0, given: a)
+    let y = same(x, given: b)
+}
+//@ check-fail R0104

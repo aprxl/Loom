@@ -1,0 +1,30 @@
+use std.io.print
+use std.iter.{from_fn, successors}
+
+// Anything with a `next` that returns `?Item` is an `Iter`.
+// Give a type that, and it gets every stream method for free.
+warp Countdown: Iter {
+    n: u32
+    type Item = u32
+    fun next(mut self) -> ?u32 {
+        if .n == 0 { return none }
+        .n -= 1
+        .n + 1
+    }
+}
+
+fun main() {
+    print(Countdown(4).collect())
+    print(Countdown(5).sum())
+    print(Countdown(10).filter(_ % 3 == 0).map(n => n * n).collect())
+
+    // `for` loops over it, too.
+    for n in Countdown(3) { print("{n}...") }
+    print("liftoff")
+
+    // Without a new type: each step makes the next item from the last.
+    print(successors(some(1), n => if n < 100 { some(n * 3) } else { none }).collect())
+    let fib = from_fn((0, 1), p => some(((p.1, p.0 + p.1), p.0)))
+    print(fib.take(10).collect())
+}
+//@ run

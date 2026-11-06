@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>Threads · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -55,15 +56,106 @@
 <div class="chapter-head">
 <span class="chapter-no">Chapter 15</span>
 <h1>Threads</h1>
-<p class="summary">Loom blocks, threads that can't outlive them, and what they may share.</p>
+<p class="summary">Loom blocks, threads that can't outlive them, what they may share, and how the compiler keeps data races out.</p>
 </div>
-<p>A <strong>loom block</strong> is a scope where threads run, and every one of them is done before the block ends. <code>thread e</code> starts <code>e</code> as a thread of the innermost loom around it, and gives a <code>Spun[T]</code> for the <code>T</code> it computes. <code>h.join()</code> waits for it and gives the <code>T</code>.</p>
+<p>Using every core is easy to ask for and hard to do safely. Two threads write the same variable, a thread outlives the data it borrowed, one failure leaves the others running with nobody watching. Most languages leave you to avoid these by discipline, a race detector, or a lot of ceremony around ownership.</p>
+<p>Loom's answer is <strong>structured</strong>: threads live inside a <strong>loom block</strong>, and every one of them is done before the block ends. That single rule makes the rest simple. Because nothing outlives its loom, threads can borrow local variables directly, with no copies and no reference counting, and the type checker can see exactly which threads touch what. A data race is a type error, found before the program runs.</p>
+<p>Threads run on several cores by default. The samples in this book run on one worker, in a fixed order, so their output is the same on every run (see <a href="threads.html#when-threads-run">When threads run</a>).</p>
+<h2 id="loom-blocks-and-thread">Loom blocks and <code>thread</code><a class="anchor" href="#loom-blocks-and-thread" aria-label="Link to this section">#</a></h2>
+<p>A <strong>loom block</strong> is a scope where threads run. <code>thread e</code> starts <code>e</code> as a thread of the innermost loom around it, and gives a <code>Spun[T]</code> for the <code>T</code> it computes. <code>h.join()</code> waits for the thread and gives the <code>T</code>. The block itself is an expression: its value is its last expression's.</p>
 <div class="sample" id="sample-threads_basic" data-sample="threads_basic" data-mode="run" data-file="threads_basic.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>threads_basic.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
-<span class="k">use</span> std.sync.sched_yield
 
-<span class="k">fun</span> <span class="f">square</span>(n: i32) -&gt; i32 = n * n
+<span class="k">fun</span> <span class="f">sum</span>(xs: [i32]) -&gt; i32 {
+    <span class="k">var</span> total = <span class="n">0</span>
+    <span class="k">for</span> x <span class="k">in</span> xs {
+        total += x
+    }
+    total
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> data = [<span class="n">3</span>, <span class="n">1</span>, <span class="n">4</span>, <span class="n">1</span>, <span class="n">5</span>, <span class="n">9</span>, <span class="n">2</span>, <span class="n">6</span>]
+
+    <span class="c">// `thread` starts a thread; `join` waits for its result. Both threads</span>
+    <span class="c">// read `data` where it is: nothing is copied, and nothing is shared</span>
+    <span class="c">// by reference counting.</span>
+    <span class="k">let</span> total = <span class="k">loom</span> {
+        <span class="k">let</span> left = <span class="k">thread</span> <span class="f">sum</span>(data[..<span class="n">4</span>])
+        <span class="k">let</span> right = <span class="k">thread</span> <span class="f">sum</span>(data[<span class="n">4</span>..])
+        left.<span class="f">join</span>() + right.<span class="f">join</span>()
+    }
+    <span class="f">print</span>(<span class="s">"total </span><span class="h">{</span>total<span class="h">}</span><span class="s">"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>total 31</code></pre></div>
+</div>
+<p>Both threads read <code>data</code>, which is declared outside the loom, and neither copies it. <code>data[..4]</code> and <code>data[4..]</code> are views of the same array.</p>
+<ul><li>A thread nobody joined is joined where the block ends. The block's value is its last expression's: a <code>thread</code> there would be a handle, which can't leave the block (<a href="diagnostics.html#C0404">C0404</a>), so end the block with <code>()</code>, or join it.</li><li><code>thread</code> is only allowed inside a <code>loom</code> (<a href="diagnostics.html#C0403">C0403</a>), and the loom is the innermost one around it, also from inside a lambda or another thread.</li><li>A <code>Spun</code> is joined once; a second <code>join</code> unravels (a <code>once</code> result makes the handle <code>once</code>, so it's <a href="diagnostics.html#L0301">L0301</a> to lose it).</li></ul>
+<div class="sample" id="sample-threads_err_handle" data-sample="threads_err_handle" data-mode="check" data-file="threads_err_handle.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>threads_err_handle.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#C0404">C0404</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> handle = <span class="k">loom</span> {
+        <span class="k">thread</span> <span class="n">1</span> + <span class="n">1</span>                 <span class="c">// the block's value would be a handle</span>
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[C0404]: a thread's handle can't leave its `loom` block</span>
+<span class="loc">  --&gt; threads_err_handle.loom:3:9</span>
+<span class="gut">  |</span>
+<span class="gut">3 |</span>         thread 1 + 1                 // the block's value would be a handle
+<span class="gut">  |</span><span class="caret">         ^^^^^^^^^^^^ the threads are done when the block ends: `join` it, or end the block with `()`</span>
+
+<span class="err">error: threads_err_handle.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<div class="try"><p>In <code>threads_basic</code>, add a third thread over <code>data[2..6]</code> and add its result to the total. Then delete the <code>.join()</code> of one thread and run it again: the block waits for it anyway, but its result is dropped.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p><code>std::thread::scope</code> is the closest relative: threads started on a scope may borrow locals, and the scope joins them all at the end. The difference is how safety is checked. Rust relies on <code>Send</code>, <code>Sync</code> and borrow rules written into types and closures; Loom relies on the loom block alone.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> data = [<span class="n">3</span>, <span class="n">1</span>, <span class="n">4</span>, <span class="n">1</span>, <span class="n">5</span>, <span class="n">9</span>, <span class="n">2</span>, <span class="n">6</span>];
+<span class="k">let</span> total = std::thread::<span class="f">scope</span>(|s| {
+    <span class="k">let</span> left = s.<span class="f">spawn</span>(|| <span class="f">sum</span>(&amp;data[..<span class="n">4</span>]));
+    <span class="k">let</span> right = s.<span class="f">spawn</span>(|| <span class="f">sum</span>(&amp;data[<span class="n">4</span>..]));
+    left.<span class="f">join</span>().<span class="f">unwrap</span>() + right.<span class="f">join</span>().<span class="f">unwrap</span>()
+});</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Goroutines aren't scoped: <code>go f()</code> returns at once and nothing says when it ends, so you add a <code>WaitGroup</code> (or an <code>errgroup.Group</code>, which also collects the first error) to join them. Loom's join is the end of the block.</p>
+<pre class="foreign" data-lang="go"><code><span class="k">var</span> wg sync.<span class="t">WaitGroup</span>
+<span class="k">var</span> left, right int
+wg.<span class="t">Add</span>(<span class="n">2</span>)
+<span class="k">go</span> <span class="k">func</span>() { <span class="k">defer</span> wg.<span class="t">Done</span>(); left = <span class="f">sum</span>(data[:<span class="n">4</span>]) }()
+<span class="k">go</span> <span class="k">func</span>() { <span class="k">defer</span> wg.<span class="t">Done</span>(); right = <span class="f">sum</span>(data[<span class="n">4</span>:]) }()
+wg.<span class="t">Wait</span>()
+total := left + right</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="swift" data-label="Swift">
+<h4>Swift</h4>
+<p>Swift's structured concurrency has the same shape: a task group is a scope, child tasks can't outlive it, and the group is what you await. It's built on <code>async</code>/<code>await</code>, so functions that suspend are marked; Loom's threads run ordinary functions.</p>
+<pre class="foreign" data-lang="swift"><code><span class="k">let</span> total = await <span class="f">withTaskGroup</span>(of: <span class="t">Int</span>.<span class="k">self</span>) { group <span class="k">in</span>
+    group.addTask { <span class="f">sum</span>(data[..&lt;<span class="n">4</span>]) }
+    group.addTask { <span class="f">sum</span>(data[<span class="n">4</span>...]) }
+    <span class="k">return</span> await group.<span class="f">reduce</span>(<span class="n">0</span>, +)
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="java" data-label="Java">
+<h4>Java</h4>
+<p>Java's virtual threads are cheap enough to start one per task. An executor in a <code>try</code> block waits for its tasks when the block closes, which is the same structure, though nothing stops a task from escaping if it's started elsewhere. <code>StructuredTaskScope</code> (structured concurrency, introduced as a preview) makes the scope explicit.</p>
+<pre class="foreign" data-lang="java"><code><span class="k">try</span> (<span class="k">var</span> executor = <span class="t">Executors</span>.<span class="f">newVirtualThreadPerTaskExecutor</span>()) {
+    <span class="t">Future</span>&lt;<span class="t">Integer</span>&gt; left = executor.<span class="f">submit</span>(() -&gt; <span class="f">sum</span>(data, <span class="n">0</span>, <span class="n">4</span>));
+    <span class="t">Future</span>&lt;<span class="t">Integer</span>&gt; right = executor.<span class="f">submit</span>(() -&gt; <span class="f">sum</span>(data, <span class="n">4</span>, <span class="n">8</span>));
+    total = left.<span class="f">get</span>() + right.<span class="f">get</span>();
+}</code></pre>
+</div>
+</div>
+<h2 id="when-threads-run">When threads run<a class="anchor" href="#when-threads-run" aria-label="Link to this section">#</a></h2>
+<p>A thread runs as soon as it's started, until it finishes or <strong>parks</strong>: waits in a <code>join</code>, or calls <code>sched_yield()</code>, which sends it to the back of the queue. Then another one runs, and the one that started it goes on. This is called the <strong>reference schedule</strong>, and it is what you get with one worker (<code>LOOM_THREADS=1</code>), which is what the Lua backend always does, and what this book's samples use. Nothing is preempted, so a program's output is the same on every run and on both backends.</p>
+<div class="sample" id="sample-threads_order" data-sample="threads_order" data-mode="run" data-file="threads_order.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>threads_order.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.sync.sched_yield
 
 <span class="k">fun</span> <span class="f">worker</span>(name: str, steps: i32) {
     <span class="k">for</span> i <span class="k">in</span> <span class="n">0</span>..steps {
@@ -73,37 +165,28 @@
 }
 
 <span class="k">fun</span> <span class="f">main</span>() {
-    <span class="c">// `thread` starts a thread; `join` waits for its result. The block's</span>
-    <span class="c">// value is its last expression's.</span>
-    <span class="k">let</span> total = <span class="k">loom</span> {
-        <span class="k">let</span> a = <span class="k">thread</span> <span class="f">square</span>(<span class="n">3</span>)
-        <span class="k">let</span> b = <span class="k">thread</span> <span class="f">square</span>(<span class="n">4</span>)
-        a.<span class="f">join</span>() + b.<span class="f">join</span>()
-    }
-    <span class="f">print</span>(<span class="s">"total </span><span class="h">{</span>total<span class="h">}</span><span class="s">"</span>)
-
-    <span class="c">// A thread runs as soon as it's started, until it finishes or</span>
-    <span class="c">// yields. Nobody joined these: the block's end waits for them.</span>
     <span class="k">loom</span> {
         <span class="k">thread</span> <span class="f">worker</span>(<span class="s">"a"</span>, <span class="n">2</span>)
         <span class="k">thread</span> <span class="f">worker</span>(<span class="s">"b"</span>, <span class="n">2</span>)
         <span class="f">print</span>(<span class="s">"started"</span>)
         ()                               <span class="c">// not a handle: it can't leave the block</span>
     }
+    <span class="f">print</span>(<span class="s">"both done"</span>)
 }</code></pre>
-<div class="sample-out"><div class="out-head">Output</div><pre><code>total 25
-a 0
+<div class="sample-out"><div class="out-head">Output</div><pre><code>a 0
 b 0
 started
 a 1
-b 1</code></pre></div>
+b 1
+both done</code></pre></div>
 </div>
-<h2 id="what-a-thread-runs">What a thread runs<a class="anchor" href="#what-a-thread-runs" aria-label="Link to this section">#</a></h2>
-<p>A thread runs as soon as it's started, until it finishes or <strong>parks</strong>: waits in a <code>join</code>, or calls <code>sched_yield()</code>, which sends it to the back of the queue. Then another one runs, and the one that started it goes on. Nothing is preempted, so a program's output is the same on every run, and on both backends. (This is the schedule with one worker, which <code>LOOM_THREADS=1</code> asks Treadle for and the Lua backend always runs. With several workers, Treadle's default, threads run side by side: what a program prints from inside threads can come in any order, and the rules below are what make its results the same.)</p>
-<p>A thread nobody joined is joined where the block ends. The block's value is its last expression's: a <code>thread</code> there would be a handle, which can't leave the block (<a href="diagnostics.html#C0404">C0404</a>), so end the block with <code>()</code>, or join it.</p>
+<p><code>a</code> runs first, prints, and yields; <code>b</code> starts and does the same; then the parent, which started both, gets back control and prints <code>started</code>. The block's end waits for what's left.</p>
+<p>With several workers, Treadle's default (one worker per core), threads run side by side. What a program prints from inside threads can come in any order: eight runs of <code>threads_order</code> on eight workers gave three different orders. Everything after the loom is the same, because the block waits. The rules in the next sections are what make a program's <em>results</em> the same however the threads interleave.</p>
+<div class="callout"><p>Two things only matter with one worker, and the samples show them. A thread that spins on <code>load()</code> waiting for another one never lets it run, so put a <code>sched_yield()</code> in the loop. And <code>sched_yield()</code> is how you ask for the interleaving in <code>threads_order</code>; with many workers it means little.</p></div>
+<div class="try"><p>Change <code>steps</code> from <code>2</code> to <code>3</code> in one of the two <code>thread worker(...)</code> calls, and read the interleaving. Then run it again with <code>LOOM_THREADS=8</code> on your machine (<code>loom run</code>) and see the order change.</p></div>
 <h2 id="what-a-thread-may-share">What a thread may share<a class="anchor" href="#what-a-thread-may-share" aria-label="Link to this section">#</a></h2>
-<p>Threads borrow local variables directly, with no copies and no <code>Arc</code>, because nothing outlives its loom. The checker keeps that safe:</p>
-<ul><li>What's declared <strong>outside</strong> the loom is shared. A thread may read it; if it changes it, no other thread may touch it, nor the parent, until it's joined (<a href="diagnostics.html#C0401">C0401</a>, <a href="diagnostics.html#C0402">C0402</a>).</li><li>What's declared <strong>inside</strong> the loom block (a loop variable, a local of the block, the parameter of a lambda around the <code>thread</code>) is <strong>copied</strong> into the thread when it starts: it may be gone by the time the thread runs. A thread can't change its copy (<a href="diagnostics.html#C0405">C0405</a>). A variable that owns what it holds (a <code>String</code>, a <code>List</code>) <strong>moves</strong> into the thread instead, and the parent can't use it after.</li><li><code>thread</code> is only allowed inside a <code>loom</code> (<a href="diagnostics.html#C0403">C0403</a>), and the loom is the innermost one around it, also from inside a lambda or another thread.</li></ul>
+<p>Threads borrow local variables directly. The checker keeps that safe with two rules about where a variable was declared:</p>
+<ul><li>What's declared <strong>outside</strong> the loom is shared. A thread may read it; if it changes it, no other thread may touch it, nor the parent, until it's joined (<a href="diagnostics.html#C0401">C0401</a>, <a href="diagnostics.html#C0402">C0402</a>).</li><li>What's declared <strong>inside</strong> the loom block (a loop variable, a local of the block, the parameter of a lambda around the <code>thread</code>) is <strong>copied</strong> into the thread when it starts: it may be gone by the time the thread runs. A thread can't change its copy (<a href="diagnostics.html#C0405">C0405</a>). A variable that owns what it holds (a <code>String</code>, a <code>List</code>) <strong>moves</strong> into the thread instead, and the parent can't use it after.</li></ul>
 <div class="sample" id="sample-threads_share" data-sample="threads_share" data-mode="run" data-file="threads_share.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>threads_share.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -133,7 +216,9 @@ b 1</code></pre></div>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>count 3
 [3, 5, 4]</code></pre></div>
 </div>
-<p>The race detector is the type checker:</p>
+<p>In the first loom, <code>count</code> is outside it and only one thread changes it, so that is allowed, and the parent reads it only after the join. In the second, <code>w</code> is a loop variable, so each thread gets its own copy.</p>
+<h3 id="the-race-detector-is-the-type-checker">The race detector is the type checker<a class="anchor" href="#the-race-detector-is-the-type-checker" aria-label="Link to this section">#</a></h3>
+<p>Break the rule and the compiler says which thread and which variable:</p>
 <div class="sample" id="sample-threads_err" data-sample="threads_err" data-mode="check" data-file="threads_err.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>threads_err.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#C0401">C0401</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -158,6 +243,83 @@ b 1</code></pre></div>
 <span class="loc">  = help: use `Atomic`, or produce a value per thread and combine them</span>
 
 <span class="err">error: threads_err.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<p>Two threads changing <code>hits</code> is <a href="diagnostics.html#C0401">C0401</a>, and the help says what to do instead: <code>Atomic</code>, or a value per thread. The parent can't read a variable while a thread that changes it hasn't been joined either (<a href="diagnostics.html#C0402">C0402</a>):</p>
+<div class="sample" id="sample-threads_err_join" data-sample="threads_err_join" data-mode="check" data-file="threads_err_join.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>threads_err_join.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#C0402">C0402</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">var</span> count = <span class="n">0</span>
+    <span class="k">loom</span> {
+        <span class="k">let</span> t = <span class="k">thread</span> { count += <span class="n">1</span> }
+        <span class="f">print</span>(count)                 <span class="c">// the thread may be changing it</span>
+        t.<span class="f">join</span>()
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[C0402]: `count` is used while a thread changes it</span>
+<span class="loc">  --&gt; threads_err_join.loom:7:15</span>
+<span class="gut">  |</span>
+<span class="gut">6 |</span>         let t = thread { count += 1 }
+<span class="gut">  |</span><span class="caret">                 --------------------- this thread changes it, and hasn't been joined</span>
+<span class="gut">7 |</span>         print(count)                 // the thread may be changing it
+<span class="gut">  |</span><span class="caret">               ^^^^^ used here</span>
+<span class="gut">  |</span>
+<span class="loc">  = help: `join` the thread first, or give it its own copy</span>
+
+<span class="err">error: threads_err_join.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<p>And a thread can only change what outlives the loom. A variable declared inside the block is copied, so the change would be invisible to everybody, and the compiler says so (<a href="diagnostics.html#C0405">C0405</a>):</p>
+<div class="sample" id="sample-threads_err_copy" data-sample="threads_err_copy" data-mode="check" data-file="threads_err_copy.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>threads_err_copy.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#C0405">C0405</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">loom</span> {
+        <span class="k">var</span> seen = <span class="n">0</span>                 <span class="c">// declared inside the loom</span>
+        <span class="k">thread</span> { seen += <span class="n">1</span> }         <span class="c">// so the thread gets a copy</span>
+        ()
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[C0405]: `seen` doesn't outlive the loom, so a thread gets a copy of it</span>
+<span class="loc">  --&gt; threads_err_copy.loom:4:18</span>
+<span class="gut">  |</span>
+<span class="gut">4 |</span>         thread { seen += 1 }         // so the thread gets a copy
+<span class="gut">  |</span><span class="caret">                  ^^^^ this changes the thread's copy, which nobody sees</span>
+<span class="gut">  |</span>
+<span class="loc">  = help: declare it outside the `loom`, or return the new value from the thread</span>
+
+<span class="err">error: threads_err_copy.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<div class="try"><p>In <code>threads_err</code>, wrap the first <code>thread { hits += 1 }</code> in a <code>let t = </code> and call <code>t.join()</code> before the second thread starts. Nobody else touches <code>hits</code> while the first changes it, so it compiles.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>The same program compiles in Go and has a race. The detector (<code>go run -race</code>) finds it when the racy lines run; the compiler never does.</p>
+<pre class="foreign" data-lang="go"><code>hits := <span class="n">0</span>
+<span class="k">var</span> wg sync.<span class="t">WaitGroup</span>
+<span class="k">for</span> i := <span class="n">0</span>; i &lt; <span class="n">2</span>; i++ {
+    wg.<span class="t">Add</span>(<span class="n">1</span>)
+    <span class="k">go</span> <span class="k">func</span>() { <span class="k">defer</span> wg.<span class="t">Done</span>(); hits++ }()
+}
+wg.<span class="t">Wait</span>()</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust refuses it too, with borrow rules: two closures can't both hold a <code>&amp;mut</code> to <code>hits</code>. The error is about aliasing, and it comes from the same machinery that governs the rest of the language. Loom's rule is specific to looms.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> <span class="k">mut</span> hits = <span class="n">0</span>;
+std::thread::<span class="f">scope</span>(|s| {
+    s.<span class="f">spawn</span>(|| hits += <span class="n">1</span>);
+    s.<span class="f">spawn</span>(|| hits += <span class="n">1</span>); <span class="c">// error[E0499]: cannot borrow `hits` as mutable more than once</span>
+});</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="swift" data-label="Swift">
+<h4>Swift</h4>
+<p>Swift 6 checks data-race safety at compile time too, with <code>Sendable</code> and actor isolation, and reports a mutation of a captured <code>var</code> in concurrently executing code. It does so across the whole language, not just within a task group.</p>
+<pre class="foreign" data-lang="swift"><code><span class="k">var</span> hits = <span class="n">0</span>
+await <span class="f">withTaskGroup</span>(of: <span class="t">Void</span>.<span class="k">self</span>) { group <span class="k">in</span>
+    group.addTask { hits += <span class="n">1</span> } <span class="c">// error: mutation of captured var in concurrently-executing code</span>
+}</code></pre>
+</div>
 </div>
 <h2 id="one-thread-for-each-item-loom-for">One thread for each item: <code>loom for</code><a class="anchor" href="#one-thread-for-each-item-loom-for" aria-label="Link to this section">#</a></h2>
 <p><code>loom for x in items { … }</code> is a loom that starts a thread for each item. The parent goes through <code>items</code> (so it's a list, a range, a stream), and each iteration runs as a thread of its own. An item that owns memory moves into its thread; one that's a view of what outlives the loop is copied.</p>
@@ -186,6 +348,56 @@ b 1</code></pre></div>
 letters 12</code></pre></div>
 </div>
 <p>Each iteration is a thread that ends with its body, so nothing in it can leave the loop or the function: <code>break</code>, <code>return</code>, a <code>continue</code> of an outer loop, and a <code>?</code> with no <code>mend</code> are <a href="diagnostics.html#C0406">C0406</a>. <code>continue</code> ends the iteration. A variable the iterations change is <a href="diagnostics.html#C0401">C0401</a>, as for any threads: use an <code>Atomic</code>, or a <code>Mutex</code>.</p>
+<div class="sample" id="sample-threads_err_break" data-sample="threads_err_break" data-mode="check" data-file="threads_err_break.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>threads_err_break.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#C0406">C0406</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.sync.<span class="t">Atomic</span>
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> hits = <span class="t">Atomic</span>[i32](<span class="n">0</span>)
+    <span class="k">loom</span> <span class="k">for</span> i <span class="k">in</span> <span class="n">0</span>..<span class="n">10</span> {
+        <span class="k">if</span> i == <span class="n">5</span> { <span class="k">break</span> }          <span class="c">// each iteration is a thread of its own</span>
+        hits.<span class="f">add</span>(<span class="n">1</span>)
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[C0406]: `break` can't leave an iteration of a `loom for`</span>
+<span class="loc">  --&gt; threads_err_break.loom:6:21</span>
+<span class="gut">  |</span>
+<span class="gut">6 |</span>         if i == 5 { break }          // each iteration is a thread of its own
+<span class="gut">  |</span><span class="caret">                     ^^^^^ each iteration is a thread of its own</span>
+<span class="gut">  |</span>
+<span class="loc">  = help: end the iteration with `continue`, or handle it in the body</span>
+
+<span class="err">error: threads_err_break.loom failed to resolve (1 error)</span></code></pre></div>
+</div>
+<p>How many threads actually run at once is decided by the workers, not by the loop. Over an exclusive integer range, a list, a slice, an array or their chunks, a task gets a run of items when there are several workers, so a hundred thousand iterations don't mean a hundred thousand tasks. Other iterators keep a task per item.</p>
+<div class="try"><p>In <code>threads_for</code>, change <code>1..=5</code> to <code>1..=1000</code>. The sum of squares comes out as 333833500, and the program has run a thousand iterations as threads. Then add <code>if n % 2 == 0 { continue }</code> at the top of the loop and see that it ends only that iteration.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust-rayon" data-label="Rust (rayon)">
+<h4>Rust (rayon)</h4>
+<p>rayon's parallel iterators are the nearest thing: a loop over items split across a pool, with the data-race rules enforced by closures' types. <code>reduce</code>/<code>sum</code> replace the <code>Atomic</code>.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">use</span> rayon::prelude::*;
+<span class="k">let</span> sum: u64 = (<span class="n">1</span>..=5u64).<span class="f">into_par_iter</span>().<span class="f">map</span>(|n| n * n).<span class="f">sum</span>();</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="c-and-c-openmp" data-label="C and C++ (OpenMP)">
+<h4>C and C++ (OpenMP)</h4>
+<p><code>#pragma omp parallel for</code> is the same idea written as an annotation on an ordinary loop. Nothing checks that iterations are independent: a race compiles and silently gives wrong answers, unless you write the <code>reduction</code> or <code>atomic</code> clause yourself.</p>
+<pre class="foreign" data-lang="c"><code><span class="k">unsigned</span> <span class="k">long</span> sum = <span class="n">0</span>;
+#pragma omp parallel <span class="k">for</span> <span class="f">reduction</span>(+:sum)
+<span class="k">for</span> (<span class="k">int</span> n = <span class="n">1</span>; n &lt;= <span class="n">5</span>; n++) sum += n * n;</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Go has no parallel loop. You start a goroutine per item (or a worker per core with a channel of items) and join with a <code>WaitGroup</code>, which is why libraries for it exist.</p>
+<pre class="foreign" data-lang="go"><code><span class="k">var</span> wg sync.<span class="t">WaitGroup</span>
+<span class="k">var</span> sum atomic.<span class="t">Uint64</span>
+<span class="k">for</span> n := <span class="f">uint64</span>(<span class="n">1</span>); n &lt;= <span class="n">5</span>; n++ {
+    wg.<span class="t">Add</span>(<span class="n">1</span>)
+    <span class="k">go</span> <span class="k">func</span>() { <span class="k">defer</span> wg.<span class="t">Done</span>(); sum.<span class="t">Add</span>(n * n) }()
+}
+wg.<span class="t">Wait</span>()</code></pre>
+</div>
+</div>
 <h2 id="changing-pieces-of-a-list-chunks-mut">Changing pieces of a list: <code>chunks_mut</code><a class="anchor" href="#changing-pieces-of-a-list-chunks-mut" aria-label="Link to this section">#</a></h2>
 <p><code>xs.chunks_mut(n)</code> gives views of <code>n</code> elements at a time, which can be changed, and don't overlap. A <code>loom for</code> over them has each thread change its own piece, with no <code>Atomic</code> and no lock: the list is the parent's again when the loop ends. Pieces that might overlap (a view made another way) are <a href="diagnostics.html#C0401">C0401</a> when two threads change them.</p>
 <div class="sample" id="sample-threads_rows" data-sample="threads_rows" data-mode="run" data-file="threads_rows.loom" data-runnable>
@@ -204,6 +416,32 @@ letters 12</code></pre></div>
     <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>grid<span class="h">}</span><span class="s">"</span>)
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>[0, 1, 2, 3, 10, 11, 12, 13, 20, 21, 22, 23]</code></pre></div>
+</div>
+<p>The compiler knows the pieces are disjoint because <code>chunks_mut</code> is declared that way in <code>std</code> (<code>#disjoint</code>); a hand-made view isn't.</p>
+<div class="try"><p>Change <code>width</code> to <code>3</code>, and read the grid: four rows of three. Then change <code>line[col] =</code> to <code>line[col + 1] =</code>: the last column of each piece is out of bounds, and the bounds check catches it instead of writing into the next thread's piece.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust has the same method name: <code>chunks_mut</code> gives disjoint <code>&amp;mut</code> slices, and rayon's <code>par_chunks_mut</code> hands them to threads. The disjointness is proved by the standard library's <code>unsafe</code> code and the borrow checker, not by a declaration.</p>
+<pre class="foreign" data-lang="rust"><code>grid.<span class="f">par_chunks_mut</span>(width).<span class="f">enumerate</span>().<span class="f">for_each</span>(|(row, line)| {
+    <span class="k">for</span> col <span class="k">in</span> <span class="n">0</span>..width {
+        line[col] = row * <span class="n">10</span> + col;
+    }
+});</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Go slices share memory freely. Handing each goroutine its own sub-slice (<code>grid[r*w:(r+1)*w]</code>) is safe by convention only: nothing stops two goroutines from being given overlapping slices.</p>
+<pre class="foreign" data-lang="go"><code><span class="k">for</span> r := <span class="n">0</span>; r &lt; rows; r++ {
+    wg.<span class="t">Add</span>(<span class="n">1</span>)
+    <span class="k">go</span> <span class="k">func</span>() {
+        <span class="k">defer</span> wg.<span class="t">Done</span>()
+        line := grid[r*width : (r+<span class="n">1</span>)*width]
+        <span class="k">for</span> col := <span class="k">range</span> line { line[col] = r*<span class="n">10</span> + col }
+    }()
+}</code></pre>
+</div>
 </div>
 <h2 id="sharing-what-changes-atomic">Sharing what changes: <code>Atomic</code><a class="anchor" href="#sharing-what-changes-atomic" aria-label="Link to this section">#</a></h2>
 <p>An <code>Atomic[T]</code> (<code>T</code> an integer of 8 to 64 bits, or <code>bool</code>) is changed through methods that only take <code>self</code> to read, so any number of threads can use one at once, with no <a href="diagnostics.html#C0401">C0401</a>. Every operation is a whole step: <code>add</code> gives the value before, <code>compare_exchange</code> says whether it swapped.</p>
@@ -244,7 +482,32 @@ thread 2 saw 5
 hits 6
 true 0, false 1</code></pre></div>
 </div>
-<p>A thread that spins on <code>load()</code> waiting for another doesn't let it run (nothing is preempted yet): put a <code>sched_yield()</code> in the loop.</p>
+<p>The first loom takes turns, because of the <code>sched_yield()</code> on one worker; with several, the "saw" values are still all different (0 to 5, each once), but in any order. The second half is a tiny race with two racers: the first <code>compare_exchange(0, 1)</code> wins, the second finds a <code>1</code> and reports it.</p>
+<p>With one worker a thread that spins on <code>load()</code> waiting for another one never lets it run: put a <code>sched_yield()</code> in the loop.</p>
+<div class="try"><p>Change <code>Atomic[u32]</code> to <code>Atomic[u8]</code> and <code>0..2</code> to <code>0..100</code>. Three threads add 100 times each, which doesn't fit a <code>u8</code>: <code>add</code> unravels when the sum doesn't fit, leaving the value as it was, and the loom fails.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust's atomics take an explicit memory ordering on every call. Loom's are all sequentially consistent, which is the strongest and the simplest, and there is nothing to choose.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> hits = <span class="t">AtomicU32</span>::<span class="f">new</span>(<span class="n">0</span>);
+<span class="k">let</span> before = hits.<span class="f">fetch_add</span>(<span class="n">1</span>, <span class="t">Ordering</span>::<span class="t">SeqCst</span>);</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Go's <code>sync/atomic</code> has typed values now (<code>atomic.Uint32</code>) with the same operations; <code>CompareAndSwap</code> reports whether it swapped.</p>
+<pre class="foreign" data-lang="go"><code><span class="k">var</span> hits atomic.<span class="t">Uint32</span>
+before := hits.<span class="t">Add</span>(<span class="n">1</span>) - <span class="n">1</span>
+swapped := hits.<span class="t">CompareAndSwap</span>(<span class="n">0</span>, <span class="n">1</span>)</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="java" data-label="Java">
+<h4>Java</h4>
+<p><code>AtomicInteger</code> is the same: <code>getAndAdd</code> gives the value before, <code>compareAndSet</code> says whether it swapped. Its operations are sequentially consistent, as Loom's are.</p>
+<pre class="foreign" data-lang="java"><code><span class="t">AtomicInteger</span> hits = <span class="k">new</span> <span class="t">AtomicInteger</span>();
+<span class="k">int</span> before = hits.<span class="f">getAndAdd</span>(<span class="n">1</span>);
+<span class="k">boolean</span> swapped = hits.<span class="f">compareAndSet</span>(<span class="n">0</span>, <span class="n">1</span>);</code></pre>
+</div>
+</div>
 <h2 id="sharing-what-needs-a-lock-mutex">Sharing what needs a lock: <code>Mutex</code><a class="anchor" href="#sharing-what-needs-a-lock-mutex" aria-label="Link to this section">#</a></h2>
 <p>A <code>Mutex[T]</code> holds a <code>T</code> that one thread at a time uses. <code>m.lock()</code> is the value, for the statement it's in: the lock is taken where it's evaluated, and given back when the statement ends, however it ends (an unravel too). Threads that find it taken wait for it, in the order they came.</p>
 <div class="sample" id="sample-threads_mutex" data-sample="threads_mutex" data-mode="run" data-file="threads_mutex.loom" data-runnable>
@@ -274,9 +537,27 @@ true 0, false 1</code></pre></div>
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>total 60, log 3 entries</code></pre></div>
 </div>
-<p>The lock is taken after the right-hand side of an assignment is worked out, so a thread holds it for the shortest time. A thread that locks what it holds already unravels.</p>
+<p>There is no guard to hold on to, and no <code>unlock</code> to forget. The lock is taken after the right-hand side of an assignment is worked out, so a thread holds it for the shortest time. A thread that locks what it holds already unravels.</p>
+<div class="try"><p>Replace <code>log.lock().push(pause(id))</code> with <code>let n = pause(id)</code> and then <code>log.lock().push(n)</code>. The result is the same, but the lock is no longer held while <code>pause</code> waits.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust's <code>Mutex&lt;T&gt;</code> hands out a guard. A guard made in a statement is dropped at its end, so <code>*total.lock().unwrap() += 10;</code> looks and behaves like Loom's version; in a <code>let</code>, the lock stays until the guard goes out of scope. In Loom there is no guard, so it can't be held across a statement.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> total = <span class="t">Mutex</span>::<span class="f">new</span>(<span class="n">0</span>);
+*total.<span class="f">lock</span>().<span class="f">unwrap</span>() += <span class="n">10</span>;</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Go's <code>sync.Mutex</code> doesn't hold data: it's a lock you take and give back around code that touches a variable, and <code>defer</code> is how you remember to give it back. Nothing connects the mutex to what it protects.</p>
+<pre class="foreign" data-lang="go"><code><span class="k">var</span> mu sync.<span class="t">Mutex</span>
+mu.<span class="t">Lock</span>()
+<span class="k">defer</span> mu.<span class="t">Unlock</span>()
+total += <span class="n">10</span></code></pre>
+</div>
+</div>
 <h2 id="passing-items-pipe">Passing items: <code>Pipe</code><a class="anchor" href="#passing-items-pipe" aria-label="Link to this section">#</a></h2>
-<p>A <code>Pipe[T](capacity)</code> is a bounded queue. <code>send</code> puts an item in and waits while the pipe is full; <code>recv</code> takes the oldest and waits while it's empty, giving <code>none</code> once the pipe is closed and drained. <code>close</code> ends it: what's in it can still be received, and the threads waiting on it wake. A thread that waits for a pipe nobody will fill is a deadlock, which unravels the parent where it waits (after cancelling what's left).</p>
+<p>A <code>Pipe[T](capacity)</code> is a bounded queue. <code>send</code> puts an item in and waits while the pipe is full; <code>recv</code> takes the oldest and waits while it's empty, giving <code>none</code> once the pipe is closed and drained. <code>close</code> ends it: what's in it can still be received, and the threads waiting on it wake.</p>
 <div class="sample" id="sample-threads_pipe" data-sample="threads_pipe" data-mode="run" data-file="threads_pipe.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>threads_pipe.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -310,11 +591,181 @@ job 2
 job 3
 job 4</code></pre></div>
 </div>
+<p>The producer sends four numbers into a pipe that holds two, so it waits when the pipe is full. The worker turns each into text and sends it on. The parent reads until the worker closes the results, which ends its <code>while</code>. Every method takes <code>self</code> to read, so any thread can use a pipe, with no <code>Mutex</code> around it.</p>
+<p>A pipe nobody will fill, with a thread waiting to receive from it, is a deadlock, and it's reported instead of hanging (see below).</p>
+<div class="try"><p>Change the capacity of <code>jobs</code> from <code>2</code> to <code>1</code>, then to <code>4</code>. The output doesn't change: capacity changes how often a thread waits, not what arrives.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Channels are the model Pipe follows: bounded, <code>close</code> ends them, and a receive from a closed and empty channel says so (<code>ok</code> is false, Loom's <code>none</code>). Go's channels are first-class in the syntax (<code>&lt;-</code>), and nothing stops goroutines being left blocked forever.</p>
+<pre class="foreign" data-lang="go"><code>jobs := <span class="f">make</span>(<span class="k">chan</span> int, <span class="n">2</span>)
+<span class="k">go</span> <span class="k">func</span>() {
+    <span class="k">for</span> n := <span class="n">1</span>; n &lt;= <span class="n">4</span>; n++ { jobs &lt;- n }
+    <span class="f">close</span>(jobs)
+}()
+<span class="k">for</span> n := <span class="k">range</span> jobs { fmt.<span class="t">Println</span>(<span class="s">"job"</span>, n) }</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p><code>std::sync::mpsc::sync_channel</code> is the bounded channel; dropping all senders closes it, so a receiver ends when the last sender goes out of scope. Loom closes a pipe explicitly, and a pipe can be shared by any number of senders and receivers.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> (tx, rx) = std::sync::mpsc::<span class="f">sync_channel</span>(<span class="n">2</span>);
+std::thread::<span class="f">spawn</span>(<span class="k">move</span> || {
+    <span class="k">for</span> n <span class="k">in</span> <span class="n">1</span>..=<span class="n">4</span> { tx.<span class="f">send</span>(n).<span class="f">unwrap</span>(); }
+});
+<span class="k">for</span> n <span class="k">in</span> rx { <span class="f">println!</span>(<span class="s">"job {n}"</span>); }</code></pre>
+</div>
+</div>
+<h2 id="results-and-errors">Results and errors<a class="anchor" href="#results-and-errors" aria-label="Link to this section">#</a></h2>
+<p><code>join</code> doesn't throw. It gives back exactly what the thread's expression computed: if that is an <code>i32 ! Odd</code>, <code>join</code> gives the <code>i32 ! Odd</code>, for you to match, or pass on with <code>?</code> where there's a <code>mend</code>. An <em>error</em> is a value, and a thread that returns one has done nothing wrong.</p>
+<div class="sample" id="sample-threads_results" data-sample="threads_results" data-mode="run" data-file="threads_results.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>threads_results.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Odd</span>: <span class="t">Error</span> {
+    <span class="k">case</span> <span class="t">Number</span>(n: i32)
+}
+
+<span class="k">fun</span> <span class="f">half</span>(n: i32) -&gt; i32 ! <span class="t">Odd</span> {
+    <span class="k">if</span> n % <span class="n">2</span> != <span class="n">0</span> { <span class="k">fail</span> .<span class="t">Number</span>(n) }
+    n / <span class="n">2</span>
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">loom</span> {
+        <span class="k">let</span> a = <span class="k">thread</span> <span class="f">half</span>(<span class="n">8</span>)
+        <span class="k">let</span> b = <span class="k">thread</span> <span class="f">half</span>(<span class="n">7</span>)
+        <span class="c">// `join` hands back the thread's own result, here an `i32 ! Odd`.</span>
+        <span class="c">// An error is a value, so it doesn't stop the other thread.</span>
+        <span class="k">for</span> r <span class="k">in</span> [a.<span class="f">join</span>(), b.<span class="f">join</span>()] {
+            <span class="k">match</span> r {
+                <span class="k">ok</span>(v) =&gt; <span class="f">print</span>(<span class="s">"half is </span><span class="h">{</span>v<span class="h">}</span><span class="s">"</span>),
+                <span class="k">err</span>(e) =&gt; <span class="f">print</span>(<span class="s">"failed: </span><span class="h">{</span>e<span class="h">}</span><span class="s">"</span>),
+            }
+        }
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>half is 4
+failed: Number(n: 7)</code></pre></div>
+</div>
 <h2 id="when-something-goes-wrong">When something goes wrong<a class="anchor" href="#when-something-goes-wrong" aria-label="Link to this section">#</a></h2>
-<p>A thread that unravels fails its loom: the other threads are <strong>cancelled</strong>, and the parent unravels with the thread's message where it sees it, at the <code>join</code> or where the block ends, after everything has stopped. A cancelled thread unwinds from where it waits (<code>join</code>, <code>sched_yield</code>, a <code>yield</code> or <code>pull</code>), running its <code>defer</code>s, and nobody sees the cancel: <code>mend</code> doesn't catch it. The same goes for leaving the block early with <code>?</code>, <code>return</code> or <code>break</code>, for <code>process.exit</code> in a thread, and for Ctrl-C.</p>
-<p>A thread started in a loom that has already failed never runs.</p>
-<h2 id="rules">Rules<a class="anchor" href="#rules" aria-label="Link to this section">#</a></h2>
-<ul><li>A loom block's own <code>defer</code>s run when its block ends, before it waits for its threads.</li><li>Results nobody joined are dropped where the loom ends.</li><li>A <code>Spun</code> is joined once; a second <code>join</code> unravels (a <code>once</code> result makes the handle <code>once</code>, so it's <a href="diagnostics.html#L0301">L0301</a> to lose it).</li><li>A shuttle can <code>yield</code> and <code>pull</code> inside a loom block: its threads keep running while it waits, and closing it early cancels them and waits for them.</li><li>Compile-time code can't start threads (<a href="diagnostics.html#K0104">K0104</a>).</li></ul>
+<p>A thread that <strong>unravels</strong> is different: it fails its loom. The other threads are <strong>cancelled</strong>, and the parent unravels with the thread's message where it sees it, at the <code>join</code> or where the block ends, after everything has stopped.</p>
+<div class="sample" id="sample-threads_cancel" data-sample="threads_cancel" data-mode="run" data-file="threads_cancel.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>threads_cancel.loom</span><span class="tag warn">unravels</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.sync.sched_yield
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">loom</span> {
+        <span class="k">thread</span> {
+            <span class="k">defer</span> <span class="f">print</span>(<span class="s">"slow: cleaned up"</span>)
+            <span class="k">while</span> <span class="k">true</span> {
+                <span class="f">print</span>(<span class="s">"slow: working"</span>)
+                <span class="f">sched_yield</span>()
+            }
+        }
+        <span class="k">thread</span> {
+            <span class="f">sched_yield</span>()
+            <span class="k">let</span> xs = [<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]
+            <span class="k">let</span> i = <span class="n">7</span>
+            <span class="f">print</span>(xs[i])             <span class="c">// unravels</span>
+        }
+        ()
+    }
+    <span class="f">print</span>(<span class="s">"not reached"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>slow: working
+slow: working
+slow: cleaned up</code></pre></div>
+<div class="sample-out"><div class="out-head">Error output</div><pre><code><span class="err">unravel: index 7 is out of bounds (len 3)</span>
+<span class="loc">  --&gt; threads_cancel.loom:5:5</span>
+<span class="gut">  |</span>
+<span class="gut">5 |</span>     loom {
+<span class="gut">  |</span><span class="caret">     ^</span>
+<span class="loc">  = note: the thread started here unravelled</span>
+<span class="loc">  --&gt; threads_cancel.loom:13:9</span>
+<span class="gut">   |</span>
+<span class="gut">13 |</span>         thread {
+<span class="gut">   |</span><span class="caret">         ^</span></code></pre></div>
+</div>
+<p>The second thread's bad index fails the loom. The first thread, an endless loop, is cancelled at its next <code>sched_yield()</code>: it unwinds from there, and its <code>defer</code> runs (<code>slow: cleaned up</code>). Then the parent unravels, with the message and where the failing thread was started. <code>not reached</code> never prints.</p>
+<p>A cancelled thread unwinds from where it waits (<code>join</code>, <code>sched_yield</code>, a <code>yield</code> or <code>pull</code>, a <code>Mutex</code> or <code>Pipe</code> wait), running its <code>defer</code>s, and nobody sees the cancel: <code>mend</code> doesn't catch it. The same goes for leaving the block early with <code>?</code>, <code>return</code> or <code>break</code>, for <code>process.exit</code> in a thread, and for Ctrl-C. A thread started in a loom that has already failed never runs. Reading a file or the terminal isn't a cancel point yet: a thread stuck in one finishes its call before it can be cancelled.</p>
+<p>If every thread is waiting and none can wake another, the loom is <strong>deadlocked</strong>, and the parent unravels where it waits instead of hanging:</p>
+<div class="sample" id="sample-threads_deadlock" data-sample="threads_deadlock" data-mode="run" data-file="threads_deadlock.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>threads_deadlock.loom</span><span class="tag warn">unravels</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.sync.<span class="t">Pipe</span>
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> jobs = <span class="t">Pipe</span>[i32](<span class="n">1</span>)
+    <span class="k">loom</span> {
+        <span class="f">print</span>(<span class="s">"waiting for a job"</span>)
+        <span class="c">// Nobody will ever send one, and nobody can close the pipe.</span>
+        <span class="f">print</span>(jobs.<span class="f">recv</span>())
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>waiting for a job</code></pre></div>
+<div class="sample-out"><div class="out-head">Error output</div><pre><code><span class="err">unravel: deadlock: every thread is waiting</span>
+<span class="loc">  --&gt; threads_deadlock.loom:9:9</span>
+<span class="gut">  |</span>
+<span class="gut">9 |</span>         print(jobs.recv())
+<span class="gut">  |</span><span class="caret">         ^</span></code></pre></div>
+</div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="swift" data-label="Swift">
+<h4>Swift</h4>
+<p>Swift task groups cancel their siblings when one child throws, and the error surfaces at the end of the group, which is the same contract. Cancellation is cooperative there too: a task has to check, or wait at a suspension point.</p>
+<pre class="foreign" data-lang="swift"><code><span class="k">try</span> await <span class="f">withThrowingTaskGroup</span>(of: <span class="t">Void</span>.<span class="k">self</span>) { group <span class="k">in</span>
+    group.addTask { <span class="k">try</span> await <span class="f">slowWork</span>() }
+    group.addTask { <span class="k">throw</span> <span class="t">Failure</span>.bad }   <span class="c">// cancels the first one</span>
+    <span class="k">try</span> await group.<span class="f">waitForAll</span>()
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="java" data-label="Java">
+<h4>Java</h4>
+<p><code>StructuredTaskScope.ShutdownOnFailure</code>, from the JDK 21 to 24 previews of structured concurrency, is the same shape: the first failure interrupts the other subtasks, and <code>join</code> then throws. Ordinary executors don't do this; a failed task just sits in its <code>Future</code> until someone asks.</p>
+<pre class="foreign" data-lang="java"><code><span class="k">try</span> (<span class="k">var</span> scope = <span class="k">new</span> <span class="t">StructuredTaskScope</span>.<span class="t">ShutdownOnFailure</span>()) {
+    <span class="k">var</span> a = scope.<span class="f">fork</span>(() -&gt; <span class="f">slowWork</span>());
+    <span class="k">var</span> b = scope.<span class="f">fork</span>(() -&gt; { <span class="k">throw</span> <span class="k">new</span> <span class="t">IllegalStateException</span>(); });
+    scope.<span class="f">join</span>().<span class="f">throwIfFailed</span>();
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>A panic in a goroutine takes down the whole process, and nothing cancels its siblings: for that you pass a <code>context.Context</code> around and check it, or use <code>errgroup.WithContext</code>.</p>
+<pre class="foreign" data-lang="go"><code>g, ctx := errgroup.<span class="t">WithContext</span>(context.<span class="t">Background</span>())
+g.<span class="t">Go</span>(<span class="k">func</span>() error { <span class="k">return</span> <span class="f">slowWork</span>(ctx) })
+g.<span class="t">Go</span>(<span class="k">func</span>() error { <span class="k">return</span> errors.<span class="t">New</span>(<span class="s">"bad"</span>) })  <span class="c">// cancels ctx</span>
+err := g.<span class="t">Wait</span>()</code></pre>
+</div>
+</div>
+<h2 id="how-many-run-at-once">How many run at once<a class="anchor" href="#how-many-run-at-once" aria-label="Link to this section">#</a></h2>
+<p>A loom schedules its threads on Treadle's worker pool: one worker per core by default, <code>LOOM_THREADS=n</code> to change it. A loom can say it wants fewer, with a <code>Crew</code> (from <a href="../std/modules/sync.html">std.sync</a>) given to it:</p>
+<div class="sample" id="sample-threads_crew" data-sample="threads_crew" data-mode="run" data-file="threads_crew.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>threads_crew.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.sync.{<span class="t">Atomic</span>, <span class="t">Crew</span>}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> done = <span class="t">Atomic</span>[u32](<span class="n">0</span>)
+    <span class="c">// At most two of these eight threads run at the same moment.</span>
+    <span class="k">loom</span>(<span class="k">given</span>: <span class="t">Crew</span>(workers: <span class="n">2</span>)) {
+        <span class="k">for</span> _ <span class="k">in</span> <span class="n">0</span>..<span class="n">8</span> {
+            <span class="k">thread</span> { done.<span class="f">add</span>(<span class="n">1</span>) }
+        }
+        ()
+    }
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>done.<span class="f">load</span>()<span class="h">}</span><span class="s"> threads ran"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>8 threads ran</code></pre></div>
+</div>
+<p>With a <code>Crew</code> of two, no more than two of the eight threads run at the same moment. A thread that's waiting (in a <code>join</code>, a lock, a pipe) holds no worker, so the others go on. A crew of no workers unravels at the <code>loom</code>.</p>
+<div class="try"><p>Change <code>workers: 2</code> to <code>workers: 0</code> and run it: the unravel names the problem. Then remove the <code>(given: …)</code> and run with the default.</p></div>
+<h2 id="other-rules">Other rules<a class="anchor" href="#other-rules" aria-label="Link to this section">#</a></h2>
+<ul><li>A loom block's own <code>defer</code>s run when its block ends, before it waits for its threads.</li><li>Results nobody joined are dropped where the loom ends.</li><li>A shuttle can <code>yield</code> and <code>pull</code> inside a loom block: its threads keep running while it waits, and closing it early cancels them and waits for them.</li><li>Compile-time code can't start threads (<a href="diagnostics.html#K0104">K0104</a>).</li><li><code>Atomic</code> takes integers of 8 to 64 bits and <code>bool</code>. A <code>Pipe</code> of a <code>once</code> type isn't built yet (<a href="diagnostics.html#U0102">U0102</a>).</li></ul>
+<h2 id="where-next">Where next<a class="anchor" href="#where-next" aria-label="Link to this section">#</a></h2>
+<p>Threads are the last feature of the language itself. <a href="not-yet.html">Not supported yet</a> says plainly what isn't built: async I/O, for one, isn't part of this version, and neither are thread pools you make yourself with their own queues.</p>
 <nav class="pager" aria-label="Chapters">
 <a class="prev" href="tests.html"><span class="dir">&larr; Chapter 14</span>Tests</a>
 <a class="next" href="not-yet.html"><span class="dir">Appendix A &rarr;</span>Not supported yet</a>

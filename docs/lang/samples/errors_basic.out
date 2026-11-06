@@ -1,0 +1,5 @@
+ok(30) err(Negative) err(TooOld(age: 300))
+problem: TooOld(age: 300)
+ok(8) true some(Negative)
+hello, 20 year old
+greet failed: Negative

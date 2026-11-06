@@ -1,0 +1,9 @@
+error[T0101]: expected `Cents`, found `i64`
+  --> docs/lang/samples/gauges_err_arith.loom:6:23
+  |
+6 |     let diff: Cents = a - b
+  |                       ^^^^^ this is `i64`
+  |
+  = help: getting into a gauge is checked: `x as Cents` (unravels), `x as? Cents` or `x as| Cents`
+
+error: docs/lang/samples/gauges_err_arith.loom failed to type-check (1 error)

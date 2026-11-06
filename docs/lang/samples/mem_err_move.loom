@@ -1,0 +1,7 @@
+use std.mem.{Arena, kib}
+
+fun main() {
+    spool frame = Arena(1.kib())
+    let other = frame
+}
+//@ check-fail M0107

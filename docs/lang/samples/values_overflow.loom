@@ -1,0 +1,23 @@
+use std.io.print
+
+fun main() {
+    // The same sum, with four ideas of what overflow means.
+    let a: u8 = 200
+    print("{a +% 100}")             // wraps around: 44
+    print("{a +| 100}")             // stops at the limit: 255
+    print("{a +? 100:?}")           // gives an optional: none
+    print("{a +? 50:?}")            // some(250)
+
+    // On a u12 the limit is 4096, not 256.
+    let m: u12 = 4095
+    print("{m +% 1} {m +| 1} {m +? 1:?}")
+
+    // Conversions have the same four policies.
+    print("{300 as% u8} {300 as| u8} {300 as? u8:?} {200 as u8}")
+    print("{-1 as% u8} {-1 as| u8} {3.99 as| u8}")
+
+    // Plain `+` unravels. This line ends the program.
+    print(a + 100)
+    print("unreachable")
+}
+//@ unravel

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>Values and control flow · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -55,46 +56,118 @@
 <div class="chapter-head">
 <span class="chapter-no">Chapter 2</span>
 <h1>Values and control flow</h1>
-<p class="summary">Numbers, text, <code>if</code>, <code>match</code>, loops, lambdas, and bit patterns.</p>
+<p class="summary">Numbers, text, functions, <code>match</code>, loops, lambdas, and bit patterns.</p>
 </div>
+<p>Before there is a loom there is thread: plain values and the small machinery that moves them around. This chapter covers the ordinary stuff every program is made of: numbers and what happens when they overflow, text and templates, functions, <code>if</code>, <code>match</code> and loops, lambdas, and a pattern syntax for picking bits apart that Loom calls <em>twill</em>.</p>
+<p>Most of it will look familiar. A few decisions are different, and they're worth noticing early: integers can have any width, overflow is chosen by the <em>operator</em> you write, and <code>match</code> insists you cover every case. The data types Loom is really about, warps and wefts, come in <a href="types.html">the next chapter</a>. Bindings (<code>let</code>, <code>var</code>) and the file layout are in <a href="start.html#the-shape-of-a-program">Getting started</a>.</p>
 <h2 id="numbers">Numbers<a class="anchor" href="#numbers" aria-label="Link to this section">#</a></h2>
-<p><code>u12</code>, <code>i24</code> and <code>u4</code> are ordinary types: any width from 1 to 64 bits. A <code>uN</code> does its arithmetic at exactly N bits, so a <code>u12</code> overflows at 4096. <code>usize</code> and <code>isize</code> are 63 bits on the Lua backend. Types wider than 64 bits and <code>f16</code> are not supported yet (<a href="diagnostics.html#U0102">U0102</a>).</p>
-<p>Each arithmetic operator says what happens on overflow:</p>
-<table class="plain"><thead><tr><th>Operator</th><th>On overflow</th></tr></thead><tbody><tr><td><code>+ - *</code></td><td>unravels</td></tr><tr><td><code>+% -% *%</code></td><td>wraps around</td></tr><tr><td><code>+| -| *|</code></td><td>stops at the type's limit (saturates)</td></tr><tr><td><code>+? -? *?</code></td><td>gives an optional, <code>none</code> on overflow</td></tr></tbody></table>
-<p><code>as</code>, <code>as%</code>, <code>as|</code> and <code>as?</code> convert with the same four policies.</p>
+<p>Loom has <code>bool</code>, <code>char</code>, <code>str</code>, floats (<code>f32</code>, <code>f64</code>) and integers, and the integers are the unusual part: <code>u12</code>, <code>i24</code> and <code>u4</code> are ordinary types. Any width from 1 to 64 bits works, and a <code>uN</code> does its arithmetic at exactly N bits, so a <code>u12</code> overflows at 4096. Bits are cheap to say in Loom: a CHIP-8 emulator, for instance, keeps its sixteen 4-bit register numbers in <code>u4</code>s. <code>usize</code> and <code>isize</code> are the size of a pointer: 64 bits on Treadle and 63 on the Lua backend.</p>
 <div class="sample" id="sample-values_numbers" data-sample="values_numbers" data-mode="run" data-file="values_numbers.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>values_numbers.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="k">fun</span> <span class="f">main</span>() {
-    <span class="c">// Integers have any width up to 64 bits: `u12` and `i24` are ordinary types.</span>
+    <span class="c">// Any width from 1 to 64 bits: `u12` and `i24` are ordinary types.</span>
     <span class="k">let</span> a: u12 = <span class="n">4095</span>
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>a +% <span class="n">1</span><span class="h">}</span><span class="s"> </span><span class="h">{</span>a +| <span class="n">1</span><span class="h">}</span><span class="s"> </span><span class="h">{</span>a +? <span class="n">1</span>:?<span class="h">}</span><span class="s">"</span>)      <span class="c">// wrap, saturate, checked</span>
+    <span class="k">let</span> b: u4 = <span class="n">15</span>
+    <span class="k">let</span> c: i24 = -<span class="n">8_000_000</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>a<span class="h">}</span><span class="s"> </span><span class="h">{</span>b<span class="h">}</span><span class="s"> </span><span class="h">{</span>c<span class="h">}</span><span class="s">"</span>)
 
-    <span class="k">let</span> b: u8 = <span class="n">200</span>
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>b +% <span class="n">100</span><span class="h">}</span><span class="s"> </span><span class="h">{</span>b +| <span class="n">100</span><span class="h">}</span><span class="s"> </span><span class="h">{</span>b +? <span class="n">100</span>:?<span class="h">}</span><span class="s">"</span>)
+    <span class="c">// Literals: separators, other bases, a suffix to pick the type.</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="n">1_000_000</span><span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">0xFF</span><span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">0o755</span><span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">0b1010_0110</span><span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">255u8</span><span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">2.5f32</span><span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">1e3</span><span class="h">}</span><span class="s">"</span>)
 
-    <span class="c">// Casts have the same three policies.</span>
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="n">300</span> <span class="k">as</span>% u8<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">300</span> <span class="k">as</span>| u8<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">300</span> <span class="k">as</span>? u8:?<span class="h">}</span><span class="s">"</span>)
+    <span class="c">// The only implicit conversion is lossless widening.</span>
+    <span class="k">let</span> small: u8 = <span class="n">200</span>
+    <span class="k">let</span> wide: u16 = small
+    <span class="k">let</span> signed: i32 = small
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>wide<span class="h">}</span><span class="s"> </span><span class="h">{</span>signed<span class="h">}</span><span class="s">"</span>)
 
-    <span class="c">// Bits.</span>
+    <span class="c">// Integer division truncates toward zero; floats are separate.</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="n">7</span> / <span class="n">2</span><span class="h">}</span><span class="s"> </span><span class="h">{</span>-<span class="n">7</span> / <span class="n">2</span><span class="h">}</span><span class="s"> </span><span class="h">{</span>-<span class="n">7</span> % <span class="n">3</span><span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">7.0</span> / <span class="n">2.0</span><span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>(<span class="n">2.0</span>).<span class="f">sqrt</span>():.<span class="n">4</span><span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">10</span>.<span class="f">pow</span>(<span class="n">3</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span>(-<span class="n">5</span>).<span class="f">abs</span>()<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">3.7</span> <span class="k">as</span> i32<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">7</span> <span class="k">as</span> f64 / <span class="n">2.0</span><span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// Methods live on the numbers themselves.</span>
     <span class="k">let</span> flags: u8 = <span class="n">0b1010_0110</span>
     <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>flags &amp; <span class="n">0x0F</span><span class="h">}</span><span class="s"> </span><span class="h">{</span>flags | <span class="n">1</span><span class="h">}</span><span class="s"> </span><span class="h">{</span>flags ~ <span class="n">0xFF</span><span class="h">}</span><span class="s"> </span><span class="h">{</span>flags &gt;&gt; <span class="n">4</span><span class="h">}</span><span class="s"> </span><span class="h">{</span>flags.<span class="f">count_ones</span>()<span class="h">}</span><span class="s">"</span>)
-
-    <span class="c">// Integer division truncates; floats print the Rust way.</span>
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="n">7</span> / <span class="n">2</span><span class="h">}</span><span class="s"> </span><span class="h">{</span>-<span class="n">7</span> / <span class="n">2</span><span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">7.0</span> / <span class="n">2.0</span><span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">2.5f32</span> * <span class="n">2.0</span><span class="h">}</span><span class="s">"</span>)
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>(<span class="n">2.0</span>).<span class="f">sqrt</span>():.<span class="n">4</span><span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">10</span>.<span class="f">pow</span>(<span class="n">3</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span>(-<span class="n">5</span>).<span class="f">abs</span>()<span class="h">}</span><span class="s">"</span>)
 }</code></pre>
-<div class="sample-out"><div class="out-head">Output</div><pre><code>0 4095 none
-44 255 none
-44 255 none
-6 167 89 10 4
-3 -3 3.5 5
-1.4142 1000 5</code></pre></div>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>4095 15 -8000000
+1000000 255 493 166 255 2.5 1000
+200 200
+3 -3 -1 3.5
+1.4142 1000 5 3 3.5
+6 167 89 10 4</code></pre></div>
 </div>
-<ul><li>The only implicit conversion is lossless integer widening (<code>u8</code> to <code>u16</code>). There is none between signed and unsigned, and none involving floats.</li><li>A number literal takes the type its context expects. With no context it becomes the first numeric type it meets, and otherwise <code>i32</code> (or <code>f64</code>).</li><li>Integer <code>/</code> and <code>%</code> truncate. A zero divisor unravels. A shift by the type's width or more unravels.</li><li>Bit operators bind tighter than comparisons, so <code>flags &amp; MASK == 0</code> means what it looks like.</li></ul>
+<ul><li><strong>Literals</strong> take the type their context asks for: <code>let a: u12 = 4095</code>. With no context, a literal becomes the first numeric type it meets, and otherwise <code>i32</code> (or <code>f64</code> for a float). A suffix (<code>255u8</code>, <code>2.5f32</code>) picks one by hand, and <code>_</code> separates digits. A literal that doesn't fit its type is a compile error (<a href="diagnostics.html#T0102">T0102</a>).</li><li><strong>The only implicit conversion is lossless integer widening</strong>: <code>u8</code> to <code>u16</code> or <code>i32</code>. There is none between signed and unsigned of the same width, none that narrows, and none involving floats. Everything else is written with <code>as</code>.</li><li><strong><code>/</code> and <code>%</code> on integers truncate toward zero</strong>, so <code>-7 / 2</code> is <code>-3</code> and <code>-7 % 3</code> is <code>-1</code>. A zero divisor unravels.</li><li><strong>Bit operators bind tighter than comparisons</strong>, so <code>flags &amp; MASK == 0</code> means what it looks like. <code>~</code> is exclusive or when it has two operands, and bitwise not when it has one. A shift by the type's width or more unravels.</li><li>Types wider than 64 bits and <code>f16</code> are not supported yet (<a href="not-yet.html#types-and-library">Not supported yet</a>).</li></ul>
+<div class="try"><p>Add <code>let narrow: u8 = wide</code> after <code>wide</code> is made. The compiler refuses (T0101): <code>u16</code> doesn't fit in a <code>u8</code> without saying so. Then try <code>let big: u8 = 256</code>, which is caught even earlier (<a href="diagnostics.html#T0102">T0102</a>).</p></div>
+<h2 id="overflow-is-part-of-the-operator">Overflow is part of the operator<a class="anchor" href="#overflow-is-part-of-the-operator" aria-label="Link to this section">#</a></h2>
+<p>What should <code>200 + 100</code> be, when both are bytes? Languages disagree: C leaves signed overflow undefined, Go wraps without telling you, Rust panics in a debug build and wraps in a release build. Loom doesn't pick for you. Plain <code>+</code>, <code>-</code> and <code>*</code> <strong>unravel</strong> (Loom's word for a fatal runtime error) if the answer doesn't fit, in every build. When wrapping is what you want, you say so with a suffix on the operator:</p>
+<table class="plain"><thead><tr><th>Operator</th><th>On overflow</th></tr></thead><tbody><tr><td><code>+ - *</code></td><td>unravels</td></tr><tr><td><code>+% -% *%</code></td><td>wraps around (two's complement)</td></tr><tr><td><code>+| -| *|</code></td><td>stops at the type's limit (saturates)</td></tr><tr><td><code>+? -? *?</code></td><td>gives an optional: <code>none</code> on overflow</td></tr></tbody></table>
+<p>The same four policies apply to conversions: <code>as</code>, <code>as%</code>, <code>as|</code> and <code>as?</code>.</p>
+<div class="sample" id="sample-values_overflow" data-sample="values_overflow" data-mode="run" data-file="values_overflow.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>values_overflow.loom</span><span class="tag warn">unravels</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="c">// The same sum, with four ideas of what overflow means.</span>
+    <span class="k">let</span> a: u8 = <span class="n">200</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>a +% <span class="n">100</span><span class="h">}</span><span class="s">"</span>)             <span class="c">// wraps around: 44</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>a +| <span class="n">100</span><span class="h">}</span><span class="s">"</span>)             <span class="c">// stops at the limit: 255</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>a +? <span class="n">100</span>:?<span class="h">}</span><span class="s">"</span>)           <span class="c">// gives an optional: none</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>a +? <span class="n">50</span>:?<span class="h">}</span><span class="s">"</span>)            <span class="c">// some(250)</span>
+
+    <span class="c">// On a u12 the limit is 4096, not 256.</span>
+    <span class="k">let</span> m: u12 = <span class="n">4095</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>m +% <span class="n">1</span><span class="h">}</span><span class="s"> </span><span class="h">{</span>m +| <span class="n">1</span><span class="h">}</span><span class="s"> </span><span class="h">{</span>m +? <span class="n">1</span>:?<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// Conversions have the same four policies.</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="n">300</span> <span class="k">as</span>% u8<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">300</span> <span class="k">as</span>| u8<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">300</span> <span class="k">as</span>? u8:?<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">200</span> <span class="k">as</span> u8<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>-<span class="n">1</span> <span class="k">as</span>% u8<span class="h">}</span><span class="s"> </span><span class="h">{</span>-<span class="n">1</span> <span class="k">as</span>| u8<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">3.99</span> <span class="k">as</span>| u8<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// Plain `+` unravels. This line ends the program.</span>
+    <span class="f">print</span>(a + <span class="n">100</span>)
+    <span class="f">print</span>(<span class="s">"unreachable"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>44
+255
+none
+some(250)
+0 4095 none
+44 255 none 200
+255 0 3</code></pre></div>
+<div class="sample-out"><div class="out-head">Error output</div><pre><code><span class="err">unravel: arithmetic overflow</span>
+<span class="loc">  --&gt; values_overflow.loom:20:5</span>
+<span class="gut">   |</span>
+<span class="gut">20 |</span>     print(a + 100)
+<span class="gut">   |</span><span class="caret">     ^</span></code></pre></div>
+</div>
+<p>The last line of that sample ends the program, which is why the sample is labelled <em>unravels</em>. An unravel prints where it happened and exits with code 101; <a href="errors.html">Optionals and errors</a> shows the errors you can recover from instead.</p>
+<div class="try"><p>Delete the <code>%</code> from <code>a +% 100</code>. The program unravels at the first line instead of printing <code>44</code>. Then change <code>u12</code> to <code>u16</code> in the <code>m</code> line and watch the three results change.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust picks by <em>method</em>: <code>wrapping_add</code>, <code>saturating_add</code>, <code>checked_add</code>. Plain <code>+</code> panics in a debug build but silently wraps in a release build unless you turn on <code>overflow-checks</code>. Loom's plain <code>+</code> is the same in every build.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> a: u8 = <span class="n">200</span>;
+a.<span class="f">wrapping_add</span>(<span class="n">100</span>);    <span class="c">// 44</span>
+a.<span class="f">saturating_add</span>(<span class="n">100</span>);  <span class="c">// 255</span>
+a.<span class="f">checked_add</span>(<span class="n">100</span>);     <span class="c">// None</span></code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="zig" data-label="Zig">
+<h4>Zig</h4>
+<p>Zig is where the operators come from: <code>+%</code> wraps and <code>+|</code> saturates there too. Zig's plain <code>+</code> is checked in safe build modes; Loom's always is, and adds <code>+?</code> for a result you can test.</p>
+<pre class="foreign" data-lang="zig"><code><span class="k">const</span> a: u8 = <span class="n">200</span>;
+<span class="k">const</span> w = a +% <span class="n">100</span>; <span class="c">// 44</span>
+<span class="k">const</span> s = a +| <span class="n">100</span>; <span class="c">// 255</span></code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Go wraps silently on every integer operation and gives you no operator to ask for anything else. If you need a check, you write it by hand.</p>
+<pre class="foreign" data-lang="go"><code><span class="k">var</span> a uint8 = <span class="n">200</span>
+a += <span class="n">100</span> <span class="c">// 44, no complaint</span></code></pre>
+</div>
+</div>
 <h2 id="text">Text<a class="anchor" href="#text" aria-label="Link to this section">#</a></h2>
-<p><code>str</code> is a view of UTF-8 text and <code>String</code> owns it. A string literal converts to <code>String</code> wherever one is expected. Lengths and positions count bytes, and slicing a string cuts on bytes, unravelling if it lands inside a character. The tests on <code>char</code> and the case changes and trimming of text follow Unicode (<code>'é'.is_alphabetic()</code>, <code>"straße".to_upper()</code>); the <code>_ascii</code> variants look at ASCII only.</p>
+<p><code>str</code> is a view of UTF-8 text and <code>String</code> owns it, the same split as Rust's <code>&amp;str</code> and <code>String</code> or Go's string and <code>[]byte</code>. A string literal converts to <code>String</code> wherever one is expected. <strong>Lengths and positions count bytes</strong>, and slicing cuts on bytes too: if the cut lands inside a character, the program unravels. Methods like <code>is_alphabetic</code> and <code>to_upper</code> follow Unicode (<code>"straße".to_upper()</code>), while the <code>_ascii</code> variants look at ASCII only.</p>
 <div class="sample" id="sample-values_text" data-sample="values_text" data-mode="run" data-file="values_text.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>values_text.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -130,45 +203,232 @@ ok(42) err(Invalid) err(Overflow)
 15
 ababab</code></pre></div>
 </div>
-<p>The full method lists are in <a href="../std/modules/string.html#Str">std.string</a> and <a href="../std/modules/num.html">std.num</a>.</p>
-<h2 id="control-flow">Control flow<a class="anchor" href="#control-flow" aria-label="Link to this section">#</a></h2>
-<p>Everything is an expression: <code>if</code>, <code>match</code> and blocks all have values. <code>match</code> must be exhaustive (<a href="diagnostics.html#P0101">P0101</a>), and an arm can have a guard. Loops are <code>for</code>, <code>while</code> and <code>loop</code>; <code>break</code> can carry a value, and a loop can have a label. Comparisons chain: <code>0 &lt;= x &lt; width</code>.</p>
-<div class="sample" id="sample-values_control" data-sample="values_control" data-mode="run" data-file="values_control.loom" data-runnable>
-<div class="sample-head"><span class="file"><span class="dot"></span>values_control.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<p>The full method lists are in <a href="../std/modules/string.html#Str">std.string</a> and <a href="../std/modules/num.html">std.num</a>. A few things to notice:</p>
+<ul><li><code>find</code> gives an optional position, and <code>parse[T]()</code> gives a result: <code>ok(42)</code>, or <code>err(Invalid)</code> and <code>err(Overflow)</code> for text that isn't a number or doesn't fit. <code>mend 0</code> supplies a fallback; both are covered in <a href="errors.html">Optionals and errors</a>.</li><li>A <code>String</code> you change must be a <code>var</code>: <code>out.push(c)</code>.</li><li><code>chars()</code>, <code>bytes()</code>, <code>lines()</code> and <code>words()</code> give lazy streams, which <a href="collections.html">Collections and streams</a> explains.</li></ul>
+<div class="try"><p>Change <code>t[0..5]</code> to <code>t[0..9]</code>. Byte 9 is in the middle of <code>ö</code>, so the program unravels instead of printing half a character.</p></div>
+<h3 id="other-kinds-of-string-literal">Other kinds of string literal<a class="anchor" href="#other-kinds-of-string-literal" aria-label="Link to this section">#</a></h3>
+<div class="sample" id="sample-values_literals" data-sample="values_literals" data-mode="run" data-file="values_literals.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>values_literals.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">fun</span> <span class="f">classify</span>(n: i32) -&gt; str = <span class="k">match</span> n {
-    <span class="n">0</span> =&gt; <span class="s">"zero"</span>
-    <span class="n">1</span>..=<span class="n">9</span> =&gt; <span class="s">"small"</span>
-    <span class="n">10</span> | <span class="n">20</span> | <span class="n">30</span> =&gt; <span class="s">"round"</span>
-    x <span class="k">if</span> x &lt; <span class="n">0</span> =&gt; <span class="s">"negative"</span>
-    _ =&gt; <span class="s">"big"</span>
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="c">// Escapes: \n \t \" \\ and \u{...} for any Unicode scalar.</span>
+    <span class="f">print</span>(<span class="s">"tab:\there, quote:\" backslash:\\ yarn:\u</span><span class="h">{</span><span class="n">1</span>F9F6<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// A raw string has no escapes and no templates.</span>
+    <span class="k">let</span> n = <span class="n">3</span>
+    <span class="f">print</span>(r<span class="s">"C:\temp\{n} is not interpolated"</span>)
+
+    <span class="c">// A triple-quoted string spans lines and drops the common indentation.</span>
+    <span class="k">let</span> poem = <span class="s">""</span><span class="s">"
+        warp runs up,
+          weft runs across.
+        "</span><span class="s">""</span>
+    <span class="f">print</span>(poem)
+
+    <span class="c">// `char` is one Unicode scalar; `as` converts to and from numbers.</span>
+    <span class="k">let</span> c = <span class="s">'é'</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>c<span class="h">}</span><span class="s"> </span><span class="h">{</span>c <span class="k">as</span> u32<span class="h">}</span><span class="s"> </span><span class="h">{</span>c.<span class="f">is_alphabetic</span>()<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">65</span> <span class="k">as</span> char<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="s">'a'</span> &lt; <span class="s">'b'</span><span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// A byte string is an array of bytes, ASCII only.</span>
+    <span class="k">let</span> get = b<span class="s">"GET"</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>get<span class="h">}</span><span class="s"> </span><span class="h">{</span>get.<span class="f">len</span>()<span class="h">}</span><span class="s">"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>tab:	here, quote:" backslash:\ yarn:🧶
+C:\temp\{n} is not interpolated
+warp runs up,
+  weft runs across.
+é 233 true A true
+[71, 69, 84] 3</code></pre></div>
+</div>
+<ul><li><code>r"..."</code> is a raw string: no escapes and no <code>{templates}</code>.</li><li><code>"""</code> starts a multi-line string. The indentation shared by all its lines is removed, and the closing <code>"""</code> can sit on a line of its own.</li><li><code>b"GET"</code> is a byte string: an array of bytes (<code>[u8; 3]</code>), ASCII only, which passes wherever a <code>[u8]</code> is wanted.</li><li><code>char</code> is one Unicode scalar, written <code>'é'</code> or <code>'\u{1F9F6}'</code>. <code>as</code> converts to and from integers.</li></ul>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="python" data-label="Python">
+<h4>Python</h4>
+<p>Python counts <em>code points</em>: <code>len("é")</code> is 1 and slicing never splits a character. Loom counts bytes like Go and Rust, so slicing is O(1) and exact, and it's your job to cut on a character boundary.</p>
+<pre class="foreign" data-lang="python"><code>s = <span class="s">"Wörld"</span>
+<span class="f">print</span>(<span class="f">len</span>(s), s[<span class="n">0</span>:<span class="n">2</span>])   <span class="c"># 5 Wö</span></code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust and Loom agree: <code>len</code> is bytes, slicing is by byte, and a cut inside a character is fatal (a panic there, an unravel here). <code>chars().count()</code> gives the characters.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> s = <span class="s">"Wörld"</span>;
+<span class="f">println!</span>(<span class="s">"{} {}"</span>, s.<span class="f">len</span>(), s.<span class="f">chars</span>().<span class="f">count</span>()); <span class="c">// 6 5</span>
+<span class="k">let</span> _ = &amp;s[<span class="n">0</span>..<span class="n">2</span>];                              <span class="c">// panics: inside 'ö'</span></code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Go's strings are bytes too, but slicing never checks: you can cut a character in half and carry on with invalid UTF-8. <code>range</code> over a string decodes runes.</p>
+<pre class="foreign" data-lang="go"><code>s := <span class="s">"Wörld"</span>
+fmt.<span class="t">Println</span>(<span class="f">len</span>(s), <span class="f">len</span>([]<span class="f">rune</span>(s))) <span class="c">// 6 5</span>
+fmt.<span class="t">Println</span>(s[<span class="n">0</span>:<span class="n">2</span>])                 <span class="c">// "W\xc3", broken UTF-8</span></code></pre>
+</div>
+</div>
+<h2 id="templates-and-format-specs">Templates and format specs<a class="anchor" href="#templates-and-format-specs" aria-label="Link to this section">#</a></h2>
+<p>A string with <code>{expr}</code> in it is a <strong>template</strong>: the expression is formatted into the string where it stands. Any expression works, and <code>{</code> is written <code>{{</code>. After a <code>:</code> comes a format spec, which looks like Python's: an optional fill and alignment (<code>&lt;</code>, <code>^</code>, <code>&gt;</code>), a sign, <code>0</code> for zero padding, a width, a precision (<code>.3</code>), and a type letter.</p>
+<div class="sample" id="sample-values_templates" data-sample="values_templates" data-mode="run" data-file="values_templates.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>values_templates.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Point</span>: <span class="t">Show</span> {
+    x: i32
+    y: i32
 }
 
 <span class="k">fun</span> <span class="f">main</span>() {
-    <span class="k">for</span> n <span class="k">in</span> [<span class="n">0</span>, <span class="n">5</span>, <span class="n">20</span>, -<span class="n">4</span>, <span class="n">99</span>] {
-        <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>n<span class="h">}</span><span class="s">: </span><span class="h">{</span><span class="f">classify</span>(n)<span class="h">}</span><span class="s">"</span>)
-    }
+    <span class="k">let</span> pi = <span class="n">3.14159265</span>
+    <span class="k">let</span> n = <span class="n">42</span>
+    <span class="k">let</span> name = <span class="s">"loom"</span>
 
-    <span class="c">// Ranges, `while`, `loop` with a value, labels.</span>
+    <span class="c">// Any expression goes between the braces.</span>
+    <span class="f">print</span>(<span class="s">"n + 1 = </span><span class="h">{</span>n + <span class="n">1</span><span class="h">}</span><span class="s">, big? </span><span class="h">{</span>n &gt; <span class="n">40</span><span class="h">}</span><span class="s">, upper: </span><span class="h">{</span>name.<span class="f">to_upper</span>()<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// After a `:` comes the format spec: [fill][align][sign][0][width][.precision][type]</span>
+    <span class="f">print</span>(<span class="s">"[</span><span class="h">{</span>pi:.<span class="n">3</span><span class="h">}</span><span class="s">] [</span><span class="h">{</span>pi:<span class="n">10.2</span><span class="h">}</span><span class="s">] [</span><span class="h">{</span>n:<span class="n">6</span><span class="h">}</span><span class="s">] [</span><span class="h">{</span>n:&lt;<span class="n">6</span><span class="h">}</span><span class="s">] [</span><span class="h">{</span>n:^<span class="n">6</span><span class="h">}</span><span class="s">] [</span><span class="h">{</span>n:<span class="n">06</span><span class="h">}</span><span class="s">] [</span><span class="h">{</span>n:+<span class="h">}</span><span class="s">]"</span>)
+    <span class="f">print</span>(<span class="s">"[</span><span class="h">{</span>name:&gt;<span class="n">8</span><span class="h">}</span><span class="s">] [</span><span class="h">{</span>name:*^<span class="n">10</span><span class="h">}</span><span class="s">] [</span><span class="h">{</span>name:-&lt;<span class="n">7</span><span class="h">}</span><span class="s">]"</span>)
+
+    <span class="c">// Integer types: x X b o, and # adds the prefix.</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="n">255</span>:x<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">255</span>:X<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">255</span>:<span class="a">#x</span><span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">255</span>:<span class="a">#b</span><span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">8</span>:o<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">255</span>:<span class="n">08b</span><span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// `?` is the debug form: strings and chars come quoted.</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>name<span class="h">}</span><span class="s"> </span><span class="h">{</span>name:?<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="s">'x'</span>:?<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="t">Point</span>(<span class="n">1</span>, <span class="n">2</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="t">Point</span>(<span class="n">1</span>, <span class="n">2</span>):?<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// Literal braces are doubled; a `:` of your own needs parentheses.</span>
+    <span class="f">print</span>(<span class="s">"{{n}} is </span><span class="h">{</span>n<span class="h">}</span><span class="s">; </span><span class="h">{</span>(<span class="k">if</span> n &gt; <span class="n">40</span> { <span class="s">"big"</span> } <span class="k">else</span> { <span class="s">"small"</span> })<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// A template is an ordinary string: it can be stored, or nested.</span>
+    <span class="k">let</span> line = <span class="s">"</span><span class="h">{</span>name<span class="h">}</span><span class="s">:</span><span class="h">{</span>n:&gt;<span class="n">4</span><span class="h">}</span><span class="s">"</span>
+    <span class="f">print</span>(<span class="s">"&lt;</span><span class="h">{</span>line<span class="h">}</span><span class="s">&gt;"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>n + 1 = 43, big? true, upper: LOOM
+[3.142] [      3.14] [    42] [42    ] [  42  ] [000042] [+42]
+[    loom] [***loom***] [loom---]
+ff FF 0xff 0b11111111 10 11111111
+loom "loom" 'x' Point(x: 1, y: 2) Point(x: 1, y: 2)
+{n} is 42; big
+&lt;loom:  42&gt;</code></pre></div>
+</div>
+<table class="plain"><thead><tr><th>Spec</th><th>Meaning</th><th>Example</th></tr></thead><tbody><tr><td><code>.3</code></td><td>three decimals</td><td><code>{pi:.3}</code> gives <code>3.142</code></td></tr><tr><td><code>6</code>, <code>&lt;6</code>, <code>^6</code>, <code>&gt;6</code></td><td>width, with alignment</td><td><code>{n:^6}</code> gives <code>  42  </code></td></tr><tr><td><code>*^10</code></td><td>fill with <code>*</code>, centered</td><td><code>***loom***</code></td></tr><tr><td><code>06</code>, <code>+</code></td><td>zero padding, always show the sign</td><td><code>000042</code>, <code>+42</code></td></tr><tr><td><code>x X b o</code></td><td>hex, upper hex, binary, octal; <code>#</code> adds <code>0x</code>/<code>0b</code></td><td><code>{255:#x}</code> gives <code>0xff</code></td></tr><tr><td><code>?</code></td><td>debug form</td><td><code>{name:?}</code> gives <code>"loom"</code></td></tr></tbody></table>
+<p>A <code>:</code> always starts the spec, so an expression that needs one of its own goes in parentheses.</p>
+<div class="try"><p>Add <code>{1_000_000:,}</code> to one of the <code>print</code> calls. Loom has no thousands separator, and says so (<a href="diagnostics.html#T0117">T0117</a>) with a hint about parentheses. Then try <code>{pi:10.5}</code> and <code>{n:#010b}</code> and see how width and precision combine.</p></div>
+<h2 id="functions">Functions<a class="anchor" href="#functions" aria-label="Link to this section">#</a></h2>
+<p>A function says what it takes and what it gives back. Every parameter needs a type; the return type goes after <code>-&gt;</code>, and is left out when the function returns nothing. The body is a block whose last expression is the result, or <code>= expr</code> for a one-liner. <code>return</code> is for leaving early.</p>
+<div class="sample" id="sample-values_functions" data-sample="values_functions" data-mode="run" data-file="values_functions.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>values_functions.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">// A block body: the last expression is the result.</span>
+<span class="k">fun</span> <span class="f">area</span>(w: f64, h: f64 = <span class="n">1.0</span>) -&gt; f64 {
+    w * h
+}
+
+<span class="c">// An expression body.</span>
+<span class="k">fun</span> <span class="f">cube</span>(n: i64) -&gt; i64 = n * n * n
+
+<span class="c">// Several results travel as a tuple.</span>
+<span class="k">fun</span> <span class="f">divmod</span>(a: i32, b: i32) -&gt; (i32, i32) = (a / b, a % b)
+
+<span class="c">// `return` leaves early.</span>
+<span class="k">fun</span> <span class="f">fact</span>(n: u64) -&gt; u64 {
+    <span class="k">if</span> n &lt;= <span class="n">1</span> { <span class="k">return</span> <span class="n">1</span> }
+    n * <span class="f">fact</span>(n - <span class="n">1</span>)
+}
+
+<span class="c">// `mut` lets the function change the caller's variable.</span>
+<span class="k">fun</span> <span class="f">bump</span>(<span class="k">mut</span> n: i32) { n += <span class="n">1</span> }
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">print</span>(<span class="f">area</span>(<span class="n">2.0</span>))                         <span class="c">// h takes its default</span>
+    <span class="f">print</span>(<span class="f">area</span>(<span class="n">2.0</span>, <span class="n">3.0</span>))
+    <span class="f">print</span>(<span class="f">area</span>(h: <span class="n">3.0</span>, w: <span class="n">2.0</span>))              <span class="c">// named arguments, in any order</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">cube</span>(-<span class="n">3</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="f">fact</span>(<span class="n">20</span>)<span class="h">}</span><span class="s">"</span>)
+
+    <span class="k">let</span> (q, r) = <span class="f">divmod</span>(<span class="n">17</span>, <span class="n">5</span>)               <span class="c">// take the tuple apart</span>
+    <span class="k">let</span> pair = <span class="f">divmod</span>(-<span class="n">17</span>, <span class="n">5</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>q<span class="h">}</span><span class="s"> </span><span class="h">{</span>r<span class="h">}</span><span class="s"> </span><span class="h">{</span>pair.<span class="n">0</span><span class="h">}</span><span class="s"> </span><span class="h">{</span>pair.<span class="n">1</span><span class="h">}</span><span class="s">"</span>)
+
+    <span class="k">var</span> k = <span class="n">1</span>
+    <span class="f">bump</span>(<span class="k">mut</span> k)                              <span class="c">// the call says so, too</span>
+    <span class="f">bump</span>(<span class="k">mut</span> k)
+    <span class="f">print</span>(k)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>2
+6
+6
+-27 2432902008176640000
+3 2 -3 -2
+3</code></pre></div>
+</div>
+<ul><li><strong>Arguments can be named</strong> at the call (<code>area(h: 3.0, w: 2.0)</code>), in any order, and <strong>a parameter can have a default</strong> (<code>h: f64 = 1.0</code>). Named arguments come after the positional ones.</li><li><strong>Several results travel as a tuple</strong>: <code>(i32, i32)</code>, read with <code>.0</code> and <code>.1</code> or taken apart with <code>let (q, r) = ...</code>.</li><li><strong><code>mut</code> lets a function change the caller's variable</strong>, and the call has to say so: <code>bump(mut k)</code>. Mutation is never a surprise at the call site. How this works for bigger values (and <code>take</code>, which consumes) is the subject of <a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a>.</li><li><strong>Any function is also a method on its first parameter</strong>: <code>cube(3)</code> can be written <code>3.cube()</code>. That's <a href="types.html#method-lookup-and-ufcs">method lookup</a>, covered in the next chapter.</li><li>A function's name is a value you can pass around: see <a href="values.html#lambdas">Lambdas</a>.</li></ul>
+<div class="try"><p>Change <code>bump(mut k)</code> to <code>bump(k)</code>. The compiler tells you the call must say <code>mut</code> (<a href="diagnostics.html#T0112">T0112</a>). Then call <code>area(h: 3.0)</code> without a width and see what it asks for.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="python" data-label="Python">
+<h4>Python</h4>
+<p>Python has the same two features, with defaults evaluated at definition time (the famous mutable default). Loom has no <code>*args</code> or <code>**kwargs</code>: a function has the parameters it says.</p>
+<pre class="foreign" data-lang="python"><code><span class="k">def</span> <span class="f">area</span>(w, h=<span class="n">1.0</span>):
+    <span class="k">return</span> w * h
+
+<span class="f">area</span>(h=<span class="n">3.0</span>, w=<span class="n">2.0</span>)</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="swift" data-label="Swift">
+<h4>Swift</h4>
+<p>Swift's argument labels are required at every call and fixed in order. Loom's names are optional, and can reorder. Swift marks a changed variable with <code>&amp;</code> at the call, the same idea as <code>mut k</code>.</p>
+<pre class="foreign" data-lang="swift"><code><span class="k">func</span> <span class="f">area</span>(w: <span class="t">Double</span>, h: <span class="t">Double</span> = <span class="n">1.0</span>) -&gt; <span class="t">Double</span> { w * h }
+<span class="k">func</span> <span class="f">bump</span>(_ n: <span class="k">inout</span> <span class="t">Int</span>) { n += <span class="n">1</span> }
+
+<span class="f">area</span>(w: <span class="n">2.0</span>, h: <span class="n">3.0</span>)
+<span class="k">var</span> k = <span class="n">1</span>
+<span class="f">bump</span>(&amp;k)</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="kotlin" data-label="Kotlin">
+<h4>Kotlin</h4>
+<p>Kotlin's named and default arguments are the closest match. The difference is mutation: Kotlin passes a copy of a number and cannot change the caller's variable at all.</p>
+<pre class="foreign" data-lang="kotlin"><code><span class="k">fun</span> <span class="f">area</span>(w: <span class="t">Double</span>, h: <span class="t">Double</span> = <span class="n">1.0</span>) = w * h
+
+<span class="f">area</span>(h = <span class="n">3.0</span>, w = <span class="n">2.0</span>)</code></pre>
+</div>
+</div>
+<h2 id="if-and-loops"><code>if</code> and loops<a class="anchor" href="#if-and-loops" aria-label="Link to this section">#</a></h2>
+<p><code>if</code> is an expression, so <code>let parity = if n % 2 == 0 { "even" } else { "odd" }</code> is how Loom spells a ternary. Conditions are <code>bool</code> only (no truthiness), and <code>else</code> can start a new line. Blocks are expressions as well, so they give the value of their last line.</p>
+<div class="sample" id="sample-values_loops" data-sample="values_loops" data-mode="run" data-file="values_loops.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>values_loops.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="c">// `if` is an expression, so it can be a value.</span>
+    <span class="k">let</span> n = <span class="n">27</span>
+    <span class="k">let</span> parity = <span class="k">if</span> n % <span class="n">2</span> == <span class="n">0</span> { <span class="s">"even"</span> } <span class="k">else</span> { <span class="s">"odd"</span> }
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>n<span class="h">}</span><span class="s"> is </span><span class="h">{</span>parity<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// `for` goes over a range, an array, a list, a stream...</span>
     <span class="k">var</span> total = <span class="n">0</span>
-    <span class="k">for</span> i <span class="k">in</span> <span class="n">1</span>..=<span class="n">4</span> { total += i }
+    <span class="k">for</span> i <span class="k">in</span> <span class="n">1</span>..=<span class="n">4</span> { total += i }              <span class="c">// 1..=4 includes the 4</span>
+    <span class="k">for</span> i <span class="k">in</span> <span class="n">0</span>..<span class="n">3</span> { total += i }               <span class="c">// 0..3 stops before the 3</span>
     <span class="f">print</span>(total)
 
-    <span class="k">var</span> n = <span class="n">27</span>
+    <span class="k">for</span> (i, name) <span class="k">in</span> [<span class="s">"a"</span>, <span class="s">"b"</span>, <span class="s">"c"</span>].<span class="f">indexed</span>() {
+        <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>i<span class="h">}</span><span class="s">=</span><span class="h">{</span>name<span class="h">}</span><span class="s">"</span>)
+    }
+
+    <span class="c">// `while` checks first; `loop` runs until it is told to `break`.</span>
+    <span class="k">var</span> x = n
     <span class="k">var</span> steps = <span class="n">0</span>
-    <span class="k">while</span> n != <span class="n">1</span> {
-        n = <span class="k">if</span> n % <span class="n">2</span> == <span class="n">0</span> { n / <span class="n">2</span> } <span class="k">else</span> { <span class="n">3</span> * n + <span class="n">1</span> }
+    <span class="k">while</span> x != <span class="n">1</span> {
+        x = <span class="k">if</span> x % <span class="n">2</span> == <span class="n">0</span> { x / <span class="n">2</span> } <span class="k">else</span> { <span class="n">3</span> * x + <span class="n">1</span> }
         steps += <span class="n">1</span>
     }
     <span class="f">print</span>(<span class="s">"collatz: </span><span class="h">{</span>steps<span class="h">}</span><span class="s">"</span>)
 
+    <span class="c">// `break` can carry the loop's value.</span>
     <span class="k">let</span> found = <span class="k">loop</span> {
         steps += <span class="n">1</span>
         <span class="k">if</span> steps % <span class="n">7</span> == <span class="n">0</span> { <span class="k">break</span> steps }
     }
     <span class="f">print</span>(found)
 
+    <span class="c">// A label names a loop, so `break` and `continue` can reach past the inner one.</span>
     outer: <span class="k">for</span> row <span class="k">in</span> <span class="n">0</span>..<span class="n">3</span> {
         <span class="k">for</span> col <span class="k">in</span> <span class="n">0</span>..<span class="n">3</span> {
             <span class="k">if</span> col == <span class="n">2</span> { <span class="k">continue</span> outer }
@@ -177,34 +437,163 @@ ababab</code></pre></div>
         }
     }
 
-    <span class="c">// Chained comparisons, tuples, indexed loops.</span>
+    <span class="c">// Comparisons chain: `0 &lt;= x &lt; width` means `0 &lt;= x and x &lt; width`.</span>
     <span class="k">let</span> width = <span class="n">10</span>
-    <span class="k">let</span> x = <span class="n">4</span>
-    <span class="k">if</span> <span class="n">0</span> &lt;= x &lt; width { <span class="f">print</span>(<span class="s">"in range"</span>) }
-
-    <span class="k">for</span> (i, name) <span class="k">in</span> [<span class="s">"a"</span>, <span class="s">"b"</span>, <span class="s">"c"</span>].<span class="f">indexed</span>() {
-        <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>i<span class="h">}</span><span class="s">=</span><span class="h">{</span>name<span class="h">}</span><span class="s">"</span>)
-    }
+    <span class="k">let</span> px = <span class="n">4</span>
+    <span class="k">if</span> <span class="n">0</span> &lt;= px &lt; width { <span class="f">print</span>(<span class="s">"in range"</span>) }
 }</code></pre>
-<div class="sample-out"><div class="out-head">Output</div><pre><code>0: zero
-5: small
-20: round
--4: negative
-99: big
-10
+<div class="sample-out"><div class="out-head">Output</div><pre><code>27 is odd
+13
+0=a
+1=b
+2=c
 collatz: 111
 112
 0,0
 0,1
 1,0
 1,1
-in range
-0=a
-1=b
-2=c</code></pre></div>
+in range</code></pre></div>
+</div>
+<ul><li><code>for x in xs</code> goes over a range, an array, a list, a map, a stream... anything with items. <code>1..=4</code> includes the 4; <code>0..3</code> stops before the 3. For <code>(i, x)</code> pairs, use <code>.indexed()</code>.</li><li><code>while cond</code> checks before each round, and <code>loop</code> runs until a <code>break</code>. <strong><code>break</code> can carry a value</strong>, which becomes the loop's value.</li><li>A label before a loop (<code>outer:</code>) lets <code>break outer</code> and <code>continue outer</code> reach past inner loops.</li><li><strong>Comparisons chain</strong>: <code>0 &lt;= x &lt; width</code> means <code>0 &lt;= x and x &lt; width</code>, with <code>x</code> evaluated once. Mixing directions (<code>a &lt; b &gt; c</code>) is an error.</li><li><code>for mut x in xs</code> edits the elements in place; see <a href="collections.html">Collections and streams</a>.</li></ul>
+<div class="try"><p>In <code>found = loop { ... }</code>, change <code>break steps</code> to a plain <code>break</code>. The loop no longer has a value, so <code>found</code> is <code>()</code> and <code>print(found)</code> stops the build: <code>()</code> isn't <code>Show</code> (<a href="diagnostics.html#T0108">T0108</a>). Then try <code>if n { ... }</code> on a number and meet the error for a condition that isn't a <code>bool</code>.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Loom's loops are Rust's: <code>loop</code> can break with a value, labels name loops. Rust spells a label <code>'outer</code>, Loom <code>outer:</code>. Rust has no chained comparison, so <code>0 &lt;= x &amp;&amp; x &lt; width</code> it is.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> found = <span class="k">loop</span> {
+    steps += <span class="n">1</span>;
+    <span class="k">if</span> steps % <span class="n">7</span> == <span class="n">0</span> { <span class="k">break</span> steps; }
+};
+'outer: <span class="k">for</span> row <span class="k">in</span> <span class="n">0</span>..<span class="n">3</span> {
+    <span class="k">for</span> col <span class="k">in</span> <span class="n">0</span>..<span class="n">3</span> {
+        <span class="k">if</span> col == <span class="n">2</span> { <span class="k">continue</span> 'outer; }
+    }
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="python" data-label="Python">
+<h4>Python</h4>
+<p>Python chains comparisons too, and <code>for ... in enumerate(...)</code> is Loom's <code>.indexed()</code>. Python has no <code>loop</code> or <code>break</code> with a value, but has <code>else</code> on loops, which Loom doesn't.</p>
+<pre class="foreign" data-lang="python"><code><span class="k">if</span> <span class="n">0</span> &lt;= x &lt; width:
+    <span class="f">print</span>(<span class="s">"in range"</span>)
+<span class="k">for</span> i, name <span class="k">in</span> <span class="f">enumerate</span>([<span class="s">"a"</span>, <span class="s">"b"</span>, <span class="s">"c"</span>]):
+    <span class="f">print</span>(f<span class="s">"{i}={name}"</span>)</code></pre>
+</div>
+</div>
+<h2 id="match-and-patterns"><code>match</code> and patterns<a class="anchor" href="#match-and-patterns" aria-label="Link to this section">#</a></h2>
+<p><code>match</code> compares a value against <strong>patterns</strong>, top to bottom, and runs the first arm that fits. It's an expression, and it must be <strong>exhaustive</strong>: if the arms leave a possible value uncovered, the compiler refuses and says which one (<a href="diagnostics.html#P0101">P0101</a>). An arm can add a guard with <code>if</code>, and arms are separated by newlines or commas.</p>
+<div class="sample" id="sample-values_match" data-sample="values_match" data-mode="run" data-file="values_match.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>values_match.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Point</span> {
+    x: i32
+    y: i32
+}
+
+<span class="c">// Literals, ranges, alternatives, a guard, and a catch-all.</span>
+<span class="k">fun</span> <span class="f">classify</span>(n: i32) -&gt; str = <span class="k">match</span> n {
+    <span class="n">0</span> =&gt; <span class="s">"zero"</span>
+    <span class="n">1</span>..=<span class="n">9</span> =&gt; <span class="s">"small"</span>
+    <span class="n">10</span> | <span class="n">20</span> | <span class="n">30</span> =&gt; <span class="s">"round"</span>
+    x <span class="k">if</span> x &lt; <span class="n">0</span> =&gt; <span class="s">"negative"</span>
+    _ =&gt; <span class="s">"big"</span>
+}
+
+<span class="c">// Matching a tuple takes both values at once.</span>
+<span class="k">fun</span> <span class="f">fizz</span>(n: u32) -&gt; <span class="t">String</span> = <span class="k">match</span> (n % <span class="n">3</span>, n % <span class="n">5</span>) {
+    (<span class="n">0</span>, <span class="n">0</span>) =&gt; <span class="s">"FizzBuzz"</span>
+    (<span class="n">0</span>, _) =&gt; <span class="s">"Fizz"</span>
+    (_, <span class="n">0</span>) =&gt; <span class="s">"Buzz"</span>
+    _ =&gt; <span class="s">"</span><span class="h">{</span>n<span class="h">}</span><span class="s">"</span>
+}
+
+<span class="c">// A record pattern names the fields it cares about; `..` skips the rest.</span>
+<span class="k">fun</span> <span class="f">where_is</span>(p: <span class="t">Point</span>) -&gt; str = <span class="k">match</span> p {
+    <span class="t">Point</span>(<span class="n">0</span>, <span class="n">0</span>) =&gt; <span class="s">"origin"</span>
+    <span class="t">Point</span>(x: <span class="n">0</span>, y: _) =&gt; <span class="s">"on the y axis"</span>
+    <span class="t">Point</span>(x:, y:) <span class="k">if</span> x == y =&gt; <span class="s">"on the diagonal"</span>   <span class="c">// `x:` binds x, like `x: x`</span>
+    <span class="t">Point</span>(x, ..) <span class="k">if</span> x &lt; <span class="n">0</span> =&gt; <span class="s">"to the left"</span>
+    _ =&gt; <span class="s">"elsewhere"</span>
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">for</span> n <span class="k">in</span> [<span class="n">0</span>, <span class="n">5</span>, <span class="n">20</span>, -<span class="n">4</span>, <span class="n">99</span>] {
+        <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>n<span class="h">}</span><span class="s">: </span><span class="h">{</span><span class="f">classify</span>(n)<span class="h">}</span><span class="s">"</span>)
+    }
+    <span class="f">print</span>([<span class="k">for</span> n <span class="k">in</span> <span class="n">1</span>..=<span class="n">15</span> =&gt; <span class="f">fizz</span>(n)])
+    <span class="k">for</span> p <span class="k">in</span> [<span class="t">Point</span>(<span class="n">0</span>, <span class="n">0</span>), <span class="t">Point</span>(<span class="n">0</span>, <span class="n">5</span>), <span class="t">Point</span>(<span class="n">3</span>, <span class="n">3</span>), <span class="t">Point</span>(-<span class="n">3</span>, <span class="n">2</span>), <span class="t">Point</span>(<span class="n">4</span>, <span class="n">1</span>)] {
+        <span class="f">print</span>(<span class="s">"(</span><span class="h">{</span>p.x<span class="h">}</span><span class="s">, </span><span class="h">{</span>p.y<span class="h">}</span><span class="s">): </span><span class="h">{</span><span class="f">where_is</span>(p)<span class="h">}</span><span class="s">"</span>)
+    }
+
+    <span class="c">// `is` is a pattern test that gives a bool, and binds for the `and` after it.</span>
+    <span class="k">let</span> found = <span class="k">some</span>(<span class="n">7</span>)
+    <span class="k">if</span> found <span class="k">is</span> <span class="k">some</span>(n) <span class="k">and</span> n &gt; <span class="n">5</span> { <span class="f">print</span>(<span class="s">"found </span><span class="h">{</span>n<span class="h">}</span><span class="s">"</span>) }
+
+    <span class="c">// `match` is an expression, so it can sit on the right of `let`.</span>
+    <span class="k">let</span> size = <span class="k">match</span> <span class="s">'q'</span> {
+        <span class="s">'a'</span>..=<span class="s">'m'</span> =&gt; <span class="s">"first half"</span>
+        <span class="s">'n'</span>..=<span class="s">'z'</span> =&gt; <span class="s">"second half"</span>
+        _ =&gt; <span class="s">"not a lowercase letter"</span>
+    }
+    <span class="f">print</span>(size)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>0: zero
+5: small
+20: round
+-4: negative
+99: big
+[1, 2, Fizz, 4, Buzz, Fizz, 7, 8, Fizz, Buzz, 11, Fizz, 13, 14, FizzBuzz]
+(0, 0): origin
+(0, 5): on the y axis
+(3, 3): on the diagonal
+(-3, 2): to the left
+(4, 1): elsewhere
+found 7
+second half</code></pre></div>
+</div>
+<table class="plain"><thead><tr><th>Pattern</th><th>Matches</th></tr></thead><tbody><tr><td><code>42</code>, <code>'a'</code>, <code>"GET"</code>, <code>true</code></td><td>a literal</td></tr><tr><td><code>1..=9</code>, <code>'a'..='f'</code></td><td>a range</td></tr><tr><td><code>10|20|30</code></td><td>any of several; both sides must bind the same names</td></tr><tr><td><code>x</code></td><td>anything, binding it to <code>x</code></td></tr><tr><td><code>_</code></td><td>anything, binding nothing</td></tr><tr><td><code>(a, b)</code></td><td>a tuple</td></tr><tr><td><code>Point(x, y)</code>, <code>Point(x:, ..)</code></td><td>a record, by position or by name; <code>..</code> skips the rest</td></tr><tr><td><code>.Circle(r)</code>, <code>some(n)</code></td><td>a case; see <a href="types.html#cases">Cases</a></td></tr></tbody></table>
+<p><code>is</code> is a pattern test that gives a <code>bool</code> and binds for the <code>and</code> that follows: <code>if found is some(n) and n &gt; 5 { ... }</code>.</p>
+<p>Slice patterns (<code>[first, ..rest]</code>) and <code>name @ pattern</code> bindings are in the design but not built yet: see <a href="not-yet.html">Not supported yet</a>.</p>
+<div class="try"><p>Delete the <code>_ =&gt; "big"</code> arm of <code>classify</code>. Because an <code>i32</code> has many more values than the arms name, the compiler stops with P0101. Next, delete just <code>(_, 0) =&gt; "Buzz"</code> from <code>fizz</code> and see it name the shape of the missing case.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Nearly the same. Rust's record patterns use braces (<code>Point { x: 0, .. }</code>) and a binding with a guard is <code>x if x &lt; 0</code>; Loom's records are patterned like calls, and <code>Point(x:, y:)</code> is the shorthand for <code>Point(x: x, y: y)</code>.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">match</span> n {
+    <span class="n">0</span> =&gt; <span class="s">"zero"</span>,
+    <span class="n">1</span>..=<span class="n">9</span> =&gt; <span class="s">"small"</span>,
+    <span class="n">10</span> | <span class="n">20</span> | <span class="n">30</span> =&gt; <span class="s">"round"</span>,
+    x <span class="k">if</span> x &lt; <span class="n">0</span> =&gt; <span class="s">"negative"</span>,
+    _ =&gt; <span class="s">"big"</span>,
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="swift" data-label="Swift">
+<h4>Swift</h4>
+<p>Swift's <code>switch</code> is exhaustive too, with <code>case</code> for each arm and <code>where</code> for a guard. Ranges are written <code>1...9</code>.</p>
+<pre class="foreign" data-lang="swift"><code><span class="k">let</span> kind = <span class="k">switch</span> n {
+<span class="k">case</span> <span class="n">0</span>: <span class="s">"zero"</span>
+<span class="k">case</span> <span class="n">1</span>...<span class="n">9</span>: <span class="s">"small"</span>
+<span class="k">case</span> <span class="n">10</span>, <span class="n">20</span>, <span class="n">30</span>: <span class="s">"round"</span>
+<span class="k">case</span> <span class="k">let</span> x <span class="k">where</span> x &lt; <span class="n">0</span>: <span class="s">"negative"</span>
+<span class="k">default</span>: <span class="s">"big"</span>
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="python" data-label="Python">
+<h4>Python</h4>
+<p>Python's <code>match</code> (3.10+) is not checked for exhaustiveness: a missing case just falls through. It has no range patterns, so a guard does the work.</p>
+<pre class="foreign" data-lang="python"><code><span class="k">match</span> n:
+    <span class="k">case</span> <span class="n">0</span>: <span class="s">"zero"</span>
+    <span class="k">case</span> <span class="n">10</span> | <span class="n">20</span> | <span class="n">30</span>: <span class="s">"round"</span>
+    <span class="k">case</span> x <span class="k">if</span> x &lt; <span class="n">0</span>: <span class="s">"negative"</span>
+    <span class="k">case</span> _: <span class="s">"other"</span></code></pre>
+</div>
 </div>
 <h2 id="lambdas">Lambdas<a class="anchor" href="#lambdas" aria-label="Link to this section">#</a></h2>
-<p><code>x =&gt; x * 2</code> is a lambda. Its parameter types come from where it's passed, so a lambda stored in a <code>let</code> needs them written. A <code>_</code> inside an argument makes a hole lambda: each <code>_</code> is a new parameter, and the hole belongs to the innermost argument that holds it. A function's name is also a value. A lambda sees the variables around it.</p>
+<p><code>x =&gt; x * 2</code> is a lambda. Its parameter types come from where it's passed (<code>xs.map(x =&gt; x + 1)</code>), so a lambda stored in a <code>let</code> needs them written: <code>(x: i32) =&gt; x * 2</code>. Function types use the same arrow: <code>i32 =&gt; i32</code>, <code>(f64, f64) =&gt; bool</code>.</p>
+<p>When a lambda is just one expression of its argument, a <strong>hole</strong> is shorter: each <code>_</code> inside an argument is a new parameter, and the argument becomes a lambda. <code>xs.filter(_ % 2 == 0)</code> is <code>xs.filter(n =&gt; n % 2 == 0)</code> and <code>xs.reduce(_ + _)</code> takes two parameters. A hole belongs to the innermost argument that holds it, so <code>clamp(_, 0, 255)</code> is a lambda too.</p>
 <div class="sample" id="sample-values_lambdas" data-sample="values_lambdas" data-mode="run" data-file="values_lambdas.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>values_lambdas.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -239,8 +628,31 @@ in range
 21
 21</code></pre></div>
 </div>
+<ul><li>A function's name is a value (<code>xs.filter(is_even)</code>), and a lambda sees the variables around it, even to change them (<code>total += x</code>).</li><li>Lambdas you pass as arguments borrow what they capture and can't outlive the call. Storing or returning one means allocating it: see <a href="memory.html">Pointers, spools and <code>given</code></a>.</li><li>If you need the same value twice, name it: <code>xs.map(n =&gt; n * n)</code>.</li></ul>
+<div class="try"><p>Change <code>xs.filter(_ % 2 == 0)</code> to <code>xs.filter(_ % 2 == _)</code>. Two holes make a two-parameter lambda, and <code>filter</code> wants one.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="kotlin" data-label="Kotlin">
+<h4>Kotlin</h4>
+<p>Kotlin's implicit <code>it</code> is the closest relative, for one-parameter lambdas. A hole generalizes it to more than one parameter and to nested calls.</p>
+<pre class="foreign" data-lang="kotlin"><code>xs.filter { it % <span class="n">2</span> == <span class="n">0</span> }
+xs.reduce { a, b -&gt; a + b }</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="swift" data-label="Swift">
+<h4>Swift</h4>
+<p>Swift names a closure's parameters by number, so <code>$0</code> can be used twice and means the same value both times. In Loom each <code>_</code> is a <em>new</em> parameter, which is why you name the value when you want it twice.</p>
+<pre class="foreign" data-lang="swift"><code>xs.filter { $<span class="n">0</span> % <span class="n">2</span> == <span class="n">0</span> }
+xs.<span class="f">reduce</span>(<span class="n">0</span>) { $<span class="n">0</span> + $<span class="n">1</span> }</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust closures need pipes and often a <code>.iter()</code> and a dereference. The captured-variable rules are stricter, because the borrow checker is tracking lifetimes.</p>
+<pre class="foreign" data-lang="rust"><code>xs.<span class="f">iter</span>().<span class="f">filter</span>(|n| *n % <span class="n">2</span> == <span class="n">0</span>);
+xs.<span class="f">iter</span>().sum::&lt;i32&gt;();</code></pre>
+</div>
+</div>
 <h2 id="twill-patterns">Twill patterns<a class="anchor" href="#twill-patterns" aria-label="Link to this section">#</a></h2>
-<p>A binary, octal or hex literal in a pattern can hold <code>?</code> (any digit) and lowercase letters, which capture. All the bits with the same letter become one unsigned integer exactly that wide. The pattern's width must equal the value's. The compiler checks twill arms for exhaustiveness bit by bit.</p>
+<p>A binary, octal or hex literal in a pattern can hold <code>?</code> (any digit) and lowercase letters, which <strong>capture</strong>. All the bits with the same letter become one unsigned integer exactly that wide. This is what you reach for when decoding an instruction set or a byte format, where hand-written masks and shifts are easy to get wrong.</p>
 <div class="sample" id="sample-values_twill" data-sample="values_twill" data-mode="run" data-file="values_twill.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>values_twill.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -292,7 +704,30 @@ E2: starts a 3-byte character
 A9: continuation
 carry 1, sum 44</code></pre></div>
 </div>
-<p>In hex twill patterns the digits <code>A</code>-<code>F</code> must be upper case. Lower case letters capture.</p>
+<ul><li>The pattern's width must equal the value's: <code>0x1nnn</code> is 16 bits, so it matches a <code>u16</code>. The three <code>n</code>s are twelve bits, so <code>n</code> is a <code>u12</code>.</li><li><code>_</code> in a binary pattern is a separator and is ignored (<code>0b0???_????</code>).</li><li>In hex patterns the digits <code>A</code> to <code>F</code> must be upper case; lower-case letters are captures. (<code>0x00e0</code> would capture <code>e</code>.)</li><li>The compiler checks twill arms for exhaustiveness bit by bit, so deleting the <code>_</code> arm of <code>utf8_kind</code> names the patterns you missed.</li><li>A twill pattern with no fixed digits can't fail, so <code>let</code> takes it. The pattern's width becomes the type of the right-hand side, which is how <code>let 0bc_ssss_ssss = a + b</code> works out an addition with its carry in 9 bits.</li></ul>
+<div class="try"><p>In <code>utf8_kind</code>, delete the <code>_ =&gt; "other"</code> arm. The compiler checks the arms bit by bit, finds a byte none of them covers, and names one (<code>240</code>, which starts <code>0b1111</code>).</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="elixir" data-label="Elixir">
+<h4>Elixir</h4>
+<p>Elixir (like Erlang) has the same idea built in, with binary patterns. Loom's twill is the version for plain integers: the pattern is a literal, so the digits show the layout.</p>
+<pre class="foreign" data-lang="elixir"><code><span class="k">case</span> &lt;&lt;byte&gt;&gt; <span class="k">do</span>
+  &lt;&lt;<span class="n">0</span>::<span class="n">1</span>, _::<span class="n">7</span>&gt;&gt; -&gt; <span class="s">"ascii"</span>
+  &lt;&lt;0b110::<span class="n">3</span>, _::<span class="n">5</span>&gt;&gt; -&gt; <span class="s">"starts a 2-byte character"</span>
+  &lt;&lt;0b10::<span class="n">2</span>, _::<span class="n">6</span>&gt;&gt; -&gt; <span class="s">"continuation"</span>
+<span class="k">end</span></code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust has no bit patterns. You test with masks in guards and shift the fields out by hand, and the compiler can't tell you if the arms are exhaustive.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">match</span> byte {
+    b <span class="k">if</span> b &amp; 0x80 == <span class="n">0</span> =&gt; <span class="s">"ascii"</span>,
+    b <span class="k">if</span> b &amp; 0xE0 == 0xC0 =&gt; <span class="s">"starts a 2-byte character"</span>,
+    b <span class="k">if</span> b &amp; 0xC0 == 0x80 =&gt; <span class="s">"continuation"</span>,
+    _ =&gt; <span class="s">"other"</span>,
+}</code></pre>
+</div>
+</div>
 <h2 id="where-next">Where next<a class="anchor" href="#where-next" aria-label="Link to this section">#</a></h2>
 <p><a href="types.html">Warps, wefts and weaves</a> introduces Loom's own data and behavior types.</p>
 <nav class="pager" aria-label="Chapters">

@@ -1,0 +1,12 @@
+error[M0101]: `evens` is used after it was moved
+  --> docs/lang/samples/coll_err_once.loom:6:11
+  |
+5 |     print(evens.count())                     // reads the stream to the end
+  |           ----- moved here: this used up the stream
+6 |     print(evens.sum())                       // there is nothing left to read
+  |           ^^^^^ used here
+  |
+  = note: a stream is read once: each of its methods takes it
+  = help: make a new stream for each use (`xs.indexed()` again), or collect it into a list first
+
+error: docs/lang/samples/coll_err_once.loom failed to type-check (1 error)

@@ -1,0 +1,34 @@
+use std.io.print
+
+// An error is a warp that weaves `Error`; its `message` shows case and payload.
+warp AgeError: Error {
+    case Negative
+    case TooOld(age: i32)
+}
+
+fun check(age: i32) -> u8 ! AgeError {
+    if age < 0 { fail .Negative }            // the leading dot picks a case of AgeError
+    age as? u8 mend fail .TooOld(age: age)
+}
+
+// No `-> T`: it either works or fails.
+fun greet(age: i32) ! AgeError {
+    let a = check(age)?
+    print("hello, {a} year old")
+}
+
+fun main() {
+    print("{check(30):?} {check(-1):?} {check(300):?}")
+
+    match check(300) {
+        ok(a) => print("fine: {a}")
+        err(.Negative) => print("negative")
+        err(e) => print("problem: {e.message()}")
+    }
+
+    let r = check(7).map(_ + 1)
+    print("{r:?} {r.is_ok()} {check(-2).error():?}")
+    greet(20) mend e => print("greet failed: {e}")
+    greet(-5) mend e => print("greet failed: {e}")
+}
+//@ run

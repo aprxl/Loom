@@ -1,0 +1,39 @@
+use std.io.print
+
+/// `self.(f)` reads and assigns a field chosen at compile time, so one
+/// default method scales any record whose fields are numbers.
+weft Scale {
+    fun scale(mut self, by: i32) {
+        const for f in Self.fields {
+            self.(f) *= by
+        }
+    }
+}
+
+/// Names the case a value is in. `v is .(c)` is an ordinary test at run
+/// time; `c` is the compile-time case it tests for.
+weft CaseName {
+    fun case_name(self) -> str {
+        const for c in Self.cases {
+            if self is .(c) { return c.name }
+        }
+        "?"
+    }
+}
+
+warp Vec3: Scale, Show { x: i32, y: i32, z: i32 }
+
+warp Light: CaseName {
+    case Red
+    case Amber
+    case Green(blink: bool)
+}
+
+fun main() {
+    var v = Vec3(1, 2, 3)
+    v.scale(10)
+    print(v)
+    print(Light.Amber.case_name())
+    print(Light.Green(blink: true).case_name())
+}
+//@ run

@@ -1,0 +1,23 @@
+use std.io.print
+
+type Port = u16 where 1..
+type Percent = f32 where 0.0..=1.0
+type Even = i64 where _ % 2 == 0
+
+fun parse_port(s: str) -> ?Port {
+    let n = s.parse[u16]() mend return none
+    if n is Port { n } else { none }    // `is` narrows `n` inside the branch
+}
+
+fun main() {
+    print("{parse_port("8080"):?} {parse_port("0"):?} {parse_port("x"):?}")
+
+    let n: i64 = 7
+    print("{n as? Even:?} {(n + 1) as? Even:?}")     // `as?` gives an optional
+    print("{70000 as| Port} {0 as| Port}")           // `as|` clamps into the range
+    print("{1.7 as| Percent} {-0.3 as| Percent}")
+
+    print("{(n + 1) as Even}")                        // `as` is fine when it fits...
+    print("{n as Even}")                              // ...and unravels when it doesn't
+}
+//@ unravel

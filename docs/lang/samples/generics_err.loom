@@ -1,0 +1,25 @@
+use std.io.print
+
+warp Blob: Show {
+    n: i32
+}
+
+// No bounds: the body is only checked against the types it is used with.
+fun biggest[T: Show](xs: [T]) -> ?T {
+    var best: ?T = none
+    for x in xs {
+        if best is some(b) and b >= x { continue }
+        best = x
+    }
+    best
+}
+
+// Bounds are checked at the call, before the body is looked at.
+fun smallest[T: Show + Ord + Copy](xs: [T]) -> ?T = xs.first()
+
+fun main() {
+    print(biggest([4, 2]))
+    print(biggest([Blob(1)]))
+    print(smallest([Blob(1)]))
+}
+//@ check-fail T0108 T0103

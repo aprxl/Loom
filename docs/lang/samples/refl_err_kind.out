@@ -1,0 +1,11 @@
+error[K0103]: compile-time code unravelled: Names only works on records, not Light
+   --> docs/lang/samples/refl_err_kind.loom:15:13
+   |
+15 |             const unravel("Names only works on records, not {Self.name}")
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ while running this
+   |
+   = note: it unravelled at docs/lang/samples/refl_err_kind.loom:15:19
+   = help: unravelling while compiling is a compile error
+   = note: in `Names.names` for `Light`
+
+error: docs/lang/samples/refl_err_kind.loom failed to compile (1 error)

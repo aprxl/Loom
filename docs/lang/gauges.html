@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>Gauges · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -55,51 +56,127 @@
 <div class="chapter-head">
 <span class="chapter-no">Chapter 9</span>
 <h1>Gauges</h1>
-<p class="summary">Number types limited to a range or a predicate.</p>
+<p class="summary">Number types limited to a range or a predicate, checked once on the way in and tracked by the compiler afterwards.</p>
 </div>
-<p>A <strong>gauge</strong> is a numeric type with a restriction: a range (<code>u16 where 1..</code>) or a predicate written as a hole lambda (<code>i64 where _ % 2 == 0</code>).</p>
-<p>A gauge is its own type. It widens to its base type by itself (a <code>Port</code> is a <code>u16</code>), and has its base's methods. Getting a number <strong>into</strong> a gauge is checked:</p>
-<table class="plain"><thead><tr><th>Form</th><th>When the value is outside</th></tr></thead><tbody><tr><td>a literal or a constant</td><td>compile error (<a href="diagnostics.html#G0201">G0201</a>)</td></tr><tr><td><code>x as Port</code></td><td>unravels</td></tr><tr><td><code>x as? Port</code></td><td>gives an optional</td></tr><tr><td><code>x as| Port</code></td><td>clamps into the range (range gauges only)</td></tr><tr><td><code>if x is Port { ... }</code></td><td>the test fails; inside the branch <code>x</code> is a <code>Port</code></td></tr></tbody></table>
-<p>Arithmetic on range gauges follows intervals at compile time. <code>Cents + Cents</code> can't go below zero, so it's still <code>Cents</code>. <code>Cents - Cents</code> can, so it's a plain <code>i64</code>. Overflow still unravels as usual.</p>
+<p>Plenty of numbers in a program aren't <em>any</em> number. A TCP port is 1 or more. A percentage runs from 0 to 1. A count of cents shouldn't go below zero. Usually that rule lives in a comment, or in a check at the top of one function, and every other function hopes it was honored.</p>
+<p>A <strong>gauge</strong> puts the rule in the type. It is a numeric type with a restriction, so a <code>Port</code> can't be zero: the check happens where a number <em>becomes</em> a <code>Port</code>, and from then on the compiler (and you) can rely on it. Because the restriction is part of the type, the compiler can also follow it through arithmetic, which is where gauges earn their name.</p>
+<h2 id="a-number-with-a-rule">A number with a rule<a class="anchor" href="#a-number-with-a-rule" aria-label="Link to this section">#</a></h2>
+<p>A gauge is declared with <code>type</code> and <code>where</code>, followed by a range or a predicate:</p>
 <div class="sample" id="sample-gauges_basic" data-sample="gauges_basic" data-mode="run" data-file="gauges_basic.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>gauges_basic.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="c">// A gauge is a number type limited to a range or a predicate.</span>
-<span class="k">type</span> <span class="t">Cents</span> = i64 <span class="k">where</span> <span class="n">0</span>..
+<span class="k">type</span> <span class="t">Port</span> = u16 <span class="k">where</span> <span class="n">1</span>..             <span class="c">// one or more</span>
+<span class="k">type</span> <span class="t">Digit</span> = u8 <span class="k">where</span> <span class="n">0</span>..<span class="n">10</span>           <span class="c">// 0 up to, not including, 10</span>
+<span class="k">type</span> <span class="t">Percent</span> = f32 <span class="k">where</span> <span class="n">0.0</span>..=<span class="n">1.0</span>
+<span class="k">type</span> <span class="t">Even</span> = i64 <span class="k">where</span> _ % <span class="n">2</span> == <span class="n">0</span>      <span class="c">// a hole lambda: any test you like</span>
+
+<span class="k">fun</span> <span class="f">connect</span>(p: <span class="t">Port</span>) -&gt; <span class="t">String</span> = <span class="s">"connecting to port </span><span class="h">{</span>p<span class="h">}</span><span class="s">"</span>
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> web: <span class="t">Port</span> = <span class="n">8080</span>              <span class="c">// a literal is checked while compiling</span>
+    <span class="f">print</span>(<span class="f">connect</span>(web))
+    <span class="f">print</span>(<span class="f">connect</span>(<span class="n">443</span>))               <span class="c">// and so is this one</span>
+
+    <span class="k">let</span> n: u16 = web                  <span class="c">// a gauge widens to its base type for free</span>
+    <span class="f">print</span>(n + <span class="n">1</span>)                      <span class="c">// and has its base's operators and methods</span>
+    <span class="f">print</span>(web.<span class="f">max</span>(<span class="n">9000</span>))
+
+    <span class="k">let</span> d: <span class="t">Digit</span> = <span class="n">7</span>
+    <span class="k">let</span> half: <span class="t">Percent</span> = <span class="n">0.5</span>
+    <span class="k">let</span> four: <span class="t">Even</span> = <span class="n">4</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>d<span class="h">}</span><span class="s"> </span><span class="h">{</span>half<span class="h">}</span><span class="s"> </span><span class="h">{</span>four<span class="h">}</span><span class="s">"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>connecting to port 8080
+connecting to port 443
+8081
+9000
+7 0.5 4</code></pre></div>
+</div>
+<ul><li>A <strong>range</strong> gauge is <code>where 1..</code> (one or more), <code>where 0..10</code> (0 up to but not including 10) or <code>where 0.0..=1.0</code> (including the end). It works for integers and floats.</li><li>A <strong>predicate</strong> gauge is a hole lambda: <code>where _ % 2 == 0</code>. Anything the test accepts is in.</li><li>A gauge is <strong>its own type</strong>: a <code>Port</code> is not interchangeable with a <code>u16</code>, and a <code>Digit</code> is not a <code>Percent</code>. But it widens to its base type by itself (<code>let n: u16 = web</code>), and it has its base's operators and methods.</li><li>A literal assigned to a gauge is checked <strong>while compiling</strong>, so <code>let web: Port = 8080</code> costs nothing at run time.</li></ul>
+<p>A gauge's bounds must be known at compile time: literals and constants, not the result of a function call (<a href="diagnostics.html#T0103">T0103</a>).</p>
+<div class="sample" id="sample-gauges_err_bounds" data-sample="gauges_err_bounds" data-mode="check" data-file="gauges_err_bounds.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>gauges_err_bounds.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#T0103">T0103</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">fun</span> <span class="f">limit</span>() -&gt; u16 = <span class="n">5</span>
+
+<span class="k">type</span> <span class="t">Small</span> = u16 <span class="k">where</span> <span class="n">0</span>..<span class="f">limit</span>()
+
+<span class="k">fun</span> <span class="f">main</span>() {}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[T0103]: a gauge's bounds must be known at compile time</span>
+<span class="loc">  --&gt; gauges_err_bounds.loom:3:27</span>
+<span class="gut">  |</span>
+<span class="gut">3 |</span> type Small = u16 where 0..limit()
+<span class="gut">  |</span><span class="caret">                           ^^^^^^^ not a literal or a constant</span>
+
+<span class="err">error: gauges_err_bounds.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<div class="try"><p>Change <code>Port</code>'s declaration to <code>where 1..1024</code> and check it. <code>connect(443)</code> is still fine, but <code>8080</code> is now outside the range, and so is the <code>9000</code> passed to <code>max</code>: the compiler points at each literal (<a href="diagnostics.html#G0201">G0201</a>).</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="ada" data-label="Ada">
+<h4>Ada</h4>
+<p>Ada's <code>range</code> types are the ancestor. Ada checks at run time and raises <code>Constraint_Error</code>; Loom checks literals and constants while compiling and has a different operator for each way a run-time value can be handled.</p>
+<pre class="foreign" data-lang="ada"><code>type <span class="t">Port</span> is range <span class="n">1</span> .. <span class="n">65_535</span>;
+subtype <span class="t">Digit</span> is <span class="t">Integer</span> range <span class="n">0</span> .. <span class="n">9</span>;</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust has no ranged integers, so the usual tool is a newtype with a checked constructor. It works, but every operation on the inside is back to a plain <code>u16</code>, and the rule is reimplemented per type.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">struct</span> <span class="t">Port</span>(u16);
+<span class="k">impl</span> <span class="t">TryFrom</span>&lt;u16&gt; <span class="k">for</span> <span class="t">Port</span> {
+    <span class="k">type</span> <span class="t">Error</span> = ();
+    <span class="k">fn</span> <span class="f">try_from</span>(n: u16) -&gt; <span class="t">Result</span>&lt;<span class="k">Self</span>, ()&gt; {
+        <span class="k">if</span> n &gt;= <span class="n">1</span> { <span class="k">Ok</span>(<span class="t">Port</span>(n)) } <span class="k">else</span> { <span class="k">Err</span>(()) }
+    }
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="zig" data-label="Zig">
+<h4>Zig</h4>
+<p>Zig's integer types can have any bit width (<code>u4</code> is 0 to 15), which gives power-of-two ranges that are checked when the compiler can see the value. A gauge gives you any range, and predicates.</p>
+<pre class="foreign" data-lang="zig"><code><span class="k">const</span> d: u4 = <span class="n">9</span>;</code></pre>
+</div>
+</div>
+<h2 id="getting-a-number-into-a-gauge">Getting a number into a gauge<a class="anchor" href="#getting-a-number-into-a-gauge" aria-label="Link to this section">#</a></h2>
+<p>Getting a number <strong>into</strong> a gauge is the one checked step. A literal or a constant is checked at compile time. For anything else there are four forms, which differ in what happens when the number is outside:</p>
+<table class="plain"><thead><tr><th>Form</th><th>When the value is outside</th></tr></thead><tbody><tr><td>a literal or a constant</td><td>compile error (<a href="diagnostics.html#G0201">G0201</a>)</td></tr><tr><td><code>x as Port</code></td><td>unravels</td></tr><tr><td><code>x as? Port</code></td><td>gives an optional: <code>some(port)</code> or <code>none</code></td></tr><tr><td><code>x as| Port</code></td><td>clamps into the range (range gauges only)</td></tr><tr><td><code>if x is Port { ... }</code></td><td>the test fails; inside the branch <code>x</code> is a <code>Port</code></td></tr></tbody></table>
+<div class="sample" id="sample-gauges_into" data-sample="gauges_into" data-mode="run" data-file="gauges_into.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>gauges_into.loom</span><span class="tag warn">unravels</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
 <span class="k">type</span> <span class="t">Port</span> = u16 <span class="k">where</span> <span class="n">1</span>..
 <span class="k">type</span> <span class="t">Percent</span> = f32 <span class="k">where</span> <span class="n">0.0</span>..=<span class="n">1.0</span>
 <span class="k">type</span> <span class="t">Even</span> = i64 <span class="k">where</span> _ % <span class="n">2</span> == <span class="n">0</span>
 
-<span class="k">fun</span> <span class="f">fee</span>(balance: <span class="t">Cents</span>, amount: <span class="t">Cents</span>) -&gt; <span class="t">Cents</span> =
-    <span class="k">if</span> balance &gt;= <span class="n">1000_00</span> { <span class="n">0</span> } <span class="k">else</span> { (amount / <span class="n">100</span>).<span class="f">max</span>(<span class="n">25</span>) }
-
-<span class="k">fun</span> <span class="f">parse_cents</span>(s: str) -&gt; ?<span class="t">Cents</span> {
-    <span class="k">let</span> n = s.parse[i64]() <span class="k">mend</span> <span class="k">return</span> <span class="k">none</span>
-    <span class="k">if</span> n <span class="k">is</span> <span class="t">Cents</span> { n } <span class="k">else</span> { <span class="k">none</span> }        <span class="c">// `is` narrows `n` inside the branch</span>
+<span class="k">fun</span> <span class="f">parse_port</span>(s: str) -&gt; ?<span class="t">Port</span> {
+    <span class="k">let</span> n = s.parse[u16]() <span class="k">mend</span> <span class="k">return</span> <span class="k">none</span>
+    <span class="k">if</span> n <span class="k">is</span> <span class="t">Port</span> { n } <span class="k">else</span> { <span class="k">none</span> }    <span class="c">// `is` narrows `n` inside the branch</span>
 }
 
 <span class="k">fun</span> <span class="f">main</span>() {
-    <span class="k">let</span> a: <span class="t">Cents</span> = <span class="n">250</span>                       <span class="c">// a literal is checked while compiling</span>
-    <span class="k">let</span> b: <span class="t">Cents</span> = <span class="n">100</span>
-    <span class="k">let</span> sum = a + b                          <span class="c">// Cents + Cents can't go below zero: still Cents</span>
-    <span class="k">let</span> diff = a - b                         <span class="c">// could go below zero: a plain i64</span>
-    <span class="k">let</span> wide: i64 = a                        <span class="c">// a gauge widens to its base type</span>
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>sum<span class="h">}</span><span class="s"> </span><span class="h">{</span>diff<span class="h">}</span><span class="s"> </span><span class="h">{</span>wide<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="f">fee</span>(<span class="n">50_00</span>, <span class="n">1234_00</span>)<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">parse_port</span>(<span class="s">"8080"</span>):?<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="f">parse_port</span>(<span class="s">"0"</span>):?<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="f">parse_port</span>(<span class="s">"x"</span>):?<span class="h">}</span><span class="s">"</span>)
 
-    <span class="c">// Getting a checked value into a gauge from somewhere else:</span>
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">parse_cents</span>(<span class="s">"42"</span>):?<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="f">parse_cents</span>(<span class="s">"-3"</span>):?<span class="h">}</span><span class="s">"</span>)
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>(-<span class="n">5</span>) <span class="k">as</span>? <span class="t">Cents</span>:?<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">7</span> <span class="k">as</span>? <span class="t">Cents</span>:?<span class="h">}</span><span class="s">"</span>)     <span class="c">// `as?` gives an optional</span>
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="n">70000</span> <span class="k">as</span>| <span class="t">Port</span><span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">1.7</span> <span class="k">as</span>| <span class="t">Percent</span><span class="h">}</span><span class="s">"</span>)     <span class="c">// `as|` clamps into the range</span>
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="n">12</span> <span class="k">as</span> <span class="t">Even</span><span class="h">}</span><span class="s">"</span>)                            <span class="c">// `as` unravels when it doesn't fit</span>
+    <span class="k">let</span> n: i64 = <span class="n">7</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>n <span class="k">as</span>? <span class="t">Even</span>:?<span class="h">}</span><span class="s"> </span><span class="h">{</span>(n + <span class="n">1</span>) <span class="k">as</span>? <span class="t">Even</span>:?<span class="h">}</span><span class="s">"</span>)     <span class="c">// `as?` gives an optional</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="n">70000</span> <span class="k">as</span>| <span class="t">Port</span><span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">0</span> <span class="k">as</span>| <span class="t">Port</span><span class="h">}</span><span class="s">"</span>)           <span class="c">// `as|` clamps into the range</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="n">1.7</span> <span class="k">as</span>| <span class="t">Percent</span><span class="h">}</span><span class="s"> </span><span class="h">{</span>-<span class="n">0.3</span> <span class="k">as</span>| <span class="t">Percent</span><span class="h">}</span><span class="s">"</span>)
+
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>(n + <span class="n">1</span>) <span class="k">as</span> <span class="t">Even</span><span class="h">}</span><span class="s">"</span>)                        <span class="c">// `as` is fine when it fits...</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>n <span class="k">as</span> <span class="t">Even</span><span class="h">}</span><span class="s">"</span>)                              <span class="c">// ...and unravels when it doesn't</span>
 }</code></pre>
-<div class="sample-out"><div class="out-head">Output</div><pre><code>350 150 250 1234
-some(42) none
-none some(7)
+<div class="sample-out"><div class="out-head">Output</div><pre><code>some(8080) none none
+none some(8)
 65535 1
-12</code></pre></div>
+1 0
+8</code></pre></div>
+<div class="sample-out"><div class="out-head">Error output</div><pre><code><span class="err">unravel: value out of range for `Even`</span>
+<span class="loc">  --&gt; gauges_into.loom:21:5</span>
+<span class="gut">   |</span>
+<span class="gut">21 |</span>     print("{n as Even}")                              // ...and unravels when it doesn't
+<span class="gut">   |</span><span class="caret">     ^</span></code></pre></div>
 </div>
-<p>A gauge's bounds must be known at compile time: literals and constants, not the result of a function call (<a href="diagnostics.html#T0103">T0103</a>). A literal outside the range is an error at the literal:</p>
+<p>Use <code>as?</code> when a miss is a normal outcome (user input), <code>as|</code> when clamping is what you want (a volume knob), <code>as</code> when a miss would be a bug, and <code>is</code> when you want to branch and then keep using the checked name. <code>is</code> narrows: inside the <code>if</code>, <code>n</code> has become a <code>Port</code>, which is why the branch can return it as one.</p>
+<p>A literal outside the range is an error at the literal:</p>
 <div class="sample" id="sample-gauges_err" data-sample="gauges_err" data-mode="check" data-file="gauges_err.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>gauges_err.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#G0201">G0201</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">type</span> <span class="t">Cents</span> = i64 <span class="k">where</span> <span class="n">0</span>..
@@ -115,6 +192,130 @@ none some(7)
 
 <span class="err">error: gauges_err.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
+<div class="try"><p>In <code>gauges_into</code>, change <code>(n + 1) as Even</code> to <code>n as Even</code>. Now the program stops at the first of the two, and the second is never reached. Then change <code>70000 as| Port</code> to <code>70000 as? Port</code>: you get <code>none</code> instead of <code>65535</code>.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust's <code>TryFrom</code> plays the role of <code>as?</code>, <code>.clamp()</code> plays <code>as|</code>, and a failed <code>.unwrap()</code> plays <code>as</code>. The difference is that the rule lives in a gauge's declaration instead of a hand-written constructor, and you get all three spellings of "outside" for free.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> n: i64 = <span class="n">7</span>;
+<span class="k">let</span> even = <span class="k">if</span> n % <span class="n">2</span> == <span class="n">0</span> { <span class="k">Some</span>(n) } <span class="k">else</span> { <span class="k">None</span> };
+<span class="k">let</span> port = u16::<span class="f">try_from</span>(70000i64).<span class="f">ok</span>();
+<span class="k">let</span> clamped = 70000i64.<span class="f">clamp</span>(<span class="n">1</span>, <span class="n">65535</span>);</code></pre>
+</div>
+</div>
+<h2 id="arithmetic-keeps-the-rule">Arithmetic keeps the rule<a class="anchor" href="#arithmetic-keeps-the-rule" aria-label="Link to this section">#</a></h2>
+<p>Here the idea pays off. The compiler tracks the interval a gauge's value can be in, through arithmetic, at compile time. <code>Cents + Cents</code> can't go below zero, so it's still a <code>Cents</code>: no cast needed. <code>Cents - Cents</code> can, so it's a plain <code>i64</code>.</p>
+<div class="sample" id="sample-gauges_arith" data-sample="gauges_arith" data-mode="run" data-file="gauges_arith.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>gauges_arith.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">type</span> <span class="t">Cents</span> = i64 <span class="k">where</span> <span class="n">0</span>..
+<span class="k">type</span> <span class="t">Pct</span> = u8 <span class="k">where</span> <span class="n">0</span>..=<span class="n">100</span>
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> a: <span class="t">Cents</span> = <span class="n">250</span>
+    <span class="k">let</span> b: <span class="t">Cents</span> = <span class="n">100</span>
+
+    <span class="c">// The compiler follows the interval through these, so each is a Cents.</span>
+    <span class="k">let</span> sum: <span class="t">Cents</span> = a + b
+    <span class="k">let</span> twice: <span class="t">Cents</span> = a * <span class="n">2</span>
+    <span class="k">let</span> third: <span class="t">Cents</span> = a / <span class="n">3</span>
+    <span class="k">let</span> rest: <span class="t">Cents</span> = a % <span class="n">7</span>
+    <span class="k">let</span> bigger: <span class="t">Cents</span> = a.<span class="f">max</span>(b)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>sum<span class="h">}</span><span class="s"> </span><span class="h">{</span>twice<span class="h">}</span><span class="s"> </span><span class="h">{</span>third<span class="h">}</span><span class="s"> </span><span class="h">{</span>rest<span class="h">}</span><span class="s"> </span><span class="h">{</span>bigger<span class="h">}</span><span class="s">"</span>)
+
+    <span class="k">let</span> x: <span class="t">Pct</span> = <span class="n">40</span>
+    <span class="k">let</span> half: <span class="t">Pct</span> = x / <span class="n">2</span>
+    <span class="k">let</span> low: <span class="t">Pct</span> = x.<span class="f">min</span>(<span class="n">60</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>half<span class="h">}</span><span class="s"> </span><span class="h">{</span>low<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// But a - b can go below zero, so it is a plain i64.</span>
+    <span class="k">let</span> diff = a - b
+    <span class="k">let</span> signed: i64 = diff
+    <span class="f">print</span>(signed)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>350 500 83 5 250
+20 40
+150</code></pre></div>
+</div>
+<p><code>+</code>, <code>*</code>, <code>/</code>, <code>%</code>, <code>min</code> and <code>max</code> all keep a range when the result provably fits. Subtraction usually doesn't, so assigning it back is an error, and the compiler suggests the three ways in:</p>
+<div class="sample" id="sample-gauges_err_arith" data-sample="gauges_err_arith" data-mode="check" data-file="gauges_err_arith.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>gauges_err_arith.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#T0101">T0101</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">type</span> <span class="t">Cents</span> = i64 <span class="k">where</span> <span class="n">0</span>..
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> a: <span class="t">Cents</span> = <span class="n">250</span>
+    <span class="k">let</span> b: <span class="t">Cents</span> = <span class="n">100</span>
+    <span class="k">let</span> diff: <span class="t">Cents</span> = a - b
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[T0101]: expected `Cents`, found `i64`</span>
+<span class="loc">  --&gt; gauges_err_arith.loom:6:23</span>
+<span class="gut">  |</span>
+<span class="gut">6 |</span>     let diff: Cents = a - b
+<span class="gut">  |</span><span class="caret">                       ^^^^^ this is `i64`</span>
+<span class="gut">  |</span>
+<span class="loc">  = help: getting into a gauge is checked: `x as Cents` (unravels), `x as? Cents` or `x as| Cents`</span>
+
+<span class="err">error: gauges_err_arith.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<ul><li>Overflow of the base type still unravels as usual.</li><li>The interval is worked out for range gauges. A predicate gauge can't be followed through arithmetic: <code>Even + Even</code> is a plain <code>i64</code>, and needs <code>as?</code> to become an <code>Even</code> again.</li></ul>
+<div class="try"><p>In <code>gauges_arith</code>, change <code>let rest: Cents = a % 7</code> to <code>a - 7</code>. A <code>Cents</code> minus a number might be negative, and the compiler refuses to call it <code>Cents</code>.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="ada" data-label="Ada">
+<h4>Ada</h4>
+<p>Ada checks every assignment into a range type at run time, which is simple and a little slow. Loom's intervals let the compiler skip the check when it can prove the value fits, and tell you when it can't.</p>
+<pre class="foreign" data-lang="ada"><code><span class="t">Total</span> : <span class="t">Cents</span> := A + B;   -- checked at run time</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>A Rust newtype has none of this: <code>Cents(a.0 + b.0)</code> is a fresh construction and a fresh check every time, and subtraction needs an explicit decision about overflow.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> total = <span class="t">Cents</span>::<span class="f">new</span>(a.<span class="n">0</span> + b.<span class="n">0</span>)?;</code></pre>
+</div>
+</div>
+<h2 id="check-once-at-the-edge">Check once, at the edge<a class="anchor" href="#check-once-at-the-edge" aria-label="Link to this section">#</a></h2>
+<p>Gauges also change how you structure a program. If a <code>Server</code> has a <code>Port</code> field, then <strong>every</strong> <code>Server</code> has a valid port, and no function that takes one needs to check. Validation moves to the edge of the program, where input comes in, and becomes a conversion:</p>
+<div class="sample" id="sample-gauges_edge" data-sample="gauges_edge" data-mode="run" data-file="gauges_edge.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>gauges_edge.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">type</span> <span class="t">Port</span> = u16 <span class="k">where</span> <span class="n">1</span>..
+
+<span class="k">warp</span> <span class="t">ConfigError</span>: <span class="t">Error</span> {
+    <span class="k">case</span> <span class="t">BadPort</span>(text: <span class="t">String</span>)
+}
+
+<span class="k">warp</span> <span class="t">Server</span>: <span class="t">Show</span> {
+    host: <span class="t">String</span>
+    port: <span class="t">Port</span>
+}
+
+<span class="c">// Check once, at the edge...</span>
+<span class="k">fun</span> <span class="f">parse_port</span>(text: str) -&gt; <span class="t">Port</span> ! <span class="t">ConfigError</span> {
+    <span class="k">let</span> n = text.parse[u16]() <span class="k">mend</span> <span class="k">fail</span> .<span class="t">BadPort</span>(text: text.<span class="f">to_string</span>())
+    n <span class="k">as</span>? <span class="t">Port</span> <span class="k">mend</span> <span class="k">fail</span> .<span class="t">BadPort</span>(text: text.<span class="f">to_string</span>())
+}
+
+<span class="c">// ...and everything after it can rely on the field.</span>
+<span class="k">fun</span> <span class="f">url</span>(s: <span class="t">Server</span>) -&gt; <span class="t">String</span> = <span class="s">"http://</span><span class="h">{</span>s.host<span class="h">}</span><span class="s">:</span><span class="h">{</span>s.port<span class="h">}</span><span class="s">/"</span>
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">for</span> text <span class="k">in</span> [<span class="s">"8080"</span>, <span class="s">"0"</span>, <span class="s">"http"</span>] {
+        <span class="k">match</span> <span class="f">parse_port</span>(text) {
+            <span class="k">ok</span>(port) =&gt; <span class="f">print</span>(<span class="f">url</span>(<span class="t">Server</span>(<span class="s">"example.org"</span>, port)))
+            <span class="k">err</span>(e) =&gt; <span class="f">print</span>(<span class="s">"rejected: </span><span class="h">{</span>e<span class="h">}</span><span class="s">"</span>)
+        }
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>http://example.org:8080/
+rejected: BadPort(text: "0")
+rejected: BadPort(text: "http")</code></pre></div>
+</div>
+<p><code>parse_port</code> is the only place that can say "not a port", and it does so with an ordinary error (see <a href="errors.html">Optionals and errors</a>). <code>url</code> and everything else downstream can't be handed a bad one, because there's no way to make one.</p>
+<div class="try"><p>Change <code>Server("example.org", port)</code> to <code>Server("example.org", 0)</code>. There's no way to build a <code>Server</code> with port 0, and the compiler says so at the literal (<a href="diagnostics.html#G0201">G0201</a>). The only way to get a different port is through <code>parse_port</code>.</p></div>
+<h2 id="not-supported-yet">Not supported yet<a class="anchor" href="#not-supported-yet" aria-label="Link to this section">#</a></h2>
+<ul><li>A gauge can't index an array or list directly: <code>arr[s]</code> with <code>s: Slot</code> is <a href="diagnostics.html#T0101">T0101</a>. Widen it first, <code>arr[s as usize]</code>. The design lets a gauge prove an index in range and skip the bounds check; that doesn't happen yet.</li><li>A gauge's bounds are literals and constants only; a call to one of your functions is <a href="diagnostics.html#T0103">T0103</a> (see <a href="compile-time.html">Compile-time code</a> for what the evaluator can fold).</li></ul>
 <h2 id="where-next">Where next<a class="anchor" href="#where-next" aria-label="Link to this section">#</a></h2>
 <p><a href="shuttles.html">Shuttles</a> are functions that can pause.</p>
 <nav class="pager" aria-label="Chapters">

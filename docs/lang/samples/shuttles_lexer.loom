@@ -1,0 +1,31 @@
+use std.io.print
+
+// A word-splitter you feed one character at a time. It yields a word
+// whenever one ends, and keeps what it has read so far between pushes.
+fun words() ~> String <~ char {
+    var word = String()
+    while pull is some(c) {
+        if c == ' ' {
+            if not word.is_empty() {
+                yield word
+                word = String()
+            }
+        } else {
+            word.push(c)
+        }
+    }
+    if not word.is_empty() { yield word }        // the input ended mid-word
+}
+
+fun main() {
+    var w = words()
+    for c in "weave the warp".chars() {
+        for word in w.push(c) {
+            print("word: {word}")
+        }
+    }
+    for word in w.close() {
+        print("last: {word}")
+    }
+}
+//@ run

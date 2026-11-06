@@ -1,0 +1,11 @@
+use std.io.print
+
+fun f() -> i32 {
+    defer return 3
+    1
+}
+
+fun main() {
+    print(f())
+}
+//@ check-fail T0118

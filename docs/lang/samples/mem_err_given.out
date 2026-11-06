@@ -1,0 +1,7 @@
+error[T0104]: `stamp` needs a `Clock` and none is given here
+   --> docs/lang/samples/mem_err_given.loom:17:11
+   |
+17 |     print(stamp(msg))
+   |           ^^^^^^^^^^ no `given` in scope
+
+error: docs/lang/samples/mem_err_given.loom failed to type-check (1 error)

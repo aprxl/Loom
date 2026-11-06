@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>Warps, wefts and weaves · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -57,11 +58,11 @@
 <h1>Warps, wefts and weaves</h1>
 <p class="summary">Data types, behavior types, and how they are joined.</p>
 </div>
-<p>A <strong>warp</strong> is a data type. A <strong>weft</strong> is a set of behavior. A <strong>weave</strong> gives a warp a weft's behavior. There is no inheritance.</p>
+<p>Here is the idea the language is named for. A cloth is a <strong>warp</strong> (the threads held taut on the frame) crossed by a <strong>weft</strong> (the thread that runs through them), and a <strong>weave</strong> is the pattern that joins the two. In Loom:</p>
+<ul><li>a <strong>warp</strong> declares data: a record, a set of cases, or both;</li><li>a <strong>weft</strong> declares behavior: a list of methods, some with default bodies;</li><li>a <strong>weave</strong> says that a warp has a weft's behavior, and gives the methods.</li></ul>
+<p>There is no inheritance and no class hierarchy to plan up front. Behavior is attached to data from the outside, which is why the same warp can be given a new weft years later, in another module. This chapter takes the pieces one at a time: records, methods, cases, wefts, weaves, deriving, and <code>through</code>, which is how a warp reuses another's behavior without being its child.</p>
 <h2 id="records">Records<a class="anchor" href="#records" aria-label="Link to this section">#</a></h2>
-<p>A warp with fields is a record. Fields can have defaults. A method takes <code>self</code>, and a function without <code>self</code> is an associated function, called on the type: <code>Point.origin()</code>.</p>
-<p><strong>Construction is a call.</strong> <code>Point(3, 4)</code> takes the fields in order, and <code>Point(y: 2)</code> names one and leaves the rest at their defaults. There are no <code>Point { x: 1 }</code> literals, so <code>if x == Foo {</code> is never ambiguous.</p>
-<p>A named argument with nothing after the colon passes the variable of that name: <code>Point(x:, y:)</code> is <code>Point(x: x, y: y)</code>, and <code>connect(host:, port: 8080)</code> mixes the two. It works in patterns too: <code>let Point(x:, y:) = p</code> binds <code>x</code> and <code>y</code>.</p>
+<p>A warp with fields is a record. Fields can have defaults. <strong>Construction is a call</strong>: <code>Point(3, 4)</code> takes the fields in order, and <code>Point(y: 2)</code> names one and leaves the rest at their defaults. There are no <code>Point { x: 1 }</code> literals, so <code>if x == Foo {</code> can never be mistaken for one.</p>
 <div class="sample" id="sample-types_records" data-sample="types_records" data-mode="run" data-file="types_records.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>types_records.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -69,42 +70,169 @@
 <span class="k">warp</span> <span class="t">Point</span>: <span class="t">Show</span> {                           <span class="c">// `Show` is derived: nothing to write</span>
     x: f64 = <span class="n">0</span>                               <span class="c">// fields can have defaults</span>
     y: f64 = <span class="n">0</span>
-
-    <span class="k">fun</span> <span class="f">len</span>(<span class="k">self</span>) -&gt; f64 = (.x * .x + .y * .y).<span class="f">sqrt</span>()   <span class="c">// `.x` is `self.x`</span>
-    <span class="k">fun</span> <span class="f">origin</span>() -&gt; <span class="t">Point</span> = <span class="t">Point</span>()           <span class="c">// no `self`: called as `Point.origin()`</span>
-    <span class="k">fun</span> <span class="f">shift</span>(<span class="k">mut</span> <span class="k">self</span>, dx: f64) { .x += dx }
-    <span class="k">const</span> UNIT = <span class="t">Point</span>(<span class="n">1</span>, <span class="n">0</span>)
 }
 
-<span class="k">warp</span> <span class="t">Meters</span>(f64)                             <span class="c">// a tuple warp with one field</span>
+<span class="k">warp</span> <span class="t">Window</span>: <span class="t">Show</span> {
+    title: <span class="t">String</span>
+    width: u32 = <span class="n">800</span>
+    height: u32 = <span class="n">600</span>
+}
+
+<span class="c">// A tuple warp: positional fields, no names. Handy for newtypes.</span>
+<span class="k">warp</span> <span class="t">Meters</span>(f64)
 
 <span class="k">fun</span> <span class="f">main</span>() {
     <span class="k">let</span> p = <span class="t">Point</span>(<span class="n">3</span>, <span class="n">4</span>)                      <span class="c">// construction is a call</span>
     <span class="k">let</span> q = <span class="t">Point</span>(y: <span class="n">2</span>)                      <span class="c">// named; x takes its default</span>
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>p<span class="h">}</span><span class="s"> </span><span class="h">{</span>q<span class="h">}</span><span class="s"> </span><span class="h">{</span>p.<span class="f">len</span>()<span class="h">}</span><span class="s">"</span>)
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="t">Point</span>.<span class="f">origin</span>()<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="t">Point</span>.UNIT<span class="h">}</span><span class="s">"</span>)
+    <span class="k">let</span> origin = <span class="t">Point</span>()                     <span class="c">// everything defaults</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>p<span class="h">}</span><span class="s"> </span><span class="h">{</span>q<span class="h">}</span><span class="s"> </span><span class="h">{</span>origin<span class="h">}</span><span class="s">"</span>)
 
-    <span class="k">var</span> moving = <span class="t">Point</span>()
-    moving.<span class="f">shift</span>(<span class="n">2.5</span>)
-    <span class="f">print</span>(moving)
+    <span class="k">let</span> w = <span class="t">Window</span>(<span class="s">"notes"</span>, height: <span class="n">480</span>)     <span class="c">// positional, then named</span>
+    <span class="f">print</span>(w)
 
-    <span class="c">// A dot-block edits a value and gives it back.</span>
-    <span class="k">let</span> moved = p.{ .x += <span class="n">10</span> }
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>moved<span class="h">}</span><span class="s"> </span><span class="h">{</span>p<span class="h">}</span><span class="s">"</span>)
+    <span class="c">// A named argument with nothing after the colon passes the variable of that name.</span>
+    <span class="k">let</span> x = <span class="n">10.0</span>
+    <span class="k">let</span> y = <span class="n">20.0</span>
+    <span class="k">let</span> moved = <span class="t">Point</span>(x:, y:)
+    <span class="f">print</span>(moved)
 
-    <span class="c">// Any warp can be shown in its debug form with `:?`.</span>
+    <span class="c">// A pattern takes a record apart. (`Point(x:, y:)` would bind `x` and `y`.)</span>
+    <span class="k">let</span> <span class="t">Point</span>(x: px, y: py) = p
+    <span class="k">let</span> <span class="t">Point</span>(x: a, y: b) = moved
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>px<span class="h">}</span><span class="s"> </span><span class="h">{</span>py<span class="h">}</span><span class="s"> </span><span class="h">{</span>a<span class="h">}</span><span class="s"> </span><span class="h">{</span>b<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// Fields are read with a dot.</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>w.title<span class="h">}</span><span class="s"> is </span><span class="h">{</span>w.width<span class="h">}</span><span class="s">x</span><span class="h">{</span>w.height<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// A tuple warp's fields are numbered. `{m:?}` is the debug form.</span>
     <span class="k">let</span> m = <span class="t">Meters</span>(<span class="n">5.5</span>)
     <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>m:?<span class="h">}</span><span class="s"> </span><span class="h">{</span>m.<span class="n">0</span><span class="h">}</span><span class="s">"</span>)
 }</code></pre>
-<div class="sample-out"><div class="out-head">Output</div><pre><code>Point(x: 3.0, y: 4.0) Point(x: 0.0, y: 2.0) 5
-Point(x: 0.0, y: 0.0) Point(x: 1.0, y: 0.0)
-Point(x: 2.5, y: 0.0)
-Point(x: 13.0, y: 4.0) Point(x: 3.0, y: 4.0)
+<div class="sample-out"><div class="out-head">Output</div><pre><code>Point(x: 3.0, y: 4.0) Point(x: 0.0, y: 2.0) Point(x: 0.0, y: 0.0)
+Window(title: "notes", width: 800, height: 480)
+Point(x: 10.0, y: 20.0)
+3 4 10 20
+notes is 800x480
 Meters(5.5) 5.5</code></pre></div>
 </div>
-<ul><li><strong>The leading dot.</strong> <code>.x</code> means "relative to the thing in context". In a method that's <code>self</code>, so <code>.x</code> is <code>self.x</code> and <code>.0</code> is <code>self.0</code>. In a dot-block it's the block's subject. Where a type is expected, it's one of that type's cases: <code>.Red</code> is <code>Color.Red</code>.</li><li><strong>Dot-blocks.</strong> <code>expr.{ ... }</code> opens a block with <code>expr</code> as its subject. On a fresh value or an immutable place it yields the edited value (<code>p.{ .x += 10 }</code> above). On a <code>var</code> it edits the variable in place and yields <code>()</code>.</li><li><strong>Show.</strong> A warp is shown with <code>{p}</code> only if it weaves <code>Show</code>, which needs no code. Any warp can be shown in its debug form with <code>{p:?}</code>.</li><li><strong>Tuple warps.</strong> <code>warp Meters(f64)</code> is a record with one positional field. It has no body, so its methods go in a <code>weave</code>, where <code>.0</code> means <code>self.0</code>.</li><li><strong>Visibility.</strong> Fields and items are private to their module unless marked <code>pub</code>. <code>pub(get)</code> makes a field readable everywhere and writable only inside its module.</li></ul>
+<ul><li>A named argument with nothing after the colon passes the variable of that name: <code>Point(x:, y:)</code> is <code>Point(x: x, y: y)</code>, and <code>Window(title:, height: 480)</code> mixes the two. In a pattern it binds: <code>let Point(x:, y:) = p</code>.</li><li><code>warp Meters(f64)</code> is a <strong>tuple warp</strong>: a record with positional fields, read as <code>.0</code>, <code>.1</code>. It has no body; give it behavior with a <code>weave</code>. A warp with no fields at all is written <code>warp Marker</code>.</li><li><strong><code>Show</code></strong> (what <code>{p}</code> and <code>print</code> use) is listed in the warp's header, and the compiler writes it. Any warp can be shown in its debug form with <code>{p:?}</code>, <code>Show</code> or not.</li><li>A warp whose fields are all <code>Copy</code> is <code>Copy</code> too: assigning it copies. One that holds a <code>String</code> or a list moves instead, as <a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a> explains.</li><li>Fields are private to their module unless marked <code>pub</code>. <code>pub(get)</code> makes a field readable everywhere and writable only inside its module.</li></ul>
+<div class="try"><p>Add <code>let a = Point(1, 2, 3)</code>, then <code>Point(z: 1)</code>, then <code>Window()</code>. Each is an error that names the problem: <a href="diagnostics.html#T0104">T0104</a> for one value too many, <a href="diagnostics.html#T0105">T0105</a> for a field that doesn't exist, and T0104 again for <code>title</code>, which has no default.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust has struct literals instead of constructor calls, and defaults come from the <code>Default</code> trait, all fields at once, through struct update. Loom's defaults are per field and the constructor takes them by name.</p>
+<pre class="foreign" data-lang="rust"><code>#[<span class="f">derive</span>(<span class="t">Debug</span>, <span class="t">Default</span>)]
+<span class="k">struct</span> <span class="t">Point</span> { x: f64, y: f64 }
+
+<span class="k">let</span> q = <span class="t">Point</span> { y: <span class="n">2.0</span>, ..<span class="t">Default</span>::<span class="f">default</span>() };</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="kotlin" data-label="Kotlin">
+<h4>Kotlin</h4>
+<p>A Kotlin <code>data class</code> is the closest thing: a constructor call, defaults per parameter, named arguments. It also generates <code>equals</code>, <code>hashCode</code> and <code>toString</code>, which Loom leaves to the header.</p>
+<pre class="foreign" data-lang="kotlin"><code><span class="k">data</span> <span class="k">class</span> <span class="t">Window</span>(<span class="k">val</span> title: <span class="t">String</span>, <span class="k">val</span> width: <span class="t">Int</span> = <span class="n">800</span>, <span class="k">val</span> height: <span class="t">Int</span> = <span class="n">600</span>)
+
+<span class="k">val</span> w = <span class="t">Window</span>(<span class="s">"notes"</span>, height = <span class="n">480</span>)</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="python" data-label="Python">
+<h4>Python</h4>
+<p>A <code>dataclass</code> gives the same call syntax. Nothing stops a later assignment to a wrong type, though; Loom's fields are typed at every use.</p>
+<pre class="foreign" data-lang="python"><code><span class="k">from</span> dataclasses <span class="k">import</span> dataclass
+
+@dataclass
+<span class="k">class</span> <span class="t">Window</span>:
+    title: str
+    width: int = <span class="n">800</span>
+    height: int = <span class="n">600</span>
+
+w = <span class="t">Window</span>(<span class="s">"notes"</span>, height=<span class="n">480</span>)</code></pre>
+</div>
+</div>
+<h2 id="methods-and-the-leading-dot">Methods and the leading dot<a class="anchor" href="#methods-and-the-leading-dot" aria-label="Link to this section">#</a></h2>
+<p>Methods live in the warp's body. A method takes <code>self</code>; a function without <code>self</code> is an <strong>associated function</strong>, called on the type: <code>Point.origin()</code>. A <code>const</code> in the body is an associated constant. <code>fun shift(mut self, ...)</code> may change the value it's called on, and then the value has to be a <code>var</code>.</p>
+<p>Inside a method you rarely need to write <code>self</code>. A leading dot means "relative to the thing in context", so <code>.x</code> is <code>self.x</code>. It is a small notation that pays for itself in code full of field access.</p>
+<div class="sample" id="sample-types_methods" data-sample="types_methods" data-mode="run" data-file="types_methods.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>types_methods.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Point</span>: <span class="t">Show</span> {
+    x: f64 = <span class="n">0</span>
+    y: f64 = <span class="n">0</span>
+
+    <span class="k">const</span> UNIT = <span class="t">Point</span>(<span class="n">1</span>, <span class="n">0</span>)                 <span class="c">// an associated constant</span>
+
+    <span class="c">// A method takes `self`. `.x` is `self.x`.</span>
+    <span class="k">fun</span> <span class="f">len</span>(<span class="k">self</span>) -&gt; f64 = (.x * .x + .y * .y).<span class="f">sqrt</span>()
+
+    <span class="c">// `mut self` may change the value it is called on.</span>
+    <span class="k">fun</span> <span class="f">shift</span>(<span class="k">mut</span> <span class="k">self</span>, dx: f64) { .x += dx }
+
+    <span class="c">// No `self`: an associated function, called on the type.</span>
+    <span class="k">fun</span> <span class="f">origin</span>() -&gt; <span class="t">Point</span> = <span class="t">Point</span>()
+    <span class="k">fun</span> <span class="f">polar</span>(r: f64, angle: f64) -&gt; <span class="t">Point</span> = <span class="t">Point</span>(r * angle.<span class="f">cos</span>(), r * angle.<span class="f">sin</span>())
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> p = <span class="t">Point</span>(<span class="n">3</span>, <span class="n">4</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>p.<span class="f">len</span>()<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="t">Point</span>.<span class="f">origin</span>()<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="t">Point</span>.UNIT<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="t">Point</span>.<span class="f">polar</span>(<span class="n">2</span>, <span class="n">0</span>)<span class="h">}</span><span class="s">"</span>)
+
+    <span class="k">var</span> moving = <span class="t">Point</span>()
+    moving.<span class="f">shift</span>(<span class="n">2.5</span>)                        <span class="c">// `moving` is a var, so it may change</span>
+    <span class="f">print</span>(moving)
+
+    <span class="c">// A dot-block opens a scope where `.x` means the block's subject.</span>
+    <span class="c">// On a `let` it gives back an edited copy...</span>
+    <span class="k">let</span> moved = p.{ .x += <span class="n">10</span> }
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>moved<span class="h">}</span><span class="s"> </span><span class="h">{</span>p<span class="h">}</span><span class="s">"</span>)
+
+    <span class="c">// ...and on a `var` it edits in place and yields `()`.</span>
+    moving.{ .x = <span class="n">1</span>; .y = <span class="n">1</span> }
+    <span class="f">print</span>(moving)
+
+    <span class="c">// Where a type is expected, a leading dot names one of its members.</span>
+    <span class="k">let</span> start: <span class="t">Point</span> = .UNIT
+    <span class="f">print</span>(start)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>5 Point(x: 0.0, y: 0.0) Point(x: 1.0, y: 0.0) Point(x: 2.0, y: 0.0)
+Point(x: 2.5, y: 0.0)
+Point(x: 13.0, y: 4.0) Point(x: 3.0, y: 4.0)
+Point(x: 1.0, y: 1.0)
+Point(x: 1.0, y: 0.0)</code></pre></div>
+</div>
+<p>The leading dot has three jobs:</p>
+<ul><li><strong>In a method</strong>, <code>.x</code> is <code>self.x</code> and <code>.0</code> is <code>self.0</code>.</li><li><strong>In a dot-block</strong>, <code>expr.{ ... }</code> opens a block whose subject is <code>expr</code>, so <code>.x</code> is the subject's field. On a <code>let</code> (or any fresh value) the block gives back the <em>edited value</em>: <code>p.{ .x += 10 }</code> leaves <code>p</code> alone. On a <code>var</code> it edits in place and gives <code>()</code>.</li><li><strong>Where a type is expected</strong>, it's one of that type's members: <code>.UNIT</code> is <code>Point.UNIT</code>, and <code>.Red</code> is <code>Color.Red</code>.</li></ul>
+<p>If a name is found by more than one of these rules the compiler asks you to write <code>self.name</code> or <code>Type.name</code> instead of guessing.</p>
+<div class="try"><p>Change <code>p.{ .x += 10 }</code> to <code>moving.{ .x += 10 }</code>. Because <code>moving</code> is a <code>var</code>, the block edits it in place and returns <code>()</code>, so <code>moved</code> is <code>()</code> and <code>print("{moved}")</code> stops the build (<a href="diagnostics.html#T0108">T0108</a>): <code>()</code> isn't <code>Show</code>. Use <code>moving.copy().{ ... }</code> when you want an edited copy of a variable.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust's <code>impl</code> block holds methods and associated functions, and <code>self</code> is spelled out on every field. <code>&amp;mut self</code> is Loom's <code>mut self</code>.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">impl</span> <span class="t">Point</span> {
+    <span class="k">fn</span> <span class="f">len</span>(&amp;<span class="k">self</span>) -&gt; f64 { (<span class="k">self</span>.x * <span class="k">self</span>.x + <span class="k">self</span>.y * <span class="k">self</span>.y).<span class="f">sqrt</span>() }
+    <span class="k">fn</span> <span class="f">shift</span>(&amp;<span class="k">mut</span> <span class="k">self</span>, dx: f64) { <span class="k">self</span>.x += dx; }
+    <span class="k">fn</span> <span class="f">origin</span>() -&gt; <span class="t">Point</span> { <span class="t">Point</span> { x: <span class="n">0.0</span>, y: <span class="n">0.0</span> } }
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="swift" data-label="Swift">
+<h4>Swift</h4>
+<p>Swift also drops <code>self.</code> inside methods, and uses <code>mutating</code> where Loom uses <code>mut self</code>. Swift's structs copy on assignment, like Loom's <code>Copy</code> warps.</p>
+<pre class="foreign" data-lang="swift"><code><span class="k">struct</span> <span class="t">Point</span> {
+    <span class="k">var</span> x = <span class="n">0.0</span>, y = <span class="n">0.0</span>
+    <span class="k">func</span> <span class="f">len</span>() -&gt; <span class="t">Double</span> { (x * x + y * y).<span class="f">squareRoot</span>() }
+    <span class="k">mutating</span> <span class="k">func</span> <span class="f">shift</span>(_ dx: <span class="t">Double</span>) { x += dx }
+    <span class="k">static</span> <span class="k">func</span> <span class="f">origin</span>() -&gt; <span class="t">Point</span> { <span class="t">Point</span>() }
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="kotlin" data-label="Kotlin">
+<h4>Kotlin</h4>
+<p>Kotlin's <code>apply { ... }</code> and <code>with</code> open a block with a receiver, the nearest relative of a dot-block. A Loom dot-block can also yield an edited copy when the subject is immutable.</p>
+<pre class="foreign" data-lang="kotlin"><code><span class="k">val</span> win = <span class="t">Window</span>(<span class="s">"notes"</span>).apply { width = <span class="n">1024</span> }   <span class="c">// width is a var</span></code></pre>
+</div>
+</div>
 <h2 id="cases">Cases<a class="anchor" href="#cases" aria-label="Link to this section">#</a></h2>
-<p>A warp with <code>case</code> lines is a sum type. Fields written beside the cases belong to every case, and can be read without a <code>match</code>.</p>
+<p>A warp with <code>case</code> lines is a <strong>sum type</strong>: a value is exactly one of the cases, and each can carry its own fields. <code>match</code> takes it apart, <code>is</code> tests it, and a leading dot names a case where the type is known (<code>.Dot</code>). Several payload-free cases can share a line: <code>case North, South, East, West</code>.</p>
+<p>Fields written beside the cases belong to <strong>every</strong> case and can be read without a <code>match</code>. ASTs, tokens and events nearly always have this shape: a position plus one of several kinds of thing.</p>
 <div class="sample" id="sample-types_cases" data-sample="types_cases" data-mode="run" data-file="types_cases.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>types_cases.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -157,7 +285,9 @@ Dot: 0
 big number 42
 a number</code></pre></div>
 </div>
-<p><code>match</code> and <code>is</code> see the cases. A <code>match</code> that leaves a case out is an error, and the compiler says which one:</p>
+<ul><li>A case is constructed like a call: <code>Shape.Circle(2.0)</code>. Where the expected type is known, <code>.Rect(w: 3, h: 4)</code> is enough. A payload-free case needs no parentheses.</li><li>Shared fields are passed by name when you construct: <code>Token.Number(42, line: 7)</code>.</li><li><code>if t is .Number(n) and n &gt; 40</code> tests and binds in one step, and <code>and</code> can use <code>n</code>.</li><li>A <code>match</code> over a warp with cases must be exhaustive.</li></ul>
+<h3 id="the-compiler-counts-the-cases">The compiler counts the cases<a class="anchor" href="#the-compiler-counts-the-cases" aria-label="Link to this section">#</a></h3>
+<p>A <code>match</code> that leaves a case out is an error, and the compiler says which one:</p>
 <div class="sample" id="sample-types_err_match" data-sample="types_err_match" data-mode="check" data-file="types_err_match.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>types_err_match.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#P0101">P0101</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">warp</span> <span class="t">Shape</span> {
@@ -186,8 +316,41 @@ a number</code></pre></div>
 
 <span class="err">error: types_err_match.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
-<h2 id="wefts-and-weaves">Wefts and weaves<a class="anchor" href="#wefts-and-weaves" aria-label="Link to this section">#</a></h2>
-<p>A weft lists methods. A method with a body is a default. A warp joins a weft <strong>inline</strong> by listing it in its header, or <strong>separately</strong> with <code>weave</code>, which can live in another module.</p>
+<p>That is the reason to prefer cases over a field with a tag: add a <code>case</code> later and the compiler walks you to every <code>match</code> that needs a new arm.</p>
+<div class="try"><p>Add <code>case Triangle(base: f64, height: f64)</code> to <code>Shape</code> in <code>types_cases</code> and run it. The <code>area</code> method stops compiling until you give it an arm. Then put <code>_ =&gt; "something else"</code> in place of the arms of the last <code>match</code>: it compiles, and from now on a new case there is silently "something else". That is the price of a catch-all.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust's <code>enum</code> is the same sum type. Fields common to every variant need a wrapper struct around the enum, which is the shape Loom lets you write directly.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">enum</span> <span class="t">TokenKind</span> { <span class="t">Word</span>(<span class="t">String</span>), <span class="t">Number</span>(i64), <span class="t">End</span> }
+<span class="k">struct</span> <span class="t">Token</span> { line: u32, kind: <span class="t">TokenKind</span> }</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="kotlin" data-label="Kotlin">
+<h4>Kotlin</h4>
+<p>A <code>sealed</code> hierarchy gets the same exhaustive <code>when</code>, but each case is a separate class, and a shared field goes on the base class or the interface.</p>
+<pre class="foreign" data-lang="kotlin"><code><span class="k">sealed</span> <span class="k">interface</span> <span class="t">Shape</span> {
+    <span class="k">data</span> <span class="k">class</span> <span class="t">Circle</span>(<span class="k">val</span> radius: <span class="t">Double</span>) : <span class="t">Shape</span>
+    <span class="k">data</span> <span class="k">class</span> <span class="t">Rect</span>(<span class="k">val</span> w: <span class="t">Double</span>, <span class="k">val</span> h: <span class="t">Double</span>) : <span class="t">Shape</span>
+    <span class="k">data</span> <span class="k">object</span> <span class="t">Dot</span> : <span class="t">Shape</span>
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="typescript" data-label="TypeScript">
+<h4>TypeScript</h4>
+<p>A discriminated union is the idiom. The tag (<code>kind</code>) is a field you maintain by hand, and exhaustiveness comes from a trick with <code>never</code>; Loom's cases carry their own tag.</p>
+<pre class="foreign" data-lang="typescript"><code><span class="k">type</span> <span class="t">Shape</span> =
+  | { kind: <span class="s">"circle"</span>; radius: number }
+  | { kind: <span class="s">"rect"</span>; w: number; h: number }
+  | { kind: <span class="s">"dot"</span> };</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="haskell" data-label="Haskell">
+<h4>Haskell</h4>
+<p>Algebraic data types are where <code>case</code> and <code>match</code> come from. The declaration is nearly the same.</p>
+<pre class="foreign" data-lang="haskell"><code><span class="k">data</span> <span class="t">Shape</span> = <span class="t">Circle</span> <span class="t">Double</span> | <span class="t">Rect</span> <span class="t">Double</span> <span class="t">Double</span> | <span class="t">Dot</span></code></pre>
+</div>
+</div>
+<h2 id="wefts">Wefts<a class="anchor" href="#wefts" aria-label="Link to this section">#</a></h2>
+<p>A weft lists methods. One with a body is a <strong>default</strong>; one without is a requirement that each warp provides. A warp joins a weft <strong>inline</strong> by listing it in its header (<code>warp Circle: Shape</code>) and writing the methods in its body, or <strong>separately</strong> with <code>weave</code>, which can live in another module.</p>
 <div class="sample" id="sample-types_wefts" data-sample="types_wefts" data-mode="run" data-file="types_wefts.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>types_wefts.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -225,10 +388,174 @@ a number</code></pre></div>
 rect with area 6
 rect</code></pre></div>
 </div>
-<ul><li>A weft can require other wefts (<code>weft Ord: Eq</code>) and can have associated types (<code>type Item</code>; see <code>Iter</code> in <a href="../std/modules/iter.html#Iter">std.iter</a>).</li><li><code>Shape.name(x)</code> calls a weft's method explicitly. A default method is checked for each type that uses it.</li><li><code>weave W into T</code> is allowed only when <code>W</code> or <code>T</code> is defined in your program (<a href="diagnostics.html#T0115">T0115</a> otherwise).</li><li>A weft used as a parameter type is a generic: see <a href="generics.html">Generics and <code>any</code></a>.</li></ul>
+<ul><li>A weft used as a parameter type, like <code>describe(s: Shape)</code>, accepts anything that weaves it. This is a generic in disguise; <a href="generics.html">Generics and <code>any</code></a> shows what it means.</li><li><code>Shape.name(x)</code> calls a weft's method explicitly. A default method is type-checked for each warp that uses it.</li><li>Weaving is explicit. Unlike Go's interfaces, a type doesn't satisfy a weft by accident of having the right methods; someone has to say so.</li><li>Operators are wefts too: <code>==</code> is <code>Eq</code>, <code>&lt;</code> is <code>Ord</code>, <code>{x}</code> is <code>Show</code>, and <code>for</code> loops over <code>Iter</code>.</li></ul>
+<h3 id="wefts-that-build-on-wefts">Wefts that build on wefts<a class="anchor" href="#wefts-that-build-on-wefts" aria-label="Link to this section">#</a></h3>
+<p>A weft can require another (<code>weft Greeter: Named</code>), and can name a type that each weave fills in (<code>type Item</code>). Whoever weaves <code>Greeter</code> must weave <code>Named</code> too. A required weft the warp doesn't mention is derived when every method it has has a default; otherwise the compiler names the missing one (<a href="diagnostics.html#T0108">T0108</a>).</p>
+<div class="sample" id="sample-types_supers" data-sample="types_supers" data-mode="run" data-file="types_supers.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>types_supers.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">weft</span> <span class="t">Named</span> {
+    <span class="k">fun</span> <span class="f">name</span>(<span class="k">self</span>) -&gt; str
+}
+
+<span class="c">// `: Named` makes Named a requirement: whatever weaves Greeter weaves Named.</span>
+<span class="k">weft</span> <span class="t">Greeter</span>: <span class="t">Named</span> {
+    <span class="k">fun</span> <span class="f">greet</span>(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"hello, </span><span class="h">{</span><span class="k">self</span>.<span class="f">name</span>()<span class="h">}</span><span class="s">!"</span>
+}
+
+<span class="c">// A weft can name a type that each weave fills in.</span>
+<span class="k">weft</span> <span class="t">Container</span> {
+    <span class="k">type</span> <span class="t">Item</span>
+    <span class="k">fun</span> <span class="f">first</span>(<span class="k">self</span>) -&gt; ?<span class="t">Item</span>
+    <span class="k">fun</span> <span class="f">is_empty</span>(<span class="k">self</span>) -&gt; bool = <span class="k">self</span>.<span class="f">first</span>() <span class="k">is</span> <span class="k">none</span>
+}
+
+<span class="k">warp</span> <span class="t">Cat</span>: <span class="t">Greeter</span>, <span class="t">Named</span> {
+    <span class="k">fun</span> <span class="f">name</span>(<span class="k">self</span>) -&gt; str = <span class="s">"cat"</span>
+}
+
+<span class="k">warp</span> <span class="t">Bag</span>: <span class="t">Container</span> {
+    items: <span class="t">List</span>[i32]
+    <span class="k">type</span> <span class="t">Item</span> = i32                          <span class="c">// this weave's answer</span>
+    <span class="k">fun</span> <span class="f">first</span>(<span class="k">self</span>) -&gt; ?i32 = .items.<span class="f">first</span>()
+}
+
+<span class="c">// `C.Item` is the associated type of whichever C comes in.</span>
+<span class="k">fun</span> first_or[C: <span class="t">Container</span>](c: C, fallback: C.<span class="t">Item</span>) -&gt; C.<span class="t">Item</span> = c.<span class="f">first</span>() <span class="k">mend</span> fallback
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">print</span>(<span class="t">Cat</span>().<span class="f">greet</span>())
+    <span class="k">let</span> full = <span class="t">Bag</span>([<span class="n">4</span>, <span class="n">5</span>])
+    <span class="k">let</span> empty = <span class="t">Bag</span>([])
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>full.<span class="f">first</span>():?<span class="h">}</span><span class="s"> </span><span class="h">{</span>full.<span class="f">is_empty</span>()<span class="h">}</span><span class="s"> </span><span class="h">{</span>empty.<span class="f">is_empty</span>()<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">first_or</span>(full, <span class="n">0</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="f">first_or</span>(empty, -<span class="n">1</span>)<span class="h">}</span><span class="s">"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>hello, cat!
+some(4) false true
+4 -1</code></pre></div>
+</div>
+<p>An associated type is read from outside as <code>C.Item</code>, the way <code>first_or</code> does. The standard library's <code>Iter</code> is exactly this shape, with <code>type Item</code> and a <code>next</code>; see <a href="../std/modules/iter.html#Iter">std.iter</a>.</p>
+<div class="try"><p>Remove <code>Named</code> from <code>Cat</code>'s header: <code>warp Cat: Greeter</code>. The compiler says a <code>Greeter</code> needs a <code>Named</code> as well, and suggests a weave.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>A trait is a weft, and <code>trait Greeter: Named</code> is the supertrait. Rust's <code>impl Trait for Type</code> is always separate from the type; Loom lets you pick inline or separate.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">trait</span> <span class="t">Shape</span> {
+    <span class="k">fn</span> <span class="f">area</span>(&amp;<span class="k">self</span>) -&gt; f64;
+    <span class="k">fn</span> <span class="f">name</span>(&amp;<span class="k">self</span>) -&gt; &amp;str { <span class="s">"shape"</span> }
+}
+<span class="k">struct</span> <span class="t">Circle</span> { radius: f64 }
+<span class="k">impl</span> <span class="t">Shape</span> <span class="k">for</span> <span class="t">Circle</span> {
+    <span class="k">fn</span> <span class="f">area</span>(&amp;<span class="k">self</span>) -&gt; f64 { <span class="n">3.0</span> * <span class="k">self</span>.radius * <span class="k">self</span>.radius }
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Go's interfaces are structural: a type satisfies one by having the methods, with no declaration. That makes them easy to retrofit and easy to satisfy by accident. Loom's are nominal, and there are no default methods in a Go interface.</p>
+<pre class="foreign" data-lang="go"><code><span class="k">type</span> <span class="t">Shape</span> <span class="k">interface</span>{ <span class="t">Area</span>() float64 }
+
+<span class="k">type</span> <span class="t">Circle</span> <span class="k">struct</span>{ <span class="t">Radius</span> float64 }
+<span class="k">func</span> (c <span class="t">Circle</span>) <span class="t">Area</span>() float64 { <span class="k">return</span> <span class="n">3</span> * c.<span class="t">Radius</span> * c.<span class="t">Radius</span> }</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="swift" data-label="Swift">
+<h4>Swift</h4>
+<p>A protocol with an extension for defaults is nearly the same thing, including associated types and protocol inheritance.</p>
+<pre class="foreign" data-lang="swift"><code><span class="k">protocol</span> <span class="t">Shape</span> { <span class="k">func</span> <span class="f">area</span>() -&gt; <span class="t">Double</span> }
+<span class="k">extension</span> <span class="t">Shape</span> { <span class="k">func</span> <span class="f">name</span>() -&gt; <span class="t">String</span> { <span class="s">"shape"</span> } }
+
+<span class="k">struct</span> <span class="t">Circle</span>: <span class="t">Shape</span> {
+    <span class="k">var</span> radius: <span class="t">Double</span>
+    <span class="k">func</span> <span class="f">area</span>() -&gt; <span class="t">Double</span> { <span class="n">3</span> * radius * radius }
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="haskell" data-label="Haskell">
+<h4>Haskell</h4>
+<p>A type class is a weft: required methods, defaults, superclasses. A class instance is a weave. Haskell resolves instances by type alone, which is why it can have at most one per type.</p>
+<pre class="foreign" data-lang="haskell"><code><span class="k">class</span> <span class="t">Shape</span> a <span class="k">where</span>
+  area :: a -&gt; <span class="t">Double</span>
+  name :: a -&gt; <span class="t">String</span>
+  name _ = <span class="s">"shape"</span>
+
+<span class="k">instance</span> <span class="t">Shape</span> <span class="t">Circle</span> <span class="k">where</span>
+  area (<span class="t">Circle</span> r) = <span class="n">3</span> * r * r</code></pre>
+</div>
+</div>
+<h2 id="weaving-by-hand">Weaving by hand<a class="anchor" href="#weaving-by-hand" aria-label="Link to this section">#</a></h2>
+<p>A weave adds a weft to a warp after the fact. That includes the wefts every program uses: writing <code>weave Show into Money</code> is how <code>{price}</code> learns to print a <code>Money</code>, <code>weave Eq</code> is what <code>==</code> calls, and <code>weave Ord</code> is what <code>&lt;</code>, <code>sort</code> and <code>max</code> use.</p>
+<div class="sample" id="sample-types_weaves" data-sample="types_weaves" data-mode="run" data-file="types_weaves.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>types_weaves.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Money</span> {
+    cents: i64
+}
+
+<span class="c">// A weave adds behavior to a warp from outside. `Show` is what `{m}` calls.</span>
+<span class="k">weave</span> <span class="t">Show</span> <span class="k">into</span> <span class="t">Money</span> {
+    <span class="k">fun</span> <span class="f">show</span>(<span class="k">self</span>, <span class="k">mut</span> f: <span class="t">Fmt</span>) {
+        f.<span class="f">put</span>(<span class="s">"$</span><span class="h">{</span>.cents / <span class="n">100</span><span class="h">}</span><span class="s">.</span><span class="h">{</span>.cents % <span class="n">100</span>:<span class="n">02</span><span class="h">}</span><span class="s">"</span>)
+    }
+}
+
+<span class="c">// `==` calls `eq`.</span>
+<span class="k">weave</span> <span class="t">Eq</span> <span class="k">into</span> <span class="t">Money</span> {
+    <span class="k">fun</span> <span class="f">eq</span>(<span class="k">self</span>, other: <span class="t">Money</span>) -&gt; bool = .cents == other.cents
+}
+
+<span class="k">warp</span> <span class="t">Card</span>: <span class="t">Show</span>, <span class="t">Eq</span> {
+    rank: u8
+    suit: char
+}
+
+<span class="c">// `&lt;` calls `lt`, and with it `sort`, `min`, `max` and friends work.</span>
+<span class="k">weave</span> <span class="t">Ord</span> <span class="k">into</span> <span class="t">Card</span> {
+    <span class="k">fun</span> <span class="f">lt</span>(<span class="k">self</span>, other: <span class="t">Card</span>) -&gt; bool = .rank &lt; other.rank
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> price = <span class="t">Money</span>(<span class="n">1234</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>price<span class="h">}</span><span class="s"> costs </span><span class="h">{</span>price == <span class="t">Money</span>(<span class="n">1234</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span>price:?<span class="h">}</span><span class="s">"</span>)
+
+    <span class="k">var</span> hand = [<span class="t">Card</span>(<span class="n">10</span>, <span class="s">'h'</span>), <span class="t">Card</span>(<span class="n">2</span>, <span class="s">'s'</span>), <span class="t">Card</span>(<span class="n">7</span>, <span class="s">'d'</span>)]
+    hand.<span class="f">sort</span>()
+    <span class="f">print</span>(hand)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="t">Card</span>(<span class="n">3</span>, <span class="s">'x'</span>) &lt; <span class="t">Card</span>(<span class="n">4</span>, <span class="s">'y'</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span>hand.<span class="f">max</span>():?<span class="h">}</span><span class="s">"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>$12.34 costs true Money(cents: 1234)
+[Card(rank: 2, suit: 's'), Card(rank: 7, suit: 'd'), Card(rank: 10, suit: 'h')]
+true some(Card(rank: 10, suit: 'h'))</code></pre></div>
+</div>
+<ul><li><code>weave W into T { ... }</code> is allowed only when <code>W</code> or <code>T</code> is defined in your program. Weaving a library weft into a library type, like <code>weave Show into i32</code>, is rejected (<a href="diagnostics.html#T0115">T0115</a>); wrap the type in a warp of your own and weave that.</li><li>A weave can be empty: <code>weave Show into Meters {}</code> is how a tuple warp gets a derived <code>Show</code>, <code>Eq</code> or <code>Ord</code>. See <a href="types.html#deriving">Deriving</a>.</li><li>Generic weaves (<code>weave[T: Show] Twice into List[T]</code>) are in <a href="generics.html#generic-weaves">Generics and <code>any</code></a>.</li><li><code>Show</code> writes into a <code>Fmt</code> with <code>f.put(...)</code>. A width or alignment in the template (<code>{price:&gt;10}</code>) still pads what <code>show</code> wrote.</li></ul>
+<div class="try"><p>Add <code>weave Show into i32 { fun show(self, mut f: Fmt) { f.put("int") } }</code> to the sample and read the error. Then remove <code>Money</code>'s <code>Eq</code> weave and try <code>price == Money(1234)</code>: the compiler says <code>Money</code> doesn't weave <code>Eq</code>.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust's <code>impl Trait for Type</code> is the same move, with the same orphan rule: you may implement a trait for a type only if one of them is yours.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">impl</span> fmt::<span class="t">Display</span> <span class="k">for</span> <span class="t">Money</span> {
+    <span class="k">fn</span> <span class="f">fmt</span>(&amp;<span class="k">self</span>, f: &amp;<span class="k">mut</span> fmt::<span class="t">Formatter</span>) -&gt; fmt::<span class="t">Result</span> {
+        <span class="f">write!</span>(f, <span class="s">"${}.{:02}"</span>, <span class="k">self</span>.cents / <span class="n">100</span>, <span class="k">self</span>.cents % <span class="n">100</span>)
+    }
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="swift" data-label="Swift">
+<h4>Swift</h4>
+<p>An <code>extension</code> adds protocol conformance to a type you don't own. Swift allows it between two foreign pieces too, as a "retroactive" conformance, and warns because two libraries might both add it.</p>
+<pre class="foreign" data-lang="swift"><code><span class="k">extension</span> <span class="t">Money</span>: <span class="t">CustomStringConvertible</span> {
+    <span class="k">var</span> description: <span class="t">String</span> { <span class="s">"$\(cents / 100).\(cents % 100)"</span> }
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="kotlin" data-label="Kotlin">
+<h4>Kotlin</h4>
+<p>Kotlin can add extension functions to a class, but not make it implement an interface after the fact. That is what a weave does and an extension doesn't.</p>
+<pre class="foreign" data-lang="kotlin"><code><span class="k">fun</span> <span class="t">Money</span>.<span class="f">show</span>() = <span class="s">"\$${cents / 100}.${cents % 100}"</span></code></pre>
+</div>
+</div>
 <h2 id="deriving">Deriving<a class="anchor" href="#deriving" aria-label="Link to this section">#</a></h2>
 <p>List <code>Show</code>, <code>Eq</code>, <code>Ord</code> or <code>Hash</code> in a warp's header and leave the methods out, and the compiler supplies them:</p>
-<ul><li><code>Show</code> writes the debug form, less any fields every case shares: <code>Point(x: 3, y: 4)</code>.</li><li><code>Eq</code>: every field is equal and, for a warp with cases, it's the same case.</li><li><code>Ord</code>: fields compare in order and the first difference decides. Earlier cases come first.</li><li><code>Hash</code> makes a warp a usable map key. <code>Error</code> gets a <code>message</code> that is its <code>Show</code> form.</li></ul>
+<ul><li><code>Show</code> writes the debug form, less any fields every case shares: <code>Version(major: 1, minor: 4)</code>.</li><li><code>Eq</code>: every field is equal and, for a warp with cases, it's the same case.</li><li><code>Ord</code>: fields compare in order and the first difference decides. Earlier cases come first.</li><li><code>Hash</code> makes a warp usable as a map key. <code>Error</code> gets a <code>message</code> that is its <code>Show</code> form.</li></ul>
 <p>A derived method needs every field to weave the weft too.</p>
 <div class="sample" id="sample-types_derive" data-sample="types_derive" data-mode="run" data-file="types_derive.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>types_derive.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
@@ -270,14 +597,42 @@ true true true
 [Version(major: 0, minor: 9), Version(major: 1, minor: 4), Version(major: 1, minor: 10)]
 1 still the same key</code></pre></div>
 </div>
-<p>Right now these defaults are built into the compiler. They're meant to become ordinary default methods that inspect the type with <a href="reflection.html">reflection</a>, as <code>ToJson</code> does.</p>
+<p>Right now these four are built into the compiler. They're meant to become ordinary default methods that inspect the type with <a href="reflection.html">reflection</a>, the way <code>ToJson</code> already does, so that deriving is not a special feature but a well-written default.</p>
+<div class="try"><p>Give <code>Version</code> a field <code>level: Level</code>, then pass it in each <code>Version(...)</code> call. <code>Version</code> derives <code>Hash</code>, but <code>Level</code> doesn't: the compiler says it can't derive <code>Hash</code> (<a href="diagnostics.html#T0108">T0108</a>) and points at the field. Add <code>Hash</code> to <code>Level</code>'s header and it works again.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p><code>#[derive(...)]</code> is the same convenience, written as an attribute. Rust's <code>Ord</code> also requires <code>Eq</code> and <code>PartialOrd</code> spelled out; Loom's one <code>Ord</code> weft covers all three of <code>&lt;</code>, <code>&lt;=</code> and <code>sort</code>.</p>
+<pre class="foreign" data-lang="rust"><code>#[<span class="f">derive</span>(<span class="t">Debug</span>, <span class="t">PartialEq</span>, <span class="t">Eq</span>, <span class="t">PartialOrd</span>, <span class="t">Ord</span>, <span class="t">Hash</span>)]
+<span class="k">struct</span> <span class="t">Version</span> { major: u32, minor: u32 }</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="haskell" data-label="Haskell">
+<h4>Haskell</h4>
+<p><code>deriving</code> is the original. Constructors compare in declaration order and fields left to right, as in Loom.</p>
+<pre class="foreign" data-lang="haskell"><code><span class="k">data</span> <span class="t">Level</span> = <span class="t">Low</span> | <span class="t">Mid</span> <span class="t">Int</span> | <span class="t">High</span> <span class="k">deriving</span> (<span class="t">Show</span>, <span class="t">Eq</span>, <span class="t">Ord</span>)</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="python" data-label="Python">
+<h4>Python</h4>
+<p>A <code>dataclass</code> generates methods when asked. <code>order=True</code> compares as tuples of fields; <code>frozen=True</code> makes instances hashable.</p>
+<pre class="foreign" data-lang="python"><code>@<span class="f">dataclass</span>(order=<span class="k">True</span>, frozen=<span class="k">True</span>)
+<span class="k">class</span> <span class="t">Version</span>:
+    major: int
+    minor: int</code></pre>
+</div>
+</div>
 <h2 id="through"><code>through</code><a class="anchor" href="#through" aria-label="Link to this section">#</a></h2>
-<p><code>through</code> forwards a field's methods, so a warp can reuse another's behavior without inheriting from it. Fields aren't forwarded, a method the outer warp defines wins, and a <code>Button</code> is not a <code>Frame</code>.</p>
+<p><code>through</code> forwards a field's methods, so a warp can reuse another's behavior without inheriting from it. The rules are short:</p>
+<ul><li>Every method of the <code>through</code> field, its own or woven, can be called on the outer warp.</li><li><strong>Fields are not forwarded.</strong> The inner warp's state stays inside; you write <code>button.frame.w</code>.</li><li>A method the outer warp defines wins over a forwarded one. Inside it, <code>.frame.describe()</code> is the "call super".</li><li>Forwarded methods count toward a weft the outer warp lists: a <code>Sticker</code> that writes nothing is still a <code>Describe</code>.</li><li>There is no subtyping. A <code>Button</code> is not a <code>Frame</code>; where a <code>Frame</code> is needed, pass <code>button.frame</code>.</li></ul>
 <div class="sample" id="sample-types_through" data-sample="types_through" data-mode="run" data-file="types_through.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>types_through.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="k">warp</span> <span class="t">Frame</span> {
+<span class="k">weft</span> <span class="t">Describe</span> {
+    <span class="k">fun</span> <span class="f">describe</span>(<span class="k">self</span>) -&gt; <span class="t">String</span>
+}
+
+<span class="k">warp</span> <span class="t">Frame</span>: <span class="t">Describe</span> {
     w: u16
     h: u16
     <span class="k">fun</span> <span class="f">size</span>(<span class="k">self</span>) -&gt; (u16, u16) = (.w, .h)
@@ -286,44 +641,179 @@ true true true
 
 <span class="c">// `through` forwards the field's methods. There is no inheritance:</span>
 <span class="c">// a Button is not a Frame.</span>
-<span class="k">warp</span> <span class="t">Button</span> {
+<span class="k">warp</span> <span class="t">Button</span>: <span class="t">Describe</span> {
     <span class="k">through</span> frame: <span class="t">Frame</span>
     label: <span class="t">String</span>
 
-    <span class="k">fun</span> <span class="f">describe</span>(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"button '</span><span class="h">{</span>.label<span class="h">}</span><span class="s">' over </span><span class="h">{</span>.frame.<span class="f">describe</span>()<span class="h">}</span><span class="s">"</span>   <span class="c">// overrides</span>
+    <span class="c">// The outer warp's own method wins over the forwarded one.</span>
+    <span class="k">fun</span> <span class="f">describe</span>(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"button '</span><span class="h">{</span>.label<span class="h">}</span><span class="s">' over </span><span class="h">{</span>.frame.<span class="f">describe</span>()<span class="h">}</span><span class="s">"</span>
 }
+
+<span class="c">// A Sticker writes nothing of its own, and still weaves Describe:</span>
+<span class="c">// forwarded methods count.</span>
+<span class="k">warp</span> <span class="t">Sticker</span>: <span class="t">Describe</span> {
+    <span class="k">through</span> frame: <span class="t">Frame</span>
+}
+
+<span class="k">fun</span> <span class="f">show_it</span>(d: <span class="t">Describe</span>) -&gt; <span class="t">String</span> = d.<span class="f">describe</span>()
 
 <span class="k">fun</span> <span class="f">main</span>() {
     <span class="k">let</span> b = <span class="t">Button</span>(<span class="t">Frame</span>(<span class="n">10</span>, <span class="n">3</span>), <span class="s">"OK"</span>)
     <span class="f">print</span>(b.<span class="f">size</span>())                          <span class="c">// forwarded from Frame</span>
     <span class="f">print</span>(b.<span class="f">describe</span>())                      <span class="c">// Button's own</span>
     <span class="f">print</span>(b.frame.w)                         <span class="c">// fields aren't forwarded</span>
+
+    <span class="f">print</span>(<span class="f">show_it</span>(<span class="t">Sticker</span>(<span class="t">Frame</span>(<span class="n">2</span>, <span class="n">2</span>))))     <span class="c">// Sticker is a Describe through its frame</span>
+    <span class="f">print</span>(<span class="f">show_it</span>(b))
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>(10, 3)
 button 'OK' over frame 10x3
-10</code></pre></div>
+10
+frame 2x2
+button 'OK' over frame 10x3</code></pre></div>
 </div>
-<h2 id="method-lookup">Method lookup<a class="anchor" href="#method-lookup" aria-label="Link to this section">#</a></h2>
-<p><code>x.f(args)</code> looks for, in order:</p>
+<div class="try"><p>Delete <code>Button</code>'s own <code>describe</code>. Now <code>b.describe()</code> is <code>Frame</code>'s, because the forwarded one is all that's left. Then restore it and add a second <code>through</code> field whose warp also has a <code>describe</code>: the compiler says <code>describe</code> comes through more than one field (<a href="diagnostics.html#T0116">T0116</a>) and asks you to write it yourself.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Go's struct embedding is the closest idea, and does more: it promotes the embedded type's <em>fields</em> as well as its methods, so <code>b.W</code> works. Loom forwards methods only, keeping the inner state out of reach.</p>
+<pre class="foreign" data-lang="go"><code><span class="k">type</span> <span class="t">Button</span> <span class="k">struct</span> {
+    <span class="t">Frame</span>
+    <span class="t">Label</span> string
+}
+b.<span class="t">Size</span>() <span class="c">// promoted method</span>
+b.W      <span class="c">// promoted field</span></code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="kotlin" data-label="Kotlin">
+<h4>Kotlin</h4>
+<p>Class delegation (<code>by</code>) is the same for interfaces: the compiler writes the forwarding methods. It works for an interface only, so there is no <code>by</code> for a concrete class.</p>
+<pre class="foreign" data-lang="kotlin"><code><span class="k">class</span> <span class="t">Button</span>(<span class="k">val</span> frame: <span class="t">Frame</span>, <span class="k">val</span> label: <span class="t">String</span>) : <span class="t">Describe</span> by frame {
+    <span class="k">override</span> <span class="k">fun</span> <span class="f">describe</span>() = <span class="s">"button '$label' over ${frame.describe()}"</span>
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust has no delegation syntax. You forward by hand, or pull in a crate (<code>delegate</code>, <code>ambassador</code>). Implementing <code>Deref</code> to get the inner methods is the common shortcut, and it is widely considered a misuse because it looks like inheritance.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">impl</span> <span class="t">Describe</span> <span class="k">for</span> <span class="t">Button</span> {
+    <span class="k">fn</span> <span class="f">describe</span>(&amp;<span class="k">self</span>) -&gt; <span class="t">String</span> { <span class="k">self</span>.frame.<span class="f">describe</span>() }
+}</code></pre>
+</div>
+</div>
+<h2 id="method-lookup-and-ufcs">Method lookup and UFCS<a class="anchor" href="#method-lookup-and-ufcs" aria-label="Link to this section">#</a></h2>
+<p><code>x.f(args)</code> looks for <code>f</code> in this order:</p>
 <ol><li>a method in <code>x</code>'s warp body;</li><li>a method from a weave into <code>x</code>'s type;</li><li>for something with items that isn't a stream (an array, list, slice, range, or a type that weaves <code>Iter</code>), a method of <code>Stream</code>;</li><li>a method forwarded through <code>through</code>;</li><li>a free function in scope whose first parameter accepts <code>x</code>.</li></ol>
-<p>Two matches at one level are an ambiguity error; write <code>Weft.f(x)</code> or <code>module.f(x)</code> to choose.</p>
+<p>The first level with a match wins. That's the whole of the rule, and it's why a method you write in the body is never shadowed by a weft's default. The last step is Loom's <strong>uniform call syntax</strong>: any free function is a method on its first parameter, so <code>64.kib()</code> is <code>kib(64)</code>. It's how a library gets extension methods without special syntax.</p>
 <div class="sample" id="sample-types_ufcs" data-sample="types_ufcs" data-mode="run" data-file="types_ufcs.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>types_ufcs.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="c">// Any free function is a method on its first parameter.</span>
+<span class="k">warp</span> <span class="t">Circle</span> {
+    r: f64
+
+    <span class="c">// 1. A method in the warp's own body comes first.</span>
+    <span class="k">fun</span> <span class="f">name</span>(<span class="k">self</span>) -&gt; str = <span class="s">"circle"</span>
+}
+
+<span class="k">weft</span> <span class="t">Shape</span> {
+    <span class="k">fun</span> <span class="f">name</span>(<span class="k">self</span>) -&gt; str = <span class="s">"shape"</span>          <span class="c">// would also match, but loses to the body</span>
+    <span class="k">fun</span> <span class="f">area</span>(<span class="k">self</span>) -&gt; f64
+}
+
+<span class="c">// 2. Then a method from a weave.</span>
+<span class="k">weave</span> <span class="t">Shape</span> <span class="k">into</span> <span class="t">Circle</span> {
+    <span class="k">fun</span> <span class="f">area</span>(<span class="k">self</span>) -&gt; f64 = <span class="n">3.0</span> * .r * .r
+}
+
+<span class="c">// 5. Last, a free function whose first parameter accepts the value.</span>
 <span class="k">fun</span> <span class="f">kib</span>(n: usize) -&gt; usize = n * <span class="n">1024</span>
 <span class="k">fun</span> <span class="f">shout</span>(s: str) -&gt; <span class="t">String</span> = s.<span class="f">to_upper</span>()
+<span class="k">fun</span> <span class="f">describe</span>(c: <span class="t">Circle</span>) -&gt; <span class="t">String</span> = <span class="s">"a </span><span class="h">{</span>c.<span class="f">name</span>()<span class="h">}</span><span class="s"> of area </span><span class="h">{</span>c.<span class="f">area</span>()<span class="h">}</span><span class="s">"</span>
 
 <span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> c = <span class="t">Circle</span>(<span class="n">2</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>c.<span class="f">name</span>()<span class="h">}</span><span class="s"> / </span><span class="h">{</span><span class="t">Shape</span>.<span class="f">name</span>(c)<span class="h">}</span><span class="s">"</span>)     <span class="c">// the body's, then the weft's, by name</span>
+    <span class="f">print</span>(c.<span class="f">area</span>())
+    <span class="f">print</span>(c.<span class="f">describe</span>())                      <span class="c">// the same as describe(c)</span>
+
     <span class="f">print</span>(<span class="n">64</span>.<span class="f">kib</span>())                          <span class="c">// the same as kib(64)</span>
     <span class="f">print</span>(<span class="s">"hi"</span>.<span class="f">shout</span>())
+
+    <span class="c">// 3. Anything with items has the stream methods: `indexed`, `filter`, `sum`...</span>
+    <span class="f">print</span>([<span class="n">10</span>, <span class="n">20</span>, <span class="n">30</span>].<span class="f">indexed</span>().<span class="f">collect</span>())
 }</code></pre>
-<div class="sample-out"><div class="out-head">Output</div><pre><code>65536
-HI</code></pre></div>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>circle / shape
+12
+a circle of area 12
+65536
+HI
+[(0, 10), (1, 20), (2, 30)]</code></pre></div>
+</div>
+<p><code>x.f</code> without parentheses is always a field, and methods are never called implicitly.</p>
+<h3 id="when-two-methods-match">When two methods match<a class="anchor" href="#when-two-methods-match" aria-label="Link to this section">#</a></h3>
+<p>Two matches at the same level are an ambiguity error. Weaving two wefts that both have <code>hi</code> into the same warp is fine until someone calls <code>g.hi()</code>:</p>
+<div class="sample" id="sample-types_err_ambiguous" data-sample="types_err_ambiguous" data-mode="check" data-file="types_err_ambiguous.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>types_err_ambiguous.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#T0116">T0116</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">weft</span> <span class="t">Hello</span> {
+    <span class="k">fun</span> <span class="f">hi</span>(<span class="k">self</span>) -&gt; str = <span class="s">"hello"</span>
+}
+
+<span class="k">weft</span> <span class="t">Howdy</span> {
+    <span class="k">fun</span> <span class="f">hi</span>(<span class="k">self</span>) -&gt; str = <span class="s">"howdy"</span>
+}
+
+<span class="k">warp</span> <span class="t">Greeting</span> {
+    n: i32
+}
+
+<span class="k">weave</span> <span class="t">Hello</span> <span class="k">into</span> <span class="t">Greeting</span> {}
+<span class="k">weave</span> <span class="t">Howdy</span> <span class="k">into</span> <span class="t">Greeting</span> {}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> g = <span class="t">Greeting</span>(<span class="n">1</span>)
+    <span class="k">let</span> s = g.<span class="f">hi</span>()
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[T0116]: `Greeting` has more than one method `hi`</span>
+<span class="loc">   --&gt; types_err_ambiguous.loom:18:13</span>
+<span class="gut">   |</span>
+<span class="gut">18 |</span>     let s = g.hi()
+<span class="gut">   |</span><span class="caret">             ^^^^ could be `Hello.hi` or `Howdy.hi`</span>
+<span class="gut">   |</span>
+<span class="loc">   = help: say which one: `Hello.hi(x)`</span>
+
+<span class="err">error: types_err_ambiguous.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<p>The compiler says which candidates it found. Write <code>Hello.hi(g)</code> (the weft) or <code>module.f(x)</code> (a free function) to choose.</p>
+<div class="try"><p>Add <code>fun area(c: Circle) -&gt; f64 = 0.0</code> to the sample and run it. <code>c.area()</code> still prints <code>12</code>: the weave's method is found at level 2, the free function waits at level 5.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust has no free-function-as-method: <code>kib(64)</code> and <code>64.kib()</code> are different things, and an extension method needs a trait.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">trait</span> <span class="t">Kib</span> { <span class="k">fn</span> <span class="f">kib</span>(<span class="k">self</span>) -&gt; usize; }
+<span class="k">impl</span> <span class="t">Kib</span> <span class="k">for</span> usize { <span class="k">fn</span> <span class="f">kib</span>(<span class="k">self</span>) -&gt; usize { <span class="k">self</span> * <span class="n">1024</span> } }
+
+64usize.<span class="f">kib</span>();</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="kotlin" data-label="Kotlin">
+<h4>Kotlin</h4>
+<p>Extension functions are the same idea, with the same rule: a member always beats an extension. Kotlin makes you declare the receiver; Loom's is just the first parameter.</p>
+<pre class="foreign" data-lang="kotlin"><code><span class="k">fun</span> <span class="t">Int</span>.<span class="f">kib</span>() = <span class="k">this</span> * <span class="n">1024</span>
+
+<span class="n">64</span>.<span class="f">kib</span>()</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="c" data-label="C#">
+<h4>C#</h4>
+<p>Extension methods need a static class and a <code>this</code> marker. Like Loom's, they lose to a real method of the same name.</p>
+<pre class="foreign" data-lang="csharp"><code><span class="k">static</span> <span class="k">class</span> <span class="t">Sizes</span> {
+    <span class="k">public</span> <span class="k">static</span> <span class="k">int</span> <span class="t">Kib</span>(<span class="k">this</span> <span class="k">int</span> n) =&gt; n * <span class="n">1024</span>;
+}
+
+<span class="n">64</span>.<span class="t">Kib</span>();</code></pre>
+</div>
 </div>
 <h2 id="where-next">Where next<a class="anchor" href="#where-next" aria-label="Link to this section">#</a></h2>
-<p><a href="generics.html">Generics and <code>any</code></a> covers type parameters and dynamic dispatch.</p>
+<p><a href="generics.html">Generics and <code>any</code></a> covers type parameters and dynamic dispatch, and what it means to use a weft as a parameter type.</p>
 <nav class="pager" aria-label="Chapters">
 <a class="prev" href="values.html"><span class="dir">&larr; Chapter 2</span>Values and control flow</a>
 <a class="next" href="generics.html"><span class="dir">Chapter 4 &rarr;</span>Generics and <code>any</code></a>

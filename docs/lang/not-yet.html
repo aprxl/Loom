@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>Not supported yet · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -55,18 +56,14 @@
 <div class="chapter-head">
 <span class="chapter-no">Appendix A</span>
 <h1>Not supported yet</h1>
-<p class="summary">What the compiler doesn't do, said plainly.</p>
+<p class="summary">What the compiler doesn't do, said plainly, chapter by chapter.</p>
 </div>
-<p>The design in <code>README.md</code> and <code>design/*.md</code> is bigger than what runs. This is the list of what doesn't run, from <code>design/lua-backend.md</code> and from trying it.</p>
-<p>Anything not built stops with a <code>U</code> code, and most stop with <a href="diagnostics.html#U0102">U0102</a>, "not implemented yet". The compiler doesn't guess and doesn't miscompile.</p>
-<h2 id="next-in-line">Next in line<a class="anchor" href="#next-in-line" aria-label="Link to this section">#</a></h2>
-<p>These are planned next, in this order: the rest of threads, then the rest of <code>given</code> and Loom's own VM, Treadle (designed in <code>design/vm.md</code>). Treadle runs everything and is what <code>loom run file.loom</code> uses; <code>--backend lua</code> runs the Lua backend instead. A program over one of its limits (a frame of more than 65 535 registers, say) stops with <a href="diagnostics.html#U0103">U0103</a>.</p>
-<h3 id="threads">Threads<a class="anchor" href="#threads" aria-label="Link to this section">#</a></h3>
-<p><a href="threads.html">Threads</a> run, one at a time: <code>loom { }</code>, <code>thread</code>, <code>.join()</code> and <code>sched_yield()</code>. Not yet: several worker threads at once.</p>
-<h3 id="more-of-given">More of <code>given</code><a class="anchor" href="#more-of-given" aria-label="Link to this section">#</a></h3>
-<p><code>given</code> runs (see <a href="ownership.html">Moves</a>). Not yet: leaving a private function's <code>given</code>s to be inferred from what it calls.</p>
+<p>The design in <code>README.md</code> and <code>design/*.md</code> is bigger than what runs. This is the list of what doesn't, checked by trying each one against the compiler, and grouped by the chapter it belongs to. If something isn't here and doesn't work, that's a bug in this list: tell us.</p>
+<p>The rule behind it: <strong>anything not built stops the build with a <code>U</code> code, and never compiles wrongly.</strong> Most stop with <a href="diagnostics.html#U0102">U0102</a>, "not implemented yet", and the message names the feature. A program that goes over one of Treadle's own limits stops with <a href="diagnostics.html#U0103">U0103</a>.</p>
+<p>Two things that earlier versions of this page listed work now, and are worth knowing: several worker threads (see <a href="threads.html">Threads</a>), and the Treadle VM, which is what <code>loom run</code> uses; <code>--backend lua</code> selects the older Lua backend. Reading standard input (<code>std.io.read_line</code>, <code>read_all</code>, <code>lines</code>), <code>process.exit</code> and Ctrl-C handling work too.</p>
 <h2 id="compile-time-code">Compile-time code<a class="anchor" href="#compile-time-code" aria-label="Link to this section">#</a></h2>
-<p>The standard library's <code>std.sys</code> is not built, and neither are <code>T.bits</code> (which needs <code>#layout(bits)</code>), <code>f.ty</code> or <code>T.weaves(W)</code>:</p>
+<p>These belong to <a href="compile-time.html">Compile-time code</a>, <a href="const-params.html">Const parameters and control flow</a> and <a href="reflection.html">Reflection</a>.</p>
+<p>The standard library's <code>std.sys</code>, the platform's own APIs, is not built:</p>
 <div class="sample" id="sample-nyet_sys" data-sample="nyet_sys" data-mode="check" data-file="nyet_sys.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>nyet_sys.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">fun</span> <span class="f">main</span>() {
@@ -80,7 +77,7 @@
 
 <span class="err">error: nyet_sys.loom failed to resolve (1 error)</span></code></pre></div>
 </div>
-<p>Array lengths and gauge bounds must be something the compiler's own evaluator can fold. A call to one of your functions isn't. It's <a href="diagnostics.html#U0102">U0102</a> for an array length and <a href="diagnostics.html#T0103">T0103</a> for a gauge bound.</p>
+<p>Array lengths and gauge bounds must be something the compiler's own evaluator can fold. A call to one of your functions isn't. It's <a href="diagnostics.html#U0102">U0102</a> for an array length and <a href="diagnostics.html#T0103">T0103</a> for a gauge bound. (A <em>constant</em> may call your functions; it's the type that can't wait for them.)</p>
 <div class="sample" id="sample-nyet_types" data-sample="nyet_types" data-mode="check" data-file="nyet_types.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>nyet_types.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="c">// A type can't depend on the compile-time sandbox yet, only on what the</span>
@@ -103,15 +100,53 @@
 <span class="err">error: nyet_types.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
 <p>Also missing:</p>
-<ul><li><code>const fun</code>s that return types (<code>const fun fixed(...) -&gt; type</code>), and anonymous <code>warp { ... }</code> types (<a href="diagnostics.html#U0101">U0101</a>).</li><li><code>break</code> and <code>continue</code> out of a <code>const for</code>.</li><li><code>const</code> parameters that aren't integers or <code>bool</code>.</li><li><code>embed</code> and <code>embed_text</code>, and the <code>bolt.loom</code> manifest.</li></ul>
+<ul><li><strong>Types computed by functions.</strong> <code>const fun fixed(...) -&gt; type</code> is <a href="diagnostics.html#U0102">U0102</a>, and so are anonymous <code>warp { ... }</code> types. <code>uint(n)</code> and <code>int(n)</code> are the built-in cases. The keyword <code>const fun</code> itself parses, but today it doesn't change what the function may do: the "compile-time only" meaning in <code>design/06-compile-time.md</code> isn't enforced.</li><li><strong><code>break</code> and <code>continue</code> in a <code>const for</code></strong> (<a href="diagnostics.html#U0102">U0102</a>). A <code>const for</code> also goes only over numbers and <code>bool</code>s the folder can work out, not over strings (<a href="diagnostics.html#K0110">K0110</a>).</li><li><strong><code>const</code> parameters that aren't integers or <code>bool</code></strong>: a <code>str</code>, a <code>char</code> or a warp is <a href="diagnostics.html#T0101">T0101</a>.</li><li><strong><code>embed</code>, <code>embed_text</code> and the <code>bolt.loom</code> manifest.</strong> There's no way to bring a file into a constant yet.</li><li><strong>Reflection:</strong> <code>T.bits</code> (which needs <code>#layout(bits)</code>), <code>f.ty</code> and <code>T.weaves(W)</code>.</li><li><strong>Derives written in Loom.</strong> <code>Show</code>, <code>Eq</code>, <code>Ord</code> and <code>Hash</code> for warps are still built into the compiler instead of being default methods that reflect; <a href="reflection.html">Reflection</a> shows how you'd write your own.</li><li><strong><code>#layout(...)</code></strong> is parsed, and the compiler reports it as not implemented (<a href="diagnostics.html#U0102">U0102</a>).</li></ul>
+<h2 id="tests">Tests<a class="anchor" href="#tests" aria-label="Link to this section">#</a></h2>
+<p>For <a href="tests.html">Tests</a>: <code>assert</code> is the only check. There is no <code>assert_eq</code>, no way to select one test by name, no setup and teardown, no way to mark a test as expected to fail, and no way to assert that code unravels.</p>
+<h2 id="threads">Threads<a class="anchor" href="#threads" aria-label="Link to this section">#</a></h2>
+<p>For <a href="threads.html">Threads</a>, the design is built apart from these:</p>
+<ul><li><strong>I/O is not a cancel point.</strong> A thread that is inside a file or terminal call isn't interrupted when its loom fails; it finishes the call first.</li><li><strong>Async I/O</strong> and an event loop (<code>std.reel</code>) aren't in this version. A <a href="shuttles.html">shuttle</a> can already suspend, but nothing yet drives shuttles that wait on I/O.</li><li><strong>Pools of your own.</strong> <code>loom(given: Crew(workers: n))</code> limits how many workers a loom uses; there isn't a way to make a pool with its own queue.</li><li><strong>A <code>Pipe</code> of a <code>once</code> type</strong> (<a href="diagnostics.html#U0102">U0102</a>), and an <code>Atomic</code> of anything but integers of 8 to 64 bits and <code>bool</code>.</li><li><strong>Composing shuttles</strong> (<code>lexer().feed(parser())</code>) isn't built.</li><li><code>loom for</code> hands out runs of items only for exclusive integer ranges, lists, slices, arrays and their chunks, at a fixed grain. There is no adaptive grain.</li></ul>
 <h2 id="memory-and-safety">Memory and safety<a class="anchor" href="#memory-and-safety" aria-label="Link to this section">#</a></h2>
-<ul><li>A <code>for</code> loop over a projection that lends many places, and <code>xs[i]</code> through an <code>Index</code> weave.</li><li><code>unsafe</code> blocks, raw pointers (<code>*T</code>), <code>extern "C"</code>, <code>Volatile</code>. <code>#layout(...)</code> is parsed but nothing acts on it.</li><li>User-written <code>Spool</code> weaves.</li><li>Lists, maps and sets in a spool (<code>List[i32]@frame</code>): a <code>String</code> made with <code>.copy()</code> goes in the spool, and a warp in a spool can't hold the others (<a href="diagnostics.html#U0102">U0102</a>).</li></ul>
+<p>For <a href="memory.html">Pointers, spools and <code>given</code></a>:</p>
+<ul><li><strong><code>unsafe</code> blocks, raw pointers (<code>*T</code>), <code>extern "C"</code> calls and <code>Volatile</code>.</strong> <code>unsafe</code> and <code>*T</code> are <a href="diagnostics.html#U0102">U0102</a>; an <code>extern "C"</code> function can be declared but not called, on either backend; <code>Volatile</code> doesn't exist.</li><li><strong>Spools:</strong> a list, a map or a box can't be held by a warp that lives in a spool (<a href="diagnostics.html#U0102">U0102</a>), and <code>Deque</code> and <code>SortedMap</code> nodes can't be in one either. You can't write a spool of your own: <code>spool s = MySpool()</code> for a type that weaves <code>Spool</code> is <a href="diagnostics.html#T0101">T0101</a>.</li><li><strong><code>given</code>:</strong> every function spells its own <code>given</code>s; a private function doesn't infer them from what it calls.</li><li><strong>Treadle images:</strong> <code>loom build --image</code> writes a file Treadle can run, but the loader doesn't verify one well enough to trust a file from someone else. Run only images you built.</li></ul>
 <h2 id="types-and-library">Types and library<a class="anchor" href="#types-and-library" aria-label="Link to this section">#</a></h2>
-<ul><li>Integers wider than 64 bits and <code>f16</code>.</li><li>Generic wefts (<code>weft From[T]</code>).</li><li><code>xs.sorted_by(...)</code> on a list or an array (it takes a stream: <code>xs.take(n).sorted_by(...)</code>, or <code>map.pairs().sorted_by(...)</code>), and other list methods the design mentions that std doesn't declare. <a href="../std/modules/list.html">std.list</a> and <a href="../std/modules/slice.html">std.slice</a> list what exists.</li><li>Reading standard input. <a href="../std/modules/io.html">std.io</a> has <code>print</code> and nothing else.</li><li>A <code>mut self</code> method of a scalar type can't be called through <code>any</code> yet, because the <code>any</code> holds its own copy.</li><li>A union of errors doesn't convert to <code>any Error</code>.</li><li>A warp that writes its own <code>eq</code> and <code>hash</code> is still keyed structurally in a <code>Map</code> or <code>Set</code>.</li></ul>
-<h2 id="running-programs">Running programs<a class="anchor" href="#running-programs" aria-label="Link to this section">#</a></h2>
-<ul><li>Ctrl-C handling (exit status 130), <code>process.exit</code>, an instruction budget for <code>loom run</code>, and running a bundle in an outside Lua (<code>--lua PATH</code>).</li><li>Async I/O and composing shuttles (<code>lexer().feed(parser())</code>) aren't in the design for this version.</li><li>The emitted Lua isn't optimized: checks the compiler could prove unneeded are still emitted. Speed comes later, with Loom's own interpreter.</li></ul>
+<ul><li><strong>Integers wider than 64 bits and <code>f16</code><strong>, </strong>generic wefts</strong> (<code>weft From[T]</code>), <strong>generic type aliases</strong>, <strong>slice patterns</strong>, <strong>inferred error sets</strong> (<code>! _</code>), <strong>explicit type arguments on a function used as a value</strong> (<code>let f = id[i32]</code>), and <strong><code>main</code> with parameters</strong> (it takes none; read <code>env.args()</code>):</li></ul>
+<div class="sample" id="sample-nyet_limits" data-sample="nyet_limits" data-mode="check" data-file="nyet_limits.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>nyet_limits.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a>, <a href="diagnostics.html#U0102">U0102</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="c">// A few limits of the type system, each stopped with U0102.</span>
+
+<span class="c">// A weft can't take type parameters yet.</span>
+<span class="k">weft</span> <span class="t">From</span>[T] {
+    <span class="k">fun</span> <span class="f">from</span>(x: T) -&gt; <span class="k">Self</span>
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="c">// Integers stop at 64 bits.</span>
+    <span class="k">let</span> wide: i128 = <span class="n">1</span>
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[U0102]: not implemented yet: generic wefts</span>
+<span class="loc">  --&gt; nyet_limits.loom:4:6</span>
+<span class="gut">  |</span>
+<span class="gut">4 |</span> weft From[T] {
+<span class="gut">  |</span><span class="caret">      ^^^^ not supported by this compiler yet</span>
+<span class="gut">  |</span>
+<span class="loc">  = note: the type checker grows one milestone at a time; see design/lua-backend.md</span>
+
+<span class="err">error[U0102]: not implemented yet: `f16` and integers wider than 64 bits</span>
+<span class="loc">   --&gt; nyet_limits.loom:10:15</span>
+<span class="gut">   |</span>
+<span class="gut">10 |</span>     let wide: i128 = 1
+<span class="gut">   |</span><span class="caret">               ^^^^ not supported by this compiler yet</span>
+<span class="gut">   |</span>
+<span class="loc">   = note: the type checker grows one milestone at a time; see design/lua-backend.md</span>
+
+<span class="err">error: nyet_limits.loom failed to type-check (2 errors)</span></code></pre></div>
+</div>
+<ul><li>A <code>mut self</code> method of a scalar type can't be called through <code>any</code>, because the <code>any</code> holds its own copy (<a href="diagnostics.html#U0102">U0102</a>).</li><li>A union of errors doesn't convert to <code>any Error</code>: <code>?</code> on an <code>A | B</code> in a function that returns <code>! any Error</code> is <a href="diagnostics.html#T0108">T0108</a>, and the help says to widen the function's errors.</li><li>A warp that writes its own <code>eq</code> and <code>hash</code> is still keyed structurally in a <code>Map</code> or <code>Set</code>: two keys your <code>eq</code> calls equal are two entries.</li><li>A <code>Fmt</code> with specs, padding and a debug builder, <code>Default</code> for arrays and big tuples, <code>BitSet</code>, <code>std.json</code>, <code>process.run</code>, buffered readers and a few number methods are on the library's to-do list. <a href="../std/index.html">The standard library</a> shows what exists.</li><li><code>for</code> over a range of <code>char</code>s (<code>'a'..'e'</code>) runs on the Lua backend and not on Treadle (<a href="diagnostics.html#U0102">U0102</a>).</li></ul>
+<h2 id="the-lua-backend">The Lua backend<a class="anchor" href="#the-lua-backend" aria-label="Link to this section">#</a></h2>
+<p><code>--backend lua</code> runs the same language on Lua 5.4. It is kept correct, and it is what the fixtures compare Treadle against, but it isn't optimized: checks the compiler could prove unneeded are still emitted. Its <code>usize</code> is 63 bits (Treadle's is 64), and <code>target.pointer_bits</code> says so. Programs that run threads run them as coroutines, one at a time.</p>
 <h2 id="the-examples">The examples<a class="anchor" href="#the-examples" aria-label="Link to this section">#</a></h2>
-<p><code>examples/tour.loom</code>, <code>examples/widgets.loom</code>, <code>examples/ledger.loom</code>, <code>examples/lexer.loom</code> and <code>examples/chip8.loom</code> compile and run. <code>examples/compile_time.loom</code> fails only at <code>std.sys</code>. <code>examples/calc.loom</code> and <code>examples/parallel.loom</code> run too.</p>
+<p><code>examples/tour.loom</code>, <code>widgets.loom</code>, <code>ledger.loom</code>, <code>lexer.loom</code>, <code>chip8.loom</code>, <code>calc.loom</code> and <code>parallel.loom</code> compile and run. <code>examples/compile_time.loom</code> fails only at <code>std.sys</code>.</p>
 <nav class="pager" aria-label="Chapters">
 <a class="prev" href="threads.html"><span class="dir">&larr; Chapter 15</span>Threads</a>
 <a class="next" href="diagnostics.html"><span class="dir">Reference &rarr;</span>Diagnostic codes</a>

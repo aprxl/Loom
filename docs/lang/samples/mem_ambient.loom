@@ -1,0 +1,20 @@
+use std.io.print
+use std.mem.{Arena, kib}
+
+warp Cell: Show {
+    n: i32
+}
+
+fun main() {
+    let on_heap = ^Cell(1)           // no spool given: the heap
+
+    spool frame = Arena(1.kib())
+    given sp = frame                 // from here on, `^e` allocates in `frame`
+    let a = ^Cell(2)
+    let b = ^Cell(3)
+    print("{on_heap} {a} {b}")
+
+    frame.reset()                    // `a` and `b` go; `on_heap` doesn't
+    print(on_heap)
+}
+//@ run

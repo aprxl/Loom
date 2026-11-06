@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>Shuttles · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -55,14 +56,124 @@
 <div class="chapter-head">
 <span class="chapter-no">Chapter 10</span>
 <h1>Shuttles</h1>
-<p class="summary">Functions that pause, yielding values out and pulling values in.</p>
+<p class="summary">Functions that pause: generators that yield values out, duplex shuttles that take values in, and projections that lend a place.</p>
 </div>
-<p>A <strong>shuttle</strong> is a function that can pause and resume. The return arrow says what kind it is:</p>
+<p>On a real loom the shuttle is the little boat that carries the weft thread back and forth across the warp, pausing at each edge. A Loom <strong>shuttle</strong> is a function that can do the same: run for a while, pause, and be resumed later with its locals intact.</p>
+<p>Pausing is useful whenever the caller and the code want to take turns. A generator hands out values one at a time instead of building a whole list. A lexer wants characters pushed in as they arrive and tokens handed back as soon as they're complete. Writing either as an ordinary function means turning the logic inside out into a state machine; a shuttle lets it read from top to bottom.</p>
+<h2 id="four-kinds-of-function">Four kinds of function<a class="anchor" href="#four-kinds-of-function" aria-label="Link to this section">#</a></h2>
+<p>The return arrow says what kind a function is:</p>
 <table class="plain"><thead><tr><th>Signature</th><th>Kind</th><th>Type</th></tr></thead><tbody><tr><td><code>fun f() -&gt; T</code></td><td>an ordinary function</td><td></td></tr><tr><td><code>fun f() ~&gt; T</code></td><td>a <strong>generator</strong>: yields <code>T</code>s</td><td><code>Shuttle[T, ()]</code></td></tr><tr><td><code>fun f() ~&gt; T &lt;~ U</code></td><td>a <strong>duplex</strong> shuttle: pulls in <code>U</code>s, yields <code>T</code>s</td><td><code>Shuttle[T, U]</code></td></tr><tr><td><code>fun f() &lt;~ U</code></td><td>a <strong>sink</strong>: only pulls</td><td><code>Shuttle[(), U]</code></td></tr></tbody></table>
-<p>Two expressions work only inside a shuttle. <code>yield v</code> sends <code>v</code> out and pauses. <code>pull</code> pauses until the driver pushes an input, and evaluates to <code>?U</code>: <code>none</code> once the shuttle is closed. <code>return</code> ends it.</p>
-<p><strong>Calling a shuttle function runs none of its body.</strong> It builds a suspended shuttle value. On the Lua backend that's a coroutine; on Treadle, a frame holding what the shuttle keeps between pauses, and the function that runs it from one pause to the next.</p>
+<p>Two expressions work only inside a shuttle. <code>yield v</code> sends <code>v</code> out and pauses. <code>pull</code> pauses until the driver pushes an input, and evaluates to <code>?U</code>: <code>none</code> once the shuttle is closed. <code>return</code> ends it. Using one the signature doesn't allow is <a href="diagnostics.html#T0120">T0120</a>, and outside any shuttle <a href="diagnostics.html#N0114">N0114</a>.</p>
+<div class="sample" id="sample-shuttles_err_kind" data-sample="shuttles_err_kind" data-mode="check" data-file="shuttles_err_kind.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>shuttles_err_kind.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#T0120">T0120</a>, <a href="diagnostics.html#T0120">T0120</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="c">// A sink only pulls: it has no `~&gt; T` to yield into.</span>
+<span class="k">fun</span> <span class="f">sink</span>() &lt;~ i32 {
+    <span class="k">yield</span> <span class="n">1</span>
+}
+
+<span class="c">// A generator only yields: there's no `&lt;~ U` to pull from.</span>
+<span class="k">fun</span> <span class="f">gen</span>() ~&gt; i32 {
+    <span class="k">let</span> x = <span class="k">pull</span>
+    <span class="k">yield</span> <span class="n">1</span>
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[T0120]: `yield` doesn't fit this shuttle</span>
+<span class="loc">  --&gt; shuttles_err_kind.loom:3:5</span>
+<span class="gut">  |</span>
+<span class="gut">3 |</span>     yield 1
+<span class="gut">  |</span><span class="caret">     ^^^^^^^ this shuttle only pulls: it has no `~&gt; T`</span>
+<span class="gut">  |</span>
+<span class="loc">  = help: the signature says what a shuttle does: `~&gt; T` yields `T`s, `&lt;~ U` pulls `U`s</span>
+
+<span class="err">error[T0120]: `pull` doesn't fit this shuttle</span>
+<span class="loc">  --&gt; shuttles_err_kind.loom:8:13</span>
+<span class="gut">  |</span>
+<span class="gut">8 |</span>     let x = pull
+<span class="gut">  |</span><span class="caret">             ^^^^ this shuttle only yields: it has no `&lt;~ U`</span>
+<span class="gut">  |</span>
+<span class="loc">  = help: the signature says what a shuttle does: `~&gt; T` yields `T`s, `&lt;~ U` pulls `U`s</span>
+
+<span class="err">error: shuttles_err_kind.loom failed to type-check (2 errors)</span></code></pre></div>
+</div>
+<div class="try"><p>Change <code>sink</code> to <code>fun sink() ~&gt; i32 &lt;~ i32</code>. It can both pull and yield now, and the first error goes away.</p></div>
+<h2 id="calling-runs-nothing">Calling runs nothing<a class="anchor" href="#calling-runs-nothing" aria-label="Link to this section">#</a></h2>
+<p><strong>Calling a shuttle function runs none of its body.</strong> It builds a suspended shuttle value and returns it. The body starts when something drives it, and each drive runs it up to the next <code>yield</code> or <code>pull</code>.</p>
+<div class="sample" id="sample-shuttles_lazy" data-sample="shuttles_lazy" data-mode="run" data-file="shuttles_lazy.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>shuttles_lazy.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fun</span> <span class="f">noisy</span>() ~&gt; i32 {
+    <span class="f">print</span>(<span class="s">"  started"</span>)
+    <span class="k">yield</span> <span class="n">1</span>
+    <span class="f">print</span>(<span class="s">"  resumed"</span>)
+    <span class="k">yield</span> <span class="n">2</span>
+    <span class="f">print</span>(<span class="s">"  done"</span>)
+}
+
+<span class="c">// A shuttle is a value: this one takes a generator that yields `i32`s.</span>
+<span class="k">fun</span> <span class="f">total</span>(<span class="k">take</span> g: <span class="t">Shuttle</span>[i32, ()]) -&gt; i32 {
+    <span class="k">var</span> sum = <span class="n">0</span>
+    <span class="k">for</span> x <span class="k">in</span> g { sum += x }
+    sum
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">print</span>(<span class="s">"calling"</span>)
+    <span class="k">let</span> g = <span class="f">noisy</span>()                  <span class="c">// builds a suspended shuttle; runs nothing</span>
+    <span class="f">print</span>(<span class="s">"called: nothing has run yet"</span>)
+    <span class="k">for</span> x <span class="k">in</span> g {
+        <span class="f">print</span>(<span class="s">"got </span><span class="h">{</span>x<span class="h">}</span><span class="s">"</span>)
+    }
+    <span class="f">print</span>(<span class="f">total</span>(<span class="f">noisy</span>()))
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>calling
+called: nothing has run yet
+  started
+got 1
+  resumed
+got 2
+  done
+  started
+  resumed
+  done
+3</code></pre></div>
+</div>
+<p>"called: nothing has run yet" comes before "started". A shuttle is an ordinary value: you can keep it in a variable, pass it as <code>Shuttle[i32, ()]</code> (a <code>take</code> parameter, since <code>for</code> uses it up), and drive it later.</p>
+<p>On Treadle, a shuttle's body is a step function plus a frame that holds what the shuttle keeps between pauses. On the Lua backend it's a coroutine.</p>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="python" data-label="Python">
+<h4>Python</h4>
+<p>A Python generator is the same idea: calling it runs nothing until <code>next</code>. The difference is typing and cost. A Loom generator has a declared yield type and a frame whose size is known when compiling.</p>
+<pre class="foreign" data-lang="python"><code><span class="k">def</span> <span class="f">noisy</span>():
+    <span class="f">print</span>(<span class="s">"started"</span>)
+    <span class="k">yield</span> <span class="n">1</span>
+
+g = <span class="f">noisy</span>()      <span class="c"># nothing printed yet</span>
+<span class="f">next</span>(g)          <span class="c"># started</span></code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="javascript" data-label="JavaScript">
+<h4>JavaScript</h4>
+<p><code>function*</code> works the same way and is driven with <code>next()</code>. Loom drives a generator with <code>for</code> or any stream method (<code>take</code>, <code>map</code>, <code>collect</code>, ...), because a generator is a stream.</p>
+<pre class="foreign" data-lang="typescript"><code><span class="k">function</span>* <span class="f">noisy</span>() {
+  console.<span class="f">log</span>(<span class="s">"started"</span>);
+  <span class="k">yield</span> <span class="n">1</span>;
+}
+<span class="k">const</span> g = <span class="f">noisy</span>();   <span class="c">// nothing yet</span>
+g.<span class="f">next</span>();            <span class="c">// started</span></code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="c" data-label="C#">
+<h4>C#</h4>
+<p>C#'s <code>yield return</code> makes an <code>IEnumerable&lt;T&gt;</code>, driven by <code>foreach</code> or LINQ. The ideas match; Loom has no separate iterator class, and the same arrow syntax also covers pushing values in.</p>
+<pre class="foreign" data-lang="csharp"><code><span class="k">static</span> <span class="t">IEnumerable</span>&lt;<span class="k">int</span>&gt; <span class="t">Noisy</span>() {
+    <span class="t">Console</span>.<span class="t">WriteLine</span>(<span class="s">"started"</span>);
+    <span class="k">yield</span> <span class="k">return</span> <span class="n">1</span>;
+}</code></pre>
+</div>
+</div>
 <h2 id="generators">Generators<a class="anchor" href="#generators" aria-label="Link to this section">#</a></h2>
-<p>A generator is a stream of what it yields: <code>for x in fib()</code>, <code>fib().take(10)</code>. Leaving a <code>for</code> loop over a generator early closes it, and that runs its <code>defer</code>s.</p>
+<p>A generator is a stream of what it yields: <code>for x in fib()</code>, <code>fib().take(10)</code>. It can be infinite, because only what you ask for is computed. The methods are the ones on any <a href="collections.html">stream</a>: <code>take</code>, <code>skip_while</code>, <code>find</code>, <code>collect</code>.</p>
 <div class="sample" id="sample-shuttles_gen" data-sample="shuttles_gen" data-mode="run" data-file="shuttles_gen.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>shuttles_gen.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -108,8 +219,77 @@ early closed
 1
 whole closed</code></pre></div>
 </div>
+<p>Leaving a <code>for</code> loop over a generator early (a <code>break</code>, a <code>return</code>) <strong>closes</strong> it, and that runs its <code>defer</code>s, so cleanup written inside the generator happens however the loop ends. In the sample, "early closed" is printed as the loop breaks, and "whole closed" as the generator finishes.</p>
+<div class="try"><p>Change <code>fib().take(10)</code> to <code>fib().take(20)</code>: only what you ask for is computed. Then change <code>countdown("whole", 2)</code> to start from <code>0</code>: the loop body never runs, but the <code>defer</code> still does.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="python" data-label="Python">
+<h4>Python</h4>
+<p>Python's generator is closest. <code>yield</code> suspends and <code>for</code> drives it. Python's <code>try/finally</code> inside a generator plays the role of <code>defer</code>, and runs when the generator is closed or garbage collected; Loom's <code>defer</code> runs when the shuttle is closed or dropped.</p>
+<pre class="foreign" data-lang="python"><code><span class="k">def</span> <span class="f">fib</span>():
+    a, b = <span class="n">0</span>, <span class="n">1</span>
+    <span class="k">while</span> <span class="k">True</span>:
+        <span class="k">yield</span> a
+        a, b = b, a + b
+
+<span class="f">print</span>(<span class="f">list</span>(itertools.<span class="f">islice</span>(<span class="f">fib</span>(), <span class="n">10</span>)))</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="kotlin" data-label="Kotlin">
+<h4>Kotlin</h4>
+<p>Kotlin's <code>sequence { yield(x) }</code> builds a lazy <code>Sequence</code>. It's a library over coroutines; in Loom <code>~&gt;</code> is part of the function's signature.</p>
+<pre class="foreign" data-lang="kotlin"><code><span class="k">val</span> fib = sequence {
+    <span class="k">var</span> (a, b) = 0L to 1L
+    <span class="k">while</span> (<span class="k">true</span>) { <span class="f">yield</span>(a); a = b.also { b += a } }
+}
+<span class="f">println</span>(fib.<span class="f">take</span>(<span class="n">10</span>).<span class="f">toList</span>())</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="lua" data-label="Lua">
+<h4>Lua</h4>
+<p>Lua's coroutines are the model the Lua backend uses: <code>coroutine.wrap</code> plus <code>coroutine.yield</code>. They are untyped and general; a shuttle is a typed coroutine with a fixed shape.</p>
+<pre class="foreign" data-lang="lua"><code><span class="k">local</span> fib = coroutine.<span class="f">wrap</span>(<span class="k">function</span>()
+  <span class="k">local</span> a, b = <span class="n">0</span>, <span class="n">1</span>
+  <span class="k">while</span> <span class="k">true</span> <span class="k">do</span> coroutine.<span class="f">yield</span>(a); a, b = b, a + b <span class="k">end</span>
+<span class="k">end</span>)</code></pre>
+</div>
+</div>
+<h2 id="when-a-shuttle-is-dropped">When a shuttle is dropped<a class="anchor" href="#when-a-shuttle-is-dropped" aria-label="Link to this section">#</a></h2>
+<p>A shuttle can be dropped part-way: after <code>.take(3)</code>, at the end of a <code>break</code>, or because it goes out of scope. On Treadle that <strong>runs the <code>defer</code>s it has reached</strong>, not ones further down its body and not ones in a scope it already left.</p>
+<div class="sample" id="sample-shuttles_drop" data-sample="shuttles_drop" data-mode="run" data-file="shuttles_drop.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>shuttles_drop.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fun</span> <span class="f">naturals</span>(name: str) ~&gt; u32 {
+    <span class="k">defer</span> <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>name<span class="h">}</span><span class="s">: closed"</span>)
+    <span class="k">var</span> i = <span class="n">1</span>
+    <span class="k">loop</span> {
+        <span class="k">yield</span> i
+        i += <span class="n">1</span>
+    }
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="c">// `take(3)` stops after three; dropping the rest runs the defer.</span>
+    <span class="k">let</span> firsts = <span class="f">naturals</span>(<span class="s">"a"</span>).<span class="f">take</span>(<span class="n">3</span>).<span class="f">collect</span>()
+    <span class="f">print</span>(firsts)
+
+    <span class="c">// So does a `break` out of a loop.</span>
+    <span class="k">for</span> n <span class="k">in</span> <span class="f">naturals</span>(<span class="s">"b"</span>) {
+        <span class="k">if</span> n &gt; <span class="n">2</span> { <span class="k">break</span> }
+        <span class="f">print</span>(n)
+    }
+    <span class="f">print</span>(<span class="s">"end of main"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>a: closed
+[1, 2, 3]
+1
+2
+b: closed
+end of main</code></pre></div>
+</div>
+<ul><li>Leaving a <code>for</code> loop over a generator early closes it; a <code>defer</code> in it that unravels unravels in the loop.</li><li>A shuttle dropped any other way runs its reached <code>defer</code>s on Treadle. On the Lua backend it is left to the garbage collector and they don't run.</li><li>An unravel inside a shuttle closes it (running its <code>defer</code>s) and is raised again where it was driven.</li><li>One dropped before it started runs none.</li></ul>
 <h2 id="pushing-values-in">Pushing values in<a class="anchor" href="#pushing-values-in" aria-label="Link to this section">#</a></h2>
-<p><code>sh.push(u)</code> resumes the shuttle with <code>u</code> as the value of its pending <code>pull</code>. The first push starts it. It returns a **<code>Burst</code>**: what the shuttle yields before it next pulls. A burst is lazy, and going through it is what runs the shuttle. <code>sh.close()</code> makes pending and later <code>pull</code>s give <code>none</code>, and returns the final burst. Pushing into a closed shuttle unravels.</p>
+<p>A generator only yields. A <strong>duplex</strong> shuttle (<code>~&gt; T &lt;~ U</code>) also takes input, with <code>pull</code>: the caller pushes a value and the shuttle goes on from where it paused.</p>
+<p><code>sh.push(u)</code> resumes the shuttle with <code>u</code> as the value of its pending <code>pull</code>. The first push starts it. It returns a <strong><code>Burst</code></strong>: what the shuttle yields before it next pulls. A burst is lazy, and going through it is what runs the shuttle. <code>sh.close()</code> makes pending and later <code>pull</code>s give <code>none</code>, and returns the final burst. Pushing into a closed shuttle unravels. A <strong>sink</strong> (<code>&lt;~ U</code> alone) only pulls, and its bursts are always empty.</p>
 <div class="sample" id="sample-shuttles_duplex" data-sample="shuttles_duplex" data-mode="run" data-file="shuttles_duplex.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>shuttles_duplex.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -163,7 +343,49 @@ pushed 5: []
 closed: (5, none)
 sum: 10</code></pre></div>
 </div>
-<p>A <code>Burst</code> is a <code>once</code> warp, so the outputs of a push can't be dropped by accident. Go through it with <code>for</code> or a stream method, or call <code>.drain()</code> to throw them away on purpose:</p>
+<p><code>pairs</code> yields a tuple for every two numbers it's given, and the odd one out when it's closed (<code>pull</code> is <code>none</code>). <code>summer</code> is a sink: it adds up whatever it's pushed and reports at the end, in a <code>defer</code> that runs when the shuttle is closed.</p>
+<div class="try"><p>Push a sixth number in <code>pairs</code>' loop (<code>[1, 2, 3, 4, 5, 6]</code>) and the <code>closed:</code> line goes away: every number found a partner. Then change <code>s.close().drain()</code> to a plain <code>s.close()</code> and see what the compiler says (next section).</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="python" data-label="Python">
+<h4>Python</h4>
+<p>Python's <code>send()</code> is the same push: <code>x = yield</code> receives what <code>send</code> gives, and the generator's <code>GeneratorExit</code> is its close. Python needs a priming <code>next()</code> first; Loom's first push starts the shuttle.</p>
+<pre class="foreign" data-lang="python"><code><span class="k">def</span> <span class="f">summer</span>():
+    total = <span class="n">0</span>
+    <span class="k">try</span>:
+        <span class="k">while</span> <span class="k">True</span>:
+            total += <span class="k">yield</span>
+    <span class="k">except</span> <span class="t">GeneratorExit</span>:
+        <span class="f">print</span>(<span class="s">"sum:"</span>, total)
+
+s = <span class="f">summer</span>(); <span class="f">next</span>(s)
+s.<span class="f">send</span>(<span class="n">1</span>); s.<span class="f">send</span>(<span class="n">2</span>); s.<span class="f">close</span>()</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="javascript" data-label="JavaScript">
+<h4>JavaScript</h4>
+<p><code>gen.next(value)</code> sends a value in and <code>gen.return()</code> closes it, like <code>push</code> and <code>close</code>. As in Python, the first <code>next</code> is spent starting the generator.</p>
+<pre class="foreign" data-lang="typescript"><code><span class="k">function</span>* <span class="f">summer</span>() {
+  <span class="k">let</span> total = <span class="n">0</span>;
+  <span class="k">try</span> { <span class="k">while</span> (<span class="k">true</span>) total += <span class="k">yield</span>; }
+  <span class="k">finally</span> { console.<span class="f">log</span>(<span class="s">"sum:"</span>, total); }
+}
+<span class="k">const</span> s = <span class="f">summer</span>(); s.<span class="f">next</span>();
+s.<span class="f">next</span>(<span class="n">1</span>); s.<span class="f">next</span>(<span class="n">2</span>); s.<span class="k">return</span>();</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Go reaches for goroutines and channels to do two-way conversations. That's concurrency; a shuttle is a plain, deterministic pause inside one thread, with no scheduler and no channel to close.</p>
+<pre class="foreign" data-lang="go"><code>in := <span class="f">make</span>(<span class="k">chan</span> int)
+<span class="k">go</span> <span class="k">func</span>() {
+    total := <span class="n">0</span>
+    <span class="k">for</span> n := <span class="k">range</span> in { total += n }
+    fmt.<span class="t">Println</span>(<span class="s">"sum:"</span>, total)
+}()
+in &lt;- <span class="n">1</span>; in &lt;- <span class="n">2</span>; <span class="f">close</span>(in)</code></pre>
+</div>
+</div>
+<h2 id="bursts-are-once">Bursts are <code>once</code><a class="anchor" href="#bursts-are-once" aria-label="Link to this section">#</a></h2>
+<p>A <code>Burst</code> is a <code>once</code> warp, so what a push yields can't be dropped by accident. Go through it with <code>for</code> or a stream method, or call <code>.drain()</code> to throw it away on purpose:</p>
 <div class="sample" id="sample-shuttles_err" data-sample="shuttles_err" data-mode="check" data-file="shuttles_err.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>shuttles_err.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#L0301">L0301</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">fun</span> <span class="f">duplex</span>() ~&gt; i32 &lt;~ i32 {
@@ -186,11 +408,108 @@ sum: 10</code></pre></div>
 
 <span class="err">error: shuttles_err.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
-<p>This push model suits lexers, protocol state machines and stream decoders: the caller keeps control of input, and the logic reads from top to bottom. <code>examples/lexer.loom</code> is one.</p>
-<h2 id="rules">Rules<a class="anchor" href="#rules" aria-label="Link to this section">#</a></h2>
-<ul><li><code>yield</code> in a shuttle that doesn't yield, or <code>pull</code> in one that doesn't pull, is <a href="diagnostics.html#T0120">T0120</a>. Neither can be inside a <code>defer</code> (<a href="diagnostics.html#T0118">T0118</a>).</li><li>A shuttle that calls itself is <a href="diagnostics.html#T0121">T0121</a>: its frame would contain itself.</li><li>A shuttle keeps its parameters as long as it lives. For now it only takes ones it owns: <code>take</code> parameters, and <code>Copy</code> ones, which it copies when it's made. A borrowed parameter is <a href="diagnostics.html#U0102">U0102</a>.</li><li>Leaving a <code>for</code> loop over a generator early closes it: its <code>defer</code>s that it has reached run. One of them that unravels unravels in the loop.</li><li>A shuttle dropped part-way any other way (after <code>.take(3)</code>, say) runs the <code>defer</code>s it has reached on Treadle; on the Lua backend it's left to the garbage collector, and they don't run.</li><li>An unravel inside a shuttle closes it (running its <code>defer</code>s) and is raised again where it was driven.</li></ul>
+<p>The loose-end error (<a href="diagnostics.html#L0301">L0301</a>, from <a href="ownership.html">Moves, <code>once</code> and <code>defer</code></a>) tells you to do exactly that. The contract is simple: the output of each push is either used or explicitly discarded.</p>
+<h2 id="a-push-style-state-machine">A push-style state machine<a class="anchor" href="#a-push-style-state-machine" aria-label="Link to this section">#</a></h2>
+<p>This push model suits lexers, protocol state machines and stream decoders: the caller keeps control of input, and the logic reads from top to bottom, with its state held in ordinary local variables.</p>
+<div class="sample" id="sample-shuttles_lexer" data-sample="shuttles_lexer" data-mode="run" data-file="shuttles_lexer.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>shuttles_lexer.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">// A word-splitter you feed one character at a time. It yields a word</span>
+<span class="c">// whenever one ends, and keeps what it has read so far between pushes.</span>
+<span class="k">fun</span> <span class="f">words</span>() ~&gt; <span class="t">String</span> &lt;~ char {
+    <span class="k">var</span> word = <span class="t">String</span>()
+    <span class="k">while</span> <span class="k">pull</span> <span class="k">is</span> <span class="k">some</span>(c) {
+        <span class="k">if</span> c == <span class="s">' '</span> {
+            <span class="k">if</span> <span class="k">not</span> word.<span class="f">is_empty</span>() {
+                <span class="k">yield</span> word
+                word = <span class="t">String</span>()
+            }
+        } <span class="k">else</span> {
+            word.<span class="f">push</span>(c)
+        }
+    }
+    <span class="k">if</span> <span class="k">not</span> word.<span class="f">is_empty</span>() { <span class="k">yield</span> word }        <span class="c">// the input ended mid-word</span>
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">var</span> w = <span class="f">words</span>()
+    <span class="k">for</span> c <span class="k">in</span> <span class="s">"weave the warp"</span>.<span class="f">chars</span>() {
+        <span class="k">for</span> word <span class="k">in</span> w.<span class="f">push</span>(c) {
+            <span class="f">print</span>(<span class="s">"word: </span><span class="h">{</span>word<span class="h">}</span><span class="s">"</span>)
+        }
+    }
+    <span class="k">for</span> word <span class="k">in</span> w.<span class="f">close</span>() {
+        <span class="f">print</span>(<span class="s">"last: </span><span class="h">{</span>word<span class="h">}</span><span class="s">"</span>)
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>word: weave
+word: the
+last: warp</code></pre></div>
+</div>
+<p><code>words</code> keeps the word it's building in a local between pushes. There is no <code>state</code> enum and no <code>match state</code>, which is how the same thing looks in an ordinary function. <code>examples/lexer.loom</code> in the repository is a bigger one: a full lexer written this way.</p>
+<div class="try"><p>Put two spaces in the text: <code>"weave  the warp"</code>. The empty word between them is skipped because of the <code>is_empty</code> check; replace both checks with <code>true</code> and empty words come out.</p></div>
 <h2 id="frames">Frames<a class="anchor" href="#frames" aria-label="Link to this section">#</a></h2>
-<p>What a shuttle keeps between pauses is its <strong>frame</strong>, and its size is known while compiling: <code>fib.Frame.size</code> is how many bytes a shuttle made by <code>fib</code> keeps (24: two <code>u64</code>s and a state word), and <code>fib.Frame.align</code> its alignment. Locals that are never kept at the same pause share space. <code>examples/lexer.loom</code> checks its lexer's with <code>const assert(lexer.Frame.size &lt;= 64)</code>.</p>
+<p>What a shuttle keeps between pauses is its <strong>frame</strong>, and its size is known while compiling. <code>fib.Frame.size</code> is how many bytes a shuttle made by <code>fib</code> keeps (24: two <code>u64</code>s and a state word), and <code>fib.Frame.align</code> its alignment. Locals that are never kept at the same pause share space. A program can pin that down: <code>examples/lexer.loom</code> checks its lexer's with <code>const assert(lexer.Frame.size &lt;= 64)</code>.</p>
+<div class="sample" id="sample-shuttles_frame" data-sample="shuttles_frame" data-mode="run" data-file="shuttles_frame.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>shuttles_frame.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fun</span> <span class="f">fib</span>() ~&gt; u64 {
+    <span class="k">var</span> (a, b): (u64, u64) = (<span class="n">0</span>, <span class="n">1</span>)
+    <span class="k">loop</span> {
+        <span class="k">yield</span> a
+        (a, b) = (b, a + b)
+    }
+}
+
+<span class="k">fun</span> <span class="f">pairs</span>() ~&gt; (i32, ?i32) &lt;~ i32 {
+    <span class="k">while</span> <span class="k">pull</span> <span class="k">is</span> <span class="k">some</span>(a) {
+        <span class="k">match</span> <span class="k">pull</span> {
+            <span class="k">some</span>(b) =&gt; <span class="k">yield</span> (a, <span class="k">some</span>(b)),
+            <span class="k">none</span> =&gt; {
+                <span class="k">yield</span> (a, <span class="k">none</span>)
+                <span class="k">return</span>
+            }
+        }
+    }
+}
+
+<span class="c">// The size is known while compiling, so it can be asserted there.</span>
+<span class="k">const</span> <span class="f">assert</span>(fib.<span class="t">Frame</span>.size &lt;= <span class="n">32</span>)
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">print</span>(<span class="s">"fib: </span><span class="h">{</span>fib.<span class="t">Frame</span>.size<span class="h">}</span><span class="s"> bytes, aligned to </span><span class="h">{</span>fib.<span class="t">Frame</span>.align<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"pairs: </span><span class="h">{</span>pairs.<span class="t">Frame</span>.size<span class="h">}</span><span class="s"> bytes"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>fib: 24 bytes, aligned to 8
+pairs: 8 bytes</code></pre></div>
+</div>
+<p>A shuttle's frame is stored inside the shuttle value, so a shuttle can't contain itself (<a href="diagnostics.html#T0121">T0121</a>):</p>
+<div class="sample" id="sample-shuttles_err_recurse" data-sample="shuttles_err_recurse" data-mode="check" data-file="shuttles_err_recurse.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>shuttles_err_recurse.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#T0121">T0121</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="c">// A shuttle's frame lives inside the shuttle, so it can't contain itself.</span>
+<span class="k">fun</span> <span class="f">count_down</span>(n: i32) ~&gt; i32 {
+    <span class="k">if</span> n &gt; <span class="n">0</span> {
+        <span class="k">for</span> x <span class="k">in</span> <span class="f">count_down</span>(n - <span class="n">1</span>) { <span class="k">yield</span> x }
+    }
+    <span class="k">yield</span> n
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[T0121]: shuttle `count_down` can't make another `count_down` inside itself</span>
+<span class="loc">  --&gt; shuttles_err_recurse.loom:4:18</span>
+<span class="gut">  |</span>
+<span class="gut">4 |</span>         for x in count_down(n - 1) { yield x }
+<span class="gut">  |</span><span class="caret">                  ^^^^^^^^^^ this shuttle would be part of its own frame</span>
+<span class="gut">  |</span>
+<span class="loc">  = note: a shuttle's frame is stored inside the shuttle value, so it has a size known when compiling</span>
+<span class="loc">  = help: allocate the inner one, `^name(…)`, which needs spools (not implemented yet)</span>
+
+<span class="err">error: shuttles_err_recurse.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<ul><li>A shuttle keeps its parameters as long as it lives. For now it only takes ones it owns: <code>take</code> parameters, and <code>Copy</code> ones, which it copies when it's made. A borrowed parameter such as a <code>List</code> or <code>String</code> is <a href="diagnostics.html#U0102">U0102</a>.</li><li>On Treadle, a generator a <code>for</code> loop calls directly has no separate frame: its body runs in place. A shuttle held in a variable keeps its frame in a box.</li></ul>
+<div class="try"><p>Change every <code>u64</code> in <code>fib</code> to <code>u32</code>: the frame shrinks from 24 bytes to 12, and its alignment from 8 to 4.</p></div>
 <h2 id="projections">Projections<a class="anchor" href="#projections" aria-label="Link to this section">#</a></h2>
 <p>A <strong>projection</strong> is a shuttle that lends a place instead of yielding a value: <code>~&gt; mut T</code> lends one to change, <code>~&gt; ref T</code> one to read, with <code>yield mut place</code> (or <code>yield ref</code>). A call of one is that place, for the statement it's in:</p>
 <div class="sample" id="sample-shuttles_lend" data-sample="shuttles_lend" data-mode="run" data-file="shuttles_lend.loom" data-runnable>
@@ -219,7 +538,28 @@ sum: 10</code></pre></div>
   (1, 0) is 6
 [0, 6, 0, 0]</code></pre></div>
 </div>
-<p>When the statement ends, the projection resumes, so the code after its <code>yield</code> (and its <code>defer</code>s) runs. One that ends without lending a place unravels, and so does one that lends a second. A projection can borrow its parameters (<code>mut self</code> here), and what it borrows stays borrowed until the statement ends (<a href="diagnostics.html#M0104">M0104</a>). What it lends can be read or changed, but not moved out (<a href="diagnostics.html#M0103">M0103</a>). A <code>for</code> loop over a projection that lends many places isn't supported yet.</p>
+<p>When the statement ends, the projection resumes, so the code after its <code>yield</code> (and its <code>defer</code>s) runs. That's how a function can hand out a place without returning a borrow, which Loom otherwise forbids (see <a href="ownership.html#borrows-are-second-class">Moves</a>).</p>
+<ul><li>One that ends without lending a place unravels, and so does one that lends a second.</li><li>A projection can borrow its parameters (<code>mut self</code> here), and what it borrows stays borrowed until the statement ends (<a href="diagnostics.html#M0104">M0104</a>).</li><li>What it lends can be read or changed, but not moved out (<a href="diagnostics.html#M0103">M0103</a>).</li><li>A <code>for</code> loop over a projection that lends many places isn't supported yet: see <a href="not-yet.html">Not supported yet</a>.</li></ul>
+<div class="try"><p>Add a second <code>yield mut .cells[0]</code> after the first one in <code>at</code>. The program unravels with "a projection lent more than one place".</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="swift" data-label="Swift">
+<h4>Swift</h4>
+<p>Swift's <code>_modify</code> accessors and Hylo's subscripts are the relatives: they yield a place and resume afterwards. Loom reuses the shuttle machinery for it instead of adding a special form.</p>
+<pre class="foreign" data-lang="swift"><code><span class="k">var</span> cells: [<span class="t">Int</span>] = [<span class="n">0</span>, <span class="n">0</span>]
+<span class="k">var</span> first: <span class="t">Int</span> {
+    _read { yield cells[<span class="n">0</span>] }
+    _modify { yield &amp;cells[<span class="n">0</span>] }
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust has no equivalent. <code>IndexMut</code> returns a <code>&amp;mut</code>, which ties the result to the lifetime of the borrow. A projection's cleanup after the <code>yield</code> has no counterpart there.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">impl</span> <span class="t">IndexMut</span>&lt;usize&gt; <span class="k">for</span> <span class="t">Grid</span> {
+    <span class="k">fn</span> <span class="f">index_mut</span>(&amp;<span class="k">mut</span> <span class="k">self</span>, i: usize) -&gt; &amp;<span class="k">mut</span> i32 { &amp;<span class="k">mut</span> <span class="k">self</span>.cells[i] }
+}</code></pre>
+</div>
+</div>
 <h2 id="where-next">Where next<a class="anchor" href="#where-next" aria-label="Link to this section">#</a></h2>
 <p><a href="compile-time.html">Compile-time code</a> runs ordinary Loom while the program compiles.</p>
 <nav class="pager" aria-label="Chapters">

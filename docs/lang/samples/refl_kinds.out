@@ -1,0 +1,8 @@
+i32: Int, 4 bytes
+f64: Float, 8 bytes
+String: Str, 24 bytes
+List: List, 24 bytes
+?i32: Optional, 8 bytes
+[u8; 4]: Array, 4 bytes
+Pair: Record, 24 bytes
+Light: Sum, 2 bytes

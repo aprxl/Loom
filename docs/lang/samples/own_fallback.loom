@@ -1,0 +1,30 @@
+use std.io.print
+
+pub once warp Tx {
+    moves: List[i32] = List()
+
+    pub fun begin() -> Tx = Tx()
+    pub fun credit(mut self, amount: i32) { .moves.push(amount) }
+    pub fun commit(take self) {
+        let Tx(moves) = self
+        print("committed {moves}")
+    }
+    pub fun rollback(take self) {
+        let Tx(_) = self
+        print("rolled back")
+    }
+}
+
+fun transfer(good: bool) {
+    var tx = Tx.begin()
+    defer tx => tx.rollback()                // runs only if `tx` is still loose
+    tx.credit(5)
+    if not good { return }                   // leaving early rolls back
+    tx.commit()                              // used up: the defer does nothing
+}
+
+fun main() {
+    transfer(true)
+    transfer(false)
+}
+//@ run

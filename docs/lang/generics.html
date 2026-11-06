@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>Generics and any · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -57,15 +58,15 @@
 <h1>Generics and <code>any</code></h1>
 <p class="summary">Type parameters checked per instance, wefts as parameter types, and dynamic dispatch.</p>
 </div>
-<h2 id="generics">Generics<a class="anchor" href="#generics" aria-label="Link to this section">#</a></h2>
-<p>A type parameter goes in brackets, with bounds after a colon (<code>T: Ord + Copy</code>) or in a <code>where</code> clause. The compiler infers arguments where it can. To give them yourself, use brackets: <code>largest[i32](xs)</code>, <code>List[i32]()</code>, <code>s.parse[u16]()</code>.</p>
-<p>Generics are checked <strong>per instance</strong>, in the style of Zig. A generic function is type-checked once for each list of arguments it's used with, and one nobody calls isn't checked at all. An error in a generic body is reported once, with a note naming the instance it came from.</p>
+<p>Sooner or later you write the same function twice: once for <code>i32</code>, once for <code>f64</code>, once for the warp you just invented. Generics let you write it once and say what it needs from the types it works on. Loom's generics are <strong>checked per instance</strong> and compiled to specialized code, so a generic function is as fast as the hand-written one.</p>
+<p>Sometimes the types aren't known until the program runs: a list of widgets of different kinds, each with its own <code>name</code>. That's what <code>any W</code> is for, with calls that go through a table. This chapter covers both and how to choose.</p>
+<h2 id="generic-functions">Generic functions<a class="anchor" href="#generic-functions" aria-label="Link to this section">#</a></h2>
+<p>A type parameter goes in brackets after the function's name, with bounds after a colon: <code>T: Ord + Copy</code> means "any <code>T</code> that weaves <code>Ord</code> and <code>Copy</code>". The same bounds can go in a <code>where</code> clause after the signature. The compiler infers the arguments where it can, and you give them yourself with brackets: <code>largest[i32]([])</code>, <code>List[str]()</code>, <code>s.parse[u16]()</code>.</p>
 <div class="sample" id="sample-generics_basic" data-sample="generics_basic" data-mode="run" data-file="generics_basic.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>generics_basic.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
-<span class="c">// Generics are checked per instance: `largest` is checked once for `i32`</span>
-<span class="c">// and once for `str`. A function nobody calls isn't checked at all.</span>
+<span class="c">// `T` is a type parameter. `Ord + Copy` are bounds: T must be orderable and copyable.</span>
 <span class="k">fun</span> largest[T: <span class="t">Ord</span> + <span class="t">Copy</span>](xs: [T]) -&gt; ?T {
     <span class="k">var</span> best: ?T = <span class="k">none</span>
     <span class="k">for</span> x <span class="k">in</span> xs {
@@ -75,47 +76,335 @@
     best
 }
 
-<span class="k">warp</span> <span class="t">Pair</span>[A, B] {
+<span class="c">// Two parameters, no bounds: the body only moves values around.</span>
+<span class="k">fun</span> swap[A, B](pair: (A, B)) -&gt; (B, A) = (pair.<span class="n">1</span>, pair.<span class="n">0</span>)
+
+<span class="c">// A `where` clause says the same as a bound, after the signature.</span>
+<span class="k">fun</span> twice[T](x: T) -&gt; <span class="t">String</span> <span class="k">where</span> T: <span class="t">Show</span> = <span class="s">"</span><span class="h">{</span>x<span class="h">}</span><span class="h">{</span>x<span class="h">}</span><span class="s">"</span>
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="c">// The compiler infers T from the arguments...</span>
+    <span class="f">print</span>(<span class="f">largest</span>([<span class="n">3</span>, <span class="n">9</span>, <span class="n">4</span>]))
+    <span class="f">print</span>(<span class="f">largest</span>([<span class="s">"pear"</span>, <span class="s">"apple"</span>]))
+    <span class="f">print</span>(<span class="f">largest</span>([<span class="n">2.5</span>, <span class="n">0.5</span>]))
+    <span class="f">print</span>(<span class="f">swap</span>((<span class="n">1</span>, <span class="s">"one"</span>)))
+    <span class="f">print</span>(<span class="f">twice</span>(<span class="n">42</span>))
+
+    <span class="c">// ...or you give it in brackets.</span>
+    <span class="f">print</span>(largest[i32]([]))
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="s">"300"</span>.parse[u16]():?<span class="h">}</span><span class="s">"</span>)
+    <span class="k">let</span> empty = <span class="t">List</span>[str]()
+    <span class="f">print</span>(empty.<span class="f">len</span>())
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>9
+pear
+2.5
+(one, 1)
+4242
+none
+ok(300)
+0</code></pre></div>
+</div>
+<ul><li>A bound is a weft. Several are joined with <code>+</code>.</li><li>With no bound, the body can still use the type's operators if the types you call it with support them, and the compiler tells you when one doesn't: see the next section.</li><li>A bound can be a <code>where</code> clause: <code>fun twice[T](x: T) -&gt; String where T: Show</code>.</li><li>Value parameters (<code>const N: usize</code>) work the same way: see <a href="const-params.html">Const parameters</a>.</li></ul>
+<div class="try"><p>Change <code>largest([2.5, 0.5])</code> to <code>largest([true, false])</code> and read the error: <code>bool</code> doesn't weave <code>Ord</code> (<a href="diagnostics.html#T0108">T0108</a>). Then call <code>largest[u8]([300])</code>, and notice that the literal is checked against the type you named.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust checks a generic against its bounds once, where it's defined: the body can only use what the bounds promise, for every <code>T</code>. The call sites are then simply correct or not.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">fn</span> largest&lt;T: <span class="t">Ord</span> + <span class="t">Copy</span>&gt;(xs: &amp;[T]) -&gt; <span class="t">Option</span>&lt;T&gt; {
+    <span class="k">let</span> <span class="k">mut</span> best = <span class="k">None</span>;
+    <span class="k">for</span> &amp;x <span class="k">in</span> xs {
+        <span class="k">if</span> <span class="k">let</span> <span class="k">Some</span>(b) = best { <span class="k">if</span> b &gt;= x { <span class="k">continue</span>; } }
+        best = <span class="k">Some</span>(x);
+    }
+    best
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Go's type parameters are constrained by interfaces such as <code>cmp.Ordered</code>, checked at the definition like Rust's. Explicit instantiation uses square brackets, as in Loom (<code>Largest[int](xs)</code>).</p>
+<pre class="foreign" data-lang="go"><code><span class="k">func</span> <span class="t">Largest</span>[T cmp.<span class="t">Ordered</span>](xs []T) (best T, ok bool) {
+    <span class="k">for</span> _, x := <span class="k">range</span> xs {
+        <span class="k">if</span> !ok || x &gt; best {
+            best, ok = x, <span class="k">true</span>
+        }
+    }
+    <span class="k">return</span>
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="typescript" data-label="TypeScript">
+<h4>TypeScript</h4>
+<p>TypeScript's generics are erased: they only exist for the type checker, and <code>T extends ...</code> is the bound. Loom produces real specialized code for each instance.</p>
+<pre class="foreign" data-lang="typescript"><code><span class="k">function</span> largest&lt;T <span class="k">extends</span> number | string&gt;(xs: T[]): T | <span class="k">undefined</span> {
+  <span class="k">return</span> xs.reduce&lt;T | <span class="k">undefined</span>&gt;((b, x) =&gt; (b === <span class="k">undefined</span> || x &gt; b ? x : b), <span class="k">undefined</span>);
+}</code></pre>
+</div>
+</div>
+<h2 id="checked-per-instance">Checked per instance<a class="anchor" href="#checked-per-instance" aria-label="Link to this section">#</a></h2>
+<p>Loom type-checks a generic function <strong>once for each list of arguments it's used with</strong>, in the style of Zig (and C++ templates, before concepts). <code>largest</code> above is checked once for <code>i32</code>, once for <code>str</code> and once for <code>f64</code>. A generic function nobody calls isn't checked at all.</p>
+<p>The bounds are checked first, at the call: that is where "this type doesn't weave <code>Ord</code>" belongs, and it says so. After that the body is checked with the real type plugged in, and an error in the body carries a note naming the instance it came from.</p>
+<div class="sample" id="sample-generics_err" data-sample="generics_err" data-mode="check" data-file="generics_err.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>generics_err.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#T0108">T0108</a>, <a href="diagnostics.html#T0103">T0103</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Blob</span>: <span class="t">Show</span> {
+    n: i32
+}
+
+<span class="c">// No bounds: the body is only checked against the types it is used with.</span>
+<span class="k">fun</span> biggest[T: <span class="t">Show</span>](xs: [T]) -&gt; ?T {
+    <span class="k">var</span> best: ?T = <span class="k">none</span>
+    <span class="k">for</span> x <span class="k">in</span> xs {
+        <span class="k">if</span> best <span class="k">is</span> <span class="k">some</span>(b) <span class="k">and</span> b &gt;= x { <span class="k">continue</span> }
+        best = x
+    }
+    best
+}
+
+<span class="c">// Bounds are checked at the call, before the body is looked at.</span>
+<span class="k">fun</span> smallest[T: <span class="t">Show</span> + <span class="t">Ord</span> + <span class="t">Copy</span>](xs: [T]) -&gt; ?T = xs.<span class="f">first</span>()
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">print</span>(<span class="f">biggest</span>([<span class="n">4</span>, <span class="n">2</span>]))
+    <span class="f">print</span>(<span class="f">biggest</span>([<span class="t">Blob</span>(<span class="n">1</span>)]))
+    <span class="f">print</span>(<span class="f">smallest</span>([<span class="t">Blob</span>(<span class="n">1</span>)]))
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[T0108]: `Blob` doesn't weave `Ord`</span>
+<span class="loc">   --&gt; generics_err.loom:23:11</span>
+<span class="gut">   |</span>
+<span class="gut">23 |</span>     print(smallest([Blob(1)]))
+<span class="gut">   |</span><span class="caret">           ^^^^^^^^^^^^^^^^^^^ `smallest` needs `T` to weave `Ord`</span>
+<span class="gut">   |</span>
+<span class="loc">   = note: here `T` is `Blob`</span>
+
+<span class="err">error[T0103]: `Blob` can't be ordered with `&gt;=`</span>
+<span class="loc">   --&gt; generics_err.loom:11:32</span>
+<span class="gut">   |</span>
+<span class="gut">11 |</span>         if best is some(b) and b &gt;= x { continue }
+<span class="gut">   |</span><span class="caret">                                ^^^^^^ here</span>
+<span class="gut">   |</span>
+<span class="loc">   = note: in `biggest` with `T = Blob`</span>
+
+<span class="err">error: generics_err.loom failed to type-check (2 errors)</span></code></pre></div>
+</div>
+<p>There are two errors, and they differ. The first is at the call of <code>smallest</code>, whose bound is spelled out: the message says what <code>T</code> was asked to be and what it is. The second is inside <code>biggest</code>, which promised nothing: <code>biggest([4, 2])</code> is fine, because <code>i32</code> can be compared, but for <code>Blob</code> the <code>&gt;=</code> in the body has nothing to compare, and the note says <code>in biggest with T = Blob</code>. The first error is the one you want to read.</p>
+<div class="callout"><p>Write the bounds you mean. Per-instance checking is what lets a generic body use any operator the instance supports, but it also means that a missing bound is found by whoever happens to call it with the wrong type. Bounds are the documentation of what a function needs.</p></div>
+<div class="try"><p>Change <code>biggest</code>'s bounds to <code>T: Show + Ord + Copy</code>. The error inside the body is gone: now both calls fail at the call, with the message <code>smallest</code> already gave. Then delete the <code>Blob</code> line and see that <code>biggest([4, 2])</code> was never in doubt.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust would reject <code>biggest</code> with no <code>Ord</code> bound before any call exists, with error E0369 ("binary operation <code>&gt;=</code> cannot be applied to type <code>T</code>"). The price of that guarantee is that every operation a generic uses must be written into its bounds.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">fn</span> biggest&lt;T: <span class="t">Copy</span>&gt;(xs: &amp;[T]) -&gt; <span class="t">Option</span>&lt;T&gt; {
+    <span class="c">// error: `&gt;=` cannot be applied to `T` -- add `T: Ord`</span>
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="c" data-label="C++">
+<h4>C++</h4>
+<p>Templates are checked per instance, and always have been: the error shows up at the instantiation, deep inside the template, as pages of notes. C++20 concepts add the Loom-style bound at the call site.</p>
+<pre class="foreign" data-lang="cpp"><code><span class="k">template</span> &lt;std::totally_ordered T&gt;
+std::optional&lt;T&gt; <span class="f">biggest</span>(std::span&lt;<span class="k">const</span> T&gt; xs);</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="zig" data-label="Zig">
+<h4>Zig</h4>
+<p>Zig's <code>comptime</code> generics are the model: a generic function is an ordinary function whose type parameter is a compile-time value, and it's checked when instantiated.</p>
+<pre class="foreign" data-lang="zig"><code><span class="k">fn</span> <span class="f">largest</span>(<span class="k">comptime</span> T: type, xs: []<span class="k">const</span> T) ?T {
+    <span class="k">var</span> best: ?T = <span class="k">null</span>;
+    <span class="k">for</span> (xs) |x| {
+        <span class="k">if</span> (best == <span class="k">null</span> or x &gt; best.?) best = x;
+    }
+    <span class="k">return</span> best;
+}</code></pre>
+</div>
+</div>
+<h2 id="generic-warps">Generic warps<a class="anchor" href="#generic-warps" aria-label="Link to this section">#</a></h2>
+<p>A warp takes type parameters too, and so do its methods, which are compiled per list of arguments just as functions are. Name the arguments (<code>Stack[str]()</code>), or leave them for the compiler to infer from the context or from the values you construct with: <code>Pair(1, "one")</code> is a <code>Pair[i32, str]</code>.</p>
+<div class="sample" id="sample-generics_warps" data-sample="generics_warps" data-mode="run" data-file="generics_warps.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>generics_warps.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">// A warp with type parameters. Each use fixes them: `Stack[i32]`, `Stack[str]`.</span>
+<span class="k">warp</span> <span class="t">Stack</span>[T]: <span class="t">Show</span> {
+    items: <span class="t">List</span>[T] = []
+
+    <span class="k">fun</span> <span class="f">push</span>(<span class="k">mut</span> <span class="k">self</span>, <span class="k">take</span> x: T) { .items.<span class="f">push</span>(x) }
+    <span class="k">fun</span> <span class="f">pop</span>(<span class="k">mut</span> <span class="k">self</span>) -&gt; ?T = .items.<span class="f">pop</span>()
+    <span class="k">fun</span> <span class="f">len</span>(<span class="k">self</span>) -&gt; usize = .items.<span class="f">len</span>()
+
+    <span class="c">// A method can add its own bound, needed only if it is used.</span>
+    <span class="k">fun</span> <span class="f">peek</span>(<span class="k">self</span>) -&gt; ?T <span class="k">where</span> T: <span class="t">Copy</span> = .items.<span class="f">last</span>()
+}
+
+<span class="k">warp</span> <span class="t">Pair</span>[A, B]: <span class="t">Show</span> {
     first: A
     second: B
 
     <span class="k">fun</span> <span class="f">swap</span>(<span class="k">self</span>) -&gt; <span class="t">Pair</span>[B, A] = <span class="t">Pair</span>(.second, .first)
 }
 
-<span class="c">// A weave can be generic too.</span>
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">var</span> nums: <span class="t">Stack</span>[i32] = <span class="t">Stack</span>()
+    nums.<span class="f">push</span>(<span class="n">1</span>)
+    nums.<span class="f">push</span>(<span class="n">2</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>nums<span class="h">}</span><span class="s"> peek=</span><span class="h">{</span>nums.<span class="f">peek</span>():?<span class="h">}</span><span class="s"> len=</span><span class="h">{</span>nums.<span class="f">len</span>()<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(nums.<span class="f">pop</span>())
+
+    <span class="k">var</span> words = <span class="t">Stack</span>[str]()                 <span class="c">// or say the type at the call</span>
+    words.<span class="f">push</span>(<span class="s">"warp"</span>)
+    words.<span class="f">push</span>(<span class="s">"weft"</span>)
+    <span class="f">print</span>(words)
+
+    <span class="k">let</span> p = <span class="t">Pair</span>(<span class="n">1</span>, <span class="s">"one"</span>)                   <span class="c">// Pair[i32, str], inferred</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>p<span class="h">}</span><span class="s"> -&gt; </span><span class="h">{</span>p.<span class="f">swap</span>()<span class="h">}</span><span class="s">"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>Stack(items: [1, 2]) peek=some(2) len=2
+2
+Stack(items: ["warp", "weft"])
+Pair(first: 1, second: "one") -&gt; Pair(first: "one", second: 1)</code></pre></div>
+</div>
+<ul><li>A method can add a bound of its own with <code>where</code>, needed only if that method is used: <code>peek</code> wants <code>T: Copy</code>, but the rest of <code>Stack</code> doesn't.</li><li><code>Stack[T]: Show</code> is derived like any other, and shows its fields in their debug form: the strings in <code>words</code> are quoted.</li><li>The standard library's <code>List[T]</code>, <code>Map[K, V]</code>, <code>Set[T]</code> and <code>Stream[T]</code> are generic warps, nothing special.</li></ul>
+<div class="try"><p>Change <code>Stack[i32]</code> to <code>Stack[f64]</code> in the first declaration. The pushes of <code>1</code> and <code>2</code> still work, since a literal becomes whatever the context asks for. Then push a <code>"text"</code> and see the error.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust's generic structs are the same, with impl blocks that spell out the bounds a method needs.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">struct</span> <span class="t">Stack</span>&lt;T&gt; { items: <span class="t">Vec</span>&lt;T&gt; }
+
+<span class="k">impl</span>&lt;T: <span class="t">Copy</span>&gt; <span class="t">Stack</span>&lt;T&gt; {
+    <span class="k">fn</span> <span class="f">peek</span>(&amp;<span class="k">self</span>) -&gt; <span class="t">Option</span>&lt;T&gt; { <span class="k">self</span>.items.<span class="f">last</span>().<span class="f">copied</span>() }
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="java" data-label="Java">
+<h4>Java</h4>
+<p>Java generics are erased, so a <code>Stack&lt;int&gt;</code> isn't possible: you box it as <code>Stack&lt;Integer&gt;</code>. Loom's <code>Stack[i32]</code> holds plain numbers.</p>
+<pre class="foreign" data-lang="java"><code><span class="k">class</span> <span class="t">Stack</span>&lt;T&gt; {
+    <span class="k">private</span> <span class="k">final</span> <span class="t">List</span>&lt;T&gt; items = <span class="k">new</span> <span class="t">ArrayList</span>&lt;&gt;();
+    <span class="k">void</span> <span class="f">push</span>(T x) { items.<span class="f">add</span>(x); }
+}</code></pre>
+</div>
+</div>
+<h2 id="generic-weaves">Generic weaves<a class="anchor" href="#generic-weaves" aria-label="Link to this section">#</a></h2>
+<p>A weave can be generic too, and then it applies to a whole family of types at once. <code>weave[T: Show] Twice into List[T]</code> gives every <code>List[T]</code> a <code>twice</code> method, as long as its items can be shown. A weave can also name one instance only: <code>weave Total into List[i32]</code>.</p>
+<div class="sample" id="sample-generics_weaves" data-sample="generics_weaves" data-mode="run" data-file="generics_weaves.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>generics_weaves.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
 <span class="k">weft</span> <span class="t">Twice</span> {
     <span class="k">fun</span> <span class="f">twice</span>(<span class="k">self</span>) -&gt; <span class="t">String</span>
 }
 
+<span class="c">// A generic weave: every `List[T]` whose items can be shown is `Twice`.</span>
 <span class="k">weave</span>[T: <span class="t">Show</span>] <span class="t">Twice</span> <span class="k">into</span> <span class="t">List</span>[T] {
     <span class="k">fun</span> <span class="f">twice</span>(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"</span><span class="h">{</span><span class="k">self</span><span class="h">}</span><span class="h">{</span><span class="k">self</span><span class="h">}</span><span class="s">"</span>
 }
 
-<span class="c">// A weft used as a parameter type is an implicit generic.</span>
+<span class="k">weft</span> <span class="t">Total</span> {
+    <span class="k">fun</span> <span class="f">total</span>(<span class="k">self</span>) -&gt; i64
+}
+
+<span class="c">// A weave for one instance only.</span>
+<span class="k">weave</span> <span class="t">Total</span> <span class="k">into</span> <span class="t">List</span>[i32] {
+    <span class="k">fun</span> <span class="f">total</span>(<span class="k">self</span>) -&gt; i64 {
+        <span class="k">var</span> t: i64 = <span class="n">0</span>
+        <span class="k">for</span> x <span class="k">in</span> <span class="k">self</span> { t += x <span class="k">as</span> i64 }
+        t
+    }
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> xs: <span class="t">List</span>[i32] = [<span class="n">1</span>, <span class="n">2</span>]
+    <span class="f">print</span>(xs.<span class="f">twice</span>())
+    <span class="k">let</span> names: <span class="t">List</span>[str] = [<span class="s">"a"</span>, <span class="s">"b"</span>]
+    <span class="f">print</span>(names.<span class="f">twice</span>())
+    <span class="f">print</span>(xs.<span class="f">total</span>())
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>[1, 2][1, 2]
+[a, b][a, b]
+3</code></pre></div>
+</div>
+<p>The brackets go straight after <code>weave</code>, because they introduce the parameters the rest of the line uses. The standard library uses the same form: <code>weave[T] FromStream into List[T]</code> is how a list is built from a stream.</p>
+<div class="try"><p>Call <code>names.total()</code>. There is no <code>Total</code> for <code>List[str]</code>, so the method doesn't exist. Today the compiler reports a missing method as <a href="diagnostics.html#U0102">U0102</a>, "not implemented yet"; read it as "no such method". The same goes for <code>.twice()</code> on a list whose items aren't <code>Show</code>.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>A generic impl is the same: <code>impl&lt;T: Display&gt; Twice for Vec&lt;T&gt;</code>. Rust's coherence rules decide which overlapping impls are allowed; Loom's per-instance lookup is simpler but also allows fewer.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">impl</span>&lt;T: fmt::<span class="t">Debug</span>&gt; <span class="t">Twice</span> <span class="k">for</span> <span class="t">Vec</span>&lt;T&gt; {
+    <span class="k">fn</span> <span class="f">twice</span>(&amp;<span class="k">self</span>) -&gt; <span class="t">String</span> { <span class="f">format!</span>(<span class="s">"{0:?}{0:?}"</span>, <span class="k">self</span>) }
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="haskell" data-label="Haskell">
+<h4>Haskell</h4>
+<p>A conditional instance is the closest: <code>instance Show a =&gt; Twice [a]</code>.</p>
+<pre class="foreign" data-lang="haskell"><code><span class="k">class</span> <span class="t">Twice</span> a <span class="k">where</span> twice :: a -&gt; <span class="t">String</span>
+<span class="k">instance</span> <span class="t">Show</span> a =&gt; <span class="t">Twice</span> [a] <span class="k">where</span>
+  twice xs = show xs ++ show xs</code></pre>
+</div>
+</div>
+<h2 id="wefts-as-parameter-types">Wefts as parameter types<a class="anchor" href="#wefts-as-parameter-types" aria-label="Link to this section">#</a></h2>
+<p>A weft in a parameter's type position is an <strong>implicit generic</strong>. <code>fun loud(a: Animal)</code> means <code>fun loud[A: Animal](a: A)</code>, and <code>fun show_all(xs: [Show])</code> means <code>fun show_all[T: Show](xs: [T])</code>. Every use has static dispatch: <code>loud(Dog())</code> and <code>loud(Cat())</code> are two specialized functions.</p>
+<div class="sample" id="sample-generics_params" data-sample="generics_params" data-mode="run" data-file="generics_params.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>generics_params.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">weft</span> <span class="t">Animal</span> {
+    <span class="k">fun</span> <span class="f">name</span>(<span class="k">self</span>) -&gt; str
+    <span class="k">fun</span> <span class="f">sound</span>(<span class="k">self</span>) -&gt; str
+    <span class="k">fun</span> <span class="f">speak</span>(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"</span><span class="h">{</span><span class="k">self</span>.<span class="f">name</span>()<span class="h">}</span><span class="s"> says </span><span class="h">{</span><span class="k">self</span>.<span class="f">sound</span>()<span class="h">}</span><span class="s">"</span>
+}
+
+<span class="k">warp</span> <span class="t">Dog</span>: <span class="t">Animal</span> {
+    <span class="k">fun</span> <span class="f">name</span>(<span class="k">self</span>) -&gt; str = <span class="s">"dog"</span>
+    <span class="k">fun</span> <span class="f">sound</span>(<span class="k">self</span>) -&gt; str = <span class="s">"woof"</span>
+}
+
+<span class="k">warp</span> <span class="t">Cat</span>: <span class="t">Animal</span> {
+    <span class="k">fun</span> <span class="f">name</span>(<span class="k">self</span>) -&gt; str = <span class="s">"cat"</span>
+    <span class="k">fun</span> <span class="f">sound</span>(<span class="k">self</span>) -&gt; str = <span class="s">"meow"</span>
+}
+
+<span class="c">// A weft as a parameter type: sugar for `fun loud[A: Animal](a: A)`.</span>
+<span class="k">fun</span> <span class="f">loud</span>(a: <span class="t">Animal</span>) -&gt; <span class="t">String</span> = a.<span class="f">speak</span>().<span class="f">to_upper</span>()
+
+<span class="c">// The same, spelled out. Use this when you need to name the type twice.</span>
+<span class="k">fun</span> duet[A: <span class="t">Animal</span>](a: A, b: A) -&gt; <span class="t">String</span> = <span class="s">"</span><span class="h">{</span>a.<span class="f">speak</span>()<span class="h">}</span><span class="s"> and </span><span class="h">{</span>b.<span class="f">speak</span>()<span class="h">}</span><span class="s">"</span>
+
+<span class="c">// Inside the brackets, it applies to the items.</span>
 <span class="k">fun</span> <span class="f">show_all</span>(xs: [<span class="t">Show</span>]) -&gt; <span class="t">String</span> = xs.<span class="f">map</span>(x =&gt; <span class="s">"&lt;</span><span class="h">{</span>x<span class="h">}</span><span class="s">&gt;"</span>).<span class="f">join</span>(<span class="s">""</span>)
 
 <span class="k">fun</span> <span class="f">main</span>() {
-    <span class="f">print</span>(<span class="f">largest</span>([<span class="n">3</span>, <span class="n">9</span>, <span class="n">4</span>]))
-    <span class="f">print</span>(<span class="f">largest</span>([<span class="s">"pear"</span>, <span class="s">"apple"</span>]))
-    <span class="f">print</span>(largest[i32]([]))                  <span class="c">// explicit type arguments use brackets</span>
-
-    <span class="k">let</span> p = <span class="t">Pair</span>(<span class="n">1</span>, <span class="s">"one"</span>)
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>p.<span class="f">swap</span>():?<span class="h">}</span><span class="s">"</span>)
-
-    <span class="k">let</span> xs: <span class="t">List</span>[i32] = [<span class="n">1</span>, <span class="n">2</span>]
-    <span class="f">print</span>(xs.<span class="f">twice</span>())
+    <span class="f">print</span>(<span class="f">loud</span>(<span class="t">Dog</span>()))                       <span class="c">// checked and compiled for Dog</span>
+    <span class="f">print</span>(<span class="f">loud</span>(<span class="t">Cat</span>()))                       <span class="c">// and again for Cat</span>
+    <span class="f">print</span>(<span class="f">duet</span>(<span class="t">Dog</span>(), <span class="t">Dog</span>()))
     <span class="f">print</span>(<span class="f">show_all</span>([<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]))
+    <span class="f">print</span>(<span class="f">show_all</span>([<span class="s">"a"</span>, <span class="s">"b"</span>]))
 }</code></pre>
-<div class="sample-out"><div class="out-head">Output</div><pre><code>9
-pear
-none
-Pair(first: "one", second: 1)
-[1, 2][1, 2]
-&lt;1&gt;&lt;2&gt;&lt;3&gt;</code></pre></div>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>DOG SAYS WOOF
+CAT SAYS MEOW
+dog says woof and dog says woof
+&lt;1&gt;&lt;2&gt;&lt;3&gt;
+&lt;a&gt;&lt;b&gt;</code></pre></div>
 </div>
-<ul><li><strong>Generic warps</strong> (<code>Pair[A, B]</code>) and their methods are compiled per list of arguments too.</li><li><strong>Generic weaves</strong> (<code>weave[T: Show] Twice into List[T]</code>) work the same way.</li><li><strong>Wefts as parameter types are implicit generics.</strong> <code>fun show_all(xs: [Show])</code> means <code>fun show_all[T: Show](xs: [T])</code>, and each use has static dispatch.</li><li>Value parameters (<code>const N: usize</code>) work too: see <a href="const-params.html">Const parameters</a>.</li><li>Generic wefts (<code>weft From[T]</code>) are not supported yet (<a href="diagnostics.html#U0102">U0102</a>).</li></ul>
-<h2 id="any-w"><code>any W</code><a class="anchor" href="#any-w" aria-label="Link to this section">#</a></h2>
-<p><code>any Widget</code> is a value of some type that weaves <code>Widget</code>. Calls on it go through a table at run time, and a type test (<code>w is l: Label</code>) recovers the concrete type. A value converts to <code>any W</code> where one is expected, and an <code>any</code> of several wefts (<code>any (Widget + Show)</code>) can be used as an <code>any</code> of fewer.</p>
+<p>Write the generic out when you need to name the type twice, as <code>duet</code> does: <code>a: Animal, b: Animal</code> would let the two be different animals, while <code>A</code> makes them the same type. Inside the brackets (<code>[Show]</code>), the weft applies to the items, so the list is homogeneous: all <code>i32</code>, or all <code>str</code>, but not both.</p>
+<div class="callout"><p>Wefts as parameter types is Loom's <code>impl Trait</code> in argument position.</p></div>
+<div class="try"><p>Pass <code>loud</code> something that doesn't weave <code>Animal</code>, like <code>loud(42)</code>. The error names the weft the argument was missing. Then change <code>show_all([1, 2, 3])</code> to <code>show_all([1, "two"])</code>: one list, one item type.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p><code>impl Trait</code> in argument position is the same sugar for a generic, with static dispatch. The explicit form is <code>fn loud&lt;A: Animal&gt;(a: &amp;A)</code>.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">fn</span> <span class="f">loud</span>(a: &amp;<span class="k">impl</span> <span class="t">Animal</span>) -&gt; <span class="t">String</span> { a.<span class="f">speak</span>().<span class="f">to_uppercase</span>() }</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="swift" data-label="Swift">
+<h4>Swift</h4>
+<p><code>some Protocol</code> is Swift's version: the caller picks the concrete type, and it's resolved at compile time.</p>
+<pre class="foreign" data-lang="swift"><code><span class="k">func</span> <span class="f">loud</span>(_ a: <span class="k">some</span> <span class="t">Animal</span>) -&gt; <span class="t">String</span> { a.<span class="f">speak</span>().<span class="f">uppercased</span>() }</code></pre>
+</div>
+</div>
+<h2 id="any-w-dynamic-dispatch"><code>any W</code>: dynamic dispatch<a class="anchor" href="#any-w-dynamic-dispatch" aria-label="Link to this section">#</a></h2>
+<p>A list of <code>Dog</code>s and <code>Cat</code>s can't be a <code>List[A]</code> for any one <code>A</code>. For that, write <code>any Animal</code>: a value of <em>some</em> type that weaves <code>Animal</code>, with the type forgotten until run time. A value converts to <code>any W</code> wherever one is expected, and a call on it goes through a table of that type's methods.</p>
 <div class="sample" id="sample-generics_any" data-sample="generics_any" data-mode="run" data-file="generics_any.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>generics_any.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -125,7 +414,7 @@ Pair(first: "one", second: 1)
     <span class="k">fun</span> <span class="f">width</span>(<span class="k">self</span>) -&gt; u16 = <span class="n">1</span>
 }
 
-<span class="k">warp</span> <span class="t">Label</span>: <span class="t">Widget</span>, <span class="t">Show</span> {
+<span class="k">warp</span> <span class="t">Label</span>: <span class="t">Widget</span> {
     text: <span class="t">String</span>
     <span class="k">fun</span> <span class="f">name</span>(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"label '</span><span class="h">{</span>.text<span class="h">}</span><span class="s">'"</span>
     <span class="k">fun</span> <span class="f">width</span>(<span class="k">self</span>) -&gt; u16 = .text.<span class="f">len</span>() <span class="k">as</span> u16
@@ -135,37 +424,179 @@ Pair(first: "one", second: 1)
     <span class="k">fun</span> <span class="f">name</span>(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"spacer"</span>
 }
 
-<span class="c">// Several wefts at once: a value that is both.</span>
-<span class="k">fun</span> <span class="f">describe</span>(w: <span class="k">any</span> (<span class="t">Widget</span> + <span class="t">Show</span>)) -&gt; <span class="t">String</span> = <span class="s">"</span><span class="h">{</span>w.<span class="f">name</span>()<span class="h">}</span><span class="s"> = </span><span class="h">{</span>w<span class="h">}</span><span class="s">"</span>
-
 <span class="k">fun</span> <span class="f">main</span>() {
-    <span class="c">// `any Widget` holds a value of some type that weaves Widget,</span>
-    <span class="c">// and calls go through a table at run time.</span>
+    <span class="c">// `any Widget` holds a value of some type that weaves Widget.</span>
+    <span class="c">// The list mixes types, and calls go through a table at run time.</span>
     <span class="k">let</span> ui: <span class="t">List</span>[<span class="k">any</span> <span class="t">Widget</span>] = [<span class="t">Label</span>(<span class="s">"hi"</span>), <span class="t">Spacer</span>(), <span class="t">Label</span>(<span class="s">"there"</span>)]
+
     <span class="k">var</span> total: u16 = <span class="n">0</span>
     <span class="k">for</span> w <span class="k">in</span> ui {
         <span class="f">print</span>(w.<span class="f">name</span>())
         total += w.<span class="f">width</span>()
-
-        <span class="c">// A type test.</span>
-        <span class="k">if</span> w <span class="k">is</span> l: <span class="t">Label</span> {
-            <span class="f">print</span>(<span class="s">"  a label with </span><span class="h">{</span>l.text.<span class="f">len</span>()<span class="h">}</span><span class="s"> letters"</span>)
-        }
     }
-    <span class="f">print</span>(total)
-    <span class="f">print</span>(<span class="f">describe</span>(<span class="t">Label</span>(<span class="s">"x"</span>)))
+    <span class="f">print</span>(<span class="s">"total width </span><span class="h">{</span>total<span class="h">}</span><span class="s">"</span>)
 }</code></pre>
 <div class="sample-out"><div class="out-head">Output</div><pre><code>label 'hi'
-  a label with 2 letters
 spacer
 label 'there'
-  a label with 5 letters
-8
-label 'x' = Label(text: "x")</code></pre></div>
+total width 8</code></pre></div>
 </div>
-<p>Use a weft as a parameter type when the caller knows the type and you want static dispatch, and <code>any</code> when a list has to hold values of different types.</p>
+<p><code>ui</code> holds three values of two types. <code>width</code> isn't written in <code>Spacer</code>, so the table for <code>Spacer</code> points at the weft's default.</p>
+<ul><li>Conversion is implicit: a <code>Label</code> goes into a <code>List[any Widget]</code> without a wrapper.</li><li>Calls cost an indirect jump instead of a static call. Use a weft as a parameter type when the caller knows the type; use <code>any</code> when a collection or a field has to hold values of different types.</li><li><code>any Show</code> works for the builtin wefts too: <code>List[any Show]</code> can hold numbers, text and warps together.</li><li>A <code>mut self</code> method of a scalar type can't be called through <code>any</code> yet (<a href="not-yet.html#types-and-library">Not supported yet</a>).</li></ul>
+<div class="try"><p>Add <code>warp Button: Widget { fun name(self) -&gt; String = "button" }</code> and a <code>Button()</code> in the list. The loop prints it with no other change. Then delete <code>Spacer</code>'s <code>name</code>: the compiler says <code>Spacer</code> doesn't have the <code>name</code> that <code>Widget</code> needs (<a href="diagnostics.html#T0113">T0113</a>).</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p><code>Box&lt;dyn Trait&gt;</code> is the same dispatch, and has the same indirect call. <code>dyn</code> values are always behind a pointer; Loom's <code>any</code> is a value, and where it lives is up to the compiler.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> ui: <span class="t">Vec</span>&lt;<span class="k">Box</span>&lt;<span class="k">dyn</span> <span class="t">Widget</span>&gt;&gt; = vec![<span class="k">Box</span>::<span class="f">new</span>(<span class="t">Label</span>::<span class="f">new</span>(<span class="s">"hi"</span>)), <span class="k">Box</span>::<span class="f">new</span>(<span class="t">Spacer</span>)];
+<span class="k">for</span> w <span class="k">in</span> &amp;ui {
+    <span class="f">println!</span>(<span class="s">"{}"</span>, w.<span class="f">name</span>());
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="swift" data-label="Swift">
+<h4>Swift</h4>
+<p>Swift 5.6 spells the idea <code>any</code> as well: an existential, a value of some type that conforms to a protocol.</p>
+<pre class="foreign" data-lang="swift"><code><span class="k">let</span> ui: [<span class="k">any</span> <span class="t">Widget</span>] = [<span class="t">Label</span>(text: <span class="s">"hi"</span>), <span class="t">Spacer</span>()]
+<span class="k">for</span> w <span class="k">in</span> ui { <span class="f">print</span>(w.<span class="f">name</span>()) }</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>A Go interface value is dynamic dispatch with no ceremony: any value with the right methods converts implicitly. Until generics arrived in Go 1.18 it was the only way to write polymorphic code, so it is idiomatic everywhere; in Loom it is the less common form.</p>
+<pre class="foreign" data-lang="go"><code>ui := []<span class="t">Widget</span>{<span class="t">Label</span>{<span class="s">"hi"</span>}, <span class="t">Spacer</span>{}}
+<span class="k">for</span> _, w := <span class="k">range</span> ui {
+    fmt.<span class="t">Println</span>(w.<span class="t">Name</span>())
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="java" data-label="Java">
+<h4>Java</h4>
+<p>Every Java object reference to an interface is <code>any</code>: all dispatch is dynamic, and the JIT removes the cost where it can. The value is always a heap object.</p>
+<pre class="foreign" data-lang="java"><code><span class="t">List</span>&lt;<span class="t">Widget</span>&gt; ui = <span class="t">List</span>.<span class="f">of</span>(<span class="k">new</span> <span class="t">Label</span>(<span class="s">"hi"</span>), <span class="k">new</span> <span class="t">Spacer</span>());
+<span class="k">for</span> (<span class="t">Widget</span> w : ui) <span class="t">System</span>.out.<span class="f">println</span>(w.<span class="f">name</span>());</code></pre>
+</div>
+</div>
+<h2 id="type-tests-and-several-wefts">Type tests and several wefts<a class="anchor" href="#type-tests-and-several-wefts" aria-label="Link to this section">#</a></h2>
+<p>An <code>any</code> has forgotten its concrete type, but a <strong>type test</strong> gets it back: <code>w is l: Label</code> is true when <code>w</code> holds a <code>Label</code>, and binds it as <code>l</code>. The same pattern works in a <code>match</code>. To require several wefts at once, write <code>any (Widget + Show)</code>; one with more wefts can be passed where one with fewer is wanted.</p>
+<div class="sample" id="sample-generics_tests" data-sample="generics_tests" data-mode="run" data-file="generics_tests.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>generics_tests.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">weft</span> <span class="t">Widget</span> {
+    <span class="k">fun</span> <span class="f">name</span>(<span class="k">self</span>) -&gt; <span class="t">String</span>
+}
+
+<span class="k">warp</span> <span class="t">Label</span>: <span class="t">Widget</span>, <span class="t">Show</span> {
+    text: <span class="t">String</span>
+    <span class="k">fun</span> <span class="f">name</span>(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"label '</span><span class="h">{</span>.text<span class="h">}</span><span class="s">'"</span>
+}
+
+<span class="k">warp</span> <span class="t">Spacer</span>: <span class="t">Widget</span>, <span class="t">Show</span> {
+    <span class="k">fun</span> <span class="f">name</span>(<span class="k">self</span>) -&gt; <span class="t">String</span> = <span class="s">"spacer"</span>
+}
+
+<span class="c">// Several wefts at once: a value that is both.</span>
+<span class="k">fun</span> <span class="f">describe</span>(w: <span class="k">any</span> (<span class="t">Widget</span> + <span class="t">Show</span>)) -&gt; <span class="t">String</span> = <span class="s">"</span><span class="h">{</span>w.<span class="f">name</span>()<span class="h">}</span><span class="s"> = </span><span class="h">{</span>w<span class="h">}</span><span class="s">"</span>
+
+<span class="c">// An `any` of more wefts can be used as an `any` of fewer.</span>
+<span class="k">fun</span> <span class="f">just_name</span>(w: <span class="k">any</span> <span class="t">Widget</span>) -&gt; <span class="t">String</span> = w.<span class="f">name</span>()
+
+<span class="k">fun</span> <span class="f">both</span>(w: <span class="k">any</span> (<span class="t">Widget</span> + <span class="t">Show</span>)) -&gt; <span class="t">String</span> = <span class="f">just_name</span>(w)
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> ui: <span class="t">List</span>[<span class="k">any</span> <span class="t">Widget</span>] = [<span class="t">Label</span>(<span class="s">"hi"</span>), <span class="t">Spacer</span>(), <span class="t">Label</span>(<span class="s">"there"</span>)]
+
+    <span class="c">// A type test recovers the concrete type, and binds it.</span>
+    <span class="k">var</span> letters = <span class="n">0</span>
+    <span class="k">for</span> w <span class="k">in</span> ui {
+        <span class="k">if</span> w <span class="k">is</span> l: <span class="t">Label</span> { letters += l.text.<span class="f">len</span>() }
+    }
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>letters<span class="h">}</span><span class="s"> letters"</span>)
+
+    <span class="c">// `match` can test types too.</span>
+    <span class="k">for</span> w <span class="k">in</span> ui {
+        <span class="k">let</span> kind = <span class="k">match</span> w {
+            l: <span class="t">Label</span> =&gt; <span class="s">"label of </span><span class="h">{</span>l.text.<span class="f">len</span>()<span class="h">}</span><span class="s">"</span>
+            _ =&gt; <span class="s">"something else"</span>
+        }
+        <span class="f">print</span>(kind)
+    }
+
+    <span class="f">print</span>(<span class="f">describe</span>(<span class="t">Label</span>(<span class="s">"x"</span>)))
+    <span class="f">print</span>(<span class="f">both</span>(<span class="t">Spacer</span>()))
+
+    <span class="c">// Any value that is `Show` fits in `any Show`.</span>
+    <span class="k">let</span> things: <span class="t">List</span>[<span class="k">any</span> <span class="t">Show</span>] = [<span class="n">1</span>, <span class="s">"two"</span>, <span class="n">3.5</span>, <span class="t">Spacer</span>()]
+    <span class="k">for</span> t <span class="k">in</span> things { <span class="f">print</span>(t) }
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>7 letters
+label of 2
+something else
+label of 5
+label 'x' = Label(text: "x")
+spacer
+1
+two
+3.5
+Spacer()</code></pre></div>
+</div>
+<ul><li><code>w is l: Label</code> binds <code>l</code> for the <code>and</code> and the body that follow, like any other <code>is</code>.</li><li>A <code>match</code> over an <code>any</code> needs a catch-all arm (<code>_</code>), because other types can weave the weft (<a href="diagnostics.html#P0101">P0101</a> otherwise).</li><li><code>any (Widget + Show)</code> converts to <code>any Widget</code> implicitly, but not back: an <code>any Widget</code> isn't always <code>Show</code> (<a href="diagnostics.html#T0108">T0108</a>).</li></ul>
+<div class="try"><p>Add a <code>Button</code> warp that weaves <code>Widget</code>, put one in <code>ui</code>, and watch the second loop send it to <code>something else</code>. Then remove <code>_ =&gt; ...</code> from the <code>match</code>: the compiler asks for it.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>A trait object can't be turned back into a concrete type. You add <code>as_any()</code> to the trait and use <code>downcast_ref</code> from <code>std::any::Any</code>.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">if</span> <span class="k">let</span> <span class="k">Some</span>(l) = w.<span class="f">as_any</span>().downcast_ref::&lt;<span class="t">Label</span>&gt;() {
+    <span class="f">println!</span>(<span class="s">"{}"</span>, l.text.<span class="f">len</span>());
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="swift" data-label="Swift">
+<h4>Swift</h4>
+<p>A conditional cast with <code>as?</code> does the job, as it does for any class or existential.</p>
+<pre class="foreign" data-lang="swift"><code><span class="k">if</span> <span class="k">let</span> l = w as? <span class="t">Label</span> { <span class="f">print</span>(l.text.count) }</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>A type assertion with the comma-ok form, or a type switch.</p>
+<pre class="foreign" data-lang="go"><code><span class="k">if</span> l, ok := w.(<span class="t">Label</span>); ok {
+    fmt.<span class="t">Println</span>(<span class="f">len</span>(l.<span class="t">Text</span>))
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="java" data-label="Java">
+<h4>Java</h4>
+<p>Pattern matching for <code>instanceof</code> binds a typed name in the same breath.</p>
+<pre class="foreign" data-lang="java"><code><span class="k">if</span> (w <span class="k">instanceof</span> <span class="t">Label</span> l) {
+    <span class="t">System</span>.out.<span class="f">println</span>(l.<span class="f">text</span>().<span class="f">length</span>());
+}</code></pre>
+</div>
+</div>
+<h2 id="static-or-dynamic">Static or dynamic?<a class="anchor" href="#static-or-dynamic" aria-label="Link to this section">#</a></h2>
+<p>You've now got two ways to say "anything that does this":</p>
+<table class="plain"><thead><tr><th></th><th>Weft as parameter type / bound</th><th><code>any W</code></th></tr></thead><tbody><tr><td>When the type is known</td><td>when compiling</td><td>when running</td></tr><tr><td>Calls</td><td>direct, and inlinable</td><td>through a table</td></tr><tr><td>Code</td><td>one copy per type used</td><td>one copy</td></tr><tr><td>A list of mixed types</td><td>impossible</td><td>yes</td></tr><tr><td>One function returning different types</td><td>no</td><td>yes</td></tr></tbody></table>
+<p>Start with the generic form, because it's the faster and the more precise one: <code>loud(a: Animal)</code> can't be handed a <code>Cat</code> where a <code>Dog</code> was meant, and the compiler specializes it. Reach for <code>any</code> when the mixture is the point.</p>
+<h3 id="what-s-missing">What's missing<a class="anchor" href="#what-s-missing" aria-label="Link to this section">#</a></h3>
+<p>Generic wefts (<code>weft From[T]</code>) are not supported yet: the type checker stops them with <a href="diagnostics.html#U0102">U0102</a>, like this:</p>
+<div class="sample" id="sample-generics_err_weft" data-sample="generics_err_weft" data-mode="check" data-file="generics_err_weft.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>generics_err_weft.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="c">// A weft with a type parameter is designed but not built yet.</span>
+<span class="k">weft</span> <span class="t">From</span>[T] {
+    <span class="k">fun</span> <span class="f">from</span>(<span class="k">take</span> x: T) -&gt; <span class="k">Self</span>
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[U0102]: not implemented yet: generic wefts</span>
+<span class="loc">  --&gt; generics_err_weft.loom:2:6</span>
+<span class="gut">  |</span>
+<span class="gut">2 |</span> weft From[T] {
+<span class="gut">  |</span><span class="caret">      ^^^^ not supported by this compiler yet</span>
+<span class="gut">  |</span>
+<span class="loc">  = note: the type checker grows one milestone at a time; see design/lua-backend.md</span>
+
+<span class="err">error: generics_err_weft.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<p>Wefts with associated types (<code>type Item</code>) are supported, and cover many of the cases where a weft would otherwise need a parameter: see <a href="types.html#wefts">Warps, wefts and weaves</a>.</p>
 <h2 id="where-next">Where next<a class="anchor" href="#where-next" aria-label="Link to this section">#</a></h2>
-<p><a href="collections.html">Collections and streams</a> uses generics all over.</p>
+<p><a href="collections.html">Collections and streams</a> uses generics all over: <code>List[T]</code>, <code>Map[K, V]</code>, and the lazy <code>Stream[T]</code>.</p>
 <nav class="pager" aria-label="Chapters">
 <a class="prev" href="types.html"><span class="dir">&larr; Chapter 3</span>Warps, wefts and weaves</a>
 <a class="next" href="collections.html"><span class="dir">Chapter 5 &rarr;</span>Collections and streams</a>

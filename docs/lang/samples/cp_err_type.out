@@ -1,0 +1,7 @@
+error[T0101]: a `const` parameter can't be a `str`
+  --> docs/lang/samples/cp_err_type.loom:2:11
+  |
+2 | fun shout(const word: str) -> str = word
+  |           ^^^^^^^^^^^^^^^ `const` parameters are integers or `bool`
+
+error: docs/lang/samples/cp_err_type.loom failed to type-check (1 error)

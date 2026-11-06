@@ -1,0 +1,27 @@
+use std.io.print
+
+fun noisy() ~> i32 {
+    print("  started")
+    yield 1
+    print("  resumed")
+    yield 2
+    print("  done")
+}
+
+// A shuttle is a value: this one takes a generator that yields `i32`s.
+fun total(take g: Shuttle[i32, ()]) -> i32 {
+    var sum = 0
+    for x in g { sum += x }
+    sum
+}
+
+fun main() {
+    print("calling")
+    let g = noisy()                  // builds a suspended shuttle; runs nothing
+    print("called: nothing has run yet")
+    for x in g {
+        print("got {x}")
+    }
+    print(total(noisy()))
+}
+//@ run

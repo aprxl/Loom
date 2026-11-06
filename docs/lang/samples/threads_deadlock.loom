@@ -1,0 +1,12 @@
+use std.io.print
+use std.sync.Pipe
+
+fun main() {
+    let jobs = Pipe[i32](1)
+    loom {
+        print("waiting for a job")
+        // Nobody will ever send one, and nobody can close the pipe.
+        print(jobs.recv())
+    }
+}
+//@ unravel

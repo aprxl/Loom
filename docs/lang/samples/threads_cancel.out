@@ -1,0 +1,14 @@
+slow: working
+slow: working
+slow: cleaned up
+--- stderr ---
+unravel: index 7 is out of bounds (len 3)
+  --> docs/lang/samples/threads_cancel.loom:5:5
+  |
+5 |     loom {
+  |     ^
+  = note: the thread started here unravelled
+  --> docs/lang/samples/threads_cancel.loom:13:9
+   |
+13 |         thread {
+   |         ^

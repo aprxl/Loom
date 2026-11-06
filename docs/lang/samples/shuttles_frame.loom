@@ -1,0 +1,30 @@
+use std.io.print
+
+fun fib() ~> u64 {
+    var (a, b): (u64, u64) = (0, 1)
+    loop {
+        yield a
+        (a, b) = (b, a + b)
+    }
+}
+
+fun pairs() ~> (i32, ?i32) <~ i32 {
+    while pull is some(a) {
+        match pull {
+            some(b) => yield (a, some(b)),
+            none => {
+                yield (a, none)
+                return
+            }
+        }
+    }
+}
+
+// The size is known while compiling, so it can be asserted there.
+const assert(fib.Frame.size <= 32)
+
+fun main() {
+    print("fib: {fib.Frame.size} bytes, aligned to {fib.Frame.align}")
+    print("pairs: {pairs.Frame.size} bytes")
+}
+//@ run

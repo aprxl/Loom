@@ -1,0 +1,8 @@
+use std.io.print
+
+// `main` can't fail, and nothing here catches, so `?` has nowhere to go.
+fun main() {
+    let n = "12".parse[i32]()?
+    print(n)
+}
+//@ check-fail T0101

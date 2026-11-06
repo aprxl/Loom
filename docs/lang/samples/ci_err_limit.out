@@ -1,0 +1,9 @@
+error[K0102]: a `const for` over more than 10000 items
+  --> docs/lang/samples/ci_err_limit.loom:6:20
+  |
+6 |     const for i in 0..10001 {
+  |                    ^^^^^^^^ at most 10000 items are written out
+  |
+  = help: use a plain `for`, which runs when the program does
+
+error: docs/lang/samples/ci_err_limit.loom failed to type-check (1 error)

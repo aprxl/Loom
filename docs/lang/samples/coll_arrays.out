@@ -1,0 +1,13 @@
+[1, 2, 3] [0, 0, 0, 0] [[0, 0, 0], [0, 0, 0]] 3
+1 3 none
+..O
+.X.
+...
+true true some(2)
+[11, 21, 31]
+--- stderr ---
+unravel: index 3 is out of bounds (len 3)
+  --> docs/lang/samples/coll_arrays.loom:31:5
+   |
+31 |     print(fixed[3])                          // one past the end
+   |     ^

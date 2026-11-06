@@ -1,0 +1,8 @@
+type Cents = i64 where 0..
+
+fun main() {
+    let a: Cents = 250
+    let b: Cents = 100
+    let diff: Cents = a - b
+}
+//@ check-fail T0101

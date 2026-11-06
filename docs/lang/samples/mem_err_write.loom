@@ -1,0 +1,14 @@
+use std.mem.{Arena, kib}
+
+// It owns text, so it is more than plain data.
+warp Named {
+    name: String
+    hits: i32
+}
+
+fun main() {
+    spool frame = Arena(1.kib())
+    var n = frame.put(Named("ann".to_string(), 0))
+    n.hits = 5
+}
+//@ check-fail T0107

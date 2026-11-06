@@ -1,0 +1,35 @@
+use std.io.print
+
+weft Animal {
+    fun name(self) -> str
+    fun sound(self) -> str
+    fun speak(self) -> String = "{self.name()} says {self.sound()}"
+}
+
+warp Dog: Animal {
+    fun name(self) -> str = "dog"
+    fun sound(self) -> str = "woof"
+}
+
+warp Cat: Animal {
+    fun name(self) -> str = "cat"
+    fun sound(self) -> str = "meow"
+}
+
+// A weft as a parameter type: sugar for `fun loud[A: Animal](a: A)`.
+fun loud(a: Animal) -> String = a.speak().to_upper()
+
+// The same, spelled out. Use this when you need to name the type twice.
+fun duet[A: Animal](a: A, b: A) -> String = "{a.speak()} and {b.speak()}"
+
+// Inside the brackets, it applies to the items.
+fun show_all(xs: [Show]) -> String = xs.map(x => "<{x}>").join("")
+
+fun main() {
+    print(loud(Dog()))                       // checked and compiled for Dog
+    print(loud(Cat()))                       // and again for Cat
+    print(duet(Dog(), Dog()))
+    print(show_all([1, 2, 3]))
+    print(show_all(["a", "b"]))
+}
+//@ run

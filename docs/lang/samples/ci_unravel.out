@@ -1,0 +1,11 @@
+error[K0103]: compile-time code unravelled: no lane width for 64
+  --> docs/lang/samples/ci_unravel.loom:9:9
+  |
+9 |         const unravel("no lane width for {N}")
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ while running this
+  |
+  = note: it unravelled at docs/lang/samples/ci_unravel.loom:9:15
+  = help: unravelling while compiling is a compile error
+  = note: in `lanes` with `N = 64`
+
+error: docs/lang/samples/ci_unravel.loom failed to compile (1 error)

@@ -1,0 +1,55 @@
+use std.io.print
+
+warp Point {
+    x: i32
+    y: i32
+}
+
+// Literals, ranges, alternatives, a guard, and a catch-all.
+fun classify(n: i32) -> str = match n {
+    0 => "zero"
+    1..=9 => "small"
+    10 | 20 | 30 => "round"
+    x if x < 0 => "negative"
+    _ => "big"
+}
+
+// Matching a tuple takes both values at once.
+fun fizz(n: u32) -> String = match (n % 3, n % 5) {
+    (0, 0) => "FizzBuzz"
+    (0, _) => "Fizz"
+    (_, 0) => "Buzz"
+    _ => "{n}"
+}
+
+// A record pattern names the fields it cares about; `..` skips the rest.
+fun where_is(p: Point) -> str = match p {
+    Point(0, 0) => "origin"
+    Point(x: 0, y: _) => "on the y axis"
+    Point(x:, y:) if x == y => "on the diagonal"   // `x:` binds x, like `x: x`
+    Point(x, ..) if x < 0 => "to the left"
+    _ => "elsewhere"
+}
+
+fun main() {
+    for n in [0, 5, 20, -4, 99] {
+        print("{n}: {classify(n)}")
+    }
+    print([for n in 1..=15 => fizz(n)])
+    for p in [Point(0, 0), Point(0, 5), Point(3, 3), Point(-3, 2), Point(4, 1)] {
+        print("({p.x}, {p.y}): {where_is(p)}")
+    }
+
+    // `is` is a pattern test that gives a bool, and binds for the `and` after it.
+    let found = some(7)
+    if found is some(n) and n > 5 { print("found {n}") }
+
+    // `match` is an expression, so it can sit on the right of `let`.
+    let size = match 'q' {
+        'a'..='m' => "first half"
+        'n'..='z' => "second half"
+        _ => "not a lowercase letter"
+    }
+    print(size)
+}
+//@ run

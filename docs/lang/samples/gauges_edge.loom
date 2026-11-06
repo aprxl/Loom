@@ -1,0 +1,31 @@
+use std.io.print
+
+type Port = u16 where 1..
+
+warp ConfigError: Error {
+    case BadPort(text: String)
+}
+
+warp Server: Show {
+    host: String
+    port: Port
+}
+
+// Check once, at the edge...
+fun parse_port(text: str) -> Port ! ConfigError {
+    let n = text.parse[u16]() mend fail .BadPort(text: text.to_string())
+    n as? Port mend fail .BadPort(text: text.to_string())
+}
+
+// ...and everything after it can rely on the field.
+fun url(s: Server) -> String = "http://{s.host}:{s.port}/"
+
+fun main() {
+    for text in ["8080", "0", "http"] {
+        match parse_port(text) {
+            ok(port) => print(url(Server("example.org", port)))
+            err(e) => print("rejected: {e}")
+        }
+    }
+}
+//@ run

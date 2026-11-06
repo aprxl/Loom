@@ -1,0 +1,35 @@
+use std.io.print
+
+// `[i32]` is a slice: a view of contiguous items. Arrays and lists pass as one.
+fun total(xs: [i32]) -> i32 {
+    var t = 0
+    for x in xs { t += x }
+    t
+}
+
+fun zero_out(mut xs: [i32]) {
+    for mut x in xs { x = 0 }
+}
+
+fun main() {
+    let fixed = [4, 8, 15]
+    var list: List[i32] = [16, 42, 23, 7]
+    print("{total(fixed)} {total(list)}")
+
+    // `xs[a..b]` is a view: no copy, and the end is left out.
+    print("{list[1..3]} {list[..2]} {list[2..]} {total(list[1..3])}")
+
+    // A view of a `var` can change its items, and the list sees it.
+    list[1..3].sort()
+    zero_out(mut list[..1])
+    print(list)
+
+    // Inside brackets, `#` is the length of what is being indexed.
+    let xs = [10, 20, 30, 40, 50]
+    print("{xs[#-1]} {xs[#-3..]} {xs[1..#-1]} {xs[#/2]}")
+
+    // Pieces of a slice: each is a lazy stream of views.
+    print(xs.chunks(2).collect())
+    print(xs.windows(3).map(w => total(w)).collect())
+}
+//@ run

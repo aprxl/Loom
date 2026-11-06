@@ -1,11 +1,37 @@
 use std.io.print
 
-// Any free function is a method on its first parameter.
+warp Circle {
+    r: f64
+
+    // 1. A method in the warp's own body comes first.
+    fun name(self) -> str = "circle"
+}
+
+weft Shape {
+    fun name(self) -> str = "shape"          // would also match, but loses to the body
+    fun area(self) -> f64
+}
+
+// 2. Then a method from a weave.
+weave Shape into Circle {
+    fun area(self) -> f64 = 3.0 * .r * .r
+}
+
+// 5. Last, a free function whose first parameter accepts the value.
 fun kib(n: usize) -> usize = n * 1024
 fun shout(s: str) -> String = s.to_upper()
+fun describe(c: Circle) -> String = "a {c.name()} of area {c.area()}"
 
 fun main() {
+    let c = Circle(2)
+    print("{c.name()} / {Shape.name(c)}")     // the body's, then the weft's, by name
+    print(c.area())
+    print(c.describe())                      // the same as describe(c)
+
     print(64.kib())                          // the same as kib(64)
     print("hi".shout())
+
+    // 3. Anything with items has the stream methods: `indexed`, `filter`, `sum`...
+    print([10, 20, 30].indexed().collect())
 }
 //@ run

@@ -1,3 +1,5 @@
 (10, 3)
 button 'OK' over frame 10x3
 10
+frame 2x2
+button 'OK' over frame 10x3

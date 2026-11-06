@@ -1,0 +1,29 @@
+use std.io.print
+
+fun fib(n: u64) -> u64 = if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+
+warp Config {
+    name: String
+    // A `const` expression can be a field's default: it's worked out once.
+    retries: u32 = const fib(10) as u32
+}
+
+// A constant can be text, a record, a list, an optional or a tuple.
+const HEX_DIGITS: String = {
+    var s = String()
+    for d in 0..16 {
+        s.push_str("{d:x}")
+    }
+    s
+}
+const ORIGIN: Config = Config(name: "origin")
+const NAMES: List[str] = ["ada", "grace"]
+const LUCKY: ?i32 = some(7)
+const PAIR: (i32, str) = (1, "one")
+
+fun main() {
+    print(HEX_DIGITS)
+    print("{ORIGIN.name} retries {ORIGIN.retries}")
+    print("{NAMES} {LUCKY} {PAIR}")
+}
+//@ run

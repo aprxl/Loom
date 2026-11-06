@@ -1,0 +1,6 @@
+fun main() {
+    let handle = loom {
+        thread 1 + 1                 // the block's value would be a handle
+    }
+}
+//@ check-fail C0404

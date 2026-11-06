@@ -1,0 +1,20 @@
+use std.io.print
+use std.sync.sched_yield
+
+fun worker(name: str, steps: i32) {
+    for i in 0..steps {
+        print("{name} {i}")
+        sched_yield()                    // let the others take a turn
+    }
+}
+
+fun main() {
+    loom {
+        thread worker("a", 2)
+        thread worker("b", 2)
+        print("started")
+        ()                               // not a handle: it can't leave the block
+    }
+    print("both done")
+}
+//@ run

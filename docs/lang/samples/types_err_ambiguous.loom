@@ -1,0 +1,20 @@
+weft Hello {
+    fun hi(self) -> str = "hello"
+}
+
+weft Howdy {
+    fun hi(self) -> str = "howdy"
+}
+
+warp Greeting {
+    n: i32
+}
+
+weave Hello into Greeting {}
+weave Howdy into Greeting {}
+
+fun main() {
+    let g = Greeting(1)
+    let s = g.hi()
+}
+//@ check-fail T0116

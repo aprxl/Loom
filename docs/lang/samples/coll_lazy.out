@@ -1,0 +1,12 @@
+pipeline built
+  making 1
+  making 2
+  making 3
+  making 4
+[20, 40]
+  mapping 1
+  mapping 2
+  mapping 3
+after the eager map
+[2, 4, 6]
+cccc

@@ -1,0 +1,10 @@
+error[R0104]: `e` has to be in the spool `b`
+   --> docs/lang/samples/mem_err_mixed.loom:17:18
+   |
+11 | fun same(e: ^Expr@sp) -> ^Expr@sp given sp: Spool = e
+   |          ----------- the parameter's type names the spool the call gives
+   .
+17 |     let y = same(x, given: b)
+   |                  ^ this points into another spool than `b`
+
+error: docs/lang/samples/mem_err_mixed.loom failed to type-check (1 error)

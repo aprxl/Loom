@@ -1,0 +1,9 @@
+error[U0102]: not implemented yet: generic wefts
+  --> docs/lang/samples/generics_err_weft.loom:2:6
+  |
+2 | weft From[T] {
+  |      ^^^^ not supported by this compiler yet
+  |
+  = note: the type checker grows one milestone at a time; see design/lua-backend.md
+
+error: docs/lang/samples/generics_err_weft.loom failed to type-check (1 error)

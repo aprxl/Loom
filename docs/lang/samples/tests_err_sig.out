@@ -1,0 +1,17 @@
+error[T0119]: a test can't have parameters
+  --> docs/lang/samples/tests_err_sig.loom:2:6
+  |
+2 | test takes_an_argument(n: i32) {
+  |      ^^^^^^^^^^^^^^^^^ in this test
+  |
+  = help: write it as `test name() { … }`, or `test name() ! E { … }` to use `?` in it
+
+error[T0119]: a test returns nothing, or `! E`
+  --> docs/lang/samples/tests_err_sig.loom:5:6
+  |
+5 | test returns_a_value() -> i32 = 3
+  |      ^^^^^^^^^^^^^^^ in this test
+  |
+  = help: write it as `test name() { … }`, or `test name() ! E { … }` to use `?` in it
+
+error: docs/lang/samples/tests_err_sig.loom failed to type-check (2 errors)

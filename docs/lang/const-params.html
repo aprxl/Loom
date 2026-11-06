@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>Const parameters and control flow · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -55,11 +56,12 @@
 <div class="chapter-head">
 <span class="chapter-no">Chapter 12</span>
 <h1>Const parameters and control flow</h1>
-<p class="summary"><code>const</code> parameters, <code>uint(n)</code>, <code>const if</code>, <code>const for</code>, and <code>target</code>.</p>
+<p class="summary"><code>const</code> parameters that become part of a type, <code>uint(n)</code>, <code>const if</code>, <code>const for</code>, <code>const unravel</code> and <code>target</code>.</p>
 </div>
-<p>This page continues <a href="compile-time.html">Compile-time code</a>. A <code>const</code> parameter takes a value that's known while compiling, and the function or warp is specialized for it. <code>const if</code> and <code>const for</code> decide what code exists.</p>
+<p><a href="compile-time.html">Compile-time code</a> computed values and left them in the program. This chapter goes one step further: a value known while compiling can shape the <em>code</em> and the <em>types</em> around it. An array's length becomes a parameter, a bit width follows a number, a branch is chosen before it exists, and a loop is written out by hand, so to speak, by the compiler.</p>
+<p>The same keyword does all of it. A <code>const</code> parameter takes a value that's known at compile time and specializes the function or warp for it. <code>const if</code> and <code>const for</code> decide what code exists at all.</p>
 <h2 id="const-parameters"><code>const</code> parameters<a class="anchor" href="#const-parameters" aria-label="Link to this section">#</a></h2>
-<p>A <code>const</code> parameter must be known at compile time. Each distinct value makes its own instance of the function, and the value can appear in types: the length in <code>[f32; n]</code> is the parameter. A <code>const</code> generic parameter (<code>const N: usize</code>) is worked out from the arguments, here from the array's length.</p>
+<p>A <code>const</code> parameter must be known at compile time. Each distinct value makes its own instance of the function, and the value can appear in types: the length in <code>[f32; n]</code> is the parameter. A <code>const</code> generic parameter (<code>const N: usize</code>) can also be worked out from the arguments, here from an array's length.</p>
 <div class="sample" id="sample-cp_zeros" data-sample="cp_zeros" data-mode="run" data-file="cp_zeros.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>cp_zeros.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -89,7 +91,45 @@
 6
 30</code></pre></div>
 </div>
-<ul><li>The parameter's type is an integer type or <code>bool</code> for now. An argument is checked against it (<a href="diagnostics.html#T0102">T0102</a>).</li><li>An argument must be something the constant folder can work out: literals, constants, other <code>const</code> parameters, arithmetic, comparisons, and the integer methods <code>log2</code>, <code>is_power_of_two</code>, <code>min</code>, <code>max</code> and <code>pow</code>. Anything else is <a href="diagnostics.html#K0109">K0109</a>.</li></ul>
+<ul><li>The parameter's type is an integer type or <code>bool</code> for now. An argument is checked against it (<a href="diagnostics.html#T0102">T0102</a> when it doesn't fit).</li><li>A <code>const</code> function parameter (<code>fun zeros(const n: usize)</code>) is written as an ordinary argument at the call. Inside the instance, and in compile-time code, it's its value.</li><li><code>zeros(4)</code> and <code>zeros(5)</code> are different instances, and <code>Ring[u32, 4]</code> and <code>Ring[u32, 8]</code> are different types.</li><li>A generic <code>const N: usize</code> is usually inferred (<code>sum([1, 2, 3])</code>), and can be given: <code>sum[2]([10, 20])</code>.</li></ul>
+<div class="try"><p>Change <code>sum([1, 2, 3])</code> to <code>sum([0; 0])</code>, an array with no items. The <code>const assert</code> is checked for each instance, and the error says <code>N = 0</code>.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust's const generics are the nearest cousin. A const parameter is a generic argument (turbofish), not a function argument, and on stable Rust it can't appear in arithmetic inside a type: <code>[f32; N * 2]</code> needs an unstable feature. Loom's <code>[f32; n]</code>, <code>uint(N.log2())</code> and friends are ordinary expressions.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">fn</span> zeros&lt;<span class="k">const</span> N: usize&gt;() -&gt; [f32; N] {
+    [<span class="n">0.0</span>; N]
+}
+
+<span class="k">fn</span> sum&lt;<span class="k">const</span> N: usize&gt;(xs: [i32; N]) -&gt; i32 {
+    xs.<span class="f">iter</span>().<span class="f">sum</span>()
+}
+
+<span class="k">let</span> z = zeros::&lt;<span class="n">3</span>&gt;();</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="c" data-label="C++">
+<h4>C++</h4>
+<p>Non-type template parameters are the same mechanism, written in a template header. C++ can compute with them freely; a mistake tends to surface as a trail of template instantiation notes, where Loom shows the <code>const assert</code> message you wrote.</p>
+<pre class="foreign" data-lang="cpp"><code><span class="k">template</span> &lt;std::size_t N&gt;
+std::array&lt;<span class="k">float</span>, N&gt; <span class="f">zeros</span>() { <span class="k">return</span> {}; }
+
+<span class="k">template</span> &lt;std::size_t N&gt;
+<span class="k">int</span> <span class="f">sum</span>(<span class="k">const</span> std::array&lt;<span class="k">int</span>, N&gt;&amp; xs) {
+    <span class="f">static_assert</span>(N &gt; <span class="n">0</span>, <span class="s">"summing nothing"</span>);
+    <span class="k">return</span> std::<span class="f">accumulate</span>(xs.<span class="f">begin</span>(), xs.<span class="f">end</span>(), <span class="n">0</span>);
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="zig" data-label="Zig">
+<h4>Zig</h4>
+<p>Zig's <code>comptime</code> parameters are written like Loom's: a normal parameter with a marker, and the value can be used in the return type.</p>
+<pre class="foreign" data-lang="zig"><code><span class="k">fn</span> <span class="f">zeros</span>(<span class="k">comptime</span> n: usize) [n]f32 {
+    <span class="k">return</span> [_]f32{<span class="n">0</span>} ** n;
+}</code></pre>
+</div>
+</div>
+<h3 id="what-an-argument-may-be">What an argument may be<a class="anchor" href="#what-an-argument-may-be" aria-label="Link to this section">#</a></h3>
+<p>An argument must be something the <a href="compile-time.html#the-constant-folder">constant folder</a> can work out: literals, constants, other <code>const</code> parameters, arithmetic, comparisons, and the integer methods <code>log2</code>, <code>is_power_of_two</code>, <code>min</code>, <code>max</code> and <code>pow</code>. Anything else is <a href="diagnostics.html#K0109">K0109</a>. A local variable is the usual culprit, and a <code>bool</code> parameter shows it:</p>
 <div class="sample" id="sample-cp_err_known" data-sample="cp_err_known" data-mode="check" data-file="cp_err_known.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>cp_err_known.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0109">K0109</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -110,7 +150,24 @@
 
 <span class="err">error: cp_err_known.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
-<ul><li>A <code>const</code> function parameter (<code>fun zeros(const n: usize)</code>) is still passed at run time like any other. Inside the instance, and in compile-time code, it's its value.</li><li><code>zeros(4)</code> and <code>zeros(5)</code> are different instances, and <code>Ring[u32, 4]</code> and <code>Ring[u32, 8]</code> are different types.</li></ul>
+<p>A <code>const</code> parameter that isn't an integer or a <code>bool</code>, such as a <code>str</code> or a <code>char</code>, is <a href="diagnostics.html#T0101">T0101</a>:</p>
+<div class="sample" id="sample-cp_err_type" data-sample="cp_err_type" data-mode="check" data-file="cp_err_type.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>cp_err_type.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#T0101">T0101</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="c">// A `const` parameter is an integer or a `bool` for now.</span>
+<span class="k">fun</span> <span class="f">shout</span>(<span class="k">const</span> word: str) -&gt; str = word
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> s = <span class="f">shout</span>(<span class="s">"hello"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[T0101]: a `const` parameter can't be a `str`</span>
+<span class="loc">  --&gt; cp_err_type.loom:2:11</span>
+<span class="gut">  |</span>
+<span class="gut">2 |</span> fun shout(const word: str) -&gt; str = word
+<span class="gut">  |</span><span class="caret">           ^^^^^^^^^^^^^^^ `const` parameters are integers or `bool`</span>
+
+<span class="err">error: cp_err_type.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<p>And an argument that doesn't fit the parameter's type is <a href="diagnostics.html#T0102">T0102</a>, as <code>300</code> doesn't fit a <code>u8</code>:</p>
 <div class="sample" id="sample-cp_err_range" data-sample="cp_err_range" data-mode="check" data-file="cp_err_range.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>cp_err_range.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#T0102">T0102</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">warp</span> <span class="t">Grid</span>[<span class="k">const</span> W: u8, <span class="k">const</span> H: u8] {
@@ -129,6 +186,7 @@
 
 <span class="err">error: cp_err_range.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
+<div class="try"><p>In <code>cp_err_known</code>, move the <code>3</code> out of <code>main</code> into <code>const LIMIT = 3</code> and call <code>pick(LIMIT &gt; 2)</code>. A constant is known while compiling, so the call is accepted.</p></div>
 <h2 id="types-from-numbers">Types from numbers<a class="anchor" href="#types-from-numbers" aria-label="Link to this section">#</a></h2>
 <p><code>uint(n)</code> and <code>int(n)</code> are the integer types with <code>n</code> bits, for <code>n</code> from 1 to 64. <code>u12</code> is <code>uint(12)</code>. The argument must be known at compile time (<a href="diagnostics.html#K0109">K0109</a> if it isn't). Together with <code>const</code> parameters, this lets a type follow a number:</p>
 <div class="sample" id="sample-cp_types" data-sample="cp_types" data-mode="run" data-file="cp_types.loom" data-runnable>
@@ -154,8 +212,28 @@
 10
 9</code></pre></div>
 </div>
+<div class="try"><p>Change <code>let small: uint(3) = 7</code> to <code>= 8</code>. A <code>uint(3)</code> holds 0 to 7, and the compiler refuses the literal.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="zig" data-label="Zig">
+<h4>Zig</h4>
+<p>Zig has integers of any width (<code>u12</code>) and builds one from a number with the standard library. It's the same idea; in Zig the function that makes the type is ordinary code. Loom's design lets a function return a type too, but that isn't built yet.</p>
+<pre class="foreign" data-lang="zig"><code><span class="k">const</span> <span class="t">Idx</span> = std.meta.<span class="t">Int</span>(.unsigned, <span class="n">12</span>);   <span class="c">// u12</span></code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="c" data-label="C">
+<h4>C</h4>
+<p>C23 added <code>_BitInt(N)</code>, a bit-precise integer whose width is a literal in the source. It can't follow a computed number.</p>
+<pre class="foreign" data-lang="c"><code><span class="k">unsigned</span> <span class="f">_BitInt</span>(<span class="n">12</span>) idx = <span class="n">4095</span>;</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust has the fixed widths (<code>u8</code>, <code>u16</code>, <code>u32</code>...) and nothing in between. A 12-bit index is a <code>u16</code> plus a convention, or a crate.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">struct</span> <span class="t">Idx</span>(u16); <span class="c">// 0..4096, by convention</span></code></pre>
+</div>
+</div>
 <h2 id="warps-with-const-parameters">Warps with <code>const</code> parameters<a class="anchor" href="#warps-with-const-parameters" aria-label="Link to this section">#</a></h2>
 <p>A generic warp's field types are worked out again for each list of arguments, since <code>type Idx = uint(N.log2())</code> can't be resolved in the template. A <code>const assert</code> in a warp's body runs for each instance of it, and the error names the instance.</p>
+<p>The ring buffer below uses both: its cursors are exactly as wide as its capacity needs, so <code>+%= 1</code> wraps at <code>N</code> by itself, with no <code>%</code> and no bounds check.</p>
 <div class="sample" id="sample-cp_ring" data-sample="cp_ring" data-mode="run" data-file="cp_ring.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>cp_ring.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -210,6 +288,7 @@ kept 4
 kept 5
 kept 6</code></pre></div>
 </div>
+<p>An instance that breaks the rule doesn't compile, and the error says which one:</p>
 <div class="sample" id="sample-cp_err_assert" data-sample="cp_err_assert" data-mode="check" data-file="cp_err_assert.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>cp_err_assert.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0101">K0101</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">warp</span> <span class="t">Ring</span>[T, <span class="k">const</span> N: usize] {
@@ -231,6 +310,40 @@ kept 6</code></pre></div>
 
 <span class="err">error: cp_err_assert.loom failed to compile (1 error)</span></code></pre></div>
 </div>
+<div class="try"><p>Change <code>Ring[u32, 4]</code> in <code>cp_ring</code> to <code>Ring[u32, 8]</code>. The cursors become <code>u3</code>, and since six items now fit, nothing is dropped. Then try <code>Ring[u32, 6]</code> and read the error.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>A const-generic struct is the same shape, but the cursor type can't be computed from <code>N</code> on stable Rust, so the usual ring stores <code>usize</code> and masks it with <code>N - 1</code>, with a check somewhere that <code>N</code> is a power of two.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">struct</span> <span class="t">Ring</span>&lt;T, <span class="k">const</span> N: usize&gt; {
+    slots: [<span class="t">Option</span>&lt;T&gt;; N],
+    head: usize,
+    tail: usize,
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="c" data-label="C++">
+<h4>C++</h4>
+<p>A class template with a <code>static_assert</code> is the equivalent, and the cursor type can be computed with a metafunction, at the price of a helper template.</p>
+<pre class="foreign" data-lang="cpp"><code><span class="k">template</span> &lt;<span class="k">class</span> T, std::size_t N&gt;
+<span class="k">struct</span> <span class="t">Ring</span> {
+    <span class="f">static_assert</span>((N &amp; (N - <span class="n">1</span>)) == <span class="n">0</span>, <span class="s">"Ring capacity must be a power of two"</span>);
+    std::array&lt;std::optional&lt;T&gt;, N&gt; slots{};
+    std::size_t head = <span class="n">0</span>, tail = <span class="n">0</span>;
+};</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="zig" data-label="Zig">
+<h4>Zig</h4>
+<p>Zig has no generic types as such: a function takes the parameters at compile time and <em>returns a type</em>. That is the model Loom's design follows for computed types (not built yet), while <code>warp Ring[T, const N: usize]</code> covers the common case.</p>
+<pre class="foreign" data-lang="zig"><code><span class="k">fn</span> <span class="t">Ring</span>(<span class="k">comptime</span> T: type, <span class="k">comptime</span> n: usize) type {
+    <span class="k">return</span> <span class="k">struct</span> {
+        slots: [n]?T = [_]?T{<span class="k">null</span>} ** n,
+        head: usize = <span class="n">0</span>,
+        tail: usize = <span class="n">0</span>,
+    };
+}</code></pre>
+</div>
+</div>
 <h2 id="const-if"><code>const if</code><a class="anchor" href="#const-if" aria-label="Link to this section">#</a></h2>
 <p><code>const if cond { ... } else { ... }</code> is decided while compiling, and the whole <code>else if</code> chain with it. The compiler checks, and emits, only the branch it takes. <strong>The others are parsed but never type-checked</strong>, so they can name things that don't exist on this target.</p>
 <div class="sample" id="sample-ci_basic" data-sample="ci_basic" data-mode="run" data-file="ci_basic.loom" data-runnable>
@@ -240,24 +353,16 @@ kept 6</code></pre></div>
 <span class="k">const</span> DEBUG = <span class="k">false</span>
 <span class="k">const</span> SIZES = [<span class="n">1</span>, <span class="n">2</span>, <span class="n">4</span>]
 
-<span class="c">/// The branch that isn't taken isn't checked, so it can name things that</span>
-<span class="c">/// don't exist here.</span>
-<span class="k">fun</span> <span class="f">page_size</span>() -&gt; usize {
-    <span class="k">const</span> <span class="k">if</span> target.pointer_bits == <span class="n">64</span> {
-        <span class="n">4096</span>
-    } <span class="k">else</span> {
-        <span class="n">8192</span>
-    }
-}
-
+<span class="c">/// `N` is a `const` parameter, worked out from the array's length. Each</span>
+<span class="c">/// instance keeps only the branch its `N` picks.</span>
 <span class="k">fun</span> describe[<span class="k">const</span> N: usize](xs: [i32; N]) -&gt; str {
     <span class="k">const</span> <span class="k">if</span> N &gt; <span class="n">2</span> { <span class="s">"long"</span> } <span class="k">else</span> { <span class="s">"short"</span> }
 }
 
 <span class="k">fun</span> <span class="f">main</span>() {
-    <span class="f">print</span>(<span class="f">page_size</span>())
     <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">describe</span>([<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>])<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="f">describe</span>([<span class="n">1</span>])<span class="h">}</span><span class="s">"</span>)
 
+    <span class="c">// The whole `else if` chain is decided while compiling.</span>
     <span class="k">const</span> <span class="k">if</span> DEBUG {
         <span class="f">print</span>(<span class="s">"debug on"</span>)
     } <span class="k">else</span> <span class="k">if</span> SIZES.<span class="f">len</span>() == <span class="n">3</span> {
@@ -268,12 +373,75 @@ kept 6</code></pre></div>
     <span class="k">let</span> width: i32 = <span class="k">const</span> <span class="k">if</span> DEBUG { <span class="n">64</span> } <span class="k">else</span> { <span class="n">32</span> }
     <span class="f">print</span>(width)
 }</code></pre>
-<div class="sample-out"><div class="out-head">Output</div><pre><code>4096
-long short
+<div class="sample-out"><div class="out-head">Output</div><pre><code>long short
 three sizes
 32</code></pre></div>
 </div>
-<ul><li>The condition must be something the constant folder can work out, like a <code>const</code> argument: literals, constants, <code>const</code> parameters, <code>target</code>, arithmetic and comparisons. Otherwise it's <a href="diagnostics.html#K0110">K0110</a>, or <a href="diagnostics.html#K0105">K0105</a> if it reads a local variable.</li><li>It can be an expression. Its branches then have to give a value.</li></ul>
+<ul><li>The condition must be something the constant folder can work out, like a <code>const</code> argument: literals, constants, <code>const</code> parameters, <code>target</code>, arithmetic and comparisons. Otherwise it's <a href="diagnostics.html#K0110">K0110</a>, or <a href="diagnostics.html#K0105">K0105</a> if it reads a local variable.</li><li>It can be an expression. Its branches then have to give a value.</li><li>A condition can use <a href="reflection.html">reflection</a> too: <code>const if T.kind == .Record { ... }</code>.</li></ul>
+<p>The skipped branch is where <code>const if</code> earns its keep. This function has a fast path and a fallback that calls something that doesn't exist, and it compiles, because only one branch is ever looked at:</p>
+<div class="sample" id="sample-ci_skipped" data-sample="ci_skipped" data-mode="run" data-file="ci_skipped.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>ci_skipped.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">const</span> FAST = <span class="k">true</span>
+
+<span class="k">fun</span> <span class="f">checksum</span>(data: [u8]) -&gt; u32 {
+    <span class="c">// The branch that isn't taken is parsed, but never checked: it can use</span>
+    <span class="c">// names that don't exist, or types that don't fit.</span>
+    <span class="k">const</span> <span class="k">if</span> FAST {
+        <span class="k">var</span> sum = <span class="n">0u32</span>
+        <span class="k">for</span> b <span class="k">in</span> data {
+            sum +%= b <span class="k">as</span> u32
+        }
+        sum
+    } <span class="k">else</span> {
+        <span class="f">slow_hardware_checksum</span>(data, <span class="s">"not even the right arguments"</span>)
+    }
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">print</span>(<span class="f">checksum</span>(b<span class="s">"loom"</span>))
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>439</code></pre></div>
+</div>
+<div class="try"><p>Change <code>FAST</code> to <code>false</code> and run it again. Now the fast branch is skipped, the other one is checked, and the compiler reports the missing name.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="c" data-label="C++">
+<h4>C++</h4>
+<p><code>if constexpr</code> discards a branch, but only inside a template: outside one, the discarded statement is still fully checked. Loom checks only the taken branch everywhere.</p>
+<pre class="foreign" data-lang="cpp"><code><span class="k">template</span> &lt;std::size_t N&gt;
+<span class="k">constexpr</span> <span class="k">const</span> <span class="k">char</span>* <span class="f">describe</span>() {
+    <span class="k">if</span> <span class="k">constexpr</span> (N &gt; <span class="n">2</span>) <span class="k">return</span> <span class="s">"long"</span>;
+    <span class="k">else</span> <span class="k">return</span> <span class="s">"short"</span>;
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust splits it in two. <code>#[cfg(...)]</code> removes an item before it's checked (but it must still parse), and <code>if cfg!(...)</code> is an ordinary <code>if</code>, where <em>both</em> branches are checked.</p>
+<pre class="foreign" data-lang="rust"><code>#[<span class="f">cfg</span>(windows)]
+<span class="k">fn</span> <span class="f">separator</span>() -&gt; &amp;'<span class="k">static</span> str { <span class="s">"\\"</span> }
+#[<span class="f">cfg</span>(<span class="f">not</span>(windows))]
+<span class="k">fn</span> <span class="f">separator</span>() -&gt; &amp;'<span class="k">static</span> str { <span class="s">"/"</span> }</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="d" data-label="D">
+<h4>D</h4>
+<p>D's <code>static if</code> is the closest match: a compile-time condition, and the branch not taken is not compiled.</p>
+<pre class="foreign" data-lang="d"><code>string <span class="f">describe</span>(size_t N)() {
+    static if (N &gt; <span class="n">2</span>) return <span class="s">"long"</span>;
+    else return <span class="s">"short"</span>;
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="zig" data-label="Zig">
+<h4>Zig</h4>
+<p>Zig doesn't need a keyword: an ordinary <code>if</code> on a <code>comptime</code>-known condition skips the other branch. Loom spells it out so the reader can see it's decided early.</p>
+<pre class="foreign" data-lang="zig"><code><span class="k">fn</span> <span class="f">describe</span>(<span class="k">comptime</span> n: usize) []<span class="k">const</span> u8 {
+    <span class="k">if</span> (n &gt; <span class="n">2</span>) <span class="k">return</span> <span class="s">"long"</span> <span class="k">else</span> <span class="k">return</span> <span class="s">"short"</span>;
+}</code></pre>
+</div>
+</div>
+<h3 id="what-a-condition-may-be">What a condition may be<a class="anchor" href="#what-a-condition-may-be" aria-label="Link to this section">#</a></h3>
+<p>A <code>const if</code> condition is read by the folder, so it can't call a function of yours, and it can't read a local:</p>
 <div class="sample" id="sample-ci_err_known" data-sample="ci_err_known" data-mode="check" data-file="ci_err_known.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>ci_err_known.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0105">K0105</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">fun</span> <span class="f">main</span>() {
@@ -314,8 +482,61 @@ three sizes
 
 <span class="err">error: ci_err_fold.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
+<h3 id="saying-no-const-unravel">Saying no: <code>const unravel</code><a class="anchor" href="#saying-no-const-unravel" aria-label="Link to this section">#</a></h3>
+<p>A <code>const if</code> chain is also the place to refuse the cases you don't handle. <code>const unravel("message")</code> stops the build with <a href="diagnostics.html#K0103">K0103</a>, with the instance named in a note. If the branch is never taken, it costs nothing.</p>
+<div class="sample" id="sample-ci_unravel" data-sample="ci_unravel" data-mode="check" data-file="ci_unravel.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>ci_unravel.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0103">K0103</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="c">/// Picks a width for each supported size. Anything else is refused while</span>
+<span class="c">/// the program compiles, not when it runs.</span>
+<span class="k">fun</span> lanes[<span class="k">const</span> N: usize]() -&gt; usize {
+    <span class="k">const</span> <span class="k">if</span> N &lt;= <span class="n">4</span> {
+        <span class="n">1</span>
+    } <span class="k">else</span> <span class="k">if</span> N &lt;= <span class="n">16</span> {
+        <span class="n">2</span>
+    } <span class="k">else</span> {
+        <span class="k">const</span> <span class="f">unravel</span>(<span class="s">"no lane width for </span><span class="h">{</span>N<span class="h">}</span><span class="s">"</span>)
+    }
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> a = lanes[<span class="n">4</span>]()
+    <span class="k">let</span> b = lanes[<span class="n">64</span>]()
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[K0103]: compile-time code unravelled: no lane width for 64</span>
+<span class="loc">  --&gt; ci_unravel.loom:9:9</span>
+<span class="gut">  |</span>
+<span class="gut">9 |</span>         const unravel("no lane width for {N}")
+<span class="gut">  |</span><span class="caret">         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ while running this</span>
+<span class="gut">  |</span>
+<span class="loc">  = note: it unravelled at ci_unravel.loom:9:15</span>
+<span class="loc">  = help: unravelling while compiling is a compile error</span>
+<span class="loc">  = note: in `lanes` with `N = 64`</span>
+
+<span class="err">error: ci_unravel.loom failed to compile (1 error)</span></code></pre></div>
+</div>
+<div class="try"><p>Change <code>lanes[64]()</code> to <code>lanes[16]()</code>. Now it takes the second branch, and the program compiles.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="zig" data-label="Zig">
+<h4>Zig</h4>
+<p><code>@compileError</code> is the same tool, and is how a Zig function rejects a type it doesn't support.</p>
+<pre class="foreign" data-lang="zig"><code><span class="k">fn</span> <span class="f">lanes</span>(<span class="k">comptime</span> n: usize) usize {
+    <span class="k">if</span> (n &lt;= <span class="n">4</span>) <span class="k">return</span> <span class="n">1</span>;
+    <span class="k">if</span> (n &lt;= <span class="n">16</span>) <span class="k">return</span> <span class="n">2</span>;
+    @<span class="f">compileError</span>(<span class="s">"no lane width for this size"</span>);
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p><code>compile_error!</code> is a macro that fails the build whenever the compiler sees it, so it is only useful inside a <code>#[cfg]</code> that is off; a <code>const</code> panic is the closest to Loom's version.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">const</span> <span class="k">fn</span> <span class="f">lanes</span>(n: usize) -&gt; usize {
+    <span class="k">if</span> n &lt;= <span class="n">4</span> { <span class="n">1</span> } <span class="k">else</span> <span class="k">if</span> n &lt;= <span class="n">16</span> { <span class="n">2</span> } <span class="k">else</span> { <span class="f">panic!</span>(<span class="s">"no lane width"</span>) }
+}
+<span class="k">const</span> LANES: usize = <span class="f">lanes</span>(<span class="n">64</span>); <span class="c">// error: evaluation of constant value failed</span></code></pre>
+</div>
+</div>
 <h2 id="const-for"><code>const for</code><a class="anchor" href="#const-for" aria-label="Link to this section">#</a></h2>
-<p><code>const for</code> is unrolled while compiling. Its body is checked once for each item, with the loop variable known at compile time, so each copy can use it in a type (<code>[0u8; i + 1]</code> above and below). It goes over a range, an array literal, a constant that holds an array, or <code>.indexed()</code> of one of those. It can run at most 10,000 times (<a href="diagnostics.html#K0102">K0102</a>). <code>break</code> and <code>continue</code> can't target a <code>const for</code> yet (<a href="diagnostics.html#U0102">U0102</a>).</p>
+<p><code>const for</code> is unrolled while compiling. Its body is checked once for each item, with the loop variable known at compile time, so each copy can use it in a type (<code>[0u8; i + 1]</code> below). It goes over a range, an array literal of numbers, a constant that holds such an array, or <code>.indexed()</code> of one of those. The items must be things the folder can work out, so integers and <code>bool</code>s; an array of strings is <a href="diagnostics.html#K0110">K0110</a>.</p>
 <div class="sample" id="sample-ci_for" data-sample="ci_for" data-mode="run" data-file="ci_for.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>ci_for.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
@@ -345,6 +566,87 @@ three sizes
 2: [0, 0, 0]
 37</code></pre></div>
 </div>
+<ul><li>It can run at most 10 000 times (<a href="diagnostics.html#K0102">K0102</a>).</li><li><code>break</code> and <code>continue</code> can't target a <code>const for</code> yet (<a href="diagnostics.html#U0102">U0102</a>).</li><li>Each copy of the body is a block of its own, checked on its own: a <code>const if</code> on the loop variable can pick different code for each.</li></ul>
+<p>A <code>const for</code> over <code>0..N</code> turns a loop into straight-line code for each instance:</p>
+<div class="sample" id="sample-ci_dot" data-sample="ci_dot" data-mode="run" data-file="ci_dot.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>ci_dot.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">/// The loop is unrolled for each `N`: `dot` on three numbers is three</span>
+<span class="c">/// multiplications and no loop.</span>
+<span class="k">fun</span> dot[<span class="k">const</span> N: usize](a: [i32; N], b: [i32; N]) -&gt; i32 {
+    <span class="k">var</span> sum = <span class="n">0</span>
+    <span class="k">const</span> <span class="k">for</span> i <span class="k">in</span> <span class="n">0</span>..N {
+        sum += a[i] * b[i]
+    }
+    sum
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">print</span>(<span class="f">dot</span>([<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>], [<span class="n">4</span>, <span class="n">5</span>, <span class="n">6</span>]))
+    <span class="f">print</span>(<span class="f">dot</span>([<span class="n">2</span>, <span class="n">2</span>], [<span class="n">10</span>, <span class="n">20</span>]))
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>32
+60</code></pre></div>
+</div>
+<p>Past the limit, the compiler says so, and suggests a plain <code>for</code>:</p>
+<div class="sample" id="sample-ci_err_limit" data-sample="ci_err_limit" data-mode="check" data-file="ci_err_limit.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>ci_err_limit.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#K0102">K0102</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">var</span> total = <span class="n">0</span>
+    <span class="c">// `const for` writes its body out once per item, up to 10 000 times.</span>
+    <span class="k">const</span> <span class="k">for</span> i <span class="k">in</span> <span class="n">0</span>..<span class="n">10001</span> {
+        total += i
+    }
+    <span class="f">print</span>(total)
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[K0102]: a `const for` over more than 10000 items</span>
+<span class="loc">  --&gt; ci_err_limit.loom:6:20</span>
+<span class="gut">  |</span>
+<span class="gut">6 |</span>     const for i in 0..10001 {
+<span class="gut">  |</span><span class="caret">                    ^^^^^^^^ at most 10000 items are written out</span>
+<span class="gut">  |</span>
+<span class="loc">  = help: use a plain `for`, which runs when the program does</span>
+
+<span class="err">error: ci_err_limit.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<div class="try"><p>In <code>ci_for</code>, change <code>0..3</code> to <code>0..5</code>. The output grows, and <code>[0u8; i + 1]</code> is checked for each of the five lengths.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="zig" data-label="Zig">
+<h4>Zig</h4>
+<p><code>inline for</code> is the same thing: the loop is unrolled at compile time, and each iteration can have a different type.</p>
+<pre class="foreign" data-lang="zig"><code><span class="k">fn</span> <span class="f">dot</span>(<span class="k">comptime</span> N: usize, a: [N]i32, b: [N]i32) i32 {
+    <span class="k">var</span> sum: i32 = <span class="n">0</span>;
+    inline <span class="k">for</span> (<span class="n">0</span>..N) |i| sum += a[i] * b[i];
+    <span class="k">return</span> sum;
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="d" data-label="D">
+<h4>D</h4>
+<p><code>static foreach</code> unrolls a loop at compile time, and can also generate declarations.</p>
+<pre class="foreign" data-lang="d"><code>int <span class="f">dot</span>(size_t N)(int[N] a, int[N] b) {
+    int sum = <span class="n">0</span>;
+    static foreach (i; <span class="n">0</span> .. N) sum += a[i] * b[i];
+    return sum;
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="c" data-label="C++">
+<h4>C++</h4>
+<p>C++ has no compile-time loop. The idiom is a parameter pack of indices, expanded by a fold expression.</p>
+<pre class="foreign" data-lang="cpp"><code><span class="k">template</span> &lt;std::size_t N, std::size_t... I&gt;
+<span class="k">constexpr</span> <span class="k">int</span> <span class="f">dot_impl</span>(<span class="k">const</span> std::array&lt;<span class="k">int</span>, N&gt;&amp; a, <span class="k">const</span> std::array&lt;<span class="k">int</span>, N&gt;&amp; b,
+                       std::index_sequence&lt;I...&gt;) {
+    <span class="k">return</span> ((a[I] * b[I]) + ...);
+}
+<span class="k">template</span> &lt;std::size_t N&gt;
+<span class="k">constexpr</span> <span class="k">int</span> <span class="f">dot</span>(<span class="k">const</span> std::array&lt;<span class="k">int</span>, N&gt;&amp; a, <span class="k">const</span> std::array&lt;<span class="k">int</span>, N&gt;&amp; b) {
+    <span class="k">return</span> <span class="f">dot_impl</span>(a, b, std::make_index_sequence&lt;N&gt;{});
+}</code></pre>
+</div>
+</div>
 <h2 id="target"><code>target</code><a class="anchor" href="#target" aria-label="Link to this section">#</a></h2>
 <p><code>target</code> is a <code>std.target.Target</code>, always in scope. It has <code>os</code>, <code>arch</code>, <code>endian</code> and <code>pointer_bits</code>, and is known at compile time, so it works in <code>const if</code>. It describes the machine doing the build, and <code>pointer_bits</code> is 64 on Treadle (the Lua backend reports 63). See <a href="../std/modules/target.html">std.target</a>.</p>
 <div class="sample" id="sample-ci_target" data-sample="ci_target" data-mode="run" data-file="ci_target.loom" data-runnable>
@@ -370,8 +672,34 @@ three sizes
 true
 1</code></pre></div>
 </div>
-<h2 id="not-supported-yet">Not supported yet<a class="anchor" href="#not-supported-yet" aria-label="Link to this section">#</a></h2>
-<p><code>std.sys</code>, and <code>const fun</code>s that return types are not built. <code>const</code> parameters of other types than integers and <code>bool</code> aren't either. See <a href="not-yet.html">Not supported yet</a>.</p>
+<div class="try"><p>Add <code>print(target.arch)</code> to <code>main</code>, and see which case your machine is.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Rust asks the same question with <code>cfg!</code> or an attribute, or reads the strings in <code>std::env::consts</code>.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> sep = <span class="k">if</span> <span class="f">cfg!</span>(windows) { <span class="s">"\\"</span> } <span class="k">else</span> { <span class="s">"/"</span> };
+<span class="k">let</span> os = std::env::consts::OS; <span class="c">// "windows", "linux", ...</span></code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="zig" data-label="Zig">
+<h4>Zig</h4>
+<p>Zig's <code>@import("builtin")</code> has a <code>target</code> with the same fields, and a comptime <code>if</code> on it drops the other branch.</p>
+<pre class="foreign" data-lang="zig"><code><span class="k">const</span> builtin = @<span class="f">import</span>(<span class="s">"builtin"</span>);
+<span class="k">const</span> sep = <span class="k">if</span> (builtin.target.os.tag == .windows) <span class="s">"\\"</span> <span class="k">else</span> <span class="s">"/"</span>;</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Go decides at the file level: build tags and <code>_windows.go</code> file suffixes pick which files exist, and <code>runtime.GOOS</code> is a run-time string.</p>
+<pre class="foreign" data-lang="go"><code><span class="c">// separator_windows.go</span>
+<span class="c">//go:build windows</span>
+
+<span class="k">package</span> main
+
+<span class="k">const</span> separator = <span class="s">`\`</span></code></pre>
+</div>
+</div>
+<h2 id="where-next">Where next<a class="anchor" href="#where-next" aria-label="Link to this section">#</a></h2>
+<p><a href="reflection.html">Reflection</a> asks a type about its fields and cases, and uses <code>const for</code> to write code for each one. <code>std.sys</code>, <code>const</code> parameters that aren't integers or <code>bool</code>, and <code>break</code> in a <code>const for</code> are listed in <a href="not-yet.html">Not supported yet</a>.</p>
 <nav class="pager" aria-label="Chapters">
 <a class="prev" href="compile-time.html"><span class="dir">&larr; Chapter 11</span>Compile-time code</a>
 <a class="next" href="reflection.html"><span class="dir">Chapter 13 &rarr;</span>Reflection</a>

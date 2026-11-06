@@ -5,7 +5,7 @@ weft Widget {
     fun width(self) -> u16 = 1
 }
 
-warp Label: Widget, Show {
+warp Label: Widget {
     text: String
     fun name(self) -> String = "label '{.text}'"
     fun width(self) -> u16 = .text.len() as u16
@@ -15,24 +15,16 @@ warp Spacer: Widget {
     fun name(self) -> String = "spacer"
 }
 
-// Several wefts at once: a value that is both.
-fun describe(w: any (Widget + Show)) -> String = "{w.name()} = {w}"
-
 fun main() {
-    // `any Widget` holds a value of some type that weaves Widget,
-    // and calls go through a table at run time.
+    // `any Widget` holds a value of some type that weaves Widget.
+    // The list mixes types, and calls go through a table at run time.
     let ui: List[any Widget] = [Label("hi"), Spacer(), Label("there")]
+
     var total: u16 = 0
     for w in ui {
         print(w.name())
         total += w.width()
-
-        // A type test.
-        if w is l: Label {
-            print("  a label with {l.text.len()} letters")
-        }
     }
-    print(total)
-    print(describe(Label("x")))
+    print("total width {total}")
 }
 //@ run

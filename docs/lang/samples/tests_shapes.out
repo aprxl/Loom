@@ -1,0 +1,5 @@
+running 2 tests
+test push_then_pop ... ok
+test len ... ok
+
+test result: ok. 2 passed; 0 failed

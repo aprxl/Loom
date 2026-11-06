@@ -1,0 +1,9 @@
+error[C0406]: `break` can't leave an iteration of a `loom for`
+  --> docs/lang/samples/threads_err_break.loom:6:21
+  |
+6 |         if i == 5 { break }          // each iteration is a thread of its own
+  |                     ^^^^^ each iteration is a thread of its own
+  |
+  = help: end the iteration with `continue`, or handle it in the body
+
+error: docs/lang/samples/threads_err_break.loom failed to resolve (1 error)

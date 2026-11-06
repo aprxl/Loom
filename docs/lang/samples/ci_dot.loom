@@ -1,0 +1,17 @@
+use std.io.print
+
+/// The loop is unrolled for each `N`: `dot` on three numbers is three
+/// multiplications and no loop.
+fun dot[const N: usize](a: [i32; N], b: [i32; N]) -> i32 {
+    var sum = 0
+    const for i in 0..N {
+        sum += a[i] * b[i]
+    }
+    sum
+}
+
+fun main() {
+    print(dot([1, 2, 3], [4, 5, 6]))
+    print(dot([2, 2], [10, 20]))
+}
+//@ run

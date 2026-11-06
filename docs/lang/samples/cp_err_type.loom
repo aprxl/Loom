@@ -1,0 +1,7 @@
+// A `const` parameter is an integer or a `bool` for now.
+fun shout(const word: str) -> str = word
+
+fun main() {
+    let s = shout("hello")
+}
+//@ check-fail T0101

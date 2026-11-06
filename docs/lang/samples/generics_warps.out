@@ -1,0 +1,4 @@
+Stack(items: [1, 2]) peek=some(2) len=2
+2
+Stack(items: ["warp", "weft"])
+Pair(first: 1, second: "one") -> Pair(first: "one", second: 1)

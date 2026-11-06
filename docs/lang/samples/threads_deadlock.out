@@ -1,0 +1,7 @@
+waiting for a job
+--- stderr ---
+unravel: deadlock: every thread is waiting
+  --> docs/lang/samples/threads_deadlock.loom:9:9
+  |
+9 |         print(jobs.recv())
+  |         ^

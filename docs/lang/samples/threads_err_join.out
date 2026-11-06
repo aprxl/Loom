@@ -1,0 +1,11 @@
+error[C0402]: `count` is used while a thread changes it
+  --> docs/lang/samples/threads_err_join.loom:7:15
+  |
+6 |         let t = thread { count += 1 }
+  |                 --------------------- this thread changes it, and hasn't been joined
+7 |         print(count)                 // the thread may be changing it
+  |               ^^^^^ used here
+  |
+  = help: `join` the thread first, or give it its own copy
+
+error: docs/lang/samples/threads_err_join.loom failed to type-check (1 error)

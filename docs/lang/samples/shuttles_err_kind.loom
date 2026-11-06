@@ -1,0 +1,13 @@
+// A sink only pulls: it has no `~> T` to yield into.
+fun sink() <~ i32 {
+    yield 1
+}
+
+// A generator only yields: there's no `<~ U` to pull from.
+fun gen() ~> i32 {
+    let x = pull
+    yield 1
+}
+
+fun main() {}
+//@ check-fail T0120 T0120

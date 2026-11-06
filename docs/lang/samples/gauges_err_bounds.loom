@@ -1,0 +1,6 @@
+fun limit() -> u16 = 5
+
+type Small = u16 where 0..limit()
+
+fun main() {}
+//@ check-fail T0103

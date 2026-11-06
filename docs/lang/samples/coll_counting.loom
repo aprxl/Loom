@@ -1,0 +1,32 @@
+use std.io.print
+
+fun main() {
+    // `entry(key, default)` is a place you can change: it adds the key if it is new.
+    var counts: Map[String, u32] = Map()
+    for word in "the cat and the hat and the bat".words() {
+        counts.entry(word.to_string(), 0) += 1
+    }
+    print(counts)
+
+    // `update` applies a function to one value.
+    counts.update("cat", _ * 10)
+    print(counts.get("cat"))
+
+    // Maps can hold lists.
+    var by_len: Map[usize, List[String]] = Map()
+    for word in ["one", "two", "three", "four", "five"] {
+        by_len.entry(word.len(), []).push(word.to_string())
+    }
+    print(by_len)
+
+    // Keep only some entries, then merge another map in.
+    counts.retain((k, n) => n > 1)
+    let extra: Map[String, u32] = ["the": 100, "end": 1]
+    counts.merge(extra, (a, b) => a + b)
+    print(counts)
+
+    // The same map, built another way: counts of a stream.
+    print("mississippi".chars().counts())
+    print("a1b22c333".chars().filter(_.is_digit()).counts().get('3'))
+}
+//@ run

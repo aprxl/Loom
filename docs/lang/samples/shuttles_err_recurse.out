@@ -1,0 +1,10 @@
+error[T0121]: shuttle `count_down` can't make another `count_down` inside itself
+  --> docs/lang/samples/shuttles_err_recurse.loom:4:18
+  |
+4 |         for x in count_down(n - 1) { yield x }
+  |                  ^^^^^^^^^^ this shuttle would be part of its own frame
+  |
+  = note: a shuttle's frame is stored inside the shuttle value, so it has a size known when compiling
+  = help: allocate the inner one, `^name(…)`, which needs spools (not implemented yet)
+
+error: docs/lang/samples/shuttles_err_recurse.loom failed to type-check (1 error)

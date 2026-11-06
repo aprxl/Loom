@@ -1,32 +1,36 @@
 use std.io.print
 
-fun total(xs: [i32]) -> i32 {                 // `[i32]` is a slice: arrays and lists pass as one
-    var t = 0
-    for x in xs { t += x }
-    t
-}
-
 fun main() {
-    let fixed = [1, 2, 3]                    // an array: `[i32; 3]`
-    let zeros = [0u8; 4]                     // repeat: four zero bytes
-    var xs: List[i32] = [5, 3, 8]            // a literal where a list is expected
-    xs.push(1)
-    xs.insert(0, 9)
+    // `List[T]` grows. A literal becomes a list where a list is expected.
+    var xs: List[i32] = [5, 3, 8]
+    xs.push(1)                               // add at the end
+    xs.insert(0, 9)                          // add at a position
     print("{xs} len {xs.len()} first {xs.first():?} last {xs.last():?}")
 
+    print("{xs.pop():?} {xs.remove(0)} {xs}")
+
+    xs.extend([4, 4, 7, 7, 7])               // add many at once
+    xs.dedup()                               // collapse runs of equal items
     xs.sort()
     print(xs)
-    print("{total(fixed)} {total(xs)} {total(xs[1..3])}")   // slicing makes a view
-    print("{zeros} {xs.contains(8)} {xs.index_of(8):?}")
 
-    // Indexing is bounds-checked; `get` gives an optional instead.
-    print("{xs[0]} {xs.get(99):?}")
-
-    // `for mut` edits the elements in place.
-    for mut x in xs { x *= 2 }
+    xs.retain(_ != 4)                        // keep what the lambda likes
+    xs.truncate(3)
     print(xs)
 
-    print(xs.map(_ + 1))
-    print(xs.chunks(2).collect())
+    // Searching and getting.
+    print("{xs.contains(8)} {xs.index_of(8):?} {xs.get(99):?}")
+
+    // A list of a given size, and a copy that is independent.
+    var row = List.filled(0, 4)
+    let backup = row.copy()
+    row[2] = 7
+    print("{row} {backup}")
+
+    // Not every list is full of numbers.
+    var names: List[String] = List()
+    names.push("ada")
+    names.push("grace")
+    print("{names} {names.len()}")
 }
 //@ run

@@ -1,0 +1,28 @@
+use std.io.print
+
+type Cents = i64 where 0..
+type Pct = u8 where 0..=100
+
+fun main() {
+    let a: Cents = 250
+    let b: Cents = 100
+
+    // The compiler follows the interval through these, so each is a Cents.
+    let sum: Cents = a + b
+    let twice: Cents = a * 2
+    let third: Cents = a / 3
+    let rest: Cents = a % 7
+    let bigger: Cents = a.max(b)
+    print("{sum} {twice} {third} {rest} {bigger}")
+
+    let x: Pct = 40
+    let half: Pct = x / 2
+    let low: Pct = x.min(60)
+    print("{half} {low}")
+
+    // But a - b can go below zero, so it is a plain i64.
+    let diff = a - b
+    let signed: i64 = diff
+    print(signed)
+}
+//@ run

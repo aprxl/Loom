@@ -1,5 +1,6 @@
-Point(x: 3.0, y: 4.0) Point(x: 0.0, y: 2.0) 5
-Point(x: 0.0, y: 0.0) Point(x: 1.0, y: 0.0)
-Point(x: 2.5, y: 0.0)
-Point(x: 13.0, y: 4.0) Point(x: 3.0, y: 4.0)
+Point(x: 3.0, y: 4.0) Point(x: 0.0, y: 2.0) Point(x: 0.0, y: 0.0)
+Window(title: "notes", width: 800, height: 480)
+Point(x: 10.0, y: 20.0)
+3 4 10 20
+notes is 800x480
 Meters(5.5) 5.5

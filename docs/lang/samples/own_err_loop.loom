@@ -1,0 +1,7 @@
+fun main() {
+    var xs: List[i32] = [1, 2, 3]
+    for x in xs {
+        if x == 2 { xs.push(9) }
+    }
+}
+//@ check-fail M0105

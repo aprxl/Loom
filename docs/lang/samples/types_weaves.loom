@@ -1,0 +1,38 @@
+use std.io.print
+
+warp Money {
+    cents: i64
+}
+
+// A weave adds behavior to a warp from outside. `Show` is what `{m}` calls.
+weave Show into Money {
+    fun show(self, mut f: Fmt) {
+        f.put("${.cents / 100}.{.cents % 100:02}")
+    }
+}
+
+// `==` calls `eq`.
+weave Eq into Money {
+    fun eq(self, other: Money) -> bool = .cents == other.cents
+}
+
+warp Card: Show, Eq {
+    rank: u8
+    suit: char
+}
+
+// `<` calls `lt`, and with it `sort`, `min`, `max` and friends work.
+weave Ord into Card {
+    fun lt(self, other: Card) -> bool = .rank < other.rank
+}
+
+fun main() {
+    let price = Money(1234)
+    print("{price} costs {price == Money(1234)} {price:?}")
+
+    var hand = [Card(10, 'h'), Card(2, 's'), Card(7, 'd')]
+    hand.sort()
+    print(hand)
+    print("{Card(3, 'x') < Card(4, 'y')} {hand.max():?}")
+}
+//@ run

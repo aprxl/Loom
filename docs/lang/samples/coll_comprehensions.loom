@@ -1,0 +1,22 @@
+use std.io.print
+
+fun main() {
+    // `[for pattern in items if condition => value]` builds a List.
+    let squares = [for n in 1..=5 => n * n]
+    let even_squares = [for n in 1..=10 if n % 2 == 0 => n * n]
+    print("{squares} {even_squares}")
+
+    // The pattern can take a tuple apart.
+    let labels = [for (i, c) in "abc".chars().indexed() => "{i}{c}"]
+    print(labels)
+
+    // It is the loop that pushes each item, so it works over any collection.
+    let names = ["ada", "grace", "alan", "edsger"]
+    let shout = [for s in names if s.starts_with("a") => s.to_upper()]
+    print(shout)
+
+    // A comprehension inside a comprehension: a multiplication table.
+    let table = [for r in 1..=3 => [for c in 1..=3 => r * c]]
+    print(table)
+}
+//@ run

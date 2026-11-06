@@ -1,0 +1,37 @@
+use std.io.print
+
+// A warp with type parameters. Each use fixes them: `Stack[i32]`, `Stack[str]`.
+warp Stack[T]: Show {
+    items: List[T] = []
+
+    fun push(mut self, take x: T) { .items.push(x) }
+    fun pop(mut self) -> ?T = .items.pop()
+    fun len(self) -> usize = .items.len()
+
+    // A method can add its own bound, needed only if it is used.
+    fun peek(self) -> ?T where T: Copy = .items.last()
+}
+
+warp Pair[A, B]: Show {
+    first: A
+    second: B
+
+    fun swap(self) -> Pair[B, A] = Pair(.second, .first)
+}
+
+fun main() {
+    var nums: Stack[i32] = Stack()
+    nums.push(1)
+    nums.push(2)
+    print("{nums} peek={nums.peek():?} len={nums.len()}")
+    print(nums.pop())
+
+    var words = Stack[str]()                 // or say the type at the call
+    words.push("warp")
+    words.push("weft")
+    print(words)
+
+    let p = Pair(1, "one")                   // Pair[i32, str], inferred
+    print("{p} -> {p.swap()}")
+}
+//@ run

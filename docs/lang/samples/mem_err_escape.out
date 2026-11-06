@@ -1,0 +1,10 @@
+error[R0101]: `^Expr@spool` is in another region than `^Expr`
+   --> docs/lang/samples/mem_err_escape.loom:13:5
+   |
+13 |     parse(1.0, given: tmp)
+   |     ^^^^^^^^^^^^^^^^^^^^^^ this is `^Expr@spool`
+   |
+   = note: `^T` with no region is a pointer into the heap; `^T@s` one into the spool `s`
+   = help: take `given out: Spool` and return `^T@out`
+
+error: docs/lang/samples/mem_err_escape.loom failed to type-check (1 error)

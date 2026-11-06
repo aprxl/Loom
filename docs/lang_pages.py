@@ -246,10 +246,24 @@ def parse_compare(fname, lines):
 # ---------------------------------------------------------------- rendering
 
 def _italics(html):
-    """*italics* in already-rendered inline HTML (outside tags and code)."""
+    """**bold** and *italics* in already-rendered inline HTML. The markers sit
+    outside tags and code, but bold may span a code span or a link
+    (`**the `mend` around it**`), so its markers pair up across them."""
     parts = re.split(r"(<code>.*?</code>|<[^>]+>)", html)
-    for k in range(0, len(parts), 2):
-        parts[k] = re.sub(r"(?<![\w*])\*([^*\s][^*]*?)\*(?![\w*])", r"<em>\1</em>", parts[k])
+    texts = range(0, len(parts), 2)
+    markers = sum(parts[k].count("**") for k in texts)
+    opening = True
+    for k in texts:
+        pieces = parts[k].split("**")
+        out = pieces[0]
+        for piece in pieces[1:]:
+            if markers >= 2 or not opening:
+                out += ("<strong>" if opening else "</strong>") + piece
+                markers -= 1
+                opening = not opening
+            else:
+                out += "**" + piece
+        parts[k] = re.sub(r"(?<![\w*])\*([^*\s][^*]*?)\*(?![\w*])", r"<em>\1</em>", out)
     return "".join(parts)
 
 

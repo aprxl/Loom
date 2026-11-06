@@ -1,0 +1,9 @@
+error[M0107]: the spool `frame` can't be moved
+  --> docs/lang/samples/mem_err_move.loom:5:17
+  |
+5 |     let other = frame
+  |                 ^^^^^ a spool stays where it was made
+  |
+  = help: lend it: `given: frame`
+
+error: docs/lang/samples/mem_err_move.loom failed to type-check (1 error)

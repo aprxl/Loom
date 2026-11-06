@@ -1,6 +1,6 @@
 some(2) none
-some(9) none
-0
-could not add: Invalid
--1
-found late at 3
+some(5) none
+some(6) none
+true ok(5)
+5 is at 1
+9 is late, at 3

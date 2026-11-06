@@ -17,16 +17,14 @@ pub once warp Tx {
     }
 }
 
-fun transfer(good: bool) {
-    var tx = Tx.begin()
-    defer tx => tx.rollback()                // runs only if `tx` is still loose
-    tx.credit(5)
-    if not good { return }                   // leaving early rolls back
-    tx.commit()                              // used up: the defer does nothing
-}
-
 fun main() {
-    transfer(true)
-    transfer(false)
+    var a = Tx.begin()
+    a.credit(5)
+    a.credit(7)
+    a.commit()
+
+    var b = Tx.begin()
+    b.credit(1)
+    b.rollback()
 }
 //@ run

@@ -1,0 +1,17 @@
+/// Picks a width for each supported size. Anything else is refused while
+/// the program compiles, not when it runs.
+fun lanes[const N: usize]() -> usize {
+    const if N <= 4 {
+        1
+    } else if N <= 16 {
+        2
+    } else {
+        const unravel("no lane width for {N}")
+    }
+}
+
+fun main() {
+    let a = lanes[4]()
+    let b = lanes[64]()
+}
+//@ check-fail K0103

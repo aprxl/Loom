@@ -1,0 +1,13 @@
+error[T0118]: `return` can't leave a `defer`
+  --> docs/lang/samples/own_err_defer.loom:4:11
+  |
+4 |     defer return 3
+  |           ^^^^^^^^
+  |           |
+  |           this would leave the deferred code
+  |           it runs when the scope ends, from here
+  |
+  = note: a `defer` runs while its scope is already ending, so it can't change where that goes
+  = help: handle it inside: `mend`, or an `if`
+
+error: docs/lang/samples/own_err_defer.loom failed to type-check (1 error)

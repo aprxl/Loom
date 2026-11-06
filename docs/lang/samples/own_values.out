@@ -1,0 +1,2 @@
+Point(x: 1, y: 2) Point(x: 10, y: 2)
+Person(name: "ann", age: 30)

@@ -1,0 +1,17 @@
+error[U0102]: not implemented yet: generic wefts
+  --> docs/lang/samples/nyet_limits.loom:4:6
+  |
+4 | weft From[T] {
+  |      ^^^^ not supported by this compiler yet
+  |
+  = note: the type checker grows one milestone at a time; see design/lua-backend.md
+
+error[U0102]: not implemented yet: `f16` and integers wider than 64 bits
+   --> docs/lang/samples/nyet_limits.loom:10:15
+   |
+10 |     let wide: i128 = 1
+   |               ^^^^ not supported by this compiler yet
+   |
+   = note: the type checker grows one milestone at a time; see design/lua-backend.md
+
+error: docs/lang/samples/nyet_limits.loom failed to type-check (2 errors)

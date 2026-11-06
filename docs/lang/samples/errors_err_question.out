@@ -1,0 +1,9 @@
+error[T0101]: `?` has nowhere to go
+  --> docs/lang/samples/errors_err_question.loom:5:13
+  |
+5 |     let n = "12".parse[i32]()?
+  |             ^^^^^^^^^^^^^^^^^^ no `mend` around it, and the function can't fail
+  |
+  = help: put it inside the left of a `mend`, or return `?T` or `T ! E`
+
+error: docs/lang/samples/errors_err_question.loom failed to type-check (1 error)

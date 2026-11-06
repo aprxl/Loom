@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>Pointers, spools and given · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -55,19 +56,78 @@
 <div class="chapter-head">
 <span class="chapter-no">Chapter 8</span>
 <h1>Pointers, spools and <code>given</code></h1>
-<p class="summary">Boxes on the heap, arenas that free everything at once, and values passed down implicitly.</p>
+<p class="summary">Boxes on the heap, arenas that free everything at once, regions that keep pointers honest, and values passed down implicitly.</p>
 </div>
-<h2 id="pointers">Pointers<a class="anchor" href="#pointers" aria-label="Link to this section">#</a></h2>
-<p><code>^e</code> puts a value in a box on the heap and gives a pointer to it, written <code>^T</code>. A pointer owns its box: it moves like any non-<code>Copy</code> value, and dropping it drops the value and frees the box. That is how a type holds itself (<code>^Tree</code> inside <code>Tree</code>). <code>p^</code> reads the box. Fields, methods, patterns and <code>{p}</code> see through a pointer, so <code>t.value</code> and <code>match t { .Node(l, x, r) =&gt; ... }</code> work on a <code>^Tree</code>. A pointer in a <code>var</code> can be written through (<code>p.x = 1</code>, <code>p^ += 1</code>).</p>
-<div class="sample" id="sample-own_pointers" data-sample="own_pointers" data-mode="run" data-file="own_pointers.loom" data-runnable>
-<div class="sample-head"><span class="file"><span class="dot"></span>own_pointers.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<p>Most values in Loom live right where they're declared: in a variable, a field, a list. That covers a great deal. But some data has to be <em>linked</em>: a tree whose nodes hold their children, a graph, a cache. For those you need pointers, and in most languages pointers are where memory bugs live.</p>
+<p>Loom's pointers are checked. This chapter has three parts. First, <strong>boxes</strong>: <code>^e</code> puts a value on the heap and gives you a pointer that owns it. Then <strong>spools</strong>: named allocators, such as arenas that free a whole batch at once, with a <strong>region checker</strong> that makes sure no pointer outlives the spool it points into. Finally <strong><code>given</code></strong>, the way a function says what it needs from its caller (an allocator, a logger, an output) without threading it through every call by hand.</p>
+<h2 id="boxes-e-and-t">Boxes: <code>^e</code> and <code>^T</code><a class="anchor" href="#boxes-e-and-t" aria-label="Link to this section">#</a></h2>
+<p><code>^e</code> puts the value of <code>e</code> in a box on the heap and gives you a pointer to it, whose type is <code>^T</code>. <strong>A pointer owns its box.</strong> It moves like any non-<code>Copy</code> value, and dropping it drops the value and frees the box, so there's nothing to free by hand and nothing to leak.</p>
+<p><code>p^</code> reads the box. Everything else looks through it: fields, methods, <code>==</code>, <code>&lt;</code>, hashing, patterns and <code>{p}</code> in a template all see the value inside. A pointer in a <code>var</code> can be written through (<code>p^ += 1</code>, <code>p.x = 1</code>).</p>
+<div class="sample" id="sample-mem_box" data-sample="mem_box" data-mode="run" data-file="mem_box.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>mem_box.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
+<span class="k">fun</span> <span class="f">bump</span>(<span class="k">mut</span> p: ^i32) {
+    p^ += <span class="n">1</span>                        <span class="c">// write through the box</span>
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">var</span> n = ^<span class="n">41</span>                    <span class="c">// 41, in a box on the heap</span>
+    <span class="f">bump</span>(<span class="k">mut</span> n)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>n^<span class="h">}</span><span class="s">"</span>)                  <span class="c">// `n^` reads what's in the box</span>
+
+    <span class="k">let</span> s = ^<span class="s">"moved"</span>.<span class="f">to_string</span>()
+    <span class="k">let</span> t = s^                     <span class="c">// a `String` isn't `Copy`: this moves it out</span>
+    <span class="f">print</span>(t)
+
+    <span class="k">let</span> a = ^[<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]
+    <span class="k">let</span> b = ^[<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>a == b<span class="h">}</span><span class="s"> </span><span class="h">{</span>a.<span class="f">len</span>()<span class="h">}</span><span class="s"> </span><span class="h">{</span>a<span class="h">}</span><span class="s">"</span>)   <span class="c">// `==`, methods and `{}` look through the box</span>
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>42
+moved
+true 3 [1, 2, 3]</code></pre></div>
+</div>
+<p>A <code>^T</code> is one machine word, and <code>?^T</code> (a pointer that might be absent) costs nothing extra, because a pointer is never null. A box costs about 10 ns to allocate, read and free.</p>
+<div class="try"><p>Add <code>print(s)</code> at the end of <code>main</code>. Taking the <code>String</code> out of the box moved it, so the pointer <code>s</code> is spent (<a href="diagnostics.html#M0101">M0101</a>). Change <code>^"moved".to_string()</code> to <code>^"moved"</code> and it works again: a <code>str</code> is <code>Copy</code>, so reading it out leaves the box intact.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p><code>^T</code> is <code>Box&lt;T&gt;</code>: an owning heap pointer, moved by default and freed when dropped. Loom's differences are small ones: <code>^e</code> is the whole constructor (no <code>Box::new</code>), and <code>p^</code> reads instead of <code>*p</code>.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> <span class="k">mut</span> n = <span class="k">Box</span>::<span class="f">new</span>(<span class="n">41</span>);
+*n += <span class="n">1</span>;
+<span class="f">println!</span>(<span class="s">"{}"</span>, *n);</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="c" data-label="C++">
+<h4>C++</h4>
+<p><code>std::unique_ptr</code> is the same idea with the same single owner. Loom's version can't be null and can't be used after a move, and both are checked at compile time.</p>
+<pre class="foreign" data-lang="cpp"><code><span class="k">auto</span> n = std::make_unique&lt;<span class="k">int</span>&gt;(<span class="n">41</span>);
+*n += <span class="n">1</span>;
+std::cout &lt;&lt; *n;</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>In Go every pointer is shared and the garbage collector decides when the memory goes. Loom has no collector, so a pointer is an owner: only one place holds a <code>^T</code>, and when that place is gone, so is the box.</p>
+<pre class="foreign" data-lang="go"><code>n := <span class="f">new</span>(int)
+*n = <span class="n">41</span>
+*n++</code></pre>
+</div>
+</div>
+<h2 id="types-that-hold-themselves">Types that hold themselves<a class="anchor" href="#types-that-hold-themselves" aria-label="Link to this section">#</a></h2>
+<p>A warp can hold a pointer to its own kind: a <code>Tree</code> with <code>^Tree</code> fields has no fixed size otherwise. This is also how you build lists, expression trees and graphs.</p>
+<div class="sample" id="sample-mem_tree" data-sample="mem_tree" data-mode="run" data-file="mem_tree.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>mem_tree.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">// A tree holds itself through pointers: a `^Tree` is a box with a `Tree` in it.</span>
 <span class="k">warp</span> <span class="t">Tree</span> {
     <span class="k">case</span> <span class="t">Leaf</span>
     <span class="k">case</span> <span class="t">Node</span>(left: ^<span class="t">Tree</span>, value: i32, right: ^<span class="t">Tree</span>)
 }
 
+<span class="c">// A `take` pointer taken apart by `match` hands its parts over by value,</span>
+<span class="c">// so the arms can move them into a new node.</span>
 <span class="k">fun</span> <span class="f">insert</span>(<span class="k">take</span> t: ^<span class="t">Tree</span>, v: i32) -&gt; ^<span class="t">Tree</span> = <span class="k">match</span> t {
     .<span class="t">Leaf</span> =&gt; ^<span class="t">Tree</span>.<span class="t">Node</span>(^<span class="t">Tree</span>.<span class="t">Leaf</span>, v, ^<span class="t">Tree</span>.<span class="t">Leaf</span>)
     .<span class="t">Node</span>(l, x, r) =&gt; <span class="k">if</span> v &lt; x {
@@ -77,9 +137,15 @@
     }
 }
 
+<span class="c">// A read parameter just looks: `match`, methods and fields see through `^`.</span>
 <span class="k">fun</span> <span class="f">sum</span>(t: ^<span class="t">Tree</span>) -&gt; i32 = <span class="k">match</span> t {
     .<span class="t">Leaf</span> =&gt; <span class="n">0</span>
     .<span class="t">Node</span>(l, x, r) =&gt; l.<span class="f">sum</span>() + x + r.<span class="f">sum</span>()
+}
+
+<span class="k">fun</span> <span class="f">depth</span>(t: ^<span class="t">Tree</span>) -&gt; i32 = <span class="k">match</span> t {
+    .<span class="t">Leaf</span> =&gt; <span class="n">0</span>
+    .<span class="t">Node</span>(l, _, r) =&gt; <span class="n">1</span> + l.<span class="f">depth</span>().<span class="f">max</span>(r.<span class="f">depth</span>())
 }
 
 <span class="k">fun</span> <span class="f">main</span>() {
@@ -87,21 +153,144 @@
     <span class="k">for</span> v <span class="k">in</span> [<span class="n">5</span>, <span class="n">2</span>, <span class="n">8</span>, <span class="n">1</span>, <span class="n">9</span>, <span class="n">3</span>] {
         t = t.<span class="f">insert</span>(v)
     }
-    <span class="f">print</span>(<span class="s">"sum </span><span class="h">{</span>t.<span class="f">sum</span>()<span class="h">}</span><span class="s">"</span>)
-
-    <span class="k">var</span> n = ^<span class="n">41</span>
-    n^ += <span class="n">1</span>
-    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>n^<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"sum </span><span class="h">{</span>t.<span class="f">sum</span>()<span class="h">}</span><span class="s">, depth </span><span class="h">{</span>t.<span class="f">depth</span>()<span class="h">}</span><span class="s">"</span>)
 }</code></pre>
-<div class="sample-out"><div class="out-head">Output</div><pre><code>sum 28
-42</code></pre></div>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>sum 28, depth 3</code></pre></div>
 </div>
-<p>A <code>take</code> pointer that a <code>match</code> takes apart hands its parts to the arms by value, so the arms can move them into a new node.</p>
-<h2 id="spools">Spools<a class="anchor" href="#spools" aria-label="Link to this section">#</a></h2>
-<p>A pointer into the heap owns its box and frees it. When many values live and die together (the nodes of a tree, a frame of a game) a <strong>spool</strong> is cheaper: <code>spool frame = Arena(1.kib())</code> makes one, <code>frame.put(v)</code> moves a value into it, and <code>^e</code> allocates in the spool a function is <code>given</code>. A pointer into a spool is <code>Copy</code> and owns nothing; <code>frame.reset()</code> takes every allocation back at once, and the spool ends with its scope.</p>
-<p><code>^T@s</code> is a pointer into the spool <code>s</code>, and <code>fun tree() -&gt; ^Node@sp given sp: Spool</code> is a function that builds in whichever spool the caller gives (<code>tree(4, given: frame)</code>), or the heap if the call gives none. A parameter written <code>^Node</code> takes a tree from any spool. A warp that holds pointers (<code>Node</code>) is <code>Node@s</code> for the spool its nodes are in.</p>
-<div class="sample" id="sample-own_spools" data-sample="own_spools" data-mode="run" data-file="own_spools.loom" data-runnable>
-<div class="sample-head"><span class="file"><span class="dot"></span>own_spools.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<p><code>insert</code> takes its tree with <code>take</code>, and the <code>match</code> takes it apart: a <code>take</code> pointer taken apart by <code>match</code> hands its parts to the arms <strong>by value</strong>, so the arms can move <code>l</code> and <code>r</code> into a new node without copying. <code>sum</code> and <code>depth</code> only read, so they use plain parameters, and <code>match</code>, methods and field access all see through the pointer.</p>
+<ul><li>A warp that holds pointers (<code>Tree</code>) is non-<code>Copy</code>, so it moves.</li><li>Moving out of a box piece by piece works: a pattern's by-value binding takes its part.</li><li>Assigning through a pointer (<code>p.x = 1</code>, <code>p^ += 1</code>) needs a <code>var</code>.</li></ul>
+<div class="try"><p>Insert the values in order, <code>[1, 2, 3, 5, 8, 9]</code>, and print <code>depth</code>: the tree degenerates into a list and the depth is 6 instead of 3. The sum doesn't change.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>In Rust you'd write the same type with <code>Box</code>. Loom's <code>match</code> on a <code>take</code> pointer feels like Rust's <code>match *t</code>, but moves parts out of the box directly.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">enum</span> <span class="t">Tree</span> {
+    <span class="t">Leaf</span>,
+    <span class="t">Node</span>(<span class="k">Box</span>&lt;<span class="t">Tree</span>&gt;, i32, <span class="k">Box</span>&lt;<span class="t">Tree</span>&gt;),
+}</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="c" data-label="C++">
+<h4>C++</h4>
+<p>In C++ the tree is a struct with <code>unique_ptr</code> members and nulls for leaves. Loom has no null: the leaf is a case.</p>
+<pre class="foreign" data-lang="cpp"><code><span class="k">struct</span> <span class="t">Tree</span> {
+    std::unique_ptr&lt;<span class="t">Tree</span>&gt; left, right;
+    <span class="k">int</span> value;
+};</code></pre>
+</div>
+</div>
+<h2 id="spools-freeing-everything-at-once">Spools: freeing everything at once<a class="anchor" href="#spools-freeing-everything-at-once" aria-label="Link to this section">#</a></h2>
+<p>A box is freed one at a time. When many values live and die together (the nodes of a tree you're about to throw away, everything a game frame allocates) that's wasteful. A <strong>spool</strong> is an allocator you can name. The simplest is <code>Arena</code>, which hands out memory by bumping a pointer and takes it all back at once.</p>
+<p><code>spool frame = Arena(1.kib())</code> makes one. <code>frame.put(v)</code> moves a value into it and gives a pointer. <code>frame.reset()</code> frees everything in the spool, and the spool itself ends with its scope.</p>
+<div class="sample" id="sample-mem_arena" data-sample="mem_arena" data-mode="run" data-file="mem_arena.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>mem_arena.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.mem.{<span class="t">Arena</span>, kib}
+
+<span class="k">warp</span> <span class="t">Particle</span>: <span class="t">Show</span> {
+    x: i32
+    y: i32
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">spool</span> frame = <span class="t">Arena</span>(<span class="n">1</span>.<span class="f">kib</span>())
+    <span class="k">var</span> p = frame.<span class="f">put</span>(<span class="t">Particle</span>(<span class="n">1</span>, <span class="n">2</span>))   <span class="c">// a `^Particle@frame`</span>
+    <span class="k">var</span> q = p                           <span class="c">// a copy of the pointer, not of the particle</span>
+    q.x = <span class="n">50</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>p<span class="h">}</span><span class="s"> </span><span class="h">{</span>q<span class="h">}</span><span class="s">"</span>)                    <span class="c">// both see the write</span>
+
+    <span class="k">var</span> total = <span class="n">0</span>
+    <span class="k">for</span> i <span class="k">in</span> <span class="n">0</span>..<span class="n">100</span> {
+        <span class="k">let</span> r = frame.<span class="f">put</span>(<span class="t">Particle</span>(i, i * <span class="n">2</span>))
+        total += r.x + r.y
+    }
+    <span class="f">print</span>(total)
+
+    frame.<span class="f">reset</span>()                       <span class="c">// every particle goes at once</span>
+    <span class="k">let</span> s = frame.<span class="f">put</span>(<span class="t">Particle</span>(<span class="n">5</span>, <span class="n">6</span>))
+    <span class="f">print</span>(s)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>Particle(x: 50, y: 2) Particle(x: 50, y: 2)
+14850
+Particle(x: 5, y: 6)</code></pre></div>
+</div>
+<p>Look at what the pointers are. <code>p</code> and <code>q</code> point at the <em>same</em> particle, so writing through <code>q</code> changes what <code>p</code> sees. A pointer into a spool is <code>Copy</code>, and <strong>owns nothing</strong>: it's a plain address, and dropping it does nothing. The spool owns the memory.</p>
+<ul><li>A spool can't be moved (<a href="diagnostics.html#M0107">M0107</a>): a pointer into it would lose its home. Lend it instead, with <code>given: frame</code> (below).</li><li>Heap pointers (<code>^T</code>) own their box. Spool pointers (<code>^T@frame</code>) are copies of an address.</li><li>Allocating in an arena is a compare and an add, so it's much cheaper than a box.</li><li><code>Arena(cap)</code> takes a capacity in bytes and grows past it when it needs to. <code>1.kib()</code> and <code>1.mib()</code> (from <code>std.mem</code>) spell sizes.</li></ul>
+<div class="sample" id="sample-mem_err_move" data-sample="mem_err_move" data-mode="check" data-file="mem_err_move.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>mem_err_move.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#M0107">M0107</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.mem.{<span class="t">Arena</span>, kib}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">spool</span> frame = <span class="t">Arena</span>(<span class="n">1</span>.<span class="f">kib</span>())
+    <span class="k">let</span> other = frame
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[M0107]: the spool `frame` can't be moved</span>
+<span class="loc">  --&gt; mem_err_move.loom:5:17</span>
+<span class="gut">  |</span>
+<span class="gut">5 |</span>     let other = frame
+<span class="gut">  |</span><span class="caret">                 ^^^^^ a spool stays where it was made</span>
+<span class="gut">  |</span>
+<span class="loc">  = help: lend it: `given: frame`</span>
+
+<span class="err">error: mem_err_move.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<div class="try"><p>Raise the loop in <code>mem_arena</code> to <code>0..1000</code>. That's far more than 1 KiB of particles, and the arena simply grows. Then add <code>print(p)</code> after <code>frame.reset()</code>: a pointer into a reset arena is exactly what the region checker refuses (<a href="diagnostics.html#R0102">R0102</a>).</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="zig" data-label="Zig">
+<h4>Zig</h4>
+<p>Zig passes an allocator to every function that allocates, which is explicit and flexible. An arena is <code>std.heap.ArenaAllocator</code>. Loom's spools are the same tool with a checker on top: nothing stops Zig code from using a pointer after <code>reset</code>.</p>
+<pre class="foreign" data-lang="zig"><code><span class="k">var</span> arena = std.heap.<span class="t">ArenaAllocator</span>.<span class="f">init</span>(std.heap.page_allocator);
+<span class="k">defer</span> arena.<span class="f">deinit</span>();
+<span class="k">const</span> p = <span class="k">try</span> arena.<span class="f">allocator</span>().<span class="f">create</span>(<span class="t">Particle</span>);
+p.* = .{ .x = <span class="n">1</span>, .y = <span class="n">2</span> };</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p><code>bumpalo</code> is Rust's arena. The pointers it gives out are ordinary references tied to the arena by a lifetime, which is the same guarantee Loom's regions give, but in the type system's own vocabulary.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">let</span> bump = bumpalo::<span class="t">Bump</span>::<span class="f">new</span>();
+<span class="k">let</span> p = bump.<span class="f">alloc</span>(<span class="t">Particle</span> { x: <span class="n">1</span>, y: <span class="n">2</span> });</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="c" data-label="C">
+<h4>C</h4>
+<p>In C an arena is a struct you write yourself, and <code>arena_reset</code> leaves every pointer dangling. That is the bug Loom's region checker exists to prevent.</p>
+<pre class="foreign" data-lang="c"><code><span class="t">Arena</span> a = <span class="f">arena_new</span>(<span class="n">1024</span>);
+<span class="t">Particle</span> *p = <span class="f">arena_alloc</span>(&amp;a, <span class="k">sizeof</span> *p);
+<span class="f">arena_reset</span>(&amp;a);   /* p now dangles; nothing checks */</code></pre>
+</div>
+</div>
+<h2 id="pointers-into-a-spool">Pointers into a spool<a class="anchor" href="#pointers-into-a-spool" aria-label="Link to this section">#</a></h2>
+<p>Because a spool pointer is <code>Copy</code>, two copies see one value. That is a feature (a graph is full of shared nodes), but it needs one rule so that sharing stays safe: <strong>a field behind a spool pointer can be written only when the warp is plain data</strong>, meaning numbers and the like, with no text, lists or cases that own anything. Otherwise it is read-only (<a href="diagnostics.html#T0107">T0107</a>).</p>
+<div class="sample" id="sample-mem_err_write" data-sample="mem_err_write" data-mode="check" data-file="mem_err_write.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>mem_err_write.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#T0107">T0107</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.mem.{<span class="t">Arena</span>, kib}
+
+<span class="c">// It owns text, so it is more than plain data.</span>
+<span class="k">warp</span> <span class="t">Named</span> {
+    name: <span class="t">String</span>
+    hits: i32
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">spool</span> frame = <span class="t">Arena</span>(<span class="n">1</span>.<span class="f">kib</span>())
+    <span class="k">var</span> n = frame.<span class="f">put</span>(<span class="t">Named</span>(<span class="s">"ann"</span>.<span class="f">to_string</span>(), <span class="n">0</span>))
+    n.hits = <span class="n">5</span>
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[T0107]: can't change what a pointer into a spool points at</span>
+<span class="loc">   --&gt; mem_err_write.loom:12:5</span>
+<span class="gut">   |</span>
+<span class="gut">12 |</span>     n.hits = 5
+<span class="gut">   |</span><span class="caret">     ^^^^^^ it holds more than plain data</span>
+
+<span class="err">error: mem_err_write.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<p>Why? Writing <code>n.name = ...</code> would drop the old <code>String</code> while another copy of the pointer might still read it. Plain data has nothing to drop, so aliased writes can't hurt.</p>
+<p>Text can live in a spool too: <code>.copy()</code> on a <code>String</code> or <code>str</code> allocates the copy in the spool the call is given, so an arena's tree can hold names and still go all at once. What a spool can't hold yet is a <em>collection</em>: a warp in a spool can't have a list, map, box or stream field (<a href="diagnostics.html#U0102">U0102</a>), because nothing would free it when the arena resets. See <a href="not-yet.html">Not supported yet</a>.</p>
+<div class="try"><p>Delete the <code>name</code> field from <code>Named</code>, and its argument in <code>frame.put(Named(0))</code>. With only a number left, it's plain data and the write is allowed.</p></div>
+<h2 id="naming-the-spool-t-s">Naming the spool: <code>^T@s</code><a class="anchor" href="#naming-the-spool-t-s" aria-label="Link to this section">#</a></h2>
+<p>How does a function say which spool its result lives in? With a <strong>region</strong>. <code>^T@s</code> is a pointer into the spool <code>s</code>, and a function can take the spool as a parameter: <code>fun tree(depth: i32) -&gt; ^Node@sp given sp: Spool</code> builds in <em>whichever spool the caller gives</em> (<code>tree(4, given: frame)</code>), or on the heap if the call gives none. Don't worry about <code>given</code> yet; the last sections explain it. For now read it as "the caller picks the spool".</p>
+<div class="sample" id="sample-mem_spools" data-sample="mem_spools" data-mode="run" data-file="mem_spools.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>mem_spools.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 <span class="k">use</span> std.mem.{<span class="t">Arena</span>, <span class="t">Spool</span>, kib}
 
@@ -135,9 +324,54 @@
 8
 32</code></pre></div>
 </div>
-<p>The region checker keeps pointers from outliving their spool: a value that points into a spool can't be returned out of the block the spool ends with (<a href="diagnostics.html#R0101">R0101</a>), used after the spool was reset (<a href="diagnostics.html#R0102">R0102</a>), or passed where a parameter names another spool (<a href="diagnostics.html#R0104">R0104</a>). A spool can't be moved (<a href="diagnostics.html#M0107">M0107</a>).</p>
-<div class="sample" id="sample-own_err_region" data-sample="own_err_region" data-mode="check" data-file="own_err_region.loom" data-runnable>
-<div class="sample-head"><span class="file"><span class="dot"></span>own_err_region.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#R0102">R0102</a></span><span class="spacer"></span></div>
+<ul><li>A parameter written <code>^Node</code> takes a tree from any spool, or from the heap. That's why <code>count</code> works on all three trees.</li><li>A warp that holds pointers (<code>Node</code>) is <code>Node@s</code> for the spool its nodes are in. The region is a hidden parameter, and you never write it unless you want to.</li><li>With no region, a <code>^T</code> in a return type, a field or a <code>take</code> parameter means the heap.</li><li>After <code>frame.reset()</code> the same arena builds a second tree, and nothing from the first is left.</li></ul>
+<div class="try"><p>Change <code>tree(4, given: frame)</code> to <code>tree(4)</code>. Now the tree is on the heap, and everything still runs: <code>count</code> and the program don't care. That's the point of leaving the spool to the caller.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="rust" data-label="Rust">
+<h4>Rust</h4>
+<p>Lifetimes are Rust's regions: <code>Bump</code> hands out <code>&amp;'a</code> references and the borrow checker proves none outlives it. Loom puts the same guarantee in a pointer's type (<code>^T@s</code>), but a region is named by the spool <em>variable</em>, so there's no lifetime algebra to learn.</p>
+<pre class="foreign" data-lang="rust"><code><span class="k">fn</span> parse&lt;'a&gt;(bump: &amp;'a <span class="t">Bump</span>, n: f64) -&gt; &amp;'a <span class="t">Expr</span>&lt;'a&gt; {
+    bump.<span class="f">alloc</span>(<span class="t">Expr</span>::<span class="t">Neg</span>(bump.<span class="f">alloc</span>(<span class="t">Expr</span>::<span class="t">Num</span>(n))))
+}</code></pre>
+</div>
+</div>
+<h2 id="the-region-checker">The region checker<a class="anchor" href="#the-region-checker" aria-label="Link to this section">#</a></h2>
+<p>Three things can go wrong with a pointer into a spool, and the checker catches each.</p>
+<p><strong>It outlives the spool.</strong> A value that points into a spool can't leave the block the spool ends with (<a href="diagnostics.html#R0101">R0101</a>). Here <code>tmp</code> ends when <code>dangling</code> returns, and the tree it holds would end with it:</p>
+<div class="sample" id="sample-mem_err_escape" data-sample="mem_err_escape" data-mode="check" data-file="mem_err_escape.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>mem_err_escape.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#R0101">R0101</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.mem.{<span class="t">Arena</span>, <span class="t">Spool</span>, kib}
+
+<span class="k">warp</span> <span class="t">Expr</span> {
+    <span class="k">case</span> <span class="t">Num</span>(f64)
+    <span class="k">case</span> <span class="t">Neg</span>(^<span class="t">Expr</span>)
+}
+
+<span class="k">fun</span> <span class="f">parse</span>(n: f64) -&gt; ^<span class="t">Expr</span>@sp <span class="k">given</span> sp: <span class="t">Spool</span> = ^<span class="t">Expr</span>.<span class="t">Neg</span>(^<span class="t">Expr</span>.<span class="t">Num</span>(n))
+
+<span class="c">// `tmp` ends with this function, and the tree it holds would end with it.</span>
+<span class="k">fun</span> <span class="f">dangling</span>() -&gt; ^<span class="t">Expr</span> {
+    <span class="k">spool</span> tmp = <span class="t">Arena</span>(<span class="n">1</span>.<span class="f">kib</span>())
+    <span class="f">parse</span>(<span class="n">1.0</span>, <span class="k">given</span>: tmp)
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[R0101]: `^Expr@spool` is in another region than `^Expr`</span>
+<span class="loc">   --&gt; mem_err_escape.loom:13:5</span>
+<span class="gut">   |</span>
+<span class="gut">13 |</span>     parse(1.0, given: tmp)
+<span class="gut">   |</span><span class="caret">     ^^^^^^^^^^^^^^^^^^^^^^ this is `^Expr@spool`</span>
+<span class="gut">   |</span>
+<span class="loc">   = note: `^T` with no region is a pointer into the heap; `^T@s` one into the spool `s`</span>
+<span class="loc">   = help: take `given out: Spool` and return `^T@out`</span>
+
+<span class="err">error: mem_err_escape.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<p>The return type <code>^Expr</code> means a heap pointer, so the compiler offers the fix: take the spool as a <code>given</code> and return <code>^Expr@sp</code>, as <code>parse</code> did.</p>
+<p><strong>It's used after a reset.</strong> <code>frame.reset()</code> takes every allocation back, so a pointer into <code>frame</code> can't be used after it (<a href="diagnostics.html#R0102">R0102</a>). The check goes through loops, so a value from one round used after the next round's reset is caught too.</p>
+<div class="sample" id="sample-mem_err_reset" data-sample="mem_err_reset" data-mode="check" data-file="mem_err_reset.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>mem_err_reset.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#R0102">R0102</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.mem.{<span class="t">Arena</span>, <span class="t">Spool</span>, kib}
 
 <span class="k">warp</span> <span class="t">Node</span> {
@@ -162,7 +396,7 @@
     <span class="f">count</span>(t)
 }</code></pre>
 <div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[R0102]: `t` points into `frame`, which was reset</span>
-<span class="loc">   --&gt; own_err_region.loom:22:11</span>
+<span class="loc">   --&gt; mem_err_reset.loom:22:11</span>
 <span class="gut">   |</span>
 <span class="gut">21 |</span>     frame.reset()
 <span class="gut">   |</span><span class="caret">     ------------- `frame` reset here</span>
@@ -171,15 +405,134 @@
 <span class="gut">   |</span>
 <span class="loc">   = help: move the reset after the last use, or `.copy()` the value into another spool first</span>
 
-<span class="err">error: own_err_region.loom failed to type-check (1 error)</span></code></pre></div>
+<span class="err">error: mem_err_reset.loom failed to type-check (1 error)</span></code></pre></div>
 </div>
-<p>Text copied with <code>.copy()</code> goes in the spool the call is given, so an arena's tree can hold names and still go at once. A list, map or box can't be held by a warp that is in a spool yet (<a href="diagnostics.html#U0102">U0102</a>): nothing would free it.</p>
-<p>A pointer into a spool is <code>Copy</code>, so two copies see the same value: a field behind one can be written only when the warp is plain data (no text, lists or cases that own anything); otherwise it is read-only (<a href="diagnostics.html#T0107">T0107</a>).</p>
-<p><code>Pool[T](n)</code> is a spool of <code>n</code> slots of one type: <code>put</code> takes a free slot and <code>free</code> gives it back, a few instructions each. It holds plain data only. <code>SharedArena(cap)</code> is an arena threads may allocate in, and its pointers may cross to them; a pointer into any other spool can't (<a href="diagnostics.html#R0103">R0103</a>).</p>
-<h2 id="given"><code>given</code><a class="anchor" href="#given" aria-label="Link to this section">#</a></h2>
-<p>A function can say what it needs from its caller with a <code>given</code> parameter of a weft: <code>fun welcome(who: str) given g: Greeter</code>. It is passed on by the call, not in the argument list: the innermost <code>given</code> in scope supplies it, <code>given name = value</code> states one from there to the end of the block, and <code>given: x</code> gives one to a single call. A weft marked <code>#given_default(Type)</code> has one when nothing is in scope (a spool's is the heap), so a program that never says <code>given</code> still runs. A function is checked for the type it is given, so an unused <code>given</code> costs nothing. Every function spells its own <code>given</code>s: a private one doesn't infer them from what it calls yet.</p>
-<div class="sample" id="sample-own_given" data-sample="own_given" data-mode="run" data-file="own_given.loom" data-runnable>
-<div class="sample-head"><span class="file"><span class="dot"></span>own_given.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<p><strong>It's in the wrong spool.</strong> A parameter whose type names <code>@sp</code> needs a pointer that is <em>in</em> the spool the call gives (<a href="diagnostics.html#R0104">R0104</a>):</p>
+<div class="sample" id="sample-mem_err_mixed" data-sample="mem_err_mixed" data-mode="check" data-file="mem_err_mixed.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>mem_err_mixed.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#R0104">R0104</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.mem.{<span class="t">Arena</span>, <span class="t">Spool</span>, kib}
+
+<span class="k">warp</span> <span class="t">Expr</span> {
+    <span class="k">case</span> <span class="t">Num</span>(f64)
+    <span class="k">case</span> <span class="t">Neg</span>(^<span class="t">Expr</span>)
+}
+
+<span class="k">fun</span> <span class="f">parse</span>(n: f64) -&gt; ^<span class="t">Expr</span>@sp <span class="k">given</span> sp: <span class="t">Spool</span> = ^<span class="t">Expr</span>.<span class="t">Neg</span>(^<span class="t">Expr</span>.<span class="t">Num</span>(n))
+
+<span class="c">// Both the argument and the result live in `sp`.</span>
+<span class="k">fun</span> <span class="f">same</span>(e: ^<span class="t">Expr</span>@sp) -&gt; ^<span class="t">Expr</span>@sp <span class="k">given</span> sp: <span class="t">Spool</span> = e
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">spool</span> a = <span class="t">Arena</span>(<span class="n">1</span>.<span class="f">kib</span>())
+    <span class="k">spool</span> b = <span class="t">Arena</span>(<span class="n">1</span>.<span class="f">kib</span>())
+    <span class="k">let</span> x = <span class="f">parse</span>(<span class="n">1.0</span>, <span class="k">given</span>: a)
+    <span class="k">let</span> y = <span class="f">same</span>(x, <span class="k">given</span>: b)
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[R0104]: `e` has to be in the spool `b`</span>
+<span class="loc">   --&gt; mem_err_mixed.loom:17:18</span>
+<span class="gut">   |</span>
+<span class="gut">11 |</span> fun same(e: ^Expr@sp) -&gt; ^Expr@sp given sp: Spool = e
+<span class="gut">   |</span><span class="caret">          ----------- the parameter's type names the spool the call gives</span>
+   .
+<span class="gut">17 |</span>     let y = same(x, given: b)
+<span class="gut">   |</span><span class="caret">                  ^ this points into another spool than `b`</span>
+
+<span class="err">error: mem_err_mixed.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<p><code>x</code> lives in <code>a</code>, and <code>same</code> was told <code>sp</code> is <code>b</code>. Without the check it would have returned a pointer typed as <code>b</code>'s that really points into <code>a</code>.</p>
+<div class="try"><p>In <code>mem_err_reset</code>, move <code>frame.reset()</code> below <code>count(t)</code>. The pointer is used before the reset, so it's fine. Or keep the reset where it is and call <code>tree</code> again after it, to see a fresh pointer is fine too.</p></div>
+<h2 id="pools-and-shared-arenas">Pools and shared arenas<a class="anchor" href="#pools-and-shared-arenas" aria-label="Link to this section">#</a></h2>
+<p>Two more spools come with <code>std.mem</code>. <code>Pool[T](n)</code> holds <code>n</code> slots of one type: <code>put</code> takes a free slot, <code>free</code> gives it back, and each costs a few instructions. It holds plain data only. A freed slot is the next one handed out, which is why a loop that puts and frees never runs the pool dry.</p>
+<div class="sample" id="sample-mem_pool" data-sample="mem_pool" data-mode="run" data-file="mem_pool.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>mem_pool.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.mem.<span class="t">Pool</span>
+
+<span class="k">warp</span> <span class="t">Particle</span> {
+    x: i32
+    y: i32
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">spool</span> slots = <span class="t">Pool</span>[<span class="t">Particle</span>](<span class="n">3</span>)       <span class="c">// room for three, no more</span>
+    <span class="k">let</span> a = slots.<span class="f">put</span>(<span class="t">Particle</span>(<span class="n">1</span>, <span class="n">2</span>))
+    <span class="k">let</span> b = slots.<span class="f">put</span>(<span class="t">Particle</span>(<span class="n">3</span>, <span class="n">4</span>))
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>a.x + b.y<span class="h">}</span><span class="s">"</span>)
+
+    slots.<span class="f">free</span>(a)                         <span class="c">// gives the slot back...</span>
+    <span class="k">let</span> c = slots.<span class="f">put</span>(<span class="t">Particle</span>(<span class="n">5</span>, <span class="n">6</span>))     <span class="c">// ...and it is the next one handed out</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>c.x<span class="h">}</span><span class="s"> </span><span class="h">{</span>b.x<span class="h">}</span><span class="s">"</span>)
+
+    <span class="k">var</span> sum = <span class="n">0</span>
+    <span class="k">for</span> i <span class="k">in</span> <span class="n">0</span>..<span class="n">10</span> {
+        <span class="k">let</span> p = slots.<span class="f">put</span>(<span class="t">Particle</span>(i, i))
+        sum += p.x
+        slots.<span class="f">free</span>(p)
+    }
+    <span class="f">print</span>(sum)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>5
+5 3
+45</code></pre></div>
+</div>
+<p><code>SharedArena(cap)</code> is an arena that threads may allocate in, and its pointers may cross to them. A pointer into any <em>other</em> spool can't (<a href="diagnostics.html#R0103">R0103</a>).</p>
+<div class="sample" id="sample-mem_shared" data-sample="mem_shared" data-mode="run" data-file="mem_shared.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>mem_shared.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.mem.<span class="t">SharedArena</span>
+
+<span class="k">warp</span> <span class="t">Cell</span> {
+    n: i32
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">spool</span> shared = <span class="t">SharedArena</span>(<span class="n">1024</span>)
+    <span class="k">let</span> first = shared.<span class="f">put</span>(<span class="t">Cell</span>(<span class="n">10</span>))
+    <span class="k">loom</span> {
+        <span class="k">let</span> a = <span class="k">thread</span> shared.<span class="f">put</span>(<span class="t">Cell</span>(first.n + <span class="n">1</span>))
+        <span class="k">let</span> b = <span class="k">thread</span> shared.<span class="f">put</span>(<span class="t">Cell</span>(first.n + <span class="n">2</span>))
+        <span class="k">let</span> (x, y) = (a.<span class="f">join</span>(), b.<span class="f">join</span>())
+        <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>x.n + y.n<span class="h">}</span><span class="s">"</span>)
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>23</code></pre></div>
+</div>
+<div class="sample" id="sample-mem_err_thread" data-sample="mem_err_thread" data-mode="check" data-file="mem_err_thread.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>mem_err_thread.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#R0103">R0103</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.mem.{<span class="t">Arena</span>, kib}
+
+<span class="k">warp</span> <span class="t">Cell</span> {
+    n: i32
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">spool</span> a = <span class="t">Arena</span>(<span class="n">1</span>.<span class="f">kib</span>())
+    <span class="k">let</span> p = a.<span class="f">put</span>(<span class="t">Cell</span>(<span class="n">1</span>))
+    <span class="k">loom</span> {
+        <span class="k">let</span> t = <span class="k">thread</span> p.n + <span class="n">1</span>
+        t.<span class="f">join</span>()
+    }
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[R0103]: `p` reaches the spool `a` from another thread</span>
+<span class="loc">   --&gt; mem_err_thread.loom:11:24</span>
+<span class="gut">   |</span>
+<span class="gut"> 8 |</span>     spool a = Arena(1.kib())
+<span class="gut">   |</span><span class="caret">           - spool declared here</span>
+   .
+<span class="gut">11 |</span>         let t = thread p.n + 1
+<span class="gut">   |</span><span class="caret">                        ^ used by a thread here</span>
+<span class="gut">   |</span>
+<span class="loc">   = help: allocate in a `SharedArena`, which threads may use</span>
+
+<span class="err">error: mem_err_thread.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<p><code>put</code> on a <code>SharedArena</code> takes the VM's lock, so it's slower than a plain <code>Arena</code>. The rule keeps a thread from reading memory another thread is about to reset.</p>
+<div class="try"><p>Change <code>SharedArena(1024)</code> in <code>mem_shared</code> to <code>Arena(1024)</code>. The threads now reach into an arena that isn't shared, and the compiler stops it with R0103 and suggests <code>SharedArena</code>.</p></div>
+<h2 id="given-what-a-function-needs"><code>given</code>: what a function needs<a class="anchor" href="#given-what-a-function-needs" aria-label="Link to this section">#</a></h2>
+<p>Some values need to reach deep into the call graph: allocators, loggers, a clock, random numbers. Passing them through every function by hand is tedious, and hiding them in globals makes them invisible. <code>given</code> sits between the two.</p>
+<p>A function says what it needs with a <code>given</code> parameter of a weft: <code>fun welcome(who: str) given g: Greeter</code>. It isn't in the argument list. The call supplies it from context.</p>
+<div class="sample" id="sample-mem_given" data-sample="mem_given" data-mode="run" data-file="mem_given.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>mem_given.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
 <pre class="code"><code><span class="k">use</span> std.io.print
 
 <span class="c">// A weft with a default: a call that is given nothing gets a `Plain`.</span>
@@ -210,10 +563,129 @@
 HELLO, ci! dee
 hello eve</code></pre></div>
 </div>
+<ul><li><strong>By type.</strong> The innermost <code>given</code> of the right type in scope supplies it. The name (<code>g</code>) matters only inside the function.</li><li><strong>From a block.</strong> <code>given name = value</code> holds from there to the end of the block.</li><li><strong>At one call.</strong> <code>welcome("eve", given: Plain())</code> gives one to a single call, and wins over the ones in scope.</li><li><strong>A default.</strong> A weft marked <code>#given_default(Type)</code> has one when nothing is in scope (a spool's default is the heap). A program that never says <code>given</code> still runs.</li><li><strong>Cost.</strong> A function is checked for the type it is given, so an unused <code>given</code> costs nothing: no dispatch, no hidden argument.</li></ul>
+<p>Every function spells out its own <code>given</code>s. A private function doesn't pick them up from what it calls (yet), so a helper that calls <code>stamp</code> has to say that it needs a <code>Clock</code> too, or the compiler stops it with <a href="diagnostics.html#T0104">T0104</a>:</p>
+<div class="sample" id="sample-mem_err_given" data-sample="mem_err_given" data-mode="check" data-file="mem_err_given.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>mem_err_given.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#T0104">T0104</a></span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">weft</span> <span class="t">Clock</span> {
+    <span class="k">fun</span> <span class="f">now</span>(<span class="k">self</span>) -&gt; u64
+}
+
+<span class="k">warp</span> <span class="t">Fixed</span>: <span class="t">Clock</span> {
+    t: u64
+
+    <span class="k">pub</span> <span class="k">fun</span> <span class="f">now</span>(<span class="k">self</span>) -&gt; u64 = .t
+}
+
+<span class="k">fun</span> <span class="f">stamp</span>(msg: str) -&gt; <span class="t">String</span> <span class="k">given</span> c: <span class="t">Clock</span> = <span class="s">"[</span><span class="h">{</span>c.<span class="f">now</span>()<span class="h">}</span><span class="s">] </span><span class="h">{</span>msg<span class="h">}</span><span class="s">"</span>
+
+<span class="c">// `log_line` calls `stamp`, but doesn't say it needs a `Clock` itself.</span>
+<span class="k">fun</span> <span class="f">log_line</span>(msg: str) {
+    <span class="f">print</span>(<span class="f">stamp</span>(msg))
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">given</span> c = <span class="t">Fixed</span>(<span class="n">42</span>)
+    <span class="f">log_line</span>(<span class="s">"started"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[T0104]: `stamp` needs a `Clock` and none is given here</span>
+<span class="loc">   --&gt; mem_err_given.loom:17:11</span>
+<span class="gut">   |</span>
+<span class="gut">17 |</span>     print(stamp(msg))
+<span class="gut">   |</span><span class="caret">           ^^^^^^^^^^ no `given` in scope</span>
+
+<span class="err">error: mem_err_given.loom failed to type-check (1 error)</span></code></pre></div>
+</div>
+<div class="try"><p>Add <code>given c: Clock</code> to <code>log_line</code>'s signature, right after <code>(msg: str)</code>, and run it: <code>[42] started</code>. Then move <code>given c = Fixed(42)</code> below the <code>log_line</code> call in <code>main</code> and see T0104 again, because a <code>given</code> only reaches the code after it.</p></div>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="scala" data-label="Scala">
+<h4>Scala</h4>
+<p><code>given</code> and <code>using</code> in Scala 3 are the closest relative: the compiler finds a value of the right type in scope and passes it. Loom's <code>given</code> also works for allocators, which is why <code>^e</code> can allocate in the spool in scope.</p>
+<pre class="foreign" data-lang="scala"><code>trait <span class="t">Clock</span> { def now: <span class="t">Long</span> }
+def <span class="f">stamp</span>(msg: <span class="t">String</span>)(using c: <span class="t">Clock</span>): <span class="t">String</span> = s<span class="s">"[${c.now}] $msg"</span>
+
+given <span class="t">Clock</span> = <span class="t">FixedClock</span>(<span class="n">42</span>)
+<span class="f">println</span>(<span class="f">stamp</span>(<span class="s">"started"</span>))</code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="odin" data-label="Odin">
+<h4>Odin</h4>
+<p>Odin's <code>context</code> is an implicit parameter of every procedure, carrying an allocator and a logger. It's one fixed struct; Loom lets any weft be given and checks for each use.</p>
+<pre class="foreign" data-lang="odin"><code>context.allocator = mem.<span class="f">arena_allocator</span>(&amp;arena)
+data := <span class="f">make</span>([]int, <span class="n">100</span>)   <span class="c">// uses context.allocator</span></code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p>Go passes a <code>context.Context</code> as the first parameter of every function that needs one. It's explicit, which is clear, and also the very threading that <code>given</code> leaves out.</p>
+<pre class="foreign" data-lang="go"><code><span class="k">func</span> <span class="f">stamp</span>(ctx context.<span class="t">Context</span>, msg string) string {
+    <span class="k">return</span> fmt.<span class="t">Sprintf</span>(<span class="s">"[%d] %s"</span>, <span class="f">clockFrom</span>(ctx).<span class="t">Now</span>(), msg)
+}</code></pre>
+</div>
+</div>
+<h2 id="the-ambient-spool-and-print">The ambient spool, and <code>print</code><a class="anchor" href="#the-ambient-spool-and-print" aria-label="Link to this section">#</a></h2>
+<p><code>given</code> is also how allocation finds its spool. <strong>The ambient spool</strong> is the innermost <code>given</code> of type <code>Spool</code> in scope, or the heap when there is none. <code>^e</code>, <code>.copy()</code> and the constructors that allocate all use it. A <code>given sp = frame</code> states one for the rest of the block:</p>
+<div class="sample" id="sample-mem_ambient" data-sample="mem_ambient" data-mode="run" data-file="mem_ambient.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>mem_ambient.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.mem.{<span class="t">Arena</span>, kib}
+
+<span class="k">warp</span> <span class="t">Cell</span>: <span class="t">Show</span> {
+    n: i32
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> on_heap = ^<span class="t">Cell</span>(<span class="n">1</span>)           <span class="c">// no spool given: the heap</span>
+
+    <span class="k">spool</span> frame = <span class="t">Arena</span>(<span class="n">1</span>.<span class="f">kib</span>())
+    <span class="k">given</span> sp = frame                 <span class="c">// from here on, `^e` allocates in `frame`</span>
+    <span class="k">let</span> a = ^<span class="t">Cell</span>(<span class="n">2</span>)
+    <span class="k">let</span> b = ^<span class="t">Cell</span>(<span class="n">3</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>on_heap<span class="h">}</span><span class="s"> </span><span class="h">{</span>a<span class="h">}</span><span class="s"> </span><span class="h">{</span>b<span class="h">}</span><span class="s">"</span>)
+
+    frame.<span class="f">reset</span>()                    <span class="c">// `a` and `b` go; `on_heap` doesn't</span>
+    <span class="f">print</span>(on_heap)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>Cell(n: 1) Cell(n: 2) Cell(n: 3)
+Cell(n: 1)</code></pre></div>
+</div>
+<p><code>on_heap</code> was made before the <code>given</code>, so the reset doesn't touch it; <code>a</code> and <code>b</code> were made after, in the arena, and are gone.</p>
+<p><code>print</code> is another <code>given</code> in disguise. It writes to whichever <code>Writer</code> is given, and standard output is its default, so a program that never mentions it still prints. Give a <code>Buffer</code> and the output is captured:</p>
+<div class="sample" id="sample-mem_writer" data-sample="mem_writer" data-mode="run" data-file="mem_writer.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>mem_writer.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.{print, write_out, <span class="t">Buffer</span>, <span class="t">Stdout</span>, <span class="t">Writer</span>}
+
+<span class="c">// `print` writes to whichever `Writer` is given. A function that prints</span>
+<span class="c">// has to say so, or `print` would have nowhere to look.</span>
+<span class="k">fun</span> <span class="f">report</span>(n: i32) <span class="k">given</span> out: <span class="t">Writer</span> {
+    <span class="f">print</span>(<span class="s">"n = </span><span class="h">{</span>n<span class="h">}</span><span class="s">"</span>)
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">print</span>(<span class="s">"before: straight to the screen"</span>)
+    <span class="k">given</span> out = <span class="t">Buffer</span>()                 <span class="c">// from here to the end of the block</span>
+    <span class="f">print</span>(<span class="s">"captured"</span>)
+    <span class="f">report</span>(<span class="n">5</span>)
+    {
+        <span class="k">given</span> direct = <span class="t">Stdout</span>()          <span class="c">// an inner `given` wins in its block</span>
+        <span class="f">print</span>(<span class="s">"direct again"</span>)
+    }
+    <span class="f">write_out</span>(<span class="s">"the buffer holds: </span><span class="h">{</span>out.text<span class="h">}</span><span class="s">"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>before: straight to the screen
+direct again
+the buffer holds: captured
+n = 5</code></pre></div>
+</div>
+<p>The function <code>report</code> has to say <code>given out: Writer</code> because it prints; <code>main</code> doesn't, because it states its own. This is how tests can check what a program prints without touching the program.</p>
+<div class="try"><p>In <code>mem_writer</code>, add <code>print("early")</code> just above <code>given out = Buffer()</code>. It prints straight away, because the <code>given</code> doesn't reach back before the line it's on.</p></div>
 <h2 id="not-supported-yet">Not supported yet<a class="anchor" href="#not-supported-yet" aria-label="Link to this section">#</a></h2>
-<p>Projections (<code>~&gt; mut T</code>), which lend a place, work: see <a href="shuttles.html">Shuttles</a>. See <a href="not-yet.html">Not supported yet</a>.</p>
+<p>Some of this is designed and doesn't run yet:</p>
+<ul><li>Lists, maps and sets allocated <em>in</em> a spool (<code>List[i32]@frame</code>), and a warp in a spool that holds one (<a href="diagnostics.html#U0102">U0102</a>).</li><li><code>given</code> of private functions inferred from what they call.</li><li><code>loom(given: pool)</code>, and <code>yield</code> / <code>pull</code> inside a <code>loom</code> body.</li><li>User-written spools (<code>weave Spool</code>).</li><li>A <code>for</code> loop over a projection that lends many places; plain projections work, and the <a href="shuttles.html">Shuttles</a> chapter covers them.</li></ul>
+<p>The full list is in <a href="not-yet.html">Not supported yet</a>.</p>
 <h2 id="where-next">Where next<a class="anchor" href="#where-next" aria-label="Link to this section">#</a></h2>
-<p><a href="gauges.html">Gauges</a> restrict a number to a range.</p>
+<p><a href="gauges.html">Gauges</a> restrict a number to a range, and let the compiler prove things about it.</p>
 <nav class="pager" aria-label="Chapters">
 <a class="prev" href="ownership.html"><span class="dir">&larr; Chapter 7</span>Moves, <code>once</code> and <code>defer</code></a>
 <a class="next" href="gauges.html"><span class="dir">Chapter 9 &rarr;</span>Gauges</a>
