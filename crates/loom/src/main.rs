@@ -37,7 +37,11 @@ use loom_syntax::{Diagnostic, FileId, SourceDb, lex, parse, pretty};
 const EXIT_COMPILE_ERROR: u8 = 2;
 
 #[derive(Debug, Parser)]
-#[command(name = "loom", version, about = "The Loom compiler: Loom → Lua 5.4")]
+#[command(
+    name = "loom",
+    version,
+    about = "The Loom compiler: runs programs on Treadle, its own VM, or builds them for Lua 5.4"
+)]
 struct Cli {
     /// When to color diagnostics.
     #[arg(long, value_enum, default_value_t = Color::Auto, global = true)]
