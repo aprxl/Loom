@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.cmp · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../../style.css">
 <script src="../../weave.js" defer></script>
+<script src="../../play/play.js" defer></script>
 </head>
 <body>
 <header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
@@ -18,7 +20,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,86 +68,116 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / cmp</div>
 <h1>std.cmp</h1>
-<p class="summary">Comparing.</p>
-<h2>Types</h2>
-<div class="item" id="Ordering">
-<div class="item-head">
-<span class="sig">warp <strong>Ordering</strong>: Eq, Ord, Show</span>
-
+<p class="summary">Comparing: <a class="code-link" href="cmp.html#Ordering"><code>Ordering</code></a> (what <code>x.cmp(y)</code> gives), <a class="code-link" href="cmp.html#min"><code>min</code></a>, <a class="code-link" href="cmp.html#max"><code>max</code></a> and <a class="code-link" href="cmp.html#clamp"><code>clamp</code></a>, and <a class="code-link" href="cmp.html#Reverse"><code>Reverse</code></a> for sorting the other way. A type gets <code>&lt;</code> and friends by weaving <a class="code-link" href="ops.html#Ord"><code>Ord</code></a>; see <a class="code-link" href="ops.html"><code>std.ops</code></a>.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/cmp.loom</code></span><a href="../../lang/types.html">read about it in the book &rarr;</a></div>
 </div>
-<p class="item-doc">How two values compare.</p>
-<ul class="cases">
-<li><span class="sig">case Less</span></li>
-<li><span class="sig">case Equal</span></li>
-<li><span class="sig">case Greater</span></li>
-</ul>
+<div class="mod-intro"><div class="sample" id="example" data-sample="std_cmp" data-mode="run" data-file="cmp_example.loom" data-store="std.cmp" data-runnable><div class="sample-head"><span class="file"><span class="dot"></span>cmp_example.loom</span><span class="tag ok">an example to run</span><span class="spacer"></span></div><pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Racer</span>: <span class="t">Show</span> {
+    name: <span class="t">String</span>
+    time: u32
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">var</span> racers = [<span class="t">Racer</span>(<span class="s">"Ada"</span>, <span class="n">52</span>), <span class="t">Racer</span>(<span class="s">"Grace"</span>, <span class="n">48</span>), <span class="t">Racer</span>(<span class="s">"Alan"</span>, <span class="n">52</span>)]
+    racers.<span class="f">sort_by</span>((a, b) =&gt; a.time.<span class="f">cmp</span>(b.time).<span class="f">then</span>(a.name.<span class="f">cmp</span>(b.name)) == .<span class="t">Less</span>)
+    <span class="f">print</span>(racers.<span class="f">map</span>(_.name.<span class="f">copy</span>()))
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">min</span>(<span class="n">3</span>, <span class="n">7</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="f">max</span>(<span class="s">"warp"</span>, <span class="s">"weft"</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="f">clamp</span>(<span class="n">15</span>, <span class="n">0</span>, <span class="n">10</span>)<span class="h">}</span><span class="s">"</span>)
+}</code></pre></div></div>
+<nav class="toc-chips" aria-label="In this module"><a href="#Ordering"><span class="kind">warp</span>Ordering</a><a href="#Reverse"><span class="kind">warp</span>Reverse</a><a href="#cmp"><span class="kind">fun</span>cmp</a><a href="#min"><span class="kind">fun</span>min</a><a href="#max"><span class="kind">fun</span>max</a><a href="#clamp"><span class="kind">fun</span>clamp</a></nav>
+<h2 id="types">Types</h2>
+<section class="item" id="Ordering">
+<div class="item-head">
+<span class="sig"><span class="kw">warp</span> <strong>Ordering</strong>: <a href="ops.html#Eq">Eq</a>, <a href="ops.html#Ord">Ord</a>, <a href="fmt.html#Show">Show</a></span>
+
+<a class="item-anchor" href="#Ordering" aria-label="Link to Ordering">#</a>
+</div>
+<div class="item-doc"><p>How two values compare.</p></div>
+<div class="parts"><span class="parts-label">Cases</span><ul class="cases">
+<li title="The first comes before the second."><span class="sig"><span class="kw">case</span> <span class="ty">Less</span></span><span class="part-doc">The first comes before the second.</span></li>
+<li title="Neither comes first."><span class="sig"><span class="kw">case</span> <span class="ty">Equal</span></span><span class="part-doc">Neither comes first.</span></li>
+<li title="The first comes after the second."><span class="sig"><span class="kw">case</span> <span class="ty">Greater</span></span><span class="part-doc">The first comes after the second.</span></li>
+</ul></div>
 <div class="members">
 <div class="member" id="Ordering.reverse">
 <div class="member-head">
-<span class="sig">fun reverse(self) -&gt; Ordering</span>
+<span class="sig"><span class="kw">fun</span> <strong>reverse</strong>(<span class="kw">self</span>) -&gt; <span class="ty">Ordering</span></span>
 
+<a class="item-anchor" href="#Ordering.reverse" aria-label="Link to Ordering.reverse">#</a>
 </div>
-<p class="member-doc"><code>Less</code> becomes <code>Greater</code> and the other way round.</p>
+<div class="member-doc"><p><code>Less</code> becomes <code>Greater</code> and the other way round.</p></div>
 </div>
 <div class="member" id="Ordering.then">
 <div class="member-head">
-<span class="sig">fun then(self, other: Ordering) -&gt; Ordering</span>
+<span class="sig"><span class="kw">fun</span> <strong>then</strong>(<span class="kw">self</span>, other: <span class="ty">Ordering</span>) -&gt; <span class="ty">Ordering</span></span>
 
+<a class="item-anchor" href="#Ordering.then" aria-label="Link to Ordering.then">#</a>
 </div>
-<p class="member-doc">Breaks a tie: <code>a.age.cmp(b.age).then(a.name.cmp(b.name))</code>.</p>
+<div class="member-doc"><p>Breaks a tie: <code>a.age.cmp(b.age).then(a.name.cmp(b.name))</code>.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="Reverse">
+</section>
+<section class="item" id="Reverse">
 <div class="item-head">
-<span class="sig">warp <strong>Reverse</strong>[T: Ord]: Ord</span>
+<span class="sig"><span class="kw">warp</span> <strong>Reverse</strong>[T: <a href="ops.html#Ord">Ord</a>]: <a href="ops.html#Ord">Ord</a></span>
 
+<a class="item-anchor" href="#Reverse" aria-label="Link to Reverse">#</a>
 </div>
-<p class="item-doc">A value that compares the other way round: sorting by <code>Reverse(score)</code> puts the highest score first.</p>
-<ul class="fields">
-<li><span class="sig">pub value: T</span></li>
-</ul>
+<div class="item-doc"><p>A value that compares the other way round: sorting by <code>Reverse(score)</code> puts the highest score first.</p></div>
+<div class="parts"><span class="parts-label">Fields</span><ul class="fields">
+<li title="The value being compared the other way round."><span class="sig"><span class="kw">pub</span> value: T</span><span class="part-doc">The value being compared the other way round.</span></li>
+</ul></div>
 <div class="members">
 <div class="member" id="Reverse.lt">
 <div class="member-head">
-<span class="sig">fun lt(self, other: Reverse[T]) -&gt; bool</span>
-<span class="badge todo">TODO</span>
-</div>
-<p class="member-doc empty">undocumented</p>
-</div>
-</div>
-</div>
-<h2>Functions</h2>
-<div class="item" id="cmp">
-<div class="item-head">
-<span class="sig">fun <strong>cmp</strong>[T: Ord](a: T, b: T) -&gt; Ordering</span>
+<span class="sig"><span class="kw">fun</span> <strong>lt</strong>(<span class="kw">self</span>, other: <span class="ty">Reverse</span>[T]) -&gt; bool</span>
 
+<a class="item-anchor" href="#Reverse.lt" aria-label="Link to Reverse.lt">#</a>
 </div>
-<p class="item-doc">How <code>a</code> compares to <code>b</code>: <code>x.cmp(y)</code> also works on numbers and text.</p>
+<div class="member-doc"><p>Whether this comes first: when the wrapped value comes after <code>other</code>'s.</p></div>
 </div>
-<div class="item" id="min">
+</div>
+</section>
+<h2 id="functions">Functions</h2>
+<section class="item" id="cmp">
 <div class="item-head">
-<span class="sig">fun <strong>min</strong>[T: Ord](a: T, b: T) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>cmp</strong>[T: <a href="ops.html#Ord">Ord</a>](a: T, b: T) -&gt; <a href="cmp.html#Ordering">Ordering</a></span>
 
+<a class="item-anchor" href="#cmp" aria-label="Link to cmp">#</a>
 </div>
-<p class="item-doc">The smaller of two values (the first, if they are equal).</p>
-</div>
-<div class="item" id="max">
+<div class="item-doc"><p>How <code>a</code> compares to <code>b</code>: <code>x.cmp(y)</code> also works on numbers and text.</p></div>
+</section>
+<section class="item" id="min">
 <div class="item-head">
-<span class="sig">fun <strong>max</strong>[T: Ord](a: T, b: T) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>min</strong>[T: <a href="ops.html#Ord">Ord</a>](a: T, b: T) -&gt; T</span>
 
+<a class="item-anchor" href="#min" aria-label="Link to min">#</a>
 </div>
-<p class="item-doc">The larger of two values (the first, if they are equal).</p>
-</div>
-<div class="item" id="clamp">
+<div class="item-doc"><p>The smaller of two values (the first, if they are equal).</p></div>
+</section>
+<section class="item" id="max">
 <div class="item-head">
-<span class="sig">fun <strong>clamp</strong>[T: Ord](x: T, lo: T, hi: T) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>max</strong>[T: <a href="ops.html#Ord">Ord</a>](a: T, b: T) -&gt; T</span>
 
+<a class="item-anchor" href="#max" aria-label="Link to max">#</a>
 </div>
-<p class="item-doc"><code>x</code>, or the nearest of <code>lo</code> and <code>hi</code> when it is outside them.</p>
+<div class="item-doc"><p>The larger of two values (the first, if they are equal).</p></div>
+</section>
+<section class="item" id="clamp">
+<div class="item-head">
+<span class="sig"><span class="kw">fun</span> <strong>clamp</strong>[T: <a href="ops.html#Ord">Ord</a>](x: T, lo: T, hi: T) -&gt; T</span>
+
+<a class="item-anchor" href="#clamp" aria-label="Link to clamp">#</a>
 </div>
+<div class="item-doc"><p><code>x</code>, or the nearest of <code>lo</code> and <code>hi</code> when it is outside them.</p></div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="bitset.html"><span class="dir">&larr; previous</span>std.bitset</a>
+<a class="next" href="default.html"><span class="dir">next &rarr;</span>std.default</a>
+</nav>
 </main>
 </div>
 </body>

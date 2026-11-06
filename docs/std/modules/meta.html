@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.meta · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,7 +19,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,53 +67,64 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / meta</div>
 <h1>std.meta</h1>
-<p class="summary">Reflection: what compile-time code can learn about a type. <code>T.name</code>, <code>T.kind</code>, <code>T.fields</code> and <code>T.cases</code> are known while compiling, and so is everything read from them; none of it is left in the program.</p>
-<h2>Types</h2>
-<div class="item" id="Kind">
+<p class="summary">Reflection: what compile-time code can learn about a type. <code>T.name</code>, <code>T.kind</code>, <code>T.fields</code> and <code>T.cases</code> are known while compiling, and so is everything read from them; none of it is left in the program. The <code>Reflection</code> chapter of the book shows a <code>ToJson</code> written this way.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/meta.loom</code></span><a href="../../lang/reflection.html">read about it in the book &rarr;</a></div>
+</div>
+<nav class="toc-chips" aria-label="In this module"><a href="#Kind"><span class="kind">warp</span>Kind</a><a href="#Field"><span class="kind">warp</span>Field</a><a href="#Case"><span class="kind">warp</span>Case</a></nav>
+<h2 id="types">Types</h2>
+<section class="item" id="Kind">
 <div class="item-head">
-<span class="sig">warp <strong>Kind</strong>: Eq, Show</span>
+<span class="sig"><span class="kw">warp</span> <strong>Kind</strong>: <a href="ops.html#Eq">Eq</a>, <a href="fmt.html#Show">Show</a></span>
 
+<a class="item-anchor" href="#Kind" aria-label="Link to Kind">#</a>
 </div>
-<p class="item-doc">What kind of type a type is: <code>T.kind</code>.</p>
-<ul class="cases">
-<li><span class="sig">case Record</span></li>
-<li><span class="sig">case Sum</span></li>
-<li><span class="sig">case Tuple</span></li>
-<li><span class="sig">case Unit</span></li>
-<li><span class="sig">case Bool</span></li>
-<li><span class="sig">case Int</span></li>
-<li><span class="sig">case Float</span></li>
-<li><span class="sig">case Char</span></li>
-<li><span class="sig">case Str</span></li>
-<li><span class="sig">case Array</span></li>
-<li><span class="sig">case Slice</span></li>
-<li><span class="sig">case List</span></li>
-<li><span class="sig">case Map</span></li>
-<li><span class="sig">case Set</span></li>
-<li><span class="sig">case Optional</span></li>
-<li><span class="sig">case Result</span></li>
-<li><span class="sig">case Fn</span></li>
-<li><span class="sig">case Any</span></li>
-<li><span class="sig">case Union</span></li>
-<li><span class="sig">case Other</span></li>
-</ul>
-</div>
-<div class="item" id="Field">
+<div class="item-doc"><p>What kind of type a type is: <code>T.kind</code>.</p></div>
+<div class="parts"><span class="parts-label">Cases</span><ul class="cases">
+<li title="A warp with fields and no cases."><span class="sig"><span class="kw">case</span> <span class="ty">Record</span></span><span class="part-doc">A warp with fields and no cases.</span></li>
+<li title="A warp with cases."><span class="sig"><span class="kw">case</span> <span class="ty">Sum</span></span><span class="part-doc">A warp with cases.</span></li>
+<li title="A tuple: `(A, B)`."><span class="sig"><span class="kw">case</span> <span class="ty">Tuple</span></span><span class="part-doc">A tuple: <code>(A, B)</code>.</span></li>
+<li title="The unit type, `()`."><span class="sig"><span class="kw">case</span> <span class="ty">Unit</span></span><span class="part-doc">The unit type, <code>()</code>.</span></li>
+<li title="`bool`."><span class="sig"><span class="kw">case</span> <span class="ty">Bool</span></span><span class="part-doc"><code>bool</code>.</span></li>
+<li title="An integer type of any width: `u8`, `i24`, `usize`..."><span class="sig"><span class="kw">case</span> <a href="num.html#Int">Int</a></span><span class="part-doc">An integer type of any width: <code>u8</code>, <code>i24</code>, <code>usize</code>...</span></li>
+<li title="`f32` or `f64`."><span class="sig"><span class="kw">case</span> <a href="num.html#Float">Float</a></span><span class="part-doc"><code>f32</code> or <code>f64</code>.</span></li>
+<li title="`char`."><span class="sig"><span class="kw">case</span> <a href="string.html#Char">Char</a></span><span class="part-doc"><code>char</code>.</span></li>
+<li title="`str` and `String`."><span class="sig"><span class="kw">case</span> <a href="string.html#Str">Str</a></span><span class="part-doc"><code>str</code> and <a class="code-link" href="string.html#String"><code>String</code></a>.</span></li>
+<li title="`[T; N]`."><span class="sig"><span class="kw">case</span> <span class="ty">Array</span></span><span class="part-doc"><code>[T; N]</code>.</span></li>
+<li title="`[T]`."><span class="sig"><span class="kw">case</span> <a href="slice.html#Slice">Slice</a></span><span class="part-doc"><code>[T]</code>.</span></li>
+<li title="`List[T]`."><span class="sig"><span class="kw">case</span> <a href="list.html#List">List</a></span><span class="part-doc"><a class="code-link" href="list.html#List"><code>List[T]</code></a>.</span></li>
+<li title="`Map[K, V]`."><span class="sig"><span class="kw">case</span> <a href="map.html#Map">Map</a></span><span class="part-doc"><a class="code-link" href="map.html#Map"><code>Map[K, V]</code></a>.</span></li>
+<li title="`Set[T]`."><span class="sig"><span class="kw">case</span> <a href="set.html#Set">Set</a></span><span class="part-doc"><a class="code-link" href="set.html#Set"><code>Set[T]</code></a>.</span></li>
+<li title="`?T`."><span class="sig"><span class="kw">case</span> <a href="option.html#Optional">Optional</a></span><span class="part-doc"><code>?T</code>.</span></li>
+<li title="`T ! E`."><span class="sig"><span class="kw">case</span> <span class="ty">Result</span></span><span class="part-doc"><code>T ! E</code>.</span></li>
+<li title="A function: `A =&gt; B`."><span class="sig"><span class="kw">case</span> <span class="ty">Fn</span></span><span class="part-doc">A function: <code>A =&gt; B</code>.</span></li>
+<li title="`any W`."><span class="sig"><span class="kw">case</span> <span class="ty">Any</span></span><span class="part-doc"><code>any W</code>.</span></li>
+<li title="`A | B`."><span class="sig"><span class="kw">case</span> <span class="ty">Union</span></span><span class="part-doc"><code>A | B</code>.</span></li>
+<li title="Any other type."><span class="sig"><span class="kw">case</span> <span class="ty">Other</span></span><span class="part-doc">Any other type.</span></li>
+</ul></div>
+</section>
+<section class="item" id="Field">
 <div class="item-head">
-<span class="sig">warp <strong>Field</strong>: Copy</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">warp</span> <strong>Field</strong>: <a href="ops.html#Copy">Copy</a></span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Field" aria-label="Link to Field">#</a>
 </div>
-<p class="item-doc">A field of a record, or of a case's payload: an item of <code>T.fields</code> or <code>c.fields</code>. It has a <code>name: str</code>, <code>is_pub: bool</code> and <code>offset: usize</code> (where it starts in the value, in bytes), and <code>v.(f)</code> is <code>v</code>'s field <code>f</code>. Only compile-time code has one.</p>
-</div>
-<div class="item" id="Case">
+<div class="item-doc"><p>A field of a record, or of a case's payload: an item of <code>T.fields</code> or <code>c.fields</code>. It has a <code>name: str</code>, <code>is_pub: bool</code> and <code>offset: usize</code> (where it starts in the value, in bytes), and <code>v.(f)</code> is <code>v</code>'s field <code>f</code>. Only compile-time code has one.</p></div>
+</section>
+<section class="item" id="Case">
 <div class="item-head">
-<span class="sig">warp <strong>Case</strong>: Copy</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">warp</span> <strong>Case</strong>: <a href="ops.html#Copy">Copy</a></span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Case" aria-label="Link to Case">#</a>
 </div>
-<p class="item-doc">A case of a sum: an item of <code>T.cases</code>. It has a <code>name: str</code> and <code>fields</code>, and <code>v is .(c)</code> tests whether <code>v</code> is case <code>c</code>. Only compile-time code has one.</p>
-</div>
+<div class="item-doc"><p>A case of a sum: an item of <code>T.cases</code>. It has a <code>name: str</code> and <code>fields</code>, and <code>v is .(c)</code> tests whether <code>v</code> is case <code>c</code>. Only compile-time code has one.</p></div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="mem.html"><span class="dir">&larr; previous</span>std.mem</a>
+<a class="next" href="num.html"><span class="dir">next &rarr;</span>std.num</a>
+</nav>
 </main>
 </div>
 </body>

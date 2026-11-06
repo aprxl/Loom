@@ -10,10 +10,13 @@ it; it's built into the binary, so it always matches that `loom`.
   what it should do, and `NAME.out` holds what it prints (see `samples.py`).
   `@compare` boxes show what other languages do instead, and `@try` boxes
   suggest an edit to make.
-- `std/` is generated from `std/data.py`, a hand-kept transcription of
-  `runtime/std/*.loom`: every item's doc comment, verbatim, or a `TODO`
-  badge where the source has none. Nothing here is guessed; if a page looks
-  thin, the fix is a doc comment in the `.loom` file, not this site.
+- `std/` is generated straight from `runtime/std/*.loom` (`std_source.py`
+  reads it): every `pub` item with its `///` doc comment, or a `todo` badge
+  where the source has none. Nothing here is written twice; if a page looks
+  thin, the fix is a doc comment in the `.loom` file. A `code` span there
+  that names a std type, method, module or function becomes a link.
+- `lang/STYLE.md` is how the book is written: voice, the shape of a chapter,
+  samples and Elsewhere boxes.
 - `style.css` is the theme, `weave.js` draws the thread that runs down every
   page, and `play/play.js` turns each sample into an editor with a Run
   button. The pages read fine without JavaScript.

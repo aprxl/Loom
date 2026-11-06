@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.num · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../../style.css">
 <script src="../../weave.js" defer></script>
+<script src="../../play/play.js" defer></script>
 </head>
 <body>
 <header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
@@ -18,7 +20,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,537 +68,629 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / num</div>
 <h1>std.num</h1>
-<p class="summary">Numbers.</p>
-<h2>Types</h2>
-<div class="item" id="NumError">
-<div class="item-head">
-<span class="sig">warp <strong>NumError</strong>: Error</span>
+<p class="summary">Numbers: the methods of every integer and float type (<code>n.pow(2)</code>, <code>x.sqrt()</code>, <code>a.gcd(b)</code>...), parsing text into numbers, and the <a class="code-link" href="num.html#Num"><code>Num</code></a> weft for code that works on any number. Integers come in every width from 1 to 64 bits (<code>u12</code>, <code>i24</code>), and each operator says what happens on overflow.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/num.loom</code></span><a href="../../lang/values.html">read about it in the book &rarr;</a></div>
+</div>
+<div class="mod-intro"><div class="sample" id="example" data-sample="std_num" data-mode="run" data-file="num_example.loom" data-store="std.num" data-runnable><div class="sample-head"><span class="file"><span class="dot"></span>num_example.loom</span><span class="tag ok">an example to run</span><span class="spacer"></span></div><pre class="code"><code><span class="k">use</span> std.io.print
 
-</div>
-<p class="item-doc">Why text didn't parse as a number.</p>
-<ul class="cases">
-<li><span class="sig">case Empty</span></li>
-<li><span class="sig">case Invalid</span></li>
-<li><span class="sig">case Overflow</span></li>
-</ul>
-</div>
-<div class="item" id="Parse">
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> n: u32 = <span class="n">40</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>n.<span class="f">pow</span>(<span class="n">2</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span>n.<span class="f">count_ones</span>()<span class="h">}</span><span class="s"> </span><span class="h">{</span>n.<span class="f">trailing_zeros</span>()<span class="h">}</span><span class="s"> </span><span class="h">{</span>n.<span class="f">to_string_radix</span>(<span class="n">2</span>)<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>(-<span class="n">7</span>).<span class="f">rem_euclid</span>(<span class="n">3</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">12</span>.<span class="f">gcd</span>(<span class="n">18</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="n">255</span>.<span class="f">to_string_radix</span>(<span class="n">16</span>)<span class="h">}</span><span class="s">"</span>)
+    <span class="k">let</span> x = <span class="n">2.0</span>
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>x.<span class="f">sqrt</span>():.<span class="n">4</span><span class="h">}</span><span class="s"> </span><span class="h">{</span>x.<span class="f">pow</span>(<span class="n">10.0</span>)<span class="h">}</span><span class="s"> </span><span class="h">{</span>(<span class="n">1.0</span>).<span class="f">atan2</span>(<span class="n">1.0</span>) * <span class="n">4.0</span><span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="s">"300"</span>.parse[u8]():?<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="s">"-12"</span>.parse[i8]():?<span class="h">}</span><span class="s"> </span><span class="h">{</span><span class="s">"2.5e3"</span>.parse[f64]():?<span class="h">}</span><span class="s">"</span>)
+}</code></pre></div></div>
+<nav class="toc-chips" aria-label="In this module"><a href="#NumError"><span class="kind">warp</span>NumError</a><a href="#Parse"><span class="kind">weft</span>Parse</a><a href="#Num"><span class="kind">weft</span>Num</a><a href="#Int"><span class="kind">warp</span>Int</a><a href="#Float"><span class="kind">warp</span>Float</a></nav>
+<h2 id="types">Types</h2>
+<section class="item" id="NumError">
 <div class="item-head">
-<span class="sig">weft <strong>Parse</strong></span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">warp</span> <strong>NumError</strong>: <a href="error.html#Error">Error</a></span>
+
+<a class="item-anchor" href="#NumError" aria-label="Link to NumError">#</a>
 </div>
-<p class="item-doc">Types <code>str.parse</code> can make: every integer and float type.</p>
-</div>
-<div class="item" id="Num">
+<div class="item-doc"><p>Why text didn't parse as a number.</p></div>
+<div class="parts"><span class="parts-label">Cases</span><ul class="cases">
+<li title="There was no text to parse."><span class="sig"><span class="kw">case</span> <span class="ty">Empty</span></span><span class="part-doc">There was no text to parse.</span></li>
+<li title="The text isn&#x27;t a number of that type: a stray character, a sign an unsigned type can&#x27;t take."><span class="sig"><span class="kw">case</span> <span class="ty">Invalid</span></span><span class="part-doc">The text isn't a number of that type: a stray character, a sign an unsigned type can't take.</span></li>
+<li title="The number is too big (or too small) for the type."><span class="sig"><span class="kw">case</span> <span class="ty">Overflow</span></span><span class="part-doc">The number is too big (or too small) for the type.</span></li>
+</ul></div>
+</section>
+<section class="item" id="Parse">
 <div class="item-head">
-<span class="sig">weft <strong>Num</strong>: Ord, Copy, Show</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">weft</span> <strong>Parse</strong></span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Parse" aria-label="Link to Parse">#</a>
 </div>
-<p class="item-doc">Every number type: the integers and the floats.</p>
-</div>
-<div class="item" id="Int">
+<div class="item-doc"><p>Types <code>str.parse</code> can make: every integer and float type.</p></div>
+</section>
+<section class="item" id="Num">
 <div class="item-head">
-<span class="sig">warp <strong>Int</strong>[T]</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">weft</span> <strong>Num</strong>: <a href="ops.html#Ord">Ord</a>, <a href="ops.html#Copy">Copy</a>, <a href="fmt.html#Show">Show</a></span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Num" aria-label="Link to Num">#</a>
 </div>
-<p class="item-doc">The methods of every integer type, <code>T</code>.</p>
+<div class="item-doc"><p>Every number type: the integers and the floats.</p></div>
+</section>
+<section class="item" id="Int">
+<div class="item-head">
+<span class="sig"><span class="kw">warp</span> <strong>Int</strong>[T]</span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Int" aria-label="Link to Int">#</a>
+</div>
+<div class="item-doc"><p>The methods of every integer type, <code>T</code>.</p></div>
 <div class="members">
 <div class="member" id="Int.abs">
 <div class="member-head">
-<span class="sig">fun abs(self) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>abs</strong>(<span class="kw">self</span>) -&gt; T</span>
 
+<a class="item-anchor" href="#Int.abs" aria-label="Link to Int.abs">#</a>
 </div>
-<p class="member-doc">The value without its sign. Unravels for the smallest signed value.</p>
+<div class="member-doc"><p>The value without its sign. Unravels for the smallest signed value.</p></div>
 </div>
 <div class="member" id="Int.min">
 <div class="member-head">
-<span class="sig">fun min(self, other: T) -&gt; T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>min</strong>(<span class="kw">self</span>, other: T) -&gt; T</span>
+
+<a class="item-anchor" href="#Int.min" aria-label="Link to Int.min">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The smaller of the two.</p></div>
 </div>
 <div class="member" id="Int.max">
 <div class="member-head">
-<span class="sig">fun max(self, other: T) -&gt; T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>max</strong>(<span class="kw">self</span>, other: T) -&gt; T</span>
+
+<a class="item-anchor" href="#Int.max" aria-label="Link to Int.max">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The larger of the two.</p></div>
 </div>
 <div class="member" id="Int.pow">
 <div class="member-head">
-<span class="sig">fun pow(self, exp: u32) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>pow</strong>(<span class="kw">self</span>, exp: u32) -&gt; T</span>
 
+<a class="item-anchor" href="#Int.pow" aria-label="Link to Int.pow">#</a>
 </div>
-<p class="member-doc"><code>self</code> to the power <code>exp</code>. Unravels when it doesn't fit.</p>
+<div class="member-doc"><p><code>self</code> to the power <code>exp</code>. Unravels when it doesn't fit.</p></div>
 </div>
 <div class="member" id="Int.trailing_zeros">
 <div class="member-head">
-<span class="sig">fun trailing_zeros(self) -&gt; u32</span>
+<span class="sig"><span class="kw">fun</span> <strong>trailing_zeros</strong>(<span class="kw">self</span>) -&gt; u32</span>
 
+<a class="item-anchor" href="#Int.trailing_zeros" aria-label="Link to Int.trailing_zeros">#</a>
 </div>
-<p class="member-doc">How many zero bits come after the lowest one bit (all of them for 0).</p>
+<div class="member-doc"><p>How many zero bits come after the lowest one bit (all of them for 0).</p></div>
 </div>
 <div class="member" id="Int.leading_zeros">
 <div class="member-head">
-<span class="sig">fun leading_zeros(self) -&gt; u32</span>
+<span class="sig"><span class="kw">fun</span> <strong>leading_zeros</strong>(<span class="kw">self</span>) -&gt; u32</span>
 
+<a class="item-anchor" href="#Int.leading_zeros" aria-label="Link to Int.leading_zeros">#</a>
 </div>
-<p class="member-doc">How many zero bits come before the highest one bit.</p>
+<div class="member-doc"><p>How many zero bits come before the highest one bit.</p></div>
 </div>
 <div class="member" id="Int.count_ones">
 <div class="member-head">
-<span class="sig">fun count_ones(self) -&gt; u32</span>
+<span class="sig"><span class="kw">fun</span> <strong>count_ones</strong>(<span class="kw">self</span>) -&gt; u32</span>
 
+<a class="item-anchor" href="#Int.count_ones" aria-label="Link to Int.count_ones">#</a>
 </div>
-<p class="member-doc">How many bits are one.</p>
+<div class="member-doc"><p>How many bits are one.</p></div>
 </div>
 <div class="member" id="Int.is_power_of_two">
 <div class="member-head">
-<span class="sig">fun is_power_of_two(self) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_power_of_two</strong>(<span class="kw">self</span>) -&gt; bool</span>
 
+<a class="item-anchor" href="#Int.is_power_of_two" aria-label="Link to Int.is_power_of_two">#</a>
 </div>
-<p class="member-doc">Whether it's 2 to the power of something: one bit is one, and it's above zero.</p>
+<div class="member-doc"><p>Whether it's 2 to the power of something: one bit is one, and it's above zero.</p></div>
 </div>
 <div class="member" id="Int.log2">
 <div class="member-head">
-<span class="sig">fun log2(self) -&gt; u32</span>
+<span class="sig"><span class="kw">fun</span> <strong>log2</strong>(<span class="kw">self</span>) -&gt; u32</span>
 
+<a class="item-anchor" href="#Int.log2" aria-label="Link to Int.log2">#</a>
 </div>
-<p class="member-doc">The base-2 logarithm, rounded down: the position of the highest one bit. Unravels for zero and below.</p>
+<div class="member-doc"><p>The base-2 logarithm, rounded down: the position of the highest one bit. Unravels for zero and below.</p></div>
 </div>
 <div class="member" id="Int.rotate_left">
 <div class="member-head">
-<span class="sig">fun rotate_left(self, n: u32) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>rotate_left</strong>(<span class="kw">self</span>, n: u32) -&gt; T</span>
 
+<a class="item-anchor" href="#Int.rotate_left" aria-label="Link to Int.rotate_left">#</a>
 </div>
-<p class="member-doc">The bits moved <code>n</code> places towards the top; those pushed out come back in at the bottom. <code>n</code> counts modulo the type's width.</p>
+<div class="member-doc"><p>The bits moved <code>n</code> places towards the top; those pushed out come back in at the bottom. <code>n</code> counts modulo the type's width.</p></div>
 </div>
 <div class="member" id="Int.rotate_right">
 <div class="member-head">
-<span class="sig">fun rotate_right(self, n: u32) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>rotate_right</strong>(<span class="kw">self</span>, n: u32) -&gt; T</span>
 
+<a class="item-anchor" href="#Int.rotate_right" aria-label="Link to Int.rotate_right">#</a>
 </div>
-<p class="member-doc">The bits moved <code>n</code> places towards the bottom; those pushed out come back in at the top. <code>n</code> counts modulo the type's width.</p>
+<div class="member-doc"><p>The bits moved <code>n</code> places towards the bottom; those pushed out come back in at the top. <code>n</code> counts modulo the type's width.</p></div>
 </div>
 <div class="member" id="Int.to_string">
 <div class="member-head">
-<span class="sig">fun to_string(self) -&gt; String</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>to_string</strong>(<span class="kw">self</span>) -&gt; <a href="string.html#String">String</a></span>
+
+<a class="item-anchor" href="#Int.to_string" aria-label="Link to Int.to_string">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The number as decimal text: what <code>{n}</code> prints.</p></div>
 </div>
 <div class="member" id="Int.to_string_radix">
 <div class="member-head">
-<span class="sig">fun to_string_radix(self, radix: u32) -&gt; String</span>
+<span class="sig"><span class="kw">fun</span> <strong>to_string_radix</strong>(<span class="kw">self</span>, radix: u32) -&gt; <a href="string.html#String">String</a></span>
 
+<a class="item-anchor" href="#Int.to_string_radix" aria-label="Link to Int.to_string_radix">#</a>
 </div>
-<p class="member-doc">The digits of <code>self</code> in base <code>radix</code>, lowercase, with a leading <code>-</code> when negative. Unravels unless <code>radix</code> is 2 to 36.</p>
+<div class="member-doc"><p>The digits of <code>self</code> in base <code>radix</code>, lowercase, with a leading <code>-</code> when negative. Unravels unless <code>radix</code> is 2 to 36.</p></div>
 </div>
 <div class="member" id="Int.signum">
 <div class="member-head">
-<span class="sig">fun signum(self) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>signum</strong>(<span class="kw">self</span>) -&gt; T</span>
 
+<a class="item-anchor" href="#Int.signum" aria-label="Link to Int.signum">#</a>
 </div>
-<p class="member-doc"><code>-1</code>, <code>0</code> or <code>1</code>.</p>
+<div class="member-doc"><p><code>-1</code>, <code>0</code> or <code>1</code>.</p></div>
 </div>
 <div class="member" id="Int.rem_euclid">
 <div class="member-head">
-<span class="sig">fun rem_euclid(self, m: T) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>rem_euclid</strong>(<span class="kw">self</span>, m: T) -&gt; T</span>
 
+<a class="item-anchor" href="#Int.rem_euclid" aria-label="Link to Int.rem_euclid">#</a>
 </div>
-<p class="member-doc">The remainder that is never below zero: <code>(-7).rem_euclid(3)</code> is <code>2</code>. Unravels if <code>m</code> is 0.</p>
+<div class="member-doc"><p>The remainder that is never below zero: <code>(-7).rem_euclid(3)</code> is <code>2</code>. Unravels if <code>m</code> is 0.</p></div>
 </div>
 <div class="member" id="Int.div_euclid">
 <div class="member-head">
-<span class="sig">fun div_euclid(self, m: T) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>div_euclid</strong>(<span class="kw">self</span>, m: T) -&gt; T</span>
 
+<a class="item-anchor" href="#Int.div_euclid" aria-label="Link to Int.div_euclid">#</a>
 </div>
-<p class="member-doc">The quotient that goes with <code>rem_euclid</code>. Unravels if <code>m</code> is 0.</p>
+<div class="member-doc"><p>The quotient that goes with <a class="code-link" href="num.html#Int.rem_euclid"><code>rem_euclid</code></a>. Unravels if <code>m</code> is 0.</p></div>
 </div>
 <div class="member" id="Int.div_floor">
 <div class="member-head">
-<span class="sig">fun div_floor(self, m: T) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>div_floor</strong>(<span class="kw">self</span>, m: T) -&gt; T</span>
 
+<a class="item-anchor" href="#Int.div_floor" aria-label="Link to Int.div_floor">#</a>
 </div>
-<p class="member-doc">The quotient rounded down. Unravels if <code>m</code> is 0.</p>
+<div class="member-doc"><p>The quotient rounded down. Unravels if <code>m</code> is 0.</p></div>
 </div>
 <div class="member" id="Int.div_ceil">
 <div class="member-head">
-<span class="sig">fun div_ceil(self, m: T) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>div_ceil</strong>(<span class="kw">self</span>, m: T) -&gt; T</span>
 
+<a class="item-anchor" href="#Int.div_ceil" aria-label="Link to Int.div_ceil">#</a>
 </div>
-<p class="member-doc">The quotient rounded up. Unravels if <code>m</code> is 0.</p>
+<div class="member-doc"><p>The quotient rounded up. Unravels if <code>m</code> is 0.</p></div>
 </div>
 <div class="member" id="Int.gcd">
 <div class="member-head">
-<span class="sig">fun gcd(self, other: T) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>gcd</strong>(<span class="kw">self</span>, other: T) -&gt; T</span>
 
+<a class="item-anchor" href="#Int.gcd" aria-label="Link to Int.gcd">#</a>
 </div>
-<p class="member-doc">The greatest number that divides both.</p>
+<div class="member-doc"><p>The greatest number that divides both.</p></div>
 </div>
 <div class="member" id="Int.lcm">
 <div class="member-head">
-<span class="sig">fun lcm(self, other: T) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>lcm</strong>(<span class="kw">self</span>, other: T) -&gt; T</span>
 
+<a class="item-anchor" href="#Int.lcm" aria-label="Link to Int.lcm">#</a>
 </div>
-<p class="member-doc">The smallest number both divide. Unravels when it doesn't fit.</p>
+<div class="member-doc"><p>The smallest number both divide. Unravels when it doesn't fit.</p></div>
 </div>
 <div class="member" id="Int.abs_diff">
 <div class="member-head">
-<span class="sig">fun abs_diff(self, other: T) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>abs_diff</strong>(<span class="kw">self</span>, other: T) -&gt; T</span>
 
+<a class="item-anchor" href="#Int.abs_diff" aria-label="Link to Int.abs_diff">#</a>
 </div>
-<p class="member-doc">The distance between <code>self</code> and <code>other</code>. Unravels when it doesn't fit.</p>
+<div class="member-doc"><p>The distance between <code>self</code> and <code>other</code>. Unravels when it doesn't fit.</p></div>
 </div>
 <div class="member" id="Int.isqrt">
 <div class="member-head">
-<span class="sig">fun isqrt(self) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>isqrt</strong>(<span class="kw">self</span>) -&gt; T</span>
 
+<a class="item-anchor" href="#Int.isqrt" aria-label="Link to Int.isqrt">#</a>
 </div>
-<p class="member-doc">The square root, rounded down. Unravels below zero.</p>
+<div class="member-doc"><p>The square root, rounded down. Unravels below zero.</p></div>
 </div>
 <div class="member" id="Int.ilog10">
 <div class="member-head">
-<span class="sig">fun ilog10(self) -&gt; u32</span>
+<span class="sig"><span class="kw">fun</span> <strong>ilog10</strong>(<span class="kw">self</span>) -&gt; u32</span>
 
+<a class="item-anchor" href="#Int.ilog10" aria-label="Link to Int.ilog10">#</a>
 </div>
-<p class="member-doc">The base-10 logarithm, rounded down. Unravels for zero and below.</p>
+<div class="member-doc"><p>The base-10 logarithm, rounded down. Unravels for zero and below.</p></div>
 </div>
 <div class="member" id="Int.next_power_of_two">
 <div class="member-head">
-<span class="sig">fun next_power_of_two(self) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>next_power_of_two</strong>(<span class="kw">self</span>) -&gt; T</span>
 
+<a class="item-anchor" href="#Int.next_power_of_two" aria-label="Link to Int.next_power_of_two">#</a>
 </div>
-<p class="member-doc">The smallest power of two that is not below it. Unravels when it doesn't fit.</p>
+<div class="member-doc"><p>The smallest power of two that is not below it. Unravels when it doesn't fit.</p></div>
 </div>
 <div class="member" id="Int.count_zeros">
 <div class="member-head">
-<span class="sig">fun count_zeros(self) -&gt; u32</span>
+<span class="sig"><span class="kw">fun</span> <strong>count_zeros</strong>(<span class="kw">self</span>) -&gt; u32</span>
 
+<a class="item-anchor" href="#Int.count_zeros" aria-label="Link to Int.count_zeros">#</a>
 </div>
-<p class="member-doc">How many bits are zero.</p>
+<div class="member-doc"><p>How many bits are zero.</p></div>
 </div>
 <div class="member" id="Int.pow_wrap">
 <div class="member-head">
-<span class="sig">fun pow_wrap(self, exp: u32) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>pow_wrap</strong>(<span class="kw">self</span>, exp: u32) -&gt; T</span>
 
+<a class="item-anchor" href="#Int.pow_wrap" aria-label="Link to Int.pow_wrap">#</a>
 </div>
-<p class="member-doc"><code>self</code> to the power <code>exp</code>, with the bits that don't fit dropped.</p>
+<div class="member-doc"><p><code>self</code> to the power <code>exp</code>, with the bits that don't fit dropped.</p></div>
 </div>
 <div class="member" id="Int.pow_sat">
 <div class="member-head">
-<span class="sig">fun pow_sat(self, exp: u32) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>pow_sat</strong>(<span class="kw">self</span>, exp: u32) -&gt; T</span>
 
+<a class="item-anchor" href="#Int.pow_sat" aria-label="Link to Int.pow_sat">#</a>
 </div>
-<p class="member-doc"><code>self</code> to the power <code>exp</code>, or the nearest number that fits.</p>
+<div class="member-doc"><p><code>self</code> to the power <code>exp</code>, or the nearest number that fits.</p></div>
 </div>
 <div class="member" id="Int.pow_checked">
 <div class="member-head">
-<span class="sig">fun pow_checked(self, exp: u32) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>pow_checked</strong>(<span class="kw">self</span>, exp: u32) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Int.pow_checked" aria-label="Link to Int.pow_checked">#</a>
 </div>
-<p class="member-doc"><code>self</code> to the power <code>exp</code>, or <code>none</code> when it doesn't fit.</p>
+<div class="member-doc"><p><code>self</code> to the power <code>exp</code>, or <code>none</code> when it doesn't fit.</p></div>
 </div>
 <div class="member" id="Int.to_be_bytes">
 <div class="member-head">
-<span class="sig">fun to_be_bytes(self) -&gt; [u8; T.size]</span>
+<span class="sig"><span class="kw">fun</span> <strong>to_be_bytes</strong>(<span class="kw">self</span>) -&gt; [u8; T.size]</span>
 
+<a class="item-anchor" href="#Int.to_be_bytes" aria-label="Link to Int.to_be_bytes">#</a>
 </div>
-<p class="member-doc">The bytes of <code>self</code>, most significant first.</p>
+<div class="member-doc"><p>The bytes of <code>self</code>, most significant first.</p></div>
 </div>
 <div class="member" id="Int.from_be_bytes">
 <div class="member-head">
-<span class="sig">fun from_be_bytes(bytes: [u8; T.size]) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>from_be_bytes</strong>(bytes: [u8; T.size]) -&gt; T</span>
 
+<a class="item-anchor" href="#Int.from_be_bytes" aria-label="Link to Int.from_be_bytes">#</a>
 </div>
-<p class="member-doc">The integer whose bytes, most significant first, are <code>bytes</code>.</p>
+<div class="member-doc"><p>The integer whose bytes, most significant first, are <code>bytes</code>.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="Float">
+</section>
+<section class="item" id="Float">
 <div class="item-head">
-<span class="sig">warp <strong>Float</strong>[T]</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">warp</span> <strong>Float</strong>[T]</span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Float" aria-label="Link to Float">#</a>
 </div>
-<p class="item-doc">The methods of every float type, <code>T</code>.</p>
+<div class="item-doc"><p>The methods of every float type, <code>T</code>.</p></div>
 <div class="members">
 <div class="member" id="Float.abs">
 <div class="member-head">
-<span class="sig">fun abs(self) -&gt; T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>abs</strong>(<span class="kw">self</span>) -&gt; T</span>
+
+<a class="item-anchor" href="#Float.abs" aria-label="Link to Float.abs">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The value without its sign.</p></div>
 </div>
 <div class="member" id="Float.min">
 <div class="member-head">
-<span class="sig">fun min(self, other: T) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>min</strong>(<span class="kw">self</span>, other: T) -&gt; T</span>
 
+<a class="item-anchor" href="#Float.min" aria-label="Link to Float.min">#</a>
 </div>
-<p class="member-doc">The smaller one; a NaN loses to a number.</p>
+<div class="member-doc"><p>The smaller one; a NaN loses to a number.</p></div>
 </div>
 <div class="member" id="Float.max">
 <div class="member-head">
-<span class="sig">fun max(self, other: T) -&gt; T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>max</strong>(<span class="kw">self</span>, other: T) -&gt; T</span>
+
+<a class="item-anchor" href="#Float.max" aria-label="Link to Float.max">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The larger one; a NaN loses to a number.</p></div>
 </div>
 <div class="member" id="Float.sqrt">
 <div class="member-head">
-<span class="sig">fun sqrt(self) -&gt; T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>sqrt</strong>(<span class="kw">self</span>) -&gt; T</span>
+
+<a class="item-anchor" href="#Float.sqrt" aria-label="Link to Float.sqrt">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The square root; NaN below zero.</p></div>
 </div>
 <div class="member" id="Float.floor">
 <div class="member-head">
-<span class="sig">fun floor(self) -&gt; T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>floor</strong>(<span class="kw">self</span>) -&gt; T</span>
+
+<a class="item-anchor" href="#Float.floor" aria-label="Link to Float.floor">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The nearest whole number at or below it.</p></div>
 </div>
 <div class="member" id="Float.ceil">
 <div class="member-head">
-<span class="sig">fun ceil(self) -&gt; T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>ceil</strong>(<span class="kw">self</span>) -&gt; T</span>
+
+<a class="item-anchor" href="#Float.ceil" aria-label="Link to Float.ceil">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The nearest whole number at or above it.</p></div>
 </div>
 <div class="member" id="Float.round">
 <div class="member-head">
-<span class="sig">fun round(self) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>round</strong>(<span class="kw">self</span>) -&gt; T</span>
 
+<a class="item-anchor" href="#Float.round" aria-label="Link to Float.round">#</a>
 </div>
-<p class="member-doc">Halfway rounds away from zero.</p>
+<div class="member-doc"><p>Halfway rounds away from zero.</p></div>
 </div>
 <div class="member" id="Float.trunc">
 <div class="member-head">
-<span class="sig">fun trunc(self) -&gt; T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>trunc</strong>(<span class="kw">self</span>) -&gt; T</span>
+
+<a class="item-anchor" href="#Float.trunc" aria-label="Link to Float.trunc">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The whole-number part: the fraction dropped, towards zero.</p></div>
 </div>
 <div class="member" id="Float.pow">
 <div class="member-head">
-<span class="sig">fun pow(self, exp: T) -&gt; T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>pow</strong>(<span class="kw">self</span>, exp: T) -&gt; T</span>
+
+<a class="item-anchor" href="#Float.pow" aria-label="Link to Float.pow">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p><code>self</code> to the power <a class="code-link" href="num.html#Float.exp"><code>exp</code></a>.</p></div>
 </div>
 <div class="member" id="Float.is_nan">
 <div class="member-head">
-<span class="sig">fun is_nan(self) -&gt; bool</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_nan</strong>(<span class="kw">self</span>) -&gt; bool</span>
+
+<a class="item-anchor" href="#Float.is_nan" aria-label="Link to Float.is_nan">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>Whether it is NaN, not a number (the only value not equal to itself).</p></div>
 </div>
 <div class="member" id="Float.to_string">
 <div class="member-head">
-<span class="sig">fun to_string(self) -&gt; String</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>to_string</strong>(<span class="kw">self</span>) -&gt; <a href="string.html#String">String</a></span>
+
+<a class="item-anchor" href="#Float.to_string" aria-label="Link to Float.to_string">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The number as text: what <code>{x}</code> prints.</p></div>
 </div>
 <div class="member" id="Float.sin">
 <div class="member-head">
-<span class="sig">fun sin(self) -&gt; T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>sin</strong>(<span class="kw">self</span>) -&gt; T</span>
+
+<a class="item-anchor" href="#Float.sin" aria-label="Link to Float.sin">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The sine of an angle in radians.</p></div>
 </div>
 <div class="member" id="Float.cos">
 <div class="member-head">
-<span class="sig">fun cos(self) -&gt; T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>cos</strong>(<span class="kw">self</span>) -&gt; T</span>
+
+<a class="item-anchor" href="#Float.cos" aria-label="Link to Float.cos">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The cosine of an angle in radians.</p></div>
 </div>
 <div class="member" id="Float.tan">
 <div class="member-head">
-<span class="sig">fun tan(self) -&gt; T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>tan</strong>(<span class="kw">self</span>) -&gt; T</span>
+
+<a class="item-anchor" href="#Float.tan" aria-label="Link to Float.tan">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The tangent of an angle in radians.</p></div>
 </div>
 <div class="member" id="Float.asin">
 <div class="member-head">
-<span class="sig">fun asin(self) -&gt; T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>asin</strong>(<span class="kw">self</span>) -&gt; T</span>
+
+<a class="item-anchor" href="#Float.asin" aria-label="Link to Float.asin">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The angle, in radians, whose sine this is; NaN outside -1 to 1.</p></div>
 </div>
 <div class="member" id="Float.acos">
 <div class="member-head">
-<span class="sig">fun acos(self) -&gt; T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>acos</strong>(<span class="kw">self</span>) -&gt; T</span>
+
+<a class="item-anchor" href="#Float.acos" aria-label="Link to Float.acos">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The angle, in radians, whose cosine this is; NaN outside -1 to 1.</p></div>
 </div>
 <div class="member" id="Float.atan">
 <div class="member-head">
-<span class="sig">fun atan(self) -&gt; T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>atan</strong>(<span class="kw">self</span>) -&gt; T</span>
+
+<a class="item-anchor" href="#Float.atan" aria-label="Link to Float.atan">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The angle, in radians, whose tangent this is.</p></div>
 </div>
 <div class="member" id="Float.atan2">
 <div class="member-head">
-<span class="sig">fun atan2(self, other: T) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>atan2</strong>(<span class="kw">self</span>, other: T) -&gt; T</span>
 
+<a class="item-anchor" href="#Float.atan2" aria-label="Link to Float.atan2">#</a>
 </div>
-<p class="member-doc">The angle of the point (<code>other</code>, <code>self</code>), from the x axis.</p>
+<div class="member-doc"><p>The angle of the point (<code>other</code>, <code>self</code>), from the x axis.</p></div>
 </div>
 <div class="member" id="Float.sinh">
 <div class="member-head">
-<span class="sig">fun sinh(self) -&gt; T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>sinh</strong>(<span class="kw">self</span>) -&gt; T</span>
+
+<a class="item-anchor" href="#Float.sinh" aria-label="Link to Float.sinh">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The hyperbolic sine.</p></div>
 </div>
 <div class="member" id="Float.cosh">
 <div class="member-head">
-<span class="sig">fun cosh(self) -&gt; T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>cosh</strong>(<span class="kw">self</span>) -&gt; T</span>
+
+<a class="item-anchor" href="#Float.cosh" aria-label="Link to Float.cosh">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The hyperbolic cosine.</p></div>
 </div>
 <div class="member" id="Float.tanh">
 <div class="member-head">
-<span class="sig">fun tanh(self) -&gt; T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>tanh</strong>(<span class="kw">self</span>) -&gt; T</span>
+
+<a class="item-anchor" href="#Float.tanh" aria-label="Link to Float.tanh">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The hyperbolic tangent.</p></div>
 </div>
 <div class="member" id="Float.exp">
 <div class="member-head">
-<span class="sig">fun exp(self) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>exp</strong>(<span class="kw">self</span>) -&gt; T</span>
 
+<a class="item-anchor" href="#Float.exp" aria-label="Link to Float.exp">#</a>
 </div>
-<p class="member-doc"><code>e</code> to the power <code>self</code>.</p>
+<div class="member-doc"><p><code>e</code> to the power <code>self</code>.</p></div>
 </div>
 <div class="member" id="Float.exp2">
 <div class="member-head">
-<span class="sig">fun exp2(self) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>exp2</strong>(<span class="kw">self</span>) -&gt; T</span>
 
+<a class="item-anchor" href="#Float.exp2" aria-label="Link to Float.exp2">#</a>
 </div>
-<p class="member-doc">2 to the power <code>self</code>.</p>
+<div class="member-doc"><p>2 to the power <code>self</code>.</p></div>
 </div>
 <div class="member" id="Float.ln">
 <div class="member-head">
-<span class="sig">fun ln(self) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>ln</strong>(<span class="kw">self</span>) -&gt; T</span>
 
+<a class="item-anchor" href="#Float.ln" aria-label="Link to Float.ln">#</a>
 </div>
-<p class="member-doc">The natural logarithm.</p>
+<div class="member-doc"><p>The natural logarithm.</p></div>
 </div>
 <div class="member" id="Float.log2">
 <div class="member-head">
-<span class="sig">fun log2(self) -&gt; T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>log2</strong>(<span class="kw">self</span>) -&gt; T</span>
+
+<a class="item-anchor" href="#Float.log2" aria-label="Link to Float.log2">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The base-2 logarithm.</p></div>
 </div>
 <div class="member" id="Float.log10">
 <div class="member-head">
-<span class="sig">fun log10(self) -&gt; T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>log10</strong>(<span class="kw">self</span>) -&gt; T</span>
+
+<a class="item-anchor" href="#Float.log10" aria-label="Link to Float.log10">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The base-10 logarithm.</p></div>
 </div>
 <div class="member" id="Float.log">
 <div class="member-head">
-<span class="sig">fun log(self, base: T) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>log</strong>(<span class="kw">self</span>, base: T) -&gt; T</span>
 
+<a class="item-anchor" href="#Float.log" aria-label="Link to Float.log">#</a>
 </div>
-<p class="member-doc">The logarithm in <code>base</code>.</p>
+<div class="member-doc"><p>The logarithm in <code>base</code>.</p></div>
 </div>
 <div class="member" id="Float.hypot">
 <div class="member-head">
-<span class="sig">fun hypot(self, other: T) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>hypot</strong>(<span class="kw">self</span>, other: T) -&gt; T</span>
 
+<a class="item-anchor" href="#Float.hypot" aria-label="Link to Float.hypot">#</a>
 </div>
-<p class="member-doc">The length of the hypotenuse of a triangle with sides <code>self</code> and <code>other</code>.</p>
+<div class="member-doc"><p>The length of the hypotenuse of a triangle with sides <code>self</code> and <code>other</code>.</p></div>
 </div>
 <div class="member" id="Float.fract">
 <div class="member-head">
-<span class="sig">fun fract(self) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>fract</strong>(<span class="kw">self</span>) -&gt; T</span>
 
+<a class="item-anchor" href="#Float.fract" aria-label="Link to Float.fract">#</a>
 </div>
-<p class="member-doc">What is left after <code>trunc</code>.</p>
+<div class="member-doc"><p>What is left after <a class="code-link" href="num.html#Float.trunc"><code>trunc</code></a>.</p></div>
 </div>
 <div class="member" id="Float.signum">
 <div class="member-head">
-<span class="sig">fun signum(self) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>signum</strong>(<span class="kw">self</span>) -&gt; T</span>
 
+<a class="item-anchor" href="#Float.signum" aria-label="Link to Float.signum">#</a>
 </div>
-<p class="member-doc"><code>-1</code>, or <code>1</code>; NaN stays NaN.</p>
+<div class="member-doc"><p><code>-1.0</code> or <code>1.0</code>, by the sign (so <code>-0.0</code> gives <code>-1.0</code>); NaN stays NaN.</p></div>
 </div>
 <div class="member" id="Float.copysign">
 <div class="member-head">
-<span class="sig">fun copysign(self, sign: T) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>copysign</strong>(<span class="kw">self</span>, sign: T) -&gt; T</span>
 
+<a class="item-anchor" href="#Float.copysign" aria-label="Link to Float.copysign">#</a>
 </div>
-<p class="member-doc"><code>self</code> with the sign of <code>sign</code>.</p>
+<div class="member-doc"><p><code>self</code> with the sign of <code>sign</code>.</p></div>
 </div>
 <div class="member" id="Float.to_degrees">
 <div class="member-head">
-<span class="sig">fun to_degrees(self) -&gt; T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>to_degrees</strong>(<span class="kw">self</span>) -&gt; T</span>
+
+<a class="item-anchor" href="#Float.to_degrees" aria-label="Link to Float.to_degrees">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>An angle in radians, in degrees.</p></div>
 </div>
 <div class="member" id="Float.to_radians">
 <div class="member-head">
-<span class="sig">fun to_radians(self) -&gt; T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>to_radians</strong>(<span class="kw">self</span>) -&gt; T</span>
+
+<a class="item-anchor" href="#Float.to_radians" aria-label="Link to Float.to_radians">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>An angle in degrees, in radians.</p></div>
 </div>
 <div class="member" id="Float.is_finite">
 <div class="member-head">
-<span class="sig">fun is_finite(self) -&gt; bool</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_finite</strong>(<span class="kw">self</span>) -&gt; bool</span>
+
+<a class="item-anchor" href="#Float.is_finite" aria-label="Link to Float.is_finite">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>Whether it is neither infinite nor NaN.</p></div>
 </div>
 <div class="member" id="Float.is_infinite">
 <div class="member-head">
-<span class="sig">fun is_infinite(self) -&gt; bool</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_infinite</strong>(<span class="kw">self</span>) -&gt; bool</span>
+
+<a class="item-anchor" href="#Float.is_infinite" aria-label="Link to Float.is_infinite">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>Whether it is <code>inf</code> or <code>-inf</code>.</p></div>
 </div>
 <div class="member" id="Float.is_sign_negative">
 <div class="member-head">
-<span class="sig">fun is_sign_negative(self) -&gt; bool</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_sign_negative</strong>(<span class="kw">self</span>) -&gt; bool</span>
+
+<a class="item-anchor" href="#Float.is_sign_negative" aria-label="Link to Float.is_sign_negative">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>Whether its sign bit is set: true for <code>-0.0</code> and negative NaNs too.</p></div>
 </div>
 <div class="member" id="Float.to_bits">
 <div class="member-head">
-<span class="sig">fun to_bits(self) -&gt; uint(T.size * 8)</span>
+<span class="sig"><span class="kw">fun</span> <strong>to_bits</strong>(<span class="kw">self</span>) -&gt; uint(T.size * 8)</span>
 
+<a class="item-anchor" href="#Float.to_bits" aria-label="Link to Float.to_bits">#</a>
 </div>
-<p class="member-doc">The IEEE 754 bit pattern.</p>
+<div class="member-doc"><p>The IEEE 754 bit pattern.</p></div>
 </div>
 <div class="member" id="Float.from_bits">
 <div class="member-head">
-<span class="sig">fun from_bits(bits: uint(T.size * 8)) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>from_bits</strong>(bits: uint(T.size * 8)) -&gt; T</span>
 
+<a class="item-anchor" href="#Float.from_bits" aria-label="Link to Float.from_bits">#</a>
 </div>
-<p class="member-doc">The float with IEEE 754 bit pattern <code>bits</code>.</p>
+<div class="member-doc"><p>The float with IEEE 754 bit pattern <code>bits</code>.</p></div>
 </div>
 <div class="member" id="Float.total_cmp">
 <div class="member-head">
-<span class="sig">fun total_cmp(self, other: T) -&gt; Ordering</span>
+<span class="sig"><span class="kw">fun</span> <strong>total_cmp</strong>(<span class="kw">self</span>, other: T) -&gt; <a href="cmp.html#Ordering">Ordering</a></span>
 
+<a class="item-anchor" href="#Float.total_cmp" aria-label="Link to Float.total_cmp">#</a>
 </div>
-<p class="member-doc">Orders every value, NaNs included: -NaN &lt; -inf &lt; … &lt; -0 &lt; +0 &lt; … &lt; inf &lt; NaN.</p>
+<div class="member-doc"><p>Orders every value, NaNs included: -NaN &lt; -inf &lt; … &lt; -0 &lt; +0 &lt; … &lt; inf &lt; NaN.</p></div>
 </div>
 </div>
-</div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="meta.html"><span class="dir">&larr; previous</span>std.meta</a>
+<a class="next" href="ops.html"><span class="dir">next &rarr;</span>std.ops</a>
+</nav>
 </main>
 </div>
 </body>

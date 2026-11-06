@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.bitset · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../../style.css">
 <script src="../../weave.js" defer></script>
+<script src="../../play/play.js" defer></script>
 </head>
 <body>
 <header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
@@ -18,7 +20,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,96 +68,125 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / bitset</div>
 <h1>std.bitset</h1>
-<p class="summary">Sets of small numbers.</p>
-<h2>Types</h2>
-<div class="item" id="BitSet">
-<div class="item-head">
-<span class="sig">warp <strong>BitSet</strong></span>
-
+<p class="summary">Sets of small numbers: <a class="code-link" href="bitset.html#BitSet"><code>BitSet</code></a> keeps one bit for each number from <code>0</code> up to its length, so a set of a thousand numbers takes 128 bytes, and asking whether a number is in it is one look at one bit.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/bitset.loom</code></span><a href="../../lang/collections.html">read about it in the book &rarr;</a></div>
 </div>
-<p class="item-doc">A set of the numbers <code>0..len</code>, one bit each. Constant-time <code>set</code>, <code>clear</code>, <code>test</code> and <code>toggle</code>; <code>count</code> and the bulk operations work a word of 64 bits at a time.</p>
+<div class="mod-intro"><div class="sample" id="example" data-sample="std_bitset" data-mode="run" data-file="bitset_example.loom" data-store="std.bitset" data-runnable><div class="sample-head"><span class="file"><span class="dot"></span>bitset_example.loom</span><span class="tag ok">an example to run</span><span class="spacer"></span></div><pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.bitset.<span class="t">BitSet</span>
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">var</span> seen = <span class="t">BitSet</span>.<span class="f">new</span>(<span class="n">100</span>)
+    <span class="k">for</span> n <span class="k">in</span> [<span class="n">3</span>, <span class="n">14</span>, <span class="n">15</span>, <span class="n">92</span>, <span class="n">65</span>, <span class="n">35</span>] { seen.<span class="f">set</span>(n) }
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>seen.<span class="f">count</span>()<span class="h">}</span><span class="s"> numbers: </span><span class="h">{</span>seen.<span class="f">items</span>()<span class="h">}</span><span class="s">"</span>)
+    seen.<span class="f">toggle</span>(<span class="n">15</span>)
+    <span class="f">print</span>(<span class="s">"14 is in: </span><span class="h">{</span>seen.<span class="f">test</span>(<span class="n">14</span>)<span class="h">}</span><span class="s">, 15 is in: </span><span class="h">{</span>seen.<span class="f">test</span>(<span class="n">15</span>)<span class="h">}</span><span class="s">"</span>)
+}</code></pre></div></div>
+<h2 id="types">Types</h2>
+<section class="item" id="BitSet">
+<div class="item-head">
+<span class="sig"><span class="kw">warp</span> <strong>BitSet</strong></span>
+
+<a class="item-anchor" href="#BitSet" aria-label="Link to BitSet">#</a>
+</div>
+<div class="item-doc"><p>A set of the numbers <code>0..len</code>, one bit each. Constant-time <a class="code-link" href="bitset.html#BitSet.set"><code>set</code></a>, <a class="code-link" href="bitset.html#BitSet.clear"><code>clear</code></a>, <a class="code-link" href="bitset.html#BitSet.test"><code>test</code></a> and <a class="code-link" href="bitset.html#BitSet.toggle"><code>toggle</code></a>; <a class="code-link" href="bitset.html#BitSet.count"><code>count</code></a> and the bulk operations work a word of 64 bits at a time.</p></div>
 <div class="members">
 <div class="member" id="BitSet.new">
 <div class="member-head">
-<span class="sig">fun new(len: usize) -&gt; BitSet</span>
+<span class="sig"><span class="kw">fun</span> <strong>new</strong>(len: usize) -&gt; <span class="ty">BitSet</span></span>
 
+<a class="item-anchor" href="#BitSet.new" aria-label="Link to BitSet.new">#</a>
 </div>
-<p class="member-doc">A set of <code>len</code> numbers, none in it.</p>
+<div class="member-doc"><p>A set of <a class="code-link" href="bitset.html#BitSet.len"><code>len</code></a> numbers, none in it.</p></div>
 </div>
 <div class="member" id="BitSet.len">
 <div class="member-head">
-<span class="sig">fun len(self) -&gt; usize</span>
+<span class="sig"><span class="kw">fun</span> <strong>len</strong>(<span class="kw">self</span>) -&gt; usize</span>
 
+<a class="item-anchor" href="#BitSet.len" aria-label="Link to BitSet.len">#</a>
 </div>
-<p class="member-doc">How many numbers it can hold: they are <code>0</code> up to this.</p>
+<div class="member-doc"><p>How many numbers it can hold: they are <code>0</code> up to this.</p></div>
 </div>
 <div class="member" id="BitSet.set">
 <div class="member-head">
-<span class="sig">fun set(mut self, i: usize)</span>
+<span class="sig"><span class="kw">fun</span> <strong>set</strong>(<span class="kw">mut</span> <span class="kw">self</span>, i: usize)</span>
 
+<a class="item-anchor" href="#BitSet.set" aria-label="Link to BitSet.set">#</a>
 </div>
-<p class="member-doc">Puts <code>i</code> in. Unravels if <code>i &gt;= len</code>.</p>
+<div class="member-doc"><p>Puts <code>i</code> in. Unravels if <code>i &gt;= len</code>.</p></div>
 </div>
 <div class="member" id="BitSet.clear">
 <div class="member-head">
-<span class="sig">fun clear(mut self, i: usize)</span>
+<span class="sig"><span class="kw">fun</span> <strong>clear</strong>(<span class="kw">mut</span> <span class="kw">self</span>, i: usize)</span>
 
+<a class="item-anchor" href="#BitSet.clear" aria-label="Link to BitSet.clear">#</a>
 </div>
-<p class="member-doc">Takes <code>i</code> out. Unravels if <code>i &gt;= len</code>.</p>
+<div class="member-doc"><p>Takes <code>i</code> out. Unravels if <code>i &gt;= len</code>.</p></div>
 </div>
 <div class="member" id="BitSet.toggle">
 <div class="member-head">
-<span class="sig">fun toggle(mut self, i: usize)</span>
+<span class="sig"><span class="kw">fun</span> <strong>toggle</strong>(<span class="kw">mut</span> <span class="kw">self</span>, i: usize)</span>
 
+<a class="item-anchor" href="#BitSet.toggle" aria-label="Link to BitSet.toggle">#</a>
 </div>
-<p class="member-doc">Puts <code>i</code> in if it is out, and out if it is in.</p>
+<div class="member-doc"><p>Puts <code>i</code> in if it is out, and out if it is in.</p></div>
 </div>
 <div class="member" id="BitSet.test">
 <div class="member-head">
-<span class="sig">fun test(self, i: usize) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>test</strong>(<span class="kw">self</span>, i: usize) -&gt; bool</span>
 
+<a class="item-anchor" href="#BitSet.test" aria-label="Link to BitSet.test">#</a>
 </div>
-<p class="member-doc">Whether <code>i</code> is in. Unravels if <code>i &gt;= len</code>.</p>
+<div class="member-doc"><p>Whether <code>i</code> is in. Unravels if <code>i &gt;= len</code>.</p></div>
 </div>
 <div class="member" id="BitSet.count">
 <div class="member-head">
-<span class="sig">fun count(self) -&gt; usize</span>
+<span class="sig"><span class="kw">fun</span> <strong>count</strong>(<span class="kw">self</span>) -&gt; usize</span>
 
+<a class="item-anchor" href="#BitSet.count" aria-label="Link to BitSet.count">#</a>
 </div>
-<p class="member-doc">How many numbers are in.</p>
+<div class="member-doc"><p>How many numbers are in.</p></div>
 </div>
 <div class="member" id="BitSet.items">
 <div class="member-head">
-<span class="sig">fun items(self) -&gt; List[usize]</span>
+<span class="sig"><span class="kw">fun</span> <strong>items</strong>(<span class="kw">self</span>) -&gt; <a href="list.html#List">List</a>[usize]</span>
 
+<a class="item-anchor" href="#BitSet.items" aria-label="Link to BitSet.items">#</a>
 </div>
-<p class="member-doc">The numbers that are in, from the smallest.</p>
+<div class="member-doc"><p>The numbers that are in, from the smallest.</p></div>
 </div>
 <div class="member" id="BitSet.intersect_with">
 <div class="member-head">
-<span class="sig">fun intersect_with(mut self, other: BitSet)</span>
+<span class="sig"><span class="kw">fun</span> <strong>intersect_with</strong>(<span class="kw">mut</span> <span class="kw">self</span>, other: <span class="ty">BitSet</span>)</span>
 
+<a class="item-anchor" href="#BitSet.intersect_with" aria-label="Link to BitSet.intersect_with">#</a>
 </div>
-<p class="member-doc">Keeps the numbers that are also in <code>other</code>. The sets must be the same size.</p>
+<div class="member-doc"><p>Keeps the numbers that are also in <code>other</code>. The sets must be the same size.</p></div>
 </div>
 <div class="member" id="BitSet.union_with">
 <div class="member-head">
-<span class="sig">fun union_with(mut self, other: BitSet)</span>
+<span class="sig"><span class="kw">fun</span> <strong>union_with</strong>(<span class="kw">mut</span> <span class="kw">self</span>, other: <span class="ty">BitSet</span>)</span>
 
+<a class="item-anchor" href="#BitSet.union_with" aria-label="Link to BitSet.union_with">#</a>
 </div>
-<p class="member-doc">Adds the numbers in <code>other</code>. The sets must be the same size.</p>
+<div class="member-doc"><p>Adds the numbers in <code>other</code>. The sets must be the same size.</p></div>
 </div>
 <div class="member" id="BitSet.subtract">
 <div class="member-head">
-<span class="sig">fun subtract(mut self, other: BitSet)</span>
+<span class="sig"><span class="kw">fun</span> <strong>subtract</strong>(<span class="kw">mut</span> <span class="kw">self</span>, other: <span class="ty">BitSet</span>)</span>
 
+<a class="item-anchor" href="#BitSet.subtract" aria-label="Link to BitSet.subtract">#</a>
 </div>
-<p class="member-doc">Takes out the numbers that are in <code>other</code>. The sets must be the same size.</p>
+<div class="member-doc"><p>Takes out the numbers that are in <code>other</code>. The sets must be the same size.</p></div>
 </div>
 </div>
-</div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="prelude.html"><span class="dir">&larr; previous</span>std.prelude</a>
+<a class="next" href="cmp.html"><span class="dir">next &rarr;</span>std.cmp</a>
+</nav>
 </main>
 </div>
 </body>

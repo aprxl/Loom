@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.sync · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../../style.css">
 <script src="../../weave.js" defer></script>
+<script src="../../play/play.js" defer></script>
 </head>
 <body>
 <header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
@@ -18,7 +20,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,141 +68,182 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / sync</div>
 <h1>std.sync</h1>
-<p class="summary">Sharing between threads.</p>
-<h2>Types</h2>
-<div class="item" id="Atomic">
-<div class="item-head">
-<span class="sig">warp <strong>Atomic</strong>[T]</span>
-<span class="badge builtin">builtin</span>
+<p class="summary">Sharing between threads: <a class="code-link" href="sync.html#Atomic"><code>Atomic</code></a> for numbers and flags, <a class="code-link" href="sync.html#Mutex"><code>Mutex</code></a> for anything else, <a class="code-link" href="sync.html#Pipe"><code>Pipe</code></a> for passing values from thread to thread, and <a class="code-link" href="sync.html#Spun"><code>Spun</code></a>, the handle a <code>thread</code> gives. Threads run inside a <code>loom</code> block; see the Threads chapter of the book.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/sync.loom</code></span><a href="../../lang/threads.html">read about it in the book &rarr;</a></div>
 </div>
-<p class="item-doc">A value that threads can read and update without locks. <code>T</code> is an integer of 8, 16, 32 or 64 bits (<code>usize</code>, <code>isize</code> too), or <code>bool</code>. Every operation is sequentially consistent, and they all take <code>self</code> to read, so threads share one the way they share any other value. With one worker thread runs until it waits, so a loop that spins on <code>load()</code> never lets another thread run: call <code>sched_yield()</code> in it.</p>
+<div class="mod-intro"><div class="sample" id="example" data-sample="std_sync" data-mode="run" data-file="sync_example.loom" data-store="std.sync" data-runnable><div class="sample-head"><span class="file"><span class="dot"></span>sync_example.loom</span><span class="tag ok">an example to run</span><span class="spacer"></span></div><pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.sync.{<span class="t">Atomic</span>, <span class="t">Mutex</span>}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> hits = <span class="t">Atomic</span>[u64](<span class="n">0</span>)
+    <span class="k">let</span> names = <span class="t">Mutex</span>[<span class="t">List</span>[<span class="t">String</span>]]([])
+    <span class="k">loom</span> {
+        <span class="k">for</span> i <span class="k">in</span> <span class="n">0</span>..<span class="n">4</span> {
+            <span class="k">thread</span> {
+                hits.<span class="f">add</span>(<span class="n">10</span>)
+                names.<span class="f">lock</span>().<span class="f">push</span>(<span class="s">"thread </span><span class="h">{</span>i<span class="h">}</span><span class="s">"</span>)
+            }
+        }
+    }
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>hits.<span class="f">load</span>()<span class="h">}</span><span class="s"> hits from </span><span class="h">{</span>names.<span class="f">lock</span>().<span class="f">len</span>()<span class="h">}</span><span class="s"> threads"</span>)
+}</code></pre></div></div>
+<nav class="toc-chips" aria-label="In this module"><a href="#Atomic"><span class="kind">warp</span>Atomic</a><a href="#Mutex"><span class="kind">warp</span>Mutex</a><a href="#Spun"><span class="kind">warp</span>Spun</a><a href="#Pipe"><span class="kind">warp</span>Pipe</a><a href="#Crew"><span class="kind">warp</span>Crew</a><a href="#sched_yield"><span class="kind">fun</span>sched_yield</a></nav>
+<h2 id="types">Types</h2>
+<section class="item" id="Atomic">
+<div class="item-head">
+<span class="sig"><span class="kw">warp</span> <strong>Atomic</strong>[T]</span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Atomic" aria-label="Link to Atomic">#</a>
+</div>
+<div class="item-doc"><p>A value that threads can read and update without a lock. <code>T</code> is an integer of 8, 16, 32 or 64 bits (<code>usize</code> and <code>isize</code> too) or <code>bool</code>. Every operation is sequentially consistent, and they all take <code>self</code> to read, so threads share an atomic the way they share any other value.</p><p>On a single worker, a thread runs until it waits, so a loop that spins on <a class="code-link" href="sync.html#Atomic.load"><code>load()</code></a> never lets another thread run: call <a class="code-link" href="sync.html#sched_yield"><code>sched_yield()</code></a> in it.</p></div>
 <div class="members">
 <div class="member" id="Atomic.load">
 <div class="member-head">
-<span class="sig">fun load(self) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>load</strong>(<span class="kw">self</span>) -&gt; T</span>
 
+<a class="item-anchor" href="#Atomic.load" aria-label="Link to Atomic.load">#</a>
 </div>
-<p class="member-doc">The value now.</p>
+<div class="member-doc"><p>The value now.</p></div>
 </div>
 <div class="member" id="Atomic.store">
 <div class="member-head">
-<span class="sig">fun store(self, value: T)</span>
+<span class="sig"><span class="kw">fun</span> <strong>store</strong>(<span class="kw">self</span>, value: T)</span>
 
+<a class="item-anchor" href="#Atomic.store" aria-label="Link to Atomic.store">#</a>
 </div>
-<p class="member-doc">Sets the value.</p>
+<div class="member-doc"><p>Sets the value.</p></div>
 </div>
 <div class="member" id="Atomic.swap">
 <div class="member-head">
-<span class="sig">fun swap(self, value: T) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>swap</strong>(<span class="kw">self</span>, value: T) -&gt; T</span>
 
+<a class="item-anchor" href="#Atomic.swap" aria-label="Link to Atomic.swap">#</a>
 </div>
-<p class="member-doc">Sets the value, and gives the one it replaced.</p>
+<div class="member-doc"><p>Sets the value, and gives the one it replaced.</p></div>
 </div>
 <div class="member" id="Atomic.compare_exchange">
 <div class="member-head">
-<span class="sig">fun compare_exchange(self, expected: T, desired: T) -&gt; (bool, T)</span>
+<span class="sig"><span class="kw">fun</span> <strong>compare_exchange</strong>(<span class="kw">self</span>, expected: T, desired: T) -&gt; (bool, T)</span>
 
+<a class="item-anchor" href="#Atomic.compare_exchange" aria-label="Link to Atomic.compare_exchange">#</a>
 </div>
-<p class="member-doc">Sets the value to <code>desired</code> if it's <code>expected</code>. Gives whether it did, and the value that was there.</p>
+<div class="member-doc"><p>Sets the value to <code>desired</code> if it's <code>expected</code>. Gives whether it did, and the value that was there.</p></div>
 </div>
 <div class="member" id="Atomic.add">
 <div class="member-head">
-<span class="sig">fun add(self, n: T) -&gt; T where T: Integer</span>
+<span class="sig"><span class="kw">fun</span> <strong>add</strong>(<span class="kw">self</span>, n: T) -&gt; T <span class="kw">where</span> T: <a href="ops.html#Integer">Integer</a></span>
 
+<a class="item-anchor" href="#Atomic.add" aria-label="Link to Atomic.add">#</a>
 </div>
-<p class="member-doc">Adds <code>n</code>, and gives the value before. Unravels if the sum doesn't fit, leaving the value as it was.</p>
+<div class="member-doc"><p>Adds <code>n</code>, and gives the value before. Unravels if the sum doesn't fit, leaving the value as it was.</p></div>
 </div>
 <div class="member" id="Atomic.sub">
 <div class="member-head">
-<span class="sig">fun sub(self, n: T) -&gt; T where T: Integer</span>
+<span class="sig"><span class="kw">fun</span> <strong>sub</strong>(<span class="kw">self</span>, n: T) -&gt; T <span class="kw">where</span> T: <a href="ops.html#Integer">Integer</a></span>
 
+<a class="item-anchor" href="#Atomic.sub" aria-label="Link to Atomic.sub">#</a>
 </div>
-<p class="member-doc">Subtracts <code>n</code>, and gives the value before. Unravels if the result doesn't fit, leaving the value as it was.</p>
+<div class="member-doc"><p>Subtracts <code>n</code>, and gives the value before. Unravels if the result doesn't fit, leaving the value as it was.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="Mutex">
+</section>
+<section class="item" id="Mutex">
 <div class="item-head">
-<span class="sig">warp <strong>Mutex</strong>[T]</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">warp</span> <strong>Mutex</strong>[T]</span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Mutex" aria-label="Link to Mutex">#</a>
 </div>
-<p class="item-doc">A value that one thread at a time can lock and use.</p>
+<div class="item-doc"><p>A value that one thread at a time can lock and use.</p></div>
 <div class="members">
 <div class="member" id="Mutex.lock">
 <div class="member-head">
-<span class="sig">fun lock(self) ~&gt; mut T</span>
+<span class="sig"><span class="kw">fun</span> <strong>lock</strong>(<span class="kw">self</span>) ~&gt; <span class="kw">mut</span> T</span>
 
+<a class="item-anchor" href="#Mutex.lock" aria-label="Link to Mutex.lock">#</a>
 </div>
-<p class="member-doc">The value, for the statement it's in: the lock is taken where <code>lock()</code> is evaluated (waiting, in turn, while another thread has it) and given back when the statement ends, however it ends. <code>total.lock() += n</code> changes it. A thread that locks a mutex it has locked already unravels.</p>
+<div class="member-doc"><p>The value, for the statement it's in: the lock is taken where <a class="code-link" href="sync.html#Mutex.lock"><code>lock()</code></a> is evaluated (waiting, in turn, while another thread has it) and given back when the statement ends, however it ends. <code>total.lock() += n</code> changes it. A thread that locks a mutex it has locked already unravels.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="Spun">
+</section>
+<section class="item" id="Spun">
 <div class="item-head">
-<span class="sig">warp <strong>Spun</strong>[T]</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">warp</span> <strong>Spun</strong>[T]</span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Spun" aria-label="Link to Spun">#</a>
 </div>
-<p class="item-doc">A thread started in a <code>loom</code> block: what <code>thread e</code> gives. It's <code>Copy</code> unless its result is <code>once</code>. A thread nobody joined is joined where the block ends.</p>
+<div class="item-doc"><p>A thread started in a <code>loom</code> block: what <code>thread e</code> gives. It's <a class="code-link" href="ops.html#Copy"><code>Copy</code></a> unless its result is <code>once</code>. A thread nobody joined is joined where the block ends.</p></div>
 <div class="members">
 <div class="member" id="Spun.join">
 <div class="member-head">
-<span class="sig">fun join(take self) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>join</strong>(<span class="kw">take</span> <span class="kw">self</span>) -&gt; T</span>
 
+<a class="item-anchor" href="#Spun.join" aria-label="Link to Spun.join">#</a>
 </div>
-<p class="member-doc">Waits for the thread and gives its result. If a thread of the block unravelled, this unravels with its message instead. A thread is joined once: a second <code>join</code> unravels.</p>
+<div class="member-doc"><p>Waits for the thread and gives its result. If a thread of the block unravelled, this unravels with its message instead. A thread is joined once: a second <a class="code-link" href="sync.html#Spun.join"><code>join</code></a> unravels.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="Pipe">
+</section>
+<section class="item" id="Pipe">
 <div class="item-head">
-<span class="sig">warp <strong>Pipe</strong>[T]</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">warp</span> <strong>Pipe</strong>[T]</span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Pipe" aria-label="Link to Pipe">#</a>
 </div>
-<p class="item-doc">A bounded queue: threads send items into it and receive them from it, in order. It holds <code>capacity</code> items at most (made with <code>Pipe[T](capacity)</code>, which is at least 1). Every method takes <code>self</code> to read, so threads share one. A pipe nobody will fill, with a thread waiting to receive from it, is a deadlock.</p>
+<div class="item-doc"><p>A bounded queue: threads send items into it and receive them from it, in order. It holds <code>capacity</code> items at most (made with <code>Pipe[T](capacity)</code>, which is at least 1). Every method takes <code>self</code> to read, so threads share one. A pipe nobody will fill, with a thread waiting to receive from it, is a deadlock.</p></div>
 <div class="members">
 <div class="member" id="Pipe.send">
 <div class="member-head">
-<span class="sig">fun send(self, take item: T)</span>
+<span class="sig"><span class="kw">fun</span> <strong>send</strong>(<span class="kw">self</span>, <span class="kw">take</span> item: T)</span>
 
+<a class="item-anchor" href="#Pipe.send" aria-label="Link to Pipe.send">#</a>
 </div>
-<p class="member-doc">Puts <code>item</code> in, waiting while the pipe is full. Unravels if it's closed (before or while it waits).</p>
+<div class="member-doc"><p>Puts <code>item</code> in, waiting while the pipe is full. Unravels if it's closed (before or while it waits).</p></div>
 </div>
 <div class="member" id="Pipe.recv">
 <div class="member-head">
-<span class="sig">fun recv(self) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>recv</strong>(<span class="kw">self</span>) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Pipe.recv" aria-label="Link to Pipe.recv">#</a>
 </div>
-<p class="member-doc">Takes the oldest item, waiting while the pipe is empty. <code>none</code> once it's closed and there's nothing left.</p>
+<div class="member-doc"><p>Takes the oldest item, waiting while the pipe is empty. <code>none</code> once it's closed and there's nothing left.</p></div>
 </div>
 <div class="member" id="Pipe.close">
 <div class="member-head">
-<span class="sig">fun close(self)</span>
+<span class="sig"><span class="kw">fun</span> <strong>close</strong>(<span class="kw">self</span>)</span>
 
+<a class="item-anchor" href="#Pipe.close" aria-label="Link to Pipe.close">#</a>
 </div>
-<p class="member-doc">Closes the pipe: what's in it can still be received, nothing more can be sent, and the threads that wait on it wake. Closing it again does nothing.</p>
+<div class="member-doc"><p>Closes the pipe: what's in it can still be received, nothing more can be sent, and the threads that wait on it wake. Closing it again does nothing.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="Crew">
+</section>
+<section class="item" id="Crew">
 <div class="item-head">
-<span class="sig">warp <strong>Crew</strong></span>
+<span class="sig"><span class="kw">warp</span> <strong>Crew</strong></span>
 
+<a class="item-anchor" href="#Crew" aria-label="Link to Crew">#</a>
 </div>
-<p class="item-doc">How many workers may run a <code>loom</code>'s threads at once: <code>loom(given: Crew(workers: 2)) { … }</code>. A thread that waits holds no worker. Unravels at the <code>loom</code> if <code>workers</code> is 0.</p>
-<ul class="fields">
-<li><span class="sig">pub workers: usize</span></li>
-</ul>
-</div>
-<h2>Functions</h2>
-<div class="item" id="sched_yield">
+<div class="item-doc"><p>How many workers may run a <code>loom</code>'s threads at once: <code>loom(given: Crew(workers: 2)) { … }</code>. A thread that waits holds no worker. Unravels at the <code>loom</code> if <code>workers</code> is 0.</p></div>
+<div class="parts"><span class="parts-label">Fields</span><ul class="fields">
+<li title="How many threads of the `loom` may run at once."><span class="sig"><span class="kw">pub</span> workers: usize</span><span class="part-doc">How many threads of the <code>loom</code> may run at once.</span></li>
+</ul></div>
+</section>
+<h2 id="functions">Functions</h2>
+<section class="item" id="sched_yield">
 <div class="item-head">
-<span class="sig">fun <strong>sched_yield</strong>()</span>
-<span class="badge extern">extern</span>
+<span class="sig"><span class="kw">fun</span> <strong>sched_yield</strong>()</span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#sched_yield" aria-label="Link to sched_yield">#</a>
 </div>
-<p class="item-doc">Lets the other threads that can run go first: the running thread goes to the back of the queue.</p>
-</div>
+<div class="item-doc"><p>Lets the other threads that can run go first: the running thread goes to the back of the queue.</p></div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="string.html"><span class="dir">&larr; previous</span>std.string</a>
+<a class="next" href="target.html"><span class="dir">next &rarr;</span>std.target</a>
+</nav>
 </main>
 </div>
 </body>

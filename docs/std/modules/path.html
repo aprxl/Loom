@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.path · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../../style.css">
 <script src="../../weave.js" defer></script>
+<script src="../../play/play.js" defer></script>
 </head>
 <body>
 <header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
@@ -18,7 +20,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,66 +68,92 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / path</div>
 <h1>std.path</h1>
-<p class="summary">File paths, as text. The separator is <code>/</code> on every system (Windows takes it too), so a program and its tests read the same everywhere.</p>
-<h2>Functions</h2>
-<div class="item" id="join">
-<div class="item-head">
-<span class="sig">fun <strong>join</strong>(a: str, b: str) -&gt; String</span>
+<p class="summary">File paths, as text. The separator is <code>/</code> on every system (Windows takes it too), so a program and its tests read the same everywhere. Nothing here touches the file system: see <a class="code-link" href="fs.html"><code>std.fs</code></a> for that.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/path.loom</code></span></div>
+</div>
+<div class="mod-intro"><div class="sample" id="example" data-sample="std_path" data-mode="run" data-file="path_example.loom" data-store="std.path" data-runnable><div class="sample-head"><span class="file"><span class="dot"></span>path_example.loom</span><span class="tag ok">an example to run</span><span class="spacer"></span></div><pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.path
 
-</div>
-<p class="item-doc"><code>a</code> and <code>b</code> as one path: <code>join("src", "main.loom")</code> is <code>src/main.loom</code>; an absolute <code>b</code> replaces <code>a</code>.</p>
-</div>
-<div class="item" id="is_absolute">
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> p = path.<span class="f">join</span>(<span class="s">"docs/lang"</span>, <span class="s">"start.html"</span>)
+    <span class="f">print</span>(p)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>path.<span class="f">file_name</span>(p):?<span class="h">}</span><span class="s"> </span><span class="h">{</span>path.<span class="f">stem</span>(p):?<span class="h">}</span><span class="s"> </span><span class="h">{</span>path.<span class="f">extension</span>(p):?<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(path.<span class="f">with_extension</span>(p, <span class="s">"md"</span>))
+    <span class="f">print</span>(path.<span class="f">normalize</span>(<span class="s">"a/./b/../c"</span>))
+}</code></pre></div></div>
+<nav class="toc-chips" aria-label="In this module"><a href="#join"><span class="kind">fun</span>join</a><a href="#is_absolute"><span class="kind">fun</span>is_absolute</a><a href="#file_name"><span class="kind">fun</span>file_name</a><a href="#parent"><span class="kind">fun</span>parent</a><a href="#stem"><span class="kind">fun</span>stem</a><a href="#extension"><span class="kind">fun</span>extension</a><a href="#with_extension"><span class="kind">fun</span>with_extension</a><a href="#normalize"><span class="kind">fun</span>normalize</a></nav>
+<h2 id="functions">Functions</h2>
+<section class="item" id="join">
 <div class="item-head">
-<span class="sig">fun <strong>is_absolute</strong>(p: str) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>join</strong>(a: str, b: str) -&gt; <a href="string.html#String">String</a></span>
 
+<a class="item-anchor" href="#join" aria-label="Link to join">#</a>
 </div>
-<p class="item-doc">Whether the path starts at the root.</p>
-</div>
-<div class="item" id="file_name">
+<div class="item-doc"><p><code>a</code> and <code>b</code> as one path: <a class="code-link" href="path.html#join"><code>join("src", "main.loom")</code></a> is <code>src/main.loom</code>; an absolute <code>b</code> replaces <code>a</code>.</p></div>
+</section>
+<section class="item" id="is_absolute">
 <div class="item-head">
-<span class="sig">fun <strong>file_name</strong>(p: str) -&gt; ?str</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_absolute</strong>(p: str) -&gt; bool</span>
 
+<a class="item-anchor" href="#is_absolute" aria-label="Link to is_absolute">#</a>
 </div>
-<p class="item-doc">The last part: <code>file_name("a/b.txt")</code> is <code>b.txt</code>. None for <code>""</code> and <code>/</code>.</p>
-</div>
-<div class="item" id="parent">
+<div class="item-doc"><p>Whether the path starts at the root.</p></div>
+</section>
+<section class="item" id="file_name">
 <div class="item-head">
-<span class="sig">fun <strong>parent</strong>(p: str) -&gt; ?str</span>
+<span class="sig"><span class="kw">fun</span> <strong>file_name</strong>(p: str) -&gt; ?str</span>
 
+<a class="item-anchor" href="#file_name" aria-label="Link to file_name">#</a>
 </div>
-<p class="item-doc">Everything before the last part: <code>parent("a/b.txt")</code> is <code>a</code>. None for a path with one part and for the root.</p>
-</div>
-<div class="item" id="stem">
+<div class="item-doc"><p>The last part: <a class="code-link" href="path.html#file_name"><code>file_name("a/b.txt")</code></a> is <code>b.txt</code>. None for <code>""</code> and <code>/</code>.</p></div>
+</section>
+<section class="item" id="parent">
 <div class="item-head">
-<span class="sig">fun <strong>stem</strong>(p: str) -&gt; ?str</span>
+<span class="sig"><span class="kw">fun</span> <strong>parent</strong>(p: str) -&gt; ?str</span>
 
+<a class="item-anchor" href="#parent" aria-label="Link to parent">#</a>
 </div>
-<p class="item-doc">The last part without its extension: <code>stem("a/b.tar.gz")</code> is <code>b.tar</code>.</p>
-</div>
-<div class="item" id="extension">
+<div class="item-doc"><p>Everything before the last part: <a class="code-link" href="path.html#parent"><code>parent("a/b.txt")</code></a> is <code>a</code>. None for a path with one part and for the root.</p></div>
+</section>
+<section class="item" id="stem">
 <div class="item-head">
-<span class="sig">fun <strong>extension</strong>(p: str) -&gt; ?str</span>
+<span class="sig"><span class="kw">fun</span> <strong>stem</strong>(p: str) -&gt; ?str</span>
 
+<a class="item-anchor" href="#stem" aria-label="Link to stem">#</a>
 </div>
-<p class="item-doc">The part after the last dot of the last part: <code>extension("a/b.txt")</code> is <code>txt</code>. None when there is no dot, or the dot starts the name.</p>
-</div>
-<div class="item" id="with_extension">
+<div class="item-doc"><p>The last part without its extension: <a class="code-link" href="path.html#stem"><code>stem("a/b.tar.gz")</code></a> is <code>b.tar</code>.</p></div>
+</section>
+<section class="item" id="extension">
 <div class="item-head">
-<span class="sig">fun <strong>with_extension</strong>(p: str, ext: str) -&gt; String</span>
+<span class="sig"><span class="kw">fun</span> <strong>extension</strong>(p: str) -&gt; ?str</span>
 
+<a class="item-anchor" href="#extension" aria-label="Link to extension">#</a>
 </div>
-<p class="item-doc">The path with a different extension: <code>with_extension("a/b.txt", "md")</code> is <code>a/b.md</code>.</p>
-</div>
-<div class="item" id="normalize">
+<div class="item-doc"><p>The part after the last dot of the last part: <a class="code-link" href="path.html#extension"><code>extension("a/b.txt")</code></a> is <code>txt</code>. None when there is no dot, or the dot starts the name.</p></div>
+</section>
+<section class="item" id="with_extension">
 <div class="item-head">
-<span class="sig">fun <strong>normalize</strong>(p: str) -&gt; String</span>
+<span class="sig"><span class="kw">fun</span> <strong>with_extension</strong>(p: str, ext: str) -&gt; <a href="string.html#String">String</a></span>
 
+<a class="item-anchor" href="#with_extension" aria-label="Link to with_extension">#</a>
 </div>
-<p class="item-doc">The path without <code>.</code> parts, empty parts, and <code>x/..</code> pairs: <code>normalize("a/./b/../c")</code> is <code>a/c</code>.</p>
+<div class="item-doc"><p>The path with a different extension: <a class="code-link" href="path.html#with_extension"><code>with_extension("a/b.txt", "md")</code></a> is <code>a/b.md</code>.</p></div>
+</section>
+<section class="item" id="normalize">
+<div class="item-head">
+<span class="sig"><span class="kw">fun</span> <strong>normalize</strong>(p: str) -&gt; <a href="string.html#String">String</a></span>
+
+<a class="item-anchor" href="#normalize" aria-label="Link to normalize">#</a>
 </div>
+<div class="item-doc"><p>The path without <code>.</code> parts, empty parts, and <code>x/..</code> pairs: <a class="code-link" href="path.html#normalize"><code>normalize("a/./b/../c")</code></a> is <code>a/c</code>.</p></div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="option.html"><span class="dir">&larr; previous</span>std.option</a>
+<a class="next" href="priority.html"><span class="dir">next &rarr;</span>std.priority</a>
+</nav>
 </main>
 </div>
 </body>

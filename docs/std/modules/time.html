@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.time · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../../style.css">
 <script src="../../weave.js" defer></script>
+<script src="../../play/play.js" defer></script>
 </head>
 <body>
 <header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
@@ -18,7 +20,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,244 +68,293 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / time</div>
 <h1>std.time</h1>
-<p class="summary">Time.</p>
-<h2>Types</h2>
-<div class="item" id="Duration">
-<div class="item-head">
-<span class="sig">warp <strong>Duration</strong>: Eq, Ord, Show</span>
-
+<p class="summary">Time: <a class="code-link" href="time.html#Duration"><code>Duration</code></a> (a span of time), <a class="code-link" href="time.html#Instant"><code>Instant</code></a> (for measuring how long something takes), <a class="code-link" href="time.html#SystemTime"><code>SystemTime</code></a> (dates and times of day), and <a class="code-link" href="time.html#sleep"><code>sleep</code></a>.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/time.loom</code></span></div>
 </div>
-<p class="item-doc">A span of time, with nanosecond precision.</p>
-<ul class="fields">
-<li><span class="sig">pub(get) nanos: u64</span></li>
-</ul>
+<div class="mod-intro"><div class="sample" id="example" data-sample="std_time" data-mode="run" data-file="time_example.loom" data-store="std.time" data-runnable><div class="sample-head"><span class="file"><span class="dot"></span>time_example.loom</span><span class="tag ok">an example to run</span><span class="spacer"></span></div><pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.time.{<span class="t">Duration</span>, ms, secs, measure}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> d = <span class="f">secs</span>(<span class="n">1</span>).<span class="f">plus</span>(<span class="f">ms</span>(<span class="n">250</span>))
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>d.<span class="f">to_string</span>()<span class="h">}</span><span class="s"> is </span><span class="h">{</span>d.<span class="f">as_millis</span>()<span class="h">}</span><span class="s"> ms"</span>)
+    <span class="k">let</span> (total, took) = <span class="f">measure</span>(() =&gt; (<span class="n">1</span>..=<span class="n">1000</span>).<span class="f">sum</span>())
+    <span class="f">print</span>(<span class="s">"sum </span><span class="h">{</span>total<span class="h">}</span><span class="s">, took less than a second: </span><span class="h">{</span>took &lt; <span class="f">secs</span>(<span class="n">1</span>)<span class="h">}</span><span class="s">"</span>)
+}</code></pre></div></div>
+<nav class="toc-chips" aria-label="In this module"><a href="#Duration"><span class="kind">warp</span>Duration</a><a href="#Instant"><span class="kind">warp</span>Instant</a><a href="#SystemTime"><span class="kind">warp</span>SystemTime</a><a href="#ns"><span class="kind">fun</span>ns</a><a href="#micros"><span class="kind">fun</span>micros</a><a href="#ms"><span class="kind">fun</span>ms</a><a href="#secs"><span class="kind">fun</span>secs</a><a href="#mins"><span class="kind">fun</span>mins</a><a href="#measure"><span class="kind">fun</span>measure</a><a href="#sleep"><span class="kind">fun</span>sleep</a><a href="#monotonic_nanos"><span class="kind">fun</span>monotonic_nanos</a><a href="#unix_nanos"><span class="kind">fun</span>unix_nanos</a></nav>
+<h2 id="types">Types</h2>
+<section class="item" id="Duration">
+<div class="item-head">
+<span class="sig"><span class="kw">warp</span> <strong>Duration</strong>: <a href="ops.html#Eq">Eq</a>, <a href="ops.html#Ord">Ord</a>, <a href="fmt.html#Show">Show</a></span>
+
+<a class="item-anchor" href="#Duration" aria-label="Link to Duration">#</a>
+</div>
+<div class="item-doc"><p>A span of time, with nanosecond precision.</p></div>
+<div class="parts"><span class="parts-label">Fields</span><ul class="fields">
+<li title="The length in nanoseconds."><span class="sig"><span class="kw">pub</span>(get) nanos: u64</span><span class="part-doc">The length in nanoseconds.</span></li>
+</ul></div>
 <div class="members">
 <div class="member" id="Duration.from_nanos">
 <div class="member-head">
-<span class="sig">fun from_nanos(nanos: u64) -&gt; Duration</span>
+<span class="sig"><span class="kw">fun</span> <strong>from_nanos</strong>(nanos: u64) -&gt; <span class="ty">Duration</span></span>
 
+<a class="item-anchor" href="#Duration.from_nanos" aria-label="Link to Duration.from_nanos">#</a>
 </div>
-<p class="member-doc">A span of <code>nanos</code> nanoseconds.</p>
+<div class="member-doc"><p>A span of <code>nanos</code> nanoseconds.</p></div>
 </div>
 <div class="member" id="Duration.from_secs_f64">
 <div class="member-head">
-<span class="sig">fun from_secs_f64(secs: f64) -&gt; Duration</span>
+<span class="sig"><span class="kw">fun</span> <strong>from_secs_f64</strong>(secs: f64) -&gt; <span class="ty">Duration</span></span>
 
+<a class="item-anchor" href="#Duration.from_secs_f64" aria-label="Link to Duration.from_secs_f64">#</a>
 </div>
-<p class="member-doc">Whole seconds, then the rest as a fraction: <code>Duration.from_secs_f64(1.5)</code>.</p>
+<div class="member-doc"><p>Whole seconds, then the rest as a fraction: <a class="code-link" href="time.html#Duration.from_secs_f64"><code>Duration.from_secs_f64(1.5)</code></a>.</p></div>
 </div>
 <div class="member" id="Duration.as_secs_f64">
 <div class="member-head">
-<span class="sig">fun as_secs_f64(self) -&gt; f64</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>as_secs_f64</strong>(<span class="kw">self</span>) -&gt; f64</span>
+
+<a class="item-anchor" href="#Duration.as_secs_f64" aria-label="Link to Duration.as_secs_f64">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The length in seconds, with the fraction: <code>1.5</code> for 1.5 s.</p></div>
 </div>
 <div class="member" id="Duration.as_millis">
 <div class="member-head">
-<span class="sig">fun as_millis(self) -&gt; u64</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>as_millis</strong>(<span class="kw">self</span>) -&gt; u64</span>
+
+<a class="item-anchor" href="#Duration.as_millis" aria-label="Link to Duration.as_millis">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The length in whole milliseconds, rounded down.</p></div>
 </div>
 <div class="member" id="Duration.as_micros">
 <div class="member-head">
-<span class="sig">fun as_micros(self) -&gt; u64</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>as_micros</strong>(<span class="kw">self</span>) -&gt; u64</span>
+
+<a class="item-anchor" href="#Duration.as_micros" aria-label="Link to Duration.as_micros">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The length in whole microseconds, rounded down.</p></div>
 </div>
 <div class="member" id="Duration.as_nanos">
 <div class="member-head">
-<span class="sig">fun as_nanos(self) -&gt; u64</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>as_nanos</strong>(<span class="kw">self</span>) -&gt; u64</span>
+
+<a class="item-anchor" href="#Duration.as_nanos" aria-label="Link to Duration.as_nanos">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The length in nanoseconds.</p></div>
 </div>
 <div class="member" id="Duration.as_secs">
 <div class="member-head">
-<span class="sig">fun as_secs(self) -&gt; u64</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>as_secs</strong>(<span class="kw">self</span>) -&gt; u64</span>
+
+<a class="item-anchor" href="#Duration.as_secs" aria-label="Link to Duration.as_secs">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The length in whole seconds, rounded down.</p></div>
 </div>
 <div class="member" id="Duration.plus">
 <div class="member-head">
-<span class="sig">fun plus(self, other: Duration) -&gt; Duration</span>
+<span class="sig"><span class="kw">fun</span> <strong>plus</strong>(<span class="kw">self</span>, other: <span class="ty">Duration</span>) -&gt; <span class="ty">Duration</span></span>
 
+<a class="item-anchor" href="#Duration.plus" aria-label="Link to Duration.plus">#</a>
 </div>
-<p class="member-doc">The sum. Unravels when it doesn't fit.</p>
+<div class="member-doc"><p>The sum. Unravels when it doesn't fit.</p></div>
 </div>
 <div class="member" id="Duration.minus">
 <div class="member-head">
-<span class="sig">fun minus(self, other: Duration) -&gt; Duration</span>
+<span class="sig"><span class="kw">fun</span> <strong>minus</strong>(<span class="kw">self</span>, other: <span class="ty">Duration</span>) -&gt; <span class="ty">Duration</span></span>
 
+<a class="item-anchor" href="#Duration.minus" aria-label="Link to Duration.minus">#</a>
 </div>
-<p class="member-doc">The difference. Unravels when <code>other</code> is longer.</p>
+<div class="member-doc"><p>The difference. Unravels when <code>other</code> is longer.</p></div>
 </div>
 <div class="member" id="Duration.times">
 <div class="member-head">
-<span class="sig">fun times(self, n: u64) -&gt; Duration</span>
+<span class="sig"><span class="kw">fun</span> <strong>times</strong>(<span class="kw">self</span>, n: u64) -&gt; <span class="ty">Duration</span></span>
 
+<a class="item-anchor" href="#Duration.times" aria-label="Link to Duration.times">#</a>
 </div>
-<p class="member-doc"><code>n</code> times as long. Unravels when it doesn't fit.</p>
+<div class="member-doc"><p><code>n</code> times as long. Unravels when it doesn't fit.</p></div>
 </div>
 <div class="member" id="Duration.divide">
 <div class="member-head">
-<span class="sig">fun divide(self, n: u64) -&gt; Duration</span>
+<span class="sig"><span class="kw">fun</span> <strong>divide</strong>(<span class="kw">self</span>, n: u64) -&gt; <span class="ty">Duration</span></span>
 
+<a class="item-anchor" href="#Duration.divide" aria-label="Link to Duration.divide">#</a>
 </div>
-<p class="member-doc">A part of it, rounded down. Unravels if <code>n</code> is 0.</p>
+<div class="member-doc"><p>A part of it, rounded down. Unravels if <code>n</code> is 0.</p></div>
 </div>
 <div class="member" id="Duration.show">
 <div class="member-head">
-<span class="sig">fun show(self, mut f: Fmt)</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>show</strong>(<span class="kw">self</span>, <span class="kw">mut</span> f: <a href="fmt.html#Fmt">Fmt</a>)</span>
+
+<a class="item-anchor" href="#Duration.show" aria-label="Link to Duration.show">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>Writes the duration as <a class="code-link" href="time.html#Duration.to_string"><code>to_string</code></a> does: <code>1.5s</code>, <code>250ms</code>.</p></div>
 </div>
 <div class="member" id="Duration.to_string">
 <div class="member-head">
-<span class="sig">fun to_string(self) -&gt; String</span>
+<span class="sig"><span class="kw">fun</span> <strong>to_string</strong>(<span class="kw">self</span>) -&gt; <a href="string.html#String">String</a></span>
 
+<a class="item-anchor" href="#Duration.to_string" aria-label="Link to Duration.to_string">#</a>
 </div>
-<p class="member-doc"><code>1.5s</code>, <code>250ms</code>, <code>40us</code>, <code>7ns</code>: in the largest unit that fits.</p>
+<div class="member-doc"><p><code>1.5s</code>, <code>250ms</code>, <code>40us</code>, <code>7ns</code>: in the largest unit that fits.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="Instant">
+</section>
+<section class="item" id="Instant">
 <div class="item-head">
-<span class="sig">warp <strong>Instant</strong>: Eq, Ord</span>
+<span class="sig"><span class="kw">warp</span> <strong>Instant</strong>: <a href="ops.html#Eq">Eq</a>, <a href="ops.html#Ord">Ord</a></span>
 
+<a class="item-anchor" href="#Instant" aria-label="Link to Instant">#</a>
 </div>
-<p class="item-doc">A moment on a clock that only goes forward, for measuring how long things take.</p>
+<div class="item-doc"><p>A moment on a clock that only goes forward, for measuring how long things take.</p></div>
 <div class="members">
 <div class="member" id="Instant.now">
 <div class="member-head">
-<span class="sig">fun now() -&gt; Instant</span>
+<span class="sig"><span class="kw">fun</span> <strong>now</strong>() -&gt; <span class="ty">Instant</span></span>
 
+<a class="item-anchor" href="#Instant.now" aria-label="Link to Instant.now">#</a>
 </div>
-<p class="member-doc">Now.</p>
+<div class="member-doc"><p>Now.</p></div>
 </div>
 <div class="member" id="Instant.since">
 <div class="member-head">
-<span class="sig">fun since(self, earlier: Instant) -&gt; Duration</span>
+<span class="sig"><span class="kw">fun</span> <strong>since</strong>(<span class="kw">self</span>, earlier: <span class="ty">Instant</span>) -&gt; <a href="time.html#Duration">Duration</a></span>
 
+<a class="item-anchor" href="#Instant.since" aria-label="Link to Instant.since">#</a>
 </div>
-<p class="member-doc">How long ago <code>earlier</code> was. Unravels if it is later than this.</p>
+<div class="member-doc"><p>How long ago <code>earlier</code> was. Unravels if it is later than this.</p></div>
 </div>
 <div class="member" id="Instant.elapsed">
 <div class="member-head">
-<span class="sig">fun elapsed(self) -&gt; Duration</span>
+<span class="sig"><span class="kw">fun</span> <strong>elapsed</strong>(<span class="kw">self</span>) -&gt; <a href="time.html#Duration">Duration</a></span>
 
+<a class="item-anchor" href="#Instant.elapsed" aria-label="Link to Instant.elapsed">#</a>
 </div>
-<p class="member-doc">How long ago this was.</p>
+<div class="member-doc"><p>How long ago this was.</p></div>
 </div>
 <div class="member" id="Instant.plus">
 <div class="member-head">
-<span class="sig">fun plus(self, d: Duration) -&gt; Instant</span>
+<span class="sig"><span class="kw">fun</span> <strong>plus</strong>(<span class="kw">self</span>, d: <a href="time.html#Duration">Duration</a>) -&gt; <span class="ty">Instant</span></span>
 
+<a class="item-anchor" href="#Instant.plus" aria-label="Link to Instant.plus">#</a>
 </div>
-<p class="member-doc">The moment <code>d</code> after this one.</p>
+<div class="member-doc"><p>The moment <code>d</code> after this one.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="SystemTime">
+</section>
+<section class="item" id="SystemTime">
 <div class="item-head">
-<span class="sig">warp <strong>SystemTime</strong>: Eq, Ord</span>
+<span class="sig"><span class="kw">warp</span> <strong>SystemTime</strong>: <a href="ops.html#Eq">Eq</a>, <a href="ops.html#Ord">Ord</a></span>
 
+<a class="item-anchor" href="#SystemTime" aria-label="Link to SystemTime">#</a>
 </div>
-<p class="item-doc">A moment on the system clock, which can be set: for dates and times of day, not for measuring how long things take (use <code>Instant</code> for that).</p>
+<div class="item-doc"><p>A moment on the system clock, which can be set: for dates and times of day, not for measuring how long things take (use <a class="code-link" href="time.html#Instant"><code>Instant</code></a> for that).</p></div>
 <div class="members">
 <div class="member" id="SystemTime.now">
 <div class="member-head">
-<span class="sig">fun now() -&gt; SystemTime</span>
+<span class="sig"><span class="kw">fun</span> <strong>now</strong>() -&gt; <span class="ty">SystemTime</span></span>
 
+<a class="item-anchor" href="#SystemTime.now" aria-label="Link to SystemTime.now">#</a>
 </div>
-<p class="member-doc">Now.</p>
+<div class="member-doc"><p>Now.</p></div>
 </div>
 <div class="member" id="SystemTime.unix_secs">
 <div class="member-head">
-<span class="sig">fun unix_secs(self) -&gt; u64</span>
+<span class="sig"><span class="kw">fun</span> <strong>unix_secs</strong>(<span class="kw">self</span>) -&gt; u64</span>
 
+<a class="item-anchor" href="#SystemTime.unix_secs" aria-label="Link to SystemTime.unix_secs">#</a>
 </div>
-<p class="member-doc">Whole seconds since 1 January 1970.</p>
+<div class="member-doc"><p>Whole seconds since 1 January 1970.</p></div>
 </div>
 <div class="member" id="SystemTime.unix_nanos">
 <div class="member-head">
-<span class="sig">fun unix_nanos(self) -&gt; u64</span>
+<span class="sig"><span class="kw">fun</span> <strong>unix_nanos</strong>(<span class="kw">self</span>) -&gt; u64</span>
 
+<a class="item-anchor" href="#SystemTime.unix_nanos" aria-label="Link to SystemTime.unix_nanos">#</a>
 </div>
-<p class="member-doc">Nanoseconds since 1 January 1970.</p>
+<div class="member-doc"><p>Nanoseconds since 1 January 1970.</p></div>
 </div>
 </div>
-</div>
-<h2>Functions</h2>
-<div class="item" id="ns">
+</section>
+<h2 id="functions">Functions</h2>
+<section class="item" id="ns">
 <div class="item-head">
-<span class="sig">fun <strong>ns</strong>(n: u64) -&gt; Duration</span>
-<span class="badge todo">TODO</span>
-</div>
-<p class="item-doc empty">undocumented in source</p>
-</div>
-<div class="item" id="micros">
-<div class="item-head">
-<span class="sig">fun <strong>micros</strong>(n: u64) -&gt; Duration</span>
-<span class="badge todo">TODO</span>
-</div>
-<p class="item-doc empty">undocumented in source</p>
-</div>
-<div class="item" id="ms">
-<div class="item-head">
-<span class="sig">fun <strong>ms</strong>(n: u64) -&gt; Duration</span>
-<span class="badge todo">TODO</span>
-</div>
-<p class="item-doc empty">undocumented in source</p>
-</div>
-<div class="item" id="secs">
-<div class="item-head">
-<span class="sig">fun <strong>secs</strong>(n: u64) -&gt; Duration</span>
-<span class="badge todo">TODO</span>
-</div>
-<p class="item-doc empty">undocumented in source</p>
-</div>
-<div class="item" id="mins">
-<div class="item-head">
-<span class="sig">fun <strong>mins</strong>(n: u64) -&gt; Duration</span>
-<span class="badge todo">TODO</span>
-</div>
-<p class="item-doc empty">undocumented in source</p>
-</div>
-<div class="item" id="measure">
-<div class="item-head">
-<span class="sig">fun <strong>measure</strong>[T](f: () =&gt; T) -&gt; (T, Duration)</span>
+<span class="sig"><span class="kw">fun</span> <strong>ns</strong>(n: u64) -&gt; <a href="time.html#Duration">Duration</a></span>
 
+<a class="item-anchor" href="#ns" aria-label="Link to ns">#</a>
 </div>
-<p class="item-doc">Runs <code>f</code>, and says how long it took.</p>
-</div>
-<div class="item" id="sleep">
+<div class="item-doc"><p><code>n</code> nanoseconds.</p></div>
+</section>
+<section class="item" id="micros">
 <div class="item-head">
-<span class="sig">fun <strong>sleep</strong>(d: Duration)</span>
-<span class="badge extern">extern</span>
+<span class="sig"><span class="kw">fun</span> <strong>micros</strong>(n: u64) -&gt; <a href="time.html#Duration">Duration</a></span>
+
+<a class="item-anchor" href="#micros" aria-label="Link to micros">#</a>
 </div>
-<p class="item-doc">Pauses the current thread for <code>d</code>.</p>
-</div>
-<div class="item" id="monotonic_nanos">
+<div class="item-doc"><p><code>n</code> microseconds.</p></div>
+</section>
+<section class="item" id="ms">
 <div class="item-head">
-<span class="sig">fun <strong>monotonic_nanos</strong>() -&gt; u64</span>
-<span class="badge extern">extern</span>
+<span class="sig"><span class="kw">fun</span> <strong>ms</strong>(n: u64) -&gt; <a href="time.html#Duration">Duration</a></span>
+
+<a class="item-anchor" href="#ms" aria-label="Link to ms">#</a>
 </div>
-<p class="item-doc">Nanoseconds on a clock that only goes forward, from an arbitrary start. Differences are what mean something: see <code>Instant</code>.</p>
-</div>
-<div class="item" id="unix_nanos">
+<div class="item-doc"><p><code>n</code> milliseconds: <a class="code-link" href="time.html#sleep"><code>sleep(ms(250))</code></a>.</p></div>
+</section>
+<section class="item" id="secs">
 <div class="item-head">
-<span class="sig">fun <strong>unix_nanos</strong>() -&gt; u64</span>
-<span class="badge extern">extern</span>
+<span class="sig"><span class="kw">fun</span> <strong>secs</strong>(n: u64) -&gt; <a href="time.html#Duration">Duration</a></span>
+
+<a class="item-anchor" href="#secs" aria-label="Link to secs">#</a>
 </div>
-<p class="item-doc">Nanoseconds since 1 January 1970 on the system clock.</p>
+<div class="item-doc"><p><code>n</code> seconds.</p></div>
+</section>
+<section class="item" id="mins">
+<div class="item-head">
+<span class="sig"><span class="kw">fun</span> <strong>mins</strong>(n: u64) -&gt; <a href="time.html#Duration">Duration</a></span>
+
+<a class="item-anchor" href="#mins" aria-label="Link to mins">#</a>
 </div>
+<div class="item-doc"><p><code>n</code> minutes.</p></div>
+</section>
+<section class="item" id="measure">
+<div class="item-head">
+<span class="sig"><span class="kw">fun</span> <strong>measure</strong>[T](f: () =&gt; T) -&gt; (T, <a href="time.html#Duration">Duration</a>)</span>
+
+<a class="item-anchor" href="#measure" aria-label="Link to measure">#</a>
+</div>
+<div class="item-doc"><p>Runs <code>f</code>, and says how long it took.</p></div>
+</section>
+<section class="item" id="sleep">
+<div class="item-head">
+<span class="sig"><span class="kw">fun</span> <strong>sleep</strong>(d: <a href="time.html#Duration">Duration</a>)</span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#sleep" aria-label="Link to sleep">#</a>
+</div>
+<div class="item-doc"><p>Pauses the current thread for <code>d</code>.</p></div>
+</section>
+<section class="item" id="monotonic_nanos">
+<div class="item-head">
+<span class="sig"><span class="kw">fun</span> <strong>monotonic_nanos</strong>() -&gt; u64</span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#monotonic_nanos" aria-label="Link to monotonic_nanos">#</a>
+</div>
+<div class="item-doc"><p>Nanoseconds on a clock that only goes forward, from an arbitrary start. Differences are what mean something: see <a class="code-link" href="time.html#Instant"><code>Instant</code></a>.</p></div>
+</section>
+<section class="item" id="unix_nanos">
+<div class="item-head">
+<span class="sig"><span class="kw">fun</span> <strong>unix_nanos</strong>() -&gt; u64</span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#unix_nanos" aria-label="Link to unix_nanos">#</a>
+</div>
+<div class="item-doc"><p>Nanoseconds since 1 January 1970 on the system clock.</p></div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="term.html"><span class="dir">&larr; previous</span>std.term</a>
+<a class="next" href="../index.html"><span class="dir">back to &rarr;</span>the library</a>
+</nav>
 </main>
 </div>
 </body>

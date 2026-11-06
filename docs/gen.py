@@ -2,10 +2,10 @@
 #
 #   python docs/gen.py                        regenerate every page
 #   python docs/gen.py --check [--loom PATH]  verify, changing nothing:
-#                                             1. docs/std/data.py matches runtime/std/*.loom
-#                                             2. the generated pages on disk are up to date
-#                                             3. every relative link and anchor resolves
-#                                             4. every Loom sample behaves as its page says
+#                                             1. the generated pages on disk are up to date
+#                                             2. every relative link and anchor resolves
+#                                             3. every Loom sample behaves as its page says,
+#                                                and every std module's example program runs
 #                                             (and notes when the playground's wasm is older
 #                                             than the compiler: python docs/play/build.py)
 #   python docs/gen.py --bless [--loom PATH]  run the samples and rewrite their .out files
@@ -16,7 +16,7 @@
 # target/release or target/debug in this repository). --check exits 1 on any
 # problem, so it can run in CI.
 #
-# Sources:            docs/std/data.py        the std spec (from runtime/std/*.loom)
+# Sources:            runtime/std/*.loom      the standard library and its doc comments
 #                     docs/lang/pages/*.md    the language pages' prose
 #                     docs/lang/samples/*     every Loom code sample, and its output
 #                     crates/loom_syntax/src/diag/codes.rs   the diagnostic codes
@@ -29,14 +29,13 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-sys.path.insert(0, os.path.join(HERE, "std"))
 
-import audit  # noqa: E402
+
 import lang_pages  # noqa: E402
 import samples  # noqa: E402
 import std_pages  # noqa: E402
+import std_source  # noqa: E402
 from common import Writer  # noqa: E402
-from data import MODULES  # noqa: E402
 
 
 class MemoryWriter(Writer):
@@ -53,8 +52,9 @@ class MemoryWriter(Writer):
 
 def generate(check):
     w = MemoryWriter(check=check)
-    std_pages.generate(MODULES, w)
-    lang_pages.generate(MODULES, w)
+    modules = std_source.load()
+    site = lang_pages.generate(modules, w)
+    std_pages.generate(modules, w, [p["slug"] for p in site.pages])
     return w
 
 
@@ -74,6 +74,29 @@ def check_links(files):
                     problems.append(f"{rel}: link to {target!r}: no anchor #{frag} in {dest}")
             elif not os.path.exists(os.path.join(HERE, *dest.split("/"))):
                 problems.append(f"{rel}: link to {target!r} goes nowhere ({dest})")
+    return problems
+
+
+def check_std_examples(exe):
+    """Each example program in a std module's header comment runs and exits 0
+    (`dbg` writes to stderr, so stderr is allowed)."""
+    import subprocess
+    import tempfile
+
+    problems, n = [], 0
+    with tempfile.TemporaryDirectory() as tmp:
+        for mod in std_source.load():
+            for code in std_pages.examples(mod):
+                n += 1
+                path = os.path.join(tmp, f"{mod['name']}_example.loom")
+                with open(path, "w", encoding="utf-8", newline="\n") as f:
+                    f.write(code + "\n")
+                p = subprocess.run([exe, "run", path, "--color", "never"], cwd=tmp, capture_output=True,
+                                   timeout=120, env=dict(os.environ, LOOM_THREADS="1"))
+                if p.returncode != 0:
+                    problems.append(f"std.{mod['name']}'s example exits {p.returncode}:\n"
+                                    + p.stdout.decode("utf-8", "replace") + p.stderr.decode("utf-8", "replace"))
+    print(f"  {n} examples run")
     return problems
 
 
@@ -120,12 +143,6 @@ def main(argv):
         return 1 if problems else 0
 
     failed = False
-    print("std data against runtime/std ...")
-    problems = audit.audit(MODULES)
-    for p in problems:
-        print("  -", p)
-    failed |= bool(problems)
-
     print("generated pages ...")
     w = generate(check=True)
     for rel in w.stale:
@@ -148,6 +165,13 @@ def main(argv):
         for p in problems:
             print("  -", p)
         print(f"  {len(names)} samples run with {exe}")
+        failed |= bool(problems)
+
+    print("std examples ...")
+    if exe:
+        problems = check_std_examples(exe)
+        for p in problems:
+            print("  -", p)
         failed |= bool(problems)
 
     print("playground ...")

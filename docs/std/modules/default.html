@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.default · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../../style.css">
 <script src="../../weave.js" defer></script>
+<script src="../../play/play.js" defer></script>
 </head>
 <body>
 <header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
@@ -18,7 +20,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,39 +68,61 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / default</div>
 <h1>std.default</h1>
-<p class="summary">Values with a default.</p>
-<h2>Types</h2>
-<div class="item" id="Default">
-<div class="item-head">
-<span class="sig">weft <strong>Default</strong></span>
-
+<p class="summary">Values with a default: the <a class="code-link" href="default.html#Default"><code>Default</code></a> weft, which a warp can derive. <code>Config.default()</code> builds a value from each field's default, and <a class="code-link" href="mem.html#take"><code>std.mem.take</code></a> leaves one behind when it moves a value out.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/default.loom</code></span><a href="../../lang/types.html">read about it in the book &rarr;</a></div>
 </div>
-<p class="item-doc">Types that have a value to start from: <code>0</code>, <code>false</code>, empty text, an empty list. A warp that lists <code>Default</code> in its header and doesn't write <code>default</code> gets one: each field takes its own default if it has one, and its type's otherwise. A warp with cases takes its first, if it carries nothing.</p>
-<pre><code>warp Config: Default {
-    host: String = "localhost"
+<div class="mod-intro"><div class="sample" id="example" data-sample="std_default" data-mode="run" data-file="default_example.loom" data-store="std.default" data-runnable><div class="sample-head"><span class="file"><span class="dot"></span>default_example.loom</span><span class="tag ok">an example to run</span><span class="spacer"></span></div><pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Config</span>: <span class="t">Default</span>, <span class="t">Show</span> {
+    host: <span class="t">String</span> = <span class="s">"localhost"</span>
+    port: u16
+    verbose: bool
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">print</span>(<span class="t">Config</span>.<span class="f">default</span>())
+    <span class="f">print</span>(<span class="t">Config</span>(port: <span class="n">8080</span>, verbose: <span class="k">true</span>))
+}</code></pre></div></div>
+<nav class="toc-chips" aria-label="In this module"><a href="#Default"><span class="kind">weft</span>Default</a><a href="#of"><span class="kind">fun</span>of</a></nav>
+<h2 id="types">Types</h2>
+<section class="item" id="Default">
+<div class="item-head">
+<span class="sig"><span class="kw">weft</span> <strong>Default</strong></span>
+
+<a class="item-anchor" href="#Default" aria-label="Link to Default">#</a>
+</div>
+<div class="item-doc"><p>Types that have a value to start from: <code>0</code>, <code>false</code>, empty text, an empty list. A warp that lists <code>Default</code> in its header and doesn't write <a class="code-link" href="default.html#Default.default"><code>default</code></a> gets one: each field takes its own default if it has one, and its type's otherwise. A warp with cases takes its first, if it carries nothing.</p><pre><code><span class="k">warp</span> <span class="t">Config</span>: <span class="t">Default</span> {
+    host: <span class="t">String</span> = <span class="s">"localhost"</span>
     port: u16
 }
-// Config.default() is Config(host: "localhost", port: 0)</code></pre>
+<span class="c">// Config.default() is Config(host: "localhost", port: 0)</span></code></pre></div>
 <div class="members">
 <div class="member" id="Default.default">
 <div class="member-head">
-<span class="sig">fun default() -&gt; Self</span>
+<span class="sig"><span class="kw">fun</span> <strong>default</strong>() -&gt; <span class="kw">Self</span></span>
 
+<a class="item-anchor" href="#Default.default" aria-label="Link to Default.default">#</a>
 </div>
-<p class="member-doc">The default value.</p>
+<div class="member-doc"><p>The default value.</p></div>
 </div>
 </div>
-</div>
-<h2>Functions</h2>
-<div class="item" id="of">
+</section>
+<h2 id="functions">Functions</h2>
+<section class="item" id="of">
 <div class="item-head">
-<span class="sig">fun <strong>of</strong>[T: Default]() -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>of</strong>[T: <a href="default.html#Default">Default</a>]() -&gt; T</span>
 
+<a class="item-anchor" href="#of" aria-label="Link to of">#</a>
 </div>
-<p class="item-doc">The default value of <code>T</code>: <code>of[u16]()</code>.</p>
-</div>
+<div class="item-doc"><p>The default value of <code>T</code>: <code>of[u16]()</code>.</p></div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="cmp.html"><span class="dir">&larr; previous</span>std.cmp</a>
+<a class="next" href="deque.html"><span class="dir">next &rarr;</span>std.deque</a>
+</nav>
 </main>
 </div>
 </body>

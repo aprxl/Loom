@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.priority · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../../style.css">
 <script src="../../weave.js" defer></script>
+<script src="../../play/play.js" defer></script>
 </head>
 <body>
 <header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
@@ -18,7 +20,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,82 +68,114 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / priority</div>
 <h1>std.priority</h1>
-<p class="summary">Priority queues.</p>
-<h2>Types</h2>
-<div class="item" id="PriorityQueue">
-<div class="item-head">
-<span class="sig">warp <strong>PriorityQueue</strong>[T: Ord]</span>
-
+<p class="summary">Priority queues: <a class="code-link" href="priority.html#PriorityQueue"><code>PriorityQueue[T]</code></a> always gives back its largest item first. Wrap items in <a class="code-link" href="cmp.html#Reverse"><code>Reverse</code></a> (from <a class="code-link" href="cmp.html"><code>std.cmp</code></a>) for the smallest first.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/priority.loom</code></span><a href="../../lang/collections.html">read about it in the book &rarr;</a></div>
 </div>
-<p class="item-doc">A queue that gives the largest item first. For the smallest first, put <code>Reverse</code> around the items (<code>std.cmp.Reverse</code>). A binary heap in a list: <code>push</code> and <code>pop</code> take <code>O(log n)</code>, <code>peek</code> takes constant time.</p>
+<div class="mod-intro"><div class="sample" id="example" data-sample="std_priority" data-mode="run" data-file="priority_example.loom" data-store="std.priority" data-runnable><div class="sample-head"><span class="file"><span class="dot"></span>priority_example.loom</span><span class="tag ok">an example to run</span><span class="spacer"></span></div><pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.priority.<span class="t">PriorityQueue</span>
+<span class="k">use</span> std.cmp.<span class="t">Reverse</span>
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">var</span> jobs: <span class="t">PriorityQueue</span>[(u8, <span class="t">String</span>)] = <span class="t">PriorityQueue</span>.<span class="f">new</span>()
+    jobs.<span class="f">push</span>((<span class="n">2</span>, <span class="s">"dye the yarn"</span>))
+    jobs.<span class="f">push</span>((<span class="n">9</span>, <span class="s">"fix the loom"</span>))
+    jobs.<span class="f">push</span>((<span class="n">5</span>, <span class="s">"wind the bobbin"</span>))
+    <span class="k">while</span> jobs.<span class="f">pop</span>() <span class="k">is</span> <span class="k">some</span>((urgency, job)) {
+        <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>urgency<span class="h">}</span><span class="s">: </span><span class="h">{</span>job<span class="h">}</span><span class="s">"</span>)
+    }
+    <span class="k">var</span> smallest = <span class="t">PriorityQueue</span>.<span class="f">from_list</span>([<span class="t">Reverse</span>(<span class="n">7</span>), <span class="t">Reverse</span>(<span class="n">3</span>), <span class="t">Reverse</span>(<span class="n">5</span>)])
+    <span class="f">print</span>(<span class="s">"smallest first: </span><span class="h">{</span>smallest.<span class="f">pop</span>().<span class="f">map</span>(_.value):?<span class="h">}</span><span class="s">"</span>)
+}</code></pre></div></div>
+<h2 id="types">Types</h2>
+<section class="item" id="PriorityQueue">
+<div class="item-head">
+<span class="sig"><span class="kw">warp</span> <strong>PriorityQueue</strong>[T: <a href="ops.html#Ord">Ord</a>]</span>
+
+<a class="item-anchor" href="#PriorityQueue" aria-label="Link to PriorityQueue">#</a>
+</div>
+<div class="item-doc"><p>A queue that gives the largest item first. For the smallest first, put <a class="code-link" href="cmp.html#Reverse"><code>Reverse</code></a> around the items (<a class="code-link" href="cmp.html#Reverse"><code>std.cmp.Reverse</code></a>). A binary heap in a list: <a class="code-link" href="priority.html#PriorityQueue.push"><code>push</code></a> and <a class="code-link" href="priority.html#PriorityQueue.pop"><code>pop</code></a> take <code>O(log n)</code>, <a class="code-link" href="priority.html#PriorityQueue.peek"><code>peek</code></a> takes constant time.</p></div>
 <div class="members">
 <div class="member" id="PriorityQueue.new">
 <div class="member-head">
-<span class="sig">fun new() -&gt; PriorityQueue[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>new</strong>() -&gt; <span class="ty">PriorityQueue</span>[T]</span>
 
+<a class="item-anchor" href="#PriorityQueue.new" aria-label="Link to PriorityQueue.new">#</a>
 </div>
-<p class="member-doc">An empty queue.</p>
+<div class="member-doc"><p>An empty queue.</p></div>
 </div>
 <div class="member" id="PriorityQueue.from_list">
 <div class="member-head">
-<span class="sig">fun from_list(take items: List[T]) -&gt; PriorityQueue[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>from_list</strong>(<span class="kw">take</span> items: <a href="list.html#List">List</a>[T]) -&gt; <span class="ty">PriorityQueue</span>[T]</span>
 
+<a class="item-anchor" href="#PriorityQueue.from_list" aria-label="Link to PriorityQueue.from_list">#</a>
 </div>
-<p class="member-doc">A queue of <code>items</code>, made in <code>O(n)</code>.</p>
+<div class="member-doc"><p>A queue of <code>items</code>, made in <code>O(n)</code>.</p></div>
 </div>
 <div class="member" id="PriorityQueue.len">
 <div class="member-head">
-<span class="sig">fun len(self) -&gt; usize</span>
+<span class="sig"><span class="kw">fun</span> <strong>len</strong>(<span class="kw">self</span>) -&gt; usize</span>
 
+<a class="item-anchor" href="#PriorityQueue.len" aria-label="Link to PriorityQueue.len">#</a>
 </div>
-<p class="member-doc">How many items there are.</p>
+<div class="member-doc"><p>How many items there are.</p></div>
 </div>
 <div class="member" id="PriorityQueue.is_empty">
 <div class="member-head">
-<span class="sig">fun is_empty(self) -&gt; bool</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_empty</strong>(<span class="kw">self</span>) -&gt; bool</span>
+
+<a class="item-anchor" href="#PriorityQueue.is_empty" aria-label="Link to PriorityQueue.is_empty">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>Whether there are no items.</p></div>
 </div>
 <div class="member" id="PriorityQueue.peek">
 <div class="member-head">
-<span class="sig">fun peek(self) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>peek</strong>(<span class="kw">self</span>) -&gt; ?T</span>
 
+<a class="item-anchor" href="#PriorityQueue.peek" aria-label="Link to PriorityQueue.peek">#</a>
 </div>
-<p class="member-doc">A copy of the largest item.</p>
+<div class="member-doc"><p>A copy of the largest item.</p></div>
 </div>
 <div class="member" id="PriorityQueue.push">
 <div class="member-head">
-<span class="sig">fun push(mut self, take x: T)</span>
+<span class="sig"><span class="kw">fun</span> <strong>push</strong>(<span class="kw">mut</span> <span class="kw">self</span>, <span class="kw">take</span> x: T)</span>
 
+<a class="item-anchor" href="#PriorityQueue.push" aria-label="Link to PriorityQueue.push">#</a>
 </div>
-<p class="member-doc">Adds <code>x</code>.</p>
+<div class="member-doc"><p>Adds <code>x</code>.</p></div>
 </div>
 <div class="member" id="PriorityQueue.pop">
 <div class="member-head">
-<span class="sig">fun pop(mut self) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>pop</strong>(<span class="kw">mut</span> <span class="kw">self</span>) -&gt; ?T</span>
 
+<a class="item-anchor" href="#PriorityQueue.pop" aria-label="Link to PriorityQueue.pop">#</a>
 </div>
-<p class="member-doc">Takes off the largest item.</p>
+<div class="member-doc"><p>Takes off the largest item.</p></div>
 </div>
 <div class="member" id="PriorityQueue.clear">
 <div class="member-head">
-<span class="sig">fun clear(mut self)</span>
+<span class="sig"><span class="kw">fun</span> <strong>clear</strong>(<span class="kw">mut</span> <span class="kw">self</span>)</span>
 
+<a class="item-anchor" href="#PriorityQueue.clear" aria-label="Link to PriorityQueue.clear">#</a>
 </div>
-<p class="member-doc">Removes every item.</p>
+<div class="member-doc"><p>Removes every item.</p></div>
 </div>
 <div class="member" id="PriorityQueue.into_sorted">
 <div class="member-head">
-<span class="sig">fun into_sorted(take self) -&gt; List[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>into_sorted</strong>(<span class="kw">take</span> <span class="kw">self</span>) -&gt; <a href="list.html#List">List</a>[T]</span>
 
+<a class="item-anchor" href="#PriorityQueue.into_sorted" aria-label="Link to PriorityQueue.into_sorted">#</a>
 </div>
-<p class="member-doc">The items from the largest to the smallest, in a new list; this queue is used up.</p>
+<div class="member-doc"><p>The items from the largest to the smallest, in a new list; this queue is used up.</p></div>
 </div>
 </div>
-</div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="path.html"><span class="dir">&larr; previous</span>std.path</a>
+<a class="next" href="process.html"><span class="dir">next &rarr;</span>std.process</a>
+</nav>
 </main>
 </div>
 </body>

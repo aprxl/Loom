@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.option · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../../style.css">
 <script src="../../weave.js" defer></script>
+<script src="../../play/play.js" defer></script>
 </head>
 <body>
 <header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
@@ -18,7 +20,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,97 +68,129 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / option</div>
 <h1>std.option</h1>
-<p class="summary">Optional values: <code>?T</code>.</p>
-<h2>Types</h2>
-<div class="item" id="Optional">
-<div class="item-head">
-<span class="sig">warp <strong>Optional</strong>[T]</span>
-<span class="badge builtin">builtin</span>
+<p class="summary">Optional values: <code>?T</code> is either <code>some(x)</code> or <code>none</code>. <code>x?</code> passes a <code>none</code> up to the caller, <code>x mend fallback</code> gives a fallback instead, and these methods transform one without unwrapping it.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/option.loom</code></span><a href="../../lang/errors.html">read about it in the book &rarr;</a></div>
 </div>
-<p class="item-doc">The methods of every optional type, <code>?T</code>.</p>
+<div class="mod-intro"><div class="sample" id="example" data-sample="std_option" data-mode="run" data-file="option_example.loom" data-store="std.option" data-runnable><div class="sample-head"><span class="file"><span class="dot"></span>option_example.loom</span><span class="tag ok">an example to run</span><span class="spacer"></span></div><pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fun</span> <span class="f">first_even</span>(xs: [i32]) -&gt; ?i32 = xs.<span class="f">find</span>(_ % <span class="n">2</span> == <span class="n">0</span>)
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> a = <span class="f">first_even</span>([<span class="n">3</span>, <span class="n">8</span>, <span class="n">5</span>])
+    <span class="k">let</span> b = <span class="f">first_even</span>([<span class="n">1</span>, <span class="n">3</span>])
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>a:?<span class="h">}</span><span class="s"> </span><span class="h">{</span>b:?<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(a.<span class="f">map</span>(_ * <span class="n">10</span>) <span class="k">mend</span> <span class="n">0</span>)
+    <span class="f">print</span>(b.<span class="f">map</span>(_ * <span class="n">10</span>) <span class="k">mend</span> <span class="n">0</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>a.<span class="f">is_some</span>()<span class="h">}</span><span class="s"> </span><span class="h">{</span>b.<span class="f">ok_or</span>(<span class="s">"no even number"</span>):?<span class="h">}</span><span class="s">"</span>)
+}</code></pre></div></div>
+<nav class="toc-chips" aria-label="In this module"><a href="#Optional"><span class="kind">warp</span>Optional</a><a href="#then"><span class="kind">fun</span>then</a><a href="#then_some"><span class="kind">fun</span>then_some</a></nav>
+<h2 id="types">Types</h2>
+<section class="item" id="Optional">
+<div class="item-head">
+<span class="sig"><span class="kw">warp</span> <strong>Optional</strong>[T]</span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Optional" aria-label="Link to Optional">#</a>
+</div>
+<div class="item-doc"><p>The methods of every optional type, <code>?T</code>.</p></div>
 <div class="members">
 <div class="member" id="Optional.take">
 <div class="member-head">
-<span class="sig">fun take(mut self) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>take</strong>(<span class="kw">mut</span> <span class="kw">self</span>) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Optional.take" aria-label="Link to Optional.take">#</a>
 </div>
-<p class="member-doc">The value, leaving <code>none</code> in its place.</p>
+<div class="member-doc"><p>The value, leaving <code>none</code> in its place: <code>let job = next.take()</code>.</p></div>
 </div>
 <div class="member" id="Optional.map">
 <div class="member-head">
-<span class="sig">fun map[U](take self, f: T =&gt; U) -&gt; ?U</span>
+<span class="sig"><span class="kw">fun</span> <strong>map</strong>[U](<span class="kw">take</span> <span class="kw">self</span>, f: T =&gt; U) -&gt; ?U</span>
 
+<a class="item-anchor" href="#Optional.map" aria-label="Link to Optional.map">#</a>
 </div>
-<p class="member-doc"><code>f</code> of the value, if there is one.</p>
+<div class="member-doc"><p><code>f</code> of the value, if there is one.</p></div>
 </div>
 <div class="member" id="Optional.filter">
 <div class="member-head">
-<span class="sig">fun filter(take self, f: T =&gt; bool) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>filter</strong>(<span class="kw">take</span> <span class="kw">self</span>, f: T =&gt; bool) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Optional.filter" aria-label="Link to Optional.filter">#</a>
 </div>
-<p class="member-doc">The value, if <code>f</code> says yes to it.</p>
+<div class="member-doc"><p>The value, if <code>f</code> says yes to it.</p></div>
 </div>
 <div class="member" id="Optional.is_some">
 <div class="member-head">
-<span class="sig">fun is_some(self) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_some</strong>(<span class="kw">self</span>) -&gt; bool</span>
 
+<a class="item-anchor" href="#Optional.is_some" aria-label="Link to Optional.is_some">#</a>
 </div>
-<p class="member-doc">Whether there is a value.</p>
+<div class="member-doc"><p>Whether there is a value.</p></div>
 </div>
 <div class="member" id="Optional.is_none">
 <div class="member-head">
-<span class="sig">fun is_none(self) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_none</strong>(<span class="kw">self</span>) -&gt; bool</span>
 
+<a class="item-anchor" href="#Optional.is_none" aria-label="Link to Optional.is_none">#</a>
 </div>
-<p class="member-doc">Whether there is no value.</p>
+<div class="member-doc"><p>Whether there is no value.</p></div>
 </div>
 <div class="member" id="Optional.zip">
 <div class="member-head">
-<span class="sig">fun zip[U](take self, take other: ?U) -&gt; ?(T, U)</span>
+<span class="sig"><span class="kw">fun</span> <strong>zip</strong>[U](<span class="kw">take</span> <span class="kw">self</span>, <span class="kw">take</span> other: ?U) -&gt; ?(T, U)</span>
 
+<a class="item-anchor" href="#Optional.zip" aria-label="Link to Optional.zip">#</a>
 </div>
-<p class="member-doc">The two values together, if both are there.</p>
+<div class="member-doc"><p>The two values together, if both are there.</p></div>
 </div>
 <div class="member" id="Optional.replace">
 <div class="member-head">
-<span class="sig">fun replace(mut self, take x: T) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>replace</strong>(<span class="kw">mut</span> <span class="kw">self</span>, <span class="kw">take</span> x: T) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Optional.replace" aria-label="Link to Optional.replace">#</a>
 </div>
-<p class="member-doc">Puts <code>x</code> in, returning what was there.</p>
+<div class="member-doc"><p>Puts <code>x</code> in, returning what was there.</p></div>
 </div>
 <div class="member" id="Optional.take_if">
 <div class="member-head">
-<span class="sig">fun take_if(mut self, f: T =&gt; bool) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>take_if</strong>(<span class="kw">mut</span> <span class="kw">self</span>, f: T =&gt; bool) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Optional.take_if" aria-label="Link to Optional.take_if">#</a>
 </div>
-<p class="member-doc">Takes the value out, if <code>f</code> says yes to it.</p>
+<div class="member-doc"><p>Takes the value out, if <code>f</code> says yes to it.</p></div>
 </div>
 <div class="member" id="Optional.ok_or">
 <div class="member-head">
-<span class="sig">fun ok_or[E](take self, take e: E) -&gt; T ! E</span>
+<span class="sig"><span class="kw">fun</span> <strong>ok_or</strong>[E](<span class="kw">take</span> <span class="kw">self</span>, <span class="kw">take</span> e: E) -&gt; T ! E</span>
 
+<a class="item-anchor" href="#Optional.ok_or" aria-label="Link to Optional.ok_or">#</a>
 </div>
-<p class="member-doc">The value, or <code>e</code> as an error when there is none.</p>
+<div class="member-doc"><p>The value, or <code>e</code> as an error when there is none.</p></div>
 </div>
 </div>
-</div>
-<h2>Functions</h2>
-<div class="item" id="then">
+</section>
+<h2 id="functions">Functions</h2>
+<section class="item" id="then">
 <div class="item-head">
-<span class="sig">fun <strong>then</strong>[T](cond: bool, f: () =&gt; T) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>then</strong>[T](cond: bool, f: () =&gt; T) -&gt; ?T</span>
 
+<a class="item-anchor" href="#then" aria-label="Link to then">#</a>
 </div>
-<p class="item-doc"><code>f()</code> when the condition holds: <code>(n &gt; 0).then(() =&gt; 100 / n)</code>.</p>
-</div>
-<div class="item" id="then_some">
+<div class="item-doc"><p><code>f()</code> when the condition holds: <code>(n &gt; 0).then(() =&gt; 100 / n)</code>.</p></div>
+</section>
+<section class="item" id="then_some">
 <div class="item-head">
-<span class="sig">fun <strong>then_some</strong>[T](cond: bool, take x: T) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>then_some</strong>[T](cond: bool, <span class="kw">take</span> x: T) -&gt; ?T</span>
 
+<a class="item-anchor" href="#then_some" aria-label="Link to then_some">#</a>
 </div>
-<p class="item-doc"><code>x</code> when the condition holds.</p>
-</div>
+<div class="item-doc"><p><code>x</code> when the condition holds.</p></div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="ops.html"><span class="dir">&larr; previous</span>std.ops</a>
+<a class="next" href="path.html"><span class="dir">next &rarr;</span>std.path</a>
+</nav>
 </main>
 </div>
 </body>

@@ -881,6 +881,61 @@ svg.thread .knot { fill: var(--madder); }
 .legend { display: grid; gap: 8px; margin: 20px 0; color: var(--linen-dim); font-size: 0.92rem; }
 .legend .badge { margin-right: 8px; }
 
+/* a name in a doc comment that links to its definition */
+a.code-link { text-decoration: none; }
+a.code-link code { color: #ffd98c; box-shadow: inset 0 -1px 0 rgba(243, 189, 85, 0.45); transition: background 0.15s; }
+a.code-link:hover code { background: rgba(243, 189, 85, 0.18); color: #fff0c9; }
+
+.item-anchor { margin-left: auto; color: var(--linen-ghost); text-decoration: none; font-family: var(--font-code); font-size: 0.8rem; opacity: 0; transition: opacity 0.15s; }
+.item-head:hover .item-anchor, .member-head:hover .item-anchor { opacity: 1; }
+.member-head .item-anchor { font-size: 0.72rem; }
+
+.mod-meta { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline; font-family: var(--font-ui); font-variation-settings: "CASL" 1; font-size: 0.78rem; color: var(--linen-faint); margin-top: 6px; }
+.mod-meta code { font-size: 0.95em; }
+.mod-meta a { color: var(--madder); text-decoration: none; font-weight: 600; }
+.mod-meta a:hover { color: var(--marigold); }
+
+.parts { margin-top: 14px; }
+.parts-label { display: block; font-family: var(--font-hand); font-size: 1.1rem; font-weight: 650; color: var(--linen-faint); margin-bottom: 4px; }
+.parts ul { flex-direction: column; align-items: flex-start; margin-top: 0; }
+.parts li { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.part-doc { font-size: 0.9em; color: var(--linen-dim); }
+
+.std-search { position: relative; margin: 8px 0 26px; max-width: 42em; }
+.std-search input {
+  width: 100%;
+  font: 500 0.95rem var(--font-ui);
+  font-variation-settings: "CASL" 1;
+  color: var(--linen);
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 12px 20px 12px 44px;
+  outline: none;
+  background-image: radial-gradient(circle at 22px 50%, transparent 6px, var(--linen-faint) 6.5px, var(--linen-faint) 8px, transparent 8.5px);
+}
+.std-search input:focus { border-color: var(--marigold); box-shadow: 0 0 0 4px rgba(243, 189, 85, 0.15); }
+.std-results {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 6px;
+  background: var(--walnut-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  max-height: 60vh;
+  overflow-y: auto;
+  box-shadow: 0 18px 40px -16px rgba(0, 0, 0, 0.8);
+}
+.std-results li { margin: 0; max-width: none; }
+.std-results a { display: grid; grid-template-columns: 4.6em auto 1fr; gap: 2px 10px; align-items: baseline; padding: 7px 12px; border-radius: 9px; text-decoration: none; color: var(--linen); }
+.std-results a:hover, .std-results a:focus { background: rgba(243, 189, 85, 0.1); }
+.std-results .kind { font-family: var(--font-ui); font-size: 0.68rem; color: var(--linen-ghost); text-transform: uppercase; letter-spacing: 0.05em; }
+.std-results code { background: none; padding: 0; color: var(--marigold); font-size: 0.85rem; }
+.std-results .in { font-family: var(--font-code); font-size: 0.72rem; color: var(--linen-faint); justify-self: end; }
+.std-results .d { grid-column: 2 / 4; font-size: 0.88rem; color: var(--linen-dim); }
+.std-results .d code { font-size: 0.78rem; color: #f7cf8b; background: rgba(240, 227, 204, 0.075); padding: 0.05em 0.3em; }
+.std-results .none { padding: 10px 14px; color: var(--linen-faint); }
+
 /* ------------------------------------------------------------ landing */
 
 .hero { padding: 30px 0 10px; }
@@ -959,11 +1014,15 @@ svg.thread .knot { fill: var(--madder); }
 @media (max-width: 640px) {
   :root { --gutter: 16px; --topbar-h: 54px; }
   body { font-size: 17.5px; }
-  .topbar { padding: 0 12px; gap: 8px; }
-  .topnav a { padding: 6px 8px; }
+  .topbar { padding: 0 10px; gap: 6px; }
+  .topnav { gap: 2px; font-size: 0.8rem; }
+  .topnav a { padding: 6px 9px; white-space: nowrap; }
   .topnav .wide { display: none; }
+  .brand { font-size: 1.3rem; gap: 6px; }
   .brand .docs-word { display: none; }
-  main.weave { padding-top: 28px; padding-left: 26px; }
+  main.weave { padding-top: 28px; padding-left: 30px; }
+  .sample-head { flex-wrap: wrap; padding-left: 16px; }
+  .sample-hint { display: none; }
   .pager { grid-template-columns: 1fr; }
   .sample::before, .sample::after, .compare::before, .compare::after { left: -5px; width: 10px; height: 10px; }
   .editor > .ed-lines { display: none; }

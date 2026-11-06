@@ -158,12 +158,14 @@
       fill: "none", stroke: "url(#dye)", "stroke-width": 2.4, "stroke-linecap": "round",
     }, layer);
 
-    // beads, one per section, over the thread
+    // beads, one per section, over the thread (smaller where the gutter is thin)
+    const r = gutter < 40 ? 9 : 12.5;
     for (const b of beads) {
       const dye = DYES[(b.n - 1) % DYES.length];
-      svg("circle", { class: "bead", cx: b.x, cy: b.y, r: 12.5, fill: dye, stroke: "rgba(255,240,220,0.55)" }, layer);
-      svg("circle", { cx: b.x - 4, cy: b.y - 4.5, r: 3, fill: "rgba(255,255,255,0.35)" }, layer);
+      svg("circle", { class: "bead", cx: b.x, cy: b.y, r, fill: dye, stroke: "rgba(255,240,220,0.55)" }, layer);
+      svg("circle", { cx: b.x - r * 0.32, cy: b.y - r * 0.36, r: r * 0.24, fill: "rgba(255,255,255,0.35)" }, layer);
       const t = svg("text", { class: "bead-num", x: b.x, y: b.y + 0.5, fill: "#1b1511" }, layer);
+      if (r < 12) t.style.fontSize = "8.5px";
       t.textContent = String(b.n);
     }
 

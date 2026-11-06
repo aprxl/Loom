@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.set · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../../style.css">
 <script src="../../weave.js" defer></script>
+<script src="../../play/play.js" defer></script>
 </head>
 <body>
 <header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
@@ -18,7 +20,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,152 +68,188 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / set</div>
 <h1>std.set</h1>
-<p class="summary">Hash sets.</p>
-<h2>Types</h2>
-<div class="item" id="Set">
-<div class="item-head">
-<span class="sig">warp <strong>Set</strong>[T]</span>
-<span class="badge builtin">builtin</span>
+<p class="summary">Hash sets: <a class="code-link" href="set.html#Set"><code>Set[T]</code></a> holds each <a class="code-link" href="ops.html#Hash"><code>Hash</code></a> value at most once, remembers the order values were added, and has the usual set algebra.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/set.loom</code></span><a href="../../lang/collections.html">read about it in the book &rarr;</a></div>
 </div>
-<p class="item-doc">A set of <code>T</code> that remembers insertion order. Build one with <code>Set()</code> or <code>Set.of(xs)</code>. <code>for x in s</code> goes through it in order, and a set has the methods of <code>Stream</code> too. Its elements must be <code>Hash</code>.</p>
+<div class="mod-intro"><div class="sample" id="example" data-sample="std_set" data-mode="run" data-file="set_example.loom" data-store="std.set" data-runnable><div class="sample-head"><span class="file"><span class="dot"></span>set_example.loom</span><span class="tag ok">an example to run</span><span class="spacer"></span></div><pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> warm = <span class="t">Set</span>.<span class="f">of</span>([<span class="s">"madder"</span>, <span class="s">"weld"</span>, <span class="s">"saffron"</span>])
+    <span class="k">let</span> bright = <span class="t">Set</span>.<span class="f">of</span>([<span class="s">"weld"</span>, <span class="s">"woad"</span>, <span class="s">"saffron"</span>])
+    <span class="f">print</span>(warm.<span class="f">intersection</span>(bright))
+    <span class="f">print</span>(warm.<span class="f">union</span>(bright).<span class="f">sorted</span>())
+    <span class="f">print</span>(<span class="s">"woad is warm: </span><span class="h">{</span>warm.<span class="f">has</span>(<span class="s">"woad"</span>)<span class="h">}</span><span class="s">"</span>)
+}</code></pre></div></div>
+<h2 id="types">Types</h2>
+<section class="item" id="Set">
+<div class="item-head">
+<span class="sig"><span class="kw">warp</span> <strong>Set</strong>[T]</span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Set" aria-label="Link to Set">#</a>
+</div>
+<div class="item-doc"><p>A set of <code>T</code> that remembers insertion order. Build one with <code>Set()</code> or <a class="code-link" href="set.html#Set.of"><code>Set.of(xs)</code></a>. <code>for x in s</code> goes through it in order, and a set has the methods of <a class="code-link" href="iter.html#Stream"><code>Stream</code></a> too. Its elements must be <a class="code-link" href="ops.html#Hash"><code>Hash</code></a>.</p></div>
 <div class="members">
 <div class="member" id="Set.of">
 <div class="member-head">
-<span class="sig">fun of(xs: [T]) -&gt; Set[T] where T: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>of</strong>(xs: [T]) -&gt; <span class="ty">Set</span>[T] <span class="kw">where</span> T: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Set.of" aria-label="Link to Set.of">#</a>
 </div>
-<p class="member-doc">A set of the elements of <code>xs</code> (each once).</p>
+<div class="member-doc"><p>A set of the elements of <code>xs</code> (each once).</p></div>
 </div>
 <div class="member" id="Set.len">
 <div class="member-head">
-<span class="sig">fun len(self) -&gt; usize</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>len</strong>(<span class="kw">self</span>) -&gt; usize</span>
+
+<a class="item-anchor" href="#Set.len" aria-label="Link to Set.len">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>How many elements there are.</p></div>
 </div>
 <div class="member" id="Set.is_empty">
 <div class="member-head">
-<span class="sig">fun is_empty(self) -&gt; bool</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_empty</strong>(<span class="kw">self</span>) -&gt; bool</span>
+
+<a class="item-anchor" href="#Set.is_empty" aria-label="Link to Set.is_empty">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>Whether there are no elements.</p></div>
 </div>
 <div class="member" id="Set.has">
 <div class="member-head">
-<span class="sig">fun has(self, x: T) -&gt; bool where T: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>has</strong>(<span class="kw">self</span>, x: T) -&gt; bool <span class="kw">where</span> T: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Set.has" aria-label="Link to Set.has">#</a>
 </div>
-<p class="member-doc">Whether <code>x</code> is in the set.</p>
+<div class="member-doc"><p>Whether <code>x</code> is in the set.</p></div>
 </div>
 <div class="member" id="Set.insert">
 <div class="member-head">
-<span class="sig">fun insert(mut self, take x: T) -&gt; bool where T: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>insert</strong>(<span class="kw">mut</span> <span class="kw">self</span>, <span class="kw">take</span> x: T) -&gt; bool <span class="kw">where</span> T: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Set.insert" aria-label="Link to Set.insert">#</a>
 </div>
-<p class="member-doc">Adds <code>x</code>; whether it wasn't there yet.</p>
+<div class="member-doc"><p>Adds <code>x</code>; whether it wasn't there yet.</p></div>
 </div>
 <div class="member" id="Set.remove">
 <div class="member-head">
-<span class="sig">fun remove(mut self, x: T) -&gt; bool where T: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>remove</strong>(<span class="kw">mut</span> <span class="kw">self</span>, x: T) -&gt; bool <span class="kw">where</span> T: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Set.remove" aria-label="Link to Set.remove">#</a>
 </div>
-<p class="member-doc">Takes <code>x</code> out; whether it was there.</p>
+<div class="member-doc"><p>Takes <code>x</code> out; whether it was there.</p></div>
 </div>
 <div class="member" id="Set.clear">
 <div class="member-head">
-<span class="sig">fun clear(mut self)</span>
+<span class="sig"><span class="kw">fun</span> <strong>clear</strong>(<span class="kw">mut</span> <span class="kw">self</span>)</span>
 
+<a class="item-anchor" href="#Set.clear" aria-label="Link to Set.clear">#</a>
 </div>
-<p class="member-doc">Removes every element.</p>
+<div class="member-doc"><p>Removes every element.</p></div>
 </div>
 <div class="member" id="Set.sorted">
 <div class="member-head">
-<span class="sig">fun sorted(self) -&gt; List[T] where T: Ord</span>
+<span class="sig"><span class="kw">fun</span> <strong>sorted</strong>(<span class="kw">self</span>) -&gt; <a href="list.html#List">List</a>[T] <span class="kw">where</span> T: <a href="ops.html#Ord">Ord</a></span>
 
+<a class="item-anchor" href="#Set.sorted" aria-label="Link to Set.sorted">#</a>
 </div>
-<p class="member-doc">A list of the elements, sorted.</p>
+<div class="member-doc"><p>A list of the elements, sorted.</p></div>
 </div>
 <div class="member" id="Set.copy">
 <div class="member-head">
-<span class="sig">fun copy(self) -&gt; Set[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>copy</strong>(<span class="kw">self</span>) -&gt; <span class="ty">Set</span>[T]</span>
 
+<a class="item-anchor" href="#Set.copy" aria-label="Link to Set.copy">#</a>
 </div>
-<p class="member-doc">A deep copy.</p>
+<div class="member-doc"><p>A deep copy.</p></div>
 </div>
 <div class="member" id="Set.pop">
 <div class="member-head">
-<span class="sig">fun pop(mut self) -&gt; ?T where T: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>pop</strong>(<span class="kw">mut</span> <span class="kw">self</span>) -&gt; ?T <span class="kw">where</span> T: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Set.pop" aria-label="Link to Set.pop">#</a>
 </div>
-<p class="member-doc">Takes out the oldest item.</p>
+<div class="member-doc"><p>Takes out the oldest item.</p></div>
 </div>
 <div class="member" id="Set.union">
 <div class="member-head">
-<span class="sig">fun union(self, other: Set[T]) -&gt; Set[T] where T: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>union</strong>(<span class="kw">self</span>, other: <span class="ty">Set</span>[T]) -&gt; <span class="ty">Set</span>[T] <span class="kw">where</span> T: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Set.union" aria-label="Link to Set.union">#</a>
 </div>
-<p class="member-doc">The items in this set, <code>other</code>, or both.</p>
+<div class="member-doc"><p>The items in this set, <code>other</code>, or both.</p></div>
 </div>
 <div class="member" id="Set.intersection">
 <div class="member-head">
-<span class="sig">fun intersection(self, other: Set[T]) -&gt; Set[T] where T: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>intersection</strong>(<span class="kw">self</span>, other: <span class="ty">Set</span>[T]) -&gt; <span class="ty">Set</span>[T] <span class="kw">where</span> T: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Set.intersection" aria-label="Link to Set.intersection">#</a>
 </div>
-<p class="member-doc">The items in both sets.</p>
+<div class="member-doc"><p>The items in both sets.</p></div>
 </div>
 <div class="member" id="Set.difference">
 <div class="member-head">
-<span class="sig">fun difference(self, other: Set[T]) -&gt; Set[T] where T: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>difference</strong>(<span class="kw">self</span>, other: <span class="ty">Set</span>[T]) -&gt; <span class="ty">Set</span>[T] <span class="kw">where</span> T: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Set.difference" aria-label="Link to Set.difference">#</a>
 </div>
-<p class="member-doc">The items in this set and not in <code>other</code>.</p>
+<div class="member-doc"><p>The items in this set and not in <code>other</code>.</p></div>
 </div>
 <div class="member" id="Set.symmetric_difference">
 <div class="member-head">
-<span class="sig">fun symmetric_difference(self, other: Set[T]) -&gt; Set[T] where T: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>symmetric_difference</strong>(<span class="kw">self</span>, other: <span class="ty">Set</span>[T]) -&gt; <span class="ty">Set</span>[T] <span class="kw">where</span> T: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Set.symmetric_difference" aria-label="Link to Set.symmetric_difference">#</a>
 </div>
-<p class="member-doc">The items in one set but not the other.</p>
+<div class="member-doc"><p>The items in one set but not the other.</p></div>
 </div>
 <div class="member" id="Set.is_subset">
 <div class="member-head">
-<span class="sig">fun is_subset(self, other: Set[T]) -&gt; bool where T: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_subset</strong>(<span class="kw">self</span>, other: <span class="ty">Set</span>[T]) -&gt; bool <span class="kw">where</span> T: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Set.is_subset" aria-label="Link to Set.is_subset">#</a>
 </div>
-<p class="member-doc">Whether every item is in <code>other</code>.</p>
+<div class="member-doc"><p>Whether every item is in <code>other</code>.</p></div>
 </div>
 <div class="member" id="Set.is_superset">
 <div class="member-head">
-<span class="sig">fun is_superset(self, other: Set[T]) -&gt; bool where T: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_superset</strong>(<span class="kw">self</span>, other: <span class="ty">Set</span>[T]) -&gt; bool <span class="kw">where</span> T: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Set.is_superset" aria-label="Link to Set.is_superset">#</a>
 </div>
-<p class="member-doc">Whether every item of <code>other</code> is here.</p>
+<div class="member-doc"><p>Whether every item of <code>other</code> is here.</p></div>
 </div>
 <div class="member" id="Set.is_disjoint">
 <div class="member-head">
-<span class="sig">fun is_disjoint(self, other: Set[T]) -&gt; bool where T: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_disjoint</strong>(<span class="kw">self</span>, other: <span class="ty">Set</span>[T]) -&gt; bool <span class="kw">where</span> T: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Set.is_disjoint" aria-label="Link to Set.is_disjoint">#</a>
 </div>
-<p class="member-doc">Whether no item is in both.</p>
+<div class="member-doc"><p>Whether no item is in both.</p></div>
 </div>
 <div class="member" id="Set.retain">
 <div class="member-head">
-<span class="sig">fun retain(mut self, keep: T =&gt; bool) where T: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>retain</strong>(<span class="kw">mut</span> <span class="kw">self</span>, keep: T =&gt; bool) <span class="kw">where</span> T: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Set.retain" aria-label="Link to Set.retain">#</a>
 </div>
-<p class="member-doc">Keeps the items <code>keep</code> says yes to.</p>
+<div class="member-doc"><p>Keeps the items <code>keep</code> says yes to.</p></div>
 </div>
 <div class="member" id="Set.extend">
 <div class="member-head">
-<span class="sig">fun extend(mut self, take items: Stream[T]) where T: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>extend</strong>(<span class="kw">mut</span> <span class="kw">self</span>, <span class="kw">take</span> items: <a href="iter.html#Stream">Stream</a>[T]) <span class="kw">where</span> T: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Set.extend" aria-label="Link to Set.extend">#</a>
 </div>
-<p class="member-doc">Adds each item.</p>
+<div class="member-doc"><p>Adds each item.</p></div>
 </div>
 </div>
-</div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="rand.html"><span class="dir">&larr; previous</span>std.rand</a>
+<a class="next" href="slice.html"><span class="dir">next &rarr;</span>std.slice</a>
+</nav>
 </main>
 </div>
 </body>

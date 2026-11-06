@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.term · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,7 +19,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,45 +67,58 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / term</div>
 <h1>std.term</h1>
-<p class="summary">The terminal.</p>
-<h2>Functions</h2>
-<div class="item" id="raw_mode">
+<p class="summary">The terminal: raw mode, which keys are held down, and its size. For games and other programs that redraw the screen; a sandboxed run has no terminal.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/term.loom</code></span></div>
+</div>
+<nav class="toc-chips" aria-label="In this module"><a href="#raw_mode"><span class="kind">fun</span>raw_mode</a><a href="#poll_keys"><span class="kind">fun</span>poll_keys</a><a href="#columns"><span class="kind">fun</span>columns</a><a href="#rows"><span class="kind">fun</span>rows</a><a href="#is_tty"><span class="kind">fun</span>is_tty</a></nav>
+<h2 id="functions">Functions</h2>
+<section class="item" id="raw_mode">
 <div class="item-head">
-<span class="sig">fun <strong>raw_mode</strong>(on: bool)</span>
-<span class="badge extern">extern</span>
+<span class="sig"><span class="kw">fun</span> <strong>raw_mode</strong>(on: bool)</span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#raw_mode" aria-label="Link to raw_mode">#</a>
 </div>
-<p class="item-doc">Turns raw mode on or off: keys arrive immediately and aren't echoed.</p>
-</div>
-<div class="item" id="poll_keys">
+<div class="item-doc"><p>Turns raw mode on or off: keys arrive immediately and aren't echoed.</p></div>
+</section>
+<section class="item" id="poll_keys">
 <div class="item-head">
-<span class="sig">fun <strong>poll_keys</strong>(keymap: str) -&gt; u16</span>
-<span class="badge extern">extern</span>
+<span class="sig"><span class="kw">fun</span> <strong>poll_keys</strong>(keymap: str) -&gt; u16</span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#poll_keys" aria-label="Link to poll_keys">#</a>
 </div>
-<p class="item-doc">A bit set of the keys in <code>keymap</code> that are held down right now.</p>
-</div>
-<div class="item" id="columns">
+<div class="item-doc"><p>A bit set of the keys in <code>keymap</code> that are held down right now.</p></div>
+</section>
+<section class="item" id="columns">
 <div class="item-head">
-<span class="sig">fun <strong>columns</strong>() -&gt; u16</span>
-<span class="badge extern">extern</span>
+<span class="sig"><span class="kw">fun</span> <strong>columns</strong>() -&gt; u16</span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#columns" aria-label="Link to columns">#</a>
 </div>
-<p class="item-doc">How many columns the terminal has (80 when there is none).</p>
-</div>
-<div class="item" id="rows">
+<div class="item-doc"><p>How many columns the terminal has (80 when there is none).</p></div>
+</section>
+<section class="item" id="rows">
 <div class="item-head">
-<span class="sig">fun <strong>rows</strong>() -&gt; u16</span>
-<span class="badge extern">extern</span>
+<span class="sig"><span class="kw">fun</span> <strong>rows</strong>() -&gt; u16</span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#rows" aria-label="Link to rows">#</a>
 </div>
-<p class="item-doc">How many rows the terminal has (24 when there is none).</p>
-</div>
-<div class="item" id="is_tty">
+<div class="item-doc"><p>How many rows the terminal has (24 when there is none).</p></div>
+</section>
+<section class="item" id="is_tty">
 <div class="item-head">
-<span class="sig">fun <strong>is_tty</strong>() -&gt; bool</span>
-<span class="badge extern">extern</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_tty</strong>() -&gt; bool</span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#is_tty" aria-label="Link to is_tty">#</a>
 </div>
-<p class="item-doc">Whether standard output is a terminal, not a file or a pipe.</p>
-</div>
+<div class="item-doc"><p>Whether standard output is a terminal, not a file or a pipe.</p></div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="target.html"><span class="dir">&larr; previous</span>std.target</a>
+<a class="next" href="time.html"><span class="dir">next &rarr;</span>std.time</a>
+</nav>
 </main>
 </div>
 </body>

@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.fmt · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../../style.css">
 <script src="../../weave.js" defer></script>
+<script src="../../play/play.js" defer></script>
 </head>
 <body>
 <header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
@@ -18,7 +20,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,50 +68,80 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / fmt</div>
 <h1>std.fmt</h1>
-<p class="summary">Formatting.</p>
-<h2>Types</h2>
-<div class="item" id="Show">
-<div class="item-head">
-<span class="sig">weft <strong>Show</strong></span>
-
+<p class="summary">Formatting: <a class="code-link" href="fmt.html#Show"><code>Show</code></a> is how a value becomes text in <code>print</code> and in templates (<code>"{x}"</code>), and <a class="code-link" href="fmt.html#Fmt"><code>Fmt</code></a> is what <code>show</code> writes to. A warp that lists <a class="code-link" href="fmt.html#Show"><code>Show</code></a> and writes no method gets its debug form, the one <code>{x:?}</code> always gives. <a class="code-link" href="fmt.html#dbg"><code>dbg</code></a> prints an expression and its value, and gives the value back.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/fmt.loom</code></span><a href="../../lang/types.html">read about it in the book &rarr;</a></div>
 </div>
-<p class="item-doc">Something that can be written as text: <code>print</code>, <code>{x}</code> in templates.</p>
+<div class="mod-intro"><div class="sample" id="example" data-sample="std_fmt" data-mode="run" data-file="fmt_example.loom" data-store="std.fmt" data-runnable><div class="sample-head"><span class="file"><span class="dot"></span>fmt_example.loom</span><span class="tag ok">an example to run</span><span class="spacer"></span></div><pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.fmt.dbg
+
+<span class="k">warp</span> <span class="t">Rgb</span>(u8, u8, u8)
+
+<span class="k">weave</span> <span class="t">Show</span> <span class="k">into</span> <span class="t">Rgb</span> {
+    <span class="k">fun</span> <span class="f">show</span>(<span class="k">self</span>, <span class="k">mut</span> f: <span class="t">Fmt</span>) {
+        f.<span class="f">put</span>(<span class="s">"#</span><span class="h">{</span>.<span class="n">0</span>:<span class="n">02x</span><span class="h">}</span><span class="h">{</span>.<span class="n">1</span>:<span class="n">02x</span><span class="h">}</span><span class="h">{</span>.<span class="n">2</span>:<span class="n">02x</span><span class="h">}</span><span class="s">"</span>)
+    }
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> madder = <span class="t">Rgb</span>(<span class="n">238</span>, <span class="n">122</span>, <span class="n">95</span>)
+    <span class="f">print</span>(<span class="s">"madder is </span><span class="h">{</span>madder<span class="h">}</span><span class="s">, or </span><span class="h">{</span>madder:?<span class="h">}</span><span class="s"> in its debug form"</span>)
+    <span class="k">let</span> n = <span class="f">dbg</span>(<span class="n">6</span> * <span class="n">7</span>) + <span class="n">1</span>
+    <span class="f">print</span>(n)
+}</code></pre></div></div>
+<nav class="toc-chips" aria-label="In this module"><a href="#Show"><span class="kind">weft</span>Show</a><a href="#Fmt"><span class="kind">warp</span>Fmt</a><a href="#dbg"><span class="kind">fun</span>dbg</a></nav>
+<h2 id="types">Types</h2>
+<section class="item" id="Show">
+<div class="item-head">
+<span class="sig"><span class="kw">weft</span> <strong>Show</strong></span>
+
+<a class="item-anchor" href="#Show" aria-label="Link to Show">#</a>
+</div>
+<div class="item-doc"><p>Something that can be written as text: <code>print</code>, <code>{x}</code> in templates.</p></div>
 <div class="members">
 <div class="member" id="Show.show">
 <div class="member-head">
-<span class="sig">fun show(self, mut f: Fmt)</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">fun</span> <strong>show</strong>(<span class="kw">self</span>, <span class="kw">mut</span> f: <a href="fmt.html#Fmt">Fmt</a>)</span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Show.show" aria-label="Link to Show.show">#</a>
 </div>
-<p class="member-doc">Writes the value to <code>f</code>. A warp that doesn't write its own gets its debug form, less any fields shared by every case: <code>Point(x: 3, y: 4)</code>, <code>Word("let")</code>, <code>Red</code>.</p>
+<div class="member-doc"><p>Writes the value to <code>f</code>. A warp that doesn't write its own gets its debug form, less any fields shared by every case: <code>Point(x: 3, y: 4)</code>, <code>Word("let")</code>, <code>Red</code>.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="Fmt">
+</section>
+<section class="item" id="Fmt">
 <div class="item-head">
-<span class="sig">warp <strong>Fmt</strong></span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">warp</span> <strong>Fmt</strong></span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Fmt" aria-label="Link to Fmt">#</a>
 </div>
-<p class="item-doc">Where <code>show</code> writes to.</p>
+<div class="item-doc"><p>Where <code>show</code> writes to.</p></div>
 <div class="members">
 <div class="member" id="Fmt.put">
 <div class="member-head">
-<span class="sig">fun put(mut self, x: any Show)</span>
+<span class="sig"><span class="kw">fun</span> <strong>put</strong>(<span class="kw">mut</span> <span class="kw">self</span>, x: <span class="kw">any</span> <a href="fmt.html#Show">Show</a>)</span>
 
+<a class="item-anchor" href="#Fmt.put" aria-label="Link to Fmt.put">#</a>
 </div>
-<p class="member-doc">Writes <code>x</code> the way <code>{x}</code> would.</p>
+<div class="member-doc"><p>Writes <code>x</code> the way <code>{x}</code> would.</p></div>
 </div>
 </div>
-</div>
-<h2>Functions</h2>
-<div class="item" id="dbg">
+</section>
+<h2 id="functions">Functions</h2>
+<section class="item" id="dbg">
 <div class="item-head">
-<span class="sig">fun <strong>dbg</strong>[T: Show](take x: T, at: str = "", expr: str = "") -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>dbg</strong>[T: <a href="fmt.html#Show">Show</a>](<span class="kw">take</span> x: T, at: str = "", expr: str = "") -&gt; T</span>
 
+<a class="item-anchor" href="#dbg" aria-label="Link to dbg">#</a>
 </div>
-<p class="item-doc">Writes <code>[file:line:col] expr = value</code> to standard error and gives <code>x</code> back: <code>let n = dbg(a + b) * 2</code>.</p>
-</div>
+<div class="item-doc"><p>Writes <code>[file:line:col] expr = value</code> to standard error and gives <code>x</code> back: <code>let n = dbg(a + b) * 2</code>.</p></div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="error.html"><span class="dir">&larr; previous</span>std.error</a>
+<a class="next" href="fs.html"><span class="dir">next &rarr;</span>std.fs</a>
+</nav>
 </main>
 </div>
 </body>

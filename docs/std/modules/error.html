@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.error · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../../style.css">
 <script src="../../weave.js" defer></script>
+<script src="../../play/play.js" defer></script>
 </head>
 <body>
 <header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
@@ -18,7 +20,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,92 +68,133 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / error</div>
 <h1>std.error</h1>
-<p class="summary">Errors and giving up.</p>
-<h2>Types</h2>
-<div class="item" id="Error">
-<div class="item-head">
-<span class="sig">weft <strong>Error</strong>: Show</span>
-
+<p class="summary">Errors and giving up. A function that can fail returns <code>T ! E</code>; the <code>?</code> operator passes an error up, <code>mend</code> handles it, and <code>fail</code> produces one. Any warp that weaves <a class="code-link" href="error.html#Error"><code>Error</code></a> can be an error, and <a class="code-link" href="error.html#unravel"><code>unravel</code></a> gives up on the whole thread (as a panic does elsewhere), running <code>defer</code>s on the way out.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/error.loom</code></span><a href="../../lang/errors.html">read about it in the book &rarr;</a></div>
 </div>
-<p class="item-doc">Something that went wrong. The default <code>message</code> is built from the case name and payload.</p>
+<div class="mod-intro"><div class="sample" id="example" data-sample="std_error" data-mode="run" data-file="error_example.loom" data-store="std.error" data-runnable><div class="sample-head"><span class="file"><span class="dot"></span>error_example.loom</span><span class="tag ok">an example to run</span><span class="spacer"></span></div><pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">ConfigError</span>: <span class="t">Error</span> {
+    <span class="k">case</span> <span class="t">Missing</span>(key: <span class="t">String</span>)
+    <span class="k">case</span> <span class="t">Bad</span>(key: <span class="t">String</span>, value: <span class="t">String</span>)
+}
+
+<span class="k">fun</span> <span class="f">port</span>(text: str) -&gt; u16 ! <span class="t">ConfigError</span> {
+    <span class="k">let</span> (key, value) = text.<span class="f">split_once</span>(<span class="s">"="</span>) <span class="k">mend</span> <span class="k">fail</span> .<span class="t">Missing</span>(key: text.<span class="f">to_string</span>())
+    value.<span class="f">trim</span>().parse[u16]() <span class="k">mend</span> <span class="k">fail</span> .<span class="t">Bad</span>(key: key.<span class="f">to_string</span>(), value: value.<span class="f">to_string</span>())
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">port</span>(<span class="s">"port=8080"</span>):?<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">port</span>(<span class="s">"port=lots"</span>):?<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span><span class="f">port</span>(<span class="s">"nothing"</span>):?<span class="h">}</span><span class="s">"</span>)
+    <span class="k">let</span> p = <span class="f">port</span>(<span class="s">"port=99"</span>) <span class="k">mend</span> e =&gt; {
+        <span class="f">print</span>(<span class="s">"gave up: </span><span class="h">{</span>e.<span class="f">message</span>()<span class="h">}</span><span class="s">"</span>)
+        <span class="n">0</span>
+    }
+    <span class="f">print</span>(p)
+}</code></pre></div></div>
+<nav class="toc-chips" aria-label="In this module"><a href="#Error"><span class="kind">weft</span>Error</a><a href="#Fallible"><span class="kind">warp</span>Fallible</a><a href="#Missing"><span class="kind">warp</span>Missing</a><a href="#unravel"><span class="kind">fun</span>unravel</a><a href="#assert"><span class="kind">fun</span>assert</a></nav>
+<h2 id="types">Types</h2>
+<section class="item" id="Error">
+<div class="item-head">
+<span class="sig"><span class="kw">weft</span> <strong>Error</strong>: <a href="fmt.html#Show">Show</a></span>
+
+<a class="item-anchor" href="#Error" aria-label="Link to Error">#</a>
+</div>
+<div class="item-doc"><p>Something that went wrong. The default <a class="code-link" href="error.html#Error.message"><code>message</code></a> is built from the case name and payload.</p></div>
 <div class="members">
 <div class="member" id="Error.message">
 <div class="member-head">
-<span class="sig">fun message(self) -&gt; String</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">fun</span> <strong>message</strong>(<span class="kw">self</span>) -&gt; <a href="string.html#String">String</a></span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Error.message" aria-label="Link to Error.message">#</a>
 </div>
-<p class="member-doc">What went wrong, in words. Derived: the value's <code>Show</code> form.</p>
+<div class="member-doc"><p>What went wrong, in words. Derived: the value's <a class="code-link" href="fmt.html#Show"><code>Show</code></a> form.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="Fallible">
+</section>
+<section class="item" id="Fallible">
 <div class="item-head">
-<span class="sig">warp <strong>Fallible</strong>[T, E]</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">warp</span> <strong>Fallible</strong>[T, E]</span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Fallible" aria-label="Link to Fallible">#</a>
 </div>
-<p class="item-doc">The methods of every result type, <code>T ! E</code>.</p>
+<div class="item-doc"><p>The methods of every result type, <code>T ! E</code>.</p></div>
 <div class="members">
 <div class="member" id="Fallible.map">
 <div class="member-head">
-<span class="sig">fun map[U](take self, f: T =&gt; U) -&gt; U ! E</span>
+<span class="sig"><span class="kw">fun</span> <strong>map</strong>[U](<span class="kw">take</span> <span class="kw">self</span>, f: T =&gt; U) -&gt; U ! E</span>
 
+<a class="item-anchor" href="#Fallible.map" aria-label="Link to Fallible.map">#</a>
 </div>
-<p class="member-doc"><code>f</code> of the value, or the error as it was.</p>
+<div class="member-doc"><p><code>f</code> of the value, or the error as it was.</p></div>
 </div>
 <div class="member" id="Fallible.map_err">
 <div class="member-head">
-<span class="sig">fun map_err[F](take self, f: E =&gt; F) -&gt; T ! F</span>
+<span class="sig"><span class="kw">fun</span> <strong>map_err</strong>[F](<span class="kw">take</span> <span class="kw">self</span>, f: E =&gt; F) -&gt; T ! F</span>
 
+<a class="item-anchor" href="#Fallible.map_err" aria-label="Link to Fallible.map_err">#</a>
 </div>
-<p class="member-doc">The value as it was, or <code>f</code> of the error.</p>
+<div class="member-doc"><p>The value as it was, or <code>f</code> of the error.</p></div>
 </div>
 <div class="member" id="Fallible.value">
 <div class="member-head">
-<span class="sig">fun value(take self) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>value</strong>(<span class="kw">take</span> <span class="kw">self</span>) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Fallible.value" aria-label="Link to Fallible.value">#</a>
 </div>
-<p class="member-doc">The value, if it worked.</p>
+<div class="member-doc"><p>The value, if it worked.</p></div>
 </div>
 <div class="member" id="Fallible.error">
 <div class="member-head">
-<span class="sig">fun error(take self) -&gt; ?E</span>
+<span class="sig"><span class="kw">fun</span> <strong>error</strong>(<span class="kw">take</span> <span class="kw">self</span>) -&gt; ?E</span>
 
+<a class="item-anchor" href="#Fallible.error" aria-label="Link to Fallible.error">#</a>
 </div>
-<p class="member-doc">The error, if it failed.</p>
+<div class="member-doc"><p>The error, if it failed.</p></div>
 </div>
 <div class="member" id="Fallible.is_ok">
 <div class="member-head">
-<span class="sig">fun is_ok(self) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_ok</strong>(<span class="kw">self</span>) -&gt; bool</span>
 
+<a class="item-anchor" href="#Fallible.is_ok" aria-label="Link to Fallible.is_ok">#</a>
 </div>
-<p class="member-doc">Whether it worked.</p>
+<div class="member-doc"><p>Whether it worked.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="Missing">
+</section>
+<section class="item" id="Missing">
 <div class="item-head">
-<span class="sig">warp <strong>Missing</strong>: Error</span>
+<span class="sig"><span class="kw">warp</span> <strong>Missing</strong>: <a href="error.html#Error">Error</a></span>
 
+<a class="item-anchor" href="#Missing" aria-label="Link to Missing">#</a>
 </div>
-<p class="item-doc">The error a <code>?</code> on an empty optional produces.</p>
-</div>
-<h2>Functions</h2>
-<div class="item" id="unravel">
+<div class="item-doc"><p>The error a <code>?</code> on an empty optional produces.</p></div>
+</section>
+<h2 id="functions">Functions</h2>
+<section class="item" id="unravel">
 <div class="item-head">
-<span class="sig">fun <strong>unravel</strong>(message: str) -&gt; never</span>
-<span class="badge extern">extern</span>
+<span class="sig"><span class="kw">fun</span> <strong>unravel</strong>(message: str) -&gt; <span class="kw">never</span></span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#unravel" aria-label="Link to unravel">#</a>
 </div>
-<p class="item-doc">Gives up: unwinds the current thread, running <code>defer</code>s on the way out.</p>
-</div>
-<div class="item" id="assert">
+<div class="item-doc"><p>Gives up: unwinds the current thread, running <code>defer</code>s on the way out.</p></div>
+</section>
+<section class="item" id="assert">
 <div class="item-head">
-<span class="sig">fun <strong>assert</strong>(condition: bool, message: str = "assertion failed")</span>
-<span class="badge extern">extern</span>
+<span class="sig"><span class="kw">fun</span> <strong>assert</strong>(condition: bool, message: str = "assertion failed")</span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#assert" aria-label="Link to assert">#</a>
 </div>
-<p class="item-doc">Unravels with <code>message</code> unless <code>condition</code> holds. In a <code>const</code> context, a failed assertion is a compile error.</p>
-</div>
+<div class="item-doc"><p>Unravels with <code>message</code> unless <code>condition</code> holds. In a <code>const</code> context, a failed assertion is a compile error.</p></div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="env.html"><span class="dir">&larr; previous</span>std.env</a>
+<a class="next" href="fmt.html"><span class="dir">next &rarr;</span>std.fmt</a>
+</nav>
 </main>
 </div>
 </body>

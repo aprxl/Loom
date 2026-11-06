@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.rand · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../../style.css">
 <script src="../../weave.js" defer></script>
+<script src="../../play/play.js" defer></script>
 </head>
 <body>
 <header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
@@ -18,7 +20,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,103 +68,135 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / rand</div>
 <h1>std.rand</h1>
-<p class="summary">Pseudo-random numbers.</p>
-<h2>Types</h2>
-<div class="item" id="Rng">
-<div class="item-head">
-<span class="sig">warp <strong>Rng</strong></span>
-
+<p class="summary">Pseudo-random numbers: <a class="code-link" href="rand.html#Rng"><code>Rng</code></a> is a small, fast generator that gives the same numbers for the same seed on every machine, which makes programs and tests reproducible. It is not for passwords or keys.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/rand.loom</code></span></div>
 </div>
-<p class="item-doc">A deterministic xoshiro256** generator: the same seed always gives the same numbers, on every machine. Not for secrets.</p>
+<div class="mod-intro"><div class="sample" id="example" data-sample="std_rand" data-mode="run" data-file="rand_example.loom" data-store="std.rand" data-runnable><div class="sample-head"><span class="file"><span class="dot"></span>rand_example.loom</span><span class="tag ok">an example to run</span><span class="spacer"></span></div><pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.rand.<span class="t">Rng</span>
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="c">// The same seed gives the same numbers, on every machine.</span>
+    <span class="k">var</span> rng = <span class="t">Rng</span>.<span class="f">seeded</span>(<span class="n">42</span>)
+    <span class="k">let</span> rolls = (<span class="n">0</span>..<span class="n">8</span>).<span class="f">map</span>(i =&gt; rng.<span class="f">between</span>(<span class="n">1</span>, <span class="n">6</span>)).<span class="f">collect</span>()
+    <span class="f">print</span>(<span class="s">"dice: </span><span class="h">{</span>rolls<span class="h">}</span><span class="s">"</span>)
+    <span class="k">let</span> colors = [<span class="s">"madder"</span>, <span class="s">"weld"</span>, <span class="s">"woad"</span>, <span class="s">"lichen"</span>]
+    <span class="f">print</span>(<span class="s">"today's dye: </span><span class="h">{</span>rng.<span class="f">choose</span>(colors):?<span class="h">}</span><span class="s">, heads: </span><span class="h">{</span>rng.<span class="f">chance</span>(<span class="n">0.5</span>)<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"a float in [0, 1): </span><span class="h">{</span>rng.<span class="f">float</span>():.<span class="n">3</span><span class="h">}</span><span class="s">"</span>)
+}</code></pre></div></div>
+<h2 id="types">Types</h2>
+<section class="item" id="Rng">
+<div class="item-head">
+<span class="sig"><span class="kw">warp</span> <strong>Rng</strong></span>
+
+<a class="item-anchor" href="#Rng" aria-label="Link to Rng">#</a>
+</div>
+<div class="item-doc"><p>A deterministic xoshiro256** generator: the same seed always gives the same numbers, on every machine. Not for secrets.</p></div>
 <div class="members">
 <div class="member" id="Rng.seeded">
 <div class="member-head">
-<span class="sig">fun seeded(seed: u64) -&gt; Rng</span>
+<span class="sig"><span class="kw">fun</span> <strong>seeded</strong>(seed: u64) -&gt; <span class="ty">Rng</span></span>
 
+<a class="item-anchor" href="#Rng.seeded" aria-label="Link to Rng.seeded">#</a>
 </div>
-<p class="member-doc">A generator that always produces the same sequence for <code>seed</code>.</p>
+<div class="member-doc"><p>A generator that always produces the same sequence for <code>seed</code>.</p></div>
 </div>
 <div class="member" id="Rng.from_entropy">
 <div class="member-head">
-<span class="sig">fun from_entropy() -&gt; Rng</span>
+<span class="sig"><span class="kw">fun</span> <strong>from_entropy</strong>() -&gt; <span class="ty">Rng</span></span>
 
+<a class="item-anchor" href="#Rng.from_entropy" aria-label="Link to Rng.from_entropy">#</a>
 </div>
-<p class="member-doc">A generator seeded from the clock and the process, so each run gets its own numbers. Not for secrets.</p>
+<div class="member-doc"><p>A generator seeded from the clock and the process, so each run gets its own numbers. Not for secrets.</p></div>
 </div>
 <div class="member" id="Rng.next_u64">
 <div class="member-head">
-<span class="sig">fun next_u64(mut self) -&gt; u64</span>
+<span class="sig"><span class="kw">fun</span> <strong>next_u64</strong>(<span class="kw">mut</span> <span class="kw">self</span>) -&gt; u64</span>
 
+<a class="item-anchor" href="#Rng.next_u64" aria-label="Link to Rng.next_u64">#</a>
 </div>
-<p class="member-doc">The next 64 random bits.</p>
+<div class="member-doc"><p>The next 64 random bits.</p></div>
 </div>
 <div class="member" id="Rng.byte">
 <div class="member-head">
-<span class="sig">fun byte(mut self) -&gt; u8</span>
+<span class="sig"><span class="kw">fun</span> <strong>byte</strong>(<span class="kw">mut</span> <span class="kw">self</span>) -&gt; u8</span>
 
+<a class="item-anchor" href="#Rng.byte" aria-label="Link to Rng.byte">#</a>
 </div>
-<p class="member-doc">A random byte: the top 8 bits of <code>next_u64</code>.</p>
+<div class="member-doc"><p>A random byte: the top 8 bits of <a class="code-link" href="rand.html#Rng.next_u64"><code>next_u64</code></a>.</p></div>
 </div>
 <div class="member" id="Rng.below">
 <div class="member-head">
-<span class="sig">fun below(mut self, n: u64) -&gt; u64</span>
+<span class="sig"><span class="kw">fun</span> <strong>below</strong>(<span class="kw">mut</span> <span class="kw">self</span>, n: u64) -&gt; u64</span>
 
+<a class="item-anchor" href="#Rng.below" aria-label="Link to Rng.below">#</a>
 </div>
-<p class="member-doc">A number from <code>0</code> up to but not including <code>n</code>, every one equally likely. Unravels if <code>n</code> is 0.</p>
+<div class="member-doc"><p>A number from <code>0</code> up to but not including <code>n</code>, every one equally likely. Unravels if <code>n</code> is 0.</p></div>
 </div>
 <div class="member" id="Rng.between">
 <div class="member-head">
-<span class="sig">fun between(mut self, lo: i64, hi: i64) -&gt; i64</span>
+<span class="sig"><span class="kw">fun</span> <strong>between</strong>(<span class="kw">mut</span> <span class="kw">self</span>, lo: i64, hi: i64) -&gt; i64</span>
 
+<a class="item-anchor" href="#Rng.between" aria-label="Link to Rng.between">#</a>
 </div>
-<p class="member-doc">A number from <code>lo</code> to <code>hi</code>, both included. Unravels if <code>hi &lt; lo</code>.</p>
+<div class="member-doc"><p>A number from <code>lo</code> to <code>hi</code>, both included. Unravels if <code>hi &lt; lo</code>.</p></div>
 </div>
 <div class="member" id="Rng.float">
 <div class="member-head">
-<span class="sig">fun float(mut self) -&gt; f64</span>
+<span class="sig"><span class="kw">fun</span> <strong>float</strong>(<span class="kw">mut</span> <span class="kw">self</span>) -&gt; f64</span>
 
+<a class="item-anchor" href="#Rng.float" aria-label="Link to Rng.float">#</a>
 </div>
-<p class="member-doc">A number from 0 up to but not including 1, with 53 random bits.</p>
+<div class="member-doc"><p>A number from 0 up to but not including 1, with 53 random bits.</p></div>
 </div>
 <div class="member" id="Rng.chance">
 <div class="member-head">
-<span class="sig">fun chance(mut self, p: f64) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>chance</strong>(<span class="kw">mut</span> <span class="kw">self</span>, p: f64) -&gt; bool</span>
 
+<a class="item-anchor" href="#Rng.chance" aria-label="Link to Rng.chance">#</a>
 </div>
-<p class="member-doc"><code>true</code> with probability <code>p</code>.</p>
+<div class="member-doc"><p><code>true</code> with probability <code>p</code>.</p></div>
 </div>
 <div class="member" id="Rng.shuffle">
 <div class="member-head">
-<span class="sig">fun shuffle[T](mut self, mut xs: [T])</span>
+<span class="sig"><span class="kw">fun</span> <strong>shuffle</strong>[T](<span class="kw">mut</span> <span class="kw">self</span>, <span class="kw">mut</span> xs: [T])</span>
 
+<a class="item-anchor" href="#Rng.shuffle" aria-label="Link to Rng.shuffle">#</a>
 </div>
-<p class="member-doc">Puts the items in a random order.</p>
+<div class="member-doc"><p>Puts the items in a random order.</p></div>
 </div>
 <div class="member" id="Rng.choose">
 <div class="member-head">
-<span class="sig">fun choose[T](mut self, xs: [T]) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>choose</strong>[T](<span class="kw">mut</span> <span class="kw">self</span>, xs: [T]) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Rng.choose" aria-label="Link to Rng.choose">#</a>
 </div>
-<p class="member-doc">A copy of a random item, if there are any.</p>
+<div class="member-doc"><p>A copy of a random item, if there are any.</p></div>
 </div>
 <div class="member" id="Rng.fill">
 <div class="member-head">
-<span class="sig">fun fill(mut self, mut buf: [u8])</span>
+<span class="sig"><span class="kw">fun</span> <strong>fill</strong>(<span class="kw">mut</span> <span class="kw">self</span>, <span class="kw">mut</span> buf: [u8])</span>
 
+<a class="item-anchor" href="#Rng.fill" aria-label="Link to Rng.fill">#</a>
 </div>
-<p class="member-doc">Fills <code>buf</code> with random bytes.</p>
+<div class="member-doc"><p>Fills <code>buf</code> with random bytes.</p></div>
 </div>
 <div class="member" id="Rng.jump">
 <div class="member-head">
-<span class="sig">fun jump(mut self) -&gt; Rng</span>
+<span class="sig"><span class="kw">fun</span> <strong>jump</strong>(<span class="kw">mut</span> <span class="kw">self</span>) -&gt; <span class="ty">Rng</span></span>
 
+<a class="item-anchor" href="#Rng.jump" aria-label="Link to Rng.jump">#</a>
 </div>
-<p class="member-doc">A generator at the current state, which this one then leaves 2^128 steps behind: each call gives a stream that overlaps no other, so every thread can have its own.</p>
+<div class="member-doc"><p>A generator at the current state, which this one then leaves 2^128 steps behind: each call gives a stream that overlaps no other, so every thread can have its own.</p></div>
 </div>
 </div>
-</div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="process.html"><span class="dir">&larr; previous</span>std.process</a>
+<a class="next" href="set.html"><span class="dir">next &rarr;</span>std.set</a>
+</nav>
 </main>
 </div>
 </body>

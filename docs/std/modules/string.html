@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.string · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../../style.css">
 <script src="../../weave.js" defer></script>
+<script src="../../play/play.js" defer></script>
 </head>
 <body>
 <header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
@@ -18,7 +20,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,593 +68,696 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / string</div>
 <h1>std.string</h1>
-<p class="summary">Text.</p>
-<h2>Types</h2>
-<div class="item" id="Utf8Error">
-<div class="item-head">
-<span class="sig">warp <strong>Utf8Error</strong>: Error</span>
+<p class="summary">Text: <code>str</code> is a view of UTF-8 text, <a class="code-link" href="string.html#String"><code>String</code></a> owns its text and can grow. Lengths and positions count bytes, slicing (<code>s[0..5]</code>) cuts on bytes and unravels inside a character, and the case changes and tests follow Unicode. A string literal is a template: <code>"{x}"</code> formats <code>x</code> into it.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/string.loom</code></span><a href="../../lang/values.html">read about it in the book &rarr;</a></div>
+</div>
+<div class="mod-intro"><div class="sample" id="example" data-sample="std_string" data-mode="run" data-file="string_example.loom" data-store="std.string" data-runnable><div class="sample-head"><span class="file"><span class="dot"></span>string_example.loom</span><span class="tag ok">an example to run</span><span class="spacer"></span></div><pre class="code"><code><span class="k">use</span> std.io.print
 
-</div>
-<p class="item-doc">Why bytes aren't text.</p>
-<ul class="fields">
-<li><span class="sig">pub valid_up_to: usize</span></li>
-</ul>
-</div>
-<div class="item" id="String">
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> line = <span class="s">"  name = Ada Lovelace  "</span>
+    <span class="k">if</span> line.<span class="f">trim</span>().<span class="f">split_once</span>(<span class="s">"="</span>) <span class="k">is</span> <span class="k">some</span>((key, value)) {
+        <span class="f">print</span>(<span class="s">"[</span><span class="h">{</span>key.<span class="f">trim</span>()<span class="h">}</span><span class="s">] -&gt; [</span><span class="h">{</span>value.<span class="f">trim</span>()<span class="h">}</span><span class="s">]"</span>)
+    }
+    <span class="k">var</span> s = <span class="t">String</span>()
+    <span class="k">for</span> c <span class="k">in</span> <span class="s">"loom"</span>.<span class="f">chars</span>() { s.<span class="f">push</span>(c.<span class="f">to_upper</span>()) }
+    s.<span class="f">push_str</span>(<span class="s">"!"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>s<span class="h">}</span><span class="s"> </span><span class="h">{</span>s.<span class="f">len</span>()<span class="h">}</span><span class="s"> bytes, </span><span class="h">{</span><span class="s">"straße"</span>.<span class="f">to_upper</span>()<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"42"</span>.parse[u8]() <span class="k">mend</span> <span class="n">0</span>)
+}</code></pre></div></div>
+<nav class="toc-chips" aria-label="In this module"><a href="#Utf8Error"><span class="kind">warp</span>Utf8Error</a><a href="#String"><span class="kind">warp</span>String</a><a href="#Str"><span class="kind">warp</span>Str</a><a href="#Char"><span class="kind">warp</span>Char</a></nav>
+<h2 id="types">Types</h2>
+<section class="item" id="Utf8Error">
 <div class="item-head">
-<span class="sig">warp <strong>String</strong></span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">warp</span> <strong>Utf8Error</strong>: <a href="error.html#Error">Error</a></span>
+
+<a class="item-anchor" href="#Utf8Error" aria-label="Link to Utf8Error">#</a>
 </div>
-<p class="item-doc">Owned, growable UTF-8 text. <code>str</code> is a view of text; a string literal converts to <code>String</code> wherever one is expected. A <code>String</code> has every method of <code>str</code>, too.</p>
+<div class="item-doc"><p>Why bytes aren't text.</p></div>
+<div class="parts"><span class="parts-label">Fields</span><ul class="fields">
+<li title="How many bytes at the start were fine."><span class="sig"><span class="kw">pub</span> valid_up_to: usize</span><span class="part-doc">How many bytes at the start were fine.</span></li>
+</ul></div>
+</section>
+<section class="item" id="String">
+<div class="item-head">
+<span class="sig"><span class="kw">warp</span> <strong>String</strong></span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#String" aria-label="Link to String">#</a>
+</div>
+<div class="item-doc"><p>Owned, growable UTF-8 text. <code>str</code> is a view of text; a string literal converts to <code>String</code> wherever one is expected. A <code>String</code> has every method of <code>str</code>, too.</p></div>
 <div class="members">
 <div class="member" id="String.with_capacity">
 <div class="member-head">
-<span class="sig">fun with_capacity(n: usize) -&gt; String</span>
+<span class="sig"><span class="kw">fun</span> <strong>with_capacity</strong>(n: usize) -&gt; <span class="ty">String</span></span>
 
+<a class="item-anchor" href="#String.with_capacity" aria-label="Link to String.with_capacity">#</a>
 </div>
-<p class="member-doc">An empty string with room for <code>n</code> bytes.</p>
+<div class="member-doc"><p>An empty string with room for <code>n</code> bytes.</p></div>
 </div>
 <div class="member" id="String.of">
 <div class="member-head">
-<span class="sig">fun of(chars: [char]) -&gt; String</span>
+<span class="sig"><span class="kw">fun</span> <strong>of</strong>(chars: [char]) -&gt; <span class="ty">String</span></span>
 
+<a class="item-anchor" href="#String.of" aria-label="Link to String.of">#</a>
 </div>
-<p class="member-doc">The text of <code>chars</code>, in order.</p>
+<div class="member-doc"><p>The text of <code>chars</code>, in order.</p></div>
 </div>
 <div class="member" id="String.push">
 <div class="member-head">
-<span class="sig">fun push(mut self, c: char)</span>
+<span class="sig"><span class="kw">fun</span> <strong>push</strong>(<span class="kw">mut</span> <span class="kw">self</span>, c: char)</span>
 
+<a class="item-anchor" href="#String.push" aria-label="Link to String.push">#</a>
 </div>
-<p class="member-doc">Adds <code>c</code> at the end.</p>
+<div class="member-doc"><p>Adds <code>c</code> at the end.</p></div>
 </div>
 <div class="member" id="String.push_str">
 <div class="member-head">
-<span class="sig">fun push_str(mut self, s: str)</span>
+<span class="sig"><span class="kw">fun</span> <strong>push_str</strong>(<span class="kw">mut</span> <span class="kw">self</span>, s: str)</span>
 
+<a class="item-anchor" href="#String.push_str" aria-label="Link to String.push_str">#</a>
 </div>
-<p class="member-doc">Adds <code>s</code> at the end.</p>
+<div class="member-doc"><p>Adds <code>s</code> at the end.</p></div>
 </div>
 <div class="member" id="String.pop">
 <div class="member-head">
-<span class="sig">fun pop(mut self) -&gt; ?char</span>
+<span class="sig"><span class="kw">fun</span> <strong>pop</strong>(<span class="kw">mut</span> <span class="kw">self</span>) -&gt; ?char</span>
 
+<a class="item-anchor" href="#String.pop" aria-label="Link to String.pop">#</a>
 </div>
-<p class="member-doc">Takes the last character off, if there is one.</p>
+<div class="member-doc"><p>Takes the last character off, if there is one.</p></div>
 </div>
 <div class="member" id="String.clear">
 <div class="member-head">
-<span class="sig">fun clear(mut self)</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>clear</strong>(<span class="kw">mut</span> <span class="kw">self</span>)</span>
+
+<a class="item-anchor" href="#String.clear" aria-label="Link to String.clear">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>Removes all the text.</p></div>
 </div>
 <div class="member" id="String.from_utf8">
 <div class="member-head">
-<span class="sig">fun from_utf8(bytes: [u8]) -&gt; String ! Utf8Error</span>
+<span class="sig"><span class="kw">fun</span> <strong>from_utf8</strong>(bytes: [u8]) -&gt; <span class="ty">String</span> ! <a href="string.html#Utf8Error">Utf8Error</a></span>
 
+<a class="item-anchor" href="#String.from_utf8" aria-label="Link to String.from_utf8">#</a>
 </div>
-<p class="member-doc">The text the bytes spell, or where they stop being UTF-8.</p>
+<div class="member-doc"><p>The text the bytes spell, or where they stop being UTF-8.</p></div>
 </div>
 <div class="member" id="String.truncate">
 <div class="member-head">
-<span class="sig">fun truncate(mut self, n: usize)</span>
+<span class="sig"><span class="kw">fun</span> <strong>truncate</strong>(<span class="kw">mut</span> <span class="kw">self</span>, n: usize)</span>
 
+<a class="item-anchor" href="#String.truncate" aria-label="Link to String.truncate">#</a>
 </div>
-<p class="member-doc">Keeps the first <code>n</code> bytes. Unravels if <code>n</code> is past the end or in the middle of a character.</p>
+<div class="member-doc"><p>Keeps the first <code>n</code> bytes. Unravels if <code>n</code> is past the end or in the middle of a character.</p></div>
 </div>
 <div class="member" id="String.insert_str">
 <div class="member-head">
-<span class="sig">fun insert_str(mut self, i: usize, s: str)</span>
+<span class="sig"><span class="kw">fun</span> <strong>insert_str</strong>(<span class="kw">mut</span> <span class="kw">self</span>, i: usize, s: str)</span>
 
+<a class="item-anchor" href="#String.insert_str" aria-label="Link to String.insert_str">#</a>
 </div>
-<p class="member-doc">Puts <code>s</code> at byte <code>i</code>. Unravels if <code>i</code> is past the end or in the middle of a character.</p>
+<div class="member-doc"><p>Puts <code>s</code> at byte <code>i</code>. Unravels if <code>i</code> is past the end or in the middle of a character.</p></div>
 </div>
 <div class="member" id="String.insert">
 <div class="member-head">
-<span class="sig">fun insert(mut self, i: usize, c: char)</span>
+<span class="sig"><span class="kw">fun</span> <strong>insert</strong>(<span class="kw">mut</span> <span class="kw">self</span>, i: usize, c: char)</span>
 
+<a class="item-anchor" href="#String.insert" aria-label="Link to String.insert">#</a>
 </div>
-<p class="member-doc">Puts <code>c</code> at byte <code>i</code>.</p>
+<div class="member-doc"><p>Puts <code>c</code> at byte <code>i</code>.</p></div>
 </div>
 <div class="member" id="String.remove">
 <div class="member-head">
-<span class="sig">fun remove(mut self, i: usize) -&gt; char</span>
+<span class="sig"><span class="kw">fun</span> <strong>remove</strong>(<span class="kw">mut</span> <span class="kw">self</span>, i: usize) -&gt; char</span>
 
+<a class="item-anchor" href="#String.remove" aria-label="Link to String.remove">#</a>
 </div>
-<p class="member-doc">Takes out the character at byte <code>i</code>. Unravels if there isn't one.</p>
+<div class="member-doc"><p>Takes out the character at byte <code>i</code>. Unravels if there isn't one.</p></div>
 </div>
 <div class="member" id="String.retain">
 <div class="member-head">
-<span class="sig">fun retain(mut self, keep: char =&gt; bool)</span>
+<span class="sig"><span class="kw">fun</span> <strong>retain</strong>(<span class="kw">mut</span> <span class="kw">self</span>, keep: char =&gt; bool)</span>
 
+<a class="item-anchor" href="#String.retain" aria-label="Link to String.retain">#</a>
 </div>
-<p class="member-doc">Keeps the characters <code>keep</code> says yes to.</p>
+<div class="member-doc"><p>Keeps the characters <code>keep</code> says yes to.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="Str">
+</section>
+<section class="item" id="Str">
 <div class="item-head">
-<span class="sig">warp <strong>Str</strong></span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">warp</span> <strong>Str</strong></span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Str" aria-label="Link to Str">#</a>
 </div>
-<p class="item-doc">The methods of <code>str</code>: a view of UTF-8 text. Lengths and positions count bytes.</p>
+<div class="item-doc"><p>The methods of <code>str</code>: a view of UTF-8 text. Lengths and positions count bytes.</p></div>
 <div class="members">
 <div class="member" id="Str.len">
 <div class="member-head">
-<span class="sig">fun len(self) -&gt; usize</span>
+<span class="sig"><span class="kw">fun</span> <strong>len</strong>(<span class="kw">self</span>) -&gt; usize</span>
 
+<a class="item-anchor" href="#Str.len" aria-label="Link to Str.len">#</a>
 </div>
-<p class="member-doc">How many bytes it takes.</p>
+<div class="member-doc"><p>How many bytes it takes.</p></div>
 </div>
 <div class="member" id="Str.is_empty">
 <div class="member-head">
-<span class="sig">fun is_empty(self) -&gt; bool</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_empty</strong>(<span class="kw">self</span>) -&gt; bool</span>
+
+<a class="item-anchor" href="#Str.is_empty" aria-label="Link to Str.is_empty">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>Whether it has no text.</p></div>
 </div>
 <div class="member" id="Str.char_count">
 <div class="member-head">
-<span class="sig">fun char_count(self) -&gt; usize</span>
+<span class="sig"><span class="kw">fun</span> <strong>char_count</strong>(<span class="kw">self</span>) -&gt; usize</span>
 
+<a class="item-anchor" href="#Str.char_count" aria-label="Link to Str.char_count">#</a>
 </div>
-<p class="member-doc">How many characters it has.</p>
+<div class="member-doc"><p>How many characters it has.</p></div>
 </div>
 <div class="member" id="Str.contains">
 <div class="member-head">
-<span class="sig">fun contains(self, part: str) -&gt; bool</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>contains</strong>(<span class="kw">self</span>, part: str) -&gt; bool</span>
+
+<a class="item-anchor" href="#Str.contains" aria-label="Link to Str.contains">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>Whether <code>part</code> is in it somewhere.</p></div>
 </div>
 <div class="member" id="Str.starts_with">
 <div class="member-head">
-<span class="sig">fun starts_with(self, prefix: str) -&gt; bool</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>starts_with</strong>(<span class="kw">self</span>, prefix: str) -&gt; bool</span>
+
+<a class="item-anchor" href="#Str.starts_with" aria-label="Link to Str.starts_with">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>Whether it starts with <code>prefix</code>.</p></div>
 </div>
 <div class="member" id="Str.ends_with">
 <div class="member-head">
-<span class="sig">fun ends_with(self, suffix: str) -&gt; bool</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>ends_with</strong>(<span class="kw">self</span>, suffix: str) -&gt; bool</span>
+
+<a class="item-anchor" href="#Str.ends_with" aria-label="Link to Str.ends_with">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>Whether it ends with <code>suffix</code>.</p></div>
 </div>
 <div class="member" id="Str.find">
 <div class="member-head">
-<span class="sig">fun find(self, part: str) -&gt; ?usize</span>
+<span class="sig"><span class="kw">fun</span> <strong>find</strong>(<span class="kw">self</span>, part: str) -&gt; ?usize</span>
 
+<a class="item-anchor" href="#Str.find" aria-label="Link to Str.find">#</a>
 </div>
-<p class="member-doc">The byte position of the first <code>part</code>, if there is one.</p>
+<div class="member-doc"><p>The byte position of the first <code>part</code>, if there is one.</p></div>
 </div>
 <div class="member" id="Str.trim">
 <div class="member-head">
-<span class="sig">fun trim(self) -&gt; str</span>
+<span class="sig"><span class="kw">fun</span> <strong>trim</strong>(<span class="kw">self</span>) -&gt; str</span>
 
+<a class="item-anchor" href="#Str.trim" aria-label="Link to Str.trim">#</a>
 </div>
-<p class="member-doc">Without the white space at both ends (Unicode <code>White_Space</code>).</p>
+<div class="member-doc"><p>Without the white space at both ends (Unicode <code>White_Space</code>).</p></div>
 </div>
 <div class="member" id="Str.trim_start">
 <div class="member-head">
-<span class="sig">fun trim_start(self) -&gt; str</span>
+<span class="sig"><span class="kw">fun</span> <strong>trim_start</strong>(<span class="kw">self</span>) -&gt; str</span>
 
+<a class="item-anchor" href="#Str.trim_start" aria-label="Link to Str.trim_start">#</a>
 </div>
-<p class="member-doc">Without the white space at the start.</p>
+<div class="member-doc"><p>Without the white space at the start.</p></div>
 </div>
 <div class="member" id="Str.trim_end">
 <div class="member-head">
-<span class="sig">fun trim_end(self) -&gt; str</span>
+<span class="sig"><span class="kw">fun</span> <strong>trim_end</strong>(<span class="kw">self</span>) -&gt; str</span>
 
+<a class="item-anchor" href="#Str.trim_end" aria-label="Link to Str.trim_end">#</a>
 </div>
-<p class="member-doc">Without the white space at the end.</p>
+<div class="member-doc"><p>Without the white space at the end.</p></div>
 </div>
 <div class="member" id="Str.to_upper">
 <div class="member-head">
-<span class="sig">fun to_upper(self) -&gt; String</span>
+<span class="sig"><span class="kw">fun</span> <strong>to_upper</strong>(<span class="kw">self</span>) -&gt; <a href="string.html#String">String</a></span>
 
+<a class="item-anchor" href="#Str.to_upper" aria-label="Link to Str.to_upper">#</a>
 </div>
-<p class="member-doc">In upper case, letter by letter (<code>ß</code> becomes <code>SS</code>).</p>
+<div class="member-doc"><p>In upper case, letter by letter (<code>ß</code> becomes <code>SS</code>).</p></div>
 </div>
 <div class="member" id="Str.to_lower">
 <div class="member-head">
-<span class="sig">fun to_lower(self) -&gt; String</span>
+<span class="sig"><span class="kw">fun</span> <strong>to_lower</strong>(<span class="kw">self</span>) -&gt; <a href="string.html#String">String</a></span>
 
+<a class="item-anchor" href="#Str.to_lower" aria-label="Link to Str.to_lower">#</a>
 </div>
-<p class="member-doc">In lower case, letter by letter.</p>
+<div class="member-doc"><p>In lower case, letter by letter.</p></div>
 </div>
 <div class="member" id="Str.replace">
 <div class="member-head">
-<span class="sig">fun replace(self, from: str, to: str) -&gt; String</span>
+<span class="sig"><span class="kw">fun</span> <strong>replace</strong>(<span class="kw">self</span>, from: str, to: str) -&gt; <a href="string.html#String">String</a></span>
 
+<a class="item-anchor" href="#Str.replace" aria-label="Link to Str.replace">#</a>
 </div>
-<p class="member-doc">Every <code>from</code> replaced with <code>to</code>. An empty <code>from</code> is found before every character and at the end: <code>"ab".replace("", "-")</code> is <code>-a-b-</code>.</p>
+<div class="member-doc"><p>Every <code>from</code> replaced with <code>to</code>. An empty <code>from</code> is found before every character and at the end: <code>"ab".replace("", "-")</code> is <code>-a-b-</code>.</p></div>
 </div>
 <div class="member" id="Str.repeat">
 <div class="member-head">
-<span class="sig">fun repeat(self, n: usize) -&gt; String</span>
+<span class="sig"><span class="kw">fun</span> <strong>repeat</strong>(<span class="kw">self</span>, n: usize) -&gt; <a href="string.html#String">String</a></span>
 
+<a class="item-anchor" href="#Str.repeat" aria-label="Link to Str.repeat">#</a>
 </div>
-<p class="member-doc"><code>n</code> copies, one after another.</p>
+<div class="member-doc"><p><code>n</code> copies, one after another.</p></div>
 </div>
 <div class="member" id="Str.split">
 <div class="member-head">
-<span class="sig">fun split(self, sep: str) -&gt; List[String]</span>
+<span class="sig"><span class="kw">fun</span> <strong>split</strong>(<span class="kw">self</span>, sep: str) -&gt; <a href="list.html#List">List</a>[<a href="string.html#String">String</a>]</span>
 
+<a class="item-anchor" href="#Str.split" aria-label="Link to Str.split">#</a>
 </div>
-<p class="member-doc">The parts between each <code>sep</code> (<code>"".split(",")</code> is one empty part). An empty <code>sep</code> splits into each character, with no empty parts at the ends (unlike Rust's).</p>
+<div class="member-doc"><p>The parts between each <code>sep</code> (<code>"".split(",")</code> is one empty part). An empty <code>sep</code> splits into each character, with no empty parts at the ends (unlike Rust's).</p></div>
 </div>
 <div class="member" id="Str.chars">
 <div class="member-head">
-<span class="sig">fun chars(self) -&gt; Stream[char]</span>
+<span class="sig"><span class="kw">fun</span> <strong>chars</strong>(<span class="kw">self</span>) -&gt; <a href="iter.html#Stream">Stream</a>[char]</span>
 
+<a class="item-anchor" href="#Str.chars" aria-label="Link to Str.chars">#</a>
 </div>
-<p class="member-doc">The characters, one at a time.</p>
+<div class="member-doc"><p>The characters, one at a time.</p></div>
 </div>
 <div class="member" id="Str.bytes">
 <div class="member-head">
-<span class="sig">fun bytes(self) -&gt; Stream[u8]</span>
+<span class="sig"><span class="kw">fun</span> <strong>bytes</strong>(<span class="kw">self</span>) -&gt; <a href="iter.html#Stream">Stream</a>[u8]</span>
 
+<a class="item-anchor" href="#Str.bytes" aria-label="Link to Str.bytes">#</a>
 </div>
-<p class="member-doc">The bytes of its UTF-8, one at a time.</p>
+<div class="member-doc"><p>The bytes of its UTF-8, one at a time.</p></div>
 </div>
 <div class="member" id="Str.lines">
 <div class="member-head">
-<span class="sig">fun lines(self) -&gt; Stream[str]</span>
+<span class="sig"><span class="kw">fun</span> <strong>lines</strong>(<span class="kw">self</span>) -&gt; <a href="iter.html#Stream">Stream</a>[str]</span>
 
+<a class="item-anchor" href="#Str.lines" aria-label="Link to Str.lines">#</a>
 </div>
-<p class="member-doc">The lines, without their line breaks (a newline, or a carriage return and a newline).</p>
+<div class="member-doc"><p>The lines, without their line breaks (a newline, or a carriage return and a newline).</p></div>
 </div>
 <div class="member" id="Str.words">
 <div class="member-head">
-<span class="sig">fun words(self) -&gt; Stream[str]</span>
+<span class="sig"><span class="kw">fun</span> <strong>words</strong>(<span class="kw">self</span>) -&gt; <a href="iter.html#Stream">Stream</a>[str]</span>
 
+<a class="item-anchor" href="#Str.words" aria-label="Link to Str.words">#</a>
 </div>
-<p class="member-doc">The words: what's between runs of white space.</p>
+<div class="member-doc"><p>The words: what's between runs of white space.</p></div>
 </div>
 <div class="member" id="Str.trim_ascii">
 <div class="member-head">
-<span class="sig">fun trim_ascii(self) -&gt; str</span>
+<span class="sig"><span class="kw">fun</span> <strong>trim_ascii</strong>(<span class="kw">self</span>) -&gt; str</span>
 
+<a class="item-anchor" href="#Str.trim_ascii" aria-label="Link to Str.trim_ascii">#</a>
 </div>
-<p class="member-doc">The text as a <code>String</code> of its own. Without the ASCII white space at both ends.</p>
+<div class="member-doc"><p>Without the ASCII white space at both ends (spaces, tabs, line breaks).</p></div>
 </div>
 <div class="member" id="Str.trim_ascii_start">
 <div class="member-head">
-<span class="sig">fun trim_ascii_start(self) -&gt; str</span>
+<span class="sig"><span class="kw">fun</span> <strong>trim_ascii_start</strong>(<span class="kw">self</span>) -&gt; str</span>
 
+<a class="item-anchor" href="#Str.trim_ascii_start" aria-label="Link to Str.trim_ascii_start">#</a>
 </div>
-<p class="member-doc">Without the ASCII white space at the start.</p>
+<div class="member-doc"><p>Without the ASCII white space at the start.</p></div>
 </div>
 <div class="member" id="Str.trim_ascii_end">
 <div class="member-head">
-<span class="sig">fun trim_ascii_end(self) -&gt; str</span>
+<span class="sig"><span class="kw">fun</span> <strong>trim_ascii_end</strong>(<span class="kw">self</span>) -&gt; str</span>
 
+<a class="item-anchor" href="#Str.trim_ascii_end" aria-label="Link to Str.trim_ascii_end">#</a>
 </div>
-<p class="member-doc">Without the ASCII white space at the end.</p>
+<div class="member-doc"><p>Without the ASCII white space at the end.</p></div>
 </div>
 <div class="member" id="Str.to_ascii_upper">
 <div class="member-head">
-<span class="sig">fun to_ascii_upper(self) -&gt; String</span>
+<span class="sig"><span class="kw">fun</span> <strong>to_ascii_upper</strong>(<span class="kw">self</span>) -&gt; <a href="string.html#String">String</a></span>
 
+<a class="item-anchor" href="#Str.to_ascii_upper" aria-label="Link to Str.to_ascii_upper">#</a>
 </div>
-<p class="member-doc">With only the ASCII letters in upper case.</p>
+<div class="member-doc"><p>With only the ASCII letters in upper case.</p></div>
 </div>
 <div class="member" id="Str.to_ascii_lower">
 <div class="member-head">
-<span class="sig">fun to_ascii_lower(self) -&gt; String</span>
+<span class="sig"><span class="kw">fun</span> <strong>to_ascii_lower</strong>(<span class="kw">self</span>) -&gt; <a href="string.html#String">String</a></span>
 
+<a class="item-anchor" href="#Str.to_ascii_lower" aria-label="Link to Str.to_ascii_lower">#</a>
 </div>
-<p class="member-doc">With only the ASCII letters in lower case.</p>
+<div class="member-doc"><p>With only the ASCII letters in lower case.</p></div>
 </div>
 <div class="member" id="Str.to_string">
 <div class="member-head">
-<span class="sig">fun to_string(self) -&gt; String</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>to_string</strong>(<span class="kw">self</span>) -&gt; <a href="string.html#String">String</a></span>
+
+<a class="item-anchor" href="#Str.to_string" aria-label="Link to Str.to_string">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The text as a <a class="code-link" href="string.html#String"><code>String</code></a> of its own.</p></div>
 </div>
 <div class="member" id="Str.copy">
 <div class="member-head">
-<span class="sig">fun copy(self) -&gt; String@sp given sp: Spool</span>
+<span class="sig"><span class="kw">fun</span> <strong>copy</strong>(<span class="kw">self</span>) -&gt; <a href="string.html#String">String</a>@sp <span class="kw">given</span> sp: <a href="mem.html#Spool">Spool</a></span>
 
+<a class="item-anchor" href="#Str.copy" aria-label="Link to Str.copy">#</a>
 </div>
-<p class="member-doc">A <code>String</code> of its own, in the spool the call is given (the heap, when there is none): text in an arena goes when the arena does.</p>
+<div class="member-doc"><p>A <a class="code-link" href="string.html#String"><code>String</code></a> of its own, in the spool the call is given (the heap, when there is none): text in an arena goes when the arena does.</p></div>
 </div>
 <div class="member" id="Str.parse">
 <div class="member-head">
-<span class="sig">fun parse[T: Parse](self) -&gt; T ! NumError</span>
+<span class="sig"><span class="kw">fun</span> <strong>parse</strong>[T: <a href="num.html#Parse">Parse</a>](<span class="kw">self</span>) -&gt; T ! <a href="num.html#NumError">NumError</a></span>
 
+<a class="item-anchor" href="#Str.parse" aria-label="Link to Str.parse">#</a>
 </div>
-<p class="member-doc">The number the text spells: <code>"42".parse[u8]()</code>. Decimal, with an optional sign; floats also take a fraction, an exponent, <code>inf</code>, <code>NaN</code>.</p>
+<div class="member-doc"><p>The number the text spells: <code>"42".parse[u8]()</code>. Decimal, with an optional sign; floats also take a fraction, an exponent, <code>inf</code>, <code>NaN</code>.</p></div>
 </div>
 <div class="member" id="Str.split_once">
 <div class="member-head">
-<span class="sig">fun split_once(self, sep: str) -&gt; ?(str, str)</span>
+<span class="sig"><span class="kw">fun</span> <strong>split_once</strong>(<span class="kw">self</span>, sep: str) -&gt; ?(str, str)</span>
 
+<a class="item-anchor" href="#Str.split_once" aria-label="Link to Str.split_once">#</a>
 </div>
-<p class="member-doc">The text before and after the first <code>sep</code>.</p>
+<div class="member-doc"><p>The text before and after the first <code>sep</code>.</p></div>
 </div>
 <div class="member" id="Str.splitn">
 <div class="member-head">
-<span class="sig">fun splitn(self, n: usize, sep: str) -&gt; List[String]</span>
+<span class="sig"><span class="kw">fun</span> <strong>splitn</strong>(<span class="kw">self</span>, n: usize, sep: str) -&gt; <a href="list.html#List">List</a>[<a href="string.html#String">String</a>]</span>
 
+<a class="item-anchor" href="#Str.splitn" aria-label="Link to Str.splitn">#</a>
 </div>
-<p class="member-doc">The pieces between <code>sep</code>s, at most <code>n</code> of them: the last holds the rest. Unravels if <code>sep</code> is empty.</p>
+<div class="member-doc"><p>The pieces between <code>sep</code>s, at most <code>n</code> of them: the last holds the rest. Unravels if <code>sep</code> is empty.</p></div>
 </div>
 <div class="member" id="Str.rsplit">
 <div class="member-head">
-<span class="sig">fun rsplit(self, sep: str) -&gt; List[String]</span>
+<span class="sig"><span class="kw">fun</span> <strong>rsplit</strong>(<span class="kw">self</span>, sep: str) -&gt; <a href="list.html#List">List</a>[<a href="string.html#String">String</a>]</span>
 
+<a class="item-anchor" href="#Str.rsplit" aria-label="Link to Str.rsplit">#</a>
 </div>
-<p class="member-doc">The pieces between <code>sep</code>s, from the last to the first.</p>
+<div class="member-doc"><p>The pieces between <code>sep</code>s, from the last to the first.</p></div>
 </div>
 <div class="member" id="Str.split_by">
 <div class="member-head">
-<span class="sig">fun split_by(self, f: char =&gt; bool) -&gt; List[String]</span>
+<span class="sig"><span class="kw">fun</span> <strong>split_by</strong>(<span class="kw">self</span>, f: char =&gt; bool) -&gt; <a href="list.html#List">List</a>[<a href="string.html#String">String</a>]</span>
 
+<a class="item-anchor" href="#Str.split_by" aria-label="Link to Str.split_by">#</a>
 </div>
-<p class="member-doc">The pieces between the characters <code>f</code> says yes to.</p>
+<div class="member-doc"><p>The pieces between the characters <code>f</code> says yes to.</p></div>
 </div>
 <div class="member" id="Str.rsplit_once">
 <div class="member-head">
-<span class="sig">fun rsplit_once(self, sep: str) -&gt; ?(str, str)</span>
+<span class="sig"><span class="kw">fun</span> <strong>rsplit_once</strong>(<span class="kw">self</span>, sep: str) -&gt; ?(str, str)</span>
 
+<a class="item-anchor" href="#Str.rsplit_once" aria-label="Link to Str.rsplit_once">#</a>
 </div>
-<p class="member-doc">The text before and after the last <code>sep</code>.</p>
+<div class="member-doc"><p>The text before and after the last <code>sep</code>.</p></div>
 </div>
 <div class="member" id="Str.rfind">
 <div class="member-head">
-<span class="sig">fun rfind(self, part: str) -&gt; ?usize</span>
+<span class="sig"><span class="kw">fun</span> <strong>rfind</strong>(<span class="kw">self</span>, part: str) -&gt; ?usize</span>
 
+<a class="item-anchor" href="#Str.rfind" aria-label="Link to Str.rfind">#</a>
 </div>
-<p class="member-doc">The index of the last <code>part</code>.</p>
+<div class="member-doc"><p>The index of the last <code>part</code>.</p></div>
 </div>
 <div class="member" id="Str.strip_prefix">
 <div class="member-head">
-<span class="sig">fun strip_prefix(self, prefix: str) -&gt; ?str</span>
+<span class="sig"><span class="kw">fun</span> <strong>strip_prefix</strong>(<span class="kw">self</span>, prefix: str) -&gt; ?str</span>
 
+<a class="item-anchor" href="#Str.strip_prefix" aria-label="Link to Str.strip_prefix">#</a>
 </div>
-<p class="member-doc">The text after <code>prefix</code>, if it starts with it.</p>
+<div class="member-doc"><p>The text after <code>prefix</code>, if it starts with it.</p></div>
 </div>
 <div class="member" id="Str.strip_suffix">
 <div class="member-head">
-<span class="sig">fun strip_suffix(self, suffix: str) -&gt; ?str</span>
+<span class="sig"><span class="kw">fun</span> <strong>strip_suffix</strong>(<span class="kw">self</span>, suffix: str) -&gt; ?str</span>
 
+<a class="item-anchor" href="#Str.strip_suffix" aria-label="Link to Str.strip_suffix">#</a>
 </div>
-<p class="member-doc">The text before <code>suffix</code>, if it ends with it.</p>
+<div class="member-doc"><p>The text before <code>suffix</code>, if it ends with it.</p></div>
 </div>
 <div class="member" id="Str.count_of">
 <div class="member-head">
-<span class="sig">fun count_of(self, part: str) -&gt; usize</span>
+<span class="sig"><span class="kw">fun</span> <strong>count_of</strong>(<span class="kw">self</span>, part: str) -&gt; usize</span>
 
+<a class="item-anchor" href="#Str.count_of" aria-label="Link to Str.count_of">#</a>
 </div>
-<p class="member-doc">How many times <code>part</code> comes up, not overlapping. Unravels if <code>part</code> is empty.</p>
+<div class="member-doc"><p>How many times <code>part</code> comes up, not overlapping. Unravels if <code>part</code> is empty.</p></div>
 </div>
 <div class="member" id="Str.char_indices">
 <div class="member-head">
-<span class="sig">fun char_indices(self) -&gt; Stream[(usize, char)]</span>
+<span class="sig"><span class="kw">fun</span> <strong>char_indices</strong>(<span class="kw">self</span>) -&gt; <a href="iter.html#Stream">Stream</a>[(usize, char)]</span>
 
+<a class="item-anchor" href="#Str.char_indices" aria-label="Link to Str.char_indices">#</a>
 </div>
-<p class="member-doc">Each character with the byte index it starts at.</p>
+<div class="member-doc"><p>Each character with the byte index it starts at.</p></div>
 </div>
 <div class="member" id="Str.char_at">
 <div class="member-head">
-<span class="sig">fun char_at(self, i: usize) -&gt; ?char</span>
+<span class="sig"><span class="kw">fun</span> <strong>char_at</strong>(<span class="kw">self</span>, i: usize) -&gt; ?char</span>
 
+<a class="item-anchor" href="#Str.char_at" aria-label="Link to Str.char_at">#</a>
 </div>
-<p class="member-doc">The <code>i</code>th character (counting characters, so it takes <code>O(i)</code>).</p>
+<div class="member-doc"><p>The <code>i</code>th character (counting characters, so it takes <code>O(i)</code>).</p></div>
 </div>
 <div class="member" id="Str.trim_matches">
 <div class="member-head">
-<span class="sig">fun trim_matches(self, f: char =&gt; bool) -&gt; str</span>
+<span class="sig"><span class="kw">fun</span> <strong>trim_matches</strong>(<span class="kw">self</span>, f: char =&gt; bool) -&gt; str</span>
 
+<a class="item-anchor" href="#Str.trim_matches" aria-label="Link to Str.trim_matches">#</a>
 </div>
-<p class="member-doc">Without the characters at both ends that <code>f</code> says yes to.</p>
+<div class="member-doc"><p>Without the characters at both ends that <code>f</code> says yes to.</p></div>
 </div>
 <div class="member" id="Str.trim_start_matches">
 <div class="member-head">
-<span class="sig">fun trim_start_matches(self, f: char =&gt; bool) -&gt; str</span>
+<span class="sig"><span class="kw">fun</span> <strong>trim_start_matches</strong>(<span class="kw">self</span>, f: char =&gt; bool) -&gt; str</span>
 
+<a class="item-anchor" href="#Str.trim_start_matches" aria-label="Link to Str.trim_start_matches">#</a>
 </div>
-<p class="member-doc">Without the characters at the start that <code>f</code> says yes to.</p>
+<div class="member-doc"><p>Without the characters at the start that <code>f</code> says yes to.</p></div>
 </div>
 <div class="member" id="Str.trim_end_matches">
 <div class="member-head">
-<span class="sig">fun trim_end_matches(self, f: char =&gt; bool) -&gt; str</span>
+<span class="sig"><span class="kw">fun</span> <strong>trim_end_matches</strong>(<span class="kw">self</span>, f: char =&gt; bool) -&gt; str</span>
 
+<a class="item-anchor" href="#Str.trim_end_matches" aria-label="Link to Str.trim_end_matches">#</a>
 </div>
-<p class="member-doc">Without the characters at the end that <code>f</code> says yes to.</p>
+<div class="member-doc"><p>Without the characters at the end that <code>f</code> says yes to.</p></div>
 </div>
 <div class="member" id="Str.eq_ignore_case">
 <div class="member-head">
-<span class="sig">fun eq_ignore_case(self, other: str) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>eq_ignore_case</strong>(<span class="kw">self</span>, other: str) -&gt; bool</span>
 
+<a class="item-anchor" href="#Str.eq_ignore_case" aria-label="Link to Str.eq_ignore_case">#</a>
 </div>
-<p class="member-doc">Whether the two are equal when upper and lower case don't count.</p>
+<div class="member-doc"><p>Whether the two are equal when upper and lower case don't count.</p></div>
 </div>
 <div class="member" id="Str.is_ascii">
 <div class="member-head">
-<span class="sig">fun is_ascii(self) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_ascii</strong>(<span class="kw">self</span>) -&gt; bool</span>
 
+<a class="item-anchor" href="#Str.is_ascii" aria-label="Link to Str.is_ascii">#</a>
 </div>
-<p class="member-doc">Whether every character is ASCII.</p>
+<div class="member-doc"><p>Whether every character is ASCII.</p></div>
 </div>
 <div class="member" id="Str.capitalize">
 <div class="member-head">
-<span class="sig">fun capitalize(self) -&gt; String</span>
+<span class="sig"><span class="kw">fun</span> <strong>capitalize</strong>(<span class="kw">self</span>) -&gt; <a href="string.html#String">String</a></span>
 
+<a class="item-anchor" href="#Str.capitalize" aria-label="Link to Str.capitalize">#</a>
 </div>
-<p class="member-doc">With the first letter in upper case.</p>
+<div class="member-doc"><p>With the first letter in upper case.</p></div>
 </div>
 <div class="member" id="Str.pad_left">
 <div class="member-head">
-<span class="sig">fun pad_left(self, width: usize, fill: char = ' ') -&gt; String</span>
+<span class="sig"><span class="kw">fun</span> <strong>pad_left</strong>(<span class="kw">self</span>, width: usize, fill: char = ' ') -&gt; <a href="string.html#String">String</a></span>
 
+<a class="item-anchor" href="#Str.pad_left" aria-label="Link to Str.pad_left">#</a>
 </div>
-<p class="member-doc">At least <code>width</code> characters, with <code>fill</code> added at the start.</p>
+<div class="member-doc"><p>At least <code>width</code> characters, with <code>fill</code> added at the start.</p></div>
 </div>
 <div class="member" id="Str.pad_right">
 <div class="member-head">
-<span class="sig">fun pad_right(self, width: usize, fill: char = ' ') -&gt; String</span>
+<span class="sig"><span class="kw">fun</span> <strong>pad_right</strong>(<span class="kw">self</span>, width: usize, fill: char = ' ') -&gt; <a href="string.html#String">String</a></span>
 
+<a class="item-anchor" href="#Str.pad_right" aria-label="Link to Str.pad_right">#</a>
 </div>
-<p class="member-doc">At least <code>width</code> characters, with <code>fill</code> added at the end.</p>
+<div class="member-doc"><p>At least <code>width</code> characters, with <code>fill</code> added at the end.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="Char">
+</section>
+<section class="item" id="Char">
 <div class="item-head">
-<span class="sig">warp <strong>Char</strong></span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">warp</span> <strong>Char</strong></span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Char" aria-label="Link to Char">#</a>
 </div>
-<p class="item-doc">The methods of <code>char</code>. The tests and the case changes follow Unicode; the <code>_ascii</code> ones look at the ASCII letters only.</p>
+<div class="item-doc"><p>The methods of <code>char</code>. The tests and the case changes follow Unicode; the <code>_ascii</code> ones look at the ASCII letters only.</p></div>
 <div class="members">
 <div class="member" id="Char.is_digit">
 <div class="member-head">
-<span class="sig">fun is_digit(self) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_digit</strong>(<span class="kw">self</span>) -&gt; bool</span>
 
+<a class="item-anchor" href="#Char.is_digit" aria-label="Link to Char.is_digit">#</a>
 </div>
-<p class="member-doc"><code>0</code> through <code>9</code>.</p>
+<div class="member-doc"><p><code>0</code> through <code>9</code>.</p></div>
 </div>
 <div class="member" id="Char.is_alphabetic">
 <div class="member-head">
-<span class="sig">fun is_alphabetic(self) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_alphabetic</strong>(<span class="kw">self</span>) -&gt; bool</span>
 
+<a class="item-anchor" href="#Char.is_alphabetic" aria-label="Link to Char.is_alphabetic">#</a>
 </div>
-<p class="member-doc">A letter in any alphabet: <code>'é'</code> is.</p>
+<div class="member-doc"><p>A letter in any alphabet: <code>'é'</code> is.</p></div>
 </div>
 <div class="member" id="Char.is_numeric">
 <div class="member-head">
-<span class="sig">fun is_numeric(self) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_numeric</strong>(<span class="kw">self</span>) -&gt; bool</span>
 
+<a class="item-anchor" href="#Char.is_numeric" aria-label="Link to Char.is_numeric">#</a>
 </div>
-<p class="member-doc">A digit in any script, or another number sign (<code>'½'</code>).</p>
+<div class="member-doc"><p>A digit in any script, or another number sign (<code>'½'</code>).</p></div>
 </div>
 <div class="member" id="Char.is_alphanumeric">
 <div class="member-head">
-<span class="sig">fun is_alphanumeric(self) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_alphanumeric</strong>(<span class="kw">self</span>) -&gt; bool</span>
 
+<a class="item-anchor" href="#Char.is_alphanumeric" aria-label="Link to Char.is_alphanumeric">#</a>
 </div>
-<p class="member-doc">A letter or a number.</p>
+<div class="member-doc"><p>A letter or a number.</p></div>
 </div>
 <div class="member" id="Char.is_whitespace">
 <div class="member-head">
-<span class="sig">fun is_whitespace(self) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_whitespace</strong>(<span class="kw">self</span>) -&gt; bool</span>
 
+<a class="item-anchor" href="#Char.is_whitespace" aria-label="Link to Char.is_whitespace">#</a>
 </div>
-<p class="member-doc">White space: a space, a tab, a line break, a no-break space...</p>
+<div class="member-doc"><p>White space: a space, a tab, a line break, a no-break space...</p></div>
 </div>
 <div class="member" id="Char.is_upper">
 <div class="member-head">
-<span class="sig">fun is_upper(self) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_upper</strong>(<span class="kw">self</span>) -&gt; bool</span>
 
+<a class="item-anchor" href="#Char.is_upper" aria-label="Link to Char.is_upper">#</a>
 </div>
-<p class="member-doc">An upper case letter in any alphabet.</p>
+<div class="member-doc"><p>An upper case letter in any alphabet.</p></div>
 </div>
 <div class="member" id="Char.is_lower">
 <div class="member-head">
-<span class="sig">fun is_lower(self) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_lower</strong>(<span class="kw">self</span>) -&gt; bool</span>
 
+<a class="item-anchor" href="#Char.is_lower" aria-label="Link to Char.is_lower">#</a>
 </div>
-<p class="member-doc">A lower case letter in any alphabet.</p>
+<div class="member-doc"><p>A lower case letter in any alphabet.</p></div>
 </div>
 <div class="member" id="Char.is_ascii_alphabetic">
 <div class="member-head">
-<span class="sig">fun is_ascii_alphabetic(self) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_ascii_alphabetic</strong>(<span class="kw">self</span>) -&gt; bool</span>
 
+<a class="item-anchor" href="#Char.is_ascii_alphabetic" aria-label="Link to Char.is_ascii_alphabetic">#</a>
 </div>
-<p class="member-doc"><code>a</code> through <code>z</code>, or <code>A</code> through <code>Z</code>.</p>
+<div class="member-doc"><p><code>a</code> through <code>z</code>, or <code>A</code> through <code>Z</code>.</p></div>
 </div>
 <div class="member" id="Char.is_ascii_alphanumeric">
 <div class="member-head">
-<span class="sig">fun is_ascii_alphanumeric(self) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_ascii_alphanumeric</strong>(<span class="kw">self</span>) -&gt; bool</span>
 
+<a class="item-anchor" href="#Char.is_ascii_alphanumeric" aria-label="Link to Char.is_ascii_alphanumeric">#</a>
 </div>
-<p class="member-doc">ASCII letters and <code>0</code> through <code>9</code>.</p>
+<div class="member-doc"><p>ASCII letters and <code>0</code> through <code>9</code>.</p></div>
 </div>
 <div class="member" id="Char.is_ascii_whitespace">
 <div class="member-head">
-<span class="sig">fun is_ascii_whitespace(self) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_ascii_whitespace</strong>(<span class="kw">self</span>) -&gt; bool</span>
 
+<a class="item-anchor" href="#Char.is_ascii_whitespace" aria-label="Link to Char.is_ascii_whitespace">#</a>
 </div>
-<p class="member-doc">A space, tab, newline, carriage return, vertical tab or form feed.</p>
+<div class="member-doc"><p>A space, tab, newline, carriage return, vertical tab or form feed.</p></div>
 </div>
 <div class="member" id="Char.is_ascii_upper">
 <div class="member-head">
-<span class="sig">fun is_ascii_upper(self) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_ascii_upper</strong>(<span class="kw">self</span>) -&gt; bool</span>
 
+<a class="item-anchor" href="#Char.is_ascii_upper" aria-label="Link to Char.is_ascii_upper">#</a>
 </div>
-<p class="member-doc"><code>A</code> through <code>Z</code>.</p>
+<div class="member-doc"><p><code>A</code> through <code>Z</code>.</p></div>
 </div>
 <div class="member" id="Char.is_ascii_lower">
 <div class="member-head">
-<span class="sig">fun is_ascii_lower(self) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_ascii_lower</strong>(<span class="kw">self</span>) -&gt; bool</span>
 
+<a class="item-anchor" href="#Char.is_ascii_lower" aria-label="Link to Char.is_ascii_lower">#</a>
 </div>
-<p class="member-doc"><code>a</code> through <code>z</code>.</p>
+<div class="member-doc"><p><code>a</code> through <code>z</code>.</p></div>
 </div>
 <div class="member" id="Char.to_upper">
 <div class="member-head">
-<span class="sig">fun to_upper(self) -&gt; char</span>
+<span class="sig"><span class="kw">fun</span> <strong>to_upper</strong>(<span class="kw">self</span>) -&gt; char</span>
 
+<a class="item-anchor" href="#Char.to_upper" aria-label="Link to Char.to_upper">#</a>
 </div>
-<p class="member-doc">Upper case; a letter with no single upper case character (<code>ß</code>) stays as it is.</p>
+<div class="member-doc"><p>Upper case; a letter with no single upper case character (<code>ß</code>) stays as it is.</p></div>
 </div>
 <div class="member" id="Char.to_lower">
 <div class="member-head">
-<span class="sig">fun to_lower(self) -&gt; char</span>
+<span class="sig"><span class="kw">fun</span> <strong>to_lower</strong>(<span class="kw">self</span>) -&gt; char</span>
 
+<a class="item-anchor" href="#Char.to_lower" aria-label="Link to Char.to_lower">#</a>
 </div>
-<p class="member-doc">Lower case; a letter with no single lower case character stays as it is.</p>
+<div class="member-doc"><p>Lower case; a letter with no single lower case character stays as it is.</p></div>
 </div>
 <div class="member" id="Char.to_ascii_upper">
 <div class="member-head">
-<span class="sig">fun to_ascii_upper(self) -&gt; char</span>
+<span class="sig"><span class="kw">fun</span> <strong>to_ascii_upper</strong>(<span class="kw">self</span>) -&gt; char</span>
 
+<a class="item-anchor" href="#Char.to_ascii_upper" aria-label="Link to Char.to_ascii_upper">#</a>
 </div>
-<p class="member-doc">Upper case for an ASCII letter; any other character stays as it is.</p>
+<div class="member-doc"><p>Upper case for an ASCII letter; any other character stays as it is.</p></div>
 </div>
 <div class="member" id="Char.to_ascii_lower">
 <div class="member-head">
-<span class="sig">fun to_ascii_lower(self) -&gt; char</span>
+<span class="sig"><span class="kw">fun</span> <strong>to_ascii_lower</strong>(<span class="kw">self</span>) -&gt; char</span>
 
+<a class="item-anchor" href="#Char.to_ascii_lower" aria-label="Link to Char.to_ascii_lower">#</a>
 </div>
-<p class="member-doc">Lower case for an ASCII letter; any other character stays as it is.</p>
+<div class="member-doc"><p>Lower case for an ASCII letter; any other character stays as it is.</p></div>
 </div>
 <div class="member" id="Char.to_digit">
 <div class="member-head">
-<span class="sig">fun to_digit(self, radix: u32 = 10) -&gt; ?u32</span>
+<span class="sig"><span class="kw">fun</span> <strong>to_digit</strong>(<span class="kw">self</span>, radix: u32 = 10) -&gt; ?u32</span>
 
+<a class="item-anchor" href="#Char.to_digit" aria-label="Link to Char.to_digit">#</a>
 </div>
-<p class="member-doc">Its value as a digit in <code>radix</code>: <code>'f'.to_digit(16)</code> is <code>15</code>.</p>
+<div class="member-doc"><p>Its value as a digit in <code>radix</code>: <code>'f'.to_digit(16)</code> is <code>15</code>.</p></div>
 </div>
 <div class="member" id="Char.digit">
 <div class="member-head">
-<span class="sig">fun digit(self) -&gt; u8</span>
+<span class="sig"><span class="kw">fun</span> <strong>digit</strong>(<span class="kw">self</span>) -&gt; u8</span>
 
+<a class="item-anchor" href="#Char.digit" aria-label="Link to Char.digit">#</a>
 </div>
-<p class="member-doc">The value of a decimal digit: <code>'7'.digit()</code> is <code>7</code>. Unravels for anything but <code>0</code> through <code>9</code>.</p>
+<div class="member-doc"><p>The value of a decimal digit: <code>'7'.digit()</code> is <code>7</code>. Unravels for anything but <code>0</code> through <code>9</code>.</p></div>
 </div>
 <div class="member" id="Char.len_utf8">
 <div class="member-head">
-<span class="sig">fun len_utf8(self) -&gt; usize</span>
+<span class="sig"><span class="kw">fun</span> <strong>len_utf8</strong>(<span class="kw">self</span>) -&gt; usize</span>
 
+<a class="item-anchor" href="#Char.len_utf8" aria-label="Link to Char.len_utf8">#</a>
 </div>
-<p class="member-doc">How many bytes it takes in UTF-8.</p>
+<div class="member-doc"><p>How many bytes it takes in UTF-8.</p></div>
 </div>
 <div class="member" id="Char.is_ascii">
 <div class="member-head">
-<span class="sig">fun is_ascii(self) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_ascii</strong>(<span class="kw">self</span>) -&gt; bool</span>
 
+<a class="item-anchor" href="#Char.is_ascii" aria-label="Link to Char.is_ascii">#</a>
 </div>
-<p class="member-doc">Whether it is one of the 128 ASCII characters.</p>
+<div class="member-doc"><p>Whether it is one of the 128 ASCII characters.</p></div>
 </div>
 </div>
-</div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="slice.html"><span class="dir">&larr; previous</span>std.slice</a>
+<a class="next" href="sync.html"><span class="dir">next &rarr;</span>std.sync</a>
+</nav>
 </main>
 </div>
 </body>

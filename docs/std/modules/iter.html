@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.iter · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../../style.css">
 <script src="../../weave.js" defer></script>
+<script src="../../play/play.js" defer></script>
 </head>
 <body>
 <header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
@@ -18,7 +20,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,550 +68,638 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / iter</div>
 <h1>std.iter</h1>
-<p class="summary">Iteration.</p>
-<h2>Types</h2>
-<div class="item" id="Iter">
-<div class="item-head">
-<span class="sig">weft <strong>Iter</strong></span>
-
+<p class="summary">Iteration: the <a class="code-link" href="iter.html#Iter"><code>Iter</code></a> weft (what <code>for</code> loops over), <a class="code-link" href="iter.html#Stream"><code>Stream</code></a> (a lazy sequence and its many methods), <a class="code-link" href="iter.html#Range"><code>Range</code></a> (<code>a..b</code>), and <a class="code-link" href="iter.html#Shuttle"><code>Shuttle</code></a> (generators and coroutines). Lists, arrays, slices, maps, sets and ranges all have the methods of <a class="code-link" href="iter.html#Stream"><code>Stream</code></a>, and nothing is computed until something asks for the next item.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/iter.loom</code></span><a href="../../lang/collections.html">read about it in the book &rarr;</a></div>
 </div>
-<p class="item-doc">Something <code>for</code> can loop over, one item at a time.</p>
-<pre><code>warp Countdown(u32): Iter {
-    type Item = u32
-    fun next(mut self) -&gt; ?u32 {
-        if .0 == 0 { return none }
-        .0 -= 1
-        .0 + 1
+<div class="mod-intro"><div class="sample" id="example" data-sample="std_iter" data-mode="run" data-file="iter_example.loom" data-store="std.iter" data-runnable><div class="sample-head"><span class="file"><span class="dot"></span>iter_example.loom</span><span class="tag ok">an example to run</span><span class="spacer"></span></div><pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="c">// Nothing runs until `collect` asks for items.</span>
+    <span class="k">let</span> squares = (<span class="n">1</span>..=<span class="n">10</span>).<span class="f">filter</span>(_ % <span class="n">2</span> == <span class="n">0</span>).<span class="f">map</span>(n =&gt; n * n)
+    <span class="f">print</span>(squares.<span class="f">collect</span>())
+    <span class="k">let</span> words = [<span class="s">"warp"</span>, <span class="s">"weft"</span>, <span class="s">"weave"</span>, <span class="s">"loom"</span>]
+    <span class="f">print</span>(words.<span class="f">indexed</span>().<span class="f">map</span>(p =&gt; <span class="s">"</span><span class="h">{</span>p.<span class="n">0</span><span class="h">}</span><span class="s">:</span><span class="h">{</span>p.<span class="n">1</span><span class="h">}</span><span class="s">"</span>).<span class="f">join</span>(<span class="s">" "</span>))
+    <span class="f">print</span>(words.<span class="f">map</span>(_.<span class="f">len</span>()).<span class="f">sum</span>())
+}</code></pre></div></div>
+<nav class="toc-chips" aria-label="In this module"><a href="#Iter"><span class="kind">weft</span>Iter</a><a href="#FromStream"><span class="kind">weft</span>FromStream</a><a href="#Range"><span class="kind">warp</span>Range</a><a href="#Stream"><span class="kind">warp</span>Stream</a><a href="#Shuttle"><span class="kind">warp</span>Shuttle</a><a href="#Burst"><span class="kind">once warp</span>Burst</a><a href="#Peekable"><span class="kind">warp</span>Peekable</a><a href="#Reversed"><span class="kind">warp</span>Reversed</a><a href="#Owned"><span class="kind">warp</span>Owned</a><a href="#from_fn"><span class="kind">fun</span>from_fn</a><a href="#successors"><span class="kind">fun</span>successors</a></nav>
+<h2 id="types">Types</h2>
+<section class="item" id="Iter">
+<div class="item-head">
+<span class="sig"><span class="kw">weft</span> <strong>Iter</strong></span>
+
+<a class="item-anchor" href="#Iter" aria-label="Link to Iter">#</a>
+</div>
+<div class="item-doc"><p>Something <code>for</code> can loop over, one item at a time.</p><pre><code><span class="k">warp</span> <span class="t">Countdown</span>(u32): <span class="t">Iter</span> {
+    <span class="k">type</span> <span class="t">Item</span> = u32
+    <span class="k">fun</span> <span class="f">next</span>(<span class="k">mut</span> <span class="k">self</span>) -&gt; ?u32 {
+        <span class="k">if</span> .<span class="n">0</span> == <span class="n">0</span> { <span class="k">return</span> <span class="k">none</span> }
+        .<span class="n">0</span> -= <span class="n">1</span>
+        .<span class="n">0</span> + <span class="n">1</span>
     }
-}</code></pre>
+}</code></pre></div>
 <div class="members">
 <div class="member" id="Iter.Item">
 <div class="member-head">
-<span class="sig">type Item</span>
+<span class="sig"><span class="kw">type</span> <strong>Item</strong></span>
 
+<a class="item-anchor" href="#Iter.Item" aria-label="Link to Iter.Item">#</a>
 </div>
-<p class="member-doc">What it gives.</p>
+<div class="member-doc"><p>What it gives.</p></div>
 </div>
 <div class="member" id="Iter.next">
 <div class="member-head">
-<span class="sig">fun next(mut self) -&gt; ?Item</span>
+<span class="sig"><span class="kw">fun</span> <strong>next</strong>(<span class="kw">mut</span> <span class="kw">self</span>) -&gt; ?<span class="ty">Item</span></span>
 
+<a class="item-anchor" href="#Iter.next" aria-label="Link to Iter.next">#</a>
 </div>
-<p class="member-doc">The next item, or <code>none</code> once there are no more.</p>
+<div class="member-doc"><p>The next item, or <code>none</code> once there are no more.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="FromStream">
+</section>
+<section class="item" id="FromStream">
 <div class="item-head">
-<span class="sig">weft <strong>FromStream</strong></span>
+<span class="sig"><span class="kw">weft</span> <strong>FromStream</strong></span>
 
+<a class="item-anchor" href="#FromStream" aria-label="Link to FromStream">#</a>
 </div>
-<p class="item-doc">Collections a stream can be gathered into: see <code>Stream.collect_as</code>. <code>Item</code> is what the collection is made of.</p>
-<pre><code>let unique = words.collect_as[Set[String]]()
-let text: String = letters.collect_as()</code></pre>
+<div class="item-doc"><p>Collections a stream can be gathered into: see <a class="code-link" href="iter.html#Stream.collect_as"><code>Stream.collect_as</code></a>. <code>Item</code> is what the collection is made of.</p><pre><code><span class="k">let</span> unique = words.collect_as[<span class="t">Set</span>[<span class="t">String</span>]]()
+<span class="k">let</span> text: <span class="t">String</span> = letters.<span class="f">collect_as</span>()</code></pre></div>
 <div class="members">
 <div class="member" id="FromStream.Item">
 <div class="member-head">
-<span class="sig">type Item</span>
+<span class="sig"><span class="kw">type</span> <strong>Item</strong></span>
 
+<a class="item-anchor" href="#FromStream.Item" aria-label="Link to FromStream.Item">#</a>
 </div>
-<p class="member-doc">What the stream's items must be.</p>
+<div class="member-doc"><p>What the stream's items must be.</p></div>
 </div>
 <div class="member" id="FromStream.from_stream">
 <div class="member-head">
-<span class="sig">fun from_stream(take items: Stream[Item]) -&gt; Self</span>
+<span class="sig"><span class="kw">fun</span> <strong>from_stream</strong>(<span class="kw">take</span> items: <a href="iter.html#Stream">Stream</a>[<span class="ty">Item</span>]) -&gt; <span class="kw">Self</span></span>
 
+<a class="item-anchor" href="#FromStream.from_stream" aria-label="Link to FromStream.from_stream">#</a>
 </div>
-<p class="member-doc">A collection of the items.</p>
+<div class="member-doc"><p>A collection of the items.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="Range">
+</section>
+<section class="item" id="Range">
 <div class="item-head">
-<span class="sig">warp <strong>Range</strong>[T]</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">warp</span> <strong>Range</strong>[T]</span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Range" aria-label="Link to Range">#</a>
 </div>
-<p class="item-doc">The type of <code>a..b</code>, <code>a..=b</code> and <code>a..</code>: the values from <code>a</code> up to <code>b</code>. It has the methods of <code>Stream</code> (over its values), and these.</p>
+<div class="item-doc"><p>The type of <code>a..b</code>, <code>a..=b</code> and <code>a..</code>: the values from <code>a</code> up to <code>b</code>. It has the methods of <a class="code-link" href="iter.html#Stream"><code>Stream</code></a> (over its values), and these.</p></div>
 <div class="members">
 <div class="member" id="Range.chunks">
 <div class="member-head">
-<span class="sig">fun chunks(self, n: usize) -&gt; Stream[Range[T]]</span>
+<span class="sig"><span class="kw">fun</span> <strong>chunks</strong>(<span class="kw">self</span>, n: usize) -&gt; <a href="iter.html#Stream">Stream</a>[<span class="ty">Range</span>[T]]</span>
 
+<a class="item-anchor" href="#Range.chunks" aria-label="Link to Range.chunks">#</a>
 </div>
-<p class="member-doc">Ranges of <code>n</code> values at a time, one after another: <code>(0..10).chunks(4)</code> is <code>0..4</code>, <code>4..8</code> and <code>8..10</code>. Each one is a range too, with all the methods of one, so it can be given to a thread. Unravels if <code>n</code> is 0 or the range has no end.</p>
+<div class="member-doc"><p>Ranges of <code>n</code> values at a time, one after another: <code>(0..10).chunks(4)</code> is <code>0..4</code>, <code>4..8</code> and <code>8..10</code>. Each one is a range too, with all the methods of one, so it can be given to a thread. Unravels if <code>n</code> is 0 or the range has no end.</p></div>
 </div>
 <div class="member" id="Range.rev">
 <div class="member-head">
-<span class="sig">fun rev(self) -&gt; Stream[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>rev</strong>(<span class="kw">self</span>) -&gt; <a href="iter.html#Stream">Stream</a>[T]</span>
 
+<a class="item-anchor" href="#Range.rev" aria-label="Link to Range.rev">#</a>
 </div>
-<p class="member-doc">The values from the last to the first. Needs room for all of them, and unravels for a range with no end.</p>
+<div class="member-doc"><p>The values from the last to the first. Needs room for all of them, and unravels for a range with no end.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="Stream">
+</section>
+<section class="item" id="Stream">
 <div class="item-head">
-<span class="sig">warp <strong>Stream</strong>[T]</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">warp</span> <strong>Stream</strong>[T]</span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Stream" aria-label="Link to Stream">#</a>
 </div>
-<p class="item-doc">A lazy stream of <code>T</code>s: <code>s.chars()</code>, <code>xs.indexed()</code> and <code>stream.map(f)</code> are streams. Nothing is computed until something asks for the next item. Everything else with items has these methods too: arrays, lists and slices, ranges, and types that weave <code>Iter</code>. <code>(1..=10).filter(_ % 2 == 0)</code> is a stream of the range's items. The methods that make a new stream use up this one: a stream is read once.</p>
+<div class="item-doc"><p>A lazy stream of <code>T</code>s: <code>s.chars()</code>, <code>xs.indexed()</code> and <code>stream.map(f)</code> are streams. Nothing is computed until something asks for the next item.</p><p>Everything else with items has these methods too: arrays, lists and slices, ranges, and types that weave <a class="code-link" href="iter.html#Iter"><code>Iter</code></a>. <code>(1..=10).filter(_ % 2 == 0)</code> is a stream of the range's items.</p><p>The methods that make a new stream use up this one: a stream is read once.</p></div>
 <div class="members">
 <div class="member" id="Stream.next">
 <div class="member-head">
-<span class="sig">fun next(mut self) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>next</strong>(<span class="kw">mut</span> <span class="kw">self</span>) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Stream.next" aria-label="Link to Stream.next">#</a>
 </div>
-<p class="member-doc">The next item, or <code>none</code> once there are no more.</p>
+<div class="member-doc"><p>The next item, or <code>none</code> once there are no more.</p></div>
 </div>
 <div class="member" id="Stream.map">
 <div class="member-head">
-<span class="sig">fun map[U](take self, f: T =&gt; U) -&gt; Stream[U]</span>
+<span class="sig"><span class="kw">fun</span> <strong>map</strong>[U](<span class="kw">take</span> <span class="kw">self</span>, f: T =&gt; U) -&gt; <span class="ty">Stream</span>[U]</span>
 
+<a class="item-anchor" href="#Stream.map" aria-label="Link to Stream.map">#</a>
 </div>
-<p class="member-doc"><code>f</code> of each item.</p>
+<div class="member-doc"><p>Each item turned into <code>f</code> of it: <code>(1..4).map(_ * 10)</code> gives 10, 20, 30.</p></div>
 </div>
 <div class="member" id="Stream.filter">
 <div class="member-head">
-<span class="sig">fun filter(take self, f: T =&gt; bool) -&gt; Stream[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>filter</strong>(<span class="kw">take</span> <span class="kw">self</span>, f: T =&gt; bool) -&gt; <span class="ty">Stream</span>[T]</span>
 
+<a class="item-anchor" href="#Stream.filter" aria-label="Link to Stream.filter">#</a>
 </div>
-<p class="member-doc">The items <code>f</code> says yes to.</p>
+<div class="member-doc"><p>The items <code>f</code> says yes to, in order: <code>xs.filter(_ &gt; 0)</code>.</p></div>
 </div>
 <div class="member" id="Stream.take">
 <div class="member-head">
-<span class="sig">fun take(take self, n: usize) -&gt; Stream[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>take</strong>(<span class="kw">take</span> <span class="kw">self</span>, n: usize) -&gt; <span class="ty">Stream</span>[T]</span>
 
+<a class="item-anchor" href="#Stream.take" aria-label="Link to Stream.take">#</a>
 </div>
-<p class="member-doc">The first <code>n</code> items.</p>
+<div class="member-doc"><p>The first <code>n</code> items.</p></div>
 </div>
 <div class="member" id="Stream.skip">
 <div class="member-head">
-<span class="sig">fun skip(take self, n: usize) -&gt; Stream[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>skip</strong>(<span class="kw">take</span> <span class="kw">self</span>, n: usize) -&gt; <span class="ty">Stream</span>[T]</span>
 
+<a class="item-anchor" href="#Stream.skip" aria-label="Link to Stream.skip">#</a>
 </div>
-<p class="member-doc">The items after the first <code>n</code>.</p>
+<div class="member-doc"><p>The items after the first <code>n</code>.</p></div>
 </div>
 <div class="member" id="Stream.take_while">
 <div class="member-head">
-<span class="sig">fun take_while(take self, f: T =&gt; bool) -&gt; Stream[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>take_while</strong>(<span class="kw">take</span> <span class="kw">self</span>, f: T =&gt; bool) -&gt; <span class="ty">Stream</span>[T]</span>
 
+<a class="item-anchor" href="#Stream.take_while" aria-label="Link to Stream.take_while">#</a>
 </div>
-<p class="member-doc">The items before the first one <code>f</code> says no to.</p>
+<div class="member-doc"><p>The items before the first one <code>f</code> says no to.</p></div>
 </div>
 <div class="member" id="Stream.skip_while">
 <div class="member-head">
-<span class="sig">fun skip_while(take self, f: T =&gt; bool) -&gt; Stream[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>skip_while</strong>(<span class="kw">take</span> <span class="kw">self</span>, f: T =&gt; bool) -&gt; <span class="ty">Stream</span>[T]</span>
 
+<a class="item-anchor" href="#Stream.skip_while" aria-label="Link to Stream.skip_while">#</a>
 </div>
-<p class="member-doc">The items from the first one <code>f</code> says no to.</p>
+<div class="member-doc"><p>The items from the first one <code>f</code> says no to.</p></div>
 </div>
 <div class="member" id="Stream.indexed">
 <div class="member-head">
-<span class="sig">fun indexed(take self) -&gt; Stream[(usize, T)]</span>
+<span class="sig"><span class="kw">fun</span> <strong>indexed</strong>(<span class="kw">take</span> <span class="kw">self</span>) -&gt; <span class="ty">Stream</span>[(usize, T)]</span>
 
+<a class="item-anchor" href="#Stream.indexed" aria-label="Link to Stream.indexed">#</a>
 </div>
-<p class="member-doc">Each item with its index: <code>(0, a), (1, b), …</code>.</p>
+<div class="member-doc"><p>Each item with its index: <code>(0, a), (1, b), …</code>.</p></div>
 </div>
 <div class="member" id="Stream.zip">
 <div class="member-head">
-<span class="sig">fun zip[U](take self, other: Stream[U]) -&gt; Stream[(T, U)]</span>
+<span class="sig"><span class="kw">fun</span> <strong>zip</strong>[U](<span class="kw">take</span> <span class="kw">self</span>, other: <span class="ty">Stream</span>[U]) -&gt; <span class="ty">Stream</span>[(T, U)]</span>
 
+<a class="item-anchor" href="#Stream.zip" aria-label="Link to Stream.zip">#</a>
 </div>
-<p class="member-doc">Pairs of items, one from each, until either runs out.</p>
+<div class="member-doc"><p>Pairs of items, one from each, until either runs out.</p></div>
 </div>
 <div class="member" id="Stream.chain">
 <div class="member-head">
-<span class="sig">fun chain(take self, other: Stream[T]) -&gt; Stream[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>chain</strong>(<span class="kw">take</span> <span class="kw">self</span>, other: <span class="ty">Stream</span>[T]) -&gt; <span class="ty">Stream</span>[T]</span>
 
+<a class="item-anchor" href="#Stream.chain" aria-label="Link to Stream.chain">#</a>
 </div>
-<p class="member-doc">These items, then <code>other</code>'s.</p>
+<div class="member-doc"><p>These items, then <code>other</code>'s.</p></div>
 </div>
 <div class="member" id="Stream.step_by">
 <div class="member-head">
-<span class="sig">fun step_by(take self, n: usize) -&gt; Stream[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>step_by</strong>(<span class="kw">take</span> <span class="kw">self</span>, n: usize) -&gt; <span class="ty">Stream</span>[T]</span>
 
+<a class="item-anchor" href="#Stream.step_by" aria-label="Link to Stream.step_by">#</a>
 </div>
-<p class="member-doc">Every <code>n</code>th item, starting with the first. Unravels if <code>n</code> is 0.</p>
+<div class="member-doc"><p>Every <code>n</code>th item, starting with the first. Unravels if <code>n</code> is 0.</p></div>
 </div>
 <div class="member" id="Stream.filter_map">
 <div class="member-head">
-<span class="sig">fun filter_map[U](take self, f: T =&gt; ?U) -&gt; Stream[U]</span>
+<span class="sig"><span class="kw">fun</span> <strong>filter_map</strong>[U](<span class="kw">take</span> <span class="kw">self</span>, f: T =&gt; ?U) -&gt; <span class="ty">Stream</span>[U]</span>
 
+<a class="item-anchor" href="#Stream.filter_map" aria-label="Link to Stream.filter_map">#</a>
 </div>
-<p class="member-doc"><code>f</code> of each item, leaving out the ones it gives <code>none</code> for.</p>
+<div class="member-doc"><p><code>f</code> of each item, leaving out the ones it gives <code>none</code> for.</p></div>
 </div>
 <div class="member" id="Stream.inspect">
 <div class="member-head">
-<span class="sig">fun inspect(take self, f: T =&gt; ()) -&gt; Stream[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>inspect</strong>(<span class="kw">take</span> <span class="kw">self</span>, f: T =&gt; ()) -&gt; <span class="ty">Stream</span>[T]</span>
 
+<a class="item-anchor" href="#Stream.inspect" aria-label="Link to Stream.inspect">#</a>
 </div>
-<p class="member-doc">The items, calling <code>f</code> with each as it goes by.</p>
+<div class="member-doc"><p>The items, calling <code>f</code> with each as it goes by.</p></div>
 </div>
 <div class="member" id="Stream.flat_map">
 <div class="member-head">
-<span class="sig">fun flat_map[U](take self, f: T =&gt; Stream[U]) -&gt; Stream[U]</span>
+<span class="sig"><span class="kw">fun</span> <strong>flat_map</strong>[U](<span class="kw">take</span> <span class="kw">self</span>, f: T =&gt; <span class="ty">Stream</span>[U]) -&gt; <span class="ty">Stream</span>[U]</span>
 
+<a class="item-anchor" href="#Stream.flat_map" aria-label="Link to Stream.flat_map">#</a>
 </div>
-<p class="member-doc">The items of the streams <code>f</code> makes from each item, one after another.</p>
+<div class="member-doc"><p>The items of the streams <code>f</code> makes from each item, one after another.</p></div>
 </div>
 <div class="member" id="Stream.peekable">
 <div class="member-head">
-<span class="sig">fun peekable(take self) -&gt; Peekable[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>peekable</strong>(<span class="kw">take</span> <span class="kw">self</span>) -&gt; <a href="iter.html#Peekable">Peekable</a>[T]</span>
 
+<a class="item-anchor" href="#Stream.peekable" aria-label="Link to Stream.peekable">#</a>
 </div>
-<p class="member-doc">A stream that lets you look at the next item before taking it.</p>
+<div class="member-doc"><p>A stream that lets you look at the next item before taking it.</p></div>
 </div>
 <div class="member" id="Stream.scan">
 <div class="member-head">
-<span class="sig">fun scan[S, U](take self, take init: S, take f: (S, T) =&gt; ?(S, U)) -&gt; Stream[U]</span>
+<span class="sig"><span class="kw">fun</span> <strong>scan</strong>[S, U](<span class="kw">take</span> <span class="kw">self</span>, <span class="kw">take</span> init: S, <span class="kw">take</span> f: (S, T) =&gt; ?(S, U)) -&gt; <span class="ty">Stream</span>[U]</span>
 
+<a class="item-anchor" href="#Stream.scan" aria-label="Link to Stream.scan">#</a>
 </div>
-<p class="member-doc">Items made from a running state: <code>f(state, item)</code> gives the new state and the next item, or <code>none</code> to stop. <code>f</code> can't capture anything; what it needs travels in the state.</p>
+<div class="member-doc"><p>Items made from a running state: <code>f(state, item)</code> gives the new state and the next item, or <code>none</code> to stop. <code>f</code> can't capture anything; what it needs travels in the state.</p></div>
 </div>
 <div class="member" id="Stream.cycle">
 <div class="member-head">
-<span class="sig">fun cycle(take self) -&gt; Stream[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>cycle</strong>(<span class="kw">take</span> <span class="kw">self</span>) -&gt; <span class="ty">Stream</span>[T]</span>
 
+<a class="item-anchor" href="#Stream.cycle" aria-label="Link to Stream.cycle">#</a>
 </div>
-<p class="member-doc">The items again and again, for ever. Nothing if there are none.</p>
+<div class="member-doc"><p>The items again and again, for ever. Nothing if there are none.</p></div>
 </div>
 <div class="member" id="Stream.chunks">
 <div class="member-head">
-<span class="sig">fun chunks(take self, n: usize) -&gt; Stream[List[T]]</span>
+<span class="sig"><span class="kw">fun</span> <strong>chunks</strong>(<span class="kw">take</span> <span class="kw">self</span>, n: usize) -&gt; <span class="ty">Stream</span>[<a href="list.html#List">List</a>[T]]</span>
 
+<a class="item-anchor" href="#Stream.chunks" aria-label="Link to Stream.chunks">#</a>
 </div>
-<p class="member-doc">Lists of <code>n</code> items at a time; the last may be shorter. Unravels if <code>n</code> is 0.</p>
+<div class="member-doc"><p>Lists of <code>n</code> items at a time; the last may be shorter. Unravels if <code>n</code> is 0.</p></div>
 </div>
 <div class="member" id="Stream.nth">
 <div class="member-head">
-<span class="sig">fun nth(take self, n: usize) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>nth</strong>(<span class="kw">take</span> <span class="kw">self</span>, n: usize) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Stream.nth" aria-label="Link to Stream.nth">#</a>
 </div>
-<p class="member-doc">The item after skipping <code>n</code>.</p>
+<div class="member-doc"><p>The item at index <code>n</code> (counting from 0), or <code>none</code> if there are fewer.</p></div>
 </div>
 <div class="member" id="Stream.is_empty">
 <div class="member-head">
-<span class="sig">fun is_empty(take self) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_empty</strong>(<span class="kw">take</span> <span class="kw">self</span>) -&gt; bool</span>
 
+<a class="item-anchor" href="#Stream.is_empty" aria-label="Link to Stream.is_empty">#</a>
 </div>
-<p class="member-doc">Whether there are no items.</p>
+<div class="member-doc"><p>Whether there are no items.</p></div>
 </div>
 <div class="member" id="Stream.eq">
 <div class="member-head">
-<span class="sig">fun eq(take self, take other: Stream[T]) -&gt; bool where T: Eq</span>
+<span class="sig"><span class="kw">fun</span> <strong>eq</strong>(<span class="kw">take</span> <span class="kw">self</span>, <span class="kw">take</span> other: <span class="ty">Stream</span>[T]) -&gt; bool <span class="kw">where</span> T: <a href="ops.html#Eq">Eq</a></span>
 
+<a class="item-anchor" href="#Stream.eq" aria-label="Link to Stream.eq">#</a>
 </div>
-<p class="member-doc">Whether both streams have equal items in the same order.</p>
+<div class="member-doc"><p>Whether both streams have equal items in the same order.</p></div>
 </div>
 <div class="member" id="Stream.min_by_key">
 <div class="member-head">
-<span class="sig">fun min_by_key[K: Ord](take self, key: T =&gt; K) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>min_by_key</strong>[K: <a href="ops.html#Ord">Ord</a>](<span class="kw">take</span> <span class="kw">self</span>, key: T =&gt; K) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Stream.min_by_key" aria-label="Link to Stream.min_by_key">#</a>
 </div>
-<p class="member-doc">The item with the smallest <code>key</code> (the first, among equals).</p>
+<div class="member-doc"><p>The item with the smallest <code>key</code> (the first, among equals).</p></div>
 </div>
 <div class="member" id="Stream.max_by_key">
 <div class="member-head">
-<span class="sig">fun max_by_key[K: Ord](take self, key: T =&gt; K) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>max_by_key</strong>[K: <a href="ops.html#Ord">Ord</a>](<span class="kw">take</span> <span class="kw">self</span>, key: T =&gt; K) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Stream.max_by_key" aria-label="Link to Stream.max_by_key">#</a>
 </div>
-<p class="member-doc">The item with the largest <code>key</code> (the last, among equals).</p>
+<div class="member-doc"><p>The item with the largest <code>key</code> (the last, among equals).</p></div>
 </div>
 <div class="member" id="Stream.min_by">
 <div class="member-head">
-<span class="sig">fun min_by(take self, before: (T, T) =&gt; bool) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>min_by</strong>(<span class="kw">take</span> <span class="kw">self</span>, before: (T, T) =&gt; bool) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Stream.min_by" aria-label="Link to Stream.min_by">#</a>
 </div>
-<p class="member-doc">The item no other goes before, by <code>before</code> (the first, among equals).</p>
+<div class="member-doc"><p>The item no other goes before, by <code>before</code> (the first, among equals).</p></div>
 </div>
 <div class="member" id="Stream.max_by">
 <div class="member-head">
-<span class="sig">fun max_by(take self, before: (T, T) =&gt; bool) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>max_by</strong>(<span class="kw">take</span> <span class="kw">self</span>, before: (T, T) =&gt; bool) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Stream.max_by" aria-label="Link to Stream.max_by">#</a>
 </div>
-<p class="member-doc">The item that goes before no other, by <code>before</code> (the last, among equals).</p>
+<div class="member-doc"><p>The item that goes before no other, by <code>before</code> (the last, among equals).</p></div>
 </div>
 <div class="member" id="Stream.partition">
 <div class="member-head">
-<span class="sig">fun partition(take self, f: T =&gt; bool) -&gt; (List[T], List[T])</span>
+<span class="sig"><span class="kw">fun</span> <strong>partition</strong>(<span class="kw">take</span> <span class="kw">self</span>, f: T =&gt; bool) -&gt; (<a href="list.html#List">List</a>[T], <a href="list.html#List">List</a>[T])</span>
 
+<a class="item-anchor" href="#Stream.partition" aria-label="Link to Stream.partition">#</a>
 </div>
-<p class="member-doc">The items <code>f</code> says yes to, and the ones it says no to.</p>
+<div class="member-doc"><p>The items <code>f</code> says yes to, and the ones it says no to.</p></div>
 </div>
 <div class="member" id="Stream.counts">
 <div class="member-head">
-<span class="sig">fun counts(take self) -&gt; Map[T, usize] where T: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>counts</strong>(<span class="kw">take</span> <span class="kw">self</span>) -&gt; <a href="map.html#Map">Map</a>[T, usize] <span class="kw">where</span> T: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Stream.counts" aria-label="Link to Stream.counts">#</a>
 </div>
-<p class="member-doc">How many times each item comes up.</p>
+<div class="member-doc"><p>How many times each item comes up.</p></div>
 </div>
 <div class="member" id="Stream.group_by">
 <div class="member-head">
-<span class="sig">fun group_by[K: Hash](take self, key: T =&gt; K) -&gt; Map[K, List[T]]</span>
+<span class="sig"><span class="kw">fun</span> <strong>group_by</strong>[K: <a href="ops.html#Hash">Hash</a>](<span class="kw">take</span> <span class="kw">self</span>, key: T =&gt; K) -&gt; <a href="map.html#Map">Map</a>[K, <a href="list.html#List">List</a>[T]]</span>
 
+<a class="item-anchor" href="#Stream.group_by" aria-label="Link to Stream.group_by">#</a>
 </div>
-<p class="member-doc">The items in lists by <code>key</code>, in the order the keys first came up.</p>
+<div class="member-doc"><p>The items in lists by <code>key</code>, in the order the keys first came up.</p></div>
 </div>
 <div class="member" id="Stream.collect_as">
 <div class="member-head">
-<span class="sig">fun collect_as[C: FromStream](take self) -&gt; C where T: C.Item</span>
+<span class="sig"><span class="kw">fun</span> <strong>collect_as</strong>[C: <a href="iter.html#FromStream">FromStream</a>](<span class="kw">take</span> <span class="kw">self</span>) -&gt; C <span class="kw">where</span> T: C.<span class="ty">Item</span></span>
 
+<a class="item-anchor" href="#Stream.collect_as" aria-label="Link to Stream.collect_as">#</a>
 </div>
-<p class="member-doc">The items gathered into a <code>C</code>: <code>words.collect_as[Set[String]]()</code>, or <code>let text: String = chars.collect_as()</code> when the type is known from where the result goes. The collections that can be made are the ones that weave <code>FromStream</code>: <code>List</code>, <code>Set</code>, <code>Map</code> (of pairs), <code>String</code> (of characters), <code>Deque</code> and <code>PriorityQueue</code>.</p>
+<div class="member-doc"><p>The items gathered into a <code>C</code>: <code>words.collect_as[Set[String]]()</code>, or <code>let text: String = chars.collect_as()</code> when the type is known from where the result goes. The collections that can be made are the ones that weave <a class="code-link" href="iter.html#FromStream"><code>FromStream</code></a>: <a class="code-link" href="list.html#List"><code>List</code></a>, <a class="code-link" href="set.html#Set"><code>Set</code></a>, <a class="code-link" href="map.html#Map"><code>Map</code></a> (of pairs), <a class="code-link" href="string.html#String"><code>String</code></a> (of characters), <a class="code-link" href="deque.html#Deque"><code>Deque</code></a> and <a class="code-link" href="priority.html#PriorityQueue"><code>PriorityQueue</code></a>.</p></div>
 </div>
 <div class="member" id="Stream.collect">
 <div class="member-head">
-<span class="sig">fun collect(take self) -&gt; List[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>collect</strong>(<span class="kw">take</span> <span class="kw">self</span>) -&gt; <a href="list.html#List">List</a>[T]</span>
 
+<a class="item-anchor" href="#Stream.collect" aria-label="Link to Stream.collect">#</a>
 </div>
-<p class="member-doc">A list of the items.</p>
+<div class="member-doc"><p>A list of the items.</p></div>
 </div>
 <div class="member" id="Stream.count">
 <div class="member-head">
-<span class="sig">fun count(take self) -&gt; usize</span>
+<span class="sig"><span class="kw">fun</span> <strong>count</strong>(<span class="kw">take</span> <span class="kw">self</span>) -&gt; usize</span>
 
+<a class="item-anchor" href="#Stream.count" aria-label="Link to Stream.count">#</a>
 </div>
-<p class="member-doc">How many items there are.</p>
+<div class="member-doc"><p>How many items there are.</p></div>
 </div>
 <div class="member" id="Stream.last">
 <div class="member-head">
-<span class="sig">fun last(take self) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>last</strong>(<span class="kw">take</span> <span class="kw">self</span>) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Stream.last" aria-label="Link to Stream.last">#</a>
 </div>
-<p class="member-doc">The last item.</p>
+<div class="member-doc"><p>The last item.</p></div>
 </div>
 <div class="member" id="Stream.each">
 <div class="member-head">
-<span class="sig">fun each(take self, f: T =&gt; ())</span>
+<span class="sig"><span class="kw">fun</span> <strong>each</strong>(<span class="kw">take</span> <span class="kw">self</span>, f: T =&gt; ())</span>
 
+<a class="item-anchor" href="#Stream.each" aria-label="Link to Stream.each">#</a>
 </div>
-<p class="member-doc">Calls <code>f</code> with each item.</p>
+<div class="member-doc"><p>Calls <code>f</code> with each item.</p></div>
 </div>
 <div class="member" id="Stream.fold">
 <div class="member-head">
-<span class="sig">fun fold[A](take self, take init: A, f: (A, T) =&gt; A) -&gt; A</span>
+<span class="sig"><span class="kw">fun</span> <strong>fold</strong>[A](<span class="kw">take</span> <span class="kw">self</span>, <span class="kw">take</span> init: A, f: (A, T) =&gt; A) -&gt; A</span>
 
+<a class="item-anchor" href="#Stream.fold" aria-label="Link to Stream.fold">#</a>
 </div>
-<p class="member-doc">Combines the items, starting with <code>init</code>: <code>f(f(init, a), b)</code>…</p>
+<div class="member-doc"><p>Combines the items, starting with <code>init</code>: <code>f(f(init, a), b)</code>…</p></div>
 </div>
 <div class="member" id="Stream.reduce">
 <div class="member-head">
-<span class="sig">fun reduce(take self, f: (T, T) =&gt; T) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>reduce</strong>(<span class="kw">take</span> <span class="kw">self</span>, f: (T, T) =&gt; T) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Stream.reduce" aria-label="Link to Stream.reduce">#</a>
 </div>
-<p class="member-doc">Combines the items, starting with the first; <code>none</code> if there are none.</p>
+<div class="member-doc"><p>Combines the items, starting with the first; <code>none</code> if there are none.</p></div>
 </div>
 <div class="member" id="Stream.all">
 <div class="member-head">
-<span class="sig">fun all(take self, f: T =&gt; bool) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>all</strong>(<span class="kw">take</span> <span class="kw">self</span>, f: T =&gt; bool) -&gt; bool</span>
 
+<a class="item-anchor" href="#Stream.all" aria-label="Link to Stream.all">#</a>
 </div>
-<p class="member-doc">Whether <code>f</code> says yes to every item (<code>true</code> when there are none).</p>
+<div class="member-doc"><p>Whether <code>f</code> says yes to every item (<code>true</code> when there are none).</p></div>
 </div>
 <div class="member" id="Stream.exists">
 <div class="member-head">
-<span class="sig">fun exists(take self, f: T =&gt; bool) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>exists</strong>(<span class="kw">take</span> <span class="kw">self</span>, f: T =&gt; bool) -&gt; bool</span>
 
+<a class="item-anchor" href="#Stream.exists" aria-label="Link to Stream.exists">#</a>
 </div>
-<p class="member-doc">Whether <code>f</code> says yes to some item. (<code>any</code> is a keyword.)</p>
+<div class="member-doc"><p>Whether <code>f</code> says yes to some item. (<code>any</code> is a keyword.)</p></div>
 </div>
 <div class="member" id="Stream.find">
 <div class="member-head">
-<span class="sig">fun find(take self, f: T =&gt; bool) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>find</strong>(<span class="kw">take</span> <span class="kw">self</span>, f: T =&gt; bool) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Stream.find" aria-label="Link to Stream.find">#</a>
 </div>
-<p class="member-doc">The first item <code>f</code> says yes to.</p>
+<div class="member-doc"><p>The first item <code>f</code> says yes to.</p></div>
 </div>
 <div class="member" id="Stream.position">
 <div class="member-head">
-<span class="sig">fun position(take self, f: T =&gt; bool) -&gt; ?usize</span>
+<span class="sig"><span class="kw">fun</span> <strong>position</strong>(<span class="kw">take</span> <span class="kw">self</span>, f: T =&gt; bool) -&gt; ?usize</span>
 
+<a class="item-anchor" href="#Stream.position" aria-label="Link to Stream.position">#</a>
 </div>
-<p class="member-doc">The index of the first item <code>f</code> says yes to.</p>
+<div class="member-doc"><p>The index of the first item <code>f</code> says yes to.</p></div>
 </div>
 <div class="member" id="Stream.sum">
 <div class="member-head">
-<span class="sig">fun sum(take self) -&gt; T where T: Num</span>
+<span class="sig"><span class="kw">fun</span> <strong>sum</strong>(<span class="kw">take</span> <span class="kw">self</span>) -&gt; T <span class="kw">where</span> T: <a href="num.html#Num">Num</a></span>
 
+<a class="item-anchor" href="#Stream.sum" aria-label="Link to Stream.sum">#</a>
 </div>
-<p class="member-doc">The sum of the items (0 when there are none). Unravels when it doesn't fit.</p>
+<div class="member-doc"><p>The sum of the items (0 when there are none). Unravels when it doesn't fit.</p></div>
 </div>
 <div class="member" id="Stream.product">
 <div class="member-head">
-<span class="sig">fun product(take self) -&gt; T where T: Num</span>
+<span class="sig"><span class="kw">fun</span> <strong>product</strong>(<span class="kw">take</span> <span class="kw">self</span>) -&gt; T <span class="kw">where</span> T: <a href="num.html#Num">Num</a></span>
 
+<a class="item-anchor" href="#Stream.product" aria-label="Link to Stream.product">#</a>
 </div>
-<p class="member-doc">The product of the items (1 when there are none). Unravels when it doesn't fit.</p>
+<div class="member-doc"><p>The product of the items (1 when there are none). Unravels when it doesn't fit.</p></div>
 </div>
 <div class="member" id="Stream.min">
 <div class="member-head">
-<span class="sig">fun min(take self) -&gt; ?T where T: Ord</span>
+<span class="sig"><span class="kw">fun</span> <strong>min</strong>(<span class="kw">take</span> <span class="kw">self</span>) -&gt; ?T <span class="kw">where</span> T: <a href="ops.html#Ord">Ord</a></span>
 
+<a class="item-anchor" href="#Stream.min" aria-label="Link to Stream.min">#</a>
 </div>
-<p class="member-doc">The smallest item (the first, among equals).</p>
+<div class="member-doc"><p>The smallest item (the first, among equals).</p></div>
 </div>
 <div class="member" id="Stream.max">
 <div class="member-head">
-<span class="sig">fun max(take self) -&gt; ?T where T: Ord</span>
+<span class="sig"><span class="kw">fun</span> <strong>max</strong>(<span class="kw">take</span> <span class="kw">self</span>) -&gt; ?T <span class="kw">where</span> T: <a href="ops.html#Ord">Ord</a></span>
 
+<a class="item-anchor" href="#Stream.max" aria-label="Link to Stream.max">#</a>
 </div>
-<p class="member-doc">The largest item (the last, among equals).</p>
+<div class="member-doc"><p>The largest item (the last, among equals).</p></div>
 </div>
 <div class="member" id="Stream.join">
 <div class="member-head">
-<span class="sig">fun join(take self, sep: str) -&gt; String where T: Show</span>
+<span class="sig"><span class="kw">fun</span> <strong>join</strong>(<span class="kw">take</span> <span class="kw">self</span>, sep: str) -&gt; <a href="string.html#String">String</a> <span class="kw">where</span> T: <a href="fmt.html#Show">Show</a></span>
 
+<a class="item-anchor" href="#Stream.join" aria-label="Link to Stream.join">#</a>
 </div>
-<p class="member-doc">The items as text, with <code>sep</code> between them.</p>
+<div class="member-doc"><p>The items as text, with <code>sep</code> between them.</p></div>
 </div>
 <div class="member" id="Stream.sorted_by">
 <div class="member-head">
-<span class="sig">fun sorted_by(take self, before: (T, T) =&gt; bool) -&gt; List[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>sorted_by</strong>(<span class="kw">take</span> <span class="kw">self</span>, before: (T, T) =&gt; bool) -&gt; <a href="list.html#List">List</a>[T]</span>
 
+<a class="item-anchor" href="#Stream.sorted_by" aria-label="Link to Stream.sorted_by">#</a>
 </div>
-<p class="member-doc">The items in a new list, sorted by <code>before</code>: <code>before(a, b)</code> says whether <code>a</code> goes before <code>b</code>. A stable sort: items that neither goes before the other keep the order they came in. <code>words.pairs().sorted_by(_.1 &gt; _.1)</code> is the most frequent first.</p>
+<div class="member-doc"><p>The items in a new list, sorted by <code>before</code>: <code>before(a, b)</code> says whether <code>a</code> goes before <code>b</code>. A stable sort: items that neither goes before the other keep the order they came in. <code>words.pairs().sorted_by(_.1 &gt; _.1)</code> is the most frequent first.</p></div>
 </div>
 <div class="member" id="Stream.sorted_by_key">
 <div class="member-head">
-<span class="sig">fun sorted_by_key[K: Ord](take self, key: T =&gt; K) -&gt; List[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>sorted_by_key</strong>[K: <a href="ops.html#Ord">Ord</a>](<span class="kw">take</span> <span class="kw">self</span>, key: T =&gt; K) -&gt; <a href="list.html#List">List</a>[T]</span>
 
+<a class="item-anchor" href="#Stream.sorted_by_key" aria-label="Link to Stream.sorted_by_key">#</a>
 </div>
-<p class="member-doc">The items in a new list, sorted by <code>key</code> of each. Stable.</p>
+<div class="member-doc"><p>The items in a new list, sorted by <code>key</code> of each. Stable.</p></div>
 </div>
 <div class="member" id="Stream.sorted">
 <div class="member-head">
-<span class="sig">fun sorted(take self) -&gt; List[T] where T: Ord</span>
+<span class="sig"><span class="kw">fun</span> <strong>sorted</strong>(<span class="kw">take</span> <span class="kw">self</span>) -&gt; <a href="list.html#List">List</a>[T] <span class="kw">where</span> T: <a href="ops.html#Ord">Ord</a></span>
 
+<a class="item-anchor" href="#Stream.sorted" aria-label="Link to Stream.sorted">#</a>
 </div>
-<p class="member-doc">The items in a new list, in order. Stable.</p>
+<div class="member-doc"><p>The items in a new list, in order. Stable.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="Shuttle">
+</section>
+<section class="item" id="Shuttle">
 <div class="item-head">
-<span class="sig">warp <strong>Shuttle</strong>[T, U]</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">warp</span> <strong>Shuttle</strong>[T, U]</span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Shuttle" aria-label="Link to Shuttle">#</a>
 </div>
-<p class="item-doc">A shuttle: a function paused between the <code>T</code>s it yields and the <code>U</code>s it pulls. Calling <code>fun f() ~&gt; T &lt;~ U</code> makes one without running any of it. A generator (<code>~&gt; T</code>, which pulls nothing) is a stream of what it yields: <code>for x in fib()</code>, <code>fib().take(10)</code>.</p>
+<div class="item-doc"><p>A shuttle: a function paused between the <code>T</code>s it yields and the <code>U</code>s it pulls. Calling <code>fun f() ~&gt; T &lt;~ U</code> makes one without running any of it.</p><p>A generator (<code>~&gt; T</code>, which pulls nothing) is a stream of what it yields: <code>for x in fib()</code>, <code>fib().take(10)</code>.</p></div>
 <div class="members">
 <div class="member" id="Shuttle.push">
 <div class="member-head">
-<span class="sig">fun push(mut self, take input: U) -&gt; Burst[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>push</strong>(<span class="kw">mut</span> <span class="kw">self</span>, <span class="kw">take</span> input: U) -&gt; <a href="iter.html#Burst">Burst</a>[T]</span>
 
+<a class="item-anchor" href="#Shuttle.push" aria-label="Link to Shuttle.push">#</a>
 </div>
-<p class="member-doc">Resumes it with <code>input</code> as the value of its pending <code>pull</code> (the first push starts it), once what's left of the last burst has run. The burst is what it yields before its next <code>pull</code>.</p>
+<div class="member-doc"><p>Resumes it with <code>input</code> as the value of its pending <code>pull</code> (the first push starts it), once what's left of the last burst has run. The burst is what it yields before its next <code>pull</code>.</p></div>
 </div>
 <div class="member" id="Shuttle.close">
 <div class="member-head">
-<span class="sig">fun close(mut self) -&gt; Burst[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>close</strong>(<span class="kw">mut</span> <span class="kw">self</span>) -&gt; <a href="iter.html#Burst">Burst</a>[T]</span>
 
+<a class="item-anchor" href="#Shuttle.close" aria-label="Link to Shuttle.close">#</a>
 </div>
-<p class="member-doc">Makes its pending and later <code>pull</code>s give <code>none</code>, once what's left of the last burst has run. The burst is what it yields from here on.</p>
+<div class="member-doc"><p>Makes its pending and later <code>pull</code>s give <code>none</code>, once what's left of the last burst has run. The burst is what it yields from here on.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="Burst">
+</section>
+<section class="item" id="Burst">
 <div class="item-head">
-<span class="sig">once warp <strong>Burst</strong>[T]</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">once warp</span> <strong>Burst</strong>[T]</span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Burst" aria-label="Link to Burst">#</a>
 </div>
-<p class="item-doc">What a shuttle yields between one input and its next <code>pull</code>. It's lazy: going through it is what runs the shuttle. It's <code>once</code>, so outputs can't be dropped by accident: go through it with <code>for</code> (or a <code>Stream</code> method), or <code>drain()</code> it.</p>
+<div class="item-doc"><p>What a shuttle yields between one input and its next <code>pull</code>. It's lazy: going through it is what runs the shuttle. It's <code>once</code>, so outputs can't be dropped by accident: go through it with <code>for</code> (or a <a class="code-link" href="iter.html#Stream"><code>Stream</code></a> method), or <a class="code-link" href="iter.html#Burst.drain"><code>drain()</code></a> it.</p></div>
 <div class="members">
 <div class="member" id="Burst.drain">
 <div class="member-head">
-<span class="sig">fun drain(take self)</span>
+<span class="sig"><span class="kw">fun</span> <strong>drain</strong>(<span class="kw">take</span> <span class="kw">self</span>)</span>
 
+<a class="item-anchor" href="#Burst.drain" aria-label="Link to Burst.drain">#</a>
 </div>
-<p class="member-doc">Runs the shuttle to its next <code>pull</code>, throwing away what it yields.</p>
+<div class="member-doc"><p>Runs the shuttle to its next <code>pull</code>, throwing away what it yields.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="Peekable">
+</section>
+<section class="item" id="Peekable">
 <div class="item-head">
-<span class="sig">warp <strong>Peekable</strong>[T]: Iter</span>
+<span class="sig"><span class="kw">warp</span> <strong>Peekable</strong>[T]: <a href="iter.html#Iter">Iter</a></span>
 
+<a class="item-anchor" href="#Peekable" aria-label="Link to Peekable">#</a>
 </div>
-<p class="item-doc">What <code>peekable</code> makes.</p>
+<div class="item-doc"><p>What <a class="code-link" href="iter.html#Stream.peekable"><code>Stream.peekable</code></a> makes: a stream that can show its next item without taking it.</p></div>
 <div class="members">
 <div class="member" id="Peekable.Item">
 <div class="member-head">
-<span class="sig">type Item = T</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">type</span> <strong>Item</strong> = T</span>
+
+<a class="item-anchor" href="#Peekable.Item" aria-label="Link to Peekable.Item">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>The items are the stream's.</p></div>
 </div>
 <div class="member" id="Peekable.peek">
 <div class="member-head">
-<span class="sig">fun peek(mut self) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>peek</strong>(<span class="kw">mut</span> <span class="kw">self</span>) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Peekable.peek" aria-label="Link to Peekable.peek">#</a>
 </div>
-<p class="member-doc">A copy of the next item, without taking it.</p>
+<div class="member-doc"><p>A copy of the next item, without taking it.</p></div>
 </div>
 <div class="member" id="Peekable.next_if">
 <div class="member-head">
-<span class="sig">fun next_if(mut self, f: T =&gt; bool) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>next_if</strong>(<span class="kw">mut</span> <span class="kw">self</span>, f: T =&gt; bool) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Peekable.next_if" aria-label="Link to Peekable.next_if">#</a>
 </div>
-<p class="member-doc">The next item, if <code>f</code> says yes to it.</p>
+<div class="member-doc"><p>The next item, if <code>f</code> says yes to it.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="Reversed">
+</section>
+<section class="item" id="Reversed">
 <div class="item-head">
-<span class="sig">warp <strong>Reversed</strong>[T]: Iter</span>
+<span class="sig"><span class="kw">warp</span> <strong>Reversed</strong>[T]: <a href="iter.html#Iter">Iter</a></span>
 
+<a class="item-anchor" href="#Reversed" aria-label="Link to Reversed">#</a>
 </div>
-<p class="item-doc">The items of <code>rev</code>: the list, emptied from the end.</p>
-<ul class="fields">
-<li><span class="sig">pub items: List[T]</span></li>
-</ul>
+<div class="item-doc"><p>The items of <code>rev</code>: the list, emptied from the end.</p></div>
+<div class="parts"><span class="parts-label">Fields</span><ul class="fields">
+<li title="What&#x27;s left, the last item first."><span class="sig"><span class="kw">pub</span> items: <a href="list.html#List">List</a>[T]</span><span class="part-doc">What's left, the last item first.</span></li>
+</ul></div>
 <div class="members">
 <div class="member" id="Reversed.Item">
 <div class="member-head">
-<span class="sig">type Item = T</span>
-<span class="badge todo">TODO</span>
-</div>
-<p class="member-doc empty">undocumented</p>
-</div>
-</div>
-</div>
-<div class="item" id="Owned">
-<div class="item-head">
-<span class="sig">warp <strong>Owned</strong>[T]: Iter</span>
+<span class="sig"><span class="kw">type</span> <strong>Item</strong> = T</span>
 
+<a class="item-anchor" href="#Reversed.Item" aria-label="Link to Reversed.Item">#</a>
 </div>
-<p class="item-doc">The items of a list this owns, from the first: what a method that builds its items in a list gives as a stream.</p>
-<ul class="fields">
-<li><span class="sig">pub items: List[T]</span></li>
-<li><span class="sig">pub at: usize</span></li>
-</ul>
+<div class="member-doc"><p>The list's items.</p></div>
+</div>
+</div>
+</section>
+<section class="item" id="Owned">
+<div class="item-head">
+<span class="sig"><span class="kw">warp</span> <strong>Owned</strong>[T]: <a href="iter.html#Iter">Iter</a></span>
+
+<a class="item-anchor" href="#Owned" aria-label="Link to Owned">#</a>
+</div>
+<div class="item-doc"><p>The items of a list this owns, from the first: what a method that builds its items in a list gives as a stream.</p></div>
+<div class="parts"><span class="parts-label">Fields</span><ul class="fields">
+<li title="The list it gives the items of."><span class="sig"><span class="kw">pub</span> items: <a href="list.html#List">List</a>[T]</span><span class="part-doc">The list it gives the items of.</span></li>
+<li title="The index of the next item."><span class="sig"><span class="kw">pub</span> at: usize</span><span class="part-doc">The index of the next item.</span></li>
+</ul></div>
 <div class="members">
 <div class="member" id="Owned.Item">
 <div class="member-head">
-<span class="sig">type Item = T</span>
-<span class="badge todo">TODO</span>
-</div>
-<p class="member-doc empty">undocumented</p>
-</div>
-</div>
-</div>
-<h2>Functions</h2>
-<div class="item" id="from_fn">
-<div class="item-head">
-<span class="sig">fun <strong>from_fn</strong>[S, T](take init: S, take f: S =&gt; ?(S, T)) -&gt; Stream[T]</span>
+<span class="sig"><span class="kw">type</span> <strong>Item</strong> = T</span>
 
+<a class="item-anchor" href="#Owned.Item" aria-label="Link to Owned.Item">#</a>
 </div>
-<p class="item-doc">Items made from a state: <code>f(state)</code> gives the new state and the next item, or <code>none</code> to stop. <code>f</code> can't capture anything; what it needs travels in the state.</p>
+<div class="member-doc"><p>The list's items.</p></div>
 </div>
-<div class="item" id="successors">
+</div>
+</section>
+<h2 id="functions">Functions</h2>
+<section class="item" id="from_fn">
 <div class="item-head">
-<span class="sig">fun <strong>successors</strong>[T: Copy](take first: ?T, take f: T =&gt; ?T) -&gt; Stream[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>from_fn</strong>[S, T](<span class="kw">take</span> init: S, <span class="kw">take</span> f: S =&gt; ?(S, T)) -&gt; <a href="iter.html#Stream">Stream</a>[T]</span>
 
+<a class="item-anchor" href="#from_fn" aria-label="Link to from_fn">#</a>
 </div>
-<p class="item-doc"><code>first</code>, then <code>f</code> of it, and so on until <code>f</code> gives <code>none</code>.</p>
+<div class="item-doc"><p>Items made from a state: <code>f(state)</code> gives the new state and the next item, or <code>none</code> to stop. <code>f</code> can't capture anything; what it needs travels in the state.</p></div>
+</section>
+<section class="item" id="successors">
+<div class="item-head">
+<span class="sig"><span class="kw">fun</span> <strong>successors</strong>[T: <a href="ops.html#Copy">Copy</a>](<span class="kw">take</span> first: ?T, <span class="kw">take</span> f: T =&gt; ?T) -&gt; <a href="iter.html#Stream">Stream</a>[T]</span>
+
+<a class="item-anchor" href="#successors" aria-label="Link to successors">#</a>
 </div>
+<div class="item-doc"><p><code>first</code>, then <code>f</code> of it, and so on until <code>f</code> gives <code>none</code>.</p></div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="hash.html"><span class="dir">&larr; previous</span>std.hash</a>
+<a class="next" href="list.html"><span class="dir">next &rarr;</span>std.list</a>
+</nav>
 </main>
 </div>
 </body>

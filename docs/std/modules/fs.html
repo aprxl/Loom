@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.fs · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../../style.css">
 <script src="../../weave.js" defer></script>
+<script src="../../play/play.js" defer></script>
 </head>
 <body>
 <header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
@@ -18,7 +20,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,155 +68,191 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / fs</div>
 <h1>std.fs</h1>
-<p class="summary">Files.</p>
-<h2>Types</h2>
-<div class="item" id="IoError">
-<div class="item-head">
-<span class="sig">warp <strong>IoError</strong>: Error</span>
-<span class="badge todo">TODO</span>
+<p class="summary">Files: read and write whole files as text or bytes, append lines, look at metadata, and walk directories. Every function that can fail returns <code>T ! IoError</code>.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/fs.loom</code></span></div>
 </div>
-<p class="item-doc empty">undocumented in source</p>
-<ul class="cases">
-<li><span class="sig">case NotFound(path: String)</span></li>
-<li><span class="sig">case Denied(path: String)</span></li>
-<li><span class="sig">case Other(message: String)</span></li>
-</ul>
-</div>
-<div class="item" id="Meta">
-<div class="item-head">
-<span class="sig">warp <strong>Meta</strong></span>
+<div class="mod-intro"><p class="summary">In a sandboxed run (the docs' playground, the test fixtures) the files are in memory and start out empty, so a program can write a file and read it back, as this one does.</p><div class="sample" id="example" data-sample="std_fs" data-mode="run" data-file="fs_example.loom" data-store="std.fs" data-runnable><div class="sample-head"><span class="file"><span class="dot"></span>fs_example.loom</span><span class="tag ok">an example to run</span><span class="spacer"></span></div><pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.fs
 
-</div>
-<p class="item-doc">What is known about a file or a directory.</p>
-<ul class="fields">
-<li><span class="sig">pub size: u64</span></li>
-<li><span class="sig">pub is_dir: bool</span></li>
-</ul>
-</div>
-<div class="item" id="File">
+<span class="k">fun</span> <span class="f">main</span>() ! fs.<span class="t">IoError</span> {
+    fs.<span class="f">write_text</span>(<span class="s">"notes.txt"</span>, <span class="s">"warp\nweft\n"</span>)?
+    <span class="k">let</span> text = fs.<span class="f">read_text</span>(<span class="s">"notes.txt"</span>)?
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>text.<span class="f">lines</span>().<span class="f">count</span>()<span class="h">}</span><span class="s"> lines, </span><span class="h">{</span>fs.<span class="f">file_size</span>(<span class="s">"notes.txt"</span>)<span class="h">}</span><span class="s"> bytes"</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>fs.<span class="f">read_text</span>(<span class="s">"missing.txt"</span>):?<span class="h">}</span><span class="s">"</span>)
+}</code></pre></div></div>
+<nav class="toc-chips" aria-label="In this module"><a href="#IoError"><span class="kind">warp</span>IoError</a><a href="#Meta"><span class="kind">warp</span>Meta</a><a href="#File"><span class="kind">warp</span>File</a><a href="#metadata"><span class="kind">fun</span>metadata</a><a href="#is_dir"><span class="kind">fun</span>is_dir</a><a href="#is_file"><span class="kind">fun</span>is_file</a><a href="#read"><span class="kind">fun</span>read</a><a href="#read_text"><span class="kind">fun</span>read_text</a><a href="#write_text"><span class="kind">fun</span>write_text</a><a href="#exists"><span class="kind">fun</span>exists</a><a href="#remove_file"><span class="kind">fun</span>remove_file</a><a href="#file_kind"><span class="kind">fun</span>file_kind</a><a href="#file_size"><span class="kind">fun</span>file_size</a><a href="#create_dir_all"><span class="kind">fun</span>create_dir_all</a><a href="#rename"><span class="kind">fun</span>rename</a><a href="#copy"><span class="kind">fun</span>copy</a><a href="#read_dir"><span class="kind">fun</span>read_dir</a></nav>
+<h2 id="types">Types</h2>
+<section class="item" id="IoError">
 <div class="item-head">
-<span class="sig">warp <strong>File</strong></span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">warp</span> <strong>IoError</strong>: <a href="error.html#Error">Error</a></span>
+
+<a class="item-anchor" href="#IoError" aria-label="Link to IoError">#</a>
 </div>
-<p class="item-doc">An open file.</p>
+<div class="item-doc"><p>Why a file operation failed.</p></div>
+<div class="parts"><span class="parts-label">Cases</span><ul class="cases">
+<li title="Nothing is at `path`."><span class="sig"><span class="kw">case</span> <span class="ty">NotFound</span>(path: <a href="string.html#String">String</a>)</span><span class="part-doc">Nothing is at <code>path</code>.</span></li>
+<li title="The system didn&#x27;t allow it."><span class="sig"><span class="kw">case</span> <span class="ty">Denied</span>(path: <a href="string.html#String">String</a>)</span><span class="part-doc">The system didn't allow it.</span></li>
+<li title="Something else went wrong; `message` says what."><span class="sig"><span class="kw">case</span> <span class="ty">Other</span>(message: <a href="string.html#String">String</a>)</span><span class="part-doc">Something else went wrong; <code>message</code> says what.</span></li>
+</ul></div>
+</section>
+<section class="item" id="Meta">
+<div class="item-head">
+<span class="sig"><span class="kw">warp</span> <strong>Meta</strong></span>
+
+<a class="item-anchor" href="#Meta" aria-label="Link to Meta">#</a>
+</div>
+<div class="item-doc"><p>What is known about a file or a directory.</p></div>
+<div class="parts"><span class="parts-label">Fields</span><ul class="fields">
+<li title="The length in bytes."><span class="sig"><span class="kw">pub</span> size: u64</span><span class="part-doc">The length in bytes.</span></li>
+<li title="Whether it is a directory."><span class="sig"><span class="kw">pub</span> is_dir: bool</span><span class="part-doc">Whether it is a directory.</span></li>
+</ul></div>
+</section>
+<section class="item" id="File">
+<div class="item-head">
+<span class="sig"><span class="kw">warp</span> <strong>File</strong></span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#File" aria-label="Link to File">#</a>
+</div>
+<div class="item-doc"><p>An open file.</p></div>
 <div class="members">
 <div class="member" id="File.append">
 <div class="member-head">
-<span class="sig">fun append(path: str) -&gt; File ! IoError</span>
+<span class="sig"><span class="kw">fun</span> <strong>append</strong>(path: str) -&gt; <span class="ty">File</span> ! <a href="fs.html#IoError">IoError</a></span>
 
+<a class="item-anchor" href="#File.append" aria-label="Link to File.append">#</a>
 </div>
-<p class="member-doc">Opens <code>path</code> for appending, creating it if needed.</p>
+<div class="member-doc"><p>Opens <code>path</code> for appending, creating it if needed.</p></div>
 </div>
 <div class="member" id="File.write_line">
 <div class="member-head">
-<span class="sig">fun write_line(mut self, line: str) ! IoError</span>
-<span class="badge todo">TODO</span>
-</div>
-<p class="member-doc empty">undocumented</p>
-</div>
-</div>
-</div>
-<h2>Functions</h2>
-<div class="item" id="metadata">
-<div class="item-head">
-<span class="sig">fun <strong>metadata</strong>(path: str) -&gt; Meta ! IoError</span>
+<span class="sig"><span class="kw">fun</span> <strong>write_line</strong>(<span class="kw">mut</span> <span class="kw">self</span>, line: str) ! <a href="fs.html#IoError">IoError</a></span>
 
+<a class="item-anchor" href="#File.write_line" aria-label="Link to File.write_line">#</a>
 </div>
-<p class="item-doc">The size of the file at <code>path</code>, and whether it is a directory.</p>
+<div class="member-doc"><p>Writes <code>line</code> and a newline at the end of the file.</p></div>
 </div>
-<div class="item" id="is_dir">
+</div>
+</section>
+<h2 id="functions">Functions</h2>
+<section class="item" id="metadata">
 <div class="item-head">
-<span class="sig">fun <strong>is_dir</strong>(path: str) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>metadata</strong>(path: str) -&gt; <a href="fs.html#Meta">Meta</a> ! <a href="fs.html#IoError">IoError</a></span>
 
+<a class="item-anchor" href="#metadata" aria-label="Link to metadata">#</a>
 </div>
-<p class="item-doc">Whether <code>path</code> is a directory.</p>
-</div>
-<div class="item" id="is_file">
+<div class="item-doc"><p>The size of the file at <code>path</code>, and whether it is a directory.</p></div>
+</section>
+<section class="item" id="is_dir">
 <div class="item-head">
-<span class="sig">fun <strong>is_file</strong>(path: str) -&gt; bool</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_dir</strong>(path: str) -&gt; bool</span>
 
+<a class="item-anchor" href="#is_dir" aria-label="Link to is_dir">#</a>
 </div>
-<p class="item-doc">Whether <code>path</code> is a file.</p>
-</div>
-<div class="item" id="read">
+<div class="item-doc"><p>Whether <code>path</code> is a directory.</p></div>
+</section>
+<section class="item" id="is_file">
 <div class="item-head">
-<span class="sig">fun <strong>read</strong>(path: str) -&gt; List[u8] ! IoError</span>
-<span class="badge extern">extern</span><span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_file</strong>(path: str) -&gt; bool</span>
+
+<a class="item-anchor" href="#is_file" aria-label="Link to is_file">#</a>
 </div>
-<p class="item-doc empty">undocumented in source</p>
-</div>
-<div class="item" id="read_text">
+<div class="item-doc"><p>Whether <code>path</code> is a file.</p></div>
+</section>
+<section class="item" id="read">
 <div class="item-head">
-<span class="sig">fun <strong>read_text</strong>(path: str) -&gt; String ! IoError</span>
-<span class="badge extern">extern</span><span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>read</strong>(path: str) -&gt; <a href="list.html#List">List</a>[u8] ! <a href="fs.html#IoError">IoError</a></span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#read" aria-label="Link to read">#</a>
 </div>
-<p class="item-doc empty">undocumented in source</p>
-</div>
-<div class="item" id="write_text">
+<div class="item-doc"><p>The bytes of the file at <code>path</code>.</p></div>
+</section>
+<section class="item" id="read_text">
 <div class="item-head">
-<span class="sig">fun <strong>write_text</strong>(path: str, text: str) ! IoError</span>
-<span class="badge extern">extern</span>
+<span class="sig"><span class="kw">fun</span> <strong>read_text</strong>(path: str) -&gt; <a href="string.html#String">String</a> ! <a href="fs.html#IoError">IoError</a></span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#read_text" aria-label="Link to read_text">#</a>
 </div>
-<p class="item-doc">Makes the file <code>path</code> hold <code>text</code>, replacing what was there.</p>
-</div>
-<div class="item" id="exists">
+<div class="item-doc"><p>The text of the file at <code>path</code>.</p></div>
+</section>
+<section class="item" id="write_text">
 <div class="item-head">
-<span class="sig">fun <strong>exists</strong>(path: str) -&gt; bool</span>
-<span class="badge extern">extern</span>
+<span class="sig"><span class="kw">fun</span> <strong>write_text</strong>(path: str, text: str) ! <a href="fs.html#IoError">IoError</a></span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#write_text" aria-label="Link to write_text">#</a>
 </div>
-<p class="item-doc">Whether there is a file or a directory at <code>path</code>.</p>
-</div>
-<div class="item" id="remove_file">
+<div class="item-doc"><p>Makes the file <code>path</code> hold <code>text</code>, replacing what was there.</p></div>
+</section>
+<section class="item" id="exists">
 <div class="item-head">
-<span class="sig">fun <strong>remove_file</strong>(path: str) ! IoError</span>
-<span class="badge extern">extern</span>
+<span class="sig"><span class="kw">fun</span> <strong>exists</strong>(path: str) -&gt; bool</span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#exists" aria-label="Link to exists">#</a>
 </div>
-<p class="item-doc">Deletes the file at <code>path</code>.</p>
-</div>
-<div class="item" id="file_kind">
+<div class="item-doc"><p>Whether there is a file or a directory at <code>path</code>.</p></div>
+</section>
+<section class="item" id="remove_file">
 <div class="item-head">
-<span class="sig">fun <strong>file_kind</strong>(path: str) -&gt; u8</span>
-<span class="badge extern">extern</span>
+<span class="sig"><span class="kw">fun</span> <strong>remove_file</strong>(path: str) ! <a href="fs.html#IoError">IoError</a></span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#remove_file" aria-label="Link to remove_file">#</a>
 </div>
-<p class="item-doc">What kind of thing is at <code>path</code>: 0 nothing, 1 a file, 2 a directory.</p>
-</div>
-<div class="item" id="file_size">
+<div class="item-doc"><p>Deletes the file at <code>path</code>.</p></div>
+</section>
+<section class="item" id="file_kind">
 <div class="item-head">
-<span class="sig">fun <strong>file_size</strong>(path: str) -&gt; u64</span>
-<span class="badge extern">extern</span>
+<span class="sig"><span class="kw">fun</span> <strong>file_kind</strong>(path: str) -&gt; u8</span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#file_kind" aria-label="Link to file_kind">#</a>
 </div>
-<p class="item-doc">The length of the file at <code>path</code> in bytes, 0 when it can't be read.</p>
-</div>
-<div class="item" id="create_dir_all">
+<div class="item-doc"><p>What kind of thing is at <code>path</code>: 0 nothing, 1 a file, 2 a directory.</p></div>
+</section>
+<section class="item" id="file_size">
 <div class="item-head">
-<span class="sig">fun <strong>create_dir_all</strong>(path: str) ! IoError</span>
-<span class="badge extern">extern</span>
+<span class="sig"><span class="kw">fun</span> <strong>file_size</strong>(path: str) -&gt; u64</span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#file_size" aria-label="Link to file_size">#</a>
 </div>
-<p class="item-doc">Makes the directory <code>path</code> and the ones above it that are missing.</p>
-</div>
-<div class="item" id="rename">
+<div class="item-doc"><p>The length of the file at <code>path</code> in bytes, 0 when it can't be read.</p></div>
+</section>
+<section class="item" id="create_dir_all">
 <div class="item-head">
-<span class="sig">fun <strong>rename</strong>(from: str, to: str) ! IoError</span>
-<span class="badge extern">extern</span>
+<span class="sig"><span class="kw">fun</span> <strong>create_dir_all</strong>(path: str) ! <a href="fs.html#IoError">IoError</a></span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#create_dir_all" aria-label="Link to create_dir_all">#</a>
 </div>
-<p class="item-doc">Moves the file <code>from</code> to <code>to</code>, replacing what is there.</p>
-</div>
-<div class="item" id="copy">
+<div class="item-doc"><p>Makes the directory <code>path</code> and the ones above it that are missing.</p></div>
+</section>
+<section class="item" id="rename">
 <div class="item-head">
-<span class="sig">fun <strong>copy</strong>(from: str, to: str) ! IoError</span>
-<span class="badge extern">extern</span>
+<span class="sig"><span class="kw">fun</span> <strong>rename</strong>(from: str, to: str) ! <a href="fs.html#IoError">IoError</a></span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#rename" aria-label="Link to rename">#</a>
 </div>
-<p class="item-doc">Copies the file <code>from</code> to <code>to</code>, replacing what is there.</p>
-</div>
-<div class="item" id="read_dir">
+<div class="item-doc"><p>Moves the file <code>from</code> to <code>to</code>, replacing what is there.</p></div>
+</section>
+<section class="item" id="copy">
 <div class="item-head">
-<span class="sig">fun <strong>read_dir</strong>(path: str) -&gt; List[String] ! IoError</span>
-<span class="badge extern">extern</span>
+<span class="sig"><span class="kw">fun</span> <strong>copy</strong>(from: str, to: str) ! <a href="fs.html#IoError">IoError</a></span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#copy" aria-label="Link to copy">#</a>
 </div>
-<p class="item-doc">The names in the directory <code>path</code>, in order.</p>
+<div class="item-doc"><p>Copies the file <code>from</code> to <code>to</code>, replacing what is there.</p></div>
+</section>
+<section class="item" id="read_dir">
+<div class="item-head">
+<span class="sig"><span class="kw">fun</span> <strong>read_dir</strong>(path: str) -&gt; <a href="list.html#List">List</a>[<a href="string.html#String">String</a>] ! <a href="fs.html#IoError">IoError</a></span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#read_dir" aria-label="Link to read_dir">#</a>
 </div>
+<div class="item-doc"><p>The names in the directory <code>path</code>, in order.</p></div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="fmt.html"><span class="dir">&larr; previous</span>std.fmt</a>
+<a class="next" href="io.html"><span class="dir">next &rarr;</span>std.io</a>
+</nav>
 </main>
 </div>
 </body>

@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.map · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../../style.css">
 <script src="../../weave.js" defer></script>
+<script src="../../play/play.js" defer></script>
 </head>
 <body>
 <header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
@@ -18,7 +20,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,173 +68,216 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / map</div>
 <h1>std.map</h1>
-<p class="summary">Hash maps.</p>
-<h2>Types</h2>
-<div class="item" id="Map">
-<div class="item-head">
-<span class="sig">warp <strong>Map</strong>[K, V]</span>
-<span class="badge builtin">builtin</span>
+<p class="summary">Hash maps: <a class="code-link" href="map.html#Map"><code>Map[K, V]</code></a> from any <a class="code-link" href="ops.html#Hash"><code>Hash</code></a> key to a value. A map remembers the order its keys were first added, so going through it, printing it and comparing two of them all follow that order.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/map.loom</code></span><a href="../../lang/collections.html">read about it in the book &rarr;</a></div>
 </div>
-<p class="item-doc">A map from <code>K</code> to <code>V</code> that remembers insertion order: going through it, and showing it, follow the order keys were first added. Build one with <code>Map()</code>, or a literal where a map is expected: <code>let ages: Map[str, u8] = ["ada": 36, "alan": 41]</code> (<code>[:]</code> is empty). <code>m[k]</code> is the value for <code>k</code>, and unravels when there's none (<code>m.get(k)</code> gives an optional); <code>m[k] = v</code> adds or replaces it. <code>for (k, v) in m</code> goes through the pairs, and a map has the methods of <code>Stream</code> too, over its pairs. Keys must be <code>Hash</code>.</p>
+<div class="mod-intro"><div class="sample" id="example" data-sample="std_map" data-mode="run" data-file="map_example.loom" data-store="std.map" data-runnable><div class="sample-head"><span class="file"><span class="dot"></span>map_example.loom</span><span class="tag ok">an example to run</span><span class="spacer"></span></div><pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">var</span> counts: <span class="t">Map</span>[<span class="t">String</span>, usize] = [:]
+    <span class="k">for</span> word <span class="k">in</span> <span class="s">"the cat and the hat and the bat"</span>.<span class="f">words</span>() {
+        counts.<span class="f">entry</span>(word.<span class="f">to_string</span>(), default: <span class="n">0</span>) += <span class="n">1</span>
+    }
+    <span class="f">print</span>(counts)
+    <span class="f">print</span>(<span class="s">"the: </span><span class="h">{</span>counts[<span class="s">"the"</span>]<span class="h">}</span><span class="s">, dog: </span><span class="h">{</span>counts.<span class="f">get</span>(<span class="s">"dog"</span>):?<span class="h">}</span><span class="s">"</span>)
+    <span class="k">for</span> (word, n) <span class="k">in</span> counts.<span class="f">pairs</span>().<span class="f">sorted_by</span>(_.<span class="n">1</span> &gt; _.<span class="n">1</span>).<span class="f">take</span>(<span class="n">2</span>) {
+        <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>word<span class="h">}</span><span class="s"> x</span><span class="h">{</span>n<span class="h">}</span><span class="s">"</span>)
+    }
+}</code></pre></div></div>
+<h2 id="types">Types</h2>
+<section class="item" id="Map">
+<div class="item-head">
+<span class="sig"><span class="kw">warp</span> <strong>Map</strong>[K, V]</span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Map" aria-label="Link to Map">#</a>
+</div>
+<div class="item-doc"><p>A map from <code>K</code> to <code>V</code> that remembers insertion order: going through it, and showing it, follow the order keys were first added. Build one with <code>Map()</code>, or a literal where a map is expected: <code>let ages: Map[str, u8] = ["ada": 36, "alan": 41]</code> (<code>[:]</code> is empty).</p><p><code>m[k]</code> is the value for <code>k</code>, and unravels when there's none (<code>m.get(k)</code> gives an optional); <code>m[k] = v</code> adds or replaces it. <code>for (k, v) in m</code> goes through the pairs, and a map has the methods of <a class="code-link" href="iter.html#Stream"><code>Stream</code></a> too, over its pairs. Keys must be <a class="code-link" href="ops.html#Hash"><code>Hash</code></a>.</p></div>
 <div class="members">
 <div class="member" id="Map.len">
 <div class="member-head">
-<span class="sig">fun len(self) -&gt; usize</span>
+<span class="sig"><span class="kw">fun</span> <strong>len</strong>(<span class="kw">self</span>) -&gt; usize</span>
 
+<a class="item-anchor" href="#Map.len" aria-label="Link to Map.len">#</a>
 </div>
-<p class="member-doc">How many keys there are.</p>
+<div class="member-doc"><p>How many keys there are.</p></div>
 </div>
 <div class="member" id="Map.is_empty">
 <div class="member-head">
-<span class="sig">fun is_empty(self) -&gt; bool</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_empty</strong>(<span class="kw">self</span>) -&gt; bool</span>
+
+<a class="item-anchor" href="#Map.is_empty" aria-label="Link to Map.is_empty">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>Whether there are no keys.</p></div>
 </div>
 <div class="member" id="Map.get">
 <div class="member-head">
-<span class="sig">fun get(self, key: K) -&gt; ?V where K: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>get</strong>(<span class="kw">self</span>, key: K) -&gt; ?V <span class="kw">where</span> K: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Map.get" aria-label="Link to Map.get">#</a>
 </div>
-<p class="member-doc">A copy of the value for <code>key</code> (<code>m[key]</code> is the value itself).</p>
+<div class="member-doc"><p>A copy of the value for <code>key</code> (<code>m[key]</code> is the value itself).</p></div>
 </div>
 <div class="member" id="Map.has">
 <div class="member-head">
-<span class="sig">fun has(self, key: K) -&gt; bool where K: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>has</strong>(<span class="kw">self</span>, key: K) -&gt; bool <span class="kw">where</span> K: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Map.has" aria-label="Link to Map.has">#</a>
 </div>
-<p class="member-doc">Whether there's a value for <code>key</code>.</p>
+<div class="member-doc"><p>Whether there's a value for <code>key</code>.</p></div>
 </div>
 <div class="member" id="Map.insert">
 <div class="member-head">
-<span class="sig">fun insert(mut self, take key: K, take value: V) -&gt; ?V where K: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>insert</strong>(<span class="kw">mut</span> <span class="kw">self</span>, <span class="kw">take</span> key: K, <span class="kw">take</span> value: V) -&gt; ?V <span class="kw">where</span> K: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Map.insert" aria-label="Link to Map.insert">#</a>
 </div>
-<p class="member-doc">Adds <code>value</code> for <code>key</code>, and gives back the value it replaces.</p>
+<div class="member-doc"><p>Adds <code>value</code> for <code>key</code>, and gives back the value it replaces.</p></div>
 </div>
 <div class="member" id="Map.entry">
 <div class="member-head">
-<span class="sig">fun entry(mut self, take key: K, take default: V) ~&gt; mut V where K: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>entry</strong>(<span class="kw">mut</span> <span class="kw">self</span>, <span class="kw">take</span> key: K, <span class="kw">take</span> default: V) ~&gt; <span class="kw">mut</span> V <span class="kw">where</span> K: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Map.entry" aria-label="Link to Map.entry">#</a>
 </div>
-<p class="member-doc">The value for <code>key</code> as a place to change, for the statement it's in: <code>counts.entry(word, default: 0) += 1</code>. When there's none, <code>default</code> is added first (and <code>key</code> kept); when there is, both are dropped.</p>
+<div class="member-doc"><p>The value for <code>key</code> as a place to change, for the statement it's in: <code>counts.entry(word, default: 0) += 1</code>. When there's none, <code>default</code> is added first (and <code>key</code> kept); when there is, both are dropped.</p></div>
 </div>
 <div class="member" id="Map.remove">
 <div class="member-head">
-<span class="sig">fun remove(mut self, key: K) -&gt; ?V where K: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>remove</strong>(<span class="kw">mut</span> <span class="kw">self</span>, key: K) -&gt; ?V <span class="kw">where</span> K: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Map.remove" aria-label="Link to Map.remove">#</a>
 </div>
-<p class="member-doc">Takes out the value for <code>key</code>; later keys keep their order.</p>
+<div class="member-doc"><p>Takes out the value for <code>key</code>; later keys keep their order.</p></div>
 </div>
 <div class="member" id="Map.clear">
 <div class="member-head">
-<span class="sig">fun clear(mut self)</span>
+<span class="sig"><span class="kw">fun</span> <strong>clear</strong>(<span class="kw">mut</span> <span class="kw">self</span>)</span>
 
+<a class="item-anchor" href="#Map.clear" aria-label="Link to Map.clear">#</a>
 </div>
-<p class="member-doc">Removes every key.</p>
+<div class="member-doc"><p>Removes every key.</p></div>
 </div>
 <div class="member" id="Map.keys">
 <div class="member-head">
-<span class="sig">fun keys(self) -&gt; Stream[K]</span>
+<span class="sig"><span class="kw">fun</span> <strong>keys</strong>(<span class="kw">self</span>) -&gt; <a href="iter.html#Stream">Stream</a>[K]</span>
 
+<a class="item-anchor" href="#Map.keys" aria-label="Link to Map.keys">#</a>
 </div>
-<p class="member-doc">The keys, in order.</p>
+<div class="member-doc"><p>The keys, in order.</p></div>
 </div>
 <div class="member" id="Map.values">
 <div class="member-head">
-<span class="sig">fun values(self) -&gt; Stream[V]</span>
+<span class="sig"><span class="kw">fun</span> <strong>values</strong>(<span class="kw">self</span>) -&gt; <a href="iter.html#Stream">Stream</a>[V]</span>
 
+<a class="item-anchor" href="#Map.values" aria-label="Link to Map.values">#</a>
 </div>
-<p class="member-doc">The values, in the order of their keys.</p>
+<div class="member-doc"><p>The values, in the order of their keys.</p></div>
 </div>
 <div class="member" id="Map.pairs">
 <div class="member-head">
-<span class="sig">fun pairs(self) -&gt; Stream[(K, V)]</span>
+<span class="sig"><span class="kw">fun</span> <strong>pairs</strong>(<span class="kw">self</span>) -&gt; <a href="iter.html#Stream">Stream</a>[(K, V)]</span>
 
+<a class="item-anchor" href="#Map.pairs" aria-label="Link to Map.pairs">#</a>
 </div>
-<p class="member-doc">The pairs, in order.</p>
+<div class="member-doc"><p>The pairs, in order.</p></div>
 </div>
 <div class="member" id="Map.sorted">
 <div class="member-head">
-<span class="sig">fun sorted(self) -&gt; List[(K, V)] where K: Ord</span>
+<span class="sig"><span class="kw">fun</span> <strong>sorted</strong>(<span class="kw">self</span>) -&gt; <a href="list.html#List">List</a>[(K, V)] <span class="kw">where</span> K: <a href="ops.html#Ord">Ord</a></span>
 
+<a class="item-anchor" href="#Map.sorted" aria-label="Link to Map.sorted">#</a>
 </div>
-<p class="member-doc">A list of the pairs, sorted by key.</p>
+<div class="member-doc"><p>A list of the pairs, sorted by key.</p></div>
 </div>
 <div class="member" id="Map.copy">
 <div class="member-head">
-<span class="sig">fun copy(self) -&gt; Map[K, V]</span>
+<span class="sig"><span class="kw">fun</span> <strong>copy</strong>(<span class="kw">self</span>) -&gt; <span class="ty">Map</span>[K, V]</span>
 
+<a class="item-anchor" href="#Map.copy" aria-label="Link to Map.copy">#</a>
 </div>
-<p class="member-doc">A deep copy.</p>
+<div class="member-doc"><p>A deep copy.</p></div>
 </div>
 <div class="member" id="Map.first">
 <div class="member-head">
-<span class="sig">fun first(self) -&gt; ?(K, V)</span>
+<span class="sig"><span class="kw">fun</span> <strong>first</strong>(<span class="kw">self</span>) -&gt; ?(K, V)</span>
 
+<a class="item-anchor" href="#Map.first" aria-label="Link to Map.first">#</a>
 </div>
-<p class="member-doc">The oldest entry.</p>
+<div class="member-doc"><p>A copy of the oldest entry: the one whose key was added first.</p></div>
 </div>
 <div class="member" id="Map.last">
 <div class="member-head">
-<span class="sig">fun last(self) -&gt; ?(K, V)</span>
+<span class="sig"><span class="kw">fun</span> <strong>last</strong>(<span class="kw">self</span>) -&gt; ?(K, V)</span>
 
+<a class="item-anchor" href="#Map.last" aria-label="Link to Map.last">#</a>
 </div>
-<p class="member-doc">The newest entry.</p>
+<div class="member-doc"><p>A copy of the newest entry: the one whose key was added last.</p></div>
 </div>
 <div class="member" id="Map.of">
 <div class="member-head">
-<span class="sig">fun of(pairs: [(K, V)]) -&gt; Map[K, V] where K: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>of</strong>(pairs: [(K, V)]) -&gt; <span class="ty">Map</span>[K, V] <span class="kw">where</span> K: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Map.of" aria-label="Link to Map.of">#</a>
 </div>
-<p class="member-doc">A map of <code>pairs</code>; a key that comes up again keeps the last value.</p>
+<div class="member-doc"><p>A map of <a class="code-link" href="map.html#Map.pairs"><code>pairs</code></a>; a key that comes up again keeps the last value.</p></div>
 </div>
 <div class="member" id="Map.get_or">
 <div class="member-head">
-<span class="sig">fun get_or(self, key: K, default: V) -&gt; V where K: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>get_or</strong>(<span class="kw">self</span>, key: K, default: V) -&gt; V <span class="kw">where</span> K: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Map.get_or" aria-label="Link to Map.get_or">#</a>
 </div>
-<p class="member-doc">The value for <code>key</code>, or <code>default</code> when there is none.</p>
+<div class="member-doc"><p>The value for <code>key</code>, or <code>default</code> when there is none.</p></div>
 </div>
 <div class="member" id="Map.retain">
 <div class="member-head">
-<span class="sig">fun retain(mut self, keep: (K, V) =&gt; bool) where K: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>retain</strong>(<span class="kw">mut</span> <span class="kw">self</span>, keep: (K, V) =&gt; bool) <span class="kw">where</span> K: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Map.retain" aria-label="Link to Map.retain">#</a>
 </div>
-<p class="member-doc">Keeps the entries <code>keep</code> says yes to.</p>
+<div class="member-doc"><p>Keeps the entries <code>keep</code> says yes to.</p></div>
 </div>
 <div class="member" id="Map.extend">
 <div class="member-head">
-<span class="sig">fun extend(mut self, take pairs: Stream[(K, V)]) where K: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>extend</strong>(<span class="kw">mut</span> <span class="kw">self</span>, <span class="kw">take</span> pairs: <a href="iter.html#Stream">Stream</a>[(K, V)]) <span class="kw">where</span> K: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Map.extend" aria-label="Link to Map.extend">#</a>
 </div>
-<p class="member-doc">Adds each pair; a key already there gets the new value.</p>
+<div class="member-doc"><p>Adds each pair; a key already there gets the new value.</p></div>
 </div>
 <div class="member" id="Map.remove_entry">
 <div class="member-head">
-<span class="sig">fun remove_entry(mut self, take key: K) -&gt; ?(K, V) where K: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>remove_entry</strong>(<span class="kw">mut</span> <span class="kw">self</span>, <span class="kw">take</span> key: K) -&gt; ?(K, V) <span class="kw">where</span> K: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Map.remove_entry" aria-label="Link to Map.remove_entry">#</a>
 </div>
-<p class="member-doc">Takes out the entry for <code>key</code> and gives it back with the key you gave.</p>
+<div class="member-doc"><p>Takes out the entry for <code>key</code> and gives it back with the key you gave.</p></div>
 </div>
 <div class="member" id="Map.update">
 <div class="member-head">
-<span class="sig">fun update(mut self, take key: K, f: V =&gt; V) where K: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>update</strong>(<span class="kw">mut</span> <span class="kw">self</span>, <span class="kw">take</span> key: K, f: V =&gt; V) <span class="kw">where</span> K: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Map.update" aria-label="Link to Map.update">#</a>
 </div>
-<p class="member-doc">Replaces the value for <code>key</code> with <code>f</code> of it, if there is one.</p>
+<div class="member-doc"><p>Replaces the value for <code>key</code> with <code>f</code> of it, if there is one.</p></div>
 </div>
 <div class="member" id="Map.merge">
 <div class="member-head">
-<span class="sig">fun merge(mut self, take other: Map[K, V], f: (V, V) =&gt; V) where K: Hash</span>
+<span class="sig"><span class="kw">fun</span> <strong>merge</strong>(<span class="kw">mut</span> <span class="kw">self</span>, <span class="kw">take</span> other: <span class="ty">Map</span>[K, V], f: (V, V) =&gt; V) <span class="kw">where</span> K: <a href="ops.html#Hash">Hash</a></span>
 
+<a class="item-anchor" href="#Map.merge" aria-label="Link to Map.merge">#</a>
 </div>
-<p class="member-doc">Adds the entries of <code>other</code>; for a key in both, <code>f(mine, theirs)</code>.</p>
+<div class="member-doc"><p>Adds the entries of <code>other</code>; for a key in both, <code>f(mine, theirs)</code>.</p></div>
 </div>
 </div>
-</div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="list.html"><span class="dir">&larr; previous</span>std.list</a>
+<a class="next" href="math.html"><span class="dir">next &rarr;</span>std.math</a>
+</nav>
 </main>
 </div>
 </body>

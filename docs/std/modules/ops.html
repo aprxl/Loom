@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.ops · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,7 +19,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,72 +67,89 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / ops</div>
 <h1>std.ops</h1>
-<p class="summary">The wefts behind operators and value semantics. A warp that lists <code>Eq</code>, <code>Ord</code> or <code>Hash</code> in its header without writing the method gets one that works field by field (see 02-types, "Deriving").</p>
-<h2>Types</h2>
-<div class="item" id="Copy">
+<p class="summary">The wefts behind operators and value semantics: <a class="code-link" href="ops.html#Eq"><code>Eq</code></a> (<code>==</code>), <a class="code-link" href="ops.html#Ord"><code>Ord</code></a> (<code>&lt;</code> and friends), <a class="code-link" href="ops.html#Hash"><code>Hash</code></a> (map keys and set elements) and <a class="code-link" href="ops.html#Copy"><code>Copy</code></a> (values that are copied instead of moved).</p>
+<div class="mod-meta"><span>source: <code>runtime/std/ops.loom</code></span><a href="../../lang/types.html">read about it in the book &rarr;</a></div>
+</div>
+<div class="mod-intro"><p class="summary">A warp that lists <a class="code-link" href="ops.html#Eq"><code>Eq</code></a>, <a class="code-link" href="ops.html#Ord"><code>Ord</code></a> or <a class="code-link" href="ops.html#Hash"><code>Hash</code></a> in its header without writing the method gets one that works field by field: see "Deriving" in the <a href="../../lang/types.html">Warps, wefts and weaves</a> chapter.</p></div>
+<nav class="toc-chips" aria-label="In this module"><a href="#Copy"><span class="kind">weft</span>Copy</a><a href="#Eq"><span class="kind">weft</span>Eq</a><a href="#Ord"><span class="kind">weft</span>Ord</a><a href="#Hash"><span class="kind">weft</span>Hash</a><a href="#Integer"><span class="kind">weft</span>Integer</a></nav>
+<h2 id="types">Types</h2>
+<section class="item" id="Copy">
 <div class="item-head">
-<span class="sig">weft <strong>Copy</strong></span>
+<span class="sig"><span class="kw">weft</span> <strong>Copy</strong></span>
 
+<a class="item-anchor" href="#Copy" aria-label="Link to Copy">#</a>
 </div>
-<p class="item-doc">Values that are copied rather than moved.</p>
-</div>
-<div class="item" id="Eq">
+<div class="item-doc"><p>Values that are copied rather than moved.</p></div>
+</section>
+<section class="item" id="Eq">
 <div class="item-head">
-<span class="sig">weft <strong>Eq</strong></span>
+<span class="sig"><span class="kw">weft</span> <strong>Eq</strong></span>
 
+<a class="item-anchor" href="#Eq" aria-label="Link to Eq">#</a>
 </div>
-<p class="item-doc"><code>==</code> and <code>!=</code>.</p>
+<div class="item-doc"><p><code>==</code> and <code>!=</code>.</p></div>
 <div class="members">
 <div class="member" id="Eq.eq">
 <div class="member-head">
-<span class="sig">fun eq(self, other: Self) -&gt; bool</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">fun</span> <strong>eq</strong>(<span class="kw">self</span>, other: <span class="kw">Self</span>) -&gt; bool</span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Eq.eq" aria-label="Link to Eq.eq">#</a>
 </div>
-<p class="member-doc">Whether the values are equal. Derived: every field is equal, and for a warp with cases, it's the same case.</p>
+<div class="member-doc"><p>Whether the values are equal. Derived: every field is equal, and for a warp with cases, it's the same case.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="Ord">
+</section>
+<section class="item" id="Ord">
 <div class="item-head">
-<span class="sig">weft <strong>Ord</strong>: Eq</span>
+<span class="sig"><span class="kw">weft</span> <strong>Ord</strong>: <a href="ops.html#Eq">Eq</a></span>
 
+<a class="item-anchor" href="#Ord" aria-label="Link to Ord">#</a>
 </div>
-<p class="item-doc"><code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code>.</p>
+<div class="item-doc"><p><code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code>.</p></div>
 <div class="members">
 <div class="member" id="Ord.lt">
 <div class="member-head">
-<span class="sig">fun lt(self, other: Self) -&gt; bool</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">fun</span> <strong>lt</strong>(<span class="kw">self</span>, other: <span class="kw">Self</span>) -&gt; bool</span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Ord.lt" aria-label="Link to Ord.lt">#</a>
 </div>
-<p class="member-doc">Whether <code>self</code> comes first. Derived: fields compare in order, the first that differs decides, and earlier cases come first.</p>
+<div class="member-doc"><p>Whether <code>self</code> comes first. Derived: fields compare in order, the first that differs decides, and earlier cases come first.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="Hash">
+</section>
+<section class="item" id="Hash">
 <div class="item-head">
-<span class="sig">weft <strong>Hash</strong></span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">weft</span> <strong>Hash</strong></span>
+
+<a class="item-anchor" href="#Hash" aria-label="Link to Hash">#</a>
 </div>
-<p class="item-doc empty">undocumented in source</p>
+<div class="item-doc"><p>Values that can be map keys and set elements. A warp that lists <code>Hash</code> in its header without writing <a class="code-link" href="ops.html#Hash.hash"><code>hash</code></a> gets one that combines its fields' hashes. Two values that are <code>==</code> must hash the same.</p></div>
 <div class="members">
 <div class="member" id="Hash.hash">
 <div class="member-head">
-<span class="sig">fun hash(self) -&gt; u64</span>
-<span class="badge builtin">builtin</span><span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>hash</strong>(<span class="kw">self</span>) -&gt; u64</span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Hash.hash" aria-label="Link to Hash.hash">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>A number that is the same for equal values. It may change between versions of Loom: for a hash to write down, see <a class="code-link" href="hash.html#fnv1a"><code>std.hash.fnv1a</code></a>.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="Integer">
+</section>
+<section class="item" id="Integer">
 <div class="item-head">
-<span class="sig">weft <strong>Integer</strong>: Ord, Copy, Show</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">weft</span> <strong>Integer</strong>: <a href="ops.html#Ord">Ord</a>, <a href="ops.html#Copy">Copy</a>, <a href="fmt.html#Show">Show</a></span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Integer" aria-label="Link to Integer">#</a>
 </div>
-<p class="item-doc">Every integer type, <code>u1</code> through <code>i128</code>.</p>
-</div>
+<div class="item-doc"><p>Every integer type, <code>u1</code> through <code>i128</code>.</p></div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="num.html"><span class="dir">&larr; previous</span>std.num</a>
+<a class="next" href="option.html"><span class="dir">next &rarr;</span>std.option</a>
+</nav>
 </main>
 </div>
 </body>

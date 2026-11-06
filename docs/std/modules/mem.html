@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.mem · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../../style.css">
 <script src="../../weave.js" defer></script>
+<script src="../../play/play.js" defer></script>
 </head>
 <body>
 <header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
@@ -18,7 +20,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,136 +68,181 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / mem</div>
 <h1>std.mem</h1>
-<p class="summary">Memory: spools and sizes.</p>
-<h2>Types</h2>
-<div class="item" id="Spool">
-<div class="item-head">
-<span class="sig">weft <strong>Spool</strong></span>
+<p class="summary">Memory: spools (the places values are allocated in), sizes, and moving values around. <code>heap</code> is the global spool, where <code>^e</code> boxes a value. An <a class="code-link" href="mem.html#Arena"><code>Arena</code></a> hands out memory by bumping a pointer and frees it all at once; a <a class="code-link" href="mem.html#Pool"><code>Pool[T]</code></a> recycles slots of one type. A pointer into a spool can't outlive it: the region checker sees to that.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/mem.loom</code></span><a href="../../lang/memory.html">read about it in the book &rarr;</a></div>
+</div>
+<div class="mod-intro"><div class="sample" id="example" data-sample="std_mem" data-mode="run" data-file="mem_example.loom" data-store="std.mem" data-runnable><div class="sample-head"><span class="file"><span class="dot"></span>mem_example.loom</span><span class="tag ok">an example to run</span><span class="spacer"></span></div><pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.mem.<span class="t">Arena</span>
 
-</div>
-<p class="item-doc">A region to allocate in. <code>heap</code> is the global one.</p>
-</div>
-<div class="item" id="Heap">
+<span class="k">warp</span> <span class="t">Tree</span> {
+    <span class="k">case</span> <span class="t">Leaf</span>(i64)
+    <span class="k">case</span> <span class="t">Node</span>(^<span class="t">Tree</span>, ^<span class="t">Tree</span>)
+}
+
+<span class="k">fun</span> <span class="f">sum</span>(t: ^<span class="t">Tree</span>) -&gt; i64 = <span class="k">match</span> t^ {
+    .<span class="t">Leaf</span>(n) =&gt; n
+    .<span class="t">Node</span>(l, r) =&gt; <span class="f">sum</span>(l) + <span class="f">sum</span>(r)
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">spool</span> frame = <span class="t">Arena</span>(<span class="n">4096</span>)
+    <span class="c">// Each `put` is a bump of a pointer; the whole arena is freed at once.</span>
+    <span class="k">let</span> leaf = (n: i64) =&gt; frame.<span class="f">put</span>(<span class="t">Tree</span>.<span class="t">Leaf</span>(n))
+    <span class="k">let</span> t = frame.<span class="f">put</span>(<span class="t">Tree</span>.<span class="t">Node</span>(<span class="f">leaf</span>(<span class="n">1</span>), frame.<span class="f">put</span>(<span class="t">Tree</span>.<span class="t">Node</span>(<span class="f">leaf</span>(<span class="n">2</span>), <span class="f">leaf</span>(<span class="n">3</span>)))))
+    <span class="f">print</span>(<span class="s">"sum </span><span class="h">{</span><span class="f">sum</span>(t)<span class="h">}</span><span class="s">"</span>)
+}</code></pre></div></div>
+<nav class="toc-chips" aria-label="In this module"><a href="#Spool"><span class="kind">weft</span>Spool</a><a href="#Heap"><span class="kind">warp</span>Heap</a><a href="#Arena"><span class="kind">warp</span>Arena</a><a href="#SharedArena"><span class="kind">warp</span>SharedArena</a><a href="#Pool"><span class="kind">warp</span>Pool</a><a href="#kib"><span class="kind">fun</span>kib</a><a href="#mib"><span class="kind">fun</span>mib</a><a href="#swap"><span class="kind">fun</span>swap</a><a href="#replace"><span class="kind">fun</span>replace</a><a href="#take"><span class="kind">fun</span>take</a></nav>
+<h2 id="types">Types</h2>
+<section class="item" id="Spool">
 <div class="item-head">
-<span class="sig">warp <strong>Heap</strong>: Spool</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">weft</span> <strong>Spool</strong></span>
+
+<a class="item-anchor" href="#Spool" aria-label="Link to Spool">#</a>
 </div>
-<p class="item-doc">The global spool: each allocation is freed when its owner is dropped.</p>
-</div>
-<div class="item" id="Arena">
+<div class="item-doc"><p>A region to allocate in. <code>heap</code> is the global one.</p></div>
+</section>
+<section class="item" id="Heap">
 <div class="item-head">
-<span class="sig">warp <strong>Arena</strong>: Spool</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">warp</span> <strong>Heap</strong>: <a href="mem.html#Spool">Spool</a></span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Heap" aria-label="Link to Heap">#</a>
 </div>
-<p class="item-doc">A spool that allocates by bumping a pointer and frees everything at once.</p>
+<div class="item-doc"><p>The global spool: each allocation is freed when its owner is dropped.</p></div>
+</section>
+<section class="item" id="Arena">
+<div class="item-head">
+<span class="sig"><span class="kw">warp</span> <strong>Arena</strong>: <a href="mem.html#Spool">Spool</a></span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Arena" aria-label="Link to Arena">#</a>
+</div>
+<div class="item-doc"><p>A spool that allocates by bumping a pointer and frees everything at once.</p></div>
 <div class="members">
 <div class="member" id="Arena.reset">
 <div class="member-head">
-<span class="sig">fun reset(mut self)</span>
+<span class="sig"><span class="kw">fun</span> <strong>reset</strong>(<span class="kw">mut</span> <span class="kw">self</span>)</span>
 
+<a class="item-anchor" href="#Arena.reset" aria-label="Link to Arena.reset">#</a>
 </div>
-<p class="member-doc">Frees everything allocated so far.</p>
+<div class="member-doc"><p>Frees everything allocated so far.</p></div>
 </div>
 <div class="member" id="Arena.put">
 <div class="member-head">
-<span class="sig">fun put[T](self, take value: T) -&gt; ^T@self</span>
+<span class="sig"><span class="kw">fun</span> <strong>put</strong>[T](<span class="kw">self</span>, <span class="kw">take</span> value: T) -&gt; ^T@<span class="kw">self</span></span>
 
+<a class="item-anchor" href="#Arena.put" aria-label="Link to Arena.put">#</a>
 </div>
-<p class="member-doc">Moves <code>value</code> into the arena and gives a pointer to it. The pointer is <code>Copy</code> and owns nothing: it lasts until the arena is reset or ends.</p>
+<div class="member-doc"><p>Moves <code>value</code> into the arena and gives a pointer to it. The pointer is <a class="code-link" href="ops.html#Copy"><code>Copy</code></a> and owns nothing: it lasts until the arena is reset or ends.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="SharedArena">
+</section>
+<section class="item" id="SharedArena">
 <div class="item-head">
-<span class="sig">warp <strong>SharedArena</strong>: Spool</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">warp</span> <strong>SharedArena</strong>: <a href="mem.html#Spool">Spool</a></span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#SharedArena" aria-label="Link to SharedArena">#</a>
 </div>
-<p class="item-doc">An <code>Arena</code> that threads may allocate in: its pointers can cross threads, and allocating takes the VM's lock.</p>
+<div class="item-doc"><p>An <a class="code-link" href="mem.html#Arena"><code>Arena</code></a> that threads may allocate in: its pointers can cross threads, and allocating takes the VM's lock.</p></div>
 <div class="members">
 <div class="member" id="SharedArena.reset">
 <div class="member-head">
-<span class="sig">fun reset(mut self)</span>
+<span class="sig"><span class="kw">fun</span> <strong>reset</strong>(<span class="kw">mut</span> <span class="kw">self</span>)</span>
 
+<a class="item-anchor" href="#SharedArena.reset" aria-label="Link to SharedArena.reset">#</a>
 </div>
-<p class="member-doc">Frees everything allocated so far.</p>
+<div class="member-doc"><p>Frees everything allocated so far.</p></div>
 </div>
 <div class="member" id="SharedArena.put">
 <div class="member-head">
-<span class="sig">fun put[T](self, take value: T) -&gt; ^T@self</span>
+<span class="sig"><span class="kw">fun</span> <strong>put</strong>[T](<span class="kw">self</span>, <span class="kw">take</span> value: T) -&gt; ^T@<span class="kw">self</span></span>
 
+<a class="item-anchor" href="#SharedArena.put" aria-label="Link to SharedArena.put">#</a>
 </div>
-<p class="member-doc">Moves <code>value</code> into the arena and gives a pointer to it.</p>
+<div class="member-doc"><p>Moves <code>value</code> into the arena and gives a pointer to it.</p></div>
 </div>
 </div>
-</div>
-<div class="item" id="Pool">
+</section>
+<section class="item" id="Pool">
 <div class="item-head">
-<span class="sig">warp <strong>Pool</strong>[T]: Spool</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">warp</span> <strong>Pool</strong>[T]: <a href="mem.html#Spool">Spool</a></span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Pool" aria-label="Link to Pool">#</a>
 </div>
-<p class="item-doc">A spool of <code>n</code> slots, each one <code>T</code>: allocating and freeing a slot is a few instructions, and a freed slot is the next one given out. It holds plain data (no text, lists or boxes), because dropping the pool does not drop what is still in it.</p>
+<div class="item-doc"><p>A spool of <code>n</code> slots, each one <code>T</code>: allocating and freeing a slot is a few instructions, and a freed slot is the next one given out. It holds plain data (no text, lists or boxes), because dropping the pool does not drop what is still in it.</p></div>
 <div class="members">
 <div class="member" id="Pool.put">
 <div class="member-head">
-<span class="sig">fun put(self, take value: T) -&gt; ^T@self</span>
+<span class="sig"><span class="kw">fun</span> <strong>put</strong>(<span class="kw">self</span>, <span class="kw">take</span> value: T) -&gt; ^T@<span class="kw">self</span></span>
 
+<a class="item-anchor" href="#Pool.put" aria-label="Link to Pool.put">#</a>
 </div>
-<p class="member-doc">Moves <code>value</code> into a free slot and gives a pointer to it. The pool being full unravels.</p>
+<div class="member-doc"><p>Moves <code>value</code> into a free slot and gives a pointer to it. The pool being full unravels.</p></div>
 </div>
 <div class="member" id="Pool.free">
 <div class="member-head">
-<span class="sig">fun free(self, p: ^T@self)</span>
+<span class="sig"><span class="kw">fun</span> <strong>free</strong>(<span class="kw">self</span>, p: ^T@<span class="kw">self</span>)</span>
 
+<a class="item-anchor" href="#Pool.free" aria-label="Link to Pool.free">#</a>
 </div>
-<p class="member-doc">Gives the slot back. The pointer, and any copy of it, must not be used again.</p>
+<div class="member-doc"><p>Gives the slot back. The pointer, and any copy of it, must not be used again.</p></div>
 </div>
 <div class="member" id="Pool.reset">
 <div class="member-head">
-<span class="sig">fun reset(mut self)</span>
+<span class="sig"><span class="kw">fun</span> <strong>reset</strong>(<span class="kw">mut</span> <span class="kw">self</span>)</span>
 
+<a class="item-anchor" href="#Pool.reset" aria-label="Link to Pool.reset">#</a>
 </div>
-<p class="member-doc">Frees every slot.</p>
+<div class="member-doc"><p>Frees every slot.</p></div>
 </div>
 </div>
-</div>
-<h2>Functions</h2>
-<div class="item" id="kib">
+</section>
+<h2 id="functions">Functions</h2>
+<section class="item" id="kib">
 <div class="item-head">
-<span class="sig">fun <strong>kib</strong>(n: usize) -&gt; usize</span>
-<span class="badge todo">TODO</span>
-</div>
-<p class="item-doc empty">undocumented in source</p>
-</div>
-<div class="item" id="mib">
-<div class="item-head">
-<span class="sig">fun <strong>mib</strong>(n: usize) -&gt; usize</span>
-<span class="badge todo">TODO</span>
-</div>
-<p class="item-doc empty">undocumented in source</p>
-</div>
-<div class="item" id="swap">
-<div class="item-head">
-<span class="sig">fun <strong>swap</strong>[T](mut a: T, mut b: T)</span>
-<span class="badge builtin">builtin</span>
-</div>
-<p class="item-doc">Exchanges the values of <code>a</code> and <code>b</code>.</p>
-</div>
-<div class="item" id="replace">
-<div class="item-head">
-<span class="sig">fun <strong>replace</strong>[T](mut dest: T, take value: T) -&gt; T</span>
-<span class="badge builtin">builtin</span>
-</div>
-<p class="item-doc">Puts <code>value</code> in <code>dest</code> and gives the value that was there.</p>
-</div>
-<div class="item" id="take">
-<div class="item-head">
-<span class="sig">fun <strong>take</strong>[T: Default](mut dest: T) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>kib</strong>(n: usize) -&gt; usize</span>
 
+<a class="item-anchor" href="#kib" aria-label="Link to kib">#</a>
 </div>
-<p class="item-doc">Gives the value in <code>dest</code>, leaving its default behind.</p>
+<div class="item-doc"><p><code>n</code> kibibytes, in bytes: <code>Arena(kib(64))</code>.</p></div>
+</section>
+<section class="item" id="mib">
+<div class="item-head">
+<span class="sig"><span class="kw">fun</span> <strong>mib</strong>(n: usize) -&gt; usize</span>
+
+<a class="item-anchor" href="#mib" aria-label="Link to mib">#</a>
 </div>
+<div class="item-doc"><p><code>n</code> mebibytes, in bytes.</p></div>
+</section>
+<section class="item" id="swap">
+<div class="item-head">
+<span class="sig"><span class="kw">fun</span> <strong>swap</strong>[T](<span class="kw">mut</span> a: T, <span class="kw">mut</span> b: T)</span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#swap" aria-label="Link to swap">#</a>
+</div>
+<div class="item-doc"><p>Exchanges the values of <code>a</code> and <code>b</code>.</p></div>
+</section>
+<section class="item" id="replace">
+<div class="item-head">
+<span class="sig"><span class="kw">fun</span> <strong>replace</strong>[T](<span class="kw">mut</span> dest: T, <span class="kw">take</span> value: T) -&gt; T</span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#replace" aria-label="Link to replace">#</a>
+</div>
+<div class="item-doc"><p>Puts <code>value</code> in <code>dest</code> and gives the value that was there.</p></div>
+</section>
+<section class="item" id="take">
+<div class="item-head">
+<span class="sig"><span class="kw">fun</span> <strong>take</strong>[T: <a href="default.html#Default">Default</a>](<span class="kw">mut</span> dest: T) -&gt; T</span>
+
+<a class="item-anchor" href="#take" aria-label="Link to take">#</a>
+</div>
+<div class="item-doc"><p>Gives the value in <code>dest</code>, leaving its default behind.</p></div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="math.html"><span class="dir">&larr; previous</span>std.math</a>
+<a class="next" href="meta.html"><span class="dir">next &rarr;</span>std.meta</a>
+</nav>
 </main>
 </div>
 </body>

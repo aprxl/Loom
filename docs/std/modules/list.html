@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.list · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../../style.css">
 <script src="../../weave.js" defer></script>
+<script src="../../play/play.js" defer></script>
 </head>
 <body>
 <header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
@@ -18,7 +20,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,138 +68,174 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / list</div>
 <h1>std.list</h1>
-<p class="summary">Growable arrays.</p>
-<h2>Types</h2>
-<div class="item" id="List">
-<div class="item-head">
-<span class="sig">warp <strong>List</strong>[T]</span>
-<span class="badge builtin">builtin</span>
+<p class="summary">Growable arrays: <a class="code-link" href="list.html#List"><code>List[T]</code></a> owns its elements and grows as you push. It has every method of a slice (<a class="code-link" href="slice.html"><code>std.slice</code></a>) and of <a class="code-link" href="iter.html#Stream"><code>Stream</code></a> too, so <code>xs.sort()</code>, <code>xs.contains(x)</code> and <code>xs.filter(f)</code> all work on a list.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/list.loom</code></span><a href="../../lang/collections.html">read about it in the book &rarr;</a></div>
 </div>
-<p class="item-doc">A growable array of <code>T</code>. Build one with <code>List()</code>, <code>List.filled(x, n)</code>, or a literal where a list is expected: <code>let xs: List[i32] = [1, 2, 3]</code>. It has every method of a slice (<code>[T]</code>), too.</p>
+<div class="mod-intro"><div class="sample" id="example" data-sample="std_list" data-mode="run" data-file="list_example.loom" data-store="std.list" data-runnable><div class="sample-head"><span class="file"><span class="dot"></span>list_example.loom</span><span class="tag ok">an example to run</span><span class="spacer"></span></div><pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">var</span> xs: <span class="t">List</span>[i32] = [<span class="n">5</span>, <span class="n">3</span>, <span class="n">8</span>]
+    xs.<span class="f">push</span>(<span class="n">1</span>)
+    xs.<span class="f">insert</span>(<span class="n">0</span>, <span class="n">9</span>)
+    xs.<span class="f">sort</span>()
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>xs<span class="h">}</span><span class="s"> has </span><span class="h">{</span>xs.<span class="f">len</span>()<span class="h">}</span><span class="s"> items, the largest is </span><span class="h">{</span>xs.<span class="f">last</span>():?<span class="h">}</span><span class="s">"</span>)
+    xs.<span class="f">retain</span>(_ % <span class="n">2</span> == <span class="n">1</span>)
+    <span class="f">print</span>(<span class="s">"odd ones: </span><span class="h">{</span>xs<span class="h">}</span><span class="s">"</span>)
+}</code></pre></div></div>
+<h2 id="types">Types</h2>
+<section class="item" id="List">
+<div class="item-head">
+<span class="sig"><span class="kw">warp</span> <strong>List</strong>[T]</span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#List" aria-label="Link to List">#</a>
+</div>
+<div class="item-doc"><p>A growable array of <code>T</code>. Build one with <code>List()</code>, <a class="code-link" href="list.html#List.filled"><code>List.filled(x, n)</code></a>, or a literal where a list is expected: <code>let xs: List[i32] = [1, 2, 3]</code>. It has every method of a slice (<code>[T]</code>), too.</p></div>
 <div class="members">
 <div class="member" id="List.filled">
 <div class="member-head">
-<span class="sig">fun filled(x: T, n: usize) -&gt; List[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>filled</strong>(x: T, n: usize) -&gt; <span class="ty">List</span>[T]</span>
 
+<a class="item-anchor" href="#List.filled" aria-label="Link to List.filled">#</a>
 </div>
-<p class="member-doc"><code>n</code> copies of <code>x</code>.</p>
+<div class="member-doc"><p><code>n</code> copies of <code>x</code>.</p></div>
 </div>
 <div class="member" id="List.push">
 <div class="member-head">
-<span class="sig">fun push(mut self, take x: T)</span>
+<span class="sig"><span class="kw">fun</span> <strong>push</strong>(<span class="kw">mut</span> <span class="kw">self</span>, <span class="kw">take</span> x: T)</span>
 
+<a class="item-anchor" href="#List.push" aria-label="Link to List.push">#</a>
 </div>
-<p class="member-doc">Adds <code>x</code> at the end.</p>
+<div class="member-doc"><p>Adds <code>x</code> at the end.</p></div>
 </div>
 <div class="member" id="List.pop">
 <div class="member-head">
-<span class="sig">fun pop(mut self) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>pop</strong>(<span class="kw">mut</span> <span class="kw">self</span>) -&gt; ?T</span>
 
+<a class="item-anchor" href="#List.pop" aria-label="Link to List.pop">#</a>
 </div>
-<p class="member-doc">Takes the last element off, if there is one.</p>
+<div class="member-doc"><p>Takes the last element off, if there is one.</p></div>
 </div>
 <div class="member" id="List.insert">
 <div class="member-head">
-<span class="sig">fun insert(mut self, i: usize, take x: T)</span>
+<span class="sig"><span class="kw">fun</span> <strong>insert</strong>(<span class="kw">mut</span> <span class="kw">self</span>, i: usize, <span class="kw">take</span> x: T)</span>
 
+<a class="item-anchor" href="#List.insert" aria-label="Link to List.insert">#</a>
 </div>
-<p class="member-doc">Puts <code>x</code> at index <code>i</code>, moving the rest up. Unravels if <code>i &gt; len</code>.</p>
+<div class="member-doc"><p>Puts <code>x</code> at index <code>i</code>, moving the rest up. Unravels if <code>i &gt; len</code>.</p></div>
 </div>
 <div class="member" id="List.remove">
 <div class="member-head">
-<span class="sig">fun remove(mut self, i: usize) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>remove</strong>(<span class="kw">mut</span> <span class="kw">self</span>, i: usize) -&gt; T</span>
 
+<a class="item-anchor" href="#List.remove" aria-label="Link to List.remove">#</a>
 </div>
-<p class="member-doc">Takes out the element at <code>i</code>, moving the rest down. Unravels if <code>i &gt;= len</code>.</p>
+<div class="member-doc"><p>Takes out the element at <code>i</code>, moving the rest down. Unravels if <code>i &gt;= len</code>.</p></div>
 </div>
 <div class="member" id="List.clear">
 <div class="member-head">
-<span class="sig">fun clear(mut self)</span>
+<span class="sig"><span class="kw">fun</span> <strong>clear</strong>(<span class="kw">mut</span> <span class="kw">self</span>)</span>
 
+<a class="item-anchor" href="#List.clear" aria-label="Link to List.clear">#</a>
 </div>
-<p class="member-doc">Removes every element.</p>
+<div class="member-doc"><p>Removes every element.</p></div>
 </div>
 <div class="member" id="List.truncate">
 <div class="member-head">
-<span class="sig">fun truncate(mut self, n: usize)</span>
+<span class="sig"><span class="kw">fun</span> <strong>truncate</strong>(<span class="kw">mut</span> <span class="kw">self</span>, n: usize)</span>
 
+<a class="item-anchor" href="#List.truncate" aria-label="Link to List.truncate">#</a>
 </div>
-<p class="member-doc">Keeps the first <code>n</code> elements.</p>
+<div class="member-doc"><p>Keeps the first <code>n</code> elements.</p></div>
 </div>
 <div class="member" id="List.extend">
 <div class="member-head">
-<span class="sig">fun extend(mut self, take items: Stream[T])</span>
+<span class="sig"><span class="kw">fun</span> <strong>extend</strong>(<span class="kw">mut</span> <span class="kw">self</span>, <span class="kw">take</span> items: <a href="iter.html#Stream">Stream</a>[T])</span>
 
+<a class="item-anchor" href="#List.extend" aria-label="Link to List.extend">#</a>
 </div>
-<p class="member-doc">Adds each of the items at the end.</p>
+<div class="member-doc"><p>Adds each of the items at the end.</p></div>
 </div>
 <div class="member" id="List.copy">
 <div class="member-head">
-<span class="sig">fun copy(self) -&gt; List[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>copy</strong>(<span class="kw">self</span>) -&gt; <span class="ty">List</span>[T]</span>
 
+<a class="item-anchor" href="#List.copy" aria-label="Link to List.copy">#</a>
 </div>
-<p class="member-doc">A deep copy.</p>
+<div class="member-doc"><p>A deep copy: a new list with a copy of every element.</p></div>
 </div>
 <div class="member" id="List.retain">
 <div class="member-head">
-<span class="sig">fun retain(mut self, keep: T =&gt; bool)</span>
+<span class="sig"><span class="kw">fun</span> <strong>retain</strong>(<span class="kw">mut</span> <span class="kw">self</span>, keep: T =&gt; bool)</span>
 
+<a class="item-anchor" href="#List.retain" aria-label="Link to List.retain">#</a>
 </div>
-<p class="member-doc">Keeps the elements <code>keep</code> says yes to, in their order.</p>
+<div class="member-doc"><p>Keeps the elements <code>keep</code> says yes to, in their order.</p></div>
 </div>
 <div class="member" id="List.dedup_by_key">
 <div class="member-head">
-<span class="sig">fun dedup_by_key[K: Eq](mut self, key: T =&gt; K)</span>
+<span class="sig"><span class="kw">fun</span> <strong>dedup_by_key</strong>[K: <a href="ops.html#Eq">Eq</a>](<span class="kw">mut</span> <span class="kw">self</span>, key: T =&gt; K)</span>
 
+<a class="item-anchor" href="#List.dedup_by_key" aria-label="Link to List.dedup_by_key">#</a>
 </div>
-<p class="member-doc">Removes the elements <code>same_key</code> of which equals the one before's.</p>
+<div class="member-doc"><p>Removes each element whose <code>key</code> equals the <code>key</code> of the one before it: <code>words.dedup_by_key(_.len())</code> keeps the first word of each run of equal lengths.</p></div>
 </div>
 <div class="member" id="List.dedup">
 <div class="member-head">
-<span class="sig">fun dedup(mut self) where T: Eq</span>
+<span class="sig"><span class="kw">fun</span> <strong>dedup</strong>(<span class="kw">mut</span> <span class="kw">self</span>) <span class="kw">where</span> T: <a href="ops.html#Eq">Eq</a></span>
 
+<a class="item-anchor" href="#List.dedup" aria-label="Link to List.dedup">#</a>
 </div>
-<p class="member-doc">Removes each element that equals the one before it.</p>
+<div class="member-doc"><p>Removes each element that equals the one before it.</p></div>
 </div>
 <div class="member" id="List.swap_remove">
 <div class="member-head">
-<span class="sig">fun swap_remove(mut self, i: usize) -&gt; T</span>
+<span class="sig"><span class="kw">fun</span> <strong>swap_remove</strong>(<span class="kw">mut</span> <span class="kw">self</span>, i: usize) -&gt; T</span>
 
+<a class="item-anchor" href="#List.swap_remove" aria-label="Link to List.swap_remove">#</a>
 </div>
-<p class="member-doc">Takes out the element at <code>i</code> by moving the last one into its place: quick, but it changes the order. Unravels if <code>i &gt;= len</code>.</p>
+<div class="member-doc"><p>Takes out the element at <code>i</code> by moving the last one into its place: quick, but it changes the order. Unravels if <code>i &gt;= len</code>.</p></div>
 </div>
 <div class="member" id="List.resize">
 <div class="member-head">
-<span class="sig">fun resize(mut self, n: usize, x: T)</span>
+<span class="sig"><span class="kw">fun</span> <strong>resize</strong>(<span class="kw">mut</span> <span class="kw">self</span>, n: usize, x: T)</span>
 
+<a class="item-anchor" href="#List.resize" aria-label="Link to List.resize">#</a>
 </div>
-<p class="member-doc">Grows with copies of <code>x</code>, or shrinks, to <code>n</code> elements.</p>
+<div class="member-doc"><p>Grows with copies of <code>x</code>, or shrinks, to <code>n</code> elements.</p></div>
 </div>
 <div class="member" id="List.split_off">
 <div class="member-head">
-<span class="sig">fun split_off(mut self, at: usize) -&gt; List[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>split_off</strong>(<span class="kw">mut</span> <span class="kw">self</span>, at: usize) -&gt; <span class="ty">List</span>[T]</span>
 
+<a class="item-anchor" href="#List.split_off" aria-label="Link to List.split_off">#</a>
 </div>
-<p class="member-doc">Cuts the list at <code>at</code>: this keeps the first <code>at</code> elements, and the rest are returned. Unravels if <code>at &gt; len</code>.</p>
+<div class="member-doc"><p>Cuts the list at <code>at</code>: this keeps the first <code>at</code> elements, and the rest are returned. Unravels if <code>at &gt; len</code>.</p></div>
 </div>
 <div class="member" id="List.append">
 <div class="member-head">
-<span class="sig">fun append(mut self, mut other: List[T])</span>
+<span class="sig"><span class="kw">fun</span> <strong>append</strong>(<span class="kw">mut</span> <span class="kw">self</span>, <span class="kw">mut</span> other: <span class="ty">List</span>[T])</span>
 
+<a class="item-anchor" href="#List.append" aria-label="Link to List.append">#</a>
 </div>
-<p class="member-doc">Moves every element of <code>other</code> to the end of this list.</p>
+<div class="member-doc"><p>Moves every element of <code>other</code> to the end of this list.</p></div>
 </div>
 <div class="member" id="List.drain">
 <div class="member-head">
-<span class="sig">fun drain(mut self, from: usize, to: usize) -&gt; List[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>drain</strong>(<span class="kw">mut</span> <span class="kw">self</span>, from: usize, to: usize) -&gt; <span class="ty">List</span>[T]</span>
 
+<a class="item-anchor" href="#List.drain" aria-label="Link to List.drain">#</a>
 </div>
-<p class="member-doc">Takes out the elements in <code>from..to</code> and returns them. Unravels if the range is outside the list.</p>
+<div class="member-doc"><p>Takes out the elements in <code>from..to</code> and returns them. Unravels if the range is outside the list.</p></div>
 </div>
 </div>
-</div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="iter.html"><span class="dir">&larr; previous</span>std.iter</a>
+<a class="next" href="map.html"><span class="dir">next &rarr;</span>std.map</a>
+</nav>
 </main>
 </div>
 </body>

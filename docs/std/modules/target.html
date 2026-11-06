@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.target · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,7 +19,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,59 +67,71 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / target</div>
 <h1>std.target</h1>
 <p class="summary">What <code>target</code> describes: the machine the program is built for. That's the machine doing the build, with 64-bit pointers on Treadle, Loom's own VM (the default), and 63-bit ones (<code>usize</code> is 63 bits) on the Lua backend.</p>
-<h2>Types</h2>
-<div class="item" id="Os">
+<div class="mod-meta"><span>source: <code>runtime/std/target.loom</code></span><a href="../../lang/const-params.html">read about it in the book &rarr;</a></div>
+</div>
+<nav class="toc-chips" aria-label="In this module"><a href="#Os"><span class="kind">warp</span>Os</a><a href="#Arch"><span class="kind">warp</span>Arch</a><a href="#Endian"><span class="kind">warp</span>Endian</a><a href="#Target"><span class="kind">warp</span>Target</a></nav>
+<h2 id="types">Types</h2>
+<section class="item" id="Os">
 <div class="item-head">
-<span class="sig">warp <strong>Os</strong>: Eq, Show</span>
+<span class="sig"><span class="kw">warp</span> <strong>Os</strong>: <a href="ops.html#Eq">Eq</a>, <a href="fmt.html#Show">Show</a></span>
 
+<a class="item-anchor" href="#Os" aria-label="Link to Os">#</a>
 </div>
-<p class="item-doc">An operating system.</p>
-<ul class="cases">
-<li><span class="sig">case Windows</span></li>
-<li><span class="sig">case Linux</span></li>
-<li><span class="sig">case MacOS</span></li>
-<li><span class="sig">case Other</span></li>
-</ul>
-</div>
-<div class="item" id="Arch">
+<div class="item-doc"><p>An operating system.</p></div>
+<div class="parts"><span class="parts-label">Cases</span><ul class="cases">
+<li title="Microsoft Windows."><span class="sig"><span class="kw">case</span> <span class="ty">Windows</span></span><span class="part-doc">Microsoft Windows.</span></li>
+<li title="Linux."><span class="sig"><span class="kw">case</span> <span class="ty">Linux</span></span><span class="part-doc">Linux.</span></li>
+<li title="Apple&#x27;s macOS."><span class="sig"><span class="kw">case</span> <span class="ty">MacOS</span></span><span class="part-doc">Apple's macOS.</span></li>
+<li title="An operating system Loom has no name for."><span class="sig"><span class="kw">case</span> <span class="ty">Other</span></span><span class="part-doc">An operating system Loom has no name for.</span></li>
+</ul></div>
+</section>
+<section class="item" id="Arch">
 <div class="item-head">
-<span class="sig">warp <strong>Arch</strong>: Eq, Show</span>
+<span class="sig"><span class="kw">warp</span> <strong>Arch</strong>: <a href="ops.html#Eq">Eq</a>, <a href="fmt.html#Show">Show</a></span>
 
+<a class="item-anchor" href="#Arch" aria-label="Link to Arch">#</a>
 </div>
-<p class="item-doc">A processor architecture.</p>
-<ul class="cases">
-<li><span class="sig">case Amd64</span></li>
-<li><span class="sig">case Arm64</span></li>
-<li><span class="sig">case Other</span></li>
-</ul>
-</div>
-<div class="item" id="Endian">
+<div class="item-doc"><p>A processor architecture.</p></div>
+<div class="parts"><span class="parts-label">Cases</span><ul class="cases">
+<li title="x86-64, also called x64 or AMD64."><span class="sig"><span class="kw">case</span> <span class="ty">Amd64</span></span><span class="part-doc">x86-64, also called x64 or AMD64.</span></li>
+<li title="64-bit ARM, also called AArch64."><span class="sig"><span class="kw">case</span> <span class="ty">Arm64</span></span><span class="part-doc">64-bit ARM, also called AArch64.</span></li>
+<li title="An architecture Loom has no name for."><span class="sig"><span class="kw">case</span> <span class="ty">Other</span></span><span class="part-doc">An architecture Loom has no name for.</span></li>
+</ul></div>
+</section>
+<section class="item" id="Endian">
 <div class="item-head">
-<span class="sig">warp <strong>Endian</strong>: Eq, Show</span>
+<span class="sig"><span class="kw">warp</span> <strong>Endian</strong>: <a href="ops.html#Eq">Eq</a>, <a href="fmt.html#Show">Show</a></span>
 
+<a class="item-anchor" href="#Endian" aria-label="Link to Endian">#</a>
 </div>
-<p class="item-doc">The order of a number's bytes in memory.</p>
-<ul class="cases">
-<li><span class="sig">case Little</span></li>
-<li><span class="sig">case Big</span></li>
-</ul>
-</div>
-<div class="item" id="Target">
+<div class="item-doc"><p>The order of a number's bytes in memory.</p></div>
+<div class="parts"><span class="parts-label">Cases</span><ul class="cases">
+<li title="The least significant byte first (x86-64, and nearly every ARM)."><span class="sig"><span class="kw">case</span> <span class="ty">Little</span></span><span class="part-doc">The least significant byte first (x86-64, and nearly every ARM).</span></li>
+<li title="The most significant byte first."><span class="sig"><span class="kw">case</span> <span class="ty">Big</span></span><span class="part-doc">The most significant byte first.</span></li>
+</ul></div>
+</section>
+<section class="item" id="Target">
 <div class="item-head">
-<span class="sig">warp <strong>Target</strong></span>
+<span class="sig"><span class="kw">warp</span> <strong>Target</strong></span>
 
+<a class="item-anchor" href="#Target" aria-label="Link to Target">#</a>
 </div>
-<p class="item-doc">The type of <code>target</code>, known at compile time: <code>const if target.os == .Windows</code>.</p>
-<ul class="fields">
-<li><span class="sig">pub os: Os</span></li>
-<li><span class="sig">pub arch: Arch</span></li>
-<li><span class="sig">pub endian: Endian</span></li>
-<li><span class="sig">pub pointer_bits: u8</span></li>
-</ul>
-</div>
+<div class="item-doc"><p>The type of <code>target</code>, known at compile time: <code>const if target.os == .Windows</code>.</p></div>
+<div class="parts"><span class="parts-label">Fields</span><ul class="fields">
+<li title="The operating system."><span class="sig"><span class="kw">pub</span> os: <a href="target.html#Os">Os</a></span><span class="part-doc">The operating system.</span></li>
+<li title="The processor architecture."><span class="sig"><span class="kw">pub</span> arch: <a href="target.html#Arch">Arch</a></span><span class="part-doc">The processor architecture.</span></li>
+<li title="The byte order of numbers in memory."><span class="sig"><span class="kw">pub</span> endian: <a href="target.html#Endian">Endian</a></span><span class="part-doc">The byte order of numbers in memory.</span></li>
+<li title="How wide a pointer (and `usize`) is: 64 on Treadle, 63 on the Lua backend."><span class="sig"><span class="kw">pub</span> pointer_bits: u8</span><span class="part-doc">How wide a pointer (and <code>usize</code>) is: 64 on Treadle, 63 on the Lua backend.</span></li>
+</ul></div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="sync.html"><span class="dir">&larr; previous</span>std.sync</a>
+<a class="next" href="term.html"><span class="dir">next &rarr;</span>std.term</a>
+</nav>
 </main>
 </div>
 </body>

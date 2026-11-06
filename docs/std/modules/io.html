@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.io · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../../style.css">
 <script src="../../weave.js" defer></script>
+<script src="../../play/play.js" defer></script>
 </head>
 <body>
 <header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
@@ -18,7 +20,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,125 +68,164 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / io</div>
 <h1>std.io</h1>
-<p class="summary">Console input and output.</p>
-<h2>Types</h2>
-<div class="item" id="Writer">
-<div class="item-head">
-<span class="sig">weft <strong>Writer</strong></span>
-
+<p class="summary">Console input and output: <a class="code-link" href="io.html#print"><code>print</code></a> and its relatives, reading standard input, and the <a class="code-link" href="io.html#Writer"><code>Writer</code></a> weft. <a class="code-link" href="io.html#print"><code>print</code></a> writes to the <a class="code-link" href="io.html#Writer"><code>Writer</code></a> that a <code>given</code> names, so code that prints can be pointed at a <a class="code-link" href="io.html#Buffer"><code>Buffer</code></a> without changing it.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/io.loom</code></span><a href="../../lang/start.html">read about it in the book &rarr;</a></div>
 </div>
-<p class="item-doc">Where <code>print</code> writes: standard output, unless a <code>given</code> says otherwise (<code>given out = Buffer()</code> keeps what is printed).</p>
+<div class="mod-intro"><div class="sample" id="example" data-sample="std_io" data-mode="run" data-file="io_example.loom" data-store="std.io" data-runnable><div class="sample-head"><span class="file"><span class="dot"></span>io_example.loom</span><span class="tag ok">an example to run</span><span class="spacer"></span></div><pre class="code"><code><span class="k">use</span> std.io.{print, <span class="t">Buffer</span>}
+
+<span class="k">fun</span> <span class="f">report</span>(n: i32) <span class="k">given</span> out: std.io.<span class="t">Writer</span> {
+    <span class="f">print</span>(<span class="s">"report </span><span class="h">{</span>n<span class="h">}</span><span class="s">"</span>)
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">report</span>(<span class="n">1</span>)                      <span class="c">// to standard output</span>
+    <span class="k">let</span> kept = {
+        <span class="k">given</span> out = <span class="t">Buffer</span>()       <span class="c">// from here on, print writes into a Buffer</span>
+        <span class="f">report</span>(<span class="n">2</span>)
+        <span class="f">report</span>(<span class="n">3</span>)
+        out.text
+    }
+    <span class="f">print</span>(<span class="s">"kept: </span><span class="h">{</span>kept:?<span class="h">}</span><span class="s">"</span>)
+}</code></pre></div></div>
+<nav class="toc-chips" aria-label="In this module"><a href="#Writer"><span class="kind">weft</span>Writer</a><a href="#Stdout"><span class="kind">warp</span>Stdout</a><a href="#Buffer"><span class="kind">warp</span>Buffer</a><a href="#print"><span class="kind">fun</span>print</a><a href="#write_out"><span class="kind">fun</span>write_out</a><a href="#write_err"><span class="kind">fun</span>write_err</a><a href="#read_line"><span class="kind">fun</span>read_line</a><a href="#read_all"><span class="kind">fun</span>read_all</a><a href="#write"><span class="kind">fun</span>write</a><a href="#eprint"><span class="kind">fun</span>eprint</a><a href="#ewrite"><span class="kind">fun</span>ewrite</a><a href="#lines"><span class="kind">fun</span>lines</a></nav>
+<h2 id="types">Types</h2>
+<section class="item" id="Writer">
+<div class="item-head">
+<span class="sig"><span class="kw">weft</span> <strong>Writer</strong></span>
+
+<a class="item-anchor" href="#Writer" aria-label="Link to Writer">#</a>
+</div>
+<div class="item-doc"><p>Where <a class="code-link" href="io.html#print"><code>print</code></a> writes: standard output, unless a <code>given</code> says otherwise (<code>given out = Buffer()</code> keeps what is printed).</p></div>
 <div class="members">
 <div class="member" id="Writer.write_str">
 <div class="member-head">
-<span class="sig">fun write_str(mut self, s: str)</span>
-<span class="badge todo">TODO</span>
-</div>
-<p class="member-doc empty">undocumented</p>
-</div>
-</div>
-</div>
-<div class="item" id="Stdout">
-<div class="item-head">
-<span class="sig">warp <strong>Stdout</strong>: Writer, Default</span>
+<span class="sig"><span class="kw">fun</span> <strong>write_str</strong>(<span class="kw">mut</span> <span class="kw">self</span>, s: str)</span>
 
+<a class="item-anchor" href="#Writer.write_str" aria-label="Link to Writer.write_str">#</a>
 </div>
-<p class="item-doc">Standard output.</p>
+<div class="member-doc"><p>Writes <code>s</code>, as is.</p></div>
+</div>
+</div>
+</section>
+<section class="item" id="Stdout">
+<div class="item-head">
+<span class="sig"><span class="kw">warp</span> <strong>Stdout</strong>: <a href="io.html#Writer">Writer</a>, <a href="default.html#Default">Default</a></span>
+
+<a class="item-anchor" href="#Stdout" aria-label="Link to Stdout">#</a>
+</div>
+<div class="item-doc"><p>Standard output.</p></div>
 <div class="members">
 <div class="member" id="Stdout.write_str">
 <div class="member-head">
-<span class="sig">fun write_str(mut self, s: str)</span>
-<span class="badge todo">TODO</span>
-</div>
-<p class="member-doc empty">undocumented</p>
-</div>
-</div>
-</div>
-<div class="item" id="Buffer">
-<div class="item-head">
-<span class="sig">warp <strong>Buffer</strong>: Writer, Default</span>
+<span class="sig"><span class="kw">fun</span> <strong>write_str</strong>(<span class="kw">mut</span> <span class="kw">self</span>, s: str)</span>
 
+<a class="item-anchor" href="#Stdout.write_str" aria-label="Link to Stdout.write_str">#</a>
 </div>
-<p class="item-doc">Keeps what is written to it, in <code>text</code>.</p>
-<ul class="fields">
-<li><span class="sig">pub text: String = ""</span></li>
-</ul>
+<div class="member-doc"><p>Writes <code>s</code> to standard output.</p></div>
+</div>
+</div>
+</section>
+<section class="item" id="Buffer">
+<div class="item-head">
+<span class="sig"><span class="kw">warp</span> <strong>Buffer</strong>: <a href="io.html#Writer">Writer</a>, <a href="default.html#Default">Default</a></span>
+
+<a class="item-anchor" href="#Buffer" aria-label="Link to Buffer">#</a>
+</div>
+<div class="item-doc"><p>Keeps what is written to it, in <code>text</code>.</p></div>
+<div class="parts"><span class="parts-label">Fields</span><ul class="fields">
+<li title="Everything written so far."><span class="sig"><span class="kw">pub</span> text: <a href="string.html#String">String</a> = ""</span><span class="part-doc">Everything written so far.</span></li>
+</ul></div>
 <div class="members">
 <div class="member" id="Buffer.write_str">
 <div class="member-head">
-<span class="sig">fun write_str(mut self, s: str)</span>
-<span class="badge todo">TODO</span>
-</div>
-<p class="member-doc empty">undocumented</p>
-</div>
-</div>
-</div>
-<h2>Functions</h2>
-<div class="item" id="print">
-<div class="item-head">
-<span class="sig">fun <strong>print</strong>(x: any Show) given out: Writer</span>
-<span class="badge extern">extern</span>
-</div>
-<p class="item-doc">Writes <code>x</code> and a newline to standard output.</p>
-</div>
-<div class="item" id="write_out">
-<div class="item-head">
-<span class="sig">fun <strong>write_out</strong>(text: str)</span>
-<span class="badge extern">extern</span>
-</div>
-<p class="item-doc">Standard output, as is: no newline.</p>
-</div>
-<div class="item" id="write_err">
-<div class="item-head">
-<span class="sig">fun <strong>write_err</strong>(text: str)</span>
-<span class="badge extern">extern</span>
-</div>
-<p class="item-doc">Standard error, as is: no newline.</p>
-</div>
-<div class="item" id="read_line">
-<div class="item-head">
-<span class="sig">fun <strong>read_line</strong>() -&gt; ?String</span>
-<span class="badge extern">extern</span>
-</div>
-<p class="item-doc">The next line of standard input, without its line ending; <code>none</code> once the input has ended.</p>
-</div>
-<div class="item" id="read_all">
-<div class="item-head">
-<span class="sig">fun <strong>read_all</strong>() -&gt; String</span>
-<span class="badge extern">extern</span>
-</div>
-<p class="item-doc">Everything left on standard input.</p>
-</div>
-<div class="item" id="write">
-<div class="item-head">
-<span class="sig">fun <strong>write</strong>(x: any Show)</span>
+<span class="sig"><span class="kw">fun</span> <strong>write_str</strong>(<span class="kw">mut</span> <span class="kw">self</span>, s: str)</span>
 
+<a class="item-anchor" href="#Buffer.write_str" aria-label="Link to Buffer.write_str">#</a>
 </div>
-<p class="item-doc">Writes <code>x</code> to standard output, with no newline after it.</p>
+<div class="member-doc"><p>Adds <code>s</code> to <code>text</code>.</p></div>
 </div>
-<div class="item" id="eprint">
+</div>
+</section>
+<h2 id="functions">Functions</h2>
+<section class="item" id="print">
 <div class="item-head">
-<span class="sig">fun <strong>eprint</strong>(x: any Show)</span>
-
+<span class="sig"><span class="kw">fun</span> <strong>print</strong>(x: <span class="kw">any</span> <a href="fmt.html#Show">Show</a>) <span class="kw">given</span> out: <a href="io.html#Writer">Writer</a></span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#print" aria-label="Link to print">#</a>
 </div>
-<p class="item-doc">Writes <code>x</code> and a newline to standard error.</p>
-</div>
-<div class="item" id="ewrite">
+<div class="item-doc"><p>Writes <code>x</code> and a newline to the <a class="code-link" href="io.html#Writer"><code>Writer</code></a> in scope: standard output, unless a <code>given out = ...</code> says otherwise.</p></div>
+</section>
+<section class="item" id="write_out">
 <div class="item-head">
-<span class="sig">fun <strong>ewrite</strong>(x: any Show)</span>
-
+<span class="sig"><span class="kw">fun</span> <strong>write_out</strong>(text: str)</span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#write_out" aria-label="Link to write_out">#</a>
 </div>
-<p class="item-doc">Writes <code>x</code> to standard error, with no newline after it.</p>
-</div>
-<div class="item" id="lines">
+<div class="item-doc"><p>Standard output, as is: no newline.</p></div>
+</section>
+<section class="item" id="write_err">
 <div class="item-head">
-<span class="sig">fun <strong>lines</strong>() -&gt; Stream[String]</span>
+<span class="sig"><span class="kw">fun</span> <strong>write_err</strong>(text: str)</span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#write_err" aria-label="Link to write_err">#</a>
+</div>
+<div class="item-doc"><p>Standard error, as is: no newline.</p></div>
+</section>
+<section class="item" id="read_line">
+<div class="item-head">
+<span class="sig"><span class="kw">fun</span> <strong>read_line</strong>() -&gt; ?<a href="string.html#String">String</a></span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#read_line" aria-label="Link to read_line">#</a>
+</div>
+<div class="item-doc"><p>The next line of standard input, without its line ending; <code>none</code> once the input has ended.</p></div>
+</section>
+<section class="item" id="read_all">
+<div class="item-head">
+<span class="sig"><span class="kw">fun</span> <strong>read_all</strong>() -&gt; <a href="string.html#String">String</a></span>
+<span class="badge extern" title="Declared extern &quot;host&quot;: it calls straight into the host">host</span>
+<a class="item-anchor" href="#read_all" aria-label="Link to read_all">#</a>
+</div>
+<div class="item-doc"><p>Everything left on standard input.</p></div>
+</section>
+<section class="item" id="write">
+<div class="item-head">
+<span class="sig"><span class="kw">fun</span> <strong>write</strong>(x: <span class="kw">any</span> <a href="fmt.html#Show">Show</a>)</span>
 
+<a class="item-anchor" href="#write" aria-label="Link to write">#</a>
 </div>
-<p class="item-doc">The lines of standard input, one at a time, as they are read.</p>
+<div class="item-doc"><p>Writes <code>x</code> to standard output, with no newline after it.</p></div>
+</section>
+<section class="item" id="eprint">
+<div class="item-head">
+<span class="sig"><span class="kw">fun</span> <strong>eprint</strong>(x: <span class="kw">any</span> <a href="fmt.html#Show">Show</a>)</span>
+
+<a class="item-anchor" href="#eprint" aria-label="Link to eprint">#</a>
 </div>
+<div class="item-doc"><p>Writes <code>x</code> and a newline to standard error.</p></div>
+</section>
+<section class="item" id="ewrite">
+<div class="item-head">
+<span class="sig"><span class="kw">fun</span> <strong>ewrite</strong>(x: <span class="kw">any</span> <a href="fmt.html#Show">Show</a>)</span>
+
+<a class="item-anchor" href="#ewrite" aria-label="Link to ewrite">#</a>
+</div>
+<div class="item-doc"><p>Writes <code>x</code> to standard error, with no newline after it.</p></div>
+</section>
+<section class="item" id="lines">
+<div class="item-head">
+<span class="sig"><span class="kw">fun</span> <strong>lines</strong>() -&gt; <a href="iter.html#Stream">Stream</a>[<a href="string.html#String">String</a>]</span>
+
+<a class="item-anchor" href="#lines" aria-label="Link to lines">#</a>
+</div>
+<div class="item-doc"><p>The lines of standard input, one at a time, as they are read.</p></div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="fs.html"><span class="dir">&larr; previous</span>std.fs</a>
+<a class="next" href="hash.html"><span class="dir">next &rarr;</span>std.hash</a>
+</nav>
 </main>
 </div>
 </body>

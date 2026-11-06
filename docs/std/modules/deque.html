@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.deque · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
 <link rel="stylesheet" href="../../style.css">
 <script src="../../weave.js" defer></script>
+<script src="../../play/play.js" defer></script>
 </head>
 <body>
 <header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
@@ -18,7 +20,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,110 +68,142 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / deque</div>
 <h1>std.deque</h1>
-<p class="summary">Double-ended queues.</p>
-<h2>Types</h2>
-<div class="item" id="Deque">
-<div class="item-head">
-<span class="sig">warp <strong>Deque</strong>[T]</span>
-
+<p class="summary">Double-ended queues: <a class="code-link" href="deque.html#Deque"><code>Deque</code></a> is a list you can push to and pop from at both ends, each in constant time (on average). Reach for it when a <a class="code-link" href="list.html#List"><code>List</code></a> would keep inserting at the front.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/deque.loom</code></span><a href="../../lang/collections.html">read about it in the book &rarr;</a></div>
 </div>
-<p class="item-doc">A queue with fast pushes and pops at both ends. Two stacks, so every operation takes constant time except the occasional one that moves half the items from one side to the other; any run of <code>n</code> operations costs <code>O(n)</code>.</p>
+<div class="mod-intro"><div class="sample" id="example" data-sample="std_deque" data-mode="run" data-file="deque_example.loom" data-store="std.deque" data-runnable><div class="sample-head"><span class="file"><span class="dot"></span>deque_example.loom</span><span class="tag ok">an example to run</span><span class="spacer"></span></div><pre class="code"><code><span class="k">use</span> std.io.print
+<span class="k">use</span> std.deque.<span class="t">Deque</span>
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">var</span> q = <span class="t">Deque</span>[<span class="t">String</span>].<span class="f">new</span>()
+    q.<span class="f">push_back</span>(<span class="s">"weft"</span>)
+    q.<span class="f">push_back</span>(<span class="s">"weave"</span>)
+    q.<span class="f">push_front</span>(<span class="s">"warp"</span>)
+    <span class="f">print</span>(q.<span class="f">to_list</span>())
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>q.<span class="f">pop_front</span>():?<span class="h">}</span><span class="s"> then </span><span class="h">{</span>q.<span class="f">pop_back</span>():?<span class="h">}</span><span class="s">, </span><span class="h">{</span>q.<span class="f">len</span>()<span class="h">}</span><span class="s"> left"</span>)
+}</code></pre></div></div>
+<h2 id="types">Types</h2>
+<section class="item" id="Deque">
+<div class="item-head">
+<span class="sig"><span class="kw">warp</span> <strong>Deque</strong>[T]</span>
+
+<a class="item-anchor" href="#Deque" aria-label="Link to Deque">#</a>
+</div>
+<div class="item-doc"><p>A queue with fast pushes and pops at both ends. Two stacks, so every operation takes constant time except the occasional one that moves half the items from one side to the other; any run of <code>n</code> operations costs <code>O(n)</code>.</p></div>
 <div class="members">
 <div class="member" id="Deque.new">
 <div class="member-head">
-<span class="sig">fun new() -&gt; Deque[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>new</strong>() -&gt; <span class="ty">Deque</span>[T]</span>
 
+<a class="item-anchor" href="#Deque.new" aria-label="Link to Deque.new">#</a>
 </div>
-<p class="member-doc">An empty queue.</p>
+<div class="member-doc"><p>An empty queue.</p></div>
 </div>
 <div class="member" id="Deque.len">
 <div class="member-head">
-<span class="sig">fun len(self) -&gt; usize</span>
+<span class="sig"><span class="kw">fun</span> <strong>len</strong>(<span class="kw">self</span>) -&gt; usize</span>
 
+<a class="item-anchor" href="#Deque.len" aria-label="Link to Deque.len">#</a>
 </div>
-<p class="member-doc">How many items there are.</p>
+<div class="member-doc"><p>How many items there are.</p></div>
 </div>
 <div class="member" id="Deque.is_empty">
 <div class="member-head">
-<span class="sig">fun is_empty(self) -&gt; bool</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_empty</strong>(<span class="kw">self</span>) -&gt; bool</span>
+
+<a class="item-anchor" href="#Deque.is_empty" aria-label="Link to Deque.is_empty">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>Whether there are no items.</p></div>
 </div>
 <div class="member" id="Deque.push_back">
 <div class="member-head">
-<span class="sig">fun push_back(mut self, take x: T)</span>
+<span class="sig"><span class="kw">fun</span> <strong>push_back</strong>(<span class="kw">mut</span> <span class="kw">self</span>, <span class="kw">take</span> x: T)</span>
 
+<a class="item-anchor" href="#Deque.push_back" aria-label="Link to Deque.push_back">#</a>
 </div>
-<p class="member-doc">Adds <code>x</code> at the end.</p>
+<div class="member-doc"><p>Adds <code>x</code> at the end.</p></div>
 </div>
 <div class="member" id="Deque.push_front">
 <div class="member-head">
-<span class="sig">fun push_front(mut self, take x: T)</span>
+<span class="sig"><span class="kw">fun</span> <strong>push_front</strong>(<span class="kw">mut</span> <span class="kw">self</span>, <span class="kw">take</span> x: T)</span>
 
+<a class="item-anchor" href="#Deque.push_front" aria-label="Link to Deque.push_front">#</a>
 </div>
-<p class="member-doc">Adds <code>x</code> at the start.</p>
+<div class="member-doc"><p>Adds <code>x</code> at the start.</p></div>
 </div>
 <div class="member" id="Deque.pop_back">
 <div class="member-head">
-<span class="sig">fun pop_back(mut self) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>pop_back</strong>(<span class="kw">mut</span> <span class="kw">self</span>) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Deque.pop_back" aria-label="Link to Deque.pop_back">#</a>
 </div>
-<p class="member-doc">Takes off the last item.</p>
+<div class="member-doc"><p>Takes off the last item.</p></div>
 </div>
 <div class="member" id="Deque.pop_front">
 <div class="member-head">
-<span class="sig">fun pop_front(mut self) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>pop_front</strong>(<span class="kw">mut</span> <span class="kw">self</span>) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Deque.pop_front" aria-label="Link to Deque.pop_front">#</a>
 </div>
-<p class="member-doc">Takes off the first item.</p>
+<div class="member-doc"><p>Takes off the first item.</p></div>
 </div>
 <div class="member" id="Deque.get">
 <div class="member-head">
-<span class="sig">fun get(self, i: usize) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>get</strong>(<span class="kw">self</span>, i: usize) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Deque.get" aria-label="Link to Deque.get">#</a>
 </div>
-<p class="member-doc">A copy of the item at <code>i</code>, counting from the start.</p>
+<div class="member-doc"><p>A copy of the item at <code>i</code>, counting from the start.</p></div>
 </div>
 <div class="member" id="Deque.first">
 <div class="member-head">
-<span class="sig">fun first(self) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>first</strong>(<span class="kw">self</span>) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Deque.first" aria-label="Link to Deque.first">#</a>
 </div>
-<p class="member-doc">A copy of the first item.</p>
+<div class="member-doc"><p>A copy of the first item.</p></div>
 </div>
 <div class="member" id="Deque.last">
 <div class="member-head">
-<span class="sig">fun last(self) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>last</strong>(<span class="kw">self</span>) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Deque.last" aria-label="Link to Deque.last">#</a>
 </div>
-<p class="member-doc">A copy of the last item.</p>
+<div class="member-doc"><p>A copy of the last item.</p></div>
 </div>
 <div class="member" id="Deque.set">
 <div class="member-head">
-<span class="sig">fun set(mut self, i: usize, take x: T)</span>
+<span class="sig"><span class="kw">fun</span> <strong>set</strong>(<span class="kw">mut</span> <span class="kw">self</span>, i: usize, <span class="kw">take</span> x: T)</span>
 
+<a class="item-anchor" href="#Deque.set" aria-label="Link to Deque.set">#</a>
 </div>
-<p class="member-doc">Replaces the item at <code>i</code>. Unravels if there isn't one.</p>
+<div class="member-doc"><p>Replaces the item at <code>i</code>. Unravels if there isn't one.</p></div>
 </div>
 <div class="member" id="Deque.clear">
 <div class="member-head">
-<span class="sig">fun clear(mut self)</span>
+<span class="sig"><span class="kw">fun</span> <strong>clear</strong>(<span class="kw">mut</span> <span class="kw">self</span>)</span>
 
+<a class="item-anchor" href="#Deque.clear" aria-label="Link to Deque.clear">#</a>
 </div>
-<p class="member-doc">Removes every item.</p>
+<div class="member-doc"><p>Removes every item.</p></div>
 </div>
 <div class="member" id="Deque.to_list">
 <div class="member-head">
-<span class="sig">fun to_list(self) -&gt; List[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>to_list</strong>(<span class="kw">self</span>) -&gt; <a href="list.html#List">List</a>[T]</span>
 
+<a class="item-anchor" href="#Deque.to_list" aria-label="Link to Deque.to_list">#</a>
 </div>
-<p class="member-doc">The items in order, in a new list.</p>
+<div class="member-doc"><p>The items in order, in a new list.</p></div>
 </div>
 </div>
-</div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="default.html"><span class="dir">&larr; previous</span>std.default</a>
+<a class="next" href="env.html"><span class="dir">next &rarr;</span>std.env</a>
+</nav>
 </main>
 </div>
 </body>

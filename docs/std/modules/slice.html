@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.slice · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,7 +19,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,250 +67,291 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / slice</div>
 <h1>std.slice</h1>
-<p class="summary">Slices: views of contiguous elements.</p>
-<h2>Types</h2>
-<div class="item" id="Slice">
-<div class="item-head">
-<span class="sig">warp <strong>Slice</strong>[T]</span>
-<span class="badge builtin">builtin</span>
+<p class="summary">Slices: views of elements that sit next to each other, in an array or a list. <code>[T]</code> is the slice type; arrays (<code>[T; n]</code>) and lists have every method here too. A slice borrows its elements: methods that change them need a <code>mut</code> slice.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/slice.loom</code></span><a href="../../lang/collections.html">read about it in the book &rarr;</a></div>
 </div>
-<p class="item-doc"><code>[T]</code>: a view of contiguous <code>T</code>s, in an array or a list. Arrays and lists have these methods too.</p>
+<h2 id="types">Types</h2>
+<section class="item" id="Slice">
+<div class="item-head">
+<span class="sig"><span class="kw">warp</span> <strong>Slice</strong>[T]</span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#Slice" aria-label="Link to Slice">#</a>
+</div>
+<div class="item-doc"><p><code>[T]</code>: a view of contiguous <code>T</code>s, in an array or a list. Arrays and lists have these methods too.</p></div>
 <div class="members">
 <div class="member" id="Slice.len">
 <div class="member-head">
-<span class="sig">fun len(self) -&gt; usize</span>
+<span class="sig"><span class="kw">fun</span> <strong>len</strong>(<span class="kw">self</span>) -&gt; usize</span>
 
+<a class="item-anchor" href="#Slice.len" aria-label="Link to Slice.len">#</a>
 </div>
-<p class="member-doc">How many elements there are.</p>
+<div class="member-doc"><p>How many elements there are.</p></div>
 </div>
 <div class="member" id="Slice.is_empty">
 <div class="member-head">
-<span class="sig">fun is_empty(self) -&gt; bool</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_empty</strong>(<span class="kw">self</span>) -&gt; bool</span>
+
+<a class="item-anchor" href="#Slice.is_empty" aria-label="Link to Slice.is_empty">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>Whether there are no elements.</p></div>
 </div>
 <div class="member" id="Slice.get">
 <div class="member-head">
-<span class="sig">fun get(self, i: usize) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>get</strong>(<span class="kw">self</span>, i: usize) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Slice.get" aria-label="Link to Slice.get">#</a>
 </div>
-<p class="member-doc">A copy of the element at <code>i</code>, or <code>none</code> past the end. (An element can't be moved out of a slice: it gives a value of its own, a deep copy for a type that isn't <code>Copy</code>.)</p>
+<div class="member-doc"><p>A copy of the element at <code>i</code>, or <code>none</code> past the end. (An element can't be moved out of a slice: it gives a value of its own, a deep copy for a type that isn't <a class="code-link" href="ops.html#Copy"><code>Copy</code></a>.)</p></div>
 </div>
 <div class="member" id="Slice.first">
 <div class="member-head">
-<span class="sig">fun first(self) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>first</strong>(<span class="kw">self</span>) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Slice.first" aria-label="Link to Slice.first">#</a>
 </div>
-<p class="member-doc">A copy of the first element.</p>
+<div class="member-doc"><p>A copy of the first element.</p></div>
 </div>
 <div class="member" id="Slice.last">
 <div class="member-head">
-<span class="sig">fun last(self) -&gt; ?T</span>
+<span class="sig"><span class="kw">fun</span> <strong>last</strong>(<span class="kw">self</span>) -&gt; ?T</span>
 
+<a class="item-anchor" href="#Slice.last" aria-label="Link to Slice.last">#</a>
 </div>
-<p class="member-doc">A copy of the last element.</p>
+<div class="member-doc"><p>A copy of the last element.</p></div>
 </div>
 <div class="member" id="Slice.contains">
 <div class="member-head">
-<span class="sig">fun contains(self, x: T) -&gt; bool where T: Eq</span>
+<span class="sig"><span class="kw">fun</span> <strong>contains</strong>(<span class="kw">self</span>, x: T) -&gt; bool <span class="kw">where</span> T: <a href="ops.html#Eq">Eq</a></span>
 
+<a class="item-anchor" href="#Slice.contains" aria-label="Link to Slice.contains">#</a>
 </div>
-<p class="member-doc">Whether some element equals <code>x</code>.</p>
+<div class="member-doc"><p>Whether some element equals <code>x</code>.</p></div>
 </div>
 <div class="member" id="Slice.index_of">
 <div class="member-head">
-<span class="sig">fun index_of(self, x: T) -&gt; ?usize where T: Eq</span>
+<span class="sig"><span class="kw">fun</span> <strong>index_of</strong>(<span class="kw">self</span>, x: T) -&gt; ?usize <span class="kw">where</span> T: <a href="ops.html#Eq">Eq</a></span>
 
+<a class="item-anchor" href="#Slice.index_of" aria-label="Link to Slice.index_of">#</a>
 </div>
-<p class="member-doc">The index of the first element equal to <code>x</code>.</p>
+<div class="member-doc"><p>The index of the first element equal to <code>x</code>.</p></div>
 </div>
 <div class="member" id="Slice.copy_from">
 <div class="member-head">
-<span class="sig">fun copy_from(mut self, src: [T])</span>
+<span class="sig"><span class="kw">fun</span> <strong>copy_from</strong>(<span class="kw">mut</span> <span class="kw">self</span>, src: [T])</span>
 
+<a class="item-anchor" href="#Slice.copy_from" aria-label="Link to Slice.copy_from">#</a>
 </div>
-<p class="member-doc">Copies <code>src</code> over the start of this slice. Unravels if <code>src</code> is longer.</p>
+<div class="member-doc"><p>Copies <code>src</code> over the start of this slice. Unravels if <code>src</code> is longer.</p></div>
 </div>
 <div class="member" id="Slice.fill">
 <div class="member-head">
-<span class="sig">fun fill(mut self, x: T)</span>
+<span class="sig"><span class="kw">fun</span> <strong>fill</strong>(<span class="kw">mut</span> <span class="kw">self</span>, x: T)</span>
 
+<a class="item-anchor" href="#Slice.fill" aria-label="Link to Slice.fill">#</a>
 </div>
-<p class="member-doc">Sets every element to a copy of <code>x</code>.</p>
+<div class="member-doc"><p>Sets every element to a copy of <code>x</code>.</p></div>
 </div>
 <div class="member" id="Slice.swap">
 <div class="member-head">
-<span class="sig">fun swap(mut self, i: usize, j: usize)</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>swap</strong>(<span class="kw">mut</span> <span class="kw">self</span>, i: usize, j: usize)</span>
+
+<a class="item-anchor" href="#Slice.swap" aria-label="Link to Slice.swap">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>Exchanges the elements at <code>i</code> and <code>j</code>. Unravels if either is past the end.</p></div>
 </div>
 <div class="member" id="Slice.reverse">
 <div class="member-head">
-<span class="sig">fun reverse(mut self)</span>
-<span class="badge todo">TODO</span>
+<span class="sig"><span class="kw">fun</span> <strong>reverse</strong>(<span class="kw">mut</span> <span class="kw">self</span>)</span>
+
+<a class="item-anchor" href="#Slice.reverse" aria-label="Link to Slice.reverse">#</a>
 </div>
-<p class="member-doc empty">undocumented</p>
+<div class="member-doc"><p>Puts the elements in the opposite order, in place. (<a class="code-link" href="slice.html#Slice.rev"><code>rev</code></a> gives them backwards without changing the slice.)</p></div>
 </div>
 <div class="member" id="Slice.sort">
 <div class="member-head">
-<span class="sig">fun sort(mut self) where T: Ord</span>
+<span class="sig"><span class="kw">fun</span> <strong>sort</strong>(<span class="kw">mut</span> <span class="kw">self</span>) <span class="kw">where</span> T: <a href="ops.html#Ord">Ord</a></span>
 
+<a class="item-anchor" href="#Slice.sort" aria-label="Link to Slice.sort">#</a>
 </div>
-<p class="member-doc">Sorts in order, keeping equal elements in the order they were in.</p>
+<div class="member-doc"><p>Sorts in order, keeping equal elements in the order they were in.</p></div>
 </div>
 <div class="member" id="Slice.to_list">
 <div class="member-head">
-<span class="sig">fun to_list(self) -&gt; List[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>to_list</strong>(<span class="kw">self</span>) -&gt; <a href="list.html#List">List</a>[T]</span>
 
+<a class="item-anchor" href="#Slice.to_list" aria-label="Link to Slice.to_list">#</a>
 </div>
-<p class="member-doc">A new list with a copy of every element.</p>
+<div class="member-doc"><p>A new list with a copy of every element.</p></div>
 </div>
 <div class="member" id="Slice.map">
 <div class="member-head">
-<span class="sig">fun map[U](self, f: T =&gt; U) -&gt; List[U]</span>
+<span class="sig"><span class="kw">fun</span> <strong>map</strong>[U](<span class="kw">self</span>, f: T =&gt; U) -&gt; <a href="list.html#List">List</a>[U]</span>
 
+<a class="item-anchor" href="#Slice.map" aria-label="Link to Slice.map">#</a>
 </div>
-<p class="member-doc">A new list of <code>f</code> of each element. (<code>xs.indexed()</code> and the other methods of <code>Stream</code> work on slices too, lazily.)</p>
+<div class="member-doc"><p>A new list of <code>f</code> of each element. (<code>xs.indexed()</code> and the other methods of <a class="code-link" href="iter.html#Stream"><code>Stream</code></a> work on slices too, lazily.)</p></div>
 </div>
 <div class="member" id="Slice.filter">
 <div class="member-head">
-<span class="sig">fun filter(self, f: T =&gt; bool) -&gt; List[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>filter</strong>(<span class="kw">self</span>, f: T =&gt; bool) -&gt; <a href="list.html#List">List</a>[T]</span>
 
+<a class="item-anchor" href="#Slice.filter" aria-label="Link to Slice.filter">#</a>
 </div>
-<p class="member-doc">A new list with a copy of each element <code>f</code> says yes to.</p>
+<div class="member-doc"><p>A new list with a copy of each element <code>f</code> says yes to.</p></div>
 </div>
 <div class="member" id="Slice.chunks">
 <div class="member-head">
-<span class="sig">fun chunks(self, n: usize) -&gt; Stream[[T]]</span>
+<span class="sig"><span class="kw">fun</span> <strong>chunks</strong>(<span class="kw">self</span>, n: usize) -&gt; <a href="iter.html#Stream">Stream</a>[[T]]</span>
 
+<a class="item-anchor" href="#Slice.chunks" aria-label="Link to Slice.chunks">#</a>
 </div>
-<p class="member-doc">Views of <code>n</code> elements at a time, one after another; the last may be shorter. Unravels if <code>n</code> is 0.</p>
+<div class="member-doc"><p>Views of <code>n</code> elements at a time, one after another; the last may be shorter. Unravels if <code>n</code> is 0.</p></div>
 </div>
 <div class="member" id="Slice.chunks_mut">
 <div class="member-head">
-<span class="sig">fun chunks_mut(mut self, n: usize) -&gt; Stream[[T]]</span>
+<span class="sig"><span class="kw">fun</span> <strong>chunks_mut</strong>(<span class="kw">mut</span> <span class="kw">self</span>, n: usize) -&gt; <a href="iter.html#Stream">Stream</a>[[T]]</span>
 
+<a class="item-anchor" href="#Slice.chunks_mut" aria-label="Link to Slice.chunks_mut">#</a>
 </div>
-<p class="member-doc">Views of <code>n</code> elements at a time, one after another, which can be changed (<code>line[i] = x</code>). They don't overlap, so in a <code>loom for</code> each thread may change its own piece. The last may be shorter. Unravels if <code>n</code> is 0.</p>
+<div class="member-doc"><p>Views of <code>n</code> elements at a time, one after another, which can be changed (<code>line[i] = x</code>). They don't overlap, so in a <code>loom for</code> each thread may change its own piece. The last may be shorter. Unravels if <code>n</code> is 0.</p></div>
 </div>
 <div class="member" id="Slice.windows">
 <div class="member-head">
-<span class="sig">fun windows(self, n: usize) -&gt; Stream[[T]]</span>
+<span class="sig"><span class="kw">fun</span> <strong>windows</strong>(<span class="kw">self</span>, n: usize) -&gt; <a href="iter.html#Stream">Stream</a>[[T]]</span>
 
+<a class="item-anchor" href="#Slice.windows" aria-label="Link to Slice.windows">#</a>
 </div>
-<p class="member-doc">Views of every run of <code>n</code> elements in a row: <code>[a, b]</code>, <code>[b, c]</code>, … Unravels if <code>n</code> is 0.</p>
+<div class="member-doc"><p>Views of every run of <code>n</code> elements in a row: <code>[a, b]</code>, <code>[b, c]</code>, … Unravels if <code>n</code> is 0.</p></div>
 </div>
 <div class="member" id="Slice.starts_with">
 <div class="member-head">
-<span class="sig">fun starts_with(self, prefix: [T]) -&gt; bool where T: Eq</span>
+<span class="sig"><span class="kw">fun</span> <strong>starts_with</strong>(<span class="kw">self</span>, prefix: [T]) -&gt; bool <span class="kw">where</span> T: <a href="ops.html#Eq">Eq</a></span>
 
+<a class="item-anchor" href="#Slice.starts_with" aria-label="Link to Slice.starts_with">#</a>
 </div>
-<p class="member-doc">Whether the slice starts with <code>prefix</code>.</p>
+<div class="member-doc"><p>Whether the slice starts with <code>prefix</code>.</p></div>
 </div>
 <div class="member" id="Slice.concat">
 <div class="member-head">
-<span class="sig">fun concat[U](self) -&gt; List[U] where T: [U]</span>
+<span class="sig"><span class="kw">fun</span> <strong>concat</strong>[U](<span class="kw">self</span>) -&gt; <a href="list.html#List">List</a>[U] <span class="kw">where</span> T: [U]</span>
 
+<a class="item-anchor" href="#Slice.concat" aria-label="Link to Slice.concat">#</a>
 </div>
-<p class="member-doc">The inner slices, one after another.</p>
+<div class="member-doc"><p>The inner slices, one after another.</p></div>
 </div>
 <div class="member" id="Slice.join">
 <div class="member-head">
-<span class="sig">fun join[U](self, sep: [U]) -&gt; List[U] where T: [U]</span>
+<span class="sig"><span class="kw">fun</span> <strong>join</strong>[U](<span class="kw">self</span>, sep: [U]) -&gt; <a href="list.html#List">List</a>[U] <span class="kw">where</span> T: [U]</span>
 
+<a class="item-anchor" href="#Slice.join" aria-label="Link to Slice.join">#</a>
 </div>
-<p class="member-doc">The inner slices with <code>sep</code> between them.</p>
+<div class="member-doc"><p>The inner slices with <code>sep</code> between them.</p></div>
 </div>
 <div class="member" id="Slice.ends_with">
 <div class="member-head">
-<span class="sig">fun ends_with(self, suffix: [T]) -&gt; bool where T: Eq</span>
+<span class="sig"><span class="kw">fun</span> <strong>ends_with</strong>(<span class="kw">self</span>, suffix: [T]) -&gt; bool <span class="kw">where</span> T: <a href="ops.html#Eq">Eq</a></span>
 
+<a class="item-anchor" href="#Slice.ends_with" aria-label="Link to Slice.ends_with">#</a>
 </div>
-<p class="member-doc">Whether the slice ends with <code>suffix</code>.</p>
+<div class="member-doc"><p>Whether the slice ends with <code>suffix</code>.</p></div>
 </div>
 <div class="member" id="Slice.count_of">
 <div class="member-head">
-<span class="sig">fun count_of(self, x: T) -&gt; usize where T: Eq</span>
+<span class="sig"><span class="kw">fun</span> <strong>count_of</strong>(<span class="kw">self</span>, x: T) -&gt; usize <span class="kw">where</span> T: <a href="ops.html#Eq">Eq</a></span>
 
+<a class="item-anchor" href="#Slice.count_of" aria-label="Link to Slice.count_of">#</a>
 </div>
-<p class="member-doc">How many elements equal <code>x</code>.</p>
+<div class="member-doc"><p>How many elements equal <code>x</code>.</p></div>
 </div>
 <div class="member" id="Slice.rotate_left">
 <div class="member-head">
-<span class="sig">fun rotate_left(mut self, n: usize)</span>
+<span class="sig"><span class="kw">fun</span> <strong>rotate_left</strong>(<span class="kw">mut</span> <span class="kw">self</span>, n: usize)</span>
 
+<a class="item-anchor" href="#Slice.rotate_left" aria-label="Link to Slice.rotate_left">#</a>
 </div>
-<p class="member-doc">Moves the elements <code>n</code> places towards the start; those pushed out come back at the end. <code>n</code> counts modulo the length.</p>
+<div class="member-doc"><p>Moves the elements <code>n</code> places towards the start; those pushed out come back at the end. <code>n</code> counts modulo the length.</p></div>
 </div>
 <div class="member" id="Slice.rotate_right">
 <div class="member-head">
-<span class="sig">fun rotate_right(mut self, n: usize)</span>
+<span class="sig"><span class="kw">fun</span> <strong>rotate_right</strong>(<span class="kw">mut</span> <span class="kw">self</span>, n: usize)</span>
 
+<a class="item-anchor" href="#Slice.rotate_right" aria-label="Link to Slice.rotate_right">#</a>
 </div>
-<p class="member-doc">Moves the elements <code>n</code> places towards the end; those pushed out come back at the start. <code>n</code> counts modulo the length.</p>
+<div class="member-doc"><p>Moves the elements <code>n</code> places towards the end; those pushed out come back at the start. <code>n</code> counts modulo the length.</p></div>
 </div>
 <div class="member" id="Slice.rev">
 <div class="member-head">
-<span class="sig">fun rev(self) -&gt; Stream[T]</span>
+<span class="sig"><span class="kw">fun</span> <strong>rev</strong>(<span class="kw">self</span>) -&gt; <a href="iter.html#Stream">Stream</a>[T]</span>
 
+<a class="item-anchor" href="#Slice.rev" aria-label="Link to Slice.rev">#</a>
 </div>
-<p class="member-doc">The elements from the last to the first.</p>
+<div class="member-doc"><p>The elements from the last to the first.</p></div>
 </div>
 <div class="member" id="Slice.sort_by">
 <div class="member-head">
-<span class="sig">fun sort_by(mut self, less: (T, T) =&gt; bool)</span>
+<span class="sig"><span class="kw">fun</span> <strong>sort_by</strong>(<span class="kw">mut</span> <span class="kw">self</span>, less: (T, T) =&gt; bool)</span>
 
+<a class="item-anchor" href="#Slice.sort_by" aria-label="Link to Slice.sort_by">#</a>
 </div>
-<p class="member-doc">Sorts so that <code>less(a, b)</code> says whether <code>a</code> goes before <code>b</code>. Stable: elements neither goes before the other keep their order.</p>
+<div class="member-doc"><p>Sorts in place, so that <code>less(a, b)</code> says whether <code>a</code> goes before <code>b</code>. Stable: elements that neither goes before the other keep the order they were in.</p></div>
 </div>
 <div class="member" id="Slice.sort_by_key">
 <div class="member-head">
-<span class="sig">fun sort_by_key[K: Ord](mut self, key: T =&gt; K)</span>
+<span class="sig"><span class="kw">fun</span> <strong>sort_by_key</strong>[K: <a href="ops.html#Ord">Ord</a>](<span class="kw">mut</span> <span class="kw">self</span>, key: T =&gt; K)</span>
 
+<a class="item-anchor" href="#Slice.sort_by_key" aria-label="Link to Slice.sort_by_key">#</a>
 </div>
-<p class="member-doc">Sorts by <code>key</code> of each element, which is computed once per element. Stable.</p>
+<div class="member-doc"><p>Sorts by <code>key</code> of each element, which is computed once per element. Stable.</p></div>
 </div>
 <div class="member" id="Slice.is_sorted">
 <div class="member-head">
-<span class="sig">fun is_sorted(self) -&gt; bool where T: Ord</span>
+<span class="sig"><span class="kw">fun</span> <strong>is_sorted</strong>(<span class="kw">self</span>) -&gt; bool <span class="kw">where</span> T: <a href="ops.html#Ord">Ord</a></span>
 
+<a class="item-anchor" href="#Slice.is_sorted" aria-label="Link to Slice.is_sorted">#</a>
 </div>
-<p class="member-doc">Whether every element is at or after the one before it.</p>
+<div class="member-doc"><p>Whether every element is at or after the one before it.</p></div>
 </div>
 <div class="member" id="Slice.lower_bound">
 <div class="member-head">
-<span class="sig">fun lower_bound(self, x: T) -&gt; usize where T: Ord</span>
+<span class="sig"><span class="kw">fun</span> <strong>lower_bound</strong>(<span class="kw">self</span>, x: T) -&gt; usize <span class="kw">where</span> T: <a href="ops.html#Ord">Ord</a></span>
 
+<a class="item-anchor" href="#Slice.lower_bound" aria-label="Link to Slice.lower_bound">#</a>
 </div>
-<p class="member-doc">The index of the first element that is not before <code>x</code> in a sorted slice: where <code>x</code> would go.</p>
+<div class="member-doc"><p>The index of the first element that is not before <code>x</code> in a sorted slice: where <code>x</code> would go.</p></div>
 </div>
 <div class="member" id="Slice.upper_bound">
 <div class="member-head">
-<span class="sig">fun upper_bound(self, x: T) -&gt; usize where T: Ord</span>
+<span class="sig"><span class="kw">fun</span> <strong>upper_bound</strong>(<span class="kw">self</span>, x: T) -&gt; usize <span class="kw">where</span> T: <a href="ops.html#Ord">Ord</a></span>
 
+<a class="item-anchor" href="#Slice.upper_bound" aria-label="Link to Slice.upper_bound">#</a>
 </div>
-<p class="member-doc">The index of the first element after <code>x</code> in a sorted slice.</p>
+<div class="member-doc"><p>The index of the first element after <code>x</code> in a sorted slice.</p></div>
 </div>
 <div class="member" id="Slice.binary_search">
 <div class="member-head">
-<span class="sig">fun binary_search(self, x: T) -&gt; ?usize where T: Ord</span>
+<span class="sig"><span class="kw">fun</span> <strong>binary_search</strong>(<span class="kw">self</span>, x: T) -&gt; ?usize <span class="kw">where</span> T: <a href="ops.html#Ord">Ord</a></span>
 
+<a class="item-anchor" href="#Slice.binary_search" aria-label="Link to Slice.binary_search">#</a>
 </div>
-<p class="member-doc">The index of an element equal to <code>x</code> in a sorted slice.</p>
+<div class="member-doc"><p>The index of an element equal to <code>x</code> in a sorted slice.</p></div>
 </div>
 <div class="member" id="Slice.partition_point">
 <div class="member-head">
-<span class="sig">fun partition_point(self, pred: T =&gt; bool) -&gt; usize</span>
+<span class="sig"><span class="kw">fun</span> <strong>partition_point</strong>(<span class="kw">self</span>, pred: T =&gt; bool) -&gt; usize</span>
 
+<a class="item-anchor" href="#Slice.partition_point" aria-label="Link to Slice.partition_point">#</a>
 </div>
-<p class="member-doc">In a slice where <code>pred</code> says yes to a run of elements and then no to the rest, the index of the first no.</p>
+<div class="member-doc"><p>In a slice where <code>pred</code> says yes to a run of elements and then no to the rest, the index of the first no.</p></div>
 </div>
 </div>
-</div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="set.html"><span class="dir">&larr; previous</span>std.set</a>
+<a class="next" href="string.html"><span class="dir">next &rarr;</span>std.string</a>
+</nav>
 </main>
 </div>
 </body>

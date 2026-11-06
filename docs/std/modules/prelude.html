@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.prelude · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,7 +19,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,56 +67,68 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / prelude</div>
 <h1>std.prelude</h1>
-<p class="summary">The prelude: names every module can use without a <code>use</code>. A module's own items and imports shadow these.</p>
-<h2>Re-exports</h2>
+<p class="summary">The prelude: the names every module can use without a <code>use</code>. It's small on purpose: the collections (<a class="code-link" href="list.html#List"><code>List</code></a>, <a class="code-link" href="map.html#Map"><code>Map</code></a>, <a class="code-link" href="set.html#Set"><code>Set</code></a>), <a class="code-link" href="string.html#String"><code>String</code></a>, the wefts behind operators and printing (<a class="code-link" href="ops.html#Eq"><code>Eq</code></a>, <a class="code-link" href="ops.html#Ord"><code>Ord</code></a>, <a class="code-link" href="ops.html#Hash"><code>Hash</code></a>, <a class="code-link" href="ops.html#Copy"><code>Copy</code></a>, <a class="code-link" href="fmt.html#Show"><code>Show</code></a>), the error basics (<a class="code-link" href="error.html#Error"><code>Error</code></a>, <a class="code-link" href="error.html#Missing"><code>Missing</code></a>, <code>assert</code>, <code>unravel</code>), streams and ranges, and a few helpers like <code>min</code>, <code>max</code> and <code>then</code>.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/prelude.loom</code></span></div>
+</div>
+<div class="mod-intro"><p class="summary">A module's own items and imports shadow these, so a program can always use a name of its own.</p></div>
+<nav class="toc-chips" aria-label="In this module"><a href="#uint"><span class="kind">fun</span>uint</a><a href="#int"><span class="kind">fun</span>int</a></nav>
+<h2 id="re-exports">Re-exports</h2>
+<p>These names are defined elsewhere in <code>std</code>; this module makes them available.</p>
 <ul class="reexports">
-<li><a href="string.html#String"><code>String</code></a><span class="from">from <code>std.string</code></span></li>
-<li><a href="list.html#List"><code>List</code></a><span class="from">from <code>std.list</code></span></li>
-<li><a href="map.html#Map"><code>Map</code></a><span class="from">from <code>std.map</code></span></li>
-<li><a href="set.html#Set"><code>Set</code></a><span class="from">from <code>std.set</code></span></li>
-<li><a href="error.html#Error"><code>Error</code></a><span class="from">from <code>std.error</code></span></li>
-<li><a href="error.html#Missing"><code>Missing</code></a><span class="from">from <code>std.error</code></span></li>
-<li><a href="error.html#assert"><code>assert</code></a><span class="from">from <code>std.error</code></span></li>
-<li><a href="error.html#unravel"><code>unravel</code></a><span class="from">from <code>std.error</code></span></li>
-<li><a href="fmt.html#Show"><code>Show</code></a><span class="from">from <code>std.fmt</code></span></li>
-<li><a href="fmt.html#Fmt"><code>Fmt</code></a><span class="from">from <code>std.fmt</code></span></li>
-<li><a href="ops.html#Copy"><code>Copy</code></a><span class="from">from <code>std.ops</code></span></li>
-<li><a href="ops.html#Eq"><code>Eq</code></a><span class="from">from <code>std.ops</code></span></li>
-<li><a href="ops.html#Ord"><code>Ord</code></a><span class="from">from <code>std.ops</code></span></li>
-<li><a href="ops.html#Hash"><code>Hash</code></a><span class="from">from <code>std.ops</code></span></li>
-<li><a href="ops.html#Integer"><code>Integer</code></a><span class="from">from <code>std.ops</code></span></li>
-<li><a href="iter.html#Iter"><code>Iter</code></a><span class="from">from <code>std.iter</code></span></li>
-<li><a href="iter.html#Stream"><code>Stream</code></a><span class="from">from <code>std.iter</code></span></li>
-<li><a href="iter.html#Shuttle"><code>Shuttle</code></a><span class="from">from <code>std.iter</code></span></li>
-<li><a href="iter.html#Burst"><code>Burst</code></a><span class="from">from <code>std.iter</code></span></li>
-<li><a href="iter.html#Range"><code>Range</code></a><span class="from">from <code>std.iter</code></span></li>
-<li><a href="num.html#Num"><code>Num</code></a><span class="from">from <code>std.num</code></span></li>
-<li><a href="default.html#Default"><code>Default</code></a><span class="from">from <code>std.default</code></span></li>
-<li><a href="option.html#then"><code>then</code></a><span class="from">from <code>std.option</code></span></li>
-<li><a href="option.html#then_some"><code>then_some</code></a><span class="from">from <code>std.option</code></span></li>
-<li><a href="cmp.html#Ordering"><code>Ordering</code></a><span class="from">from <code>std.cmp</code></span></li>
-<li><a href="cmp.html#cmp"><code>cmp</code></a><span class="from">from <code>std.cmp</code></span></li>
-<li><a href="cmp.html#min"><code>min</code></a><span class="from">from <code>std.cmp</code></span></li>
-<li><a href="cmp.html#max"><code>max</code></a><span class="from">from <code>std.cmp</code></span></li>
-<li><a href="cmp.html#clamp"><code>clamp</code></a><span class="from">from <code>std.cmp</code></span></li>
+<li><a href="string.html#String"><code>String</code></a><span class="from">from <a href="string.html">std.string</a></span></li>
+<li><a href="list.html#List"><code>List</code></a><span class="from">from <a href="list.html">std.list</a></span></li>
+<li><a href="map.html#Map"><code>Map</code></a><span class="from">from <a href="map.html">std.map</a></span></li>
+<li><a href="set.html#Set"><code>Set</code></a><span class="from">from <a href="set.html">std.set</a></span></li>
+<li><a href="error.html#Error"><code>Error</code></a><span class="from">from <a href="error.html">std.error</a></span></li>
+<li><a href="error.html#Missing"><code>Missing</code></a><span class="from">from <a href="error.html">std.error</a></span></li>
+<li><a href="error.html#assert"><code>assert</code></a><span class="from">from <a href="error.html">std.error</a></span></li>
+<li><a href="error.html#unravel"><code>unravel</code></a><span class="from">from <a href="error.html">std.error</a></span></li>
+<li><a href="fmt.html#Show"><code>Show</code></a><span class="from">from <a href="fmt.html">std.fmt</a></span></li>
+<li><a href="fmt.html#Fmt"><code>Fmt</code></a><span class="from">from <a href="fmt.html">std.fmt</a></span></li>
+<li><a href="ops.html#Copy"><code>Copy</code></a><span class="from">from <a href="ops.html">std.ops</a></span></li>
+<li><a href="ops.html#Eq"><code>Eq</code></a><span class="from">from <a href="ops.html">std.ops</a></span></li>
+<li><a href="ops.html#Ord"><code>Ord</code></a><span class="from">from <a href="ops.html">std.ops</a></span></li>
+<li><a href="ops.html#Hash"><code>Hash</code></a><span class="from">from <a href="ops.html">std.ops</a></span></li>
+<li><a href="ops.html#Integer"><code>Integer</code></a><span class="from">from <a href="ops.html">std.ops</a></span></li>
+<li><a href="iter.html#Iter"><code>Iter</code></a><span class="from">from <a href="iter.html">std.iter</a></span></li>
+<li><a href="iter.html#Stream"><code>Stream</code></a><span class="from">from <a href="iter.html">std.iter</a></span></li>
+<li><a href="iter.html#Shuttle"><code>Shuttle</code></a><span class="from">from <a href="iter.html">std.iter</a></span></li>
+<li><a href="iter.html#Burst"><code>Burst</code></a><span class="from">from <a href="iter.html">std.iter</a></span></li>
+<li><a href="iter.html#Range"><code>Range</code></a><span class="from">from <a href="iter.html">std.iter</a></span></li>
+<li><a href="num.html#Num"><code>Num</code></a><span class="from">from <a href="num.html">std.num</a></span></li>
+<li><a href="default.html#Default"><code>Default</code></a><span class="from">from <a href="default.html">std.default</a></span></li>
+<li><a href="option.html#then"><code>then</code></a><span class="from">from <a href="option.html">std.option</a></span></li>
+<li><a href="option.html#then_some"><code>then_some</code></a><span class="from">from <a href="option.html">std.option</a></span></li>
+<li><a href="cmp.html#Ordering"><code>Ordering</code></a><span class="from">from <a href="cmp.html">std.cmp</a></span></li>
+<li><a href="cmp.html#cmp"><code>cmp</code></a><span class="from">from <a href="cmp.html">std.cmp</a></span></li>
+<li><a href="cmp.html#min"><code>min</code></a><span class="from">from <a href="cmp.html">std.cmp</a></span></li>
+<li><a href="cmp.html#max"><code>max</code></a><span class="from">from <a href="cmp.html">std.cmp</a></span></li>
+<li><a href="cmp.html#clamp"><code>clamp</code></a><span class="from">from <a href="cmp.html">std.cmp</a></span></li>
 </ul>
-<h2>Functions</h2>
-<div class="item" id="uint">
+<h2 id="functions">Functions</h2>
+<section class="item" id="uint">
 <div class="item-head">
-<span class="sig">fun <strong>uint</strong>(bits: u8) -&gt; type</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">fun</span> <strong>uint</strong>(bits: u8) -&gt; <span class="kw">type</span></span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#uint" aria-label="Link to uint">#</a>
 </div>
-<p class="item-doc">The unsigned integer type with <code>bits</code> bits: <code>uint(12)</code> is <code>u12</code>.</p>
-</div>
-<div class="item" id="int">
+<div class="item-doc"><p>The unsigned integer type with <code>bits</code> bits: <a class="code-link" href="prelude.html#uint"><code>uint(12)</code></a> is <code>u12</code>.</p></div>
+</section>
+<section class="item" id="int">
 <div class="item-head">
-<span class="sig">fun <strong>int</strong>(bits: u8) -&gt; type</span>
-<span class="badge builtin">builtin</span>
+<span class="sig"><span class="kw">fun</span> <strong>int</strong>(bits: u8) -&gt; <span class="kw">type</span></span>
+<span class="badge builtin" title="Implemented by the compiler or the runtime, not in Loom">builtin</span>
+<a class="item-anchor" href="#int" aria-label="Link to int">#</a>
 </div>
-<p class="item-doc">The signed integer type with <code>bits</code> bits: <code>int(24)</code> is <code>i24</code>.</p>
-</div>
+<div class="item-doc"><p>The signed integer type with <code>bits</code> bits: <a class="code-link" href="prelude.html#int"><code>int(24)</code></a> is <code>i24</code>.</p></div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="../index.html"><span class="dir">&larr; back to</span>the library</a>
+<a class="next" href="bitset.html"><span class="dir">next &rarr;</span>std.bitset</a>
+</nav>
 </main>
 </div>
 </body>

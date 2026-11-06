@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
 <title>std.math · Loom</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,7 +19,7 @@
 <rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
 <path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
 <path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
-</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a href="../../lang/index.html">The book</a><a class="current" href="../../std/index.html">Library</a><a class="wide" href="../../lang/diagnostics.html">Codes</a><a class="play-link" href="../../playground.html">Playground</a></nav></header>
 <div class="layout">
 <nav class="sidebar" aria-label="Contents">
 <div class="group">
@@ -66,66 +67,74 @@
 </ul></div>
 </nav>
 <main class="weave">
+<div class="chapter-head">
 <div class="crumb"><a href="../index.html">std</a> / math</div>
 <h1>std.math</h1>
-<p class="summary">Mathematical constants and functions.</p>
-<h2>Constants</h2>
-<div class="item" id="PI">
+<p class="summary">Mathematical constants. The functions on numbers (<code>sqrt</code>, <code>sin</code>, <code>pow</code>, <code>gcd</code>...) are methods of the number types themselves: see <a class="code-link" href="num.html"><code>std.num</code></a>.</p>
+<div class="mod-meta"><span>source: <code>runtime/std/math.loom</code></span><a href="../../lang/values.html">read about it in the book &rarr;</a></div>
+</div>
+<nav class="toc-chips" aria-label="In this module"><a href="#PI"><span class="kind">const</span>PI</a><a href="#EULER"><span class="kind">const</span>EULER</a><a href="#TAU"><span class="kind">const</span>TAU</a><a href="#SQRT_2"><span class="kind">const</span>SQRT_2</a><a href="#LN_2"><span class="kind">const</span>LN_2</a><a href="#LN_10"><span class="kind">const</span>LN_10</a><a href="#INV_PI"><span class="kind">const</span>INV_PI</a><a href="#PHI"><span class="kind">const</span>PHI</a></nav>
+<h2 id="constants">Constants</h2>
+<section class="item" id="PI">
 <div class="item-head">
-<span class="sig">const <strong>PI</strong>: f64 = 3.141592653589793</span>
-<span class="badge todo">TODO</span>
-</div>
-<p class="item-doc empty">undocumented in source</p>
-</div>
-<div class="item" id="EULER">
-<div class="item-head">
-<span class="sig">const <strong>EULER</strong>: f64 = 2.718281828459045</span>
-<span class="badge todo">TODO</span>
-</div>
-<p class="item-doc empty">undocumented in source</p>
-</div>
-<div class="item" id="TAU">
-<div class="item-head">
-<span class="sig">const <strong>TAU</strong>: f64 = 6.283185307179586</span>
+<span class="sig"><span class="kw">const</span> <strong>PI</strong>: f64 = 3.141592653589793</span>
 
 </div>
-<p class="item-doc">A full turn in radians: twice <code>PI</code>.</p>
-</div>
-<div class="item" id="SQRT_2">
+<div class="item-doc"><p>Half a turn in radians: the ratio of a circle's circumference to its diameter.</p></div>
+</section>
+<section class="item" id="EULER">
 <div class="item-head">
-<span class="sig">const <strong>SQRT_2</strong>: f64 = 1.4142135623730951</span>
+<span class="sig"><span class="kw">const</span> <strong>EULER</strong>: f64 = 2.718281828459045</span>
 
 </div>
-<p class="item-doc">The square root of 2.</p>
-</div>
-<div class="item" id="LN_2">
+<div class="item-doc"><p>Euler's number <code>e</code>, the base of the natural logarithm.</p></div>
+</section>
+<section class="item" id="TAU">
 <div class="item-head">
-<span class="sig">const <strong>LN_2</strong>: f64 = 0.6931471805599453</span>
+<span class="sig"><span class="kw">const</span> <strong>TAU</strong>: f64 = 6.283185307179586</span>
 
 </div>
-<p class="item-doc">The natural logarithm of 2.</p>
-</div>
-<div class="item" id="LN_10">
+<div class="item-doc"><p>A full turn in radians: twice <code>PI</code>.</p></div>
+</section>
+<section class="item" id="SQRT_2">
 <div class="item-head">
-<span class="sig">const <strong>LN_10</strong>: f64 = 2.302585092994046</span>
+<span class="sig"><span class="kw">const</span> <strong>SQRT_2</strong>: f64 = 1.4142135623730951</span>
 
 </div>
-<p class="item-doc">The natural logarithm of 10.</p>
-</div>
-<div class="item" id="INV_PI">
+<div class="item-doc"><p>The square root of 2.</p></div>
+</section>
+<section class="item" id="LN_2">
 <div class="item-head">
-<span class="sig">const <strong>INV_PI</strong>: f64 = 0.3183098861837907</span>
+<span class="sig"><span class="kw">const</span> <strong>LN_2</strong>: f64 = 0.6931471805599453</span>
 
 </div>
-<p class="item-doc">One over <code>PI</code>.</p>
-</div>
-<div class="item" id="PHI">
+<div class="item-doc"><p>The natural logarithm of 2.</p></div>
+</section>
+<section class="item" id="LN_10">
 <div class="item-head">
-<span class="sig">const <strong>PHI</strong>: f64 = 1.618033988749895</span>
+<span class="sig"><span class="kw">const</span> <strong>LN_10</strong>: f64 = 2.302585092994046</span>
 
 </div>
-<p class="item-doc">The golden ratio.</p>
+<div class="item-doc"><p>The natural logarithm of 10.</p></div>
+</section>
+<section class="item" id="INV_PI">
+<div class="item-head">
+<span class="sig"><span class="kw">const</span> <strong>INV_PI</strong>: f64 = 0.3183098861837907</span>
+
 </div>
+<div class="item-doc"><p>One over <code>PI</code>.</p></div>
+</section>
+<section class="item" id="PHI">
+<div class="item-head">
+<span class="sig"><span class="kw">const</span> <strong>PHI</strong>: f64 = 1.618033988749895</span>
+
+</div>
+<div class="item-doc"><p>The golden ratio.</p></div>
+</section>
+<nav class="pager" aria-label="Modules">
+<a class="prev" href="map.html"><span class="dir">&larr; previous</span>std.map</a>
+<a class="next" href="mem.html"><span class="dir">next &rarr;</span>std.mem</a>
+</nav>
 </main>
 </div>
 </body>

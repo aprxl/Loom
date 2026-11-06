@@ -86,9 +86,12 @@ Speed work, reviews and design effort go to Treadle.
 - Keep the design docs in sync when behavior changes. If an example stops being
   accurate, fix the example or the implementation, not both silently.
 - The docs site (`docs/`, opened by `loom docs`) is generated: edit
-  `docs/std/data.py` or `docs/lang/pages/*.md`, run `python docs/gen.py`,
-  and when behavior changes, `python docs/gen.py --check --loom
-  target/debug/loom.exe` (every sample in the language guide runs).
+  `docs/lang/pages/*.md` (the book; `docs/lang/STYLE.md` says how it's
+  written) or the `///` doc comments in `runtime/std/*.loom` (the std pages
+  are made from them), run `python docs/gen.py`, and when behavior changes,
+  `python docs/gen.py --check --loom target/debug/loom.exe` (every sample in
+  the book runs) and `python docs/play/build.py` (the browser playground's
+  wasm build of the compiler; it needs `rustup target add wasm32-wasip1`).
 
 ## Status
 
