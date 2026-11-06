@@ -5,13 +5,17 @@
 //! release; elsewhere a key counts as held for the one poll after it was
 //! pressed. In raw mode Ctrl-C is a key like any other, so a poll that sees
 //! it fails, and the program unravels: its `defer`s put the terminal back.
+//!
+//! A WebAssembly build has no terminal: raw mode and keys are refused, and
+//! the size is 80 by 24.
 
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
 
-use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
-use crossterm::terminal;
+#[cfg(not(target_family = "wasm"))]
+use native::{next_key, set_raw_mode, terminal_size};
+#[cfg(target_family = "wasm")]
+use none::{next_key, set_raw_mode, terminal_size};
 
 /// Whether raw mode is on, for the ways out that have no [`Term`] to ask: a
 /// second Ctrl-C, a panic.
@@ -20,7 +24,7 @@ static RAW: AtomicBool = AtomicBool::new(false);
 /// Leaves raw mode if it's on, from anywhere.
 pub fn restore_terminal() {
     if RAW.swap(false, Ordering::Relaxed) {
-        let _ = terminal::disable_raw_mode();
+        let _ = set_raw_mode(false);
     }
 }
 
@@ -36,8 +40,7 @@ pub struct Term {
 
 impl Term {
     pub fn raw_mode(&mut self, on: bool) -> Result<(), String> {
-        let switched = if on { terminal::enable_raw_mode() } else { terminal::disable_raw_mode() };
-        switched.map_err(|e| format!("can't switch the terminal's raw mode: {e}"))?;
+        set_raw_mode(on).map_err(|e| format!("can't switch the terminal's raw mode: {e}"))?;
         self.raw = on;
         RAW.store(on, Ordering::Relaxed);
         Ok(())
@@ -48,16 +51,15 @@ impl Term {
     pub fn poll_keys(&mut self, keymap: &str) -> Result<u16, String> {
         let failed = |e: std::io::Error| format!("can't read the keyboard: {e}");
         let mut pressed = HashSet::new();
-        while event::poll(Duration::ZERO).map_err(failed)? {
-            let Event::Key(key) = event::read().map_err(failed)? else { continue };
-            let KeyCode::Char(c) = key.code else { continue };
+        while let Some(key) = next_key().map_err(failed)? {
+            let Some(c) = key.char else { continue };
             let c = c.to_ascii_lowercase();
-            if key.kind == KeyEventKind::Release {
+            if key.released {
                 self.held.remove(&c);
                 self.reports_releases = true;
                 continue;
             }
-            if c == 'c' && key.modifiers.contains(KeyModifiers::CONTROL) {
+            if c == 'c' && key.ctrl {
                 return Err("interrupted (Ctrl-C)".into());
             }
             self.held.insert(c);
@@ -93,5 +95,65 @@ impl Drop for Term {
 
 /// The terminal's columns and rows, or 80 and 24 when there is none.
 pub fn size() -> (u16, u16) {
-    terminal::size().unwrap_or((80, 24))
+    terminal_size().unwrap_or((80, 24))
+}
+
+/// A key event: its character (none for keys that aren't one), whether it
+/// was a release, and whether Ctrl was held.
+struct Key {
+    char: Option<char>,
+    released: bool,
+    ctrl: bool,
+}
+
+#[cfg(not(target_family = "wasm"))]
+mod native {
+    use std::time::Duration;
+
+    use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+    use crossterm::terminal;
+
+    use super::Key;
+
+    pub fn set_raw_mode(on: bool) -> std::io::Result<()> {
+        if on { terminal::enable_raw_mode() } else { terminal::disable_raw_mode() }
+    }
+
+    /// The next key event waiting, if any; never blocks.
+    pub fn next_key() -> std::io::Result<Option<Key>> {
+        while event::poll(Duration::ZERO)? {
+            let Event::Key(key) = event::read()? else { continue };
+            return Ok(Some(Key {
+                char: if let KeyCode::Char(c) = key.code { Some(c) } else { None },
+                released: key.kind == KeyEventKind::Release,
+                ctrl: key.modifiers.contains(KeyModifiers::CONTROL),
+            }));
+        }
+        Ok(None)
+    }
+
+    pub fn terminal_size() -> std::io::Result<(u16, u16)> {
+        terminal::size()
+    }
+}
+
+#[cfg(target_family = "wasm")]
+mod none {
+    use super::Key;
+
+    fn no_terminal() -> std::io::Error {
+        std::io::Error::new(std::io::ErrorKind::Unsupported, "there is no terminal here")
+    }
+
+    pub fn set_raw_mode(_on: bool) -> std::io::Result<()> {
+        Err(no_terminal())
+    }
+
+    pub fn next_key() -> std::io::Result<Option<Key>> {
+        Err(no_terminal())
+    }
+
+    pub fn terminal_size() -> std::io::Result<(u16, u16)> {
+        Err(no_terminal())
+    }
 }

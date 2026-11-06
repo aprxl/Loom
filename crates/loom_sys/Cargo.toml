@@ -6,7 +6,9 @@ edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
-[dependencies]
+# A WebAssembly build (the docs' playground) has no terminal and no Ctrl-C:
+# `term` refuses raw mode and keys there, and `interrupt` installs no handler.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
 crossterm.workspace = true
 ctrlc.workspace = true
 

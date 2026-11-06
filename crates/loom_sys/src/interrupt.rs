@@ -38,7 +38,9 @@ fn interrupt(flag: &AtomicBool) -> bool {
 pub fn install() -> Arc<AtomicBool> {
     FLAG.get_or_init(|| {
         let flag = Arc::new(AtomicBool::new(false));
+        #[cfg(not(target_family = "wasm"))]
         let set = flag.clone();
+        #[cfg(not(target_family = "wasm"))]
         let _ = ctrlc::set_handler(move || {
             if !interrupt(&set) {
                 // The second one: out at once, but with the terminal as it
