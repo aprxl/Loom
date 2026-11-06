@@ -43,6 +43,27 @@ fn to_codespan(diag: &Diagnostic) -> cs::Diagnostic<FileId> {
     base.with_code(diag.code.id).with_message(&diag.message).with_labels(labels).with_notes(diag.notes.clone())
 }
 
+/// How many of a stage's diagnostics `loom` shows; [`report_tail`] counts the rest.
+pub const MAX_SHOWN: usize = 50;
+
+/// What `loom` writes after the diagnostics of one stage (`parse`,
+/// `resolve`, `type-check`, `compile`) of the program at `path`: how many
+/// past [`MAX_SHOWN`] weren't shown, then, if any is an error, that the
+/// stage failed. The `bool` says whether it failed.
+pub fn report_tail(path: &str, diagnostics: &[Diagnostic], stage: &str) -> (String, bool) {
+    let mut out = String::new();
+    let hidden = diagnostics.len().saturating_sub(MAX_SHOWN);
+    if hidden > 0 {
+        out.push_str(&format!("note: {hidden} more not shown\n\n"));
+    }
+    let errors = diagnostics.iter().filter(|d| d.is_error()).count();
+    if errors > 0 {
+        let plural = if errors == 1 { "" } else { "s" };
+        out.push_str(&format!("error: {path} failed to {stage} ({errors} error{plural})\n"));
+    }
+    (out, errors > 0)
+}
+
 /// Renders one diagnostic without color, e.g. for tests and golden files.
 pub fn render_plain(db: &SourceDb, diag: &Diagnostic) -> String {
     term::emit_into_string(&config(), db, &to_codespan(diag))

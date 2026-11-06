@@ -1,0 +1,3 @@
+# Samples the docs playground (crates/loom_play) can't run as `loom` does,
+# one per line: NAME, then why. The docs show these with their checked output
+# and no Run button; crates/loom_play/tests/samples.rs keeps the list honest.

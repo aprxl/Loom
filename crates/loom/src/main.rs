@@ -27,18 +27,14 @@ use loom_compiler::modules::FsLoader;
 use loom_compiler::target::Target;
 use loom_compiler::treadle;
 use loom_compiler::typeck::{self, Typed};
-use loom_host::{Host, Outcome, Output};
+use loom_host::{Host, Output};
 use loom_runner::{EXIT_FAILED, EXIT_INTERNAL, describe, exit_code, worker_count};
-use loom_syntax::diag::{ColorMode, emit_to_stderr};
+use loom_syntax::diag::{ColorMode, MAX_SHOWN, emit_to_stderr, report_tail};
 use loom_syntax::token::dump_tokens;
 use loom_syntax::{Diagnostic, FileId, SourceDb, lex, parse, pretty};
 
 /// Exit codes (see design/lua-backend.md).
 const EXIT_COMPILE_ERROR: u8 = 2;
-
-/// How many diagnostics one report shows; the rest are counted. Past the
-/// first few, they're mostly the same mistake again.
-const MAX_SHOWN: usize = 50;
 
 #[derive(Debug, Parser)]
 #[command(name = "loom", version, about = "The Loom compiler: Loom → Lua 5.4")]
@@ -256,17 +252,9 @@ fn report(
     {
         eprintln!("error: couldn't write diagnostics: {e}");
     }
-    let hidden = diagnostics.len() - shown.len();
-    if hidden > 0 {
-        eprintln!("note: {hidden} more not shown\n");
-    }
-    let errors = diagnostics.iter().filter(|d| d.is_error()).count();
-    if errors == 0 {
-        return Ok(());
-    }
-    let plural = if errors == 1 { "" } else { "s" };
-    eprintln!("error: {} failed to {stage} ({errors} error{plural})", path.display());
-    Err(ExitCode::from(EXIT_COMPILE_ERROR))
+    let (tail, failed) = report_tail(&path.display().to_string(), diagnostics, stage);
+    eprint!("{tail}");
+    if failed { Err(ExitCode::from(EXIT_COMPILE_ERROR)) } else { Ok(()) }
 }
 
 /// Parses and resolves the program rooted at `path`. When a file has syntax
@@ -633,29 +621,7 @@ fn test_vm(path: &Path, color: ColorMode, level: Level) -> ExitCode {
 
 /// Prints what each test did, and how it went overall.
 fn test_report(runs: &[loom_host::TestRun]) -> ExitCode {
-    let plural = |n: usize| if n == 1 { "" } else { "s" };
-    println!("running {} test{}", runs.len(), plural(runs.len()));
-    for run in runs {
-        let verdict = if run.outcome == Outcome::Finished { "ok" } else { "FAILED" };
-        println!("test {} ... {verdict}", run.name);
-    }
-    let failed: Vec<&loom_host::TestRun> = runs.iter().filter(|r| r.outcome != Outcome::Finished).collect();
-    if !failed.is_empty() {
-        println!("\nfailures:");
-        for run in &failed {
-            println!("\n---- {} ----", run.name);
-            print!("{}", run.output);
-            if !run.output.is_empty() && !run.output.ends_with('\n') {
-                println!();
-            }
-            print!("{}", describe(&run.outcome).unwrap_or_default());
-        }
-    }
-    let verdict = if failed.is_empty() { "ok" } else { "FAILED" };
-    println!("\ntest result: {verdict}. {} passed; {} failed", runs.len() - failed.len(), failed.len());
-    // A crash is Loom's bug, whatever else happened.
-    if let Some(crash) = failed.iter().find(|r| matches!(r.outcome, Outcome::Crash { .. })) {
-        return exit_code(&crash.outcome);
-    }
-    if failed.is_empty() { ExitCode::SUCCESS } else { ExitCode::from(EXIT_FAILED) }
+    let (report, code) = loom_runner::test_report(runs, &loom_runner::read_source);
+    print!("{report}");
+    ExitCode::from(code)
 }

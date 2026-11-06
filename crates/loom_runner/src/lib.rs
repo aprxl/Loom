@@ -6,7 +6,7 @@
 use std::process::ExitCode;
 
 use loom_isa::Image;
-use loom_sys::{Host, Location, Outcome, Output};
+use loom_sys::{Host, Location, Outcome, Output, TestRun};
 use loom_vm::{Config, HostTable, Vm};
 
 /// Exit codes (see design/lua-backend.md).
@@ -142,7 +142,12 @@ pub fn run(image: &Image, program: String, args: Vec<String>, trusted: bool) -> 
 }
 
 pub fn exit_code(outcome: &Outcome) -> ExitCode {
-    ExitCode::from(match outcome {
+    ExitCode::from(exit_status(outcome))
+}
+
+/// The exit code a run that ended with `outcome` gives.
+pub fn exit_status(outcome: &Outcome) -> u8 {
+    match outcome {
         Outcome::Finished => 0,
         Outcome::Unravel { .. } => EXIT_UNRAVEL,
         Outcome::Failed { .. } => EXIT_FAILED,
@@ -150,11 +155,23 @@ pub fn exit_code(outcome: &Outcome) -> ExitCode {
         Outcome::Crash { .. } | Outcome::OverBudget { .. } | Outcome::Refused { .. } => EXIT_INTERNAL,
         Outcome::Exit(code) => *code,
         Outcome::Interrupted => EXIT_INTERRUPTED,
-    })
+    }
+}
+
+/// Reads a source file from disk, for the source line under a location.
+pub fn read_source(file: &str) -> Option<String> {
+    std::fs::read_to_string(file).ok()
 }
 
 /// What went wrong, for a run that didn't finish: the message, and where.
 pub fn describe(outcome: &Outcome) -> Option<String> {
+    describe_in(outcome, &read_source)
+}
+
+/// [`describe`], with the source line under a location taken from `source`
+/// (a file's name to its text): for a program that isn't on disk.
+pub fn describe_in(outcome: &Outcome, source: &dyn Fn(&str) -> Option<String>) -> Option<String> {
+    let location_text = |at| location_text(at, source);
     Some(match outcome {
         Outcome::Finished | Outcome::Exit(_) => return None,
         Outcome::Interrupted => "interrupted (Ctrl-C)\n".into(),
@@ -197,14 +214,50 @@ fn backtrace_text(trace: &[(String, Option<Location>)], gap: Option<(usize, usiz
 }
 
 /// `  --> file:line:col` and the source line, with a caret under the column.
-fn location_text(location: Option<&Location>) -> String {
+fn location_text(location: Option<&Location>, source: &dyn Fn(&str) -> Option<String>) -> String {
     let Some(at) = location else { return String::new() };
     let mut out = format!("  --> {}:{}:{}\n", at.file, at.line, at.column);
-    let Ok(text) = std::fs::read_to_string(&at.file) else { return out };
+    let Some(text) = source(&at.file) else { return out };
     let Some(line) = text.lines().nth(at.line.saturating_sub(1) as usize) else { return out };
     let number = at.line.to_string();
     let pad = " ".repeat(number.len());
     let caret = " ".repeat(at.column.saturating_sub(1) as usize);
     out.push_str(&format!("{pad} |\n{number} | {line}\n{pad} | {caret}^\n"));
     out
+}
+
+/// What `loom test` prints for `runs`: each test's verdict, the output and
+/// failure of each that failed, and the totals. The `u8` is the exit code.
+pub fn test_report(runs: &[TestRun], source: &dyn Fn(&str) -> Option<String>) -> (String, u8) {
+    use std::fmt::Write as _;
+    let plural = |n: usize| if n == 1 { "" } else { "s" };
+    let mut out = String::new();
+    let _ = writeln!(out, "running {} test{}", runs.len(), plural(runs.len()));
+    for run in runs {
+        let verdict = if run.outcome == Outcome::Finished { "ok" } else { "FAILED" };
+        let _ = writeln!(out, "test {} ... {verdict}", run.name);
+    }
+    let failed: Vec<&TestRun> = runs.iter().filter(|r| r.outcome != Outcome::Finished).collect();
+    if !failed.is_empty() {
+        out.push_str("\nfailures:\n");
+        for run in &failed {
+            let _ = writeln!(out, "\n---- {} ----", run.name);
+            out.push_str(&run.output);
+            if !run.output.is_empty() && !run.output.ends_with('\n') {
+                out.push('\n');
+            }
+            out.push_str(&describe_in(&run.outcome, source).unwrap_or_default());
+        }
+    }
+    let verdict = if failed.is_empty() { "ok" } else { "FAILED" };
+    let _ = writeln!(out, "\ntest result: {verdict}. {} passed; {} failed", runs.len() - failed.len(), failed.len());
+    // A crash is Loom's bug, whatever else happened.
+    let code = if let Some(crash) = failed.iter().find(|r| matches!(r.outcome, Outcome::Crash { .. })) {
+        exit_status(&crash.outcome)
+    } else if failed.is_empty() {
+        0
+    } else {
+        EXIT_FAILED
+    };
+    (out, code)
 }

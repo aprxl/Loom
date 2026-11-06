@@ -393,6 +393,17 @@ name = "loom_isa"
 version = "0.1.0"
 
 [[package]]
+name = "loom_play"
+version = "0.1.0"
+dependencies = [
+ "loom_compiler",
+ "loom_runner",
+ "loom_syntax",
+ "loom_sys",
+ "loom_vm",
+]
+
+[[package]]
 name = "loom_runner"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,21 @@
+[package]
+name = "loom_play"
+description = "The docs' playground: compiles and runs one Loom file in memory, saying what `loom run`, `check` or `test` would. Built for WebAssembly, it runs the docs' samples in the browser."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "loom-play"
+path = "src/main.rs"
+
+[dependencies]
+loom_syntax.workspace = true
+loom_compiler.workspace = true
+loom_runner.workspace = true
+loom_sys.workspace = true
+loom_vm.workspace = true
+
+[lints]
+workspace = true

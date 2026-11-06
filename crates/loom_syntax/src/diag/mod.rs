@@ -8,7 +8,7 @@ pub mod codes;
 mod render;
 
 pub use codes::Code;
-pub use render::{ColorMode, emit_to_stderr, render_plain};
+pub use render::{ColorMode, MAX_SHOWN, emit_to_stderr, render_plain, report_tail};
 
 use crate::source::Span;
 

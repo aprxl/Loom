@@ -197,14 +197,7 @@ unsafe extern "C-unwind" fn stop(state: *mut mlua::ffi::lua_State, _: *mut mlua:
     }
 }
 
-/// One test of a test bundle, and how it went.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TestRun {
-    pub name: String,
-    pub outcome: Outcome,
-    /// What it printed.
-    pub output: String,
-}
+pub use loom_sys::TestRun;
 
 /// Runs the tests of a bundle built by `lower_tests`, one after another,
 /// each with its own output. `Err` if the bundle doesn't even load.

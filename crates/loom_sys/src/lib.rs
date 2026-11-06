@@ -58,6 +58,15 @@ pub struct Location {
     pub column: u32,
 }
 
+/// One test of a program, and how it went.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TestRun {
+    pub name: String,
+    pub outcome: Outcome,
+    /// What it printed.
+    pub output: String,
+}
+
 /// What compile-time code may use up (design/vm.md §9.5, §17: V4).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Budget {
