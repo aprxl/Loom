@@ -2,6 +2,26 @@
 
 Running log of milestone work and decisions. Newest first. Replaces `ledger.log`.
 
+## Start-up and compile time (2026-11-10)
+
+Done (numbers in bench/RESULTS.md, "Start-up and compile time"): the lexer's
+byte fast paths and a first-byte punctuation table, the parser without token
+clones and with one token buffer per compile, FxHash for the resolver's
+scopes, a size-class allocator for the `loom` binary (`crates/loom/src/alloc.rs`),
+`user32.dll` delay-loaded by `loom` and the runner stub, and the tables every
+Treadle worker reads on cache lines of their own (`loom_vm::lines`). Hello world
+15.8 to 11.8 ms; compiling `bench/lexer.loom` 20.0 to 15.1 ms.
+
+Decided (Caio, 2026-11-10): `lua-host` keeps the new allocator. The PUC Lua
+baseline is 10% faster for it (geomean; `binary_trees` 36%), so "against Lua"
+numbers from here on are against that Lua and the gates comparing with it are
+stricter: arena trees 274 ms against Lua's 1.769 s, 6.4x (it read 9.8-10.9x
+against the old baseline; gate 4x); the bench geomean is 2.55x.
+
+Open:
+- `binary_trees` and `nbody` on Treadle read 3-4% slower from where a new
+  `Env` field put the dispatch loop's code (design/vm.md section 9.1).
+
 ## V6 review fixes and open items (2026-10-22)
 
 Done, each its own commit with fixtures on both backends where the behaviour is visible: `mem.swap`/`replace` move spool pointers by reference (9d04867); `owns_heap` looks into user warps, and `put` rejects text, lists and boxes (8b8b6df); the region checks cover `SharedArena` and `Pool` through `#spool_put`/`#spool_reset` markers, and an unknown attribute is N0101 (6ccdd31); documented but unbuilt attributes give U0102 (4d30018); text copied into a spool is typed by its region, `String@sp`, so R0101 and R0102 apply to it (c638e67); a zero-slot `Pool` has no slots (82c3e31); arena sizes are checked and an arena past 8 GiB unravels out of memory on both backends (a865299); the cleanup items (a4f36ea, 7779f67, 5f911e2, 283860f) and one builder for the hidden region parameter (fafedcc, byte-identical Lua, Heddle and bytecode across the corpus); the `usize` maximum literal is by design, Lua's `usize` is 63 bits and Treadle's 64, so `tests/fail/usize_literal.loom` pins it (f0762ab); `std_counts` asserts its setups build N items (f10b8e1); Lua shares one vtable for spool and heap text (468df7f, Treadle unchanged); a `Pool` on Lua takes its slot size from `loom_vm::slot_size` and unravels past 8 GiB as Treadle does, with `pool_huge`, `pool_past_limit` and `pool_under_limit` (Treadle's bytecode and Heddle for the old corpus unchanged).

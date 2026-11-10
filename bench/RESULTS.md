@@ -4,6 +4,117 @@ Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
 
+## Start-up and compile time (2026-11-10)
+
+Every `loom` command paid about 12 ms before it did anything of its own: 5 ms
+lexing, parsing and resolving `std` (120 KB, 17 000 tokens), 1.2 ms loading
+`user32.dll` (and what it loads) for the one call `term.poll_keys` makes, and a
+third of compiling in the system allocator. The changes: the lexer takes its
+fast paths a byte at a time and finds punctuation by its first byte, the
+parser stops cloning tokens and keeps one token buffer for every file of a
+compile, and the resolver's scopes hash with FxHash; the `loom` binary has its
+own allocator (`crates/loom/src/alloc.rs`: size classes per thread, as
+Treadle's heap has); `loom` and the runner stub delay-load `user32.dll`; and
+the tables every Treadle worker reads (code, functions, natives, literals,
+format items, and the program's data) sit on cache lines of their own (`loom_vm::lines`), which the
+new allocator needed (below).
+
+Old and new binary, runs interleaved, best of 21, wall ms:
+
+| | before | after | |
+|---|--:|--:|--:|
+| `loom run` hello world | 15.8 | 11.8 | 0.75 |
+| `loom check` hello world | 14.8 | 11.1 | 0.75 |
+| `loom build --emit bytecode bench/lexer.loom` | 20.0 | 15.1 | 0.76 |
+| `loom check examples/chip8.loom` | 45.8 | 41.3 | 0.90 |
+| `loom run examples/tour.loom` | 20.5 | 15.6 | 0.76 |
+
+In the process (a harness calling the compiler, hello world): resolving went
+from 2.7 to 1.2-1.4 ms warm and from 4.6 to 3.0-3.2 ms cold; compiling
+`bench/lexer.loom` from 3.6 to 2.7 ms warm. The front end makes 29 000
+allocations for hello world (11 MB in all).
+
+**The PUC Lua baseline got faster too.** `loom lua-host` runs Lua in the same
+binary, and mlua allocates through Rust's global allocator, so the new
+allocator serves the baseline as well. Old and new binary on `bench/lua`, best
+of 5, seconds:
+
+| | before | after | |
+|---|--:|--:|--:|
+| `fib` | 0.090 | 0.084 | 0.94 |
+| `sieve` | 0.345 | 0.339 | 0.98 |
+| `mandelbrot` | 0.136 | 0.118 | 0.87 |
+| `nbody` | 0.534 | 0.524 | 0.98 |
+| `spectral_norm` | 0.160 | 0.155 | 0.97 |
+| `fannkuch` | 1.491 | 1.452 | 0.97 |
+| `binary_trees` | 2.705 | 1.740 | 0.64 |
+| `richards` | 0.185 | 0.136 | 0.74 |
+| `word_freq` | 0.245 | 0.234 | 0.95 |
+| `maps` | 0.128 | 0.103 | 0.80 |
+| `sort` | 0.308 | 0.269 | 0.87 |
+| `streams` | 0.943 | 0.900 | 0.96 |
+| `chip8` | 0.105 | 0.101 | 0.96 |
+| `lexer` | 1.460 | 1.438 | 0.99 |
+
+Geometric mean 0.895. So "against Lua" ratios from here on are against a
+faster Lua (`--backend lua` gets the same speedup), and the gates that compare
+with Lua are stricter: `arena_trees` reads 6.4x where it read 9.8-10.9x.
+Treadle, old and new binary, both against the new binary's Lua (best of 9,
+seconds):
+
+| | Lua | Treadle before | Treadle after | before | after |
+|---|--:|--:|--:|--:|--:|
+| `fib` | 0.087 | 0.043 | 0.039 | 2.01x | 2.24x |
+| `sieve` | 0.352 | 0.126 | 0.121 | 2.79x | 2.92x |
+| `mandelbrot` | 0.131 | 0.071 | 0.067 | 1.86x | 1.97x |
+| `nbody` | 0.521 | 0.287 | 0.295 | 1.81x | 1.76x |
+| `spectral_norm` | 0.162 | 0.071 | 0.065 | 2.27x | 2.50x |
+| `fannkuch` | 1.492 | 0.776 | 0.776 | 1.92x | 1.92x |
+| `binary_trees` | 1.766 | 0.660 | 0.686 | 2.68x | 2.58x |
+| `richards` | 0.135 | 0.061 | 0.053 | 2.20x | 2.53x |
+| `word_freq` | 0.248 | 0.214 | 0.210 | 1.16x | 1.18x |
+| `maps` | 0.107 | 0.082 | 0.078 | 1.30x | 1.37x |
+| `sort` | 0.278 | 0.108 | 0.105 | 2.58x | 2.65x |
+| `streams` | 0.879 | 0.082 | 0.076 | 10.71x | 11.59x |
+| `chip8` | 0.104 | 0.060 | 0.060 | 1.74x | 1.72x |
+| `lexer` | 1.436 | 0.188 | 0.182 | 7.63x | 7.88x |
+
+Geometric mean 2.44x before, 2.55x after; most of the gain is the 4 ms of
+start-up in every run. `binary_trees` and `nbody` lost 3-4%: the field the
+format items added to the interpreter's `Env` moved the loop's code (a build
+without it read 651-666 ms on `binary_trees`, against 672-676 before and
+684-698 after), the layout effect section 9.1 of design/vm.md describes.
+
+**False sharing.** With the allocator alone, `par_print` on 8 workers fell
+from 3.56-3.71x to 2.45-3.03x. Moving the blocks of chosen size classes to
+cache lines of their own (an experiment) found it: blocks of 96 and 160 bytes,
+which a small program's format items and native tables take, were carved next
+to what the main worker writes on every `print`, so each write took the line
+from the other seven workers. The system allocator kept them apart by chance.
+Treadle now puts those tables on whole cache lines wherever they come from:
+`par_print` 3.93-4.12x.
+
+Perf gates at the end (`perf_gates`, `compile_time`):
+
+| Gate | Reading | Limit |
+|---|---|---|
+| Box allocate, read, free | 11 ns | at most 15 ns |
+| Arena put over heap box | 0.37 | at most 0.5 |
+| Binary trees in arenas against Lua | 6.4x (the faster Lua) | at least 4x |
+| `par_mandelbrot`, 8 workers | 5.63-5.72x | at least 5.2x |
+| Spawn and join, 8 workers | 0.79-0.84 us | at most 2 us |
+| `par_text` | 6.0x | at least 4x |
+| `par_build` | 5.9x | at least 4x |
+| `par_mutex` | 5.0-5.1x | at least 4x |
+| `par_chunks` | 7.8-7.9x | at least 4x |
+| `par_fmt` | 5.1-5.3x | at least 3.5x |
+| `par_print` | 3.93x | at least 2.5x |
+| source to image at `-O2` over `-O0` | 1.33x | at most 1.75x |
+| `compile_at` alone | 2.08x | at most 2.15x |
+
+"Source to image" rose from 1.25-1.27x because `-O0` got faster: the front
+end both share is a smaller part of it now.
+
 ## V8 summary (2026-11-02)
 
 V8 (speed) is complete; the commits are in LEDGER.md. Geometric mean against PUC
