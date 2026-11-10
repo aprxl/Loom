@@ -39,7 +39,7 @@ use loom_isa::word::{a, b, bc_i32, bc_u32, c, c_i16, unpack_cast};
 use std::io::{BufRead as _, Read as _};
 use std::sync::{Arc, Mutex};
 
-use loom_isa::{Image, LINK_SLOTS, Op};
+use loom_isa::{FmtItem, Image, LINK_SLOTS, Op};
 
 use crate::pool::{Pool, PoolState};
 use crate::sched::{IDLE, Running, Sched, Step, Taken, TaskOp};
@@ -49,6 +49,7 @@ use loom_sys::Host;
 
 use crate::embed::{HostCx, HostFns};
 use crate::ints::{self, IntErr};
+use crate::lines::Lines;
 use crate::natives::{
     Ctx, LocalFn, NativeFn, OutBuf, Worker, WorkerFn, resolve, resolve_local, resolve_task, resolve_worker,
 };
@@ -166,7 +167,7 @@ struct Env<'e, 'i> {
     /// The program's context and threads, by pointer: with several workers
     /// they're shared, each use under the pool's lock (see `pool.rs`), so no
     /// two `&mut` of them ever live at once.
-    ctx: *mut Ctx<'i>,
+    ctx: *mut Ctx,
     stack: &'e mut Stack,
     /// The text literals, which never change: where they are, and where each
     /// starts and how long (a worker reads them without the lock).
@@ -212,6 +213,9 @@ struct Env<'e, 'i> {
     st_ops: Vec<u64>,
     st_pcs: Vec<u64>,
     st_runtime: crate::RuntimeStats,
+    /// The image's format items, as the context keeps them. (Last: where a
+    /// field of this struct sits moves the loop's code, and its speed.)
+    fmts: *const [FmtItem],
 }
 
 /// What every worker of a run shares, none of which changes while it runs
@@ -233,10 +237,11 @@ struct Init<'a, 'i> {
     out: Option<Arc<Mutex<OutBuf>>>,
     batched: bool,
     const_waiting: Arc<std::sync::atomic::AtomicUsize>,
-    ctx: *mut Ctx<'i>,
+    ctx: *mut Ctx,
     sched: *mut Sched,
     rodata: *const u8,
     strings: *const (usize, usize),
+    fmts: *const [FmtItem],
     rodata_range: (u64, u64),
     data_range: (u64, u64),
     entry_results: usize,
@@ -286,19 +291,21 @@ impl Drop for Env<'_, '_> {
 pub(crate) struct Machine<'i> {
     image: &'i Image,
     /// The image's code, with each jump back made a `Loop` (see `with_loops`).
-    code: Box<[u64]>,
-    funcs: Vec<Callee>,
+    /// It and the tables below are what every worker's loop reads: each on
+    /// cache lines of its own (see [`Lines`]).
+    code: Lines<u64>,
+    funcs: Lines<Callee>,
     /// The program's data: the image's, which the program may change
     /// (constants computed on first read).
-    data: Box<[u64]>,
-    natives: Vec<(NativeFn, usize)>,
-    local_natives: Vec<Option<LocalFn>>,
-    worker_natives: Vec<Option<WorkerFn>>,
-    task_natives: Vec<Option<TaskOp>>,
+    data: Lines<u64>,
+    natives: Lines<(NativeFn, usize)>,
+    local_natives: Lines<Option<LocalFn>>,
+    worker_natives: Lines<Option<WorkerFn>>,
+    task_natives: Lines<Option<TaskOp>>,
     host_window: usize,
     /// The host functions bound to the image's imports (see `hostcall`).
     pub(crate) hosts: HostFns,
-    pub ctx: Ctx<'i>,
+    pub ctx: Ctx,
     stack_limit: usize,
     /// Kept between calls from outside.
     stack: Option<Stack>,
@@ -316,8 +323,8 @@ pub(crate) struct Machine<'i> {
 /// budgets and Ctrl-C never see. The compiler already writes `Loop` for those,
 /// so this changes nothing in what it makes, and the forward `Jmp` stays as
 /// it is (a test of the offset on each would cost where it's rarely needed).
-fn with_loops(image: &Image) -> Box<[u64]> {
-    let mut code = image.code.clone().into_boxed_slice();
+fn with_loops(image: &Image) -> Lines<u64> {
+    let mut code = Lines::from(image.code.clone());
     for f in &image.funcs {
         let (mut pc, end) = (f.entry as usize, (f.entry + f.len) as usize);
         while pc < end {
@@ -345,7 +352,7 @@ impl<'i> Machine<'i> {
             .map(|name| resolve(name).ok_or_else(|| format!("Treadle has no native `{name}`")))
             .collect::<Result<Vec<_>, _>>()?;
         let code = with_loops(image);
-        let funcs = image
+        let funcs: Vec<Callee> = image
             .funcs
             .iter()
             .map(|f| Callee {
@@ -355,7 +362,7 @@ impl<'i> Machine<'i> {
                 results: usize::from(f.results),
             })
             .collect();
-        let mut data = image.data.clone().into_boxed_slice();
+        let mut data = Lines::from(image.data.clone());
         // Pointers into the data are offsets in the image: addresses now.
         let base = data.as_ptr() as u64;
         for &r in &image.relocs {
@@ -368,14 +375,14 @@ impl<'i> Machine<'i> {
             has_threads: image.natives.iter().any(|n| n == "task.spawn"),
             image,
             code,
-            funcs,
+            funcs: funcs.into(),
             data,
-            local_natives: image.natives.iter().map(|name| resolve_local(name)).collect(),
-            worker_natives: image.natives.iter().map(|name| resolve_worker(name)).collect(),
-            task_natives: image.natives.iter().map(|name| resolve_task(name)).collect(),
+            local_natives: image.natives.iter().map(|name| resolve_local(name)).collect::<Vec<_>>().into(),
+            worker_natives: image.natives.iter().map(|name| resolve_worker(name)).collect::<Vec<_>>().into(),
+            task_natives: image.natives.iter().map(|name| resolve_task(name)).collect::<Vec<_>>().into(),
             host_window: image.host_window(),
             hosts: HostFns::default(),
-            natives,
+            natives: natives.into(),
             ctx: {
                 let mut ctx = Ctx::new(image, host);
                 ctx.const_waiting = Arc::clone(&sched.const_waiting);
@@ -475,6 +482,7 @@ impl<'i> Machine<'i> {
             sched: &raw mut self.sched,
             rodata: self.ctx.rodata_ptr(),
             strings: self.ctx.strings_ptr(),
+            fmts: self.ctx.fmts_ptr(),
             rodata_range: self.ctx.rodata_range(),
             data_range,
             entry_results: self.funcs[entry].results,
@@ -597,6 +605,7 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
             st_runtime: crate::RuntimeStats::default(),
             st_ops: if cfg!(feature = "stats") { vec![0; Op::ALL.len()] } else { Vec::new() },
             st_pcs: if cfg!(feature = "stats") { vec![0; init.image.code.len()] } else { Vec::new() },
+            fmts: init.fmts,
         };
         // Only `pc` and `fp` (and each instruction's word) stay in registers
         // through the loop; the rest is read from `env` where it's needed.
@@ -1490,7 +1499,9 @@ fn run(init: &Init, stack: &mut Stack, ticks_out: &mut i32, start: Start) -> Res
                                             local: &mut env.local,
                                             out,
                                             batched: env.batched,
-                                            fmts: &env.image.fmts,
+                                            // SAFETY: the context's format items, which
+                                            // outlive the run and never change.
+                                            fmts: unsafe { &*env.fmts },
                                             data_range: env.data_range,
                                             const_waiting: &env.const_waiting,
                                         };

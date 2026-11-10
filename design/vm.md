@@ -736,6 +736,11 @@ loop {
   the same bytecode. What else the loop calls out of line (`memcpy`, the
   other natives) still moves, by a few percent at most. Only MSVC targets
   (lld-link) take the file; elsewhere the code lands where it lands.
+- What every worker's loop reads and almost nothing writes (the code, the
+  function and native tables, the literals, the format items, and the
+  program's data, which only constants computed on first read change) is on
+  cache lines of its own (`loom_vm::lines`): a small table allocated next to
+  a worker's output line made `par_print` a third slower on 8 workers.
 - Everything rare is `#[cold]` and out of line: traps, the allocator's slow
   path, stack segment switches, unwinding.
 - Handlers never allocate Rust values or format strings on their fast path.

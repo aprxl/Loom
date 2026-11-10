@@ -14,15 +14,18 @@ use loom_sys::Output;
 use crate::Trap;
 use crate::fmt::{self, Value};
 use crate::heap::Heap;
+use crate::lines::Lines;
 
 /// What natives read and write.
 #[derive(Debug)]
-pub(crate) struct Ctx<'i> {
-    fmts: &'i [FmtItem],
+pub(crate) struct Ctx {
+    /// The image's format items, its text literals and where each starts:
+    /// read by every worker, so each on cache lines of its own.
+    fmts: Lines<FmtItem>,
     /// Every text literal of the image, one after another.
-    rodata: Box<[u8]>,
+    rodata: Lines<u8>,
     /// Where each literal starts in `rodata`, and its length.
-    strings: Vec<(usize, usize)>,
+    strings: Lines<(usize, usize)>,
     /// Where output goes once it is whole lines, with its own lock: the
     /// workers of a pool put theirs there without the pool's.
     shared_out: Arc<Mutex<OutBuf>>,
@@ -146,8 +149,8 @@ fn lock_out(out: &Mutex<OutBuf>) -> MutexGuard<'_, OutBuf> {
     out.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-impl<'i> Ctx<'i> {
-    pub fn new(image: &'i Image, host: loom_sys::Host) -> Ctx<'i> {
+impl Ctx {
+    pub fn new(image: &Image, host: loom_sys::Host) -> Ctx {
         let sink = host.output;
         let mut rodata = Vec::new();
         let mut strings = Vec::with_capacity(image.strings.len());
@@ -157,9 +160,9 @@ impl<'i> Ctx<'i> {
         }
         let line_buffered = matches!(sink, Output::Stdout) && std::io::stdout().is_terminal();
         Ctx {
-            fmts: &image.fmts,
-            rodata: rodata.into_boxed_slice(),
-            strings,
+            fmts: image.fmts.clone().into(),
+            rodata: rodata.into(),
+            strings: strings.into(),
             shared_out: Arc::new(Mutex::new(OutBuf { buf: Vec::new(), sink, line_buffered })),
             line_buffered,
             pooled: false,
@@ -369,6 +372,10 @@ impl<'i> Ctx<'i> {
         self.strings.as_ptr()
     }
 
+    pub fn fmts_ptr(&self) -> *const [FmtItem] {
+        &raw const *self.fmts
+    }
+
     /// With `checked`: whether `len` bytes at `addr` are a live object or
     /// stack in use.
     fn owns(&self, addr: u64, len: u64) -> bool {
@@ -472,7 +479,7 @@ pub(crate) trait Sinks: Strings {
     fn const_waiting(&self) -> bool;
 }
 
-impl Sinks for Ctx<'_> {
+impl Sinks for Ctx {
     fn local(&mut self) -> &mut Local {
         &mut self.cur
     }
@@ -543,7 +550,7 @@ pub(crate) trait Texts {
     fn text(&self, ptr: u64, len: u64) -> Result<&[u8], Trap>;
 }
 
-impl Texts for Ctx<'_> {
+impl Texts for Ctx {
     fn text(&self, ptr: u64, len: u64) -> Result<&[u8], Trap> {
         // SAFETY: callers pass a text value the compiler built, as `Ctx::text`
         // requires.
@@ -560,7 +567,7 @@ pub(crate) trait HostOps {
     fn bytes_mut(&mut self, addr: u64, len: u64) -> Result<&mut [u8], String>;
 }
 
-impl HostOps for Ctx<'_> {
+impl HostOps for Ctx {
     fn text(&self, addr: u64, len: u64) -> Result<&[u8], String> {
         Texts::text(self, addr, len).map_err(|t| t.message())
     }
@@ -592,7 +599,7 @@ impl HostOps for Ctx<'_> {
 }
 
 /// `len` bytes at `addr` must be live memory in the checked build.
-fn live_check(ctx: &Ctx<'_>, addr: u64, len: u64) -> Result<(), String> {
+fn live_check(ctx: &Ctx, addr: u64, len: u64) -> Result<(), String> {
     if len > 0 && cfg!(feature = "checked") && !ctx.owns(addr, len) {
         return Err(format!("{len} bytes at {addr:#x} aren't live memory"));
     }
@@ -605,7 +612,7 @@ pub(crate) trait Strings: Texts {
     fn heap(&mut self) -> &mut Heap;
 }
 
-impl Strings for Ctx<'_> {
+impl Strings for Ctx {
     fn heap(&mut self) -> &mut Heap {
         &mut self.heap
     }

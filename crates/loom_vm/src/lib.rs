@@ -22,6 +22,7 @@ mod fmt;
 mod heap;
 mod host;
 mod ints;
+mod lines;
 mod methods;
 mod natives;
 mod pool;
