@@ -395,9 +395,13 @@ impl<'a> Builder<'a> {
             ExprKind::Chain { .. } | ExprKind::Is { .. } => self.bool_value(e).map(Val::Regs),
             ExprKind::Cast { expr, kind, .. } => self.cast(e, expr, *kind, ty).map(Val::Regs),
             ExprKind::Field { .. } | ExprKind::LeadingDot(_) | ExprKind::ConstField { .. } => self.field(e),
-            ExprKind::Assoc { .. } => match self.tables().assoc_values.get(&e.id).copied() {
+            ExprKind::Assoc { name, .. } => match self.tables().assoc_values.get(&e.id).copied() {
                 Some(crate::typeck::AssocValue::Int(v)) => self.int_value(v, ty, span).map(Val::Regs),
                 Some(crate::typeck::AssocValue::Const(def)) => self.const_def(def, ty, span),
+                // `T.fields` and the like, still needed when the program runs.
+                None if crate::typeck::REFLECTION_QUERIES.contains(&name.name.as_str()) => {
+                    self.runtime_reflection(span)
+                }
                 None => self.unsupported(span, "this kind of value"),
             },
             ExprKind::DotBlock { subject, body } => self.dot_block(e, subject, body),
@@ -577,18 +581,24 @@ impl<'a> Builder<'a> {
                     _ => self.unsupported(span, "cases"),
                 }
             }
-            ConstVal::Field { .. } | ConstVal::Case { .. } => {
-                let code = loom_syntax::diag::codes::K0111;
-                if !self.diags.iter().any(|d| d.code == code && d.labels.first().is_some_and(|l| l.span == span)) {
-                    self.diags.push(
-                        loom_syntax::Diagnostic::error(code, "reflection only exists while compiling")
-                            .primary(span, "needed when the program runs")
-                            .help("read what you need from it at compile time: `f.name`, `self.(f)`, `const for f in T.fields`"),
-                    );
-                }
-                None
-            }
+            ConstVal::Field { .. } | ConstVal::Case { .. } => self.runtime_reflection(span),
         }
+    }
+
+    /// Reports reflection the program would need when it runs (K0111), once
+    /// for each place, though a `const for` builds the code many times.
+    fn runtime_reflection<T>(&mut self, span: Span) -> Option<T> {
+        let code = loom_syntax::diag::codes::K0111;
+        if !self.diags.iter().any(|d| d.code == code && d.labels.first().is_some_and(|l| l.span == span)) {
+            self.diags.push(
+                loom_syntax::Diagnostic::error(code, "reflection only exists while compiling")
+                    .primary(span, "needed when the program runs")
+                    .help(
+                        "read what you need from it at compile time: `f.name`, `self.(f)`, `const for f in T.fields`",
+                    ),
+            );
+        }
+        None
     }
 
     /// A constant's value: untyped ones are literals; typed ones are
