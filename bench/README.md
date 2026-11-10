@@ -50,6 +50,11 @@ The last runs the Lua version on the Lua 5.4 bundled in `loom` (a Lua file
 that returns its `main` function). Results, with the machine and versions,
 go in `RESULTS.md`.
 
+`python bench/pgo.py --gate` builds `loom` with profile-guided optimization
+(into `target/pgo`, trained on what the suite doesn't time) and times it
+against the plain release binary. It needs `llvm-profdata` of rustc's LLVM.
+`loom` doesn't ship with it: it didn't pass its gate (RESULTS.md, "PGO").
+
 ## The dispatch counts
 
 Wall-clock time is too noisy to fail a test on, so `counts.txt` pins how many

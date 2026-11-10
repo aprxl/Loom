@@ -4,6 +4,59 @@ Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
 
+## PGO (2026-11-10): measured, not shipped
+
+`python bench/pgo.py --gate` builds `loom` instrumented (with
+`.cargo/config.toml`'s rustflags, which RUSTFLAGS would otherwise replace),
+trains it on 281 runs that bench/run.py doesn't time (the `tests/run`
+fixtures, the examples run and checked, the other benchmarks in `bench/`),
+merges the profile with `llvm-profdata` 22.1.8 (rustc 1.98's LLVM is 22.1.8),
+builds again with it, and times that against the plain release binary: best
+of 5, the two interleaved. The gate: geomean at most 0.95, no benchmark more
+than 3% slower, compiling not slower.
+
+| Benchmark | plain | PGO | | trained on the suite | | no block alignment | |
+|---|--:|--:|--:|--:|--:|--:|--:|
+| `fib` | 0.037 s | 0.037 s | 0.985 | 0.036 s | 0.945 | 0.036 s | 0.969 |
+| `sieve` | 0.120 s | 0.122 s | 1.012 | 0.120 s | 1.002 | 0.119 s | 1.004 |
+| `mandelbrot` | 0.065 s | 0.066 s | 1.014 | 0.065 s | 0.994 | 0.066 s | 1.023 |
+| `nbody` | 0.292 s | 0.281 s | 0.963 | 0.279 s | 0.942 | 0.277 s | 0.966 |
+| `spectral_norm` | 0.062 s | 0.066 s | 1.051 | 0.064 s | 0.997 | 0.064 s | 1.026 |
+| `fannkuch` | 0.768 s | 0.792 s | 1.032 | 0.807 s | 1.043 | 0.787 s | 1.022 |
+| `binary_trees` | 0.667 s | 0.693 s | 1.039 | 0.647 s | 0.957 | 0.675 s | 1.018 |
+| `richards` | 0.051 s | 0.052 s | 1.004 | 0.052 s | 0.984 | 0.052 s | 0.989 |
+| `word_freq` | 0.221 s | 0.204 s | 0.921 | 0.185 s | 0.829 | 0.204 s | 0.973 |
+| `maps` | 0.078 s | 0.077 s | 0.999 | 0.073 s | 0.959 | 0.072 s | 0.968 |
+| `sort` | 0.101 s | 0.103 s | 1.021 | 0.101 s | 0.996 | 0.101 s | 1.009 |
+| `streams` | 0.076 s | 0.075 s | 0.983 | 0.076 s | 0.996 | 0.074 s | 1.003 |
+| `chip8` | 0.054 s | 0.054 s | 1.008 | 0.053 s | 0.969 | 0.053 s | 0.979 |
+| `lexer` | 0.181 s | 0.188 s | 1.040 | 0.176 s | 0.987 | 0.186 s | 1.063 |
+| geomean | | | **1.005** | | 0.970 | | 1.000 |
+| compiling `chip8.loom` | 46.4 ms | 43.1 ms | 0.931 | 43.0 ms | 0.929 | 41.8 ms | 0.927 |
+
+(Each variant has its own plain column in the logs, within 1-3% of the one
+shown.) The gate fails: 1.005 against 0.95, with `spectral_norm`, `fannkuch`,
+`binary_trees` and `lexer` 3-5% slower. A second run of the same script (the
+training now run outside the repository's root, so the examples' files don't
+land in it) read 0.981, `chip8`'s 0.867 of it a slow plain run, and compiling
+0.985: the runs move by 2-3%, and PGO's gain on compiling is 1.5-7%. Trained on the very programs it is
+timed on, the best it can do, PGO reaches 0.970, and dropping
+`-align-all-nofallthru-blocks` so the profile lays the blocks out alone gives
+1.000. The dispatch loop's flags (one copy of the dispatch per op, aligned
+blocks) already give it the layout a profile would; what PGO adds is a few
+percent on compiling, too little for a second build in every release. So `loom` ships
+without it, and `bench/pgo.py` stays to measure it again when those flags
+change.
+
+`binary_trees` and `nbody`, which the start-up work read 3-4% slower (684-698
+ms and 295 ms, below): the plain binary reads 663-676 ms and 287-297 ms in
+these runs, so the loss isn't visible here, but nothing in this work aimed at
+it (no Treadle code changed), the earlier numbers come from other runs, and
+runs move by 2-3%: not reproduced, rather than fixed. PGO doesn't move
+`binary_trees` (681-693 ms, 647 when trained on the suite) and takes `nbody`
+to 277-281 ms.
+
+
 ## V9 switch (2026-11-10)
 
 design/vm.md §18's list, checked before Treadle became the default for
@@ -45,6 +98,17 @@ design/vm.md §18's list, checked before Treadle became the default for
    that name a backend are wrong on Lua (a nested generator's `defer`) or on
    both (`parse[f32]`, a hand-written `Show` on a std warp). Images are
    trusted, not verified (Caio, 2026-11-03), which the docs now say.
+
+The `#[ignore]`d gates on the result (release, one at a time): `perf_gates`
+10 of 11 on the first run (a box 11 ns, an arena put 0.36 of a box, arena
+trees 6.6x Lua, `par_chunks` 8.43x, `par_mandelbrot` 5.96x, spawn+join 797
+ns on 8 workers, `par_build` 6.18x, `par_fmt` 5.43x, `par_text` 6.42x,
+`par_mutex` 5.28x). `print_scales_to_8_workers` read 1.18x, then 4.31x and
+0.89x when run alone again: bimodal, and the same on the binary from before
+this work (12 interleaved runs of `par_print` on 8 workers, 210-219 ms on
+both, one 561 ms outlier), so it's the gate's noise, not a change here.
+`compile_time` and `build_exe`'s gates pass (an exe starts at the process
+floor, 6.58 ms against 6.59).
 
 `loom check` on Treadle (an `-O0` build of `main` and the tests, nothing
 written) against the Lua check it replaces, over the 248 files of `examples/`

@@ -763,7 +763,11 @@ but not perfectly (D2). What V8 measures:
   and the `preserve_none` calling convention, built with clang-cl as the Lua
   VM already is;
 - profile-guided optimization of the `loom` binary, which typically gives an
-  interpreter 10–20% on its own.
+  interpreter 10–20% on its own. Measured on 2026-11-10 (`bench/pgo.py`,
+  bench/RESULTS.md): it doesn't here. The tail duplication and block
+  alignment flags already give the loop the layout a profile would, and the
+  suite's geomean read 1.005 and 0.981 of the plain binary's in two runs
+  (the gate is 0.95); compiling got 1.5–7% faster.
 
 ### 9.2 Calls and the stack
 
