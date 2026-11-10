@@ -106,6 +106,14 @@ const OUT_BUFFER: usize = 32 * 1024;
 /// them to the shared output (when that isn't a terminal).
 const QUEUE_BATCH: usize = 16 * 1024;
 
+/// The least capacity of a worker's line buffer, which every `print` writes.
+/// A small one comes from the `loom` binary's size classes, and in some runs
+/// it sat where every write was slow: `par_print` ran a worker 5-6x slower
+/// from its first line to its last, always with its buffer at the same offset
+/// in a chunk (bench/RESULTS.md, "par_print"). One this big comes from the
+/// system's allocator and has lines of its own.
+const LINE_BUF: usize = 2048;
+
 /// Output that is whole lines, waiting to be handed to the host.
 #[derive(Debug)]
 pub(crate) struct OutBuf {
@@ -737,6 +745,10 @@ impl Worker<'_> {
             }
         }
         self.local.out.drain(..end);
+        // A task that moved here may have brought a small buffer.
+        if self.local.out.capacity() < LINE_BUF {
+            self.local.out.reserve(LINE_BUF);
+        }
     }
 }
 

@@ -4,6 +4,37 @@ Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
 
+## par_print (2026-11-10): one slow worker in some runs
+
+`print_scales_to_8_workers` read 1.18x, 4.31x and 0.89x in three runs. On 8
+workers `par_print` takes 70-95 ms, or, in some runs (from 1 in 50 to 1 in 4,
+depending on the hour), 310-330 or 420-450 ms. It isn't the output (it does
+it into NUL too, and the out lock is never waited on for long), the
+scheduler (the 8 tasks start on 8 workers within a millisecond), or the
+machine's load (CPU burners on every core make it 130 ms, not 400). A trace
+kept in memory, with each worker's progress every 100 000 lines and the CPU
+it was on, shows one to three workers slow from their first line to their
+last at a steady 38-55 ms per 100 000 lines, against 6-10, whatever CPU they
+moved to and after every other task had ended; the process's user time is
+higher by about what they took, so they run slowly rather than wait. In all
+10 slow workers of 7 slow runs caught, and in none of the fast ones, the
+worker's line buffer (`Local.out`, a 32-byte block of the binary's size
+classes) was at offset 0xc8b0 or 0xc8d0 of its chunk. What makes that place
+slow isn't pinned down: not the digits buffer on the stack (writing them
+straight into the buffer changed nothing) or the program's literals (their
+addresses differed run to run).
+
+Keeping the buffer at 2 KB or more (`LINE_BUF` in `loom_vm::natives`), so it
+comes from the system's allocator, ends it. On one binary with the change
+behind a flag, runs interleaved, 8 workers: 6 of 40 runs slow without and 0
+of 40 with; at a busier hour 8 of 60 without and 0 of 60 with. Then the
+gate three times in a row: 4.46x, 4.52x, 4.49x (87 ms on 8 workers, 389-393
+ms on one, as before), every other perf gate passing. The suite: 2.60x PUC
+Lua, as before (2.59x). The same experiment on the template sinks
+(`par_fmt`, `par_text`) found no slow mode to remove, and a 2 KB sink made
+`par_fmt` 4-8% slower, so they keep their buffers.
+
+
 ## PGO (2026-11-10): measured, not shipped
 
 `python bench/pgo.py --gate` builds `loom` instrumented (with
