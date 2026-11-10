@@ -1,8 +1,9 @@
 //! The `loom` command-line tool.
 //!
 //! - `check` parses, resolves and type-checks a program.
-//! - `build` compiles it to a Lua bundle (plus a source map), or dumps a
-//!   stage with `--emit tokens|ast|hir|lua|heddle|bytecode` (the last two
+//! - `build` compiles it to Treadle's image (`--exe`: a standalone
+//!   executable; `--backend lua`: a Lua bundle and its source map), or dumps
+//!   a stage with `--emit tokens|ast|hir|lua|heddle|bytecode` (the last two
 //!   are Treadle's, Loom's own VM).
 //! - `run` compiles the program for Treadle and runs it in this process. With
 //!   `--backend lua` it writes the Lua bundle to a temporary file and runs it
@@ -44,7 +45,7 @@ const EXIT_COMPILE_ERROR: u8 = 2;
 #[command(
     name = "loom",
     version,
-    about = "The Loom compiler: runs programs on Treadle, its own VM, or builds them for Lua 5.4"
+    about = "The Loom compiler: builds and runs programs on Treadle, its own VM, or on Lua 5.4"
 )]
 struct Cli {
     /// When to color diagnostics.
@@ -62,21 +63,21 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Transpile a Loom file to Lua (or dump an intermediate stage with --emit).
+    /// Compile a Loom file to Treadle's image, `<file>.lmi`, which `loom run` runs (or dump a stage with --emit).
     Build {
         file: PathBuf,
-        /// Where to write the output (default: stdout for --emit, `<file>.lua` otherwise).
+        /// Where to write the output (default: stdout for --emit, `<file>.lmi`, `<file>` or `<file>.lua` otherwise).
         #[arg(short, long)]
         out: Option<PathBuf>,
-        /// Stop after a stage and print it instead of writing Lua.
-        #[arg(long, value_enum, conflicts_with_all = ["image", "exe"])]
+        /// Stop after a stage and print it instead of writing the program.
+        #[arg(long, value_enum, conflicts_with = "exe")]
         emit: Option<Emit>,
-        /// Write Treadle's compiled image (`<file>.lmi`, which `loom run` runs) instead of Lua.
-        #[arg(long, conflicts_with = "exe")]
-        image: bool,
         /// Write a standalone executable: Treadle and the compiled image, without the compiler.
         #[arg(long)]
         exe: bool,
+        /// What the program is built for: Treadle, Loom's own VM, or Lua (a bundle and its source map).
+        #[arg(long, value_enum, default_value_t = Backend::Vm, conflicts_with = "exe")]
+        backend: Backend,
     },
     /// Compile a Loom file and run it (on Treadle, or with `--backend lua` on the bundled Lua VM).
     Run {
@@ -207,13 +208,11 @@ fn run(cli: Cli) -> ExitCode {
     let color = ColorMode::from(cli.color);
     let level = cli.opt.into();
     match cli.command {
-        Command::Build { file, out, emit, image, exe } => {
-            let product = if exe {
-                Product::Exe
-            } else if image {
-                Product::Image
-            } else {
-                Product::Lua
+        Command::Build { file, out, emit, exe, backend } => {
+            let product = match (exe, backend) {
+                (true, _) => Product::Exe,
+                (false, Backend::Vm) => Product::Image,
+                (false, Backend::Lua) => Product::Lua,
             };
             build(&file, out.as_deref(), emit, product, color, level)
         }
@@ -444,7 +443,7 @@ fn write_output(path: &Path, image: &[u8], product: Product) -> Result<(), ExitC
     Ok(())
 }
 
-/// `loom run x.lmi`: runs an image `loom build --image` wrote.
+/// `loom run x.lmi`: runs an image `loom build` wrote.
 fn run_image(path: &Path, args: Vec<String>) -> ExitCode {
     let image =
         std::fs::read(path).map_err(|e| e.to_string()).and_then(|b| loom_isa::decode(&b).map_err(|e| e.to_string()));

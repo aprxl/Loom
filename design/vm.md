@@ -679,10 +679,10 @@ An image holds:
 - unwind tables;
 - debug info: a line table per function, what was inlined where, file names.
 
-`loom build --backend vm` writes one and `loom run x.treadle` runs one.
+`loom build` writes one (`x.lmi`) and `loom run x.lmi` runs one.
 Images aren't portable across compiler versions, and the header says which
-compiler made them. A standalone executable (the `loom` binary with an image
-appended) comes in V9.
+compiler made them. `loom build --exe` writes a standalone executable: the
+runner (Treadle without the compiler) with the image appended.
 
 ---
 

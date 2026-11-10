@@ -407,7 +407,7 @@ locals), constant initializers in dependency order (`C`), and finally
 `return F.main_N`. Next to it, `NAME.lua.map` maps each Lua line that starts a
 statement to its Loom file, line and column.
 
-`loom build` writes both files. `loom run` compiles in-process, writes them to
+`loom build --backend lua` writes both files. `loom run --backend lua` compiles in-process, writes them to
 a temp file, and spawns `loom lua-host <bundle> -- args` with stdin, stdout and
 stderr inherited. The host loads the chunk, gives it `__LOOM_HOST.write` (so
 output reaches the Windows console as UTF-8), and calls `main`. Anything that

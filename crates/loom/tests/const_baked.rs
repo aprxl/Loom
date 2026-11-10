@@ -227,8 +227,8 @@ fn building_in_two_processes_gives_the_same_bytes() {
     let listing_b = run(&["build", "--emit", "bytecode", src]);
     assert_eq!(listing_a, listing_b, "the image's listing changed");
     let (a, b) = (dir.join("a.lua"), dir.join("b.lua"));
-    run(&["build", src, "-o", a.to_str().expect("utf-8")]);
-    run(&["build", src, "-o", b.to_str().expect("utf-8")]);
+    run(&["build", "--backend", "lua", src, "-o", a.to_str().expect("utf-8")]);
+    run(&["build", "--backend", "lua", src, "-o", b.to_str().expect("utf-8")]);
     assert_eq!(std::fs::read(&a).expect("a bundle"), std::fs::read(&b).expect("a bundle"));
     assert_eq!(
         std::fs::read(dir.join("a.lua.map")).expect("a map"),

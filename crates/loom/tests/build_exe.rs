@@ -1,4 +1,4 @@
-//! `loom build --image` and `--exe` (V9): the image a program compiles to
+//! `loom build` and `--exe` (V9): the image a program compiles to
 //! survives a file, and the file, run by itself, does what `loom run` does.
 
 use std::path::{Path, PathBuf};
@@ -153,13 +153,7 @@ fn an_image_runs_with_loom_run() {
     let want = reference(&dir, &args);
 
     let image = dir.join("prog.lmi");
-    let built = loom(&[
-        "build",
-        "--image",
-        dir.join("prog.loom").to_str().expect("utf-8"),
-        "-o",
-        image.to_str().expect("utf-8"),
-    ]);
+    let built = loom(&["build", dir.join("prog.loom").to_str().expect("utf-8"), "-o", image.to_str().expect("utf-8")]);
     assert!(built.status.success(), "{}", text(&built.stderr));
     let mut run = vec!["run", image.to_str().expect("utf-8"), "--"];
     run.extend_from_slice(&args);
@@ -172,13 +166,7 @@ fn a_damaged_image_is_refused() {
     let dir = scratch("bad-image");
     let image = dir.join("prog.lmi");
     std::fs::write(dir.join("prog.loom"), PROGRAM).expect("a source file");
-    let built = loom(&[
-        "build",
-        "--image",
-        dir.join("prog.loom").to_str().expect("utf-8"),
-        "-o",
-        image.to_str().expect("utf-8"),
-    ]);
+    let built = loom(&["build", dir.join("prog.loom").to_str().expect("utf-8"), "-o", image.to_str().expect("utf-8")]);
     assert!(built.status.success(), "{}", text(&built.stderr));
     let mut bytes = std::fs::read(&image).expect("the image");
     let last = bytes.len() - 1;
@@ -213,7 +201,7 @@ fn a_tampered_exe_exits_70() {
 
 #[test]
 fn build_flags_conflict() {
-    let out = loom(&["build", "--exe", "--image", "x.loom"]);
+    let out = loom(&["build", "--exe", "--backend", "lua", "x.loom"]);
     assert_eq!(out.status.code(), Some(2));
     let out = loom(&["build", "--exe", "--emit", "bytecode", "x.loom"]);
     assert_eq!(out.status.code(), Some(2));

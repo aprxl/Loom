@@ -313,8 +313,8 @@ built in `crates/`, following the plan in `design/lua-backend.md`:
   `examples/tour.loom`, `examples/ledger.loom` and `examples/chip8.loom`
   run start to finish (chip8 wants a ROM: `loom run examples/chip8.loom --
   game.ch8`). `loom run <file>` runs a program on Treadle; `loom test <file>` runs its
-  tests; `loom build <file>` writes the Lua (`--backend lua` on `run` and
-  `test` runs the Lua backend); `--emit tokens|ast|hir|lua`
+  tests; `loom build <file>` writes Treadle's image (`--exe` an executable;
+  `--backend lua` on `build`, `run` and `test` picks the Lua backend); `--emit tokens|ast|hir|lua`
   dumps a stage; `loom docs` opens the documentation in your browser. The other examples use more than this; the compiler says
   so rather than guessing.
 - **Treadle**, Loom's own VM, is the default backend: a typed,

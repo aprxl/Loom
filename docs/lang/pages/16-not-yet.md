@@ -52,7 +52,7 @@ For [Pointers, spools and `given`](page:memory):
 - **`unsafe` blocks, raw pointers (`*T`), `extern "C"` calls and `Volatile`.** `unsafe` and `*T` are [U0102](diag:U0102); an `extern "C"` function can be declared but not called, on either backend; `Volatile` doesn't exist.
 - **Spools:** a list, a map or a box can't be held by a warp that lives in a spool ([U0102](diag:U0102)), and `Deque` and `SortedMap` nodes can't be in one either. You can't write a spool of your own: `spool s = MySpool()` for a type that weaves `Spool` is [T0101](diag:T0101).
 - **`given`:** every function spells its own `given`s; a private function doesn't infer them from what it calls.
-- **Treadle images:** `loom build --image` writes a file Treadle can run, but the loader doesn't verify one well enough to trust a file from someone else. Run only images you built.
+- **Treadle images:** `loom build` writes a file Treadle can run. The loader checks its hash, so a damaged file is refused, but an image is trusted: it is only as safe as the compiler that built it, and a file made by hand can touch any memory. Run only images you built.
 
 ## Types and library
 
