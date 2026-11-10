@@ -53,7 +53,7 @@ impl Parser<'_> {
         // `(A, B) => C`: parentheses right before `=>` hold the parameter
         // list, so `((A, B)) => C` takes one tuple and `(()) => C` takes a unit.
         if self.at_punct(Punct::LParen) && self.paren_is_lambda() {
-            let open = self.bump().span;
+            let open = self.bump();
             let params = self.with_nl(false, |p| p.comma_list(Punct::RParen, Self::ty));
             self.expect_close(Punct::RParen, open);
             self.expect_punct(Punct::FatArrow);
@@ -139,7 +139,7 @@ impl Parser<'_> {
                 simple(TyKind::Infer)
             }
             TokenKind::Punct(Punct::LParen) => {
-                let open = self.bump().span;
+                let open = self.bump();
                 let kind = self.with_nl(false, |p| {
                     if p.at_punct(Punct::RParen) {
                         return TyKind::Unit;
@@ -161,7 +161,7 @@ impl Parser<'_> {
                 Ty { kind, span: self.span_from(open) }
             }
             TokenKind::Punct(Punct::LBracket) => {
-                let open = self.bump().span;
+                let open = self.bump();
                 let kind = self.with_nl(false, |p| {
                     let elem = Box::new(p.ty());
                     if p.eat_punct(Punct::Semi).is_some() {
@@ -192,7 +192,7 @@ impl Parser<'_> {
             segments.push(self.path_segment());
         }
         if self.at_punct(Punct::LParen) && !self.at_line_start() {
-            let open = self.bump().span;
+            let open = self.bump();
             let args = self.with_nl(false, |p| p.comma_list(Punct::RParen, Self::expr));
             self.expect_close(Punct::RParen, open);
             return Ty { kind: TyKind::ConstCall { segments, args }, span: self.span_from(start) };
@@ -203,7 +203,7 @@ impl Parser<'_> {
 
     fn path_segment(&mut self) -> crate::ast::Ident {
         if self.at_kw(Keyword::SelfType) {
-            let span = self.bump().span;
+            let span = self.bump();
             return crate::ast::Ident { name: "Self".into(), span };
         }
         self.ident(NameCase::Any, "type name")
@@ -211,7 +211,7 @@ impl Parser<'_> {
 
     /// `[T, 4]`: generic arguments in a type.
     pub(super) fn type_args(&mut self) -> Vec<GenericArg> {
-        let open = self.bump().span;
+        let open = self.bump();
         let args = self.with_nl(false, |p| {
             p.comma_list(Punct::RBracket, |p| match p.kind() {
                 TokenKind::Int(_)

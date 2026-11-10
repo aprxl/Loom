@@ -58,7 +58,11 @@ pub struct SourceFile {
 
 impl SourceFile {
     fn new(name: String, text: String) -> Self {
-        let text = text.strip_prefix('\u{feff}').unwrap_or(&text).replace("\r\n", "\n");
+        let text = if text.starts_with('\u{feff}') || text.contains('\r') {
+            text.strip_prefix('\u{feff}').unwrap_or(&text).replace("\r\n", "\n")
+        } else {
+            text
+        };
         assert!(u32::try_from(text.len()).is_ok(), "source file `{name}` is larger than 4 GiB");
         let mut line_starts = vec![0];
         line_starts.extend(text.match_indices('\n').map(|(i, _)| i as u32 + 1));

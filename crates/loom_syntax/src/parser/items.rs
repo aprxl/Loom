@@ -156,7 +156,7 @@ impl Parser<'_> {
         while let Some(start) = self.eat_punct(Punct::Hash) {
             let name = self.ident(NameCase::Value, "attribute name");
             let args = if self.at_punct(Punct::LParen) && !self.at_line_start() {
-                let open = self.bump().span;
+                let open = self.bump();
                 let args = self.with_nl(false, |p| p.comma_list(Punct::RParen, Self::attr_arg));
                 self.expect_close(Punct::RParen, open);
                 args
@@ -216,7 +216,7 @@ impl Parser<'_> {
             }
             if self.nth_is_punct(1, Punct::LBrace) {
                 self.bump();
-                let open = self.bump().span;
+                let open = self.bump();
                 let group = self.with_nl(false, |p| p.comma_list(Punct::RBrace, Self::use_tree));
                 self.expect_close(Punct::RBrace, open);
                 return UseTree { path, kind: UseKind::Group(group), span: self.span_from(start) };
@@ -268,7 +268,7 @@ impl Parser<'_> {
         }
         let where_clause = self.where_clause();
         let body = if self.at_punct(Punct::LParen) {
-            let open = self.bump().span;
+            let open = self.bump();
             let fields = self.with_nl(false, |p| p.comma_list(Punct::RParen, Self::case_field));
             self.expect_close(Punct::RParen, open);
             WarpBody::Tuple(fields)
@@ -425,7 +425,7 @@ impl Parser<'_> {
         let start = self.peek().span;
         let name = self.ident(NameCase::Type, "case");
         let fields = if self.at_punct(Punct::LParen) && !self.at_line_start() {
-            let open = self.bump().span;
+            let open = self.bump();
             let fields = self.with_nl(false, |p| p.comma_list(Punct::RParen, Self::case_field));
             self.expect_close(Punct::RParen, open);
             Some(fields)
@@ -538,11 +538,11 @@ impl Parser<'_> {
         };
         if let Some(actual) = misplaced {
             let word = self.bump();
-            let keyword = self.text(word.span);
+            let keyword = self.text(word);
             let fixed = format!("{keyword} {}: …", name.name);
             self.report(
                 Diagnostic::error(codes::S0208, format!("`{keyword}` goes before the parameter name"))
-                    .primary(word.span, "parameter modes are written first")
+                    .primary(word, "parameter modes are written first")
                     .help(format!("write `{fixed}`")),
             );
             mode = actual;
@@ -563,7 +563,7 @@ impl Parser<'_> {
                 FnRet::Value(self.ty())
             }
             TokenKind::Punct(Punct::Bang) => {
-                let bang = self.bump().span;
+                let bang = self.bump();
                 let err = self.err_ty();
                 let unit = Ty { kind: TyKind::Unit, span: bang };
                 let span = bang.to(err.span);
@@ -595,7 +595,7 @@ impl Parser<'_> {
         if !self.at_punct(Punct::LBracket) || self.at_line_start() {
             return Vec::new();
         }
-        let open = self.bump().span;
+        let open = self.bump();
         let params = self.with_nl(false, |p| {
             p.comma_list(Punct::RBracket, |p| {
                 let start = p.peek().span;

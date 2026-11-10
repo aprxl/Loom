@@ -37,7 +37,12 @@ impl Lexed {
 
 /// Lexes one file of `db`.
 pub fn lex(db: &SourceDb, file: FileId) -> Lexed {
-    let mut lexer = Lexer::new(file, db.file(file).text());
+    lex_into(db, file, Vec::new())
+}
+
+/// [`lex`], with the tokens in `tokens`' memory (what it holds is dropped).
+pub(crate) fn lex_into(db: &SourceDb, file: FileId, tokens: Vec<Token>) -> Lexed {
+    let mut lexer = Lexer::new(file, db.file(file).text(), tokens);
     lexer.run();
     Lexed { tokens: lexer.tokens, diagnostics: lexer.diags }
 }
@@ -84,6 +89,10 @@ struct Lexer<'a> {
     interps: Vec<Interp>,
 }
 
+/// About how many bytes of source a token takes: the token list is sized by
+/// it before lexing, so it rarely grows.
+const BYTES_PER_TOKEN: usize = 6;
+
 /// Columns of leading whitespace (space = 1, tab = 4).
 fn measure_indent(line: &str) -> u32 {
     let mut cols = 0;
@@ -126,12 +135,14 @@ fn classify_word(text: &str) -> TokenKind {
 }
 
 impl<'a> Lexer<'a> {
-    fn new(file: FileId, src: &'a str) -> Self {
+    fn new(file: FileId, src: &'a str, mut tokens: Vec<Token>) -> Self {
+        tokens.clear();
+        tokens.reserve(src.len() / BYTES_PER_TOKEN);
         Self {
             file,
             src,
             pos: 0,
-            tokens: Vec::new(),
+            tokens,
             diags: Vec::new(),
             nl_pending: false,
             line_indent: measure_indent(src),
@@ -188,16 +199,16 @@ impl<'a> Lexer<'a> {
         loop {
             self.skip_trivia();
             let start = self.pos;
-            let Some(c) = self.peek() else {
+            let Some(b) = self.byte_at(start) else {
                 self.finish();
                 return;
             };
 
             if let Some(interp) = self.interps.last() {
-                match c {
+                match b {
                     // Only reachable for single-line strings: `skip_trivia`
                     // stops at the newline so we can report it here.
-                    '\n' => {
+                    b'\n' => {
                         let start = interp.start;
                         self.report(
                             Diagnostic::error(codes::S0111, "unterminated interpolation")
@@ -209,11 +220,11 @@ impl<'a> Lexer<'a> {
                         self.abandon_interps();
                         continue;
                     }
-                    '}' if interp.depth == 0 => {
+                    b'}' if interp.depth == 0 => {
                         self.close_interp();
                         continue;
                     }
-                    ':' if interp.depth == 0 => {
+                    b':' if interp.depth == 0 => {
                         self.interp_spec();
                         continue;
                     }
@@ -221,13 +232,14 @@ impl<'a> Lexer<'a> {
                 }
             }
 
-            match c {
-                '"' => self.string(start),
-                '\'' => self.char_literal(start),
-                '0'..='9' => self.number(start),
-                'r' if self.byte_at(start + 1) == Some(b'"') => self.raw_string(start),
-                'b' if self.byte_at(start + 1) == Some(b'"') => self.byte_string(start),
-                c if is_ident_start(c) => self.word(start),
+            match b {
+                b'"' => self.string(start),
+                b'\'' => self.char_literal(start),
+                b'0'..=b'9' => self.number(start),
+                b'r' if self.byte_at(start + 1) == Some(b'"') => self.raw_string(start),
+                b'b' if self.byte_at(start + 1) == Some(b'"') => self.byte_string(start),
+                b'a'..=b'z' | b'A'..=b'Z' | b'_' => self.word(start),
+                0x80.. if self.peek().is_some_and(is_ident_start) => self.word(start),
                 _ => self.punct(start),
             }
         }
@@ -328,8 +340,14 @@ impl<'a> Lexer<'a> {
 
     fn word(&mut self, start: usize) {
         self.bump();
-        while self.peek().is_some_and(is_ident_continue) {
-            self.bump();
+        loop {
+            match self.byte_at(self.pos) {
+                Some(b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_') => self.pos += 1,
+                Some(0x80..) if self.peek().is_some_and(is_ident_continue) => {
+                    self.bump();
+                }
+                _ => break,
+            }
         }
         let src = self.src;
         let text = &src[start..self.pos];
@@ -352,9 +370,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn punct(&mut self, start: usize) {
-        let src = self.src;
-        let rest = &src[start..];
-        let Some(&punct) = Punct::BY_LENGTH.iter().find(|p| rest.starts_with(p.as_str())) else {
+        let Some(punct) = Punct::longest(&self.src.as_bytes()[start..]) else {
             let c = self.bump().unwrap_or('\0');
             let mut diag = Diagnostic::error(codes::S0100, format!("unexpected character `{c}`"))
                 .primary(self.span(start, self.pos), "not valid here");

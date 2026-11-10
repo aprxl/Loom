@@ -14,6 +14,6 @@ pub mod twill;
 
 pub use diag::{Diagnostic, Severity};
 pub use lexer::{Lexed, lex};
-pub use parser::{Parsed, parse};
+pub use parser::{Parsed, parse, parse_reusing};
 pub use source::{FileId, LineCol, SourceDb, Span};
 pub use token::{Token, TokenKind};

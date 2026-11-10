@@ -20,11 +20,12 @@ use indexmap::IndexMap;
 use loom_syntax::ast::{self, Ident, UseKind, UseTree, Vis};
 use loom_syntax::diag::codes;
 use loom_syntax::source::{FileId, SourceDb, Span};
-use loom_syntax::{Diagnostic, parse};
+use loom_syntax::{Diagnostic, Token, parse_reusing};
 
 use super::{
     Binding, Def, DefId, DefKind, HirId, Import, Intrinsic, Local, LocalId, LocalKind, Module, ModuleId, Program,
 };
+use crate::fxhash::FxHashMap;
 use crate::modules::{Loader, Source, UserModule};
 
 /// The result of name resolution.
@@ -79,7 +80,7 @@ enum RibKind {
 #[derive(Debug)]
 struct Rib {
     kind: RibKind,
-    names: HashMap<String, Res>,
+    names: FxHashMap<String, Res>,
 }
 
 /// The [`DefId`]s made for one AST item, so lowering can find them again.
@@ -138,6 +139,8 @@ struct Resolver<'a> {
     /// Diagnostics of `const if` branches being lowered, innermost last.
     deferred: Vec<Vec<Diagnostic>>,
     asts: Vec<Option<ast::Module>>,
+    /// The memory each file's tokens are lexed into (see `parse_reusing`).
+    tokens: Vec<Token>,
     item_defs: Vec<Vec<ItemDefs>>,
     pending_uses: Vec<PendingUse>,
     /// The names being imported in the current round of `resolve_imports`.
@@ -174,6 +177,7 @@ impl<'a> Resolver<'a> {
             diags: Vec::new(),
             deferred: Vec::new(),
             asts: vec![None],
+            tokens: Vec::new(),
             item_defs: vec![Vec::new()],
             pending_uses: Vec::new(),
             in_flight: Vec::new(),
@@ -280,7 +284,7 @@ impl<'a> Resolver<'a> {
     fn add_file_module(&mut self, path: String, parent: Option<ModuleId>, file: FileId) -> ModuleId {
         let name = path.rsplit('.').next().unwrap_or(&path).to_string();
         let id = self.add_module(path, Some(file), parent, &name);
-        let mut parsed = parse(self.db, file);
+        let mut parsed = parse_reusing(self.db, file, &mut self.tokens);
         self.diags.extend(parsed.diagnostics);
         derive::derive_defaults(&mut parsed.module);
         let defs = self.collect_module(id, &parsed.module);
@@ -290,21 +294,21 @@ impl<'a> Resolver<'a> {
     }
 
     fn load_std_module(&mut self, path: &[String], source: Source) {
+        let Some((name, above)) = path.split_last() else { return };
         let mut parent = self.std_root;
         let mut dotted = String::from("std");
-        for (i, segment) in path.iter().enumerate() {
+        for segment in above {
             dotted.push('.');
             dotted.push_str(segment);
-            if i + 1 == path.len() {
-                let file = self.db.add(source.name.clone(), source.text.clone());
-                self.add_file_module(dotted.clone(), Some(parent), file);
-            } else {
-                parent = match self.p.module(parent).children.get(segment) {
-                    Some(&child) => child,
-                    None => self.add_module(dotted.clone(), None, Some(parent), segment),
-                };
-            }
+            parent = match self.p.module(parent).children.get(segment) {
+                Some(&child) => child,
+                None => self.add_module(dotted.clone(), None, Some(parent), segment),
+            };
         }
+        dotted.push('.');
+        dotted.push_str(name);
+        let file = self.db.add(source.name, source.text);
+        self.add_file_module(dotted, Some(parent), file);
     }
 
     /// The user module at `path`, loading it (and queuing its imports) on first use.
@@ -472,7 +476,7 @@ impl<'a> Resolver<'a> {
 
     fn collect_members(&mut self, m: ModuleId, parent: DefId, members: &[ast::Member]) -> Vec<Vec<DefId>> {
         use ast::MemberKind as K;
-        let mut seen: HashMap<String, Span> = HashMap::new();
+        let mut seen: FxHashMap<String, Span> = FxHashMap::default();
         let mut out = Vec::with_capacity(members.len());
         for member in members {
             let names: Vec<&Ident> = match &member.kind {
@@ -709,7 +713,7 @@ impl<'a> Resolver<'a> {
     // ------------------------------------------------------------ scopes
 
     fn push_rib(&mut self, kind: RibKind) {
-        self.ribs.push(Rib { kind, names: HashMap::new() });
+        self.ribs.push(Rib { kind, names: FxHashMap::default() });
     }
 
     fn pop_rib(&mut self) {

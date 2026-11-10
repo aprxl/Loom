@@ -150,7 +150,7 @@ impl Parser<'_> {
                 }
             }
             TokenKind::Punct(Punct::LParen) => {
-                let open = self.bump().span;
+                let open = self.bump();
                 let kind = self.with_nl(false, |p| {
                     if p.at_punct(Punct::RParen) {
                         return PatKind::Tuple(Vec::new());
@@ -172,11 +172,11 @@ impl Parser<'_> {
                 Pat { kind, span: self.span_from(open) }
             }
             TokenKind::Punct(Punct::LBracket) => {
-                let open = self.bump().span;
+                let open = self.bump();
                 let elems = self.with_nl(false, |p| {
                     p.comma_list(Punct::RBracket, |p| {
                         if p.at_punct(Punct::DotDot) {
-                            let start = p.bump().span;
+                            let start = p.bump();
                             let name =
                                 matches!(p.kind(), TokenKind::Ident).then(|| p.ident(NameCase::Value, "binding"));
                             return Pat { kind: PatKind::Rest(name), span: p.span_from(start) };
@@ -196,7 +196,7 @@ impl Parser<'_> {
 
     fn pat_path_segment(&mut self) -> crate::ast::Ident {
         if self.at_kw(Keyword::SelfType) {
-            let span = self.bump().span;
+            let span = self.bump();
             return crate::ast::Ident { name: "Self".into(), span };
         }
         self.ident(NameCase::Any, "name")
@@ -207,7 +207,7 @@ impl Parser<'_> {
         if !self.at_punct(Punct::LParen) || self.at_line_start() {
             return Pat { kind: PatKind::Case { path, fields: None, rest: false }, span: self.span_from(start) };
         }
-        let open = self.bump().span;
+        let open = self.bump();
         let mut rest = false;
         let fields = self.with_nl(false, |p| {
             p.comma_list(Punct::RParen, |p| {

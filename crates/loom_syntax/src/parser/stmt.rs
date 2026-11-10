@@ -106,7 +106,8 @@ impl Parser<'_> {
     }
 
     fn let_stmt(&mut self) -> StmtKind {
-        let mutable = self.bump().kind == TokenKind::Keyword(Keyword::Var);
+        let mutable = self.at_kw(Keyword::Var);
+        self.bump();
         let pat = self.pat_top(false);
         let ty = self.eat_punct(Punct::Colon).map(|_| self.ty());
         let init = if self.eat_punct(Punct::Eq).is_some() {

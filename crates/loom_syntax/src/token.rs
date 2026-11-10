@@ -305,15 +305,23 @@ macro_rules! puncts {
                 }
             }
 
-            /// Every punctuation token, longest spellings first, which is
-            /// the order the lexer tries them in (maximal munch).
-            pub const BY_LENGTH: &'static [Punct] = &{
+            /// The longest punctuation token that `text` starts with
+            /// (maximal munch).
+            pub fn longest(text: &[u8]) -> Option<Punct> {
+                let first = usize::from(*text.first()?);
+                let group = usize::from(*Self::GROUPS.get(first)?)..usize::from(*Self::GROUPS.get(first + 1)?);
+                Self::BY_FIRST_BYTE[group].iter().copied().find(|p| text.starts_with(p.as_str().as_bytes()))
+            }
+
+            /// Every punctuation token, grouped by its first byte, the longest
+            /// spellings of a group first: the order `longest` tries them in.
+            const BY_FIRST_BYTE: [Punct; Self::COUNT] = {
                 let mut all = [$(Punct::$variant,)*];
-                // Sort by descending length at compile time (insertion sort).
+                // Insertion sort, at compile time.
                 let mut i = 1;
                 while i < all.len() {
                     let mut j = i;
-                    while j > 0 && all[j - 1].len() < all[j].len() {
+                    while j > 0 && all[j].sorts_before(all[j - 1]) {
                         let tmp = all[j - 1];
                         all[j - 1] = all[j];
                         all[j] = tmp;
@@ -323,6 +331,35 @@ macro_rules! puncts {
                 }
                 all
             };
+
+            /// Where each ASCII byte's group starts in `BY_FIRST_BYTE` (and, one
+            /// past the last byte, where the last group ends).
+            const GROUPS: [u8; 129] = {
+                let mut starts = [0; 129];
+                let mut i = 0;
+                while i < Self::COUNT {
+                    let mut b = Self::BY_FIRST_BYTE[i].first_byte() as usize + 1;
+                    while b < starts.len() {
+                        starts[b] += 1;
+                        b += 1;
+                    }
+                    i += 1;
+                }
+                starts
+            };
+
+            const COUNT: usize = [$($text,)*].len();
+
+            const fn sorts_before(self, other: Punct) -> bool {
+                let (a, b) = (self.first_byte(), other.first_byte());
+                a < b || (a == b && self.len() > other.len())
+            }
+
+            const fn first_byte(self) -> u8 {
+                match self {
+                    $(Punct::$variant => $text.as_bytes()[0],)*
+                }
+            }
 
             const fn len(self) -> usize {
                 match self {
@@ -475,8 +512,38 @@ mod tests {
 
     #[test]
     fn puncts_are_ordered_longest_first() {
-        let lens: Vec<usize> = Punct::BY_LENGTH.iter().map(|p| p.as_str().len()).collect();
-        assert!(lens.windows(2).all(|w| w[0] >= w[1]), "{lens:?}");
+        for group in Punct::BY_FIRST_BYTE.chunk_by(|a, b| a.first_byte() == b.first_byte()) {
+            let lens: Vec<usize> = group.iter().map(|p| p.as_str().len()).collect();
+            assert!(lens.windows(2).all(|w| w[0] >= w[1]), "{group:?}");
+        }
+    }
+
+    #[test]
+    fn the_longest_punct_is_found() {
+        // Against the plain definition: of every punct the text starts with, the longest.
+        let naive = |text: &[u8]| {
+            Punct::BY_FIRST_BYTE
+                .iter()
+                .copied()
+                .filter(|p| text.starts_with(p.as_str().as_bytes()))
+                .max_by_key(|p| p.as_str().len())
+        };
+        let bytes: Vec<u8> = (0..=255).collect();
+        for &a in &bytes {
+            assert_eq!(Punct::longest(&[a]), naive(&[a]), "{a}");
+            for &b in &bytes {
+                assert_eq!(Punct::longest(&[a, b]), naive(&[a, b]), "{a} {b}");
+            }
+        }
+        for &p in &Punct::BY_FIRST_BYTE {
+            let text = p.as_str().as_bytes();
+            assert_eq!(Punct::longest(text), Some(p));
+            for &next in &bytes {
+                let longer = [text, &[next]].concat();
+                assert_eq!(Punct::longest(&longer), naive(&longer), "{longer:?}");
+            }
+        }
+        assert_eq!(Punct::longest(b""), None);
     }
 
     #[test]

@@ -21,11 +21,9 @@ mod stmt;
 mod tests;
 mod ty;
 
-use std::collections::HashMap;
-
 use crate::ast::{Expr, Ident, Module};
 use crate::diag::{Code, Diagnostic, codes};
-use crate::lexer::lex;
+use crate::lexer::lex_into;
 use crate::source::{FileId, SourceDb, Span};
 use crate::token::{Keyword, Punct, Token, TokenKind, describe};
 
@@ -44,11 +42,20 @@ impl Parsed {
 
 /// Lexes and parses one file of `db`.
 pub fn parse(db: &SourceDb, file: FileId) -> Parsed {
-    let lexed = lex(db, file);
+    parse_reusing(db, file, &mut Vec::new())
+}
+
+/// [`parse`], with the file's tokens in `tokens`' memory, which is left
+/// empty and as big as they needed: parsing one file after another then
+/// touches that memory once, not once a file.
+pub fn parse_reusing(db: &SourceDb, file: FileId, tokens: &mut Vec<Token>) -> Parsed {
+    let lexed = lex_into(db, file, std::mem::take(tokens));
     let mut parser = Parser::new(db, file, lexed.tokens);
     let module = parser.module();
     let mut diagnostics = lexed.diagnostics;
     diagnostics.extend(parser.diags);
+    parser.tokens.clear();
+    *tokens = parser.tokens;
     Parsed { module, diagnostics }
 }
 
@@ -78,8 +85,9 @@ pub(crate) struct Parser<'a> {
     file: FileId,
     /// Doc comments are removed from the stream and kept in `docs`.
     tokens: Vec<Token>,
-    /// Doc comment lines that precede the token at each index.
-    docs: HashMap<usize, Vec<String>>,
+    /// The doc comment lines that precede a token, with the token's index:
+    /// those of the tokens still ahead, the nearest last.
+    docs: Vec<(usize, Vec<String>)>,
     pos: usize,
     diags: Vec<Diagnostic>,
     nl_stack: Vec<bool>,
@@ -112,20 +120,24 @@ const MAX_DEPTH: u32 = 128;
 
 impl<'a> Parser<'a> {
     fn new(db: &'a SourceDb, file: FileId, raw: Vec<Token>) -> Self {
-        let mut tokens = Vec::with_capacity(raw.len());
-        let mut docs: HashMap<usize, Vec<String>> = HashMap::new();
+        let mut tokens = raw;
+        let mut docs: Vec<(usize, Vec<String>)> = Vec::new();
         let mut pending: Vec<String> = Vec::new();
-        for tok in raw {
-            match tok.kind {
-                TokenKind::DocComment(text) => pending.push(text),
-                _ => {
-                    if !pending.is_empty() {
-                        docs.insert(tokens.len(), std::mem::take(&mut pending));
-                    }
-                    tokens.push(tok);
-                }
+        let mut kept = 0;
+        tokens.retain_mut(|tok| match &mut tok.kind {
+            TokenKind::DocComment(text) => {
+                pending.push(std::mem::take(text));
+                false
             }
-        }
+            _ => {
+                if !pending.is_empty() {
+                    docs.push((kept, std::mem::take(&mut pending)));
+                }
+                kept += 1;
+                true
+            }
+        });
+        docs.reverse();
         debug_assert!(matches!(tokens.last(), Some(Token { kind: TokenKind::Eof, .. })));
         Self {
             db,
@@ -194,19 +206,19 @@ impl<'a> Parser<'a> {
     }
 
     fn at_punct(&self, p: Punct) -> bool {
-        *self.kind() == TokenKind::Punct(p)
+        matches!(self.kind(), TokenKind::Punct(q) if *q == p)
     }
 
     fn nth_is_punct(&self, n: usize, p: Punct) -> bool {
-        *self.nth_kind(n) == TokenKind::Punct(p)
+        matches!(self.nth_kind(n), TokenKind::Punct(q) if *q == p)
     }
 
     fn at_kw(&self, k: Keyword) -> bool {
-        *self.kind() == TokenKind::Keyword(k)
+        matches!(self.kind(), TokenKind::Keyword(q) if *q == k)
     }
 
     fn nth_is_kw(&self, n: usize, k: Keyword) -> bool {
-        *self.nth_kind(n) == TokenKind::Keyword(k)
+        matches!(self.nth_kind(n), TokenKind::Keyword(q) if *q == k)
     }
 
     /// The current token is the contextual keyword `word` (lexed as an identifier).
@@ -216,7 +228,7 @@ impl<'a> Parser<'a> {
 
     fn nth_is_contextual(&self, n: usize, word: &str) -> bool {
         let tok = self.nth(n);
-        tok.kind == TokenKind::Ident && self.text(tok.span) == word
+        matches!(tok.kind, TokenKind::Ident) && self.text(tok.span) == word
     }
 
     fn text(&self, span: Span) -> &'a str {
@@ -224,21 +236,22 @@ impl<'a> Parser<'a> {
         db.slice(span)
     }
 
-    /// Consumes the current token (never moves past `Eof`).
-    fn bump(&mut self) -> Token {
-        let tok = self.peek().clone();
+    /// Consumes the current token (never moves past `Eof`) and gives its span.
+    fn bump(&mut self) -> Span {
+        let tok = self.peek();
+        let span = tok.span;
         if !matches!(tok.kind, TokenKind::Eof) {
             self.pos += 1;
         }
-        tok
+        span
     }
 
     fn eat_punct(&mut self, p: Punct) -> Option<Span> {
-        self.at_punct(p).then(|| self.bump().span)
+        self.at_punct(p).then(|| self.bump())
     }
 
     fn eat_kw(&mut self, k: Keyword) -> Option<Span> {
-        self.at_kw(k).then(|| self.bump().span)
+        self.at_kw(k).then(|| self.bump())
     }
 
     /// Span of the most recently consumed token.
@@ -258,8 +271,11 @@ impl<'a> Parser<'a> {
         if end.hi < start.lo { start } else { Span::new(start.file, start.lo, end.hi) }
     }
 
+    /// The doc comment before the current token. (The parser only moves
+    /// forward, so a comment before a token it's past is nobody's.)
     fn take_docs(&mut self) -> Vec<String> {
-        self.docs.remove(&self.pos).unwrap_or_default()
+        while self.docs.pop_if(|(at, _)| *at < self.pos).is_some() {}
+        self.docs.pop_if(|(at, _)| *at == self.pos).map(|(_, lines)| lines).unwrap_or_default()
     }
 
     // ------------------------------------------------------------ diagnostics
@@ -387,8 +403,7 @@ impl<'a> Parser<'a> {
 
     /// Reads an identifier of any case class, checking it against `case`.
     fn ident(&mut self, case: NameCase, what: &str) -> Ident {
-        let tok = self.peek().clone();
-        let actual = match tok.kind {
+        let actual = match self.kind() {
             TokenKind::Ident => NameCase::Value,
             TokenKind::TypeIdent => NameCase::Type,
             TokenKind::ConstIdent => NameCase::Const,
@@ -397,8 +412,8 @@ impl<'a> Parser<'a> {
                 return Ident { name: String::new(), span: self.here() };
             }
         };
-        self.bump();
-        let name = self.text(tok.span).to_string();
+        let span = self.bump();
+        let name = self.text(span).to_string();
         if case != NameCase::Any && case != actual {
             let (rule, example) = match case {
                 NameCase::Value => ("snake_case", "my_name"),
@@ -408,12 +423,12 @@ impl<'a> Parser<'a> {
             };
             self.error_at(
                 codes::S0207,
-                tok.span,
+                span,
                 format!("{what} `{name}` should be {rule}"),
                 format!("{what}s are written like `{example}`"),
             );
         }
-        Ident { name, span: tok.span }
+        Ident { name, span }
     }
 
     // ------------------------------------------------------------ newlines

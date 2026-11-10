@@ -221,7 +221,7 @@ impl Parser<'_> {
                     Expr { kind: ExprKind::Is { expr: Box::new(lhs), pat: Box::new(pat) }, span }
                 }
                 Infix::Range { inclusive } => {
-                    let op = self.bump().span;
+                    let op = self.bump();
                     let hi = self.range_hi_follows().then(|| Box::new(self.expr_bp(BP_RANGE + 1)));
                     let end = hi.as_ref().map_or(op, |h| h.span);
                     let span = lhs.span.to(end);
@@ -258,7 +258,7 @@ impl Parser<'_> {
         while self.continues()
             && let Some(Infix::Cmp(op)) = infix_of(self.kind())
         {
-            let op_span = self.bump().span;
+            let op_span = self.bump();
             let rhs = self.expr_bp(BP_CMP + 1);
             rest.push((op, rhs, op_span));
         }
@@ -304,7 +304,7 @@ impl Parser<'_> {
     /// a shuttle signature). Reports it and carries on as if it were `a < ~b`.
     fn pull_arrow_in_expr(&mut self, lhs: Expr) -> Expr {
         self.last_error_at = Some(self.pos);
-        let arrow = self.bump().span;
+        let arrow = self.bump();
         self.report(
             Diagnostic::error(codes::S0200, "`<~` is the pull arrow, not `<` followed by `~`")
                 .primary(arrow, "one token, only used in shuttle signatures")
@@ -367,12 +367,12 @@ impl Parser<'_> {
                 }
                 TokenKind::Punct(Punct::Dot) => e = self.dot_suffix(e),
                 TokenKind::Punct(Punct::Question) => {
-                    let q = self.bump().span;
+                    let q = self.bump();
                     let span = e.span.to(q);
                     e = Expr { kind: ExprKind::Try(Box::new(e)), span };
                 }
                 TokenKind::Punct(Punct::Caret) => {
-                    let c = self.bump().span;
+                    let c = self.bump();
                     let span = e.span.to(c);
                     e = Expr { kind: ExprKind::Deref(Box::new(e)), span };
                 }
@@ -385,11 +385,11 @@ impl Parser<'_> {
     /// Reads the current integer token, whose value is `value`, as a tuple
     /// index after a `.`: `t.0`, `.1`.
     fn tuple_index(&mut self, value: u128) -> Option<FieldName> {
-        let tok = self.bump();
+        let span = self.bump();
         match u32::try_from(value) {
-            Ok(index) => Some(FieldName::Index(index, tok.span)),
+            Ok(index) => Some(FieldName::Index(index, span)),
             Err(_) => {
-                self.error_at(codes::S0200, tok.span, "tuple index is too large", "not a tuple index");
+                self.error_at(codes::S0200, span, "tuple index is too large", "not a tuple index");
                 None
             }
         }
@@ -402,12 +402,12 @@ impl Parser<'_> {
         let tok = self.peek().clone();
         let kind = match tok.kind {
             TokenKind::Punct(Punct::LBrace) => {
-                let open = self.bump().span;
+                let open = self.bump();
                 let body = self.block_rest(open);
                 ExprKind::DotBlock { subject: Box::new(base), body }
             }
             TokenKind::Punct(Punct::LParen) => {
-                let open = self.bump().span;
+                let open = self.bump();
                 let field = self.with_nl(false, |p| p.expr());
                 self.expect_close(Punct::RParen, open);
                 ExprKind::ConstField { base: Box::new(base), field: Box::new(field) }
@@ -448,9 +448,9 @@ impl Parser<'_> {
         let ident_label = self.nth_is_punct(1, Punct::Colon) && matches!(self.kind(), TokenKind::Ident);
         let label =
             if self.nth_is_punct(1, Punct::Colon) && matches!(self.kind(), TokenKind::Ident | TokenKind::Keyword(_)) {
-                let tok = self.bump();
+                let span = self.bump();
                 self.bump();
-                Some(Ident { name: self.text(tok.span).to_string(), span: tok.span })
+                Some(Ident { name: self.text(span).to_string(), span })
             } else {
                 None
             };
@@ -743,7 +743,7 @@ impl Parser<'_> {
     }
 
     fn template(&mut self) -> Expr {
-        let start = self.bump().span;
+        let start = self.bump();
         let mut parts = Vec::new();
         loop {
             let tok = self.peek().clone();
@@ -842,7 +842,7 @@ impl Parser<'_> {
         if !self.no_lambda && self.paren_is_lambda() {
             return self.lambda_parens();
         }
-        let open = self.bump().span;
+        let open = self.bump();
         let result = self.with_nl(false, |p| {
             if p.at_punct(Punct::RParen) {
                 return ExprKind::Tuple(Vec::new());
@@ -865,7 +865,7 @@ impl Parser<'_> {
     }
 
     fn lambda_parens(&mut self) -> Expr {
-        let open = self.bump().span;
+        let open = self.bump();
         let params = self.with_nl(false, |p| {
             p.comma_list(Punct::RParen, |p| {
                 let take = if p.at_contextual("take") && matches!(p.nth_kind(1), TokenKind::Ident) {
@@ -888,7 +888,7 @@ impl Parser<'_> {
 
     /// `[a, b]`, `[v; n]`, `[k: v, …]`, `[]`, `[:]`.
     fn array_like(&mut self) -> Expr {
-        let open = self.bump().span;
+        let open = self.bump();
         if self.at_kw(Keyword::For) {
             let (pat, iter, cond, elem) = self.with_nl(false, |p| p.comprehension());
             let close = self.expect_close(Punct::RBracket, open);
@@ -939,7 +939,7 @@ impl Parser<'_> {
 
     /// `#` in `x[…]`: the length of `x`, as `x.len()`.
     fn len_expr(&mut self) -> Expr {
-        let span = self.bump().span;
+        let span = self.bump();
         match &self.len_base {
             LenBase::Path(base) => {
                 let base = base.clone();
@@ -1014,7 +1014,7 @@ impl Parser<'_> {
     }
 
     fn match_expr(&mut self) -> Expr {
-        let start = self.bump().span;
+        let start = self.bump();
         let scrutinee = self.head_expr();
         let open = self.expect_punct(Punct::LBrace);
         let outer_indent = self.stmt_indent;
@@ -1108,21 +1108,21 @@ impl Parser<'_> {
     }
 
     fn while_expr(&mut self, label: Option<Ident>) -> Expr {
-        let start = self.bump().span;
+        let start = self.bump();
         let cond = self.head_expr();
         let body = self.block();
         Expr { kind: ExprKind::While { label, cond: Box::new(cond), body }, span: self.span_from(start) }
     }
 
     fn loop_expr(&mut self, label: Option<Ident>) -> Expr {
-        let start = self.bump().span;
+        let start = self.bump();
         let body = self.block();
         Expr { kind: ExprKind::Loop { label, body }, span: self.span_from(start) }
     }
 
     /// `loom { … }`, `loom(args) { … }` or `loom for …`.
     fn loom_expr(&mut self, label: Option<Ident>) -> Expr {
-        let start = self.bump().span;
+        let start = self.bump();
         if self.eat_kw(Keyword::For).is_some() {
             return self.for_rest(start, label, false, true);
         }
@@ -1138,7 +1138,7 @@ impl Parser<'_> {
         self.labels.push(label.name.clone());
         let mut e = match self.kind() {
             TokenKind::Keyword(Keyword::For) => {
-                let start = self.bump().span;
+                let start = self.bump();
                 self.for_rest(start, Some(label), false, false)
             }
             TokenKind::Keyword(Keyword::While) => self.while_expr(Some(label)),
@@ -1151,7 +1151,7 @@ impl Parser<'_> {
     }
 
     fn unsafe_block(&mut self) -> Expr {
-        let start = self.bump().span;
+        let start = self.bump();
         let reason = match self.kind().clone() {
             TokenKind::Str(reason) => {
                 self.bump();
@@ -1173,7 +1173,7 @@ impl Parser<'_> {
 
     /// `const { … }`, `const if …`, `const for …`, or `const expr`.
     fn const_expr(&mut self) -> Expr {
-        let start = self.bump().span;
+        let start = self.bump();
         match self.kind() {
             TokenKind::Keyword(Keyword::If) => {
                 self.bump();
