@@ -14,6 +14,7 @@
 //! - `lua-host` (hidden) runs a bundle, or a test bundle's tests, and
 //!   reports how it ended, with Loom source locations.
 
+mod alloc;
 mod docs;
 
 use std::path::{Path, PathBuf};
@@ -32,6 +33,9 @@ use loom_runner::{EXIT_FAILED, EXIT_INTERNAL, describe, exit_code, worker_count}
 use loom_syntax::diag::{ColorMode, MAX_SHOWN, emit_to_stderr, report_tail};
 use loom_syntax::token::dump_tokens;
 use loom_syntax::{Diagnostic, FileId, SourceDb, lex, parse, pretty};
+
+#[global_allocator]
+static ALLOCATOR: alloc::Classes = alloc::Classes;
 
 /// Exit codes (see design/lua-backend.md).
 const EXIT_COMPILE_ERROR: u8 = 2;
