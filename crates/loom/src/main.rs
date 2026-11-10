@@ -1,6 +1,7 @@
 //! The `loom` command-line tool.
 //!
-//! - `check` parses, resolves and type-checks a program.
+//! - `check` parses, resolves and type-checks a program, and compiles it for
+//!   Treadle (or with `--backend lua`, for Lua) without writing anything.
 //! - `build` compiles it to Treadle's image (`--exe`: a standalone
 //!   executable; `--backend lua`: a Lua bundle and its source map), or dumps
 //!   a stage with `--emit tokens|ast|hir|lua|heddle|bytecode` (the last two
@@ -90,7 +91,12 @@ enum Command {
         args: Vec<String>,
     },
     /// Check a Loom file for errors without writing anything.
-    Check { file: PathBuf },
+    Check {
+        file: PathBuf,
+        /// What the program is checked for: Treadle, Loom's own VM, or Lua.
+        #[arg(long, value_enum, default_value_t = Backend::Vm)]
+        backend: Backend,
+    },
     /// Run a file's tests (`test name() { … }`).
     Test {
         file: PathBuf,
@@ -216,7 +222,7 @@ fn run(cli: Cli) -> ExitCode {
             };
             build(&file, out.as_deref(), emit, product, color, level)
         }
-        Command::Check { file } => check(&file, color),
+        Command::Check { file, backend } => check(&file, backend, color),
         Command::Run { file, backend: Backend::Lua, args } => run_file(&file, &args, color),
         Command::Run { file, backend: Backend::Vm, args } if file.extension().is_some_and(|e| e == IMAGE_EXTENSION) => {
             run_image(&file, args)
@@ -293,11 +299,22 @@ fn typecheck_for(path: &Path, color: ColorMode, target: Target) -> Result<(Sourc
     Ok((db, resolved, typed))
 }
 
-fn check(path: &Path, color: ColorMode) -> ExitCode {
+fn check(path: &Path, backend: Backend, color: ColorMode) -> ExitCode {
     let run = || -> Result<(), ExitCode> {
-        let (db, resolved, typed) = typecheck(path, color)?;
+        let (db, resolved, diagnostics) = match backend {
+            Backend::Vm => {
+                let (db, resolved, typed) = typecheck_for(path, color, Target::VM)?;
+                let diagnostics = treadle::check(&db, &resolved.program, &typed);
+                (db, resolved, diagnostics)
+            }
+            Backend::Lua => {
+                let (db, resolved, typed) = typecheck(path, color)?;
+                let diagnostics = lower::check(&db, &resolved.program, &typed);
+                (db, resolved, diagnostics)
+            }
+        };
         let p = &resolved.program;
-        report(&db, path, &lower::check(&db, p, &typed), "compile", color)?;
+        report(&db, path, &diagnostics, "compile", color)?;
         let n = p.root.map_or(0, |root| p.module(root).decls.len());
         println!("{}: {n} item{}, no errors", path.display(), if n == 1 { "" } else { "s" });
         Ok(())

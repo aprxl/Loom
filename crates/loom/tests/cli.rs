@@ -232,6 +232,29 @@ fun main() {
     );
 }
 
+/// `loom check` checks for Treadle unless told `--backend lua`: the targets'
+/// `usize` differs (63 bits on Lua), so a `const assert` on it fails on one.
+#[test]
+fn check_is_for_the_backend_build_uses() {
+    let path = temp_source(
+        "check-target",
+        "use std.io.print
+
+const assert(target.pointer_bits == 63)
+
+fun main() {
+    print(\"checked\")
+}
+",
+    );
+    let file = path.to_str().expect("utf-8 path");
+    let vm = loom(&["check", file]);
+    assert_eq!(vm.status.code(), Some(2), "{}", text(&vm.stderr));
+    assert!(text(&vm.stderr).contains("K0101"), "{}", text(&vm.stderr));
+    let lua = loom(&["check", "--backend", "lua", file]);
+    assert!(lua.status.success(), "{}", text(&lua.stderr));
+}
+
 /// Plain `loom build` is Treadle's: it writes `<stem>.lmi` in the current
 /// directory, and nothing for Lua.
 #[test]

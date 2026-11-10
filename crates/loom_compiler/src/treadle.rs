@@ -60,6 +60,37 @@ pub fn compile_tests(
     Ok((Compiled { heddle, image }, tests))
 }
 
+/// What `loom check` finds for Treadle: the compile-time code runs (the
+/// tests' too), then `main` and the tests are built and generated at `-O0`,
+/// and nothing is kept: what `loom build` and `loom test` would report.
+pub fn check(db: &SourceDb, p: &Program, typed: &Typed) -> Vec<Diagnostic> {
+    let baked = match crate::consteval::evaluate(db, p, typed, true) {
+        Ok(baked) => baked,
+        Err(diags) => return diags,
+    };
+    let generate = |heddle: Result<heddle::Module, Vec<Diagnostic>>| -> Vec<Diagnostic> {
+        match heddle.and_then(|h| optimized(h, Level::O0)) {
+            Ok(h) if h.funcs.is_empty() => Vec::new(),
+            Ok(h) => codegen::generate(db, &h).err().map(codegen_diagnostics).unwrap_or_default(),
+            Err(diags) => diags,
+        }
+    };
+    let Some(root) = p.root.map(|root| p.module(root)) else { return Vec::new() };
+    let mut diags = Vec::new();
+    if root.items.contains_key("main") {
+        diags.extend(generate(heddle::build_with(p, typed, &baked)));
+    }
+    if !root.tests.is_empty() {
+        // What `main` and a test both reach is reported once.
+        for d in generate(heddle::build_tests_with(p, typed, &baked).map(|(h, _)| h)) {
+            if !diags.contains(&d) {
+                diags.push(d);
+            }
+        }
+    }
+    diags
+}
+
 /// The byte offset of each field of the warp `warp` in `module`, in
 /// declaration order, as the layout gives them (`None` if it has no such
 /// warp, or it has cases).
