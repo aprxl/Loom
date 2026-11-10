@@ -11,6 +11,7 @@ const EXTENSIONS: &[&str] = &["html", "css", "js", "svg", "png"];
 
 fn main() {
     order_code();
+    delay_user32();
     let manifest = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").expect("set by cargo"));
     let docs = manifest.join("../../docs");
     println!("cargo:rerun-if-changed={}", docs.display());
@@ -79,4 +80,15 @@ fn order_code() {
     )
     .expect("OUT_DIR is writable");
     println!("cargo:rustc-link-arg-bins=/ORDER:@{}", out.display());
+}
+
+/// Has `user32.dll` loaded when a program first reads keys (`term.poll_keys`
+/// is all that calls into it), not when `loom` starts: loading it, and what
+/// it loads in turn, took 1.2 ms of every run.
+fn delay_user32() {
+    if std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default() != "msvc" {
+        return;
+    }
+    println!("cargo:rustc-link-arg-bins=/DELAYLOAD:user32.dll");
+    println!("cargo:rustc-link-arg-bins=delayimp.lib");
 }
