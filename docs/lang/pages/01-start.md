@@ -126,7 +126,7 @@ loom build FILE [-o OUT]       write the program out: Treadle's image (FILE.lmi)
 loom docs                      open these docs, offline
 ```
 
-- `loom run` compiles the program and runs it on **Treadle**, Loom's own virtual machine. Arguments after `--` go to the program, which reads them with `env.args()` (the first one is the file's path). Its code is optimized; `-O0` turns that off for the fastest compile, with every call kept in a backtrace.
+- `loom run` compiles the program and runs it on **Treadle**, Loom's own virtual machine. Arguments after `--` go to the program, which reads them with `env.args()` (the first one is the file's path). Its code is optimized; `-O0` turns that off for the fastest compile ([How programs run](page:running) has the whole trip).
 - `loom build` writes Treadle's compiled image (`FILE.lmi`), which `loom run FILE.lmi` runs without compiling again. `loom build --exe` writes a standalone executable: Treadle and the image, without the compiler.
 - `--backend lua` on `run`, `test`, `build` and `check` uses the bundled Lua 5.4 instead: `loom build --backend lua` writes the program as Lua (`FILE.lua`, with a source map). Both backends run the same language; the samples in this book are checked on Treadle.
 - `loom build --emit tokens|ast|hir|lua|heddle|bytecode` prints one stage of the compiler instead, if you're curious how your program looks on the way down.

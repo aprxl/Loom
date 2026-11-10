@@ -4,6 +4,55 @@ Wall clock, best of five, compilation and start-up included (about 10 ms for
 each way of running). Lower is better.
 
 
+## V9 switch (2026-11-10)
+
+design/vm.md §18's list, checked before Treadle became the default for
+`loom build` and `loom check` too (`run` and `test` already were):
+
+1. `tests/vm_skip.txt` is empty.
+2. All 8 examples give the same exit code and stdout on both backends (`loom
+   run`, empty stdin; `chip8` needs a ROM, so `loom test` instead):
+   `calc`, `chip8`, `ledger`, `lexer`, `parallel`, `tour` and `widgets` exit
+   0, and `compile_time` stops at 2 on both (it uses `std.sys`). The four
+   `.vm.out` files are rows of §14: `const_if` P6 (`target.pointer_bits`, 64
+   against 63), `p1_mut_on_unwind` P1, `p4_hash` P4, `shuttle_drop` P2.
+3. The checked build is clean over the corpus (`cargo test -p loom
+   --features vm-checked,vm-stats`). The generator's 20 000 seeds (300 to
+   20 299, `--test gen -- --ignored`, release) pass: 0 failed, 70.25 s on the
+   ordinary build and 64.65 s with `--features vm-checked`.
+4. The V3 speed gate (2.5x PUC Lua) holds: 2.59x, lowest 1.07x
+   (`word_freq`), against the PUC Lua that got 10% faster with the new
+   allocator (below):
+
+   | Benchmark | PUC Lua 5.4 | Treadle | |
+   |---|--:|--:|--:|
+   | `fib` | 0.088 s | 0.039 s | 2.25x |
+   | `sieve` | 0.345 s | 0.120 s | 2.87x |
+   | `mandelbrot` | 0.133 s | 0.065 s | 2.03x |
+   | `nbody` | 0.567 s | 0.294 s | 1.93x |
+   | `spectral_norm` | 0.156 s | 0.063 s | 2.46x |
+   | `fannkuch` | 1.502 s | 0.773 s | 1.94x |
+   | `binary_trees` | 1.801 s | 0.673 s | 2.68x |
+   | `richards` | 0.138 s | 0.055 s | 2.52x |
+   | `word_freq` | 0.237 s | 0.221 s | 1.07x |
+   | `maps` | 0.116 s | 0.078 s | 1.48x |
+   | `sort` | 0.293 s | 0.105 s | 2.80x |
+   | `streams` | 0.945 s | 0.077 s | 12.21x |
+   | `chip8` | 0.103 s | 0.058 s | 1.76x |
+   | `lexer` | 1.500 s | 0.187 s | 8.02x |
+
+5. Nothing in LEDGER.md is wrong on Treadle and right on Lua. The open items
+   that name a backend are wrong on Lua (a nested generator's `defer`) or on
+   both (`parse[f32]`, a hand-written `Show` on a std warp). Images are
+   trusted, not verified (Caio, 2026-11-03), which the docs now say.
+
+`loom check` on Treadle (an `-O0` build of `main` and the tests, nothing
+written) against the Lua check it replaces, over the 248 files of `examples/`
+and `tests/run`, best of 5 each: 2706 ms before, 2867 ms after (1.06x; the
+gate was 1.3x). `loom check --backend lua` prints exactly what the old check
+did on all 248.
+
+
 ## Start-up and compile time (2026-11-10)
 
 Every `loom` command paid about 12 ms before it did anything of its own: 5 ms

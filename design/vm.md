@@ -10,6 +10,12 @@
 > the image and the Lua bundle (§17).
 > **V5 is built** (2026-10-17): threads on several workers, with the limits
 > listed in §17.
+> **V6 is built** (2026-10-22): heap pointers, spools, regions and `given`
+> (design/v6-spools.md). V7, Lua interop, is deferred.
+> **V8 is built** (2026-11-02): 2.73× PUC Lua on `bench/` (geomean).
+> **V9 is built** (2026-11-10): Treadle is the default for `loom run`,
+> `test`, `build` and `check`; `loom build` writes images and `--exe`
+> executables, and §18's list holds.
 > The decisions in
 > [section 3](#3-decisions) were settled on 2026-09-29.
 
@@ -664,6 +670,9 @@ compiled or loaded from an image:
 
 It doesn't check what a register's value *means*: whether a pointer really
 points somewhere. That's the compiler's job, and the checked build's (§5.6).
+So an image file is trusted, not verified (decided 2026-11-03): the loader
+checks its hash and runs this verifier, and a file made by hand can still
+read or write any address. Only images you built should be run.
 
 ### 8.7 Images
 
@@ -2008,9 +2017,9 @@ numbers in RESULTS.md.
 Passing: the V8 row of §16, and a scoreboard in RESULTS.md against every
 interpreter available.
 
-### V9: Treadle by default
+### V9: Treadle by default — done (2026-11-10)
 
-In: `loom run`, `test` and `build` use Treadle unless told `--backend lua`;
+In: `loom run`, `test`, `build` and `check` use Treadle unless told `--backend lua`;
 image files; `loom build --exe`; docs-site pages on how programs run; this
 document's status.
 
@@ -2032,6 +2041,11 @@ Treadle becomes the default once:
 
 V9 is the latest this happens. The Lua backend stays in the test suite as the
 oracle, and stays the way to run Loom inside a Lua host.
+
+It happened on 2026-11-10, with each item checked in bench/RESULTS.md ("V9
+switch"): the examples agree, the four `.vm.out` files are P1, P2, P4 and P6,
+20 000 seeds pass on the ordinary and the checked build, and Treadle is 2.59×
+PUC Lua.
 
 ---
 

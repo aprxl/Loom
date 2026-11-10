@@ -1,0 +1,13 @@
+use std.io.print
+
+warp Point: Eq, Hash { x: i32, y: i32 }
+
+fun main() {
+    // What the program is compiled for.
+    print("pointers: {target.pointer_bits} bits")
+    print("usize max: {usize.MAX}")
+    // Equal values hash the same; the number itself is the backend's own.
+    let p = Point(x: 1, y: 2)
+    print("{p.hash() == Point(x: 1, y: 2).hash()} {p.hash()}")
+}
+//@ run

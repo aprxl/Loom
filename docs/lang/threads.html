@@ -42,6 +42,7 @@
 <li><a href="reflection.html" data-chapter="reflection"><span class="num">13</span><span>Reflection</span></a></li>
 <li><a href="tests.html" data-chapter="tests"><span class="num">14</span><span>Tests</span></a></li>
 <li><a class="current" aria-current="page" href="threads.html" data-chapter="threads"><span class="num">15</span><span>Threads</span></a></li>
+<li><a href="running.html" data-chapter="running"><span class="num">16</span><span>How programs run</span></a></li>
 <li><a href="not-yet.html" data-chapter="not-yet"><span class="num">A</span><span>Not supported yet</span></a></li>
 </ul></div>
 <div class="group">
@@ -765,10 +766,10 @@ err := g.<span class="t">Wait</span>()</code></pre>
 <h2 id="other-rules">Other rules<a class="anchor" href="#other-rules" aria-label="Link to this section">#</a></h2>
 <ul><li>A loom block's own <code>defer</code>s run when its block ends, before it waits for its threads.</li><li>Results nobody joined are dropped where the loom ends.</li><li>A shuttle can <code>yield</code> and <code>pull</code> inside a loom block: its threads keep running while it waits, and closing it early cancels them and waits for them.</li><li>Compile-time code can't start threads (<a href="diagnostics.html#K0104">K0104</a>).</li><li><code>Atomic</code> takes integers of 8 to 64 bits and <code>bool</code>. A <code>Pipe</code> of a <code>once</code> type isn't built yet (<a href="diagnostics.html#U0102">U0102</a>).</li></ul>
 <h2 id="where-next">Where next<a class="anchor" href="#where-next" aria-label="Link to this section">#</a></h2>
-<p>Threads are the last feature of the language itself. <a href="not-yet.html">Not supported yet</a> says plainly what isn't built: async I/O, for one, isn't part of this version, and neither are thread pools you make yourself with their own queues.</p>
+<p>Threads are the last feature of the language itself. <a href="running.html">How programs run</a> follows a program from its file to Treadle, and says what <code>loom build</code> writes. After it, <a href="not-yet.html">Not supported yet</a> says plainly what isn't built: async I/O, for one, isn't part of this version, and neither are thread pools you make yourself with their own queues.</p>
 <nav class="pager" aria-label="Chapters">
 <a class="prev" href="tests.html"><span class="dir">&larr; Chapter 14</span>Tests</a>
-<a class="next" href="not-yet.html"><span class="dir">Appendix A &rarr;</span>Not supported yet</a>
+<a class="next" href="running.html"><span class="dir">Chapter 16 &rarr;</span>How programs run</a>
 </nav>
 </main>
 </div>

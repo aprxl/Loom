@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<script>document.documentElement.classList.remove("no-js")</script>
+<title>How programs run · Loom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400..800;1,400..800&amp;family=Caveat:wght@500..700&amp;family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..800,0..100,0..1;1,9..144,300..800,0..100,0..1&amp;family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..800,0..1,0..1,0..1&amp;display=swap">
+<link rel="stylesheet" href="../style.css">
+<script src="../weave.js" defer></script>
+<script src="../play/play.js" defer></script>
+</head>
+<body data-chapter="running">
+<header class="topbar"><button class="menu-toggle" type="button" aria-expanded="false" aria-label="Chapters">&#9776;</button><a class="brand" href="../index.html"><svg class="spool" viewBox="0 0 32 32" aria-hidden="true">
+<rect x="6" y="3" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="6" y="24" width="20" height="5" rx="2.5" fill="#8a6a4f"/>
+<rect x="9" y="8" width="14" height="16" fill="#ee7a5f"/>
+<path d="M9 11h14M9 14h14M9 17h14M9 20h14" stroke="#c4533d" stroke-width="1.2"/>
+<path d="M23 15c4 1 5 5 3 9" fill="none" stroke="#ee7a5f" stroke-width="1.6" stroke-linecap="round"/>
+</svg>Loom <span class="docs-word">docs</span></a><nav class="topnav" aria-label="Sections"><a class="current" href="../lang/index.html">The book</a><a href="../std/index.html">Library</a><a class="wide" href="../lang/diagnostics.html">Codes</a><a class="play-link" href="../playground.html">Playground</a></nav></header>
+<div class="layout">
+<nav class="sidebar" aria-label="Contents">
+<div class="group">
+<h3>The book</h3>
+<ul class="beads">
+<li><a href="index.html" data-chapter="index"><span class="num"></span><span>Welcome to Loom</span></a></li>
+<li><a href="start.html" data-chapter="start"><span class="num">1</span><span>Getting started</span></a></li>
+<li><a href="values.html" data-chapter="values"><span class="num">2</span><span>Values and control flow</span></a></li>
+<li><a href="types.html" data-chapter="types"><span class="num">3</span><span>Warps, wefts and weaves</span></a></li>
+<li><a href="generics.html" data-chapter="generics"><span class="num">4</span><span>Generics and <code>any</code></span></a></li>
+<li><a href="collections.html" data-chapter="collections"><span class="num">5</span><span>Collections and streams</span></a></li>
+<li><a href="errors.html" data-chapter="errors"><span class="num">6</span><span>Optionals and errors</span></a></li>
+<li><a href="ownership.html" data-chapter="ownership"><span class="num">7</span><span>Moves, <code>once</code> and <code>defer</code></span></a></li>
+<li><a href="memory.html" data-chapter="memory"><span class="num">8</span><span>Pointers, spools and <code>given</code></span></a></li>
+<li><a href="gauges.html" data-chapter="gauges"><span class="num">9</span><span>Gauges</span></a></li>
+<li><a href="shuttles.html" data-chapter="shuttles"><span class="num">10</span><span>Shuttles</span></a></li>
+<li><a href="compile-time.html" data-chapter="compile-time"><span class="num">11</span><span>Compile-time code</span></a></li>
+<li><a href="const-params.html" data-chapter="const-params"><span class="num">12</span><span>Const parameters and control flow</span></a></li>
+<li><a href="reflection.html" data-chapter="reflection"><span class="num">13</span><span>Reflection</span></a></li>
+<li><a href="tests.html" data-chapter="tests"><span class="num">14</span><span>Tests</span></a></li>
+<li><a href="threads.html" data-chapter="threads"><span class="num">15</span><span>Threads</span></a></li>
+<li><a class="current" aria-current="page" href="running.html" data-chapter="running"><span class="num">16</span><span>How programs run</span></a></li>
+<li><a href="not-yet.html" data-chapter="not-yet"><span class="num">A</span><span>Not supported yet</span></a></li>
+</ul></div>
+<div class="group">
+<h3>Also</h3>
+<ul class="plain-list">
+<li><a href="diagnostics.html">Diagnostic codes</a></li>
+<li><a href="../playground.html">Playground</a></li>
+<li><a href="../std/index.html">Standard library</a></li>
+</ul></div>
+</nav>
+<main class="weave">
+<div class="chapter-head">
+<span class="chapter-no">Chapter 16</span>
+<h1>How programs run</h1>
+<p class="summary">Treadle, the optimizer, images and executables, and the Lua backend.</p>
+</div>
+<p>The chapters so far were about what a program says. This one is about what happens when you run it: how <code>loom run</code> turns a file into something a machine can follow, what <code>loom build</code> leaves on disk, and when you'd reach for the other backend, Lua.</p>
+<p>None of it changes what your program means. Every sample in this book prints the same thing whichever way it runs, except where this chapter says otherwise.</p>
+<h2 id="from-a-file-to-treadle">From a file to Treadle<a class="anchor" href="#from-a-file-to-treadle" aria-label="Link to this section">#</a></h2>
+<p><code>loom run FILE</code> does the whole trip in one process. The file is parsed, its names are resolved, and it's type-checked. Then the compile-time code runs (<a href="compile-time.html">Compile-time code</a>), and what it computed is written into the program as data. The checked program becomes <strong>Heddle</strong>, Loom's typed intermediate code, which the optimizer works on; Heddle becomes bytecode; and <strong>Treadle</strong>, Loom's own virtual machine, runs the bytecode.</p>
+<div class="sample" id="sample-run_stages" data-sample="run_stages" data-mode="run" data-file="run_stages.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>run_stages.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">fun</span> <span class="f">square</span>(x: i64) -&gt; i64 = x * x
+
+<span class="c">/// Sums the squares of `1..=n`.</span>
+<span class="k">fun</span> <span class="f">sum_squares</span>(n: i64) -&gt; i64 {
+    <span class="k">var</span> total = <span class="n">0</span>
+    <span class="k">for</span> i <span class="k">in</span> <span class="n">1</span>..=n {
+        total += <span class="f">square</span>(i)
+    }
+    total
+}
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="f">print</span>(<span class="s">"1..=10: </span><span class="h">{</span><span class="f">sum_squares</span>(<span class="n">10</span>)<span class="h">}</span><span class="s">"</span>)
+    <span class="f">print</span>(<span class="s">"1..=1000: </span><span class="h">{</span><span class="f">sum_squares</span>(<span class="n">1000</span>)<span class="h">}</span><span class="s">"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>1..=10: 385
+1..=1000: 333833500</code></pre></div>
+</div>
+<ul><li><code>loom build FILE --emit heddle</code> prints the Heddle after the optimizer, and <code>--emit bytecode</code> the instructions Treadle runs. <code>--emit tokens</code>, <code>ast</code> and <code>hir</code> show the earlier stages.</li><li><code>loom check FILE</code> goes as far as the bytecode and stops: it reports what <code>loom build</code> and <code>loom test</code> would, and writes nothing.</li><li>A run that unravels prints where. With <code>LOOM_BACKTRACE=1</code> set, it also lists every call that led there, inlined ones included.</li></ul>
+<div class="try"><p>Run <code>loom build docs/lang/samples/run_stages.loom --emit heddle</code> in a terminal (the browser can't show stages). There's only <code>main</code>: the optimizer copied <code>sum_squares</code> and <code>square</code> into it, and the <code>inlined</code> lines at the top say where each piece came from. Add <code>-O0</code> before <code>build</code> and both come back as functions of their own, with a <code>call</code> to each.</p></div>
+<h2 id="optimizing-or-not">Optimizing, or not<a class="anchor" href="#optimizing-or-not" aria-label="Link to this section">#</a></h2>
+<p>Code is optimized unless you say <code>-O0</code>. At <code>-O2</code> (the default) the optimizer inlines small functions, folds constants, merges repeated work, moves what doesn't change out of loops, and drops the bounds and overflow checks it can prove never fail. Those checks are still there whenever it can't: an index out of range unravels at either level, at the same place.</p>
+<ul><li><code>-O0</code> compiles fastest, with every function kept as it was written. Reach for it when compiling time matters more than running time.</li><li><code>-O2</code> takes up to about twice as long to compile, and runs well ahead of <code>-O0</code> on loops and small functions.</li><li>A program prints the same thing at both levels. A difference is a bug in the optimizer.</li></ul>
+<h2 id="images-and-executables">Images and executables<a class="anchor" href="#images-and-executables" aria-label="Link to this section">#</a></h2>
+<p><code>loom build FILE</code> writes <strong>Treadle's image</strong>, <code>FILE.lmi</code>: the program after every stage above, already optimized and with its constants computed. <code>loom run FILE.lmi</code> runs it without compiling anything again. The compiler isn't in the image, and neither is your source code, only what Treadle needs to run it.</p>
+<p><code>loom build --exe FILE</code> goes one step further and writes a standalone executable: Treadle and the image together, which runs on a machine with no Loom installed. It takes arguments like any program, and exits with the program's own exit code.</p>
+<ul><li><code>-o OUT</code> picks the file's name.</li><li>An image holds a hash of its contents, and the loader checks it. A damaged image or executable is refused with a message, rather than run.</li><li>An image is tied to the compiler that wrote it. Rebuild after updating Loom.</li><li>An image is <strong>trusted</strong>. The loader checks the shape of its bytecode (every register, jump and call in range) but not what a pointer points to: that's the compiler's promise, so a file made by hand could touch any memory. Run only images you built.</li></ul>
+<div class="compare">
+<div class="compare-head"><span class="compare-label">Elsewhere</span><div class="tabs" role="tablist" aria-label="Other languages"></div></div>
+<div class="tab-panel" role="tabpanel" data-lang="python" data-label="Python">
+<h4>Python</h4>
+<p>Python caches each module's bytecode in a <code>.pyc</code> file, but it always ships and reads the source: the cache is checked against it. A Loom image stands on its own, with the optimizer's work already done.</p>
+<pre class="foreign" data-lang="python"><code><span class="k">import</span> py_compile
+py_compile.<span class="f">compile</span>(<span class="s">"tour.py"</span>)  <span class="c"># __pycache__/tour.cpython-313.pyc</span></code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="java" data-label="Java">
+<h4>Java</h4>
+<p>A <code>.class</code> file is bytecode too, and the JVM checks its types as it loads, because classes come from anywhere. Loom's loader checks only the bytecode's shape and trusts the compiler for the rest, which keeps loading small and fast.</p>
+<pre class="foreign" data-lang="java"><code><span class="c">// javac Tour.java   -&gt; Tour.class</span>
+<span class="c">// java Tour         -&gt; verified, then run</span></code></pre>
+</div>
+<div class="tab-panel" role="tabpanel" data-lang="go" data-label="Go">
+<h4>Go</h4>
+<p><code>go build</code> writes one native executable with the runtime inside. <code>loom build --exe</code> gives you the same kind of single file, with Treadle in the place of the runtime.</p>
+<pre class="foreign" data-lang="go"><code><span class="c">// go build -o tour .</span></code></pre>
+</div>
+</div>
+<h2 id="threads">Threads<a class="anchor" href="#threads" aria-label="Link to this section">#</a></h2>
+<p>Treadle runs a program's threads (<a href="threads.html">Threads</a>) on several workers: one per core by default. <code>LOOM_THREADS=N</code> picks how many. <code>LOOM_THREADS=1</code> runs every thread on one worker, in a fixed order, which helps when you're chasing a bug that depends on timing.</p>
+<h2 id="the-lua-backend">The Lua backend<a class="anchor" href="#the-lua-backend" aria-label="Link to this section">#</a></h2>
+<p>Loom also compiles to Lua 5.4. <code>--backend lua</code> on <code>run</code>, <code>test</code>, <code>build</code> and <code>check</code> picks it: <code>loom run --backend lua FILE</code> runs the program on the Lua bundled inside <code>loom</code>, and <code>loom build --backend lua FILE</code> writes <code>FILE.lua</code>, a single Lua file, with <code>FILE.lua.map</code> next to it to map its lines back to your source.</p>
+<p>It's the older of the two backends and much slower. It stays because it's the reference Treadle is tested against: every program in Loom's test suite runs on both, and their output is compared. It's also a way to read your program as plain Lua.</p>
+<div class="sample" id="sample-run_target" data-sample="run_target" data-mode="run" data-file="run_target.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>run_target.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">warp</span> <span class="t">Point</span>: <span class="t">Eq</span>, <span class="t">Hash</span> { x: i32, y: i32 }
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="c">// What the program is compiled for.</span>
+    <span class="f">print</span>(<span class="s">"pointers: </span><span class="h">{</span>target.pointer_bits<span class="h">}</span><span class="s"> bits"</span>)
+    <span class="f">print</span>(<span class="s">"usize max: </span><span class="h">{</span>usize.MAX<span class="h">}</span><span class="s">"</span>)
+    <span class="c">// Equal values hash the same; the number itself is the backend's own.</span>
+    <span class="k">let</span> p = <span class="t">Point</span>(x: <span class="n">1</span>, y: <span class="n">2</span>)
+    <span class="f">print</span>(<span class="s">"</span><span class="h">{</span>p.<span class="f">hash</span>() == <span class="t">Point</span>(x: <span class="n">1</span>, y: <span class="n">2</span>).<span class="f">hash</span>()<span class="h">}</span><span class="s"> </span><span class="h">{</span>p.<span class="f">hash</span>()<span class="h">}</span><span class="s">"</span>)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>pointers: 64 bits
+usize max: 18446744073709551615
+true 589729691727335466</code></pre></div>
+</div>
+<p>A few things are allowed to differ, and they're the same few everywhere:</p>
+<table class="plain"><thead><tr><th>What</th><th>Treadle</th><th>Lua</th></tr></thead><tbody><tr><td><code>usize</code> and <code>target.pointer_bits</code></td><td>64 bits</td><td>63 bits (Lua's integers are signed)</td></tr><tr><td><code>x.hash()</code></td><td>Treadle's own hash</td><td>a hash of the value's text</td></tr><tr><td>how deep recursion can go before <code>stack overflow</code></td><td>far: a million calls deep is fine</td><td>Lua's limits</td></tr><tr><td>a <code>mut</code> argument when the function unravels</td><td>keeps the writes made before it</td><td>loses them</td></tr><tr><td>a shuttle dropped part-way through</td><td>runs the <code>defer</code>s it reached</td><td>leaves them to Lua's collector</td></tr></tbody></table>
+<p>Equal values hash the same on both, so a map behaves the same: only the numbers differ.</p>
+<div class="try"><p>Run <code>loom run --backend lua docs/lang/samples/run_target.loom</code> in a terminal. <code>usize.MAX</code> is half as big, and the hash is a different number, while the <code>true</code> stays.</p></div>
+<h2 id="where-next">Where next<a class="anchor" href="#where-next" aria-label="Link to this section">#</a></h2>
+<p>That's the whole trip, from a file to a run. <a href="not-yet.html">Not supported yet</a> lists what the compiler doesn't do, chapter by chapter.</p>
+<nav class="pager" aria-label="Chapters">
+<a class="prev" href="threads.html"><span class="dir">&larr; Chapter 15</span>Threads</a>
+<a class="next" href="not-yet.html"><span class="dir">Appendix A &rarr;</span>Not supported yet</a>
+</nav>
+</main>
+</div>
+</body>
+</html>

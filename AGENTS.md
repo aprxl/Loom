@@ -171,8 +171,8 @@ language through every layer (type checking, lowering to Lua, the runtime,
     `tests/run/derive_json`). `examples/compile_time.loom` fails only for
     `std.sys`.
 
-Treadle, Loom's own VM (`design/vm.md`, milestones V0–V9), is what `loom run`
-and `loom test` use; `--backend lua` selects the Lua backend instead. The typed program becomes Heddle
+Treadle, Loom's own VM (`design/vm.md`, milestones V0–V9), is what `loom run`,
+`test`, `build` and `check` use; `--backend lua` selects the Lua backend instead. The typed program becomes Heddle
 (`loom_compiler::heddle`, a typed SSA IR), Heddle becomes bytecode
 (`loom_compiler::codegen`, into `loom_isa`'s images), and `loom_vm` runs it.
 
@@ -310,9 +310,15 @@ cancel point yet (design/vm.md §11.4, §17).
     `bench/RESULTS.md`'s "V8 summary" (geomean 2.73x over PUC Lua). The `fn`
     keyword is `fun`.
 
-Next: V9 Treadle by default (verifier hardening first). The deferred work of
-each milestone, std included, is in LEDGER.md ("Roadmap"); what V8 left is
-under "Later" there.
+33. Treadle V9, by default: COMPLETE (2026-11-10). `loom run`, `test`,
+    `build` and `check` use Treadle unless told `--backend lua`; `loom build`
+    writes `<file>.lmi` (`--exe` a standalone executable). Images are
+    trusted, hash-checked and run through the verifier, not verified for
+    memory (design/vm.md §8.6). The book's "How programs run" page; §18's
+    list checked in `bench/RESULTS.md` ("V9 switch").
+
+Next: generic wefts. The deferred work of each milestone, std included, is
+in LEDGER.md ("Roadmap"); what V8 left is under "Later" there.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and

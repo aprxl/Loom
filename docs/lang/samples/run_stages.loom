@@ -1,0 +1,18 @@
+use std.io.print
+
+fun square(x: i64) -> i64 = x * x
+
+/// Sums the squares of `1..=n`.
+fun sum_squares(n: i64) -> i64 {
+    var total = 0
+    for i in 1..=n {
+        total += square(i)
+    }
+    total
+}
+
+fun main() {
+    print("1..=10: {sum_squares(10)}")
+    print("1..=1000: {sum_squares(1000)}")
+}
+//@ run

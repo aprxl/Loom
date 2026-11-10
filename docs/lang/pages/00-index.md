@@ -67,6 +67,7 @@ The whole language is designed (the design lives in the repository's `README.md`
 | Reflection, and default methods built from a type's shape | [Reflection](page:reflection) |
 | Tests and `loom test` | [Tests](page:tests) |
 | Threads on many cores: `loom`, `thread`, `loom for`, `Atomic`, `Mutex`, `Pipe` | [Threads](page:threads) |
+| Treadle, the optimizer, images and executables, the Lua backend | [How programs run](page:running) |
 | What isn't built yet, said plainly | [Not supported yet](page:not-yet) |
 
 ## The standard library

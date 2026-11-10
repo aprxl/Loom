@@ -377,4 +377,4 @@ With a `Crew` of two, no more than two of the eight threads run at the same mome
 
 ## Where next
 
-Threads are the last feature of the language itself. [Not supported yet](page:not-yet) says plainly what isn't built: async I/O, for one, isn't part of this version, and neither are thread pools you make yourself with their own queues.
+Threads are the last feature of the language itself. [How programs run](page:running) follows a program from its file to Treadle, and says what `loom build` writes. After it, [Not supported yet](page:not-yet) says plainly what isn't built: async I/O, for one, isn't part of this version, and neither are thread pools you make yourself with their own queues.
