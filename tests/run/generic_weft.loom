@@ -1,0 +1,74 @@
+use std.fmt.Show
+use std.io.print
+
+// A weft with a type parameter: `Into[u64]` and `Into[String]` are two
+// wefts, and one type can weave both.
+weft Into[T] {
+    fun convert(self) -> T
+    fun twice(self) -> (T, T) {
+        let a = Into[T].convert(self)
+        let b = Into[T].convert(self)
+        (a, b)
+    }
+}
+
+warp Meters { v: u64 }
+warp Feet { v: u64 }
+warp Box[T] { v: T }
+
+weave Into[u64] into Meters { fun convert(self) -> u64 = self.v }
+weave Into[String] into Meters { fun convert(self) -> String = "{self.v}m".to_string() }
+weave Into[u64] into Feet { fun convert(self) -> u64 = self.v * 3 }
+weave[T: Show] Into[String] into Box[T] { fun convert(self) -> String = "box of {self.v}".to_string() }
+
+// A super-weft with arguments: `Both[u64]` needs `Into[u64]`.
+weft Both[T]: Into[T] {
+    fun both(self) -> (T, T) = (Into[T].convert(self), Into[T].convert(self))
+}
+
+weave Both[u64] into Meters {}
+weave Both[u64] into Feet {}
+
+// A weave whose parameter is bounded by a weft with arguments, and a super
+// nobody wove, derived because all its methods have defaults.
+warp Wrap[T] { v: T }
+
+weave[T: Into[u64]] Into[u64] into Wrap[T] { fun convert(self) -> u64 = Into[u64].convert(self.v) * 2 }
+
+weft Tag[T] {
+    fun tag(self) -> str = "tagged"
+}
+
+weft Tagged[T]: Tag[T] {
+    fun tagged(self) -> String = "{Tag[T].tag(self)}!"
+}
+
+weave Tagged[u8] into Feet {}
+
+fun conv[T: Into[U], U](x: T) -> U = x.convert()
+
+// `x.convert()` would be ambiguous for a type that weaves two `Into`s.
+fun conv_exact[T: Into[U], U](x: T) -> U = Into[U].convert(x)
+
+fun main() {
+    let m = Meters(v: 7)
+    print(Into[u64].convert(m))
+    print(Into[String].convert(m))
+    let pair = Into[u64].twice(m)
+    print("{pair.0} {pair.1}")
+    let texts = Into[String].twice(m)
+    print("{texts.0} {texts.1}")
+    let both = Both[u64].both(m)
+    print("{both.0} {both.1}")
+    print(conv[Feet, u64](Feet(v: 5)))
+    print(conv[Box[i32], String](Box(v: 4)))
+    print(conv[Box[str], String](Box(v: "x")))
+    let f = Feet(v: 2)
+    print(f.convert())
+    print(Both[u64].both(f).1)
+    print(Into[u64].convert(Wrap(v: Feet(v: 2))))
+    print(conv_exact[Meters, u64](m))
+    print(conv_exact[Meters, String](m))
+    print(Tagged[u8].tagged(f))
+    print(Tag[u8].tag(f))
+}

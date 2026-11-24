@@ -183,9 +183,9 @@ impl Checker<'_> {
     pub(super) fn default_instance(&mut self, ty: Ty) -> Option<super::BodyId> {
         let weft = self.std.default?;
         let method = self.weft_methods(weft).into_iter().find(|&m| self.p.def(m).name == "default")?;
-        let m = self.weaving(weft, ty)?;
+        let m = self.weaving(weft, Some(&[]), ty)?;
         let imp = self.impl_of(m.w, method, ty, 0)?;
-        let inst = self.impl_instance(imp, ty, &m.bindings);
+        let inst = self.impl_instance(imp, ty, Some(m.w), &m.bindings);
         Some(self.instance(inst))
     }
 
@@ -194,7 +194,7 @@ impl Checker<'_> {
         let found = self.given_scope.iter().rev().copied().collect::<Vec<_>>();
         found.into_iter().find(|&(_, ty)| {
             let ty = self.resolve(ty);
-            !self.has_vars(ty) && self.weaves(ty, weft)
+            !self.has_vars(ty) && self.weaves(ty, weft, &[])
         })
     }
 
@@ -220,7 +220,7 @@ impl Checker<'_> {
         let mut explicit = args.iter().filter(|a| a.is_given);
         let mut hints = Vec::with_capacity(f.givens.len());
         for g in &f.givens {
-            let weft = self.weft_of(&g.ty);
+            let weft = self.plain_weft(&g.ty);
             let hint = if let Some(arg) = explicit.next() {
                 let ty = self.check_expr(&arg.value, None);
                 self.prechecked.insert(arg.value.id, ty);

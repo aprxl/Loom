@@ -163,6 +163,7 @@ A weft lists methods. One with a body is a **default**; one without is a require
 - `Shape.name(x)` calls a weft's method explicitly. A default method is type-checked for each warp that uses it.
 - Weaving is explicit. Unlike Go's interfaces, a type doesn't satisfy a weft by accident of having the right methods; someone has to say so.
 - Operators are wefts too: `==` is `Eq`, `<` is `Ord`, `{x}` is `Show`, and `for` loops over `Iter`.
+- A weft can take type parameters, `weft Convert[T]`, and a warp can weave it for several: [Generics and `any`](page:generics#wefts-with-type-parameters).
 
 ### Wefts that build on wefts
 

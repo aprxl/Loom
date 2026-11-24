@@ -229,7 +229,7 @@ impl Checker<'_> {
             let ty = self.deep_resolve(ty);
             if !self.tcx.is_lenient(ty)
                 && !self.tcx.has_error(ty)
-                && self.std.show.is_some_and(|show| !self.weaves(ty, show))
+                && self.std.show.is_some_and(|show| !self.weaves(ty, show, &[]))
             {
                 let shown = self.show(ty);
                 self.diags.push(

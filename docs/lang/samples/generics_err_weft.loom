@@ -1,7 +1,0 @@
-// A weft with a type parameter is designed but not built yet.
-weft From[T] {
-    fun from(take x: T) -> Self
-}
-
-fun main() {}
-//@ check-fail U0102

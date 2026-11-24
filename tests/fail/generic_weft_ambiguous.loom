@@ -1,0 +1,18 @@
+// A type that weaves `Into[u64]` and `Into[bool]` has two `convert`s: a
+// call has to say which.
+
+weft Into[T] {
+    fun convert(self) -> T
+}
+
+warp Meters { v: u64 }
+
+weave Into[u64] into Meters { fun convert(self) -> u64 = self.v }
+weave Into[bool] into Meters { fun convert(self) -> bool = true }
+
+fun main() {
+    let m = Meters(v: 1)
+    let a = Into.convert(m)                               //~ T0116
+    let b = m.convert()                                   //~ T0116
+    let c = Into[u64].convert(m)
+}

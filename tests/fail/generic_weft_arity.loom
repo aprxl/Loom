@@ -1,0 +1,12 @@
+// A weft takes the number of type arguments it declares.
+
+weft Into[T] {
+    fun convert(self) -> T
+}
+
+warp Missing: Into { v: u8 }                              //~ T0104
+warp TooMany: Into[u8, u8] { v: u8 }                      //~ T0104
+
+fun conv[T: Into](x: T) {}                                //~ T0104
+
+fun main() {}

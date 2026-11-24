@@ -1007,7 +1007,7 @@ impl Checker<'_> {
         }
         let ordered = !matches!(op, BinaryOp::Eq | BinaryOp::Ne);
         let weft = if ordered { self.std.ord } else { self.std.eq };
-        if weft.is_some_and(|w| self.weaves(ty, w)) {
+        if weft.is_some_and(|w| self.weaves(ty, w, &[])) {
             return;
         }
         let shown = self.show(ty);

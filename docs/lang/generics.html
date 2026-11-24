@@ -575,27 +575,47 @@ Spacer()</code></pre></div>
 <p>You've now got two ways to say "anything that does this":</p>
 <table class="plain"><thead><tr><th></th><th>Weft as parameter type / bound</th><th><code>any W</code></th></tr></thead><tbody><tr><td>When the type is known</td><td>when compiling</td><td>when running</td></tr><tr><td>Calls</td><td>direct, and inlinable</td><td>through a table</td></tr><tr><td>Code</td><td>one copy per type used</td><td>one copy</td></tr><tr><td>A list of mixed types</td><td>impossible</td><td>yes</td></tr><tr><td>One function returning different types</td><td>no</td><td>yes</td></tr></tbody></table>
 <p>Start with the generic form, because it's the faster and the more precise one: <code>loud(a: Animal)</code> can't be handed a <code>Cat</code> where a <code>Dog</code> was meant, and the compiler specializes it. Reach for <code>any</code> when the mixture is the point.</p>
-<h3 id="what-s-missing">What's missing<a class="anchor" href="#what-s-missing" aria-label="Link to this section">#</a></h3>
-<p>Generic wefts (<code>weft From[T]</code>) are not supported yet: the type checker stops them with <a href="diagnostics.html#U0102">U0102</a>, like this:</p>
-<div class="sample" id="sample-generics_err_weft" data-sample="generics_err_weft" data-mode="check" data-file="generics_err_weft.loom" data-runnable>
-<div class="sample-head"><span class="file"><span class="dot"></span>generics_err_weft.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a></span><span class="spacer"></span></div>
-<pre class="code"><code><span class="c">// A weft with a type parameter is designed but not built yet.</span>
-<span class="k">weft</span> <span class="t">From</span>[T] {
-    <span class="k">fun</span> <span class="f">from</span>(<span class="k">take</span> x: T) -&gt; <span class="k">Self</span>
+<h3 id="wefts-with-type-parameters">Wefts with type parameters<a class="anchor" href="#wefts-with-type-parameters" aria-label="Link to this section">#</a></h3>
+<p>A weft can take type parameters of its own, written like a generic function's: <code>weft Convert[T]</code>. <code>Convert[u32]</code> and <code>Convert[str]</code> are different wefts, so a type can weave both, each with its own methods. A bound names the arguments (<code>T: Convert[U]</code>), and the call <code>Convert[u32].convert(x)</code> says which weaving it means.</p>
+<div class="sample" id="sample-generics_weft" data-sample="generics_weft" data-mode="run" data-file="generics_weft.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>generics_weft.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">// A weft can take type parameters. `Convert[T]` is a different weft for each</span>
+<span class="c">// `T`, so one type can weave `Convert[u32]` and `Convert[str]`.</span>
+<span class="k">weft</span> <span class="t">Convert</span>[T] {
+    <span class="k">fun</span> <span class="f">convert</span>(<span class="k">self</span>) -&gt; T
+    <span class="k">fun</span> <span class="f">twice</span>(<span class="k">self</span>) -&gt; (T, T) = (<span class="t">Convert</span>[T].<span class="f">convert</span>(<span class="k">self</span>), <span class="t">Convert</span>[T].<span class="f">convert</span>(<span class="k">self</span>))
 }
 
-<span class="k">fun</span> <span class="f">main</span>() {}</code></pre>
-<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[U0102]: not implemented yet: generic wefts</span>
-<span class="loc">  --&gt; generics_err_weft.loom:2:6</span>
-<span class="gut">  |</span>
-<span class="gut">2 |</span> weft From[T] {
-<span class="gut">  |</span><span class="caret">      ^^^^ not supported by this compiler yet</span>
-<span class="gut">  |</span>
-<span class="loc">  = note: the type checker grows one milestone at a time; see design/lua-backend.md</span>
+<span class="k">warp</span> <span class="t">Meters</span> { v: u32 }
 
-<span class="err">error: generics_err_weft.loom failed to type-check (1 error)</span></code></pre></div>
+<span class="k">weave</span> <span class="t">Convert</span>[u32] <span class="k">into</span> <span class="t">Meters</span> { <span class="k">fun</span> <span class="f">convert</span>(<span class="k">self</span>) -&gt; u32 = <span class="k">self</span>.v }
+<span class="k">weave</span> <span class="t">Convert</span>[str] <span class="k">into</span> <span class="t">Meters</span> { <span class="k">fun</span> <span class="f">convert</span>(<span class="k">self</span>) -&gt; str = <span class="s">"metres"</span> }
+
+<span class="k">warp</span> <span class="t">Feet</span> { v: u32 }
+
+<span class="k">weave</span> <span class="t">Convert</span>[u32] <span class="k">into</span> <span class="t">Feet</span> { <span class="k">fun</span> <span class="f">convert</span>(<span class="k">self</span>) -&gt; u32 = <span class="k">self</span>.v * <span class="n">3</span> }
+
+<span class="c">// A bound can name the arguments: `T` weaves `Convert[U]`.</span>
+<span class="k">fun</span> to[T: <span class="t">Convert</span>[U], U](x: T) -&gt; U = x.<span class="f">convert</span>()
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> m = <span class="t">Meters</span>(v: <span class="n">7</span>)
+    <span class="f">print</span>(<span class="t">Convert</span>[u32].<span class="f">convert</span>(m))
+    <span class="f">print</span>(<span class="t">Convert</span>[str].<span class="f">convert</span>(m))
+    <span class="f">print</span>(<span class="t">Convert</span>[u32].<span class="f">twice</span>(m))
+    <span class="f">print</span>(to[<span class="t">Feet</span>, u32](<span class="t">Feet</span>(v: <span class="n">2</span>)))
+    <span class="f">print</span>(<span class="t">Feet</span>(v: <span class="n">5</span>).<span class="f">convert</span>())
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>7
+metres
+(7, 7)
+6
+15</code></pre></div>
 </div>
-<p>Wefts with associated types (<code>type Item</code>) are supported, and cover many of the cases where a weft would otherwise need a parameter: see <a href="types.html#wefts">Warps, wefts and weaves</a>.</p>
+<ul><li>Without the arguments, <code>Convert.convert(x)</code> and <code>x.convert()</code> work when the type weaves one <code>Convert</code> only. With two, the compiler lists them (<a href="diagnostics.html#T0116">T0116</a>) and you pick: <code>Convert[u32].convert(x)</code>.</li><li>A default method (<code>twice</code>) sees <code>T</code> as whatever the weaving gave it, and is checked once for each weaving that uses it.</li><li>A bound says what a call needs, not which weaving the body uses: inside <code>to</code>, <code>x.convert()</code> still sees every <code>Convert</code> that <code>T</code> weaves. A type with two of them makes it ambiguous, and <code>Convert[U].convert(x)</code> picks the one the bound names.</li><li><code>T: Convert[U]</code> is checked when <code>to</code> is called, with both arguments known: <code>to[Feet, str](f)</code> stops with <a href="diagnostics.html#T0108">T0108</a>, because a <code>Feet</code> doesn't weave <code>Convert[str]</code>.</li><li>A weft of <code>const</code> or region parameters, <code>any Convert[u32]</code>, a generic weft as a parameter's type, and inferring <code>T</code> and <code>U</code> from the arguments or from where the result goes aren't supported yet: see <a href="not-yet.html">Not supported yet</a>.</li></ul>
+<p>Wefts with associated types (<code>type Item</code>) cover many of the cases where a weft would otherwise need a parameter: see <a href="types.html#wefts">Warps, wefts and weaves</a>.</p>
 <h2 id="where-next">Where next<a class="anchor" href="#where-next" aria-label="Link to this section">#</a></h2>
 <p><a href="collections.html">Collections and streams</a> uses generics all over: <code>List[T]</code>, <code>Map[K, V]</code>, and the lazy <code>Stream[T]</code>.</p>
 <nav class="pager" aria-label="Chapters">

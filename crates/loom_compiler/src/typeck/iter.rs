@@ -61,7 +61,7 @@ impl Checker<'_> {
             return Some((IterSource::Burst(t), t));
         }
         let iter = self.std.iter?;
-        if self.stream_item(ty).is_some() || self.weaving(iter, ty).is_none() {
+        if self.stream_item(ty).is_some() || self.weaving(iter, Some(&[]), ty).is_none() {
             return None;
         }
         // Its `next`, written in it or in its weave.
@@ -137,7 +137,7 @@ impl Checker<'_> {
         let name = &self.p.def(member).name;
         w.wefts
             .iter()
-            .filter_map(|t| self.weft_of(t))
+            .filter_map(|t| self.weft_head(t))
             .any(|weft| self.assoc_types(weft).iter().any(|&a| &self.p.def(a).name == name))
     }
 
@@ -150,7 +150,7 @@ impl Checker<'_> {
         {
             return Some(item);
         }
-        let m = self.weaving(weft, ty)?;
+        let m = self.weaving(weft, None, ty)?;
         let site = self.weavings[m.w].site;
         let member = self.assoc_binding(site, name)?;
         let DefKind::Type(alias) = &self.p.def(member).kind else { return None };

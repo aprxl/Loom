@@ -421,7 +421,7 @@ impl Checker<'_> {
             return;
         }
         if let Some(hash) = self.std.hash
-            && !self.weaves(key, hash)
+            && !self.weaves(key, hash, &[])
         {
             let shown = self.show(key);
             self.diags.push(

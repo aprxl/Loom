@@ -111,32 +111,34 @@
 <p>For <a href="memory.html">Pointers, spools and <code>given</code></a>:</p>
 <ul><li><strong><code>unsafe</code> blocks, raw pointers (<code>*T</code>), <code>extern "C"</code> calls and <code>Volatile</code>.</strong> <code>unsafe</code> and <code>*T</code> are <a href="diagnostics.html#U0102">U0102</a>; an <code>extern "C"</code> function can be declared but not called, on either backend; <code>Volatile</code> doesn't exist.</li><li><strong>Spools:</strong> a list, a map or a box can't be held by a warp that lives in a spool (<a href="diagnostics.html#U0102">U0102</a>), and <code>Deque</code> and <code>SortedMap</code> nodes can't be in one either. You can't write a spool of your own: <code>spool s = MySpool()</code> for a type that weaves <code>Spool</code> is <a href="diagnostics.html#T0101">T0101</a>.</li><li><strong><code>given</code>:</strong> every function spells its own <code>given</code>s; a private function doesn't infer them from what it calls.</li><li><strong>Treadle images:</strong> <code>loom build</code> writes a file Treadle can run. The loader checks its hash, so a damaged file is refused, but an image is trusted: it is only as safe as the compiler that built it, and a file made by hand can touch any memory. Run only images you built.</li></ul>
 <h2 id="types-and-library">Types and library<a class="anchor" href="#types-and-library" aria-label="Link to this section">#</a></h2>
-<ul><li><strong>Integers wider than 64 bits and <code>f16</code><strong>, </strong>generic wefts</strong> (<code>weft From[T]</code>), <strong>generic type aliases</strong>, <strong>slice patterns</strong>, <strong>inferred error sets</strong> (<code>! _</code>), <strong>explicit type arguments on a function used as a value</strong> (<code>let f = id[i32]</code>), and <strong><code>main</code> with parameters</strong> (it takes none; read <code>env.args()</code>):</li></ul>
+<ul><li><strong>Integers wider than 64 bits and <code>f16</code><strong>, </strong>generic wefts as <code>any</code> or as a parameter's type</strong> (<code>any Convert[u32]</code>), <strong><code>const</code> or region parameters of a weft<strong>, </strong>generic type aliases<strong>, </strong>slice patterns<strong>, </strong>inferred error sets</strong> (<code>! _</code>), <strong>explicit type arguments on a function used as a value</strong> (<code>let f = id[i32]</code>), and <strong><code>main</code> with parameters</strong> (it takes none; read <code>env.args()</code>):</li></ul>
 <div class="sample" id="sample-nyet_limits" data-sample="nyet_limits" data-mode="check" data-file="nyet_limits.loom" data-runnable>
 <div class="sample-head"><span class="file"><span class="dot"></span>nyet_limits.loom</span><span class="tag err">doesn't compile: <a href="diagnostics.html#U0102">U0102</a>, <a href="diagnostics.html#U0102">U0102</a></span><span class="spacer"></span></div>
 <pre class="code"><code><span class="c">// A few limits of the type system, each stopped with U0102.</span>
 
-<span class="c">// A weft can't take type parameters yet.</span>
-<span class="k">weft</span> <span class="t">From</span>[T] {
-    <span class="k">fun</span> <span class="f">from</span>(x: T) -&gt; <span class="k">Self</span>
+<span class="k">weft</span> <span class="t">Convert</span>[T] {
+    <span class="k">fun</span> <span class="f">convert</span>(<span class="k">self</span>) -&gt; T
 }
+
+<span class="c">// A generic weft can't be an `any` yet.</span>
+<span class="k">fun</span> <span class="f">all</span>(items: <span class="t">List</span>[<span class="k">any</span> <span class="t">Convert</span>[u32]]) {}
 
 <span class="k">fun</span> <span class="f">main</span>() {
     <span class="c">// Integers stop at 64 bits.</span>
     <span class="k">let</span> wide: i128 = <span class="n">1</span>
 }</code></pre>
-<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[U0102]: not implemented yet: generic wefts</span>
-<span class="loc">  --&gt; nyet_limits.loom:4:6</span>
+<div class="sample-out"><div class="out-head">The compiler says</div><pre><code><span class="err">error[U0102]: not implemented yet: generic wefts here</span>
+<span class="loc">  --&gt; nyet_limits.loom:8:25</span>
 <span class="gut">  |</span>
-<span class="gut">4 |</span> weft From[T] {
-<span class="gut">  |</span><span class="caret">      ^^^^ not supported by this compiler yet</span>
+<span class="gut">8 |</span> fun all(items: List[any Convert[u32]]) {}
+<span class="gut">  |</span><span class="caret">                         ^^^^^^^^^^^^ not supported by this compiler yet</span>
 <span class="gut">  |</span>
 <span class="loc">  = note: the type checker grows one milestone at a time; see design/lua-backend.md</span>
 
 <span class="err">error[U0102]: not implemented yet: `f16` and integers wider than 64 bits</span>
-<span class="loc">   --&gt; nyet_limits.loom:10:15</span>
+<span class="loc">   --&gt; nyet_limits.loom:12:15</span>
 <span class="gut">   |</span>
-<span class="gut">10 |</span>     let wide: i128 = 1
+<span class="gut">12 |</span>     let wide: i128 = 1
 <span class="gut">   |</span><span class="caret">               ^^^^ not supported by this compiler yet</span>
 <span class="gut">   |</span>
 <span class="loc">   = note: the type checker grows one milestone at a time; see design/lua-backend.md</span>

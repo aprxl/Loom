@@ -60,8 +60,8 @@ impl Checker<'_> {
                 let shown = self.show(ty);
                 let vias: Vec<String> = found.iter().map(|f| format!("`{}`", f.via)).collect();
                 let help = if found[0].path.is_empty() {
-                    let weft = found[0].via.split('.').next().unwrap_or_default().to_string();
-                    format!("say which one: `{weft}.{name}(x)`")
+                    let via = &found[0].via;
+                    format!("say which one: `{via}(x)`")
                 } else {
                     format!("write `{name}` in `{shown}` itself to choose")
                 };
@@ -104,11 +104,11 @@ impl Checker<'_> {
         if !woven.is_empty() {
             return woven
                 .into_iter()
-                .map(|(weft, inst)| Found {
+                .map(|(weft, args, inst)| Found {
                     inst,
                     path: Vec::new(),
                     self_ty: ty,
-                    via: format!("{}.{name}", self.p.def(weft).name),
+                    via: format!("{}.{name}", self.show_weft(weft, &args)),
                     stream: None,
                 })
                 .collect();

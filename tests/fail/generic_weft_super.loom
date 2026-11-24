@@ -1,0 +1,15 @@
+// Weaving a weft with arguments means weaving its super-weft with the same
+// ones.
+
+weft Into[T] {
+    fun convert(self) -> T
+}
+
+weft Both[T]: Into[T] {}
+
+warp Feet { v: u64 }
+
+weave Into[u64] into Feet { fun convert(self) -> u64 = self.v }
+weave Both[bool] into Feet {}                             //~ T0108
+
+fun main() {}

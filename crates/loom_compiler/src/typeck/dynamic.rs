@@ -24,7 +24,7 @@ impl Checker<'_> {
         while let Some(w) = stack.pop() {
             if !out.contains(&w) {
                 out.push(w);
-                stack.extend(self.supers(w));
+                stack.extend(self.super_heads(w));
             }
         }
         out.sort();
@@ -73,7 +73,7 @@ impl Checker<'_> {
             return None;
         }
         self.dyn_methods.insert(method);
-        let sig = self.sig_with_self(method, any)?;
+        let sig = self.sig_with_self(method, any, &[])?;
         Some((method, sig))
     }
 
@@ -113,7 +113,7 @@ impl Checker<'_> {
             return;
         };
         for weft in wefts {
-            if !self.weaves(tested, weft) {
+            if !self.weaves(tested, weft, &[]) {
                 let (shown, weft_name) = (self.show(tested), self.p.def(weft).name.clone());
                 self.diags.push(
                     Diagnostic::error(codes::T0108, format!("`{shown}` doesn't weave `{weft_name}`"))
@@ -150,13 +150,13 @@ impl Checker<'_> {
                     if !methods.contains(&method) {
                         continue;
                     }
-                    let imp = match self.weaving(weft, ty) {
-                        Some(m) => self.impl_of(m.w, method, ty, 0).map(|imp| (imp, m.bindings)),
+                    let imp = match self.weaving(weft, Some(&[]), ty) {
+                        Some(m) => self.impl_of(m.w, method, ty, 0).map(|imp| (imp, Some(m.w), m.bindings)),
                         // Built-in weaves (`Show` for numbers) have only
                         // compiler-made methods.
-                        None => self.builtin_default(method).map(|imp| (imp, Vec::new())),
+                        None => self.builtin_default(method).map(|imp| (imp, None, Vec::new())),
                     };
-                    let Some((imp, bindings)) = imp else { continue };
+                    let Some((imp, w, bindings)) = imp else { continue };
                     // A scalar changed through `any` can't be copied back to
                     // where it came from: the `any` holds its own copy.
                     let mut_self = matches!(&self.p.def(method).kind,
@@ -169,7 +169,7 @@ impl Checker<'_> {
                         );
                         continue;
                     }
-                    let inst = self.impl_instance(imp, ty, &bindings);
+                    let inst = self.impl_instance(imp, ty, w, &bindings);
                     entries.push((method, self.instance(inst)));
                 }
             }

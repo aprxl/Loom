@@ -1,0 +1,23 @@
+// A bound with arguments is checked with them: `i32` weaves no `Into[u64]`.
+
+weft Into[T] {
+    fun convert(self) -> T
+}
+
+warp Meters { v: u64 }
+
+weave Into[u64] into Meters { fun convert(self) -> u64 = self.v }
+
+warp Wrap[T] { v: T }
+
+weave[T: Into[u64]] Into[u64] into Wrap[T] { fun convert(self) -> u64 = Into[u64].convert(self.v) }
+
+fun conv[T: Into[U], U](x: T) -> U = Into[U].convert(x)
+
+fun main() {
+    let fine = conv[Meters, u64](Meters(v: 1))
+    let bad = conv[i32, u64](3)                           //~ T0108
+    let wrong = conv[Meters, bool](Meters(v: 1))          //~ T0108
+    let via = conv[Wrap[Meters], u64](Wrap(v: Meters(v: 1)))
+    let nothing = conv[Wrap[bool], u64](Wrap(v: true))       //~ T0108
+}

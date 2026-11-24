@@ -278,13 +278,19 @@ You've now got two ways to say "anything that does this":
 
 Start with the generic form, because it's the faster and the more precise one: `loud(a: Animal)` can't be handed a `Cat` where a `Dog` was meant, and the compiler specializes it. Reach for `any` when the mixture is the point.
 
-### What's missing
+### Wefts with type parameters
 
-Generic wefts (`weft From[T]`) are not supported yet: the type checker stops them with [U0102](diag:U0102), like this:
+A weft can take type parameters of its own, written like a generic function's: `weft Convert[T]`. `Convert[u32]` and `Convert[str]` are different wefts, so a type can weave both, each with its own methods. A bound names the arguments (`T: Convert[U]`), and the call `Convert[u32].convert(x)` says which weaving it means.
 
-@sample generics_err_weft
+@sample generics_weft
 
-Wefts with associated types (`type Item`) are supported, and cover many of the cases where a weft would otherwise need a parameter: see [Warps, wefts and weaves](page:types#wefts).
+- Without the arguments, `Convert.convert(x)` and `x.convert()` work when the type weaves one `Convert` only. With two, the compiler lists them ([T0116](diag:T0116)) and you pick: `Convert[u32].convert(x)`.
+- A default method (`twice`) sees `T` as whatever the weaving gave it, and is checked once for each weaving that uses it.
+- A bound says what a call needs, not which weaving the body uses: inside `to`, `x.convert()` still sees every `Convert` that `T` weaves. A type with two of them makes it ambiguous, and `Convert[U].convert(x)` picks the one the bound names.
+- `T: Convert[U]` is checked when `to` is called, with both arguments known: `to[Feet, str](f)` stops with [T0108](diag:T0108), because a `Feet` doesn't weave `Convert[str]`.
+- A weft of `const` or region parameters, `any Convert[u32]`, a generic weft as a parameter's type, and inferring `T` and `U` from the arguments or from where the result goes aren't supported yet: see [Not supported yet](page:not-yet).
+
+Wefts with associated types (`type Item`) cover many of the cases where a weft would otherwise need a parameter: see [Warps, wefts and weaves](page:types#wefts).
 
 ## Where next
 

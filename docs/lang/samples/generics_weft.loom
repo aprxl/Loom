@@ -1,0 +1,30 @@
+use std.io.print
+
+// A weft can take type parameters. `Convert[T]` is a different weft for each
+// `T`, so one type can weave `Convert[u32]` and `Convert[str]`.
+weft Convert[T] {
+    fun convert(self) -> T
+    fun twice(self) -> (T, T) = (Convert[T].convert(self), Convert[T].convert(self))
+}
+
+warp Meters { v: u32 }
+
+weave Convert[u32] into Meters { fun convert(self) -> u32 = self.v }
+weave Convert[str] into Meters { fun convert(self) -> str = "metres" }
+
+warp Feet { v: u32 }
+
+weave Convert[u32] into Feet { fun convert(self) -> u32 = self.v * 3 }
+
+// A bound can name the arguments: `T` weaves `Convert[U]`.
+fun to[T: Convert[U], U](x: T) -> U = x.convert()
+
+fun main() {
+    let m = Meters(v: 7)
+    print(Convert[u32].convert(m))
+    print(Convert[str].convert(m))
+    print(Convert[u32].twice(m))
+    print(to[Feet, u32](Feet(v: 2)))
+    print(Feet(v: 5).convert())
+}
+//@ run

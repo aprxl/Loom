@@ -56,7 +56,7 @@ For [Pointers, spools and `given`](page:memory):
 
 ## Types and library
 
-- **Integers wider than 64 bits and `f16`**, **generic wefts** (`weft From[T]`), **generic type aliases**, **slice patterns**, **inferred error sets** (`! _`), **explicit type arguments on a function used as a value** (`let f = id[i32]`), and **`main` with parameters** (it takes none; read `env.args()`):
+- **Integers wider than 64 bits and `f16`**, **generic wefts as `any` or as a parameter's type** (`any Convert[u32]`), **`const` or region parameters of a weft**, **generic type aliases**, **slice patterns**, **inferred error sets** (`! _`), **explicit type arguments on a function used as a value** (`let f = id[i32]`), and **`main` with parameters** (it takes none; read `env.args()`):
 
 @sample nyet_limits
 

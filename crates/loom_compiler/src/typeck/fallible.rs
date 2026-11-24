@@ -228,7 +228,7 @@ impl Checker<'_> {
             }
             (TyKind::Union(_), TyKind::Any(_)) => None,
             (_, TyKind::Any(wefts)) => {
-                wefts.iter().all(|&w| self.weaves(from, w)).then(|| ErrConv::ToAny(self.weft_closure(&wefts)))
+                wefts.iter().all(|&w| self.weaves(from, w, &[])).then(|| ErrConv::ToAny(self.weft_closure(&wefts)))
             }
             (_, TyKind::Adt(def, _)) => self.absorbing_case(def, to, from),
             _ => None,

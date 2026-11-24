@@ -103,10 +103,16 @@ impl Checker<'_> {
                 if let hir::TyKind::Def { def, args: weft_args } = &base.kind
                     && matches!(self.p.def(*def).kind, DefKind::Weft(_))
                 {
-                    if !weft_args.is_empty() {
-                        return self.unsupported(base.span, "generic wefts");
-                    }
-                    return self.weft_call(call, *def, &name.name, name.span, args);
+                    let explicit = if weft_args.is_empty() {
+                        None
+                    } else {
+                        let given = self.weft_arity(base).and_then(|_| self.weft_ref(base));
+                        match given {
+                            Some((_, given)) => Some(given),
+                            None => return self.check_args_alone(args),
+                        }
+                    };
+                    return self.weft_call(call, *def, explicit.as_deref(), &name.name, name.span, args);
                 }
                 self.infer_args = true;
                 let ty = self.lower_ty(base);
@@ -647,8 +653,17 @@ impl Checker<'_> {
         }
     }
 
-    /// `Weft.name(x, …)`: the weft's method, for the type of `x`.
-    fn weft_call(&mut self, call: &Expr, weft: DefId, name: &str, span: Span, args: &[Arg]) -> Ty {
+    /// `Weft.name(x, …)` or `Weft[A].name(x, …)`: the weft's method, for the
+    /// type of `x`.
+    fn weft_call(
+        &mut self,
+        call: &Expr,
+        weft: DefId,
+        weft_args: Option<&[Ty]>,
+        name: &str,
+        span: Span,
+        args: &[Arg],
+    ) -> Ty {
         let weft_name = self.p.def(weft).name.clone();
         let Some(method) = self.weft_methods(weft).into_iter().find(|&m| self.p.def(m).name == name) else {
             self.error(codes::T0111, span, format!("`{weft_name}` has no method `{name}`"), "no such method");
@@ -668,16 +683,40 @@ impl Checker<'_> {
         if self.tcx.is_error(ty) {
             return self.check_args_alone(&args[1..]);
         }
-        let inst = match self.weaving(weft, ty) {
-            Some(m) => self.impl_of(m.w, method, ty, 0).map(|imp| self.impl_instance(imp, ty, &m.bindings)),
+        let mut found = self.weavings_for(weft, weft_args, ty);
+        // A weft without arguments has one weaving per type: the first wins
+        // when a generic weave overlaps a written one, as `x.f()` does.
+        if self.weft_generic_count(weft) == 0 {
+            found.truncate(1);
+        }
+        if found.len() > 1 {
+            let shown = self.show(ty);
+            let mut vias = Vec::with_capacity(found.len());
+            for m in &found {
+                let args = self.weft_args(Some(m.w), &m.bindings);
+                vias.push(format!("`{}.{name}`", self.show_weft(weft, &args)));
+            }
+            self.diags.push(
+                Diagnostic::error(codes::T0116, format!("`{shown}` has more than one method `{name}`"))
+                    .primary(span, format!("could be {}", vias.join(" or ")))
+                    .help(format!("say which one: `{}(x)`", vias[0].trim_matches('`'))),
+            );
+            return self.check_args_alone(&args[1..]);
+        }
+        let inst = match found.pop() {
+            Some(m) => match self.impl_of(m.w, method, ty, 0) {
+                Some(imp) => Some(self.impl_instance(imp, ty, Some(m.w), &m.bindings)),
+                None => None,
+            },
             None => None,
         };
         let Some(inst) = inst else {
             let shown = self.show(ty);
+            let wanted = self.show_weft(weft, weft_args.unwrap_or(&[]));
             self.error(
                 codes::T0108,
                 first.value.span,
-                format!("`{shown}` doesn't weave `{weft_name}`"),
+                format!("`{shown}` doesn't weave `{wanted}`"),
                 format!("this is `{shown}`"),
             );
             return self.check_args_alone(&args[1..]);

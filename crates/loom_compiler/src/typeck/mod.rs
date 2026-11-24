@@ -66,7 +66,7 @@ use infer::{PendingLit, Var};
 pub(crate) use reflect::QUERIES as REFLECTION_QUERIES;
 pub use seq::Seq;
 pub use warp::{CaseFieldInfo, CaseInfo, FieldInfo, Key, WarpInfo};
-pub use weave::{Impl, Weaving};
+pub use weave::{Impl, Weaving, WeftRef};
 
 /// How many instances in a row one may lead to (Rust stops at 128).
 const MAX_INSTANCE_DEPTH: u32 = 100;
@@ -587,8 +587,14 @@ struct Checker<'p> {
     queue: VecDeque<BodyId>,
     /// Every weave in the program (see `weave.rs`).
     weavings: Vec<Weaving>,
-    /// The first weaving of each weft into each type.
-    weave_index: HashMap<(DefId, Ty), usize>,
+    /// The first weaving of each weft, with its arguments, into each type.
+    weave_index: HashMap<(DefId, Vec<Ty>, Ty), usize>,
+    /// The super-wefts each weft names, lowered once in terms of its own
+    /// parameters.
+    weft_supers: HashMap<DefId, Vec<WeftRef>>,
+    /// The wefts each generic parameter of a weave or warp must weave,
+    /// lowered once in terms of the site's own parameters.
+    site_bounds: HashMap<(DefId, DefId), Vec<WeftRef>>,
     /// Call arguments whose type was already checked, to find the method
     /// they're passed to (`Show.show(x, …)`).
     prechecked: HashMap<HirId, Ty>,
@@ -738,6 +744,8 @@ impl<'p> Checker<'p> {
             queue: VecDeque::new(),
             weavings: Vec::new(),
             weave_index: HashMap::new(),
+            weft_supers: HashMap::new(),
+            site_bounds: HashMap::new(),
             prechecked: HashMap::new(),
             subst: Vec::new(),
             implicit: generic::Implicit::Off,
@@ -937,11 +945,12 @@ impl<'p> Checker<'p> {
                     for t in &w.wefts {
                         self.weft_arg_problem(t);
                     }
+                    self.check_bound_arity(&w.generics, &w.where_clause);
                     self.check_weaves_at(inst.def);
                 }
             }
             DefKind::Weave(w) => self.check_weave_item(inst.def, w),
-            DefKind::Weft(w) => self.check_weft(inst.def, w),
+            DefKind::Weft(w) => self.check_weft(w),
             DefKind::Type(alias) if alias.gauge.is_some() => self.check_gauge_def(id, inst.def),
             DefKind::Type(_) => self.check_alias(inst.def),
             DefKind::ConstBlock(e) => {
@@ -1042,10 +1051,31 @@ impl<'p> Checker<'p> {
             self.unsupported(self.p.def(g).span, "`const` and region parameters");
             return;
         }
+        self.check_bound_arity(&w.generics, &w.where_clause);
         if self.weft_arg_problem(&w.weft) {
             return;
         }
         self.check_weaves_at(def);
+    }
+
+    /// A weft named as a bound of a weave's or a warp's generic parameter
+    /// takes the number of arguments it declares.
+    fn check_bound_arity(&mut self, generics: &[DefId], where_clause: &[hir::WherePred]) {
+        let p = self.p;
+        for &g in generics {
+            if let DefKind::GenericParam(gp) = &p.def(g).kind
+                && let hir::GenericParamKind::Type { bounds } = &gp.kind
+            {
+                bounds.iter().for_each(|b| {
+                    self.weft_arity(b);
+                });
+            }
+        }
+        for pred in where_clause {
+            pred.bounds.iter().for_each(|b| {
+                self.weft_arity(b);
+            });
+        }
     }
 
     /// Every bound a function names, on its generics and in its `where`
@@ -1080,14 +1110,7 @@ impl<'p> Checker<'p> {
     /// whether there was a problem.
     fn weft_arg_problem(&mut self, t: &hir::Ty) -> bool {
         match &t.kind {
-            HirTy::Def { def, args } if matches!(self.p.def(*def).kind, DefKind::Weft(_)) => {
-                if args.is_empty() {
-                    false
-                } else {
-                    self.unsupported(t.span, "generic wefts");
-                    true
-                }
-            }
+            HirTy::Def { def, .. } if matches!(self.p.def(*def).kind, DefKind::Weft(_)) => self.weft_arity(t).is_none(),
             HirTy::Error => true,
             _ => {
                 let ty = self.lower_ty(t);
@@ -1102,9 +1125,9 @@ impl<'p> Checker<'p> {
 
     /// A weft's own declarations. Its default methods are checked for each
     /// type that uses them, with `Self` standing for that type.
-    fn check_weft(&mut self, def: DefId, w: &hir::WeftDef) {
-        if !w.generics.is_empty() {
-            self.unsupported(self.p.def(def).span, "generic wefts");
+    fn check_weft(&mut self, w: &hir::WeftDef) {
+        if let Some(&g) = w.generics.iter().find(|&&g| !self.is_type_param(g)) {
+            self.unsupported(self.p.def(g).span, "`const` and region parameters");
             return;
         }
         for sup in &w.supers {
@@ -1266,7 +1289,7 @@ impl<'p> Checker<'p> {
         self.given_tys.clear();
         let mut given_params = Vec::with_capacity(f.givens.len());
         for g in &f.givens {
-            let Some(weft) = self.weft_of(&g.ty) else {
+            let Some(weft) = self.plain_weft(&g.ty) else {
                 self.unsupported(g.ty.span, "`given` parameters that aren't a weft");
                 return None;
             };
@@ -1507,7 +1530,9 @@ impl<'p> Checker<'p> {
                     }
                     // A weft as a parameter's type is an implicit generic.
                     DefKind::Weft(_) => {
-                        if matches!(self.implicit, generic::Implicit::Fresh(_)) {
+                        if !args.is_empty() {
+                            self.unsupported(span, "generic wefts here")
+                        } else if matches!(self.implicit, generic::Implicit::Fresh(_)) {
                             let var = self.new_var(infer::VarKind::Type);
                             if let generic::Implicit::Fresh(vars) = &mut self.implicit {
                                 vars.push((var, Some(*def)));
@@ -1558,9 +1583,15 @@ impl<'p> Checker<'p> {
                 let mut defs = Vec::with_capacity(wefts.len());
                 for weft in wefts {
                     match &weft.kind {
-                        HirTy::Def { def, args }
-                            if args.is_empty() && matches!(self.p.def(*def).kind, DefKind::Weft(_)) =>
-                        {
+                        HirTy::Def { def, args } if matches!(self.p.def(*def).kind, DefKind::Weft(_)) => {
+                            if !args.is_empty() {
+                                return self.unsupported(weft.span, "generic wefts here");
+                            }
+                            // A weft that needs a generic one (`weft Foo: Into[u64]`)
+                            // has vtable slots only a weaving's arguments could type.
+                            if self.weft_closure(&[*def]).iter().any(|&w| self.weft_generic_count(w) > 0) {
+                                return self.unsupported(weft.span, "generic wefts here");
+                            }
                             defs.push(*def)
                         }
                         _ => return self.unsupported(weft.span, "this kind of `any` type"),
@@ -1847,7 +1878,7 @@ impl<'p> Checker<'p> {
                 return false;
             }
             (_, TyKind::Any(wefts)) => {
-                let missing: Vec<DefId> = wefts.iter().copied().filter(|&w| !self.weaves(actual, w)).collect();
+                let missing: Vec<DefId> = wefts.iter().copied().filter(|&w| !self.weaves(actual, w, &[])).collect();
                 if let Some(&weft) = missing.first() {
                     let (ty, weft) = (self.show(actual), self.p.def(weft).name.clone());
                     self.error(
@@ -1914,16 +1945,17 @@ impl<'p> Checker<'p> {
             }
     }
 
-    /// Whether `ty` weaves `weft`: built in (the primitive types, `String`,
-    /// tuples and optionals of them), or through a weave.
-    fn weaves(&self, ty: Ty, weft: DefId) -> bool {
+    /// Whether `ty` weaves `weft` (with these `args`): built in (the
+    /// primitive types, `String`, tuples and optionals of them), or through
+    /// a weave.
+    fn weaves(&mut self, ty: Ty, weft: DefId, args: &[Ty]) -> bool {
         let ty = self.resolve(ty);
-        if self.weaving(weft, ty).is_some() {
+        if self.weaving(weft, Some(args), ty).is_some() {
             return true;
         }
         // A gauge weaves what its base does.
         if let TyKind::Gauge(_, base) = *self.tcx.kind(ty) {
-            return self.weaves(base, weft);
+            return self.weaves(base, weft, args);
         }
         // Two `any` or union values may hold different types, which have no
         // order between them (they're just unequal).
@@ -1941,7 +1973,7 @@ impl<'p> Checker<'p> {
             return match seq {
                 Seq::Slice(_) if Some(weft) == self.std.copy => true,
                 Seq::List(_) if Some(weft) == self.std.copy => false,
-                _ => self.weaves(seq.elem(), weft),
+                _ => self.weaves(seq.elem(), weft, &[]),
             };
         }
         // A map or a set shows and compares like its contents; it's moved,
@@ -1949,11 +1981,13 @@ impl<'p> Checker<'p> {
         if let Some(parts) = self.coll_parts(ty)
             && [self.std.show, self.std.eq, self.std.copy, self.std.hash].contains(&Some(weft))
         {
-            return [self.std.show, self.std.eq].contains(&Some(weft)) && parts.iter().all(|&t| self.weaves(t, weft));
+            return [self.std.show, self.std.eq].contains(&Some(weft))
+                && parts.into_iter().all(|t| self.weaves(t, weft, &[]));
         }
         // A union weaves what every one of its types weaves.
         if let TyKind::Union(members) = self.tcx.kind(ty) {
-            return members.iter().all(|&m| self.weaves(m, weft));
+            let members = members.clone();
+            return members.into_iter().all(|m| self.weaves(m, weft, &[]));
         }
         // A warp is `Copy` when all its fields are, whether it says so or not.
         if Some(weft) == self.std.copy
@@ -1962,55 +1996,68 @@ impl<'p> Checker<'p> {
         {
             return info.copy;
         }
-        let is_string = |ty: Ty| matches!(self.tcx.kind(ty), TyKind::Adt(d, _) if Some(*d) == self.std.string);
-        let kind = self.tcx.kind(ty);
-        let numeric = matches!(kind, TyKind::Int(_) | TyKind::Float(_) | TyKind::IntVar(_) | TyKind::FloatVar(_));
-        let scalar = numeric || matches!(kind, TyKind::Bool | TyKind::Char);
-        let all = |this: &Self, items: &[Ty]| items.iter().all(|&t| this.weaves(t, weft));
         let w = Some(weft);
+        let (inner, items, flags) = {
+            let kind = self.tcx.kind(ty);
+            let numeric = matches!(kind, TyKind::Int(_) | TyKind::Float(_) | TyKind::IntVar(_) | TyKind::FloatVar(_));
+            let flags = Flags {
+                numeric,
+                scalar: numeric || matches!(kind, TyKind::Bool | TyKind::Char),
+                string: matches!(kind, TyKind::Adt(d, _) if Some(*d) == self.std.string),
+                text: matches!(kind, TyKind::Str),
+                char: matches!(kind, TyKind::Char),
+                unit: matches!(kind, TyKind::Unit),
+                int: matches!(kind, TyKind::Int(_) | TyKind::IntVar(_)),
+                hashable: matches!(
+                    kind,
+                    TyKind::Int(_) | TyKind::IntVar(_) | TyKind::Bool | TyKind::Char | TyKind::Str
+                ),
+                stream: matches!(kind, TyKind::Adt(def, _) if Some(*def) == self.std.stream),
+            };
+            let inner = match kind {
+                TyKind::Optional(inner) | TyKind::Ptr(inner, _) => Some((*inner, matches!(kind, TyKind::Ptr(..)))),
+                _ => None,
+            };
+            let items = match kind {
+                TyKind::Tuple(items) => Some(items.clone()),
+                _ => None,
+            };
+            (inner, items, flags)
+        };
         // `?T` shows as the value or `none`, and compares, copies and hashes
-        // like `T` does.
-        if let TyKind::Optional(inner) = kind
-            && [self.std.show, self.std.eq, self.std.copy, self.std.hash].contains(&w)
-        {
-            return self.weaves(*inner, weft);
+        // like `T` does. A pointer shows, compares and hashes like what it
+        // points at.
+        if let Some((inner, pointer)) = inner {
+            let list: &[Option<DefId>] = if pointer {
+                &[self.std.show, self.std.eq, self.std.ord, self.std.hash]
+            } else {
+                &[self.std.show, self.std.eq, self.std.copy, self.std.hash]
+            };
+            if list.contains(&w) {
+                return self.weaves(inner, weft, &[]);
+            }
         }
-        // A pointer shows, compares and hashes like what it points at.
-        if let TyKind::Ptr(target, _) = kind
-            && [self.std.show, self.std.eq, self.std.ord, self.std.hash].contains(&w)
-        {
-            return self.weaves(*target, weft);
-        }
+        // Tuples are as good as their items.
+        let tuple = |this: &mut Self, nonempty: bool| match &items {
+            Some(items) => (!nonempty || !items.is_empty()) && items.iter().all(|&t| this.weaves(t, weft, &[])),
+            None => false,
+        };
         if w == self.std.show {
-            scalar
-                || matches!(kind, TyKind::Str)
-                || is_string(ty)
-                || matches!(kind, TyKind::Tuple(items) if !items.is_empty() && all(self, items))
+            flags.scalar || flags.text || flags.string || tuple(self, true)
         } else if w == self.std.eq {
-            scalar
-                || matches!(kind, TyKind::Str | TyKind::Unit)
-                || is_string(ty)
-                || matches!(kind, TyKind::Tuple(items) if all(self, items))
+            flags.scalar || flags.text || flags.unit || flags.string || tuple(self, false)
         } else if w == self.std.ord {
-            // Tuples compare item by item.
-            numeric
-                || matches!(kind, TyKind::Char | TyKind::Str)
-                || is_string(ty)
-                || matches!(kind, TyKind::Tuple(items) if !items.is_empty() && all(self, items))
+            flags.numeric || flags.char || flags.text || flags.string || tuple(self, true)
         } else if w == self.std.hash {
-            matches!(kind, TyKind::Int(_) | TyKind::IntVar(_) | TyKind::Bool | TyKind::Char | TyKind::Str)
-                || is_string(ty)
-                || matches!(kind, TyKind::Tuple(items) if !items.is_empty() && all(self, items))
+            flags.hashable || flags.string || tuple(self, true)
         } else if w == self.std.copy {
-            scalar
-                || matches!(kind, TyKind::Str | TyKind::Unit)
-                || matches!(kind, TyKind::Tuple(items) if all(self, items))
+            flags.scalar || flags.text || flags.unit || tuple(self, false)
         } else if w == self.std.integer {
-            matches!(kind, TyKind::Int(_) | TyKind::IntVar(_))
+            flags.int
         } else if w == self.std.parse || w == self.std.num {
-            numeric
+            flags.numeric
         } else if w == self.std.iter {
-            matches!(kind, TyKind::Adt(def, _) if Some(*def) == self.std.stream)
+            flags.stream
         } else {
             false
         }
@@ -2060,4 +2107,17 @@ fn is_str_literal(e: &Expr) -> bool {
         },
         _ => false,
     }
+}
+
+/// What the shape of a type says about the std wefts it weaves.
+struct Flags {
+    numeric: bool,
+    scalar: bool,
+    string: bool,
+    text: bool,
+    char: bool,
+    unit: bool,
+    int: bool,
+    hashable: bool,
+    stream: bool,
 }

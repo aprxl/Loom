@@ -18,7 +18,7 @@ use loom_syntax::diag::codes;
 use loom_syntax::source::Span;
 
 use super::infer::VarKind;
-use super::{BodyId, Checker, FnSig, Instance};
+use super::{BodyId, Checker, FnSig, Instance, WeftRef};
 use crate::hir::{self, DefId, DefKind, HirId, TyKind as HirTy};
 use crate::ty::{ConstVal, Ty, TyKind};
 
@@ -65,7 +65,7 @@ pub(super) enum Patch {
 #[derive(Clone, Debug)]
 pub(super) struct Bound {
     pub ty: Ty,
-    pub wefts: Vec<DefId>,
+    pub wefts: Vec<WeftRef>,
     /// The parameter, for messages: `T`, or the weft for an implicit one.
     pub param: String,
     /// For a `const` parameter, its type, which the value inferred for it
@@ -83,6 +83,7 @@ impl Checker<'_> {
                 DefKind::Fn(f) => f.generics.clone(),
                 DefKind::Warp(w) => w.generics.clone(),
                 DefKind::Weave(w) => w.generics.clone(),
+                DefKind::Weft(w) => w.generics.clone(),
                 _ => Vec::new(),
             }
         };
@@ -307,25 +308,32 @@ impl Checker<'_> {
         self.current = saved_current;
         self.self_ty = saved_self;
         let implicit = std::mem::replace(&mut self.implicit, saved_implicit);
+        // The bounds' arguments (`T: Into[U]`) are read where the call's are.
+        let mut bounds = Vec::new();
+        if sig.is_some() {
+            for (&g, &ty) in f.generics.iter().zip(&own) {
+                if let Some(decl) = self.const_param_decl(g) {
+                    bounds.push(Bound { ty, wefts: Vec::new(), param: p.def(g).name.clone(), value: Some(decl) });
+                }
+                let wefts = self.bounds_of(g, f);
+                if !wefts.is_empty() {
+                    bounds.push(Bound { ty, wefts, param: p.def(g).name.clone(), value: None });
+                }
+            }
+            bounds.extend(self.parent_bounds(inst.def, &args[..parent_params]));
+        }
         self.subst = saved_subst;
         let sig = sig?;
-
-        let mut bounds = Vec::new();
-        for (&g, &ty) in f.generics.iter().zip(&own) {
-            if let Some(decl) = self.const_param_decl(g) {
-                bounds.push(Bound { ty, wefts: Vec::new(), param: p.def(g).name.clone(), value: Some(decl) });
-            }
-            let wefts = self.bounds_of(g, f);
-            if !wefts.is_empty() {
-                bounds.push(Bound { ty, wefts, param: p.def(g).name.clone(), value: None });
-            }
-        }
-        bounds.extend(self.parent_bounds(inst.def, &args[..parent_params]));
         if let Implicit::Fresh(vars) = implicit {
             for (ty, weft) in vars {
                 args.push(ty);
                 if let Some(weft) = weft {
-                    bounds.push(Bound { ty, wefts: vec![weft], param: p.def(weft).name.clone(), value: None });
+                    bounds.push(Bound {
+                        ty,
+                        wefts: vec![(weft, Vec::new())],
+                        param: p.def(weft).name.clone(),
+                        value: None,
+                    });
                 }
             }
         }
@@ -334,8 +342,9 @@ impl Checker<'_> {
 
     /// The bounds a method's `where` clause puts on its warp's parameters
     /// (`fun sum(self) -> T where T: Num`), for the warp's arguments `args`.
-    pub(super) fn parent_bounds(&self, def: DefId, args: &[Ty]) -> Vec<Bound> {
-        let DefKind::Fn(f) = &self.p.def(def).kind else { return Vec::new() };
+    pub(super) fn parent_bounds(&mut self, def: DefId, args: &[Ty]) -> Vec<Bound> {
+        let p = self.p;
+        let DefKind::Fn(f) = &p.def(def).kind else { return Vec::new() };
         let params = self.generic_params(def);
         let parent = &params[..params.len() - f.generics.len()];
         let mut bounds = Vec::new();
@@ -343,17 +352,11 @@ impl Checker<'_> {
             let mut wefts = Vec::new();
             for pred in &f.where_clause {
                 if matches!(&pred.ty.kind, HirTy::Def { def, .. } if *def == g) {
-                    for t in &pred.bounds {
-                        if let HirTy::Def { def, .. } = &t.kind
-                            && matches!(self.p.def(*def).kind, DefKind::Weft(_))
-                        {
-                            wefts.push(*def);
-                        }
-                    }
+                    wefts.extend(pred.bounds.iter().filter_map(|t| self.weft_ref(t)));
                 }
             }
             if !wefts.is_empty() {
-                bounds.push(Bound { ty, wefts, param: self.p.def(g).name.clone(), value: None });
+                bounds.push(Bound { ty, wefts, param: p.def(g).name.clone(), value: None });
             }
         }
         bounds
@@ -372,13 +375,14 @@ impl Checker<'_> {
             if let Some(decl) = bound.value {
                 ok &= self.check_const_value(ty, decl, &bound.param, span);
             }
-            for &weft in &bound.wefts {
-                if !self.weaves(ty, weft) {
-                    let (shown, weft_name) = (self.show(ty), self.p.def(weft).name.clone());
+            for (weft, weft_args) in &bound.wefts {
+                let weft_args: Vec<Ty> = weft_args.iter().map(|&t| self.deep_resolve(t)).collect();
+                if !self.weaves(ty, *weft, &weft_args) {
+                    let (shown, weft_name) = (self.show(ty), self.show_weft(*weft, &weft_args));
                     let mut diag = Diagnostic::error(codes::T0108, format!("`{shown}` doesn't weave `{weft_name}`"));
                     // A weft as a parameter's type is its own bound; a
                     // named parameter says what it stands for.
-                    diag = if bound.param == weft_name {
+                    diag = if bound.param == self.p.def(*weft).name {
                         diag.primary(span, format!("`{name}` needs a `{weft_name}`"))
                     } else {
                         diag.primary(span, format!("`{name}` needs `{}` to weave `{weft_name}`", bound.param))
@@ -467,23 +471,17 @@ impl Checker<'_> {
 
     /// The wefts generic parameter `g` of `f` must weave: its bounds and
     /// its `where` clauses.
-    fn bounds_of(&self, g: DefId, f: &hir::FnDef) -> Vec<DefId> {
+    fn bounds_of(&mut self, g: DefId, f: &hir::FnDef) -> Vec<WeftRef> {
+        let p = self.p;
         let mut wefts = Vec::new();
-        let mut add = |t: &hir::Ty| {
-            if let HirTy::Def { def, .. } = &t.kind
-                && matches!(self.p.def(*def).kind, DefKind::Weft(_))
-            {
-                wefts.push(*def);
-            }
-        };
-        if let DefKind::GenericParam(gp) = &self.p.def(g).kind
+        if let DefKind::GenericParam(gp) = &p.def(g).kind
             && let hir::GenericParamKind::Type { bounds } = &gp.kind
         {
-            bounds.iter().for_each(&mut add);
+            wefts.extend(bounds.iter().filter_map(|t| self.weft_ref(t)));
         }
         for pred in &f.where_clause {
             if matches!(&pred.ty.kind, HirTy::Def { def, .. } if *def == g) {
-                pred.bounds.iter().for_each(&mut add);
+                wefts.extend(pred.bounds.iter().filter_map(|t| self.weft_ref(t)));
             }
         }
         wefts
@@ -600,7 +598,7 @@ impl Checker<'_> {
     /// name: check the weaves of the std types a program uses.
     fn check_std_op_weaves(&mut self, ty: Ty) {
         for weft in [self.std.show, self.std.eq, self.std.ord].into_iter().flatten() {
-            let Some(m) = self.weaving(weft, ty) else { continue };
+            let Some(m) = self.weaving(weft, Some(&[]), ty) else { continue };
             let site = self.weavings[m.w].site;
             if !self.tcx.has_params(self.weavings[m.w].target)
                 && self.is_std_module(self.p.def(site).module)
@@ -621,7 +619,7 @@ impl Checker<'_> {
         let mut any = false;
         for (weft, name) in [(self.std.show, "show"), (self.std.eq, "eq"), (self.std.ord, "lt")] {
             let Some(weft) = weft else { continue };
-            let Some(m) = self.weaving(weft, ty) else { continue };
+            let Some(m) = self.weaving(weft, Some(&[]), ty) else { continue };
             if !self.tcx.has_params(self.weavings[m.w].target) {
                 continue;
             }
@@ -632,7 +630,7 @@ impl Checker<'_> {
                 Some(imp @ (super::Impl::Written(_) | super::Impl::Default(_) | super::Impl::Forward(_))) => imp,
                 _ => continue,
             };
-            let inst = self.impl_instance(imp, ty, &m.bindings);
+            let inst = self.impl_instance(imp, ty, Some(m.w), &m.bindings);
             let id = self.instance(inst);
             match name {
                 "show" => fns.show = Some(id),
