@@ -1,0 +1,23 @@
+use std.io.print
+
+weft Convert[T] {
+    fun convert(self) -> T
+}
+
+warp Meters { v: u32 }
+
+// One type, two weavings of the same weft.
+weave Convert[u32] into Meters { fun convert(self) -> u32 = self.v }
+weave Convert[str] into Meters { fun convert(self) -> str = "metres" }
+
+// Inside `to`, `x.convert()` is the weaving the bound names: `Convert[U]`.
+fun to[T: Convert[U], U](x: T) -> U = x.convert()
+
+fun main() {
+    let m = Meters(v: 7)
+    print(to[Meters, u32](m))
+    print(to[Meters, str](m))
+    // Out here nothing says which one, so the call does.
+    print(Convert[u32].convert(m))
+}
+//@ run

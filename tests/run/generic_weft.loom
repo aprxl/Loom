@@ -47,8 +47,19 @@ weave Tagged[u8] into Feet {}
 
 fun conv[T: Into[U], U](x: T) -> U = x.convert()
 
-// `x.convert()` would be ambiguous for a type that weaves two `Into`s.
+// The explicit form of `conv`: it names the weaving itself.
 fun conv_exact[T: Into[U], U](x: T) -> U = Into[U].convert(x)
+
+// Static methods: `u64` weaves `From[u32]` and `From[str]`. The call's first
+// argument says which one, or a bound does.
+weft From[T] {
+    fun from(take x: T) -> Self
+}
+
+weave From[u32] into u64 { fun from(take x: u32) -> u64 = x as u64 }
+weave From[str] into u64 { fun from(take x: str) -> u64 = x.len() as u64 + 10 }
+
+fun make[T: From[U], U](x: U) -> T = T.from(x)
 
 fun main() {
     let m = Meters(v: 7)
@@ -67,8 +78,16 @@ fun main() {
     print(f.convert())
     print(Both[u64].both(f).1)
     print(Into[u64].convert(Wrap(v: Feet(v: 2))))
+    print(conv[Meters, u64](m))
+    print(conv[Meters, String](m))
     print(conv_exact[Meters, u64](m))
     print(conv_exact[Meters, String](m))
     print(Tagged[u8].tagged(f))
     print(Tag[u8].tag(f))
+    print(u64.from(3_u32))
+    print(u64.from("seven"))
+    print(make[u64, u32](5_u32))
+    print(make[u64, str]("ab"))
+    let n: u64 = From[u32].from(8_u32)
+    print(n + 1)
 }

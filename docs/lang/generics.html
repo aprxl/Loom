@@ -614,7 +614,70 @@ metres
 6
 15</code></pre></div>
 </div>
-<ul><li>Without the arguments, <code>Convert.convert(x)</code> and <code>x.convert()</code> work when the type weaves one <code>Convert</code> only. With two, the compiler lists them (<a href="diagnostics.html#T0116">T0116</a>) and you pick: <code>Convert[u32].convert(x)</code>.</li><li>A default method (<code>twice</code>) sees <code>T</code> as whatever the weaving gave it, and is checked once for each weaving that uses it.</li><li>A bound says what a call needs, not which weaving the body uses: inside <code>to</code>, <code>x.convert()</code> still sees every <code>Convert</code> that <code>T</code> weaves. A type with two of them makes it ambiguous, and <code>Convert[U].convert(x)</code> picks the one the bound names.</li><li><code>T: Convert[U]</code> is checked when <code>to</code> is called, with both arguments known: <code>to[Feet, str](f)</code> stops with <a href="diagnostics.html#T0108">T0108</a>, because a <code>Feet</code> doesn't weave <code>Convert[str]</code>.</li><li>A weft of <code>const</code> or region parameters, <code>any Convert[u32]</code>, a generic weft as a parameter's type, and inferring <code>T</code> and <code>U</code> from the arguments or from where the result goes aren't supported yet: see <a href="not-yet.html">Not supported yet</a>.</li></ul>
+<ul><li>Without the arguments, <code>Convert.convert(x)</code> and <code>x.convert()</code> work when the type weaves one <code>Convert</code> only. With two, the compiler lists them (<a href="diagnostics.html#T0116">T0116</a>) and you pick: <code>Convert[u32].convert(x)</code>.</li><li>A default method (<code>twice</code>) sees <code>T</code> as whatever the weaving gave it, and is checked once for each weaving that uses it.</li><li><code>T: Convert[U]</code> is checked when <code>to</code> is called, with both arguments known: <code>to[Feet, str](f)</code> stops with <a href="diagnostics.html#T0108">T0108</a>, because a <code>Feet</code> doesn't weave <code>Convert[str]</code>.</li><li>A weft of <code>const</code> or region parameters, <code>any Convert[u32]</code>, a generic weft as a parameter's type, and inferring a weft's arguments from where the result goes aren't supported yet: see <a href="not-yet.html">Not supported yet</a>.</li></ul>
+<h3 id="one-type-several-weavings">One type, several weavings<a class="anchor" href="#one-type-several-weavings" aria-label="Link to this section">#</a></h3>
+<p>When a type weaves the same weft twice, a call in generic code follows the bound. Inside <code>to</code>, <code>x.convert()</code> is <code>Convert[U].convert(x)</code>, because <code>T: Convert[U]</code> says so. Outside a bound, a plain <code>m.convert()</code> is ambiguous (<a href="diagnostics.html#T0116">T0116</a>) and you write <code>Convert[u32].convert(m)</code>.</p>
+<div class="sample" id="sample-generics_weft_bound" data-sample="generics_weft_bound" data-mode="run" data-file="generics_weft_bound.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>generics_weft_bound.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="k">weft</span> <span class="t">Convert</span>[T] {
+    <span class="k">fun</span> <span class="f">convert</span>(<span class="k">self</span>) -&gt; T
+}
+
+<span class="k">warp</span> <span class="t">Meters</span> { v: u32 }
+
+<span class="c">// One type, two weavings of the same weft.</span>
+<span class="k">weave</span> <span class="t">Convert</span>[u32] <span class="k">into</span> <span class="t">Meters</span> { <span class="k">fun</span> <span class="f">convert</span>(<span class="k">self</span>) -&gt; u32 = <span class="k">self</span>.v }
+<span class="k">weave</span> <span class="t">Convert</span>[str] <span class="k">into</span> <span class="t">Meters</span> { <span class="k">fun</span> <span class="f">convert</span>(<span class="k">self</span>) -&gt; str = <span class="s">"metres"</span> }
+
+<span class="c">// Inside `to`, `x.convert()` is the weaving the bound names: `Convert[U]`.</span>
+<span class="k">fun</span> to[T: <span class="t">Convert</span>[U], U](x: T) -&gt; U = x.<span class="f">convert</span>()
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="k">let</span> m = <span class="t">Meters</span>(v: <span class="n">7</span>)
+    <span class="f">print</span>(to[<span class="t">Meters</span>, u32](m))
+    <span class="f">print</span>(to[<span class="t">Meters</span>, str](m))
+    <span class="c">// Out here nothing says which one, so the call does.</span>
+    <span class="f">print</span>(<span class="t">Convert</span>[u32].<span class="f">convert</span>(m))
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>7
+metres
+7</code></pre></div>
+</div>
+<h3 id="functions-without-self">Functions without <code>self</code><a class="anchor" href="#functions-without-self" aria-label="Link to this section">#</a></h3>
+<p>A weft's function with no <code>self</code>, like <code>from</code>, is called on the type: <code>Meters.from(3_u32)</code>. When the type weaves the weft more than once, the call is settled by a bound (<code>T.from(x)</code> with <code>T: From[U]</code>), else by the type of its first argument. If neither settles it, the compiler lists the candidates (<a href="diagnostics.html#T0116">T0116</a>). <code>From[u32].from(x)</code> names the weaving, and needs to know <code>Self</code> from where the result goes: <code>let m: Meters = From[u32].from(9_u32)</code>.</p>
+<div class="sample" id="sample-generics_weft_static" data-sample="generics_weft_static" data-mode="run" data-file="generics_weft_static.loom" data-runnable>
+<div class="sample-head"><span class="file"><span class="dot"></span>generics_weft_static.loom</span><span class="tag ok">runs</span><span class="spacer"></span></div>
+<pre class="code"><code><span class="k">use</span> std.io.print
+
+<span class="c">// A weft's function with no `self` is called on the type.</span>
+<span class="k">weft</span> <span class="t">From</span>[T] {
+    <span class="k">fun</span> <span class="f">from</span>(<span class="k">take</span> x: T) -&gt; <span class="k">Self</span>
+}
+
+<span class="k">warp</span> <span class="t">Meters</span> { v: u32 }
+
+<span class="k">weave</span> <span class="t">From</span>[u32] <span class="k">into</span> <span class="t">Meters</span> { <span class="k">fun</span> <span class="f">from</span>(<span class="k">take</span> x: u32) -&gt; <span class="t">Meters</span> = <span class="t">Meters</span>(v: x) }
+<span class="k">weave</span> <span class="t">From</span>[str] <span class="k">into</span> <span class="t">Meters</span> { <span class="k">fun</span> <span class="f">from</span>(<span class="k">take</span> x: str) -&gt; <span class="t">Meters</span> = <span class="t">Meters</span>(v: x.<span class="f">len</span>() <span class="k">as</span> u32) }
+
+<span class="c">// A bound picks the weaving in generic code.</span>
+<span class="k">fun</span> make[T: <span class="t">From</span>[U], U](x: U) -&gt; T = T.<span class="f">from</span>(x)
+
+<span class="k">fun</span> <span class="f">main</span>() {
+    <span class="c">// The argument's type says which one.</span>
+    <span class="f">print</span>(<span class="t">Meters</span>.<span class="f">from</span>(<span class="n">3_u32</span>).v)
+    <span class="f">print</span>(<span class="t">Meters</span>.<span class="f">from</span>(<span class="s">"seven"</span>).v)
+    <span class="f">print</span>(make[<span class="t">Meters</span>, str](<span class="s">"abcd"</span>).v)
+    <span class="c">// With the type the result goes to, the weft can be named.</span>
+    <span class="k">let</span> m: <span class="t">Meters</span> = <span class="t">From</span>[u32].<span class="f">from</span>(<span class="n">9_u32</span>)
+    <span class="f">print</span>(m.v)
+}</code></pre>
+<div class="sample-out"><div class="out-head">Output</div><pre><code>3
+5
+4
+9</code></pre></div>
+</div>
 <p>Wefts with associated types (<code>type Item</code>) cover many of the cases where a weft would otherwise need a parameter: see <a href="types.html#wefts">Warps, wefts and weaves</a>.</p>
 <h2 id="where-next">Where next<a class="anchor" href="#where-next" aria-label="Link to this section">#</a></h2>
 <p><a href="collections.html">Collections and streams</a> uses generics all over: <code>List[T]</code>, <code>Map[K, V]</code>, and the lazy <code>Stream[T]</code>.</p>

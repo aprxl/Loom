@@ -1,0 +1,16 @@
+// Static methods of a weft with arguments: the call says which weaving it
+// means, by its argument, a bound, or the type it's expected to give.
+
+weft From[T] {
+    fun from(take x: T) -> Self
+}
+
+weave From[u32] into u64 { fun from(take x: u32) -> u64 = x as u64 }
+weave From[str] into u64 { fun from(take x: str) -> u64 = 7 }
+
+fun main() {
+    let a = u64.from(3)                                   //~ T0116
+    let b = u64.from(true)                                //~ T0116
+    let c = From[u32].from(3_u32)                         //~ T0104
+    let d: u64 = From[u32].from(3_u32)
+}

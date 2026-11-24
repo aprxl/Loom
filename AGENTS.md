@@ -317,8 +317,16 @@ cancel point yet (design/vm.md §11.4, §17).
     memory (design/vm.md §8.6). The book's "How programs run" page; §18's
     list checked in `bench/RESULTS.md` ("V9 switch").
 
-Next: generic wefts. The deferred work of each milestone, std included, is
-in LEDGER.md ("Roadmap"); what V8 left is under "Later" there.
+34. Generic wefts (2026-11-24): `weft Into[T]`, weaves with arguments
+    (`weave Into[u64] into Meters`), super-wefts and bounds with arguments, bounds
+    that pick the weaving in generic code, `Into[u64].convert(x)`, and static
+    functions (`u64.from(x)`, `T.from(x)`). Left: `any W[A]`, a generic weft as a
+    parameter's type, inferring a weft's arguments from the result type,
+    associated types through a generic weft, `const` and region parameters of a
+    weft (`tests/run/generic_weft`).
+
+Next: what's left of the deferred work of each milestone, std included, in
+LEDGER.md ("Roadmap"); what V8 left is under "Later" there.
 
 Keep these green:
 - `every_example_parses_cleanly` (`crates/loom_syntax`) and

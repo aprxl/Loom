@@ -394,7 +394,7 @@ impl Checker<'_> {
     /// The wefts generic parameter `param` of `site` (a weave, or a generic
     /// warp) must weave, with their arguments in terms of the site's own
     /// parameters.
-    fn param_bounds(&mut self, site: DefId, param: DefId) -> Vec<WeftRef> {
+    pub(super) fn param_bounds(&mut self, site: DefId, param: DefId) -> Vec<WeftRef> {
         if let Some(bounds) = self.site_bounds.get(&(site, param)) {
             return bounds.clone();
         }
@@ -402,6 +402,7 @@ impl Checker<'_> {
         let (generics, preds) = match &p.def(site).kind {
             DefKind::Weave(w) => (w.generics.as_slice(), w.where_clause.as_slice()),
             DefKind::Warp(w) => (w.generics.as_slice(), w.where_clause.as_slice()),
+            DefKind::Weft(w) => (w.generics.as_slice(), &[][..]),
             _ => (&[][..], &[][..]),
         };
         let mut written: Vec<&hir::Ty> = Vec::new();
@@ -499,7 +500,54 @@ impl Checker<'_> {
                 }
             }
         }
+        // A bound of the function being checked (`T: Into[U]`) says which of
+        // several weavings it means.
+        if found.len() > 1 && found.iter().any(|(weft, args, _)| self.hinted(ty, *weft, args)) {
+            let hinted: Vec<bool> = found.iter().map(|(weft, args, _)| self.hinted(ty, *weft, args)).collect();
+            let mut keep = hinted.into_iter();
+            found.retain(|_| keep.next().unwrap_or(false));
+        }
         found
+    }
+
+    /// Whether a bound of the function being checked says `ty` weaves
+    /// `weft` with these `args`.
+    pub(super) fn hinted(&self, ty: Ty, weft: DefId, args: &[Ty]) -> bool {
+        self.bound_hints.iter().any(|(t, w, a)| *t == ty && *w == weft && a == args)
+    }
+
+    /// Fills `bound_hints` from the generic parameters of `inst`, which
+    /// stand for what `self.subst` says.
+    pub(super) fn fill_bound_hints(&mut self, inst: &Instance, f: &hir::FnDef) {
+        self.bound_hints.clear();
+        if inst.args.is_empty() {
+            return;
+        }
+        let params = self.generic_params(inst.def);
+        let parent_len = params.len() - f.generics.len();
+        let stands_for = |this: &Self, g: DefId| this.subst.iter().find(|(d, _)| *d == g).map(|&(_, t)| t);
+        let mut hints: Vec<(Ty, DefId, Vec<Ty>)> = Vec::new();
+        for &g in &f.generics {
+            let Some(ty) = stands_for(self, g) else { continue };
+            hints.extend(self.bounds_of(g, f).into_iter().filter(|(_, a)| !a.is_empty()).map(|(w, a)| (ty, w, a)));
+        }
+        if let Some(site) = self.p.def(inst.def).parent {
+            for &g in &params[..parent_len] {
+                let Some(ty) = stands_for(self, g) else { continue };
+                let subst = self.subst.clone();
+                for (weft, args) in self.param_bounds(site, g) {
+                    if !args.is_empty() {
+                        let args = args.into_iter().map(|t| self.tcx.subst(t, &subst)).collect();
+                        hints.push((ty, weft, args));
+                    }
+                }
+            }
+            let parent_args = &inst.args[..parent_len.min(inst.args.len())];
+            for bound in self.parent_bounds(inst.def, parent_args) {
+                hints.extend(bound.wefts.into_iter().filter(|(_, a)| !a.is_empty()).map(|(w, a)| (bound.ty, w, a)));
+            }
+        }
+        self.bound_hints = hints;
     }
 
     /// Whether the code being checked can name `weft`: a weave's methods are

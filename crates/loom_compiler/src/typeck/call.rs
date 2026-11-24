@@ -16,6 +16,7 @@ use loom_syntax::source::Span;
 use super::generic::{self, Patch, Pending};
 use super::method::{Found, Lookup};
 use super::warp::{Key, Member, WarpInfo};
+use super::weave::Match;
 use super::{ArgSource, AssocValue, Call, Checker, FieldAccess, Instance, Receiver, Seq, SigParam};
 use crate::hir::{self, Arg, Binding, DefId, DefKind, Expr, ExprKind, HirId};
 use crate::ty::{Ty, TyKind};
@@ -112,7 +113,7 @@ impl Checker<'_> {
                             None => return self.check_args_alone(args),
                         }
                     };
-                    return self.weft_call(call, *def, explicit.as_deref(), &name.name, name.span, args);
+                    return self.weft_call(call, *def, explicit.as_deref(), &name.name, name.span, args, expected);
                 }
                 self.infer_args = true;
                 let ty = self.lower_ty(base);
@@ -614,6 +615,9 @@ impl Checker<'_> {
             if let Some(inst) = self.prim_assoc(ty, name) {
                 return self.call_fn(call, inst, args, None);
             }
+            if let Some(made) = self.static_weave_call(call, ty, name, span, args) {
+                return made;
+            }
             // `bool.to_json(b)`: a method a weave gives a built-in type.
             match self.find_method(ty, name, span) {
                 Lookup::One(found) => return self.call_fn(call, found.inst, args, None),
@@ -642,19 +646,26 @@ impl Checker<'_> {
             // `Rect.area(r)`: a weave's method, called through the type. A
             // method a `through` field has needs a value to follow the
             // field from, so it's called on one instead.
-            None => match self.find_method(ty, name, span) {
-                Lookup::One(found) if found.path.is_empty() => self.call_fn(call, found.inst, args, None),
-                Lookup::Ambiguous => self.check_args_alone(args),
-                Lookup::One(_) | Lookup::None => {
-                    self.error(codes::T0111, span, format!("`{}` has no `{name}`", info.name), "no such member");
-                    self.check_args_alone(args)
+            None => {
+                if let Some(made) = self.static_weave_call(call, ty, name, span, args) {
+                    return made;
                 }
-            },
+                match self.find_method(ty, name, span) {
+                    Lookup::One(found) if found.path.is_empty() => self.call_fn(call, found.inst, args, None),
+                    Lookup::Ambiguous => self.check_args_alone(args),
+                    Lookup::One(_) | Lookup::None => {
+                        self.error(codes::T0111, span, format!("`{}` has no `{name}`", info.name), "no such member");
+                        self.check_args_alone(args)
+                    }
+                }
+            }
         }
     }
 
     /// `Weft.name(x, …)` or `Weft[A].name(x, …)`: the weft's method, for the
-    /// type of `x`.
+    /// type of `x`. A method without `self` has no `x` to ask: `Self` is the
+    /// type the call is expected to give.
+    #[allow(clippy::too_many_arguments)]
     fn weft_call(
         &mut self,
         call: &Expr,
@@ -663,25 +674,44 @@ impl Checker<'_> {
         name: &str,
         span: Span,
         args: &[Arg],
+        expected: Option<Ty>,
     ) -> Ty {
         let weft_name = self.p.def(weft).name.clone();
         let Some(method) = self.weft_methods(weft).into_iter().find(|&m| self.p.def(m).name == name) else {
             self.error(codes::T0111, span, format!("`{weft_name}` has no method `{name}`"), "no such method");
             return self.check_args_alone(args);
         };
-        let Some(first) = args.first().filter(|a| a.label.is_none() && !a.is_given) else {
-            self.error(
-                codes::T0104,
-                call.span,
-                format!("`{weft_name}.{name}` needs the value to call it on first"),
-                format!("for example `{weft_name}.{name}(x)`"),
-            );
-            return self.check_args_alone(args);
+        let has_self =
+            matches!(&self.p.def(method).kind, DefKind::Fn(f) if f.params.first().is_some_and(|p| p.is_self));
+        let first = args.first().filter(|a| a.label.is_none() && !a.is_given);
+        let (ty, rest) = if has_self {
+            let Some(first) = first else {
+                self.error(
+                    codes::T0104,
+                    call.span,
+                    format!("`{weft_name}.{name}` needs the value to call it on first"),
+                    format!("for example `{weft_name}.{name}(x)`"),
+                );
+                return self.check_args_alone(args);
+            };
+            let ty = self.check_expr(&first.value, None);
+            (self.resolve(ty), &args[1..])
+        } else {
+            let known = expected.map(|t| self.resolve(t)).filter(|&t| !self.has_vars(t));
+            let Some(ty) = known else {
+                let shown = self.show_weft(weft, weft_args.unwrap_or(&[]));
+                self.error(
+                    codes::T0104,
+                    call.span,
+                    format!("`{shown}.{name}` needs to know `Self`"),
+                    format!("write `T.{name}(…)` with the type, or say where the result goes"),
+                );
+                return self.check_args_alone(args);
+            };
+            (ty, args)
         };
-        let ty = self.check_expr(&first.value, None);
-        let ty = self.resolve(ty);
         if self.tcx.is_error(ty) {
-            return self.check_args_alone(&args[1..]);
+            return self.check_args_alone(rest);
         }
         let mut found = self.weavings_for(weft, weft_args, ty);
         // A weft without arguments has one weaving per type: the first wins
@@ -689,22 +719,30 @@ impl Checker<'_> {
         if self.weft_generic_count(weft) == 0 {
             found.truncate(1);
         }
-        if found.len() > 1 {
+        let mut each: Vec<(Match, Vec<Ty>)> = Vec::with_capacity(found.len());
+        for m in found {
+            let wargs = self.weft_args(Some(m.w), &m.bindings);
+            each.push((m, wargs));
+        }
+        // A bound of the function being checked says which one it means.
+        if each.len() > 1 && each.iter().any(|(_, a)| self.hinted(ty, weft, a)) {
+            each.retain(|(_, a)| self.hinted(ty, weft, a));
+        }
+        if each.len() > 1 {
             let shown = self.show(ty);
-            let mut vias = Vec::with_capacity(found.len());
-            for m in &found {
-                let args = self.weft_args(Some(m.w), &m.bindings);
-                vias.push(format!("`{}.{name}`", self.show_weft(weft, &args)));
+            let mut vias = Vec::with_capacity(each.len());
+            for (_, wargs) in &each {
+                vias.push(format!("`{}.{name}`", self.show_weft(weft, wargs)));
             }
             self.diags.push(
                 Diagnostic::error(codes::T0116, format!("`{shown}` has more than one method `{name}`"))
                     .primary(span, format!("could be {}", vias.join(" or ")))
                     .help(format!("say which one: `{}(x)`", vias[0].trim_matches('`'))),
             );
-            return self.check_args_alone(&args[1..]);
+            return self.check_args_alone(rest);
         }
-        let inst = match found.pop() {
-            Some(m) => match self.impl_of(m.w, method, ty, 0) {
+        let inst = match each.pop() {
+            Some((m, _)) => match self.impl_of(m.w, method, ty, 0) {
                 Some(imp) => Some(self.impl_instance(imp, ty, Some(m.w), &m.bindings)),
                 None => None,
             },
@@ -713,16 +751,63 @@ impl Checker<'_> {
         let Some(inst) = inst else {
             let shown = self.show(ty);
             let wanted = self.show_weft(weft, weft_args.unwrap_or(&[]));
-            self.error(
-                codes::T0108,
-                first.value.span,
-                format!("`{shown}` doesn't weave `{wanted}`"),
-                format!("this is `{shown}`"),
-            );
-            return self.check_args_alone(&args[1..]);
+            let at = first.filter(|_| has_self).map_or(call.span, |f| f.value.span);
+            self.error(codes::T0108, at, format!("`{shown}` doesn't weave `{wanted}`"), format!("this is `{shown}`"));
+            return self.check_args_alone(rest);
         };
-        self.prechecked.insert(first.value.id, ty);
+        if let Some(first) = first.filter(|_| has_self) {
+            self.prechecked.insert(first.value.id, ty);
+        }
         self.call_fn(call, inst, args, None)
+    }
+
+    /// `u64.from(x)` where `u64` weaves `From[u32]` and `From[str]`: the
+    /// weaving the call means, from a bound of the function being checked
+    /// (`T: From[U]`), else from the type of the first argument. `None`
+    /// when `ty` has at most one weaving with a method `name`, which the
+    /// ordinary lookup finds.
+    fn static_weave_call(&mut self, call: &Expr, ty: Ty, name: &str, span: Span, args: &[Arg]) -> Option<Ty> {
+        let mut found = self.weave_methods(ty, name, 0);
+        if found.len() < 2 {
+            return None;
+        }
+        // The first argument says which, when it's one of the candidates'.
+        if let Some(first) = args.first().filter(|a| a.label.is_none() && !a.is_given) {
+            let arg_ty = self.check_expr(&first.value, None);
+            let arg_ty = self.resolve(arg_ty);
+            self.prechecked.insert(first.value.id, arg_ty);
+            let mut keep = Vec::with_capacity(found.len());
+            for (i, (weft, wargs, _)) in found.iter().enumerate() {
+                let method = self.weft_methods(*weft).into_iter().find(|&m| self.p.def(m).name == name);
+                let first_param =
+                    method.and_then(|m| self.sig_with_self(m, ty, wargs)).and_then(|s| s.params.first().map(|p| p.ty));
+                if first_param.is_some_and(|p| self.resolve(p) == arg_ty) {
+                    keep.push(i);
+                }
+            }
+            if !keep.is_empty() {
+                let mut at = 0;
+                found.retain(|_| {
+                    at += 1;
+                    keep.contains(&(at - 1))
+                });
+            }
+        }
+        if found.len() == 1 {
+            let (_, _, inst) = found.remove(0);
+            return Some(self.call_fn(call, inst, args, None));
+        }
+        let shown = self.show(ty);
+        let mut vias = Vec::with_capacity(found.len());
+        for (weft, wargs, _) in &found {
+            vias.push(format!("`{}.{name}`", self.show_weft(*weft, wargs)));
+        }
+        self.diags.push(
+            Diagnostic::error(codes::T0116, format!("`{shown}` has more than one `{name}`"))
+                .primary(span, format!("could be {}", vias.join(" or ")))
+                .help(format!("say which one: `{}(x)`", vias[0].trim_matches('`'))),
+        );
+        Some(self.check_args_alone(args))
     }
 
     /// The warp a type names, built-in ones included.

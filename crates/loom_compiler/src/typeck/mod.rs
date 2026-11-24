@@ -592,6 +592,10 @@ struct Checker<'p> {
     /// The super-wefts each weft names, lowered once in terms of its own
     /// parameters.
     weft_supers: HashMap<DefId, Vec<WeftRef>>,
+    /// What the generic function being checked says its parameters weave
+    /// (`T: Into[U]` with `T = Meters`, `U = u64`: `(Meters, Into, [u64])`),
+    /// so a lookup that finds several weavings takes the one a bound names.
+    bound_hints: Vec<(Ty, DefId, Vec<Ty>)>,
     /// The wefts each generic parameter of a weave or warp must weave,
     /// lowered once in terms of the site's own parameters.
     site_bounds: HashMap<(DefId, DefId), Vec<WeftRef>>,
@@ -745,6 +749,7 @@ impl<'p> Checker<'p> {
             weavings: Vec::new(),
             weave_index: HashMap::new(),
             weft_supers: HashMap::new(),
+            bound_hints: Vec::new(),
             site_bounds: HashMap::new(),
             prechecked: HashMap::new(),
             subst: Vec::new(),
@@ -1149,11 +1154,13 @@ impl<'p> Checker<'p> {
     fn check_fn(&mut self, id: BodyId, inst: &Instance, f: &hir::FnDef) {
         self.subst = self.instance_subst(inst);
         self.apply_shapes(f);
+        self.fill_bound_hints(inst, f);
         self.self_ty = self.instance_self(inst);
         self.self_local = f.params.first().filter(|p| p.is_self).map(|p| p.local);
         self.check_fn_body(id, f);
         self.self_ty = None;
         self.self_local = None;
+        self.bound_hints.clear();
         self.subst = Vec::new();
     }
 

@@ -286,9 +286,20 @@ A weft can take type parameters of its own, written like a generic function's: `
 
 - Without the arguments, `Convert.convert(x)` and `x.convert()` work when the type weaves one `Convert` only. With two, the compiler lists them ([T0116](diag:T0116)) and you pick: `Convert[u32].convert(x)`.
 - A default method (`twice`) sees `T` as whatever the weaving gave it, and is checked once for each weaving that uses it.
-- A bound says what a call needs, not which weaving the body uses: inside `to`, `x.convert()` still sees every `Convert` that `T` weaves. A type with two of them makes it ambiguous, and `Convert[U].convert(x)` picks the one the bound names.
 - `T: Convert[U]` is checked when `to` is called, with both arguments known: `to[Feet, str](f)` stops with [T0108](diag:T0108), because a `Feet` doesn't weave `Convert[str]`.
-- A weft of `const` or region parameters, `any Convert[u32]`, a generic weft as a parameter's type, and inferring `T` and `U` from the arguments or from where the result goes aren't supported yet: see [Not supported yet](page:not-yet).
+- A weft of `const` or region parameters, `any Convert[u32]`, a generic weft as a parameter's type, and inferring a weft's arguments from where the result goes aren't supported yet: see [Not supported yet](page:not-yet).
+
+### One type, several weavings
+
+When a type weaves the same weft twice, a call in generic code follows the bound. Inside `to`, `x.convert()` is `Convert[U].convert(x)`, because `T: Convert[U]` says so. Outside a bound, a plain `m.convert()` is ambiguous ([T0116](diag:T0116)) and you write `Convert[u32].convert(m)`.
+
+@sample generics_weft_bound
+
+### Functions without `self`
+
+A weft's function with no `self`, like `from`, is called on the type: `Meters.from(3_u32)`. When the type weaves the weft more than once, the call is settled by a bound (`T.from(x)` with `T: From[U]`), else by the type of its first argument. If neither settles it, the compiler lists the candidates ([T0116](diag:T0116)). `From[u32].from(x)` names the weaving, and needs to know `Self` from where the result goes: `let m: Meters = From[u32].from(9_u32)`.
+
+@sample generics_weft_static
 
 Wefts with associated types (`type Item`) cover many of the cases where a weft would otherwise need a parameter: see [Warps, wefts and weaves](page:types#wefts).
 

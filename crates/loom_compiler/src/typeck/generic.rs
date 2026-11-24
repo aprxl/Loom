@@ -471,7 +471,7 @@ impl Checker<'_> {
 
     /// The wefts generic parameter `g` of `f` must weave: its bounds and
     /// its `where` clauses.
-    fn bounds_of(&mut self, g: DefId, f: &hir::FnDef) -> Vec<WeftRef> {
+    pub(super) fn bounds_of(&mut self, g: DefId, f: &hir::FnDef) -> Vec<WeftRef> {
         let p = self.p;
         let mut wefts = Vec::new();
         if let DefKind::GenericParam(gp) = &p.def(g).kind

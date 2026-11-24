@@ -177,8 +177,9 @@ templates and `Show` (`"{x}"`).
    captures), `mem.swap/replace/take/drop`, I/O and `time.sleep` as cancel
    points.
 
-V6.5 (language gaps: `Self` for numbers, `where T: [U]`, generic wefts,
-`Show` on std warps, more `Default`, `collect_as` call-site errors, `Fmt`)
+V6.5 (language gaps: `Self` for numbers, `where T: [U]`, generic wefts (done,
+except `any W[A]`, inferring their arguments from the result type and
+associated types through them), `Show` on std warps, more `Default`, `collect_as` call-site errors, `Fmt`)
 follows, or interleaves where it is cheaper to do a gap before the slice
 that needs it.
 
