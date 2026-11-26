@@ -1,0 +1,60 @@
+// Command-line host for the Lua runtime. The guest receives only an empty
+// environment table and the arguments passed to its chunk as (...).
+
+use machine.run
+use std.env.args
+use std.fs.read
+use std.io.{read_all, write_err, write_out}
+use std.process.exit
+
+const USAGE: str = "usage: loom run projects/lua/main.loom -- [--results] [--] FILE|- [ARGS ...]\n"
+
+fun main() {
+    let arguments = args()
+    var i: usize = 1
+    var show_results = false
+    while i < arguments.len() {
+        if arguments[i] == "--help" or arguments[i] == "-h" {
+            write_out(USAGE)
+            return
+        }
+        if arguments[i] == "--results" {
+            show_results = true
+            i += 1
+        } else {
+            if arguments[i] == "--" {
+                i += 1
+            } else if arguments[i] != "-" and arguments[i].starts_with("-") {
+                write_err("unknown option: {arguments[i]}\n{USAGE}")
+                exit(2)
+            }
+            break
+        }
+    }
+    if i >= arguments.len() {
+        write_err(USAGE)
+        exit(2)
+    }
+    let path = if arguments[i] == "-" { "<stdin>".to_string() } else { arguments[i].copy() }
+    let source: List[u8] = if arguments[i] == "-" {
+        let text = read_all()
+        text.bytes().collect()
+    } else {
+        let data = read(path) mend e => {
+            write_err("{path}: {e.message()}\n")
+            exit(1)
+        }
+        data
+    }
+    match run(source, arguments[i + 1..]) {
+        ok(result) => {
+            if show_results {
+                for value in result.values { write_out("{result.render(value)}\n") }
+            }
+        }
+        err(error) => {
+            write_err("{path}:{error.message()}\n")
+            exit(1)
+        }
+    }
+}

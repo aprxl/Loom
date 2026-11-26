@@ -1,0 +1,280 @@
+// Stable handles give guest tables and functions identity. A nonrecursive
+// tracing collector follows scopes, closures, table values, and table keys.
+
+use numbers.exact_integer
+use strings.Strings
+use syntax.{LuaError, Site, Value}
+
+// Table keys have a tag and a bit payload. Integral floats share the
+// integer tag, and both signs of zero canonicalize to integer zero.
+const BOOL_KEY: u8 = 0
+const INT_KEY: u8 = 1
+const FLOAT_KEY: u8 = 2
+const TEXT_KEY: u8 = 3
+const TABLE_KEY: u8 = 4
+const FUNCTION_KEY: u8 = 5
+
+fun table_key(value: Value) -> ?(u8, u64) = match value {
+    .Nil => none
+    .Boolean(b) => some((BOOL_KEY, if b { 1u64 } else { 0u64 }))
+    .Integer(n) => some((INT_KEY, n as% u64))
+    .Float(n) => {
+        if n.is_nan() { return none }
+        if exact_integer(n) is some(i) { return (INT_KEY, i as% u64) }
+        (FLOAT_KEY, n.to_bits())
+    }
+    .Text(id) => some((TEXT_KEY, id as u64))
+    .Table(id) => some((TABLE_KEY, id as u64))
+    .Function(id) => some((FUNCTION_KEY, id as u64))
+}
+
+warp TableObject {
+    live: bool = true
+    fields: Map[(u8, u64), Value] = Map()
+}
+
+warp Cell {
+    binding: usize
+    value: Value
+    parent: ?usize
+    depth: usize
+    live: bool = true
+}
+
+pub warp Closure {
+    pub code: usize
+    pub scope: usize
+    live: bool = true
+}
+
+warp Root {
+    case Text(usize)
+    case Table(usize)
+    case Closure(usize)
+    case Scope(usize)
+}
+
+fun reference(strings: Strings, value: Value) -> ?Root = match value {
+    .Text(id) if strings.is_dynamic(id) => some(Root.Text(id))
+    .Table(id) => some(Root.Table(id))
+    .Function(id) => some(Root.Closure(id))
+    _ => none
+}
+
+pub warp Heap {
+    pub strings: Strings
+    tables: List[TableObject] = List()
+    cells: List[Cell] = List()
+    closures: List[Closure] = List()
+    free_tables: List[usize] = List()
+    free_cells: List[usize] = List()
+    free_closures: List[usize] = List()
+    roots: List[Root] = List()
+    allocations: usize = 0
+    threshold: usize = 256
+
+    pub fun new(take strings: Strings) -> Heap = Heap(strings)
+
+    /// Evaluator checkpoints own all temporary references pushed after them.
+    pub fun checkpoint(self) -> usize = .roots.len()
+    pub fun release(mut self, checkpoint: usize) = .roots.truncate(checkpoint)
+
+    pub fun pin(mut self, value: Value) {
+        if reference(.strings, value) is some(root) { .roots.push(root) }
+    }
+
+    pub fun intern(mut self, take text: String) -> Value {
+        .allocations += 1
+        Value.Text(.strings.intern(text))
+    }
+
+    /// A running block uses one root slot for its changing lexical scope.
+    pub fun scope_root(mut self, scope: usize) -> usize {
+        let slot = .roots.len()
+        .roots.push(Root.Scope(scope))
+        slot
+    }
+
+    pub fun replace_scope(mut self, slot: usize, scope: usize) {
+        .roots[slot] = Root.Scope(scope)
+    }
+
+    pub fun new_table(mut self) -> Value {
+        .allocations += 1
+        if .free_tables.pop() is some(id) {
+            .tables[id] = TableObject()
+            .pin(Value.Table(id))
+            return Value.Table(id)
+        }
+        let id = .tables.len()
+        .tables.push(TableObject())
+        .pin(Value.Table(id))
+        Value.Table(id)
+    }
+
+    pub fun get(self, value: Value, key: Value, site: Site) -> Value ! LuaError {
+        if value is .Table(id) {
+            if table_key(key) is some(k) { return (.tables[id].fields.get(k) mend Value.Nil) }
+            return Value.Nil
+        }
+        fail LuaError.Runtime(site, "attempt to index a {type_name(value)} value")
+    }
+
+    pub fun set(mut self, object: Value, key: Value, value: Value, site: Site) ! LuaError {
+        if object is .Table(id) {
+            let k = table_key(key) mend fail LuaError.Runtime(site, "table index is nil or NaN")
+            if value is .Nil {
+                let _ = .tables[id].fields.remove(k)
+            } else {
+                let _ = .tables[id].fields.insert(k, value)
+            }
+        } else {
+            fail LuaError.Runtime(site, "attempt to index a {type_name(object)} value")
+        }
+    }
+
+    /// Find a valid border by bracketing a present and an absent index.
+    pub fun length(self, id: usize) -> i64 {
+        let max = 9223372036854775807u64
+        var low: u64 = 0
+        var high: u64 = 1
+        while .tables[id].fields.has((INT_KEY, high)) {
+            if high == max { return max as i64 }
+            low = high
+            high = if high > max / 2 { max } else { high * 2 }
+        }
+        while high - low > 1 {
+            let middle = low + (high - low) / 2
+            if .tables[id].fields.has((INT_KEY, middle)) { low = middle }
+            else { high = middle }
+        }
+        low as i64
+    }
+
+    pub fun bind(mut self, parent: ?usize, binding: usize, value: Value) -> usize {
+        let depth = if parent is some(id) { .cells[id].depth + 1 } else { 0 }
+        let cell = Cell(binding, value, parent, depth)
+        .allocations += 1
+        var id = .cells.len()
+        if .free_cells.pop() is some(slot) {
+            id = slot
+            .cells[id] = cell
+        } else {
+            .cells.push(cell)
+        }
+        let _ = .scope_root(id)
+        id
+    }
+
+    pub fun resolve(self, scope: usize, binding: usize) -> usize {
+        var at = scope
+        while .cells[at].binding != binding {
+            at = .cells[at].parent mend unravel("resolved binding missing from its lexical scope")
+        }
+        at
+    }
+
+    pub fun unwind(self, scope: usize, depth: usize) -> usize {
+        var at = scope
+        while .cells[at].depth > depth {
+            at = .cells[at].parent mend unravel("cannot unwind past the root scope")
+        }
+        at
+    }
+
+    pub fun read(self, cell: usize) -> Value = .cells[cell].value
+
+    pub fun write(mut self, cell: usize, value: Value) { .cells[cell].value = value }
+
+    pub fun close_over(mut self, code: usize, scope: usize) -> Value {
+        let closure = Closure(code, scope)
+        .allocations += 1
+        var id = .closures.len()
+        if .free_closures.pop() is some(slot) {
+            id = slot
+            .closures[id] = closure
+        } else {
+            .closures.push(closure)
+        }
+        .pin(Value.Function(id))
+        Value.Function(id)
+    }
+
+    pub fun closure(self, id: usize) -> Closure = .closures[id]
+
+    /// Safe points occur between guest statements. Every active evaluator
+    /// frame has already published its scope and transient guest values.
+    pub fun collect_if_due(mut self) {
+        if .allocations < .threshold { return }
+        var texts = List.filled(false, .strings.slot_count())
+        var tables = List.filled(false, .tables.len())
+        var cells = List.filled(false, .cells.len())
+        var closures = List.filled(false, .closures.len())
+        var queue = .roots.copy()
+        var live: usize = 0
+        while queue.pop() is some(root) {
+            match root {
+                .Text(id) => {
+                    if texts[id] { continue }
+                    texts[id] = true
+                }
+                .Table(id) => {
+                    if tables[id] { continue }
+                    tables[id] = true
+                    for ((tag, bits), value) in .tables[id].fields {
+                        if tag == TEXT_KEY and .strings.is_dynamic(bits as usize) {
+                            queue.push(Root.Text(bits as usize))
+                        }
+                        if tag == TABLE_KEY { queue.push(Root.Table(bits as usize)) }
+                        if tag == FUNCTION_KEY { queue.push(Root.Closure(bits as usize)) }
+                        if reference(.strings, value) is some(child) { queue.push(child) }
+                    }
+                }
+                .Closure(id) => {
+                    if closures[id] { continue }
+                    closures[id] = true
+                    queue.push(Root.Scope(.closures[id].scope))
+                }
+                .Scope(id) => {
+                    if cells[id] { continue }
+                    cells[id] = true
+                    let cell = .cells[id]
+                    if cell.parent is some(parent) { queue.push(Root.Scope(parent)) }
+                    if reference(.strings, cell.value) is some(child) { queue.push(child) }
+                }
+            }
+            live += 1
+        }
+        for id in 0..tables.len() {
+            if .tables[id].live and not tables[id] {
+                .tables[id].fields.clear()
+                .tables[id].live = false
+                .free_tables.push(id)
+            }
+        }
+        for id in 0..cells.len() {
+            if .cells[id].live and not cells[id] {
+                .cells[id].live = false
+                .free_cells.push(id)
+            }
+        }
+        for id in 0..closures.len() {
+            if .closures[id].live and not closures[id] {
+                .closures[id].live = false
+                .free_closures.push(id)
+            }
+        }
+        .strings.sweep(texts)
+        .allocations = 0
+        .threshold = live +| 256
+    }
+}
+
+pub fun type_name(value: Value) -> str = match value {
+    .Nil => "nil"
+    .Boolean(_) => "boolean"
+    .Integer(_) | .Float(_) => "number"
+    .Text(_) => "string"
+    .Table(_) => "table"
+    .Function(_) => "function"
+}

@@ -1,0 +1,566 @@
+// The parser resolves names while reading the chunk. Every function captures
+// the lexical scope at its definition, and each global reference remembers
+// which _ENV binding it indexes. Gotos are linked after all labels are known.
+
+use lexer.{Kind, Token, tokenize}
+use strings.Strings
+use syntax.{Attribute, Binary, Binding, Branch, Call, Declare, Expr, Field, Function,
+    Instruction, Jump, LuaError, Program, Site, Statement, Unary, Value}
+
+warp LocalName {
+    name: usize
+    binding: Binding
+}
+
+warp Label {
+    target: usize
+    depth: usize
+}
+
+warp BlockInfo {
+    parent: ?usize
+    parent_depth: usize
+    labels: Map[usize, Label] = Map()
+}
+
+warp PendingJump {
+    block: usize
+    name: usize
+    depth: usize
+    site: Site
+}
+
+warp Parser {
+    program: Program
+    strings: Strings
+    tokens: List[Token]
+    at: usize = 0
+    locals: List[LocalName] = List()
+    blocks: List[BlockInfo] = List()
+    pending: List[PendingJump] = List()
+    next_id: usize = 1
+    loop_depth: usize = 0
+    variadic: bool = true
+    environment: usize
+    self_name: usize
+
+    fun current(self) -> Token = .tokens[.at]
+    fun kind(self) -> Kind = .current().kind
+    fun site(self) -> Site = .current().site
+
+    fun advance(mut self) -> Token {
+        let token = .current()
+        if token.kind != Kind.Eof { .at += 1 }
+        token
+    }
+
+    fun eat(mut self, kind: Kind) -> bool {
+        if .kind() != kind { return false }
+        let _ = .advance()
+        true
+    }
+
+    fun expect(mut self, kind: Kind, description: str) ! LuaError {
+        if not .eat(kind) { fail LuaError.Syntax(.site(), "expected {description}") }
+    }
+
+    fun name(mut self) -> usize ! LuaError {
+        let token = .current()
+        .expect(Kind.Name, "a name")?
+        if token.value is .Text(id) { return id }
+        unravel("name token without a text handle")
+    }
+
+    fun bind(mut self, name: usize, readonly: bool = false) -> Binding {
+        let binding = Binding(.next_id, readonly)
+        .next_id += 1
+        .locals.push(LocalName(name, binding))
+        binding
+    }
+
+    fun lookup(self, name: usize) -> ?Binding {
+        var i = .locals.len()
+        while i > 0 {
+            i -= 1
+            if .locals[i].name == name { return .locals[i].binding }
+        }
+        if name == .environment { return Binding(0) }
+        none
+    }
+
+    fun variable(mut self, name: usize, site: Site) -> usize {
+        if .lookup(name) is some(binding) {
+            return .program.node(site, Expr.Local(binding))
+        }
+        let env = .lookup(.environment) mend Binding(0)
+        .program.node(site, Expr.Global(env.id, name))
+    }
+
+    fun key(mut self, object: usize, name: usize, site: Site) -> usize {
+        let key = .program.node(site, Expr.Literal(Value.Text(name)))
+        .program.node(site, Expr.Index(object, key))
+    }
+
+    fun validate_target(self, id: usize) ! LuaError {
+        let node = .program.expressions[id]
+        match node.expr {
+            .Local(binding) => {
+                if binding.readonly { fail LuaError.Syntax(node.site, "cannot assign to a constant local") }
+            }
+            .Global(..) | .Index(..) => {}
+            _ => fail LuaError.Syntax(node.site, "expected an assignment target")
+        }
+    }
+
+    fun expression_list(mut self) -> List[usize] ! LuaError {
+        var values = List()
+        values.push(.expression(1)?)
+        while .eat(Kind.Comma) { values.push(.expression(1)?) }
+        values
+    }
+
+    /// Pratt parsing with separate left and right binding powers for the
+    /// two right-associative operators. Unary operators bind below power.
+    fun expression(mut self, minimum: u8) -> usize ! LuaError {
+        let token = .current()
+        var left: usize = 0
+        if unary(token.kind) is some(op) {
+            let _ = .advance()
+            let operand = .expression(11)?
+            left = .program.node(token.site, Expr.Prefix(op, operand))
+        } else {
+            left = .primary()?
+        }
+        while binary(.kind()) is some((op, priority, next)) {
+            if priority < minimum { break }
+            let site = .advance().site
+            let right = .expression(next)?
+            left = .program.node(site, Expr.Infix(op, left, right))
+        }
+        left
+    }
+
+    fun primary(mut self) -> usize ! LuaError {
+        let token = .current()
+        if token.kind == Kind.Name or token.kind == Kind.LeftParen { return .prefix()? }
+        if token.kind == Kind.LeftBrace { return .table()? }
+        let _ = .advance()
+        let expr: Expr = match token.kind {
+            .Number | .StringLit => Expr.Literal(token.value)
+            .Nil => Expr.Literal(Value.Nil)
+            .True => Expr.Literal(Value.Boolean(true))
+            .False => Expr.Literal(Value.Boolean(false))
+            .Dots => {
+                if not .variadic {
+                    fail LuaError.Syntax(token.site, "cannot use '...' outside a variadic function")
+                }
+                Expr.Vararg
+            }
+            .Function => Expr.Closure(.function_body(false)?)
+            _ => fail LuaError.Syntax(token.site, "expected an expression")
+        }
+        .program.node(token.site, expr)
+    }
+
+    fun prefix(mut self) -> usize ! LuaError {
+        let site = .site()
+        var expr: usize = 0
+        if .eat(Kind.LeftParen) {
+            let inner = .expression(1)?
+            .expect(Kind.RightParen, "')'")?
+            expr = .program.node(site, Expr.Paren(inner))
+        } else {
+            let name = .name()?
+            expr = .variable(name, site)
+        }
+        loop {
+            let suffix = .site()
+            if .eat(Kind.LeftBracket) {
+                let key = .expression(1)?
+                .expect(Kind.RightBracket, "']'")?
+                expr = .program.node(suffix, Expr.Index(expr, key))
+            } else if .eat(Kind.Dot) {
+                let name = .name()?
+                expr = .key(expr, name, suffix)
+            } else if .eat(Kind.Colon) {
+                let name = .name()?
+                expr = .application(expr, some(name), suffix)?
+            } else if .kind() is .LeftParen | .LeftBrace | .StringLit {
+                expr = .application(expr, none, suffix)?
+            } else {
+                break
+            }
+        }
+        expr
+    }
+
+    fun application(mut self, callee: usize, method: ?usize, site: Site) -> usize ! LuaError {
+        var args: List[usize] = List()
+        if .eat(Kind.LeftParen) {
+            if .kind() != Kind.RightParen { args = .expression_list()? }
+            .expect(Kind.RightParen, "')'")?
+        } else if .kind() == Kind.LeftBrace {
+            args.push(.table()?)
+        } else if .kind() == Kind.StringLit {
+            let token = .advance()
+            args.push(.program.node(token.site, Expr.Literal(token.value)))
+        } else {
+            fail LuaError.Syntax(.site(), "expected function arguments")
+        }
+        let id = .program.calls.len()
+        .program.calls.push(Call(callee, method, args))
+        .program.node(site, Expr.Apply(id))
+    }
+
+    fun table(mut self) -> usize ! LuaError {
+        let site = .advance().site
+        var fields: List[Field] = List()
+        while .kind() != Kind.RightBrace {
+            if .eat(Kind.LeftBracket) {
+                let key = .expression(1)?
+                .expect(Kind.RightBracket, "']'")?
+                .expect(Kind.Equal, "'='")?
+                fields.push(Field.Keyed(key, .expression(1)?))
+            } else if .kind() == Kind.Name and .tokens[.at + 1].kind == Kind.Equal {
+                let name_site = .site()
+                let name = .name()?
+                let _ = .advance()
+                let key = .program.node(name_site, Expr.Literal(Value.Text(name)))
+                fields.push(Field.Keyed(key, .expression(1)?))
+            } else {
+                fields.push(Field.Array(.expression(1)?))
+            }
+            if not (.eat(Kind.Comma) or .eat(Kind.Semicolon)) { break }
+        }
+        .expect(Kind.RightBrace, "'}}'")?
+        let id = .program.tables.len()
+        .program.tables.push(fields)
+        .program.node(site, Expr.Table(id))
+    }
+
+    fun function_body(mut self, method: bool) -> usize ! LuaError {
+        let saved_depth = .locals.len()
+        let saved_loop = .loop_depth
+        let saved_variadic = .variadic
+        .loop_depth = 0
+        .variadic = false
+        .expect(Kind.LeftParen, "'('")?
+        var params: List[Binding] = List()
+        if method { params.push(.bind(.self_name)) }
+        if .kind() != Kind.RightParen {
+            loop {
+                if .eat(Kind.Dots) {
+                    .variadic = true
+                    break
+                }
+                let name = .name()?
+                params.push(.bind(name))
+                if not .eat(Kind.Comma) { break }
+            }
+        }
+        .expect(Kind.RightParen, "')'")?
+        let body = .block(none, .locals.len())?
+        .expect(Kind.End, "'end'")?
+        let id = .program.functions.len()
+        .program.functions.push(Function(params, .variadic, body))
+        .locals.truncate(saved_depth)
+        .loop_depth = saved_loop
+        .variadic = saved_variadic
+        id
+    }
+
+    /// Parse until a block terminator. A repeat loop passes retain_locals so
+    /// its until expression can resolve the locals declared in the body.
+    fun block(mut self, parent: ?usize, parent_depth: usize, retain_locals: bool = false) -> usize ! LuaError {
+        let entry_depth = .locals.len()
+        let id = .program.blocks.len()
+        .program.blocks.push(List())
+        .blocks.push(BlockInfo(parent, parent_depth))
+        var body: List[Instruction] = List()
+        while not terminator(.kind()) {
+            if .eat(Kind.Semicolon) { continue }
+            let site = .site()
+            let statement = .statement(id, body.len())?
+            let returns = statement is .Return(_)
+            body.push(Instruction(site, statement))
+            if returns {
+                let _ = .eat(Kind.Semicolon)
+                if not terminator(.kind()) { fail LuaError.Syntax(.site(), "return must end its block") }
+                break
+            }
+        }
+        if not retain_locals {
+            // A trailing label is outside the scope of the block's locals.
+            var i = body.len()
+            while i > 0 {
+                i -= 1
+                if body[i].statement is .Label(name) {
+                    let _ = .blocks[id].labels.insert(name, Label(i, entry_depth))
+                } else {
+                    break
+                }
+            }
+            .locals.truncate(entry_depth)
+        }
+        .program.blocks[id] = body
+        id
+    }
+
+    fun selection(mut self, block: usize, depth: usize) -> Statement ! LuaError {
+        var branches: List[Branch] = List()
+        loop {
+            let condition = .expression(1)?
+            .expect(Kind.Then, "'then'")?
+            branches.push(Branch(condition, .block(some(block), depth)?))
+            if not .eat(Kind.ElseIf) { break }
+        }
+        var otherwise: ?usize = none
+        if .eat(Kind.Else) { otherwise = some(.block(some(block), depth)?) }
+        .expect(Kind.End, "'end'")?
+        Statement.If(branches, otherwise)
+    }
+
+    fun for_loop(mut self, block: usize, depth: usize) -> Statement ! LuaError {
+        let name = .name()?
+        .loop_depth += 1
+        let statement = if .eat(Kind.Equal) {
+            let start = .expression(1)?
+            .expect(Kind.Comma, "','")?
+            let limit = .expression(1)?
+            var step: ?usize = none
+            if .eat(Kind.Comma) { step = some(.expression(1)?) }
+            .expect(Kind.Do, "'do'")?
+            let binding = .bind(name)
+            let body = .block(some(block), depth)?
+            Statement.NumericFor(binding, start, limit, step, body)
+        } else {
+            var names: List[usize] = [name]
+            while .eat(Kind.Comma) { names.push(.name()?) }
+            .expect(Kind.In, "'in'")?
+            let values = .expression_list()?
+            .expect(Kind.Do, "'do'")?
+            var bindings: List[Binding] = List()
+            for name in names { bindings.push(.bind(name)) }
+            let body = .block(some(block), depth)?
+            Statement.GenericFor(bindings, values, body)
+        }
+        .expect(Kind.End, "'end'")?
+        .locals.truncate(depth)
+        .loop_depth -= 1
+        statement
+    }
+
+    fun local_declaration(mut self) -> Statement ! LuaError {
+        if .eat(Kind.Function) {
+            let name = .name()?
+            let binding = .bind(name)
+            return Statement.Recursive(binding, .function_body(false)?)
+        }
+        var names: List[(usize, Attribute)] = List()
+        var close_seen = false
+        loop {
+            let name = .name()?
+            var attr = Attribute.Plain
+            if .eat(Kind.Less) {
+                let site = .site()
+                let id = .name()?
+                let spelling = .strings.copy_text(id)
+                attr = match spelling[..] {
+                    "const" => Attribute.Const
+                    "close" => {
+                        if close_seen { fail LuaError.Syntax(site, "only one '<close>' local per declaration") }
+                        close_seen = true
+                        Attribute.Close
+                    }
+                    _ => fail LuaError.Syntax(site, "unknown local attribute '{spelling}'")
+                }
+                .expect(Kind.Greater, "'>'")?
+            }
+            names.push((name, attr))
+            if not .eat(Kind.Comma) { break }
+        }
+        var values: List[usize] = List()
+        if .eat(Kind.Equal) { values = .expression_list()? }
+        var declarations: List[Declare] = List()
+        // Initializers see the old names. Publish the new bindings only
+        // after parsing the entire right-hand side.
+        for (name, attr) in names {
+            declarations.push(Declare(.bind(name, attr != Attribute.Plain), attr))
+        }
+        Statement.Local(declarations, values)
+    }
+
+    fun named_function(mut self, site: Site) -> Statement ! LuaError {
+        let name = .name()?
+        var target = .variable(name, site)
+        while .eat(Kind.Dot) {
+            let field = .name()?
+            target = .key(target, field, site)
+        }
+        let method = .eat(Kind.Colon)
+        if method {
+            let field = .name()?
+            target = .key(target, field, site)
+        }
+        .validate_target(target)?
+        let function_id = .function_body(method)?
+        let expr = .program.node(site, Expr.Closure(function_id))
+        Statement.Assign([target], [expr])
+    }
+
+    fun assignment_or_call(mut self) -> Statement ! LuaError {
+        let first = .prefix()?
+        if .kind() is .Comma | .Equal {
+            .validate_target(first)?
+            var targets: List[usize] = [first]
+            while .eat(Kind.Comma) {
+                let target = .prefix()?
+                .validate_target(target)?
+                targets.push(target)
+            }
+            .expect(Kind.Equal, "'='")?
+            return Statement.Assign(targets, .expression_list()?)
+        }
+        let node = .program.expressions[first]
+        if node.expr is .Apply(id) { return Statement.Call(id) }
+        fail LuaError.Syntax(node.site, "expected an assignment or a function call")
+    }
+
+    fun statement(mut self, block: usize, index: usize) -> Statement ! LuaError {
+        let token = .current()
+        let depth = .locals.len()
+        if not (token.kind is .Name | .LeftParen) { let _ = .advance() }
+        match token.kind {
+            .Name | .LeftParen => .assignment_or_call()?
+            .Local => .local_declaration()?
+            .Function => .named_function(token.site)?
+            .If => .selection(block, depth)?
+            .For => .for_loop(block, depth)?
+            .Do => {
+                let body = .block(some(block), depth)?
+                .expect(Kind.End, "'end'")?
+                Statement.Do(body)
+            }
+            .While => {
+                let condition = .expression(1)?
+                .expect(Kind.Do, "'do'")?
+                .loop_depth += 1
+                let body = .block(some(block), depth)?
+                .loop_depth -= 1
+                .expect(Kind.End, "'end'")?
+                Statement.While(condition, body)
+            }
+            .Repeat => {
+                .loop_depth += 1
+                let body = .block(some(block), depth, retain_locals: true)?
+                .loop_depth -= 1
+                .expect(Kind.Until, "'until'")?
+                let condition = .expression(1)?
+                .locals.truncate(depth)
+                Statement.Repeat(body, condition)
+            }
+            .Return => {
+                if terminator(.kind()) or .kind() == Kind.Semicolon {
+                    Statement.Return(List())
+                } else {
+                    Statement.Return(.expression_list()?)
+                }
+            }
+            .Break => {
+                if .loop_depth == 0 { fail LuaError.Syntax(token.site, "break outside a loop") }
+                Statement.Break
+            }
+            .DoubleColon => {
+                let name = .name()?
+                .expect(Kind.DoubleColon, "'::'")?
+                var visible = some(block)
+                while visible is some(id) {
+                    if .blocks[id].labels.has(name) {
+                        fail LuaError.Syntax(token.site, "duplicate label '{.strings.copy_text(name)}'")
+                    }
+                    visible = .blocks[id].parent
+                }
+                let _ = .blocks[block].labels.insert(name, Label(index, depth))
+                Statement.Label(name)
+            }
+            .Goto => {
+                let name = .name()?
+                let id = .pending.len()
+                .pending.push(PendingJump(block, name, depth, token.site))
+                Statement.Goto(id)
+            }
+            _ => fail LuaError.Syntax(token.site, "expected a statement")
+        }
+    }
+
+    fun resolve_jump(self, pending: PendingJump) -> Jump ! LuaError {
+        var block = pending.block
+        var depth = pending.depth
+        loop {
+            if .blocks[block].labels.get(pending.name) is some(label) {
+                if label.depth > depth {
+                    fail LuaError.Syntax(pending.site, "goto enters the scope of a local")
+                }
+                return Jump(block, label.target, label.depth)
+            }
+            depth = .blocks[block].parent_depth
+            block = .blocks[block].parent mend break
+        }
+        fail LuaError.Syntax(pending.site, "no visible label '{.strings.copy_text(pending.name)}'")
+    }
+
+    fun link(mut self) ! LuaError {
+        var jumps: List[Jump] = List()
+        for pending in .pending { jumps.push(.resolve_jump(pending)?) }
+        .program.jumps = jumps
+    }
+}
+
+fun terminator(kind: Kind) -> bool = kind is .Else | .ElseIf | .End | .Until | .Eof
+
+fun unary(kind: Kind) -> ?Unary = match kind {
+    .Minus => some(Unary.Negate)
+    .Tilde => some(Unary.Invert)
+    .Not => some(Unary.Not)
+    .HashSign => some(Unary.Length)
+    _ => none
+}
+
+fun binary(kind: Kind) -> ?(Binary, u8, u8) = match kind {
+    .Or => some((Binary.Or, 1, 2))
+    .And => some((Binary.And, 2, 3))
+    .EqualEqual => some((Binary.Equal, 3, 4))
+    .NotEqual => some((Binary.Different, 3, 4))
+    .Less => some((Binary.Less, 3, 4))
+    .LessEqual => some((Binary.LessEqual, 3, 4))
+    .Greater => some((Binary.Greater, 3, 4))
+    .GreaterEqual => some((Binary.GreaterEqual, 3, 4))
+    .Pipe => some((Binary.BitOr, 4, 5))
+    .Tilde => some((Binary.BitXor, 5, 6))
+    .Amp => some((Binary.BitAnd, 6, 7))
+    .ShiftLeft => some((Binary.ShiftLeft, 7, 8))
+    .ShiftRight => some((Binary.ShiftRight, 7, 8))
+    .Concat => some((Binary.Concat, 8, 8))
+    .Plus => some((Binary.Add, 9, 10))
+    .Minus => some((Binary.Subtract, 9, 10))
+    .Star => some((Binary.Multiply, 10, 11))
+    .Slash => some((Binary.Divide, 10, 11))
+    .DoubleSlash => some((Binary.FloorDivide, 10, 11))
+    .Percent => some((Binary.Modulo, 10, 11))
+    .Caret => some((Binary.Power, 12, 12))
+    _ => none
+}
+
+/// Returns the resolved chunk and its string pool. Block zero is the chunk.
+pub fun parse(source: [u8]) -> (Program, Strings) ! LuaError {
+    var strings = Strings.new()
+    let environment = strings.from_text("_ENV")
+    let self_name = strings.from_text("self")
+    let tokens = tokenize(source, mut strings)?
+    var parser = Parser(program: Program.new(), strings: strings, tokens: tokens,
+        environment: environment, self_name: self_name)
+    let _ = parser.block(none, 0)?
+    parser.expect(Kind.Eof, "end of input")?
+    parser.link()?
+    (parser.program, parser.strings)
+}

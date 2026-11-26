@@ -1,0 +1,164 @@
+// Indexed syntax, produced once and shared by every invocation of a function.
+// Source locations belong to nodes. Runtime values carry only their payloads.
+
+pub warp Site {
+    pub line: usize = 1
+    pub column: usize = 1
+}
+
+pub warp LuaError: Error {
+    case Syntax(site: Site, detail: String)
+    case Runtime(site: Site, detail: String)
+
+    fun message(self) -> String = match self {
+        .Syntax(site, detail) => "{site.line}:{site.column}: syntax error: {detail}"
+        .Runtime(site, detail) => "{site.line}:{site.column}: runtime error: {detail}"
+    }
+}
+
+/// Text, tables and functions are handles in the owning interpreter session.
+pub warp Value {
+    case Nil
+    case Boolean(bool)
+    case Integer(i64)
+    case Float(f64)
+    case Text(usize)
+    case Table(usize)
+    case Function(usize)
+}
+
+// Binding IDs are unique in a chunk, including across nested functions.
+// The host-supplied outer _ENV has ID zero.
+pub warp Binding {
+    pub id: usize
+    pub readonly: bool = false
+}
+
+pub warp Attribute: Eq {
+    case Plain
+    case Const
+    case Close
+}
+
+pub warp Declare {
+    pub binding: Binding
+    pub attr: Attribute
+}
+
+pub warp Unary {
+    case Negate
+    case Invert
+    case Not
+    case Length
+}
+
+pub warp Binary {
+    case Or
+    case And
+    case Equal
+    case Different
+    case Less
+    case LessEqual
+    case Greater
+    case GreaterEqual
+    case BitOr
+    case BitXor
+    case BitAnd
+    case ShiftLeft
+    case ShiftRight
+    case Concat
+    case Add
+    case Subtract
+    case Multiply
+    case Divide
+    case FloorDivide
+    case Modulo
+    case Power
+}
+
+pub warp Expr {
+    case Literal(Value)
+    case Local(Binding)
+    case Global(environment: usize, name: usize)
+    case Index(object: usize, key: usize)
+    case Paren(usize)
+    case Vararg
+    case Closure(usize)
+    case Table(usize)
+    case Apply(usize)
+    case Prefix(op: Unary, operand: usize)
+    case Infix(op: Binary, left: usize, right: usize)
+}
+
+pub warp Node {
+    pub site: Site
+    pub expr: Expr
+}
+
+pub warp Field {
+    case Keyed(key: usize, value: usize)
+    case Array(usize)
+}
+
+pub warp Call {
+    pub callee: usize
+    /// A method name implies that callee is the receiver expression.
+    pub method: ?usize
+    pub args: List[usize]
+}
+
+pub warp Function {
+    pub params: List[Binding]
+    pub variadic: bool
+    pub body: usize
+}
+
+pub warp Jump {
+    pub block: usize
+    pub target: usize
+    pub depth: usize
+}
+
+pub warp Branch {
+    pub condition: usize
+    pub body: usize
+}
+
+pub warp Statement {
+    case Local(names: List[Declare], values: List[usize])
+    case Recursive(binding: Binding, function_id: usize)
+    case Assign(targets: List[usize], values: List[usize])
+    case Call(usize)
+    case Do(usize)
+    case If(branches: List[Branch], otherwise: ?usize)
+    case While(condition: usize, body: usize)
+    case Repeat(body: usize, condition: usize)
+    case NumericFor(binding: Binding, start: usize, limit: usize, step: ?usize, body: usize)
+    case GenericFor(bindings: List[Binding], values: List[usize], body: usize)
+    case Return(List[usize])
+    case Break
+    case Label(usize)
+    case Goto(usize)
+}
+
+pub warp Instruction {
+    pub site: Site
+    pub statement: Statement
+}
+
+pub warp Program {
+    pub expressions: List[Node] = List()
+    pub blocks: List[List[Instruction]] = List()
+    pub tables: List[List[Field]] = List()
+    pub calls: List[Call] = List()
+    pub functions: List[Function] = List()
+    pub jumps: List[Jump] = List()
+
+    pub fun new() -> Program = Program()
+
+    pub fun node(mut self, site: Site, expr: Expr) -> usize {
+        let id = .expressions.len()
+        .expressions.push(Node(site, expr))
+        id
+    }
+}

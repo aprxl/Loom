@@ -1,0 +1,367 @@
+// Byte-oriented lexer. Newlines are normalized as they are consumed, keeping
+// locations and long-string contents consistent for LF, CR, and mixed pairs.
+
+use numbers.{hex_digit, numeral}
+use strings.Strings
+use syntax.{LuaError, Site, Value}
+
+pub warp Kind: Eq {
+    case Eof
+    case Name
+    case Number
+    case StringLit
+    case And
+    case Break
+    case Do
+    case Else
+    case ElseIf
+    case End
+    case False
+    case For
+    case Function
+    case Goto
+    case If
+    case In
+    case Local
+    case Nil
+    case Not
+    case Or
+    case Repeat
+    case Return
+    case Then
+    case True
+    case Until
+    case While
+    case Plus
+    case Minus
+    case Star
+    case Slash
+    case DoubleSlash
+    case Percent
+    case Caret
+    case HashSign
+    case Amp
+    case Tilde
+    case Pipe
+    case ShiftLeft
+    case ShiftRight
+    case Equal
+    case EqualEqual
+    case NotEqual
+    case Less
+    case LessEqual
+    case Greater
+    case GreaterEqual
+    case LeftParen
+    case RightParen
+    case LeftBrace
+    case RightBrace
+    case LeftBracket
+    case RightBracket
+    case Colon
+    case DoubleColon
+    case Semicolon
+    case Comma
+    case Dot
+    case Concat
+    case Dots
+}
+
+pub warp Token {
+    pub kind: Kind
+    pub site: Site
+    // Names and quoted strings carry a text handle; numerals carry a number.
+    pub value: Value = Value.Nil
+}
+
+warp Cursor {
+    at: usize = 0
+    site: Site = Site()
+
+    fun peek(self, bytes: [u8], offset: usize = 0) -> char {
+        if .at + offset < bytes.len() { bytes[.at + offset] as char } else { '\0' }
+    }
+
+    fun advance(mut self, bytes: [u8]) -> char {
+        let ch = .peek(bytes)
+        if .at == bytes.len() { return '\0' }
+        .at += 1
+        if ch == '\n' or ch == '\r' {
+            let following = .peek(bytes)
+            if (ch == '\n' and following == '\r') or (ch == '\r' and following == '\n') {
+                .at += 1
+            }
+            .site.line += 1
+            .site.column = 1
+            return '\n'
+        }
+        .site.column += 1
+        ch
+    }
+
+    fun eat(mut self, bytes: [u8], ch: char) -> bool {
+        if .peek(bytes) != ch { return false }
+        let _ = .advance(bytes)
+        true
+    }
+
+    /// A matching pair starts with one bracket, then zero or more equals
+    /// signs, then the same bracket. A bare bracket is an ordinary token.
+    fun delimiter(self, bytes: [u8], bracket: char) -> ?usize {
+        if .peek(bytes) != bracket { return none }
+        var count: usize = 1
+        while .peek(bytes, count) == '=' { count += 1 }
+        if .peek(bytes, count) == bracket { return count + 1 }
+        none
+    }
+
+    fun skip(mut self, bytes: [u8], count: usize) {
+        for _ in 0..count { let _ = .advance(bytes) }
+    }
+
+    fun line_comment(mut self, bytes: [u8]) {
+        while .at < bytes.len() and not (.peek(bytes) == '\n' or .peek(bytes) == '\r') {
+            let _ = .advance(bytes)
+        }
+    }
+}
+
+fun whitespace(ch: char) -> bool = match ch {
+    ' ' | '\t' | '\n' | '\r' | '\u{B}' | '\u{C}' => true
+    _ => false
+}
+
+fun decimal(ch: char) -> bool = '0' <= ch and ch <= '9'
+
+fun name_start(ch: char) -> bool =
+    ch == '_' or ('a' <= ch and ch <= 'z') or ('A' <= ch and ch <= 'Z')
+
+fun name_part(ch: char) -> bool = name_start(ch) or decimal(ch)
+
+fun keyword(text: str) -> Kind = match text {
+    "and" => .And
+    "break" => .Break
+    "do" => .Do
+    "else" => .Else
+    "elseif" => .ElseIf
+    "end" => .End
+    "false" => .False
+    "for" => .For
+    "function" => .Function
+    "goto" => .Goto
+    "if" => .If
+    "in" => .In
+    "local" => .Local
+    "nil" => .Nil
+    "not" => .Not
+    "or" => .Or
+    "repeat" => .Repeat
+    "return" => .Return
+    "then" => .Then
+    "true" => .True
+    "until" => .Until
+    "while" => .While
+    _ => .Name
+}
+
+fun long_body(mut cursor: Cursor, bytes: [u8], size: usize, capture: bool, site: Site) -> String ! LuaError {
+    cursor.skip(bytes, size)
+    if cursor.peek(bytes) == '\r' or cursor.peek(bytes) == '\n' {
+        let _ = cursor.advance(bytes)
+    }
+    var text = String()
+    while cursor.at < bytes.len() {
+        if cursor.delimiter(bytes, ']') is some(end_size) {
+            if end_size == size {
+                cursor.skip(bytes, size)
+                return text
+            }
+            // Leave the last bracket available as the start of a delimiter.
+            for _ in 1..end_size {
+                let ch = cursor.advance(bytes)
+                if capture { text.push(ch) }
+            }
+        } else {
+            let ch = cursor.advance(bytes)
+            if capture { text.push(ch) }
+        }
+    }
+    fail LuaError.Syntax(site, if capture { "unfinished long string" } else { "unfinished long comment" })
+}
+
+/// Lua's UTF-8 escape encodes values up to 31 bits, including values outside
+/// Unicode's scalar range. Append the encoded bytes directly to the string.
+fun unicode_escape(mut cursor: Cursor, bytes: [u8], site: Site, mut out: String) ! LuaError {
+    if not cursor.eat(bytes, '{') {
+        fail LuaError.Syntax(site, "expected an opening brace after the Unicode escape")
+    }
+    var code: u32 = 0
+    var any_digit = false
+    while hex_digit(cursor.peek(bytes) as u8) is some(digit) {
+        any_digit = true
+        let _ = cursor.advance(bytes)
+        if code > 0x07ffffff { fail LuaError.Syntax(site, "Unicode escape is too large") }
+        code = (code << 4) | (digit as u32)
+    }
+    if not any_digit or not cursor.eat(bytes, '}') {
+        fail LuaError.Syntax(site, "malformed Unicode escape")
+    }
+    if code < 128 {
+        out.push(code as char)
+        return ()
+    }
+    let width = if code < 0x800 { 2 }
+        else if code < 0x10000 { 3 }
+        else if code < 0x200000 { 4 }
+        else if code < 0x4000000 { 5 }
+        else { 6 }
+    let lead = (0xffu32 << (8 - width)) & 0xff
+    out.push((lead | (code >> (6 * (width - 1)))) as char)
+    var remaining = width - 1
+    while remaining > 0 {
+        remaining -= 1
+        out.push((0x80 | ((code >> (6 * remaining)) & 0x3f)) as char)
+    }
+}
+
+fun escape(mut cursor: Cursor, bytes: [u8], mut out: String) ! LuaError {
+    let site = cursor.site
+    let ch = cursor.advance(bytes)
+    match ch {
+        '\\' | '\'' | '"' | '\n' => out.push(ch)
+        'a' => out.push('\u{7}')
+        'b' => out.push('\u{8}')
+        'f' => out.push('\u{C}')
+        'n' => out.push('\n')
+        'r' => out.push('\r')
+        't' => out.push('\t')
+        'v' => out.push('\u{B}')
+        'z' => {
+            while whitespace(cursor.peek(bytes)) { let _ = cursor.advance(bytes) }
+        }
+        'x' => {
+            var byte: u8 = 0
+            for _ in 0..2 {
+                let digit = hex_digit(cursor.advance(bytes) as u8)
+                    mend fail LuaError.Syntax(site, "expected two hexadecimal escape digits")
+                byte = (byte << 4) | digit
+            }
+            out.push(byte as char)
+        }
+        'u' => unicode_escape(mut cursor, bytes, site, mut out)?
+        '0'..='9' => {
+            var number = (ch as u32) - 48
+            for _ in 0..2 {
+                if not decimal(cursor.peek(bytes)) { break }
+                number = number * 10 + ((cursor.advance(bytes) as u32) - 48)
+            }
+            if number > 255 { fail LuaError.Syntax(site, "decimal escape is greater than 255") }
+            out.push(number as char)
+        }
+        _ => fail LuaError.Syntax(site, "invalid escape sequence")
+    }
+}
+
+fun quoted(mut cursor: Cursor, bytes: [u8], quote: char, site: Site) -> String ! LuaError {
+    var text = String()
+    while cursor.at < bytes.len() {
+        let ch = cursor.advance(bytes)
+        if ch == quote { return text }
+        if ch == '\n' { break }
+        if ch == '\\' { escape(mut cursor, bytes, mut text)? }
+        else { text.push(ch) }
+    }
+    fail LuaError.Syntax(site, "unfinished quoted string")
+}
+
+fun number(mut cursor: Cursor, bytes: [u8], first: char, site: Site) -> Value ! LuaError {
+    let hex = first == '0' and (cursor.peek(bytes) == 'x' or cursor.peek(bytes) == 'X')
+    var text = String()
+    text.push(first)
+    var prev = first
+    while true {
+        let ch = cursor.peek(bytes)
+        let exponent = if hex { prev == 'p' or prev == 'P' } else { prev == 'e' or prev == 'E' }
+        if not (name_part(ch) or ch == '.' or (exponent and (ch == '+' or ch == '-'))) { break }
+        text.push(cursor.advance(bytes))
+        prev = ch
+    }
+    numeral(text, site)
+}
+
+fun punctuation(mut cursor: Cursor, bytes: [u8], ch: char, site: Site) -> Kind ! LuaError = match ch {
+    '+' => Kind.Plus
+    '-' => Kind.Minus
+    '*' => Kind.Star
+    '/' => if cursor.eat(bytes, '/') { Kind.DoubleSlash } else { Kind.Slash }
+    '%' => Kind.Percent
+    '^' => Kind.Caret
+    '#' => Kind.HashSign
+    '&' => Kind.Amp
+    '|' => Kind.Pipe
+    '~' => if cursor.eat(bytes, '=') { Kind.NotEqual } else { Kind.Tilde }
+    '=' => if cursor.eat(bytes, '=') { Kind.EqualEqual } else { Kind.Equal }
+    '<' => if cursor.eat(bytes, '=') { Kind.LessEqual }
+        else if cursor.eat(bytes, '<') { Kind.ShiftLeft } else { Kind.Less }
+    '>' => if cursor.eat(bytes, '=') { Kind.GreaterEqual }
+        else if cursor.eat(bytes, '>') { Kind.ShiftRight } else { Kind.Greater }
+    '(' => Kind.LeftParen
+    ')' => Kind.RightParen
+    '[' => Kind.LeftBracket
+    ']' => Kind.RightBracket
+    '{' => Kind.LeftBrace
+    '}' => Kind.RightBrace
+    ':' => if cursor.eat(bytes, ':') { Kind.DoubleColon } else { Kind.Colon }
+    ';' => Kind.Semicolon
+    ',' => Kind.Comma
+    '.' => if cursor.eat(bytes, '.') {
+        if cursor.eat(bytes, '.') { Kind.Dots } else { Kind.Concat }
+    } else { Kind.Dot }
+    _ => fail LuaError.Syntax(site, "unexpected byte 0x{ch as u8:02x}")
+}
+
+pub fun tokenize(bytes: [u8], mut strings: Strings) -> List[Token] ! LuaError {
+    var cursor = Cursor()
+    var tokens: List[Token] = List()
+    if bytes.len() >= 3 and bytes[0] == 0xef and bytes[1] == 0xbb and bytes[2] == 0xbf {
+        cursor.at = 3
+    }
+    if cursor.peek(bytes) == '#' { cursor.line_comment(bytes) }
+
+    while cursor.at < bytes.len() {
+        let site = cursor.site
+        let first = cursor.peek(bytes)
+        if whitespace(first) {
+            let _ = cursor.advance(bytes)
+        } else if first == '-' and cursor.peek(bytes, 1) == '-' {
+            cursor.skip(bytes, 2)
+            if cursor.delimiter(bytes, '[') is some(size) {
+                let _ = long_body(mut cursor, bytes, size, false, site)?
+            } else {
+                cursor.line_comment(bytes)
+            }
+        } else if cursor.delimiter(bytes, '[') is some(size) {
+            let raw = long_body(mut cursor, bytes, size, true, site)?
+            tokens.push(Token(.StringLit, site, Value.Text(strings.intern(raw))))
+        } else {
+            let ch = cursor.advance(bytes)
+            if ch == '\'' or ch == '"' {
+                let raw = quoted(mut cursor, bytes, ch, site)?
+                tokens.push(Token(.StringLit, site, Value.Text(strings.intern(raw))))
+            } else if decimal(ch) or (ch == '.' and decimal(cursor.peek(bytes))) {
+                tokens.push(Token(.Number, site, number(mut cursor, bytes, ch, site)?))
+            } else if name_start(ch) {
+                var text = String()
+                text.push(ch)
+                while name_part(cursor.peek(bytes)) { text.push(cursor.advance(bytes)) }
+                let kind = keyword(text)
+                let value = if kind == Kind.Name { Value.Text(strings.intern(text)) } else { Value.Nil }
+                tokens.push(Token(kind, site, value))
+            } else {
+                tokens.push(Token(punctuation(mut cursor, bytes, ch, site)?, site))
+            }
+        }
+    }
+    tokens.push(Token(.Eof, cursor.site))
+    tokens
+}

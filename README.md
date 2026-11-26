@@ -290,6 +290,9 @@ The examples use `std` (`std.io`, `std.fs`, `std.mem`, …). So far `runtime/std
 declares what they need, which is enough for their names to resolve; the
 bodies come with type checking and lowering.
 
+[Lua in Loom](projects/lua/README.md) interprets Lua 5.4 source with an empty
+guest environment and no Lua standard library.
+
 ## Status
 
 The language is a design sketch (v0.1). A Loom → Lua 5.4 transpiler is being

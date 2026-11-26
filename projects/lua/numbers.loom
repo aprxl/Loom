@@ -1,0 +1,238 @@
+// Lua numerals use wrapping hexadecimal integers, signed decimal integers,
+// and binary64 for real literals and decimal integers outside the signed range.
+
+use syntax.{Binary, LuaError, Site, Value}
+
+pub fun hex_digit(b: u8) -> ?u8 = match b {
+    48..=57 => some(b - 48)
+    65..=70 => some(b - 65 + 10)
+    97..=102 => some(b - 97 + 10)
+    _ => none
+}
+
+pub fun numeral(text: str, site: Site) -> Value ! LuaError {
+    if text.starts_with("0x") or text.starts_with("0X") {
+        return (hexadecimal(text) mend fail LuaError.Syntax(site, "malformed hexadecimal numeral"))
+    }
+    if not (text.contains(".") or text.contains("e") or text.contains("E")) {
+        if text.parse[i64]() is ok(n) { return Value.Integer(n) }
+    }
+    let decimal = text.parse[f64]() mend fail LuaError.Syntax(site, "malformed decimal numeral")
+    Value.Float(decimal)
+}
+
+/// Numeric for loops are the remaining language context that accepts a
+/// numeric string even when the string library has never been loaded.
+pub fun numeric_string(text: str) -> ?Value {
+    let bytes = text.bytes().collect()
+    var start: usize = 0
+    var end = bytes.len()
+    while start < end and ascii_space(bytes[start]) { start += 1 }
+    while end > start and ascii_space(bytes[end - 1]) { end -= 1 }
+    if start == end { return none }
+    let signed = bytes[start] == 45 or bytes[start] == 43
+    let magnitude = if signed { start + 1 } else { start }
+    if magnitude == end { return none }
+    if bytes[magnitude] == 46 or (bytes[magnitude] >= 48 and bytes[magnitude] <= 57) {
+        let spelling = text[magnitude..end]
+        if spelling.starts_with("0x") or spelling.starts_with("0X") {
+            let value = hexadecimal(spelling)?
+            if bytes[start] != 45 { return value }
+            return match value {
+                .Integer(n) => Value.Integer(0 -% n)
+                .Float(n) => Value.Float(-n)
+                _ => unravel("expected a hexadecimal number")
+            }
+        }
+        let signed_text = text[start..end]
+        if signed_text.parse[i64]() is ok(n) { return Value.Integer(n) }
+        if signed_text.parse[f64]() is ok(n) { return Value.Float(n) }
+    }
+    none
+}
+
+fun ascii_space(byte: u8) -> bool = byte == 32 or (byte >= 9 and byte <= 13)
+
+/// The first 53 significant bits and a guard/sticky pair suffice to round
+/// a hexadecimal mantissa. Subnormals retain fewer bits before rounding.
+fun hexadecimal(text: str) -> ?Value {
+    var digits: List[u8] = List()
+    var fractional: i64 = 0
+    var after_point = false
+    var at: usize = 0
+    let bytes = text.bytes().collect()
+    for i in 2..bytes.len() {
+        let b = bytes[i]
+        if b == 112 or b == 80 {
+            at = i + 1
+            break
+        }
+        if b == 46 {
+            if after_point { return none }
+            after_point = true
+        } else {
+            let digit = hex_digit(b)?
+            digits.push(digit)
+            if after_point { fractional += 1 }
+        }
+    }
+    if digits.is_empty() { return none }
+    if at == 0 and not after_point {
+        var integer: u64 = 0
+        for digit in digits { integer = (integer << 4) | (digit as u64) }
+        return Value.Integer(integer as% i64)
+    }
+
+    var exponent: i64 = 0
+    if at > 0 {
+        let negative = at < bytes.len() and bytes[at] == 45
+        if at < bytes.len() and (bytes[at] == 43 or bytes[at] == 45) { at += 1 }
+        if at == bytes.len() { return none }
+        while at < bytes.len() {
+            let b = bytes[at]
+            if b < 48 or b > 57 { return none }
+            exponent = (exponent *| 10) +| ((b - 48) as i64)
+            at += 1
+        }
+        if negative { exponent = 0 -| exponent }
+    }
+
+    var first: usize = 0
+    while first < digits.len() and digits[first] == 0 { first += 1 }
+    if first == digits.len() { return Value.Float(0.0) }
+    let width = ((digits.len() - first - 1) as i64) * 4
+    var high: i64 = 3
+    while ((digits[first] as u64) & (1u64 << high)) == 0 { high -= 1 }
+
+    let top = (exponent -| (fractional * 4)) +| (width + high)
+    if top > 1023 { return Value.Float(f64.from_bits(0x7ff0000000000000)) }
+    if top < -1075 { return Value.Float(0.0) }
+    let keep = if top >= -1022 { 53 } else { top + 1075 }
+    var significand: u64 = 0
+    var seen: i64 = 0
+    var guard = false
+    var sticky = false
+    for i in first..digits.len() {
+        let start = if i == first { high } else { 3 }
+        var bit = start
+        while bit >= 0 {
+            let set = ((digits[i] as u64) >> bit) & 1
+            if seen < keep { significand = (significand << 1) | set }
+            else if seen == keep { guard = set != 0 }
+            else if set != 0 { sticky = true }
+            seen += 1
+            bit -= 1
+        }
+    }
+    if seen < keep { significand = significand << (keep - seen) }
+    if guard and (sticky or (significand & 1) != 0) { significand += 1 }
+    let base = if top >= -1022 { ((top + 1022) as u64) << 52 } else { 0 }
+    Value.Float(f64.from_bits(base + significand))
+}
+
+pub fun as_float(value: Value, site: Site) -> f64 ! LuaError = match value {
+    .Integer(n) => n as f64
+    .Float(n) => n
+    _ => fail LuaError.Runtime(site, "expected a number")
+}
+
+/// A checked conversion with Lua's exact bounds, including the rounded f64
+/// value of maxinteger, which is already outside the integer range.
+pub fun exact_integer(n: f64) -> ?i64 {
+    if n >= -9223372036854775808.0 and n < 9223372036854775808.0 and n.trunc() == n {
+        return n as i64
+    }
+    none
+}
+
+pub fun as_integer(value: Value, site: Site) -> i64 ! LuaError = match value {
+    .Integer(n) => n
+    .Float(n) => exact_integer(n) mend fail LuaError.Runtime(site, "number has no integer representation")
+    _ => fail LuaError.Runtime(site, "expected a number")
+}
+
+pub fun is_number(value: Value) -> bool = value is .Integer(_) or value is .Float(_)
+
+/// Compare a mixed pair without rounding the integer to binary64.
+pub fun number_less(left: Value, right: Value) -> bool = match (left, right) {
+    (.Integer(a), .Integer(b)) => a < b
+    (.Float(a), .Float(b)) => a < b
+    (.Integer(a), .Float(b)) => {
+        if b >= 9223372036854775808.0 { return true }
+        if b < -9223372036854775808.0 or b.is_nan() { return false }
+        let floor = b.floor()
+        let n = floor as i64
+        a < n or (a == n and floor < b)
+    }
+    (.Float(a), .Integer(b)) => {
+        if a < -9223372036854775808.0 { return true }
+        if a >= 9223372036854775808.0 or a.is_nan() { return false }
+        (a.floor() as i64) < b
+    }
+    _ => false
+}
+
+fun shift_left(bits: u64, count: i64) -> i64 {
+    if count <= -64 or count >= 64 { return 0 }
+    if count < 0 { return (bits >> (0 - count)) as% i64 }
+    (bits << count) as% i64
+}
+
+pub fun bitwise(op: Binary, left: Value, right: Value, site: Site) -> Value ! LuaError {
+    let a = as_integer(left, site)?
+    let b = as_integer(right, site)?
+    let result = match op {
+        .BitAnd => a & b
+        .BitOr => a | b
+        .BitXor => a ~ b
+        .ShiftLeft => shift_left(a as% u64, b)
+        .ShiftRight => shift_left(a as% u64, 0 -| b)
+        _ => unravel("expected a bitwise operator")
+    }
+    Value.Integer(result)
+}
+
+fun integer_arithmetic(op: Binary, a: i64, b: i64, site: Site) -> i64 ! LuaError = match op {
+    .Add => a +% b
+    .Subtract => a -% b
+    .Multiply => a *% b
+    .FloorDivide | .Modulo => {
+        if b == 0 { fail LuaError.Runtime(site, "integer division by zero") }
+        if b == -1 {
+            return if op is .Modulo { 0 } else { 0 -% a }
+        }
+        let r = a % b
+        let adjust = r != 0 and ((a < 0) != (b < 0))
+        if op is .Modulo {
+            if adjust { r + b } else { r }
+        } else {
+            let q = a / b
+            if adjust { q - 1 } else { q }
+        }
+    }
+    _ => unravel("expected an integer arithmetic operator")
+}
+
+pub fun arithmetic(op: Binary, left: Value, right: Value, site: Site) -> Value ! LuaError {
+    if not (op is .Divide or op is .Power) {
+        if (left, right) is (.Integer(a), .Integer(b)) {
+            return Value.Integer(integer_arithmetic(op, a, b, site)?)
+        }
+    }
+    let a = as_float(left, site)?
+    let b = as_float(right, site)?
+    let result = match op {
+        .Add => a + b
+        .Subtract => a - b
+        .Multiply => a * b
+        .Divide => a / b
+        .FloorDivide => (a / b).floor()
+        .Modulo => {
+            let r = a % b
+            if (r < 0.0 and b > 0.0) or (r > 0.0 and b < 0.0) { r + b } else { r }
+        }
+        .Power => a.pow(b)
+        _ => unravel("expected a floating-point arithmetic operator")
+    }
+    Value.Float(result)
+}

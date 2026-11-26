@@ -1,0 +1,53 @@
+// Interning keeps equality and table lookups independent of string length.
+
+warp TextSlot {
+    bytes: String
+    live: bool = true
+}
+
+/// Interned Lua bytes. Each guest byte is encoded as the Loom character
+/// with the same ordinal. This is reversible for all byte strings, including
+/// invalid UTF-8, and preserves bytewise ordering in Loom's text comparisons.
+pub warp Strings {
+    entries: List[TextSlot] = List()
+    ids: Map[String, usize] = Map()
+    free: List[usize] = List()
+    frozen: usize = 0
+
+    pub fun new() -> Strings = Strings()
+
+    pub fun intern(mut self, take encoded: String) -> usize {
+        if .ids.get(encoded) is some(id) { return id }
+        var id = .entries.len()
+        if .free.pop() is some(slot) { id = slot }
+        let _ = .ids.insert(encoded.copy(), id)
+        if id == .entries.len() { .entries.push(TextSlot(encoded)) }
+        else { .entries[id] = TextSlot(encoded) }
+        id
+    }
+
+    pub fun from_text(mut self, text: str) -> usize {
+        var encoded = String.with_capacity(text.len())
+        for b in text.bytes() { encoded.push(b as char) }
+        .intern(encoded)
+    }
+
+    pub fun copy_text(self, id: usize) -> String = .entries[id].bytes.copy()
+    pub fun length(self, id: usize) -> usize = .entries[id].bytes.char_count()
+    pub fun less(self, left: usize, right: usize) -> bool = .entries[left].bytes < .entries[right].bytes
+
+    /// Literals and names are referenced by the immutable syntax.
+    pub fun freeze(mut self) { .frozen = .entries.len() }
+    pub fun is_dynamic(self, id: usize) -> bool = id >= .frozen
+    pub fun slot_count(self) -> usize = .entries.len()
+
+    pub fun sweep(mut self, marked: [bool]) {
+        for id in .frozen..marked.len() {
+            if .entries[id].live and not marked[id] {
+                let _ = .ids.remove(.entries[id].bytes)
+                .entries[id] = TextSlot(String(), live: false)
+                .free.push(id)
+            }
+        }
+    }
+}

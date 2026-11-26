@@ -1,0 +1,578 @@
+// Tree-walking evaluator. Single-result and expanding evaluation are
+// separate, so Lua's adjustment rules are shared by calls, assignments,
+// returns, and constructors.
+
+use heap.{Heap, type_name}
+use numbers.{arithmetic, as_float, as_integer, bitwise, exact_integer, is_number, number_less, numeric_string}
+use parser.parse
+use strings.Strings
+use syntax.{Attribute, Binary, Binding, Call, Expr, Instruction, Jump, LuaError, Program,
+    Site, Unary, Value}
+
+warp Activation {
+    scope: usize
+    varargs: List[Value]
+}
+
+warp Invocation {
+    callee: Value
+    args: List[Value]
+    site: Site
+}
+
+warp Control {
+    case Next
+    case Break
+    case Return(List[Value])
+    case Tail(Invocation)
+    case Jump(Jump)
+}
+
+warp Place {
+    case Cell(usize)
+    case Index(object: Value, key: Value)
+}
+
+fun truthy(value: Value) -> bool = not (value is .Nil or value is .Boolean(false))
+
+fun at(values: [Value], index: usize) -> Value {
+    if index < values.len() { values[index] } else { Value.Nil }
+}
+
+fun equal(left: Value, right: Value) -> bool = match (left, right) {
+    (.Nil, .Nil) => true
+    (.Boolean(a), .Boolean(b)) => a == b
+    (.Text(a), .Text(b)) | (.Table(a), .Table(b)) | (.Function(a), .Function(b)) => a == b
+    (.Integer(a), .Integer(b)) => a == b
+    (.Float(a), .Float(b)) => a == b
+    (.Float(a), .Integer(b)) | (.Integer(b), .Float(a)) => {
+        if exact_integer(a) is some(n) { return n == b }
+        false
+    }
+    _ => false
+}
+
+fun number_text(value: Value) -> String = match value {
+    .Integer(n) => "{n}"
+    .Float(n) => {
+        let text = "{n}"
+        if n.is_finite() and not (text.contains(".") or text.contains("e") or text.contains("E")) {
+            return "{text}.0"
+        }
+        text
+    }
+    _ => unravel("expected a number to format")
+}
+
+fun concat_piece(heap: Heap, value: Value, site: Site) -> String ! LuaError = match value {
+    .Text(id) => heap.strings.copy_text(id)
+    .Integer(_) | .Float(_) => number_text(value)
+    _ => fail LuaError.Runtime(site, "attempt to concatenate a {type_name(value)} value")
+}
+
+fun closing_value(value: Value, site: Site) ! LuaError {
+    // Only nil and false can be closed in a library-free environment.
+    if truthy(value) { fail LuaError.Runtime(site, "value has no '__close' metamethod") }
+}
+
+fun unary(heap: Heap, op: Unary, value: Value, site: Site) -> Value ! LuaError = match op {
+    .Not => Value.Boolean(not truthy(value))
+    .Negate => {
+        if value is .Integer(n) { return Value.Integer(0 -% n) }
+        Value.Float(-as_float(value, site)?)
+    }
+    .Invert => Value.Integer(~as_integer(value, site)?)
+    .Length => match value {
+        .Text(id) => Value.Integer(heap.strings.length(id) as i64)
+        .Table(id) => Value.Integer(heap.length(id))
+        _ => fail LuaError.Runtime(site, "attempt to get the length of a {type_name(value)} value")
+    }
+}
+
+fun compare(heap: Heap, op: Binary, left: Value, right: Value, site: Site) -> Value ! LuaError {
+    let reversed = op is .Greater | .GreaterEqual
+    let a = if reversed { right } else { left }
+    let b = if reversed { left } else { right }
+    let less = match (a, b) {
+        (.Text(x), .Text(y)) => heap.strings.less(x, y)
+        _ => {
+            if not (is_number(a) and is_number(b)) {
+                fail LuaError.Runtime(site, "cannot compare {type_name(a)} with {type_name(b)}")
+            }
+            number_less(a, b)
+        }
+    }
+    Value.Boolean(less or ((op is .LessEqual | .GreaterEqual) and equal(a, b)))
+}
+
+fun binary(mut heap: Heap, op: Binary, left: Value, right: Value, site: Site) -> Value ! LuaError = match op {
+    .And | .Or => right
+    .Equal => Value.Boolean(equal(left, right))
+    .Different => Value.Boolean(not equal(left, right))
+    .Less | .LessEqual | .Greater | .GreaterEqual => compare(heap, op, left, right, site)?
+    .BitAnd | .BitOr | .BitXor | .ShiftLeft | .ShiftRight => bitwise(op, left, right, site)?
+    .Add | .Subtract | .Multiply | .Divide | .FloorDivide | .Modulo | .Power =>
+        arithmetic(op, left, right, site)?
+    .Concat => {
+        var text = concat_piece(heap, left, site)?
+        let tail = concat_piece(heap, right, site)?
+        text.push_str(tail)
+        heap.intern(text)
+    }
+}
+
+fun evaluate(mut heap: Heap, program: Program, frame: Activation, id: usize) -> Value ! LuaError {
+    let node = program.expressions[id]
+    let value: Value = match node.expr {
+        .Literal(literal) => literal
+        .Local(binding) => heap.read(heap.resolve(frame.scope, binding.id))
+        .Global(env, name) => {
+            let value = heap.get(heap.read(heap.resolve(frame.scope, env)), Value.Text(name), node.site)?
+            value
+        }
+        .Index(object, key) => {
+            let table = evaluate(mut heap, program, frame, object)?
+            let index = evaluate(mut heap, program, frame, key)?
+            let value = heap.get(table, index, node.site)?
+            value
+        }
+        .Paren(inner) => {
+            let value = evaluate(mut heap, program, frame, inner)?
+            value
+        }
+        .Vararg => at(frame.varargs, 0)
+        .Closure(code) => heap.close_over(code, frame.scope)
+        .Table(fields) => {
+            let value = construct_table(mut heap, program, frame, fields, node.site)?
+            value
+        }
+        .Apply(call_id) => {
+            let invocation = prepare(mut heap, program, frame, program.calls[call_id], node.site)?
+            let values = invoke(mut heap, program, invocation)?
+            at(values, 0)
+        }
+        .Prefix(op, operand) => {
+            let v = evaluate(mut heap, program, frame, operand)?
+            let result = unary(heap, op, v, node.site)?
+            result
+        }
+        .Infix(op, left, right) => {
+            let a = evaluate(mut heap, program, frame, left)?
+            if ((op is .And) and not truthy(a)) or ((op is .Or) and truthy(a)) {
+                a
+            } else {
+                let b = evaluate(mut heap, program, frame, right)?
+                let result = binary(mut heap, op, a, b, node.site)?
+                result
+            }
+        }
+    }
+    heap.pin(value)
+    value
+}
+
+fun evaluate_many(mut heap: Heap, program: Program, frame: Activation, id: usize) -> List[Value] ! LuaError {
+    let node = program.expressions[id]
+    match node.expr {
+        .Vararg => frame.varargs.copy()
+        .Apply(call_id) => {
+            let invocation = prepare(mut heap, program, frame, program.calls[call_id], node.site)?
+            let values = invoke(mut heap, program, invocation)?
+            for value in values { heap.pin(value) }
+            values
+        }
+        _ => {
+            let result: List[Value] = [evaluate(mut heap, program, frame, id)?]
+            result
+        }
+    }
+}
+
+fun evaluate_list(mut heap: Heap, program: Program, frame: Activation, ids: [usize]) -> List[Value] ! LuaError {
+    var values: List[Value] = List()
+    for i in 0..ids.len() {
+        if i + 1 == ids.len() {
+            let tail = evaluate_many(mut heap, program, frame, ids[i])?
+            for value in tail { values.push(value) }
+        } else {
+            values.push(evaluate(mut heap, program, frame, ids[i])?)
+        }
+    }
+    values
+}
+
+fun construct_table(mut heap: Heap, program: Program, frame: Activation, fields: usize, site: Site) -> Value ! LuaError {
+    let table = heap.new_table()
+    var index: i64 = 1
+    let count = program.tables[fields].len()
+    for (offset, field) in program.tables[fields].indexed() {
+        match field {
+            .Keyed(key, value) => {
+                let k = evaluate(mut heap, program, frame, key)?
+                let v = evaluate(mut heap, program, frame, value)?
+                heap.set(table, k, v, site)?
+            }
+            .Array(value) => {
+                if offset + 1 == count {
+                    let values = evaluate_many(mut heap, program, frame, value)?
+                    for item in values {
+                        heap.set(table, Value.Integer(index), item, site)?
+                        index += 1
+                    }
+                } else {
+                    let item = evaluate(mut heap, program, frame, value)?
+                    heap.set(table, Value.Integer(index), item, site)?
+                    index += 1
+                }
+            }
+        }
+    }
+    table
+}
+
+fun prepare(mut heap: Heap, program: Program, frame: Activation, call: Call, site: Site) -> Invocation ! LuaError {
+    let subject = evaluate(mut heap, program, frame, call.callee)?
+    var args: List[Value] = List()
+    let callee = if call.method is some(name) {
+        args.push(subject)
+        let method = heap.get(subject, Value.Text(name), site)?
+        heap.pin(method)
+        method
+    } else {
+        subject
+    }
+    let supplied = evaluate_list(mut heap, program, frame, call.args)?
+    for value in supplied { args.push(value) }
+    Invocation(callee, args, site)
+}
+
+fun invoke(mut heap: Heap, program: Program, take first: Invocation) -> List[Value] ! LuaError {
+    let mark = heap.checkpoint()
+    defer heap.release(mark)
+    var pending = first
+    loop {
+        let callee = pending.callee
+        let site = pending.site
+        heap.release(mark)
+        heap.pin(callee)
+        for value in pending.args { heap.pin(value) }
+        let id = match callee {
+            .Function(id) => id
+            _ => fail LuaError.Runtime(site, "attempt to call a {type_name(callee)} value")
+        }
+        let closure = heap.closure(id)
+        let code = closure.code
+        let arity = program.functions[code].params.len()
+        var scope = closure.scope
+        for i in 0..arity {
+            scope = heap.bind(some(scope), program.functions[code].params[i].id, at(pending.args, i))
+        }
+        var varargs: List[Value] = List()
+        if program.functions[code].variadic {
+            for i in arity..pending.args.len() { varargs.push(pending.args[i]) }
+        }
+        var frame = Activation(scope, varargs)
+        match run_block(mut heap, program, mut frame, program.functions[code].body)? {
+            .Next => return List[Value]()
+            .Return(values) => return values
+            .Tail(next) => pending = next
+            _ => unravel("unresolved control flow escaped a function")
+        }
+    }
+}
+
+fun place(mut heap: Heap, program: Program, frame: Activation, id: usize) -> Place ! LuaError {
+    let node = program.expressions[id]
+    match node.expr {
+        .Local(binding) => Place.Cell(heap.resolve(frame.scope, binding.id))
+        .Global(env, name) => {
+            let table = heap.read(heap.resolve(frame.scope, env))
+            heap.pin(table)
+            Place.Index(table, Value.Text(name))
+        }
+        .Index(object, key) => {
+            let table = evaluate(mut heap, program, frame, object)?
+            let index = evaluate(mut heap, program, frame, key)?
+            Place.Index(table, index)
+        }
+        _ => unravel("parser accepted an invalid assignment target")
+    }
+}
+
+fun nested(mut heap: Heap, program: Program, frame: Activation, body: usize, scope: usize) -> Control ! LuaError {
+    var inner = Activation(scope, frame.varargs.copy())
+    run_block(mut heap, program, mut inner, body)
+}
+
+fun while_loop(mut heap: Heap, program: Program, frame: Activation, condition: usize, body: usize) -> Control ! LuaError {
+    let mark = heap.checkpoint()
+    loop {
+        heap.release(mark)
+        heap.collect_if_due()
+        if not truthy(evaluate(mut heap, program, frame, condition)?) { return Control.Next }
+        let flow = nested(mut heap, program, frame, body, frame.scope)?
+        match flow {
+            .Next => {}
+            .Break => return Control.Next
+            _ => return flow
+        }
+    }
+}
+
+fun repeat_loop(mut heap: Heap, program: Program, frame: Activation, body: usize, condition: usize) -> Control ! LuaError {
+    let mark = heap.checkpoint()
+    loop {
+        heap.release(mark)
+        var inner = Activation(frame.scope, frame.varargs.copy())
+        match run_block(mut heap, program, mut inner, body)? {
+            .Next => {
+                let _ = heap.scope_root(inner.scope)
+                if truthy(evaluate(mut heap, program, inner, condition)?) { return Control.Next }
+            }
+            .Break => return Control.Next
+            flow => return flow
+        }
+    }
+}
+
+fun for_number(heap: Heap, value: Value, part: str, site: Site) -> Value ! LuaError {
+    if is_number(value) { return value }
+    if value is .Text(id) {
+        if numeric_string(heap.strings.copy_text(id)) is some(n) { return n }
+    }
+    fail LuaError.Runtime(site, "numeric for {part} must be a number")
+}
+
+fun numeric_for(mut heap: Heap, program: Program, frame: Activation, binding: Binding,
+    start: Value, limit: Value, step: Value, body: usize, site: Site) -> Control ! LuaError {
+    let mark = heap.checkpoint()
+    if (start, step) is (.Integer(first), .Integer(increment)) {
+        if increment == 0 { fail LuaError.Runtime(site, "numeric for step is zero") }
+        var last = for_number(heap, limit, "limit", site)?
+        if last is .Float(n) and n.is_nan() {
+            if increment > 0 { return Control.Next }
+            last = Value.Integer(-9223372036854775807 - 1)
+        }
+        var cursor = first
+        loop {
+            let current = Value.Integer(cursor)
+            if (increment > 0 and number_less(last, current)) or
+                (increment < 0 and number_less(current, last)) { break }
+            heap.release(mark)
+            let scope = heap.bind(some(frame.scope), binding.id, current)
+            match nested(mut heap, program, frame, body, scope)? {
+                .Next => {}
+                .Break => break
+                flow => return flow
+            }
+            cursor = (cursor +? increment) mend break
+        }
+    } else {
+        let last = as_float(for_number(heap, limit, "limit", site)?, site)?
+        let increment = as_float(for_number(heap, step, "step", site)?, site)?
+        var cursor = as_float(for_number(heap, start, "initial value", site)?, site)?
+        if increment == 0.0 { fail LuaError.Runtime(site, "numeric for step is zero") }
+        if (increment > 0.0 and last < cursor) or (not (increment > 0.0) and cursor < last) {
+            return Control.Next
+        }
+        loop {
+            heap.release(mark)
+            let scope = heap.bind(some(frame.scope), binding.id, Value.Float(cursor))
+            match nested(mut heap, program, frame, body, scope)? {
+                .Next => {}
+                .Break => break
+                flow => return flow
+            }
+            cursor += increment
+            let continues = if increment > 0.0 { cursor <= last } else { last <= cursor }
+            if not continues { break }
+        }
+    }
+    Control.Next
+}
+
+fun generic_for(mut heap: Heap, program: Program, frame: Activation, bindings: [Binding],
+    values: [Value], body: usize, site: Site) -> Control ! LuaError {
+    let callee = at(values, 0)
+    let state = at(values, 1)
+    var control = at(values, 2)
+    closing_value(at(values, 3), site)?
+    let mark = heap.checkpoint()
+    loop {
+        // Preserve the control value across removal of the last iteration's roots.
+        heap.release(mark)
+        heap.pin(control)
+        let items = invoke(mut heap, program, Invocation(callee, [state, control], site))?
+        control = at(items, 0)
+        if control is .Nil { break }
+        var scope = frame.scope
+        for i in 0..bindings.len() {
+            scope = heap.bind(some(scope), bindings[i].id, at(items, i))
+        }
+        match nested(mut heap, program, frame, body, scope)? {
+            .Next => {}
+            .Break => break
+            flow => return flow
+        }
+    }
+    Control.Next
+}
+
+fun execute(mut heap: Heap, program: Program, mut frame: Activation, instruction: Instruction) -> Control ! LuaError {
+    let site = instruction.site
+    match instruction.statement {
+        .Local(names, expressions) => {
+            let values = evaluate_list(mut heap, program, frame, expressions)?
+            for (i, name) in names.indexed() {
+                let value = at(values, i)
+                if name.attr == Attribute.Close { closing_value(value, site)? }
+                frame.scope = heap.bind(some(frame.scope), name.binding.id, value)
+            }
+        }
+        .Recursive(binding, code) => {
+            frame.scope = heap.bind(some(frame.scope), binding.id, Value.Nil)
+            let function = heap.close_over(code, frame.scope)
+            heap.write(frame.scope, function)
+        }
+        .Assign(targets, expressions) => {
+            var places: List[(Place, Site)] = List()
+            for target in targets {
+                places.push((place(mut heap, program, frame, target)?, program.expressions[target].site))
+            }
+            let values = evaluate_list(mut heap, program, frame, expressions)?
+            var i = places.len()
+            while i > 0 {
+                i -= 1
+                let (target, location) = places[i]
+                let value = at(values, i)
+                match target {
+                    .Cell(cell) => heap.write(cell, value)
+                    .Index(table, key) => heap.set(table, key, value, location)?
+                }
+            }
+        }
+        .Call(id) => {
+            let invocation = prepare(mut heap, program, frame, program.calls[id], site)?
+            let _ = invoke(mut heap, program, invocation)?
+        }
+        .Do(body) => return nested(mut heap, program, frame, body, frame.scope)?
+        .If(branches, otherwise) => {
+            for branch in branches {
+                if truthy(evaluate(mut heap, program, frame, branch.condition)?) {
+                    return nested(mut heap, program, frame, branch.body, frame.scope)?
+                }
+            }
+            if otherwise is some(body) { return nested(mut heap, program, frame, body, frame.scope)? }
+        }
+        .While(condition, body) => return while_loop(mut heap, program, frame, condition, body)?
+        .Repeat(body, condition) => return repeat_loop(mut heap, program, frame, body, condition)?
+        .NumericFor(binding, start, limit, step, body) => {
+            let first = evaluate(mut heap, program, frame, start)?
+            let last = evaluate(mut heap, program, frame, limit)?
+            var inc = Value.Integer(1)
+            if step is some(id) { inc = evaluate(mut heap, program, frame, id)? }
+            return numeric_for(mut heap, program, frame, binding, first, last, inc, body, site)?
+        }
+        .GenericFor(bindings, expressions, body) => {
+            let values = evaluate_list(mut heap, program, frame, expressions)?
+            return generic_for(mut heap, program, frame, bindings, values, body, site)?
+        }
+        .Return(expressions) => {
+            if expressions.len() == 1 {
+                let node = program.expressions[expressions[0]]
+                if node.expr is .Apply(id) {
+                    return Control.Tail(prepare(mut heap, program, frame, program.calls[id], node.site)?)
+                }
+            }
+            return Control.Return(evaluate_list(mut heap, program, frame, expressions)?)
+        }
+        .Break => return Control.Break
+        .Goto(id) => return Control.Jump(program.jumps[id])
+        .Label(_) => {}
+    }
+    Control.Next
+}
+
+fun run_block(mut heap: Heap, program: Program, mut frame: Activation, body: usize) -> Control ! LuaError {
+    let entry = heap.checkpoint()
+    defer heap.release(entry)
+    let slot = heap.scope_root(frame.scope)
+    let mark = heap.checkpoint()
+    let count = program.blocks[body].len()
+    var pc: usize = 0
+    heap.collect_if_due()
+    while pc < count {
+        let control = execute(mut heap, program, mut frame, program.blocks[body][pc])?
+        pc += 1
+        match control {
+            .Next => {}
+            .Jump(jump) if jump.block == body => {
+                pc = jump.target
+                frame.scope = heap.unwind(frame.scope, jump.depth)
+            }
+            _ => return control
+        }
+        heap.replace_scope(slot, frame.scope)
+        heap.release(mark)
+        heap.collect_if_due()
+    }
+    Control.Next
+}
+
+/// A chunk's return tuple and the text needed to render it for the host.
+pub warp Execution {
+    pub values: List[Value]
+    strings: Strings
+
+    /// Renders guest bytes as a quoted line with reversible ASCII escapes.
+    pub fun render(self, value: Value) -> String = match value {
+        .Nil => "nil"
+        .Boolean(b) => "{b}"
+        .Integer(_) | .Float(_) => number_text(value)
+        .Text(id) => quote(.strings.copy_text(id))
+        .Table(id) => "<table {id}>"
+        .Function(id) => "<function {id}>"
+    }
+}
+
+fun quote(encoded: str) -> String {
+    var text = String()
+    text.push('"')
+    for ch in encoded.chars() {
+        match ch {
+            '"' | '\\' => {
+                text.push('\\')
+                text.push(ch)
+            }
+            '\n' => text.push_str("\\n")
+            '\r' => text.push_str("\\r")
+            '\t' => text.push_str("\\t")
+            ' '..='~' => text.push(ch)
+            _ => text.push_str("\\x{ch as u8:02x}")
+        }
+    }
+    text.push('"')
+    text
+}
+
+/// Executes one source chunk with an empty global table and string varargs.
+pub fun run(source: [u8], args: [String]) -> Execution ! LuaError {
+    let (program, strings) = parse(source)?
+    var heap = Heap.new(strings)
+    let globals = heap.new_table()
+    let scope = heap.bind(none, 0, globals)
+    var varargs: List[Value] = List()
+    for arg in args { varargs.push(Value.Text(heap.strings.from_text(arg))) }
+    heap.strings.freeze()
+    var frame = Activation(scope, varargs)
+    let values = match run_block(mut heap, program, mut frame, 0)? {
+        .Next => List[Value]()
+        .Return(values) => values
+        .Tail(call) => {
+            let returned = invoke(mut heap, program, call)?
+            returned
+        }
+        _ => unravel("unresolved control flow escaped the chunk")
+    }
+    Execution(values, heap.strings)
+}
